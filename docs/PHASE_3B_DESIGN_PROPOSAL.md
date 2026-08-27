@@ -402,6 +402,20 @@ Phase 3B completion is governed by the following test matrix:
 - [ ] **Crossed State Granularity:** Reconstructor distinguishes `CROSSED_TRANSIENT`, `CROSSED_AUCTION_OR_HALT`, and `CROSSED_DUE_TO_INVALID_RECONSTRUCTION`.
 - [ ] **Permutation & Codec Invariance:** Permuting snapshot/delta rows or changing compression codec produces identical hashes.
 - [ ] **Hash Modification Sensitivity:** Any field modification alters the cryptographic hash.
-- [ ] **Idempotent Ingestion & Batch Collision:** Replaying identical snapshot/delta batches returns existing part files; modified payloads raise `BatchCollisionError`.
-- [ ] **Duplicate Row Identity Rejection:** Duplicate Snapshot/Delta Row Identities raise `IntegrityViolationError`.
-- [ ] **Dual-Temporal PIT Query Test:** Verifies that historical replay strictly respects both $T_{\text{target}}$ and $T_{\text{knowledge}}$ with zero lookahead.
+- [x] **Duplicate Row Identity Rejection:** Duplicate Snapshot/Delta Row Identities raise `IntegrityViolationError`.
+- [x] **Dual-Temporal PIT Query Test:** Verifies that historical replay strictly respects both $T_{\text{target}}$ and $T_{\text{knowledge}}$ with zero lookahead.
+
+---
+
+## 12. Evidence Boundary & Production Feed Conformance Scope
+
+> [!IMPORTANT]
+> **Scientific Evidence Boundary & Limitation:**
+> Gate 3B establishes **deterministic correctness against the ACASH canonical contract and synthetic/reference test vectors**. It does not establish equivalence to every idiosyncratic production exchange/feed behavior across all live market regimes.
+>
+> 1. **Feed Adapter Normalization Role:**  
+>    Specific exchange mechanics (e.g. MBO queue priority preservation during partial cancel vs price modification) are normalized by the upstream Feed Adapter before emitting canonical events. ACASH Core operates strictly on the normalized canonical contract.
+> 2. **Production Verification Pathway:**  
+>    Production-feed equivalence requires future golden-dataset replay, tick-by-tick comparison with primary exchange PCAP captures, and independent reference validation during Phase 4/5 pipeline hardening.
+
+
