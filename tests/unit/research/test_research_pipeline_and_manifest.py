@@ -191,5 +191,107 @@ def test_canonical_feature_table_sha256_duplicate_timestamps_permutation_invaria
     })
     assert calculate_canonical_feature_table_sha256(tbl_bool) != calculate_canonical_feature_table_sha256(tbl_int)
 
+    # Type Distinguishability Invariant: str("ABC") vs bytes(b"ABC")
+    tbl_str = pa.Table.from_pydict({
+        "timestamp_utc": [t_shared],
+        "tag": ["ABC"],
+    })
+    tbl_bytes = pa.Table.from_pydict({
+        "timestamp_utc": [t_shared],
+        "tag": [b"ABC"],
+    })
+    assert calculate_canonical_feature_table_sha256(tbl_str) != calculate_canonical_feature_table_sha256(tbl_bytes)
+
+
+def test_research_manifest_identity_binds_all_configurations() -> None:
+    """Verify ResearchManifest.manifest_id changes when HAC policy, cost model, or split policy changes."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        engine = ResearchManifestEngine(manifests_dir=Path(tmp_dir) / "manifests")
+        pipeline = AlphaResearchPipeline(manifest_engine=engine)
+        feat_tbl, bars_tbl = _make_dataset(num_bars=100)
+
+        hyp = HypothesisSpecification(
+            hypothesis_id="HYP-CONFIG-BINDING-V1",
+            hypothesis_version="1.0.0",
+            economic_rationale="Testing configuration sensitivity.",
+            target_symbol="ES.FUT",
+            feature_dependencies=["vwap_std"],
+            parameter_config_json="{}",
+            expected_direction=ExpectedDirection.DISPERSION,
+            target_horizons=[1, 5],
+            primary_horizon=5,
+            invalidation_criteria=InvalidationCriteria(
+                min_in_sample_rank_ic=Decimal("0.01"),
+                min_hac_t_stat=Decimal("1.5"),
+            ),
+            registered_at_utc="2026-08-28T00:00:00Z",
+            author="Quantitative Research",
+        )
+
+        split_a = SplitPolicy(train_pct=Decimal("0.60"), val_pct=Decimal("0.20"), oos_pct=Decimal("0.20"), embargo_bars=2)
+        split_b = SplitPolicy(train_pct=Decimal("0.50"), val_pct=Decimal("0.25"), oos_pct=Decimal("0.25"), embargo_bars=4)
+
+        from acash.research.schema import CostModelConfig, HacBandwidthMethod, HacInferencePolicy
+
+        hac_a = HacInferencePolicy(bandwidth_method=HacBandwidthMethod.FIXED_HORIZON_MINUS_ONE)
+        hac_b = HacInferencePolicy(bandwidth_method=HacBandwidthMethod.ANDREWS_AR1_PLUGIN)
+
+
+        cost_a = CostModelConfig(quoted_spread_bps=Decimal("1.0"))
+        cost_b = CostModelConfig(quoted_spread_bps=Decimal("3.0"))
+
+        m_base, _, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_tbl,
+            bars_table=bars_tbl,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+            split_policy=split_a,
+            hac_policy=hac_a,
+            cost_config=cost_a,
+            evaluate_oos=False,
+        )
+
+        m_split, _, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_tbl,
+            bars_table=bars_tbl,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+            split_policy=split_b,
+            hac_policy=hac_a,
+            cost_config=cost_a,
+            evaluate_oos=False,
+        )
+
+        m_hac, _, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_tbl,
+            bars_table=bars_tbl,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+            split_policy=split_a,
+            hac_policy=hac_b,
+            cost_config=cost_a,
+            evaluate_oos=False,
+        )
+
+        m_cost, _, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_tbl,
+            bars_table=bars_tbl,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+            split_policy=split_a,
+            hac_policy=hac_a,
+            cost_config=cost_b,
+            evaluate_oos=False,
+        )
+
+        # Invariant: Changing ANY configuration alters manifest_id and parameter_config_hash!
+        assert m_base.manifest_id != m_split.manifest_id
+        assert m_base.manifest_id != m_hac.manifest_id
+        assert m_base.manifest_id != m_cost.manifest_id
+        assert m_base.parameter_config_hash != m_split.parameter_config_hash
+        assert m_base.parameter_config_hash != m_hac.parameter_config_hash
+        assert m_base.parameter_config_hash != m_cost.parameter_config_hash
+
+
 
 

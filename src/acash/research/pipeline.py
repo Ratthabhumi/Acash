@@ -8,12 +8,14 @@ Strictly enforces:
 """
 
 import hashlib
+import json
 import struct
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import pyarrow as pa
+
 
 from acash.data.features.engine import to_decimal18
 from acash.data.schema import DataContractError
@@ -48,6 +50,7 @@ TYPE_TAG_DECIMAL18 = b"\x04"
 TYPE_TAG_TIMESTAMP_US = b"\x05"
 TYPE_TAG_DATE = b"\x06"
 TYPE_TAG_STR = b"\x07"
+TYPE_TAG_BYTES = b"\x08"
 
 FIELD_SEPARATOR_BYTE = b"\x1f"
 RECORD_SEPARATOR_BYTE = b"\x1e"
@@ -92,12 +95,13 @@ def _encode_field(val: Any) -> bytes:
         return TYPE_TAG_STR + struct.pack(">I", len(s_bytes)) + s_bytes
 
     if isinstance(val, bytes):
-        return TYPE_TAG_STR + struct.pack(">I", len(val)) + val
+        return TYPE_TAG_BYTES + struct.pack(">I", len(val)) + val
 
     raise DataContractError(
         f"Unsupported field type in canonical feature table serialization: {type(val)} ({val!r}). "
         f"Supported types: None, bool, int, Decimal, datetime, date, float, str, bytes."
     )
+
 
 
 
@@ -251,14 +255,47 @@ class AlphaResearchPipeline:
 
         # 4. Out-of-Sample Evaluation & State Machine Governance
         feature_sha256 = calculate_canonical_feature_table_sha256(features_table)
-
-
         hyp_spec_hash = calculate_hypothesis_spec_sha256(hypothesis)
-        manifest_seed = (
-            f"{hypothesis.hypothesis_id}:{primary_h}:{hyp_spec_hash}:{feature_sha256}:"
-            f"{split_cfg.train_pct}:{split_cfg.val_pct}:{evaluate_oos}"
-        )
 
+        # Comprehensive canonical parameter and configuration dictionary
+        try:
+            hyp_params = json.loads(hypothesis.parameter_config_json)
+        except Exception:
+            hyp_params = {"raw": hypothesis.parameter_config_json}
+
+        full_param_config = {
+            "hypothesis_id": hypothesis.hypothesis_id,
+            "hypothesis_version": hypothesis.hypothesis_version,
+            "hypothesis_parameters": hyp_params,
+            "feature_name": feature_name,
+            "primary_horizon": primary_h,
+            "split_policy": {
+                "train_pct": str(split_cfg.train_pct),
+                "val_pct": str(split_cfg.val_pct),
+                "oos_pct": str(split_cfg.oos_pct),
+                "embargo_bars": split_cfg.embargo_bars,
+            },
+            "hac_policy": {
+                "bandwidth_method": hac_cfg.bandwidth_method.value,
+                "fixed_lag_value": hac_cfg.fixed_lag_value,
+                "kernel_type": hac_cfg.kernel_type,
+                "robustness_lags": hac_cfg.robustness_lags,
+            },
+            "cost_model": {
+                "quoted_spread_bps": str(cost_cfg.quoted_spread_bps),
+                "roundtrip_broker_fee_bps": str(cost_cfg.roundtrip_broker_fee_bps),
+                "fixed_slippage_bps": str(cost_cfg.fixed_slippage_bps),
+                "latency_delay_ms": cost_cfg.latency_delay_ms,
+            },
+            "evaluate_oos": evaluate_oos,
+        }
+        parameter_config_json = json.dumps(full_param_config, sort_keys=True)
+        parameter_config_hash = hashlib.sha256(parameter_config_json.encode("utf-8")).hexdigest()
+
+        manifest_seed = (
+            f"{hypothesis.hypothesis_id}:{hypothesis.hypothesis_version}:{primary_h}:"
+            f"{hyp_spec_hash}:{feature_sha256}:{parameter_config_hash}:{evaluate_oos}"
+        )
         manifest_digest = hashlib.sha256(manifest_seed.encode("utf-8")).hexdigest()[:16]
         manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{manifest_digest}"
 
@@ -328,8 +365,9 @@ class AlphaResearchPipeline:
             purging_policy_version="LABEL_INTERVAL_PURGING_V1",
             embargo_policy_version="MAX_HORIZON_EMBARGO_V1",
             input_feature_hashes=[feature_sha256],
-            parameter_config_hash=hyp_spec_hash,
+            parameter_config_hash=parameter_config_hash,
             search_record_hash=calculate_research_search_record_sha256(search_rec),
+
 
             train_window=(p_start_str, str(bars_table["bar_end_utc"][train_end].as_py())),
             validation_window=(str(bars_table["bar_start_utc"][val_start].as_py()), str(bars_table["bar_end_utc"][val_end].as_py())),
