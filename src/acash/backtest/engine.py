@@ -60,23 +60,35 @@ class SimulatedOrderBook:
         size: Optional[Decimal],
     ) -> None:
         """Update order book state based on market data delta."""
+        action_upper = action.upper()
         side_upper = side.upper()
-        target_book = self.bids if side_upper in ("BID", "BUY") else self.asks
 
-        if action in ("SNAPSHOT", "CLEAR"):
-            target_book.clear()
+        if action_upper == "CLEAR":
+            if side_upper in ("ALL", "BOTH", "BOOK"):
+                self.bids.clear()
+                self.asks.clear()
+            elif side_upper in ("BID", "BUY"):
+                self.bids.clear()
+            elif side_upper in ("ASK", "SELL"):
+                self.asks.clear()
+            return
+
+        target_book = self.bids if side_upper in ("BID", "BUY") else self.asks
 
         if price is None:
             return
 
-        if action in ("ADD", "MODIFY", "SNAPSHOT"):
+        if action_upper in ("ADD", "MODIFY", "SNAPSHOT"):
             if size is not None and size > Decimal("0.0"):
                 target_book[price] = size
             else:
                 target_book.pop(price, None)
-        elif action == "DELETE":
-            target_book.pop(price, None)
-        elif action == "REDUCE":
+        elif action_upper in ("DELETE", "CANCEL"):
+            if size is not None and size > Decimal("0.0"):
+                target_book[price] = size
+            else:
+                target_book.pop(price, None)
+        elif action_upper == "REDUCE":
             if size is not None and price in target_book:
                 new_size = target_book[price] - size
                 if new_size > Decimal("0.0"):
@@ -85,6 +97,7 @@ class SimulatedOrderBook:
                     target_book.pop(price, None)
             else:
                 target_book.pop(price, None)
+
 
     @property
     def best_bid(self) -> Optional[Decimal]:
@@ -354,15 +367,22 @@ class EventBacktestRunner:
         slippage_factor = slippage_bps / Decimal("10000.0")
         impact_coeff = self.config.slippage_config.impact_coefficient
 
-        # 1. Fill or Kill (FOK) Check: Must be able to fill the entire remaining quantity
+        # 1. Fill or Kill (FOK) and Immediate or Cancel (IOC) Pre-Execution Checks
+        avail_depth = (
+            self.order_book.total_ask_depth
+            if order.side == "BUY"
+            else self.order_book.total_bid_depth
+        )
+        has_book = self.order_book.asks if order.side == "BUY" else self.order_book.bids
+
         if order.order_type == OrderType.FOK:
-            avail_depth = (
-                self.order_book.total_ask_depth
-                if order.side == "BUY"
-                else self.order_book.total_bid_depth
-            )
-            has_book = self.order_book.asks if order.side == "BUY" else self.order_book.bids
-            if has_book and avail_depth < order.remaining_qty:
+            # FOK requires sufficient executable depth in book; if empty or insufficient, cancel immediately
+            if not has_book or avail_depth < order.remaining_qty:
+                order.status = BacktestOrderStatus.CANCELLED
+                return
+        elif order.order_type == OrderType.IOC:
+            # IOC requires immediate executable depth in book; if empty, cancel immediately
+            if not has_book or avail_depth <= Decimal("0.0"):
                 order.status = BacktestOrderStatus.CANCELLED
                 return
 
@@ -381,8 +401,7 @@ class EventBacktestRunner:
                     )
                     executed_price = vwap * (Decimal("1.0") + slippage_factor + impact)
                 else:
-                    if order.order_type in (OrderType.IOC, OrderType.FOK):
-                        order.status = BacktestOrderStatus.CANCELLED
+                    order.status = BacktestOrderStatus.CANCELLED
                     return
             else:
                 base_price = self.order_book.best_ask or self.last_price
@@ -403,8 +422,7 @@ class EventBacktestRunner:
                     )
                     executed_price = vwap * (Decimal("1.0") - slippage_factor - impact)
                 else:
-                    if order.order_type in (OrderType.IOC, OrderType.FOK):
-                        order.status = BacktestOrderStatus.CANCELLED
+                    order.status = BacktestOrderStatus.CANCELLED
                     return
             else:
                 base_price = self.order_book.best_bid or self.last_price
@@ -415,8 +433,7 @@ class EventBacktestRunner:
                 executed_price = base_price * (Decimal("1.0") - slippage_factor)
 
         if filled_qty <= Decimal("0.0"):
-            if order.order_type in (OrderType.IOC, OrderType.FOK):
-                order.status = BacktestOrderStatus.CANCELLED
+            order.status = BacktestOrderStatus.CANCELLED
             return
 
         # 2. Taker Fee Schedule
@@ -460,11 +477,9 @@ class EventBacktestRunner:
         if order.remaining_qty == Decimal("0.0"):
             order.status = BacktestOrderStatus.FILLED
         else:
-            if order.order_type in (OrderType.IOC, OrderType.FOK):
-                order.status = BacktestOrderStatus.CANCELLED
-            else:
-                order.status = BacktestOrderStatus.PARTIALLY_FILLED
-                self.order_queue.append(order)
+            # MARKET, IOC, and FOK orders do NOT rest in queue; remainder is cancelled
+            order.status = BacktestOrderStatus.CANCELLED
+
 
         # Track PnL statistics
         if realized_pnl > Decimal("0.0"):

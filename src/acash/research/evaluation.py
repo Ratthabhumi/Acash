@@ -246,17 +246,24 @@ def evaluate_hypothesis_relationship(
     if n < 3:
         raise DataContractError(f"Minimum 3 valid observations required for evaluation, got {n}")
 
-    # Determine Primary HAC Lag Bandwidth
+    # Compute exact OLS model residuals e_t = y_t - (alpha_hat + beta_hat * x_t) for HAC plug-in bandwidth
     x_arr = np.array([float(v) for v in features])
     y_arr = np.array([float(v) for v in forward_returns])
-    resids = y_arr - np.mean(y_arr)  # Initial residual proxy for plug-in
+    x_dm = x_arr - np.mean(x_arr)
+    y_dm = y_arr - np.mean(y_arr)
+    denom = float(np.sum(x_dm ** 2))
+    beta_hat = float(np.sum(x_dm * y_dm) / denom) if denom > 0 else 0.0
+    alpha_hat = float(np.mean(y_arr) - beta_hat * np.mean(x_arr))
+    ols_residuals = y_arr - (alpha_hat + beta_hat * x_arr)
+
     primary_lag = determine_hac_bandwidth(
         policy.bandwidth_method,
         sample_size=n,
         horizon=horizon,
         fixed_lag=policy.fixed_lag_value,
-        residuals=resids,
+        residuals=ols_residuals,
     )
+
 
     # Primary OLS Slope Beta & HAC Inference
     beta, hac_se, hac_t_stat, p_val = compute_ols_beta_and_hac(features, forward_returns, primary_lag)

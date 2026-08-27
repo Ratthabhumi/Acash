@@ -44,8 +44,34 @@ def test_simulated_order_book_vwap_sweeps_and_liquidity_consumption() -> None:
     assert book.total_ask_depth == Decimal("23.0")
 
 
+def test_snapshot_multi_row_application_and_clear_all() -> None:
+    """Verify multi-row snapshot frames populate all levels and CLEAR ALL empties both books."""
+    book = SimulatedOrderBook()
+
+    # Apply CLEAR ALL
+    book.apply_delta("CLEAR", "ALL", None, None)
+    assert len(book.bids) == 0 and len(book.asks) == 0
+
+    # Multi-row snapshot frame rows
+    book.apply_delta("SNAPSHOT", "BID", Decimal("5000.00"), Decimal("5.0"))
+    book.apply_delta("SNAPSHOT", "BID", Decimal("4999.00"), Decimal("10.0"))
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5001.00"), Decimal("7.0"))
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5002.00"), Decimal("12.0"))
+
+    assert len(book.bids) == 2
+    assert len(book.asks) == 2
+    assert book.best_bid == Decimal("5000.00")
+    assert book.best_ask == Decimal("5001.00")
+    assert book.total_bid_depth == Decimal("15.0")
+    assert book.total_ask_depth == Decimal("19.0")
+
+    # CLEAR ALL resets both books
+    book.apply_delta("CLEAR", "ALL", None, None)
+    assert len(book.bids) == 0 and len(book.asks) == 0
+
+
 def test_taker_partial_fill_and_ioc_fok_semantics() -> None:
-    """Verify FOK cancels when depth is insufficient, and IOC fills available and cancels remaining."""
+    """Verify FOK cancels when depth is insufficient or book empty, and Market/IOC remainder is cancelled."""
     config = BacktestEngineConfig(
         engine_id="BKT-IOC-FOK-TEST",
         symbol="ES.FUT",
@@ -69,7 +95,22 @@ def test_taker_partial_fill_and_ioc_fok_semantics() -> None:
     assert len(runner_fok.fills) == 0
     assert runner_fok.order_book.total_ask_depth == Decimal("5.0")
 
-    # --- Scenario 2: IOC order with partial depth ---
+    # --- Scenario 2: FOK order on EMPTY book with last_price present -> MUST CANCEL (no fill from mark price) ---
+    runner_empty = EventBacktestRunner(config=config)
+    runner_empty.current_time_ns = 1_000_000_000
+    runner_empty.last_price = Decimal("5000.00")
+    order_fok_empty = runner_empty.submit_order(
+        order_id="ORD-FOK-002",
+        symbol="ES.FUT",
+        order_type=OrderType.FOK,
+        side="BUY",
+        quantity=Decimal("10.0"),
+    )
+    assert order_fok_empty.status is BacktestOrderStatus.CANCELLED
+    assert order_fok_empty.filled_qty == Decimal("0.0")
+    assert len(runner_empty.fills) == 0
+
+    # --- Scenario 3: IOC order with partial depth ---
     runner_ioc = EventBacktestRunner(config=config)
     runner_ioc.current_time_ns = 1_000_000_000
     runner_ioc.order_book.apply_delta("ADD", "ASK", Decimal("5000.00"), Decimal("5.0"))
@@ -88,6 +129,25 @@ def test_taker_partial_fill_and_ioc_fok_semantics() -> None:
     assert len(runner_ioc.fills) == 1
     assert runner_ioc.fills[0].fill_qty == Decimal("5.0")
     assert runner_ioc.order_book.total_ask_depth == Decimal("0.0")
+
+    # --- Scenario 4: MARKET order with partial depth -> Fills available, cancels remainder without resting in queue ---
+    runner_mkt = EventBacktestRunner(config=config)
+    runner_mkt.current_time_ns = 1_000_000_000
+    runner_mkt.order_book.apply_delta("ADD", "ASK", Decimal("5000.00"), Decimal("4.0"))
+
+    order_mkt = runner_mkt.submit_order(
+        order_id="ORD-MKT-001",
+        symbol="ES.FUT",
+        order_type=OrderType.MARKET,
+        side="BUY",
+        quantity=Decimal("10.0"),
+    )
+    assert order_mkt.status is BacktestOrderStatus.CANCELLED
+    assert order_mkt.filled_qty == Decimal("4.0")
+    assert order_mkt.remaining_qty == Decimal("6.0")
+    assert len(runner_mkt.fills) == 1
+    assert len(runner_mkt.order_queue) == 0  # Does NOT rest in queue!
+
 
 
 def test_maker_queue_priority_and_trade_through_matching() -> None:

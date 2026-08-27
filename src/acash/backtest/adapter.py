@@ -226,12 +226,14 @@ class CanonicalDataAdapter:
             message_rank = int(msg_rank_col[i].as_py()) if msg_rank_col is not None else 1
             row_sub_index = int(row_sub_col[i].as_py()) if row_sub_col is not None else 0
 
+            trade_id_val = trade_id_col[i].as_py() if trade_id_col is not None else None
             payload = {
-                "trade_id": str(trade_id_col[i].as_py()) if trade_id_col is not None else f"T-{i}",
+                "trade_id": str(trade_id_val) if trade_id_val is not None else None,
                 "price": Decimal(str(price_col[i].as_py())),
                 "size": Decimal(str(size_col[i].as_py())),
                 "aggressor_side": str(side_col[i].as_py()) if side_col is not None else "UNKNOWN",
             }
+
 
             event = BacktestMarketEvent(
                 event_type=BacktestEventType.TRADE,

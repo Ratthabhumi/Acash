@@ -140,7 +140,22 @@ class AlphaResearchPipeline:
         )
 
         # 4. Out-of-Sample Evaluation & State Machine Governance
-        manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{uuid.uuid4().hex[:8]}"
+        feature_hash = hashlib.sha256()
+        for col_name in sorted(features_table.column_names):
+            feature_hash.update(col_name.encode("utf-8"))
+            for val in features_table[col_name].to_pylist():
+                feature_hash.update(str(val).encode("utf-8"))
+        feature_sha256 = feature_hash.hexdigest()
+
+        hyp_spec_hash = calculate_hypothesis_spec_sha256(hypothesis)
+        manifest_seed = (
+            f"{hypothesis.hypothesis_id}:{primary_h}:{hyp_spec_hash}:{feature_sha256}:"
+            f"{split_cfg.train_pct}:{split_cfg.val_pct}:{evaluate_oos}"
+        )
+
+        manifest_digest = hashlib.sha256(manifest_seed.encode("utf-8")).hexdigest()[:16]
+        manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{manifest_digest}"
+
         oos_beta: Optional[Decimal] = None
         oos_t_stat: Optional[Decimal] = None
         oos_r_ic: Optional[Decimal] = None
@@ -174,7 +189,7 @@ class AlphaResearchPipeline:
 
         # 5. Build and Commit ResearchManifest
         search_rec = search_record or ResearchSearchRecord(
-            experiment_id=f"EXP-{uuid.uuid4().hex[:8]}",
+            experiment_id=f"EXP-{manifest_digest[:8]}",
             hypothesis_id=hypothesis.hypothesis_id,
             parameter_variants_count=1,
             feature_variants_tried=[feature_name],
@@ -206,9 +221,10 @@ class AlphaResearchPipeline:
             cost_model_version="3_TIER_FIXED_PROXY_V1",
             purging_policy_version="LABEL_INTERVAL_PURGING_V1",
             embargo_policy_version="MAX_HORIZON_EMBARGO_V1",
-            input_feature_hashes=["phase3c_features_hash"],
-            parameter_config_hash=calculate_hypothesis_spec_sha256(hypothesis),
+            input_feature_hashes=[feature_sha256],
+            parameter_config_hash=hyp_spec_hash,
             search_record_hash=calculate_research_search_record_sha256(search_rec),
+
             train_window=(p_start_str, str(bars_table["bar_end_utc"][train_end].as_py())),
             validation_window=(str(bars_table["bar_start_utc"][val_start].as_py()), str(bars_table["bar_end_utc"][val_end].as_py())),
             oos_window=(str(bars_table["bar_start_utc"][oos_start].as_py()), p_end_str),

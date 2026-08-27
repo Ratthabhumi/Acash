@@ -94,9 +94,22 @@ def test_research_pipeline_end_to_end_and_manifest_storage() -> None:
         assert manifest.hypothesis_id == "HYP-VWAP-DISPERSION-V1"
         assert manifest.inference_estimator == "OLS_SLOPE_BETA_HAC"
         assert eval_table.num_rows == 1
+        assert len(manifest.input_feature_hashes[0]) == 64  # Real SHA-256
 
         # Verify Manifest persistence and loading
         loaded_manifest = engine.load_research_manifest(manifest.manifest_id)
         assert loaded_manifest is not None
         assert loaded_manifest.manifest_id == manifest.manifest_id
         assert loaded_manifest.in_sample_beta == manifest.in_sample_beta
+
+        # Re-run 2: Identical inputs MUST produce identical deterministic manifest_id
+        manifest2, _, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_tbl,
+            bars_table=bars_tbl,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+            split_policy=split_policy,
+            evaluate_oos=False,
+        )
+        assert manifest.manifest_id == manifest2.manifest_id
+
