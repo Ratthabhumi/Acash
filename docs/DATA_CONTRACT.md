@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.5.0 (Event Key vs Revision Identity, Logical Hashing & Single-Writer Scope Finalized)  
+**Version:** 1.6.0 (Revision Monotonicity Separation, Batch Idempotency & Revision Sequence Contract Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -29,7 +29,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 | `event_start_utc` | `timestamp[us, tz=UTC]` | Exact bar opening timestamp in UTC (Microsecond precision) |
 | `event_end_utc` | `timestamp[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microsecond precision) |
 | `knowledge_time_utc`| `timestamp[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microsecond precision) |
-| `revision_seq` | `int64` | Deterministic revision sequence scoped to `Event Observation Key` |
+| `revision_seq` | `int64` | Deterministic revision sequence scoped to `Event Observation Key` ($\ge 1$) |
 | `open` | `decimal128(38, 18)` | Opening price within explicit precision/scale limits |
 | `high` | `decimal128(38, 18)` | Highest traded price during the bar interval |
 | `low` | `decimal128(38, 18)` | Lowest traded price during the bar interval |
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout & Concurrency Boundaries
+## 3. Storage Layout, Batch Idempotency & Concurrency Boundaries
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -59,7 +59,7 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 └── ...
 ```
 
-### Storage & Concurrency Invariants:
+### Storage & Ingestion Invariants:
 1. **Append-Only Parts:** Each successful batch ingestion writes a new, uniquely identified immutable part file.
 2. **Never Overwrite Existing Parts:** Normal ingestion never overwrites, truncates, or replaces existing part files.
 3. **Partition Scanning:** DuckDB reads the full historical dataset across all parts using parquet file globs:
@@ -67,7 +67,11 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 4. **Atomic Staging Pattern:**
    $$\text{Write Temp (.tmp\_part\_*.parquet)} \to \text{Flush/Close} \to \text{Validate Staged File} \to \text{os.replace into Canonical Part Path}$$
    Under supported filesystem semantics, readers will not observe the final path as a partially written staging file, and a failed write leaves existing parts completely intact.
-5. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
+5. **Batch Idempotency Contract:**
+   - `batch_id` must be unique within the canonical storage namespace.
+   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (no-op; returns the existing part path without creating duplicate parts).
+   - Ingesting an existing `batch_id` with differing canonical content is rejected with a fatal `BatchCollisionError`.
+6. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
 
 ---
 
@@ -75,20 +79,28 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 
 ACASH explicitly decouples **Event Time** ($t_{\text{event}}$) from **Knowledge Time** ($t_{\text{knowledge}}$).
 
-### 4.1 Temporal Ordering Invariants:
+### 4.1 Temporal Ordering Invariants (Separation of Event Time vs Revision Ordering):
 1. **Intra-Bar Interval:** $t_{\text{event\_start}} < t_{\text{event\_end}}$
 2. **Knowledge Invariant:** $t_{\text{knowledge}} \ge t_{\text{event\_end}}$ (No observation can be known before its bar interval closes)
-3. **Stream-Isolated Monotonicity:** For sequential bars $i$ and $i+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, i+1} \ge t_{\text{event\_end}, i}$.
+3. **Distinct Event Monotonicity:** For distinct event observation keys $j$ and $j+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
+4. **Revision Ordering Within Event:** Multiple valid revisions sharing the **same** `event_start_utc` are permitted. Revisions within an event are ordered and validated by strictly distinct `(knowledge_time_utc, revision_seq)`. They do **not** violate event-time monotonicity.
 
-### 4.2 Event Observation Key vs Revision Identity:
+### 4.2 Event Observation Key, Revision Identity & `revision_seq` Contract:
 ACASH makes a strict distinction between the **event being observed** and its **specific historical revision**:
 
 $$\text{Event Observation Key} = (\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc})$$
 
 $$\text{Revision Identity} = (\text{Event Observation Key}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
 
-- `revision_seq` is a deterministic, strictly increasing integer scoped to the `Event Observation Key`.
-- **Global Revision Uniqueness:** An exact `Revision Identity` must be globally unique across the canonical dataset. If an incoming record matches a `Revision Identity` already present in the incoming batch or existing canonical Parquet parts, it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
+#### `revision_seq` Contract:
+- Integer $\ge 1$.
+- Scoped strictly to `Event Observation Key`.
+- Deterministic and monotonic.
+- Must not be reused for the same source-specific event observation.
+- **Assignment Origin:** If provided upstream by the data source, source sequence is validated; otherwise, ACASH deterministically assigns `revision_seq` starting at 1 ordered ascending by `knowledge_time_utc`.
+
+#### Global Revision Uniqueness:
+- An exact `Revision Identity` must be globally unique across the canonical dataset. If an incoming record matches a `Revision Identity` already present in the incoming batch or existing canonical Parquet parts, it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
 - **Zero Premature Source Merging:** Multiple data sources observing the same symbol and timestamp remain distinct independent observations. Phase 2 PIT queries return source-specific authoritative records and do NOT merge, rank, or reconcile sources. (Source selection and reconciliation is a separate future research layer).
 
 ### 4.3 Source-Aware Point-in-Time (P-I-T) Query Standard:
@@ -126,6 +138,7 @@ Provenance is tracked at the batch and source level without circular row-level s
      2. Encode numeric decimals and UTC timestamps in canonical fixed-width binary representations.
      3. Sort rows strictly by `Revision Identity` (`source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq`).
    - **File-Layout Invariance:** The logical hash is completely invariant to Parquet compression codecs, row-group boundaries, file metadata, or physical storage chunking.
+   - **Content Verification:** Modified canonical data content is detected by recomputing the logical canonical representation and comparing its `canonical_batch_sha256`. (It does not claim to detect raw metadata/file-level edits that leave logical canonical data unchanged).
    - Stored in the Provenance Ledger (`data/provenance_ledger.jsonl`) alongside the resulting Parquet part file path.
 
 ---
@@ -146,7 +159,8 @@ Integrity validation operates strictly per independent data stream: `(source_id,
    - OHLC Geometry Violations                          - Unexpected Cadence Gap
    - Non-finite (NaN / Inf)                            - High-Low Spread Expansion
    - Invalid / Future Timestamps                       - Missing Secondary Fields (quote_vol, trade_count)
-   - Duplicate Global Revision Identities              - Statistically unusual observations
+   - Distinct Event Monotonicity Violations            - Statistically unusual observations
+   - Duplicate Global Revision Identities              
    - Schema / Type / Precision Boundary Mismatch
 ```
 
@@ -181,7 +195,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.5.0",
+  "schema_version": "1.6.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",
@@ -195,4 +209,4 @@ Every ingestion run records an entry in the **append-only application audit log*
 ```
 
 > [!NOTE]
-> **Audit Log Security Boundaries:** The JSONL provenance ledger is an append-only application audit log, not a cryptographically tamper-evident or chained ledger. The embedded SHA-256 hashes provide dataset integrity verification. Cryptographic hash chaining or WORM storage may be evaluated in future enterprise security phases.
+> **Audit Log Security Boundaries:** The JSONL provenance ledger is an append-only application audit log, not a cryptographically tamper-evident or chained ledger. The embedded SHA-256 hashes verify logical canonical data content. Cryptographic hash chaining or WORM storage may be evaluated in future enterprise security phases.

@@ -191,19 +191,26 @@
 
 ## ADR-019: Immutable Part Storage, Event-Key/Revision-Identity Semantics & Data Contract
 - **Status:** Approved
-- **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must not cross independent source streams, duplicate revision identities must be deterministically rejected across the entire dataset, and hash calculations must be invariant to input row permutations.
+- **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must distinguish between sequential distinct event observations and multiple historical revisions of the same event observation.
 - **Decision:**
   1. **Immutable Append-Only Part Storage:** Datasets are stored as partitioned immutable part files:
      `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`
      Normal ingestion never overwrites existing part files; DuckDB queries scan all parts via Parquet globs.
-  2. **Canonical Types & Precision Limits:**
+  2. **Batch Idempotency Contract:**
+     - Retrying the same `batch_id` with identical canonical content is safely idempotent.
+     - Ingestion of an existing `batch_id` with differing canonical content is rejected with `BatchCollisionError`.
+  3. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(38, 18)` (Canonical representation supporting up to 18 fractional scale places; out-of-bound or non-finite values rejected).
-  3. **Event Observation Key vs Revision Identity & Concurrency:**
+  4. **Event Observation Key, Revision Identity & `revision_seq`:**
      - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
      - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
-     - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against the incoming batch and existing canonical parts under the **Phase 2 single-writer scope**. (Concurrent ingestion is out of scope).
-  4. **Source-Aware P-I-T Revision Selection Standard:**
+     - `revision_seq` is an integer $\ge 1$ scoped to the Event Observation Key (source-provided or deterministically assigned by ACASH).
+     - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against the incoming batch and existing canonical parts under the **Phase 2 single-writer scope**.
+  5. **Distinct Event Monotonicity vs Revision Ordering:**
+     - Event-time monotonicity is validated over distinct event observation keys: $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
+     - Revisions within an event are ordered and validated by distinct `(knowledge_time_utc, revision_seq)` with $t_{\text{knowledge}} \ge t_{\text{event\_end}}$.
+  6. **Source-Aware P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
          SELECT * FROM read_parquet('data/parquet/{symbol}/{timeframe}/**/*.parquet')
@@ -217,13 +224,13 @@
      ) = 1
      ORDER BY source_id ASC, event_start_utc ASC;
      ```
-  5. **Deterministic Logical Data Hashes:**
+  7. **Deterministic Logical Data Hashes:**
      - `raw_source_sha256`: SHA-256 of raw input bytes.
      - `canonical_batch_sha256`: SHA-256 computed over the deterministic binary serialization of canonical data columns sorted by Revision Identity (excluding digest fields). Completely invariant to physical Parquet compression, chunking, or input row permutations.
      - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
-  6. **Per-Stream Validation:** Monotonicity and cadence checks execute strictly per independent `(source_id, symbol, timeframe)` stream.
-  7. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
-- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources and files, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
+  8. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
+- **Consequences:** Eliminates partition overwrite data-loss risks, decouples event-time sequencing from revision ordering, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
+
 
 
 
