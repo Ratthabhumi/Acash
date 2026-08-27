@@ -1,7 +1,7 @@
 # ACASH — Phase 3B: Canonical Order Book Subsystem Design Proposal & Data Contract
 
 **Document:** `docs/PHASE_3B_DESIGN_PROPOSAL.md`  
-**Version:** 1.6.0  
+**Version:** 1.7.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — FINAL ARCHITECTURAL LOCK (Awaiting Formal Sign-off)**  
 
@@ -17,7 +17,7 @@ Unlike **Trades (Phase 3A)**, which are discrete completed matching events (poin
    - **L2/L3 Incremental Deltas:** Mutation events (`ADD`, `MODIFY`, `CANCEL`, `DELETE`, `CLEAR`) carrying adapter-defined ordering tokens.
 2. An analytical research query requesting *"What was the exact Top-10 Depth Ladder at time $T_{\text{target}}$ as observed at or before $T_{\text{knowledge}}$?"* requires a **deterministic Book State Reconstruction Engine** that:
    - Operates strictly within an **immutable Stream Scope** `(source_id, channel_id, symbol, trading_date)`.
-   - Selects the latest complete **Snapshot Frame** prior to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$, with deterministic tie-breaking.
+   - Selects the latest complete **Snapshot Frame** prior to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$, with replay-stable deterministic tie-breaking.
    - Applies subsequent incremental deltas strictly following the snapshot boundary via a unified **Canonical Reconstruction Ordering Key** up to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$, using normalized resulting quantities.
 
 ```
@@ -28,7 +28,7 @@ Unlike **Trades (Phase 3A)**, which are discrete completed matching events (poin
     CANONICAL SNAPSHOTS (MBP)                                             CANONICAL DELTAS (MBP/MBO)
   - Multi-row atomic snapshot frames                                    - Incremental Atomic Mutations
   - Contract-driven shape completeness                                  - Normalized resulting quantity semantics
-  - Explicit source_order_key token                                     - Explicit source_order_key token
+  - Shared source_order_key domain                                      - Shared source_order_key domain
   - Scoped to (source, channel, symbol, date)                           - Nullable control fields for CLEAR
                  │                                                                     │
                  └──────────────────────────────────┬──────────────────────────────────┘
@@ -38,8 +38,10 @@ Unlike **Trades (Phase 3A)**, which are discrete completed matching events (poin
                                │  BOOK STATE RECONSTRUCTION ENGINE       │
                                │  - Immutable Stream Scope               │
                                │  - Multi-Row Frame Compound Root        │
-                               │  - Deterministic Final Tie-Breaker      │
+                               │  - Replay-Stable Final Tie-Breaker      │
                                │  - Unified Reconstruction Ordering Key  │
+                               │  - Strict Byte/ASCII Lexical Ordering   │
+                               │  - Zero source_seq_num Inferences       │
                                │  - Normalized Resulting Size Semantics  │
                                │  - Adapter SourceOrderingPolicy         │
                                │  - Classifies Crossed States            │
@@ -80,14 +82,17 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
 
 ---
 
-## 3. Snapshot Frame Identity, Uniqueness & Contract-Driven Shape Completeness
+## 3. Snapshot Frame Identity, Stability & Contract-Driven Shape Completeness
 
 > [!IMPORTANT]
 > **Snapshot Frame Compound Identity & Completeness Principle:**
 > A snapshot is **NOT a single row**; it is an **atomic multi-row frame** representing a full price ladder across bid and ask sides.
 >
-> 1. **Snapshot Frame Identity & Uniqueness Scope:**  
->    The `snapshot_id` string is unique within the compound frame scope:
+> 1. **Snapshot Frame Identity & Replay Stability:**  
+>    The `snapshot_id` string is **immutable, deterministic, and replay-stable** within the compound frame scope. It **MUST NOT** be generated randomly (no random UUIDs).  
+>    Canonical derivation rule when not supplied by feed:
+>    $$\text{snapshot\_id} = \text{snap\_}\{\text{source\_id}\}\_\{\text{channel\_id}\}\_\{\text{symbol}\}\_\{\text{trading\_date}\}\_\{\text{source\_order\_key}\}$$
+>    Compound Frame Identity:
 >    $$\text{Compound Frame Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{snapshot\_id})$$
 >
 > 2. **Contract-Driven Snapshot Shape Policy:**  
@@ -104,25 +109,34 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
 
 ---
 
-## 4. Adapter-Defined Source Ordering Policy & `source_order_key` Contract
+## 4. Shared `source_order_key` Ordering Domain & Hard Sequence Boundary
 
 > [!IMPORTANT]
-> **`source_order_key` Total Ordering & Opacity Contract:**
-> 1. **Opaque to Core:**  
->    `source_order_key` is an adapter-supplied token whose internal structure or meaning is **NOT interpreted by ACASH core**.
-> 2. **Total Ordering Guarantee:**  
->    The Source Adapter **MUST guarantee** that the serialized string representation of `source_order_key` possesses a deterministic **total ordering** suitable for direct comparison (`<`, `<=`, `>`, `>=`) within the declared Stream Scope.
-> 3. **Core Permissions & Constraints:**  
->    - Core **MAY** compare `source_order_key` values lexicographically.
->    - Core **MUST NOT** perform arithmetic on `source_order_key` or infer numeric contiguity/gaps from it.
-> 4. **Adapter Responsibility:**  
->    For feeds where upstream `source_seq_num` or transaction IDs are authoritative for ordering, the adapter normalizes `source_order_key` (e.g. zero-padded string `f"{seq:020d}"`) to guarantee correct lexical sorting.
-> 5. **Unorderable Fallback (`STATE_UNORDERABLE`):**  
->    If the source adapter cannot provide a trustworthy total ordering guarantee for a stream, the Reconstructor marks state as `STATE_UNORDERABLE` and refuses reconstruction rather than guessing order.
+> **1. Shared Ordering Domain Invariant:**
+> For any given stream `(source_id, channel_id, symbol, trading_date)`, Snapshot and Delta records **MUST use `source_order_key` values from the same adapter-defined ordering domain**.
+> - The Source Adapter **MUST guarantee** deterministic comparability of `source_order_key` across `SNAPSHOT_FRAME` and `INCREMENTAL_DELTA` records within the stream.
+> - `source_order_key` comparison **MUST use deterministic byte-wise/ASCII lexicographical ordering** (independent of database locale or collation settings).
+>
+> **2. Hard Boundary: Zero `source_seq_num` Inferences:**
+> - `source_seq_num` is an upstream opaque identifier and **IS NOT a reconstruction ordering primitive**.
+> - The ACASH Core Reconstruction Engine **MUST NEVER compare `source_seq_num` arithmetically or lexicographically**.
+> - `source_order_key` is the **SOLE** canonical cross-record ordering primitive for reconstruction.
+>
+> **3. `SourceOrderingPolicy`:**  
+> ```python
+> class SourceOrderingPolicy(str, Enum):
+>     OPAQUE = "OPAQUE"                     # Ordered strictly by (exchange_time_utc, source_order_key, action_sub_idx)
+>     MONOTONIC_INTEGER = "MONOTONIC_INTEGER" # Monotonically increasing sequence within channel/session
+>     CONTIGUOUS_PACKET = "CONTIGUOUS_PACKET" # Strict arithmetic contiguity guaranteed by source feed
+>     RESET_AWARE = "RESET_AWARE"           # Declared session rollover / channel reconnect reset support
+> ```
+>
+> **4. Unorderable Fallback (`STATE_UNORDERABLE`):**  
+> If the source adapter cannot provide a trustworthy total ordering guarantee for a stream, the Reconstructor marks state as `STATE_UNORDERABLE` and refuses reconstruction rather than guessing order.
 
 ---
 
-## 5. Unified Canonical Reconstruction Ordering Key & Boundary Model
+## 5. Unified Canonical Reconstruction Ordering Key & Explicit Sub-Index Mapping
 
 > [!IMPORTANT]
 > **Unified Reconstruction Ordering Model:**
@@ -130,20 +144,22 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
 >
 > $$\text{ReconstructionOrder} = (\text{exchange\_time\_utc}, \text{source\_order\_key}, \text{message\_type\_rank}, \text{row\_sub\_index})$$
 >
-> Where:
+> ### 5.1 Explicit Field & Sub-Index Mappings
 > - `exchange_time_utc`: `timestamp[ns, tz=UTC]` (lossless nanoseconds)
-> - `source_order_key`: `string` (lexicographically total-ordered by adapter)
+> - `source_order_key`: `string` (lexicographically total-ordered by adapter via byte/ASCII collation)
 > - `message_type_rank`: `int` (Precedence rank):
 >   - `0` for **`SNAPSHOT_FRAME`** (Root State Snapshot)
 >   - `1` for **`INCREMENTAL_DELTA`** (Incremental Mutation)
-> - `row_sub_index`: `int` (`level_idx` for snapshots; `action_sub_idx` for deltas)
+> - `row_sub_index`: `int` (Explicit Deterministic Mapping):
+>   - For `SNAPSHOT_FRAME`: $\text{row\_sub\_index} = (0 \text{ if side == 'BID' else } 1) \times 100000 + \text{level\_idx}$
+>   - For `INCREMENTAL_DELTA`: $\text{row\_sub\_index} = \text{action\_sub\_idx}$
 >
-> ### 5.1 Single Canonical Eligibility Rule
+> ### 5.2 Single Canonical Eligibility Rule
 > A Delta is eligible to be applied to the Root Snapshot if and only if:
 > $$\text{delta.ReconstructionOrder} > \text{snapshot.ReconstructionBoundary}$$
-> where $\text{snapshot.ReconstructionBoundary} = (\text{snapshot.exchange\_time\_utc}, \text{snapshot.source\_order\_key}, 0, \infty)$.
+> where $\text{snapshot.ReconstructionBoundary} = (\text{snapshot.exchange\_time\_utc}, \text{snapshot.source\_order\_key}, 0, 2147483647)$.
 >
-> ### 5.2 Deterministic Coincidence Resolution
+> ### 5.3 Deterministic Coincidence Resolution
 > In the exact coincidence case where $\text{delta.exchange\_time\_utc} == \text{snapshot.exchange\_time\_utc}$ AND $\text{delta.source\_order\_key} == \text{snapshot.source\_order\_key}$:
 > - The snapshot frame has `message_type_rank = 0`.
 > - The incremental delta has `message_type_rank = 1`.
@@ -167,7 +183,7 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
   `CLEAR` is classified as a control action and is **strictly excluded from positive price/size validation**.
 
 ### 6.2 MBO (Market By Order — L3 Order-Level Deltas)
-- **`ADD`**: `order_id` (non-null, non-empty string required), `price` ($> 0$), `size` ($> 0$). `size` represents the **initial order quantity** with FIFO queue priority.
+- **`ADD`**: `order_id` (non-null, non-empty string required: `order_id != None and len(order_id) > 0`), `price` ($> 0$), `size` ($> 0$). `size` represents the **initial order quantity** with FIFO queue priority.
 - **`MODIFY`**: `order_id` (non-null, non-empty string required), `price` ($> 0$), `size` ($> 0$). `size` represents the **resulting remaining order quantity**; price modification resets FIFO queue priority.
 - **`CANCEL`**: `order_id` (non-null, non-empty string required), `size` ($\ge 0$). `size` represents the **resulting remaining order quantity**; if `0`, the order is purged from the queue.
 - **`DELETE`**: `order_id` (non-null, non-empty string required), `size = Decimal("0")`. Order is immediately purged from the queue.
@@ -191,8 +207,8 @@ CANONICAL_BOOK_SNAPSHOT_SCHEMA = pa.schema([
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
     pa.field("source_seq_num", pa.int64(), nullable=False),
-    pa.field("source_order_key", pa.string(), nullable=False),    # Total-ordered adapter token
-    pa.field("snapshot_id", pa.string(), nullable=False),         # Compound Frame Group Identifier
+    pa.field("source_order_key", pa.string(), nullable=False),    # Shared total-ordered token (byte/ASCII)
+    pa.field("snapshot_id", pa.string(), nullable=False),         # Replay-stable Frame Group Identifier
     pa.field("is_snapshot_complete", pa.bool_(), nullable=False), # Contract-certified completeness
     pa.field("side", pa.string(), nullable=False),               # "BID", "ASK"
     pa.field("level_idx", pa.int32(), nullable=False),           # 0 = Top of Book (BBO), 1..N Depth
@@ -214,7 +230,7 @@ CANONICAL_BOOK_DELTA_SCHEMA = pa.schema([
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
     pa.field("source_seq_num", pa.int64(), nullable=False),
-    pa.field("source_order_key", pa.string(), nullable=False),    # Total-ordered adapter token
+    pa.field("source_order_key", pa.string(), nullable=False),    # Shared total-ordered token (byte/ASCII)
     pa.field("action_sub_idx", pa.int32(), nullable=False),       # 0, 1, 2... within packet
     pa.field("delta_type", pa.string(), nullable=False),         # "MBP" or "MBO"
     pa.field("action", pa.string(), nullable=False),             # "ADD", "MODIFY", "CANCEL", "DELETE", "CLEAR"
@@ -291,7 +307,7 @@ data/
 
 To reconstruct the Order Book state for stream `($source_id, $channel_id, $symbol, $trading_date)` at target exchange time $T_{\text{target}}$ as observed at or before $T_{\text{knowledge}}$:
 
-#### Stage 1: Select Candidate Snapshot Frame with Deterministic Tie-Breaker & Retrieve ALL Frame Rows
+#### Stage 1: Select Candidate Snapshot Frame with Replay-Stable Tie-Breaker & Retrieve ALL Frame Rows
 ```sql
 WITH candidate_frame AS (
     SELECT
@@ -317,7 +333,7 @@ WITH candidate_frame AS (
             exchange_time_utc DESC,
             source_order_key DESC,
             knowledge_time_utc DESC,
-            snapshot_id ASC  -- Final deterministic tie-breaker
+            snapshot_id ASC  -- Replay-stable deterministic tie-breaker
     ) = 1
 )
 SELECT s.*
@@ -343,7 +359,7 @@ WHERE source_id = ?
   AND trading_date = CAST(? AS DATE)
   AND knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
   AND (
-    (exchange_time_utc = CAST(? AS TIMESTAMPTZ) AND source_order_key >= ?) -- Handled in engine via ReconstructionOrder > boundary
+    (exchange_time_utc = CAST(? AS TIMESTAMPTZ) AND source_order_key >= ?) -- Evaluated in memory via ReconstructionOrder > boundary
     OR (exchange_time_utc > CAST(? AS TIMESTAMPTZ) AND exchange_time_utc <= CAST(? AS TIMESTAMPTZ))
   )
 ORDER BY exchange_time_utc ASC, source_order_key ASC, action_sub_idx ASC;
@@ -361,15 +377,19 @@ emitting the exact Top-$N$ Depth Ladder at $T_{\text{target}}$.
 Phase 3B completion is governed by the following test matrix:
 
 - [ ] **Schema Conformance:** Both `CANONICAL_BOOK_SNAPSHOT_SCHEMA` and `CANONICAL_BOOK_DELTA_SCHEMA` strictly enforced, including `source_order_key: pa.string()`, `is_snapshot_complete: pa.bool_()`, and nullable price/size for `CLEAR`.
-- [ ] **Deterministic Snapshot Frame Selection:** Stage 1 PIT query selects the full multi-level snapshot frame and uses `snapshot_id ASC` as a deterministic tie-breaker when timestamps and ordering keys match.
+- [ ] **Cross-Message `source_order_key` Comparability:** Verifies that Snapshot and Delta `source_order_key` values use the exact same ordering domain and compare accurately across record types.
+- [ ] **Byte/ASCII Lexical Collation Independence:** Verifies that `source_order_key` comparisons are deterministic and byte/ASCII collation independent.
+- [ ] **Deterministic Snapshot Frame Selection & Stability:** Stage 1 PIT query selects the full multi-level snapshot frame and uses replay-stable `snapshot_id ASC` as a deterministic tie-breaker.
 - [ ] **Compound Join Scope:** Stage 1 PIT retrieval joins on `(source_id, channel_id, symbol, trading_date, source_seq_num, snapshot_id)`, preventing cross-stream collision.
 - [ ] **Contract-Driven Snapshot Completeness:** Reconstructor validates shape completeness according to declared policy (`FIXED_DEPTH_N`, `VARIABLE_DEPTH`, `SOURCE_DECLARED_COMPLETE`) and rejects incomplete frames (`PARTIAL_SNAPSHOT_REJECTED`).
 - [ ] **Frame Metadata Consistency:** Validator rejects snapshot tables where rows with the same Compound Frame Identity contain conflicting timestamp/sequence/order-key metadata.
+- [ ] **Explicit `row_sub_index` Mapping:** Verifies that `ReconstructionOrder` correctly maps `level_idx` for snapshots and `action_sub_idx` for deltas.
+- [ ] **Proof of Zero `source_seq_num` Ordering Dependency:** Verifies that modifying or reversing `source_seq_num` values has zero effect on reconstruction order when `source_order_key` is preserved.
+- [ ] **Same Timestamp & Same Order Key Coincidence Test:** Verifies that when $\text{snapshot.time} == \text{delta.time}$ and $\text{snapshot.key} == \text{delta.key}$, the delta is deterministically applied via $\text{rank } 1 > \text{rank } 0$.
 - [ ] **Normalized MBP Action Payload Semantics:** Verifies accurate ladder state transitions for `ADD` ($>0$), `MODIFY` (resulting absolute size), `CANCEL` (remaining size), `DELETE` (size 0), and `CLEAR` (`price=None, size=None, side in {BID, ASK, ALL}`).
 - [ ] **MBP order_id Null Invariant:** Validator strictly enforces `order_id is None` for all MBP actions.
-- [ ] **Normalized MBO Order Queue Semantics:** Verifies discrete order queue tracking with non-empty `order_id`, FIFO priority, priority reset on price modification, and L2 depth projection.
-- [ ] **Stream Scope & Strict Ordering Tuple Boundary:** Verifies that deltas from a different stream are rejected and deltas preceding or equal to the snapshot ordering tuple are not double-applied.
-- [ ] **Same Timestamp & Same Order Key Coincidence Test:** Verifies that when $\text{snapshot.time} == \text{delta.time}$ and $\text{snapshot.key} == \text{delta.key}$, the delta is deterministically applied via $\text{rank } 1 > \text{rank } 0$.
+- [ ] **Normalized MBO Order Queue Semantics:** Verifies discrete order queue tracking with non-null, non-empty `order_id`, FIFO priority, priority reset on price modification, and L2 depth projection.
+- [ ] **Stream Scope & Strict Ordering Tuple Boundary:** Verifies that deltas from a different stream are rejected and deltas preceding or equal to the snapshot ordering boundary are not double-applied.
 - [ ] **Adapter SourceOrderingPolicy Compliance:** Reconstructor obeys adapter-defined ordering without imposing generic sequence contiguity on opaque feeds, marking `STATE_UNORDERABLE` if untrustworthy.
 - [ ] **Crossed State Granularity:** Reconstructor distinguishes `CROSSED_TRANSIENT`, `CROSSED_AUCTION_OR_HALT`, and `CROSSED_DUE_TO_INVALID_RECONSTRUCTION`.
 - [ ] **Permutation & Codec Invariance:** Permuting snapshot/delta rows or changing compression codec produces identical hashes.
