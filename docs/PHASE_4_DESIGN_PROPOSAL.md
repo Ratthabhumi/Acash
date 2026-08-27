@@ -1,9 +1,9 @@
 # ACASH — Phase 4: Alpha Research Engine & Hypothesis Contract Design Proposal
 
 **Document:** `docs/PHASE_4_DESIGN_PROPOSAL.md`  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Date:** 2026-08-28  
-**Status:** **PROPOSED — AWAITING ARCHITECTURAL REVIEW & SIGN-OFF**  
+**Status:** **PROPOSED — METHODOLOGICAL REFINEMENTS (Awaiting Formal Sign-Off)**  
 
 ---
 
@@ -18,32 +18,32 @@ In institutional quantitative finance, **the primary cause of failure is not com
                        ┌───────────────────────────────┐
                        │    FORMAL HYPOTHESIS SPEC     │
                        │ - Structural Economic Theory  │
-                       │ - Falsification Criteria      │
-                       │ - Lineage & Versioning        │
+                       │ - Pre-registered Falsification│
+                       │ - Versioned Specification     │
                        └───────────────┬───────────────┘
                                        │
                                        ▼
                        ┌───────────────────────────────┐
-                       │   FORWARD OUTCOME ENGINE      │
-                       │ - Exact Next-Bar Entry Rules  │
-                       │ - Horizons H={1,5,15,60}      │
-                       │ - Overlapping Variance Correc │
+                       │    FORWARD OUTCOME ENGINE     │
+                       │ - Next-Bar Open Entry Rules   │
+                       │ - Multi-Horizons H={1,5,15,60}│
+                       │ - Purging & Embargo Boundaries│
                        └───────────────┬───────────────┘
                                        │
                                        ▼
                        ┌───────────────────────────────┐
                        │    STATISTICAL EVALUATION     │
                        │ - Pearson IC & Rank IC        │
-                       │ - Newey-West Adjusted t-Stats │
-                       │ - Feature Decay Profiles      │
+                       │ - Configurable HAC Inference  │
+                       │ - Robustness Bandwidth Matrix │
                        └───────────────┬───────────────┘
                                        │
                  ┌─────────────────────┴─────────────────────┐
                  ▼                                           ▼
-      3-TIERED TRANSACTION COSTS                   MULTI-TESTING & OOS GATE
-   - Raw Signal Edge                            - In-Sample (60%)
-   - Half-Spread & Fee Net                      - Validation (20%)
-   - Slippage & Latency Economic Edge           - Strict Held-Out OOS (20%)
+      3-TIERED TRANSACTION COSTS                   MULTI-TESTING & SEARCH REGISTRY
+   - Tier 1: Raw Predictive Edge                - Parameter & Variant Accounting
+   - Tier 2: Spread & Fee Net                   - Train / Val / Embargo / OOS Partitions
+   - Tier 3: Slippage & Latency Economic Edge   - Blind OOS Exposure State Tracking
                  │                                           │
                  └─────────────────────┬─────────────────────┘
                                        │
@@ -55,16 +55,20 @@ In institutional quantitative finance, **the primary cause of failure is not com
 ```
 
 > [!IMPORTANT]
-> **Core Philosophy of Phase 4:**
-> 1. **Alpha Research $\neq$ Strategy Backtesting:** Phase 4 does NOT search for profitable trading bots. It tests whether quantitative features contain **statistically significant, economically viable predictive information** before any strategy is formed.
-> 2. **Pre-Registered Falsification:** Every hypothesis must declare explicit invalidation criteria *before* running evaluations. If the metric fails the threshold, the hypothesis is formally rejected.
-> 3. **3-Tier Friction Realism:** No signal is considered viable based on raw returns. It must survive spread, execution fees, slippage, and latency penalties.
+> **Strict Epistemic Distinctions in Phase 4:**
+> 
+> $$\text{Predictive Statistical Association (IC)} \quad \not\equiv \quad \text{Tradeable Economic Edge (Net Alpha)} \quad \not\equiv \quad \text{Production Profitability (Live Strategy)}$$
+> 
+> 1. **Predictive Association (IC):** Quantifies whether a feature has non-random correlation with forward returns. It does NOT prove money can be extracted.
+> 2. **Tradeable Economic Edge:** Quantifies whether predictive association survives roundtrip bid/ask spread, exchange fees, market impact slippage, and latency drag.
+> 3. **Production Profitability:** Reserved for Phase 5+, subject to dynamic portfolio allocation, execution routing, and real-world infrastructure constraints.
+> 4. **Alpha Research $\neq$ Strategy Backtesting:** Phase 4 does NOT search for profitable trading bots. It tests whether quantitative features contain **statistically significant, economically viable predictive information** before any strategy is formed.
 
 ---
 
 ## 2. Formal Hypothesis Specification Contract
 
-Every quantitative inquiry in ACASH must be formally registered as an immutable `HypothesisSpecification`:
+Every quantitative inquiry in ACASH must be formally registered as an immutable `HypothesisSpecification` with pre-declared falsification criteria:
 
 ```python
 class ExpectedDirection(str, Enum):
@@ -74,10 +78,11 @@ class ExpectedDirection(str, Enum):
 
 
 class InvalidationCriteria(BaseModel):
+    """Pre-registered statistical falsification criteria."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     min_in_sample_rank_ic: Decimal = Field(default=Decimal("0.025"), ge=Decimal("0.0"))
-    min_newey_west_t_stat: Decimal = Field(default=Decimal("2.00"), ge=Decimal("1.5"))
+    min_hac_t_stat: Decimal = Field(default=Decimal("2.00"), ge=Decimal("1.5"))
     max_feature_autocorrelation: Decimal = Field(default=Decimal("0.98"), le=Decimal("1.0"))
     min_cost_adjusted_spread_ratio: Decimal = Field(default=Decimal("1.50"), ge=Decimal("1.0"))
 
@@ -87,10 +92,10 @@ class HypothesisSpecification(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     hypothesis_id: str               # e.g. "HYP-001-OBI-SHORT-MOMENTUM-V1"
-    hypothesis_version: str          # e.g. "1.0.0"
+    hypothesis_version: str          # e.g. "1.1.0"
     parent_hypothesis_id: Optional[str] = None # Lineage tracking for iterations
     
-    # Structural Economic Theory (Why does this anomaly exist?)
+    # Structural Economic Theory (Why does this anomaly exist in market microstructure?)
     economic_rationale: str
     
     # Feature Dependencies & Target Instruments
@@ -112,50 +117,84 @@ class HypothesisSpecification(BaseModel):
 
 ---
 
-## 3. Forward Outcome & Temporal Alignment Contract
+## 3. Forward Outcome, Temporal Purging & Embargo Contract
 
 ### 3.1 Exact Price Source & Entry/Exit Semantics
-To prevent lookahead bias and unrealistic execution assumptions:
+To prevent lookahead bias and unrealistic execution timing:
 
 $$\text{Forward Return } R_{t, H} = \frac{P_{\text{exit}, t+H} - P_{\text{entry}, t}}{P_{\text{entry}, t}}$$
 
 1. **Bar-Level Trade Features:**
-   - **Signal Evaluation Time:** Bar $t$ Close ($T_{\text{decision}} = \text{bar\_end\_utc}_t$).
-   - **Entry Price ($P_{\text{entry}, t}$):** Strictly evaluated at the **Next Bar Open** ($P_{\text{open}, t+1}$) or Bar $t$ Close with simulated entry latency:
+   - **Signal Decision Time:** Bar $t$ Close ($T_{\text{decision}} = \text{bar\_end\_utc}_t$).
+   - **Entry Price ($P_{\text{entry}, t}$):** Strictly evaluated at the **Next Bar Open** ($P_{\text{open}, t+1}$) or simulated with explicit execution latency:
      $$T_{\text{entry}} = T_{\text{decision}} + \tau_{\text{latency}}$$
    - **Exit Price ($P_{\text{exit}, t+H}$):** Evaluated at Bar $t+H$ Close ($P_{\text{close}, t+H}$).
-2. **Tick/Order-Book Microstructure Features:**
-   - **Entry Price:** Effective Ask for Buy / Effective Bid for Sell at $T_{\text{decision}} + \tau_{\text{latency}}$.
-   - **Exit Price:** Effective Bid for Buy / Effective Ask for Sell at $T_{\text{decision}} + H \cdot \Delta t$.
-
-### 3.2 Missing Labels & End-of-Session Behavior
-- If bar $t+H$ exceeds the daily session boundary or contains missing data, $R_{t, H}$ evaluates to `None` (or null in Parquet) with status `INVALID_MISSING_FORWARD_BAR`.
-- Missing labels are **strictly excluded** from correlation calculations, never imputed with zero or forward-filled.
-
-### 3.3 Overlapping Horizons & Statistical Variance Correction
-When evaluation horizon $H > 1$, forward returns $R_{t, H}$ and $R_{t+1, H}$ share $H-1$ overlapping bars, inducing artificial moving-average autocorrelation in residuals.
-- **Mandatory Newey-West HAC Correction:** Standard errors of the mean IC must use the Newey-West kernel with lag truncation $L = H - 1$:
-
-$$\sigma_{\text{HAC}}^2 = \hat{\gamma}_0 + 2 \sum_{l=1}^{H-1} \left(1 - \frac{l}{H}\right) \hat{\gamma}_l$$
-
-$$t_{\text{stat, adjusted}} = \frac{\overline{\text{IC}}}{\sigma_{\text{HAC}} / \sqrt{N}}$$
+2. **Missing Labels & End-of-Session Behavior:**
+   - If bar $t+H$ exceeds the daily session boundary or contains missing data, $R_{t, H}$ evaluates to `None` (null in Parquet) with status `INVALID_MISSING_FORWARD_BAR`.
+   - Missing labels are **strictly excluded** from correlation calculations, never imputed with zero or forward-filled.
 
 ---
 
-## 4. Statistical Evaluation Metrics
+### 3.2 Temporal Purging & Embargo Boundary Semantics
+When evaluating forward horizons $H > 1$, overlapping label intervals span multiple bars. Without strict purging and embargoing, observations near partition boundaries leak information across Train, Validation, and OOS gates.
+
+```
+Train Interval                      Embargo          Validation Interval            Embargo        Held-Out OOS Interval
+[T_train_start ─────── T_train_end] ──[H-bars]──►    [T_val_start ─────── T_val_end] ──[H-bars]──► [T_oos_start ─────── T_oos_end]
+      │                                                     │                                            │
+  (Purged if                                            (Purged if                                   (Strictly Blind
+   Label > T_train_end)                                  Label > T_val_end)                           Evaluation Gate)
+```
+
+1. **Feature Interval:** $[T_{\text{feature\_start}}, T_{\text{decision}}]$
+2. **Label Interval:** $[T_{\text{entry}}, T_{\text{exit}}]$, where $T_{\text{exit}} = T_{\text{entry}} + H \cdot \Delta t$
+3. **Partition Intervals:**
+   - $\text{Train Interval} = [T_{\text{train\_start}}, T_{\text{train\_end}}]$
+   - $\text{Validation Interval} = [T_{\text{val\_start}}, T_{\text{val\_end}}]$
+   - $\text{OOS Interval} = [T_{\text{oos\_start}}, T_{\text{oos\_end}}]$
+4. **Purging Invariant:** Any training observation whose `label_interval` overlaps beyond $T_{\text{train\_end}}$ is **strictly purged** from the training set.
+5. **Embargo Invariant:** An embargo window $\Delta T_{\text{embargo}} \ge \max(H) \cdot \Delta t + \tau_{\text{latency}}$ is inserted between partition boundaries to eliminate serial correlation leakage.
+
+---
+
+## 4. Statistical Evaluation & Configurable HAC Policy
 
 ### 4.1 Pearson IC vs. Spearman Rank IC
-1. **Pearson Information Coefficient ($\text{IC}_{\text{linear}}$):**
-   $$\text{IC}_{\text{linear}}(t, H) = \frac{\sum (X_i - \bar{X})(Y_{i, H} - \bar{Y}_H)}{\sqrt{\sum (X_i - \bar{X})^2 \sum (Y_{i, H} - \bar{Y}_H)^2}}$$
-2. **Spearman Rank Information Coefficient ($\text{IC}_{\text{rank}}$):**
-   $$\text{IC}_{\text{rank}}(t, H) = \text{PearsonCorrelation}\left(\text{rank}(X), \text{rank}(Y_H)\right)$$
-   *(Robust against non-linear scaling and microstructure outliers).*
-3. **Zero Variance & Constant Inputs:**
-   If $\sigma(X) == 0$ or $\sigma(Y) == 0$, $\text{IC} = \text{None}$ with status `ZERO_VARIANCE`.
+1. **Pearson Information Coefficient ($\text{IC}_{\text{linear}}$):** Linear correlation between continuous feature values and forward returns.
+2. **Spearman Rank Information Coefficient ($\text{IC}_{\text{rank}}$):** Rank correlation between feature percentiles and forward return percentiles (robust against fat-tailed microstructure noise).
+3. **Zero Variance & Constant Inputs:** If $\sigma(X) == 0$ or $\sigma(Y) == 0$, $\text{IC} = \text{None}$ with status `ZERO_VARIANCE`.
+4. **Minimum Sample Requirement:** Minimum $N \ge 250$ valid non-overlapping equivalent observations per evaluation window.
 
-### 4.2 Feature Decay & Autocorrelation Profile
-1. **Feature Autocorrelation:** $\rho(X_t, X_{t-k})$ for $k \in \{1, 5, 15, 60\}$ to measure signal persistence vs turnover.
-2. **Decay Half-Life:** The horizon $H^*$ where $\text{IC}(H^*) \le 0.5 \times \text{IC}(1)$.
+---
+
+### 4.2 Configurable HAC Estimator & Bandwidth Selection Policy
+
+> [!IMPORTANT]
+> **Methodological Invariant on HAC Inference:**
+> Lag length $L = H - 1$ is a **baseline reference heuristic**, NOT a universal mathematical truth. In empirical finance, inference on overlapping returns is sensitive to predictor persistence, sample size, and bandwidth selection.
+
+ACASH models HAC inference via a versioned, configurable **`HacInferencePolicy`**:
+
+```python
+class HacBandwidthMethod(str, Enum):
+    FIXED_HORIZON_MINUS_ONE = "FIXED_HORIZON_MINUS_ONE" # Baseline: L = H - 1
+    FIXED_LAG = "FIXED_LAG"                             # Explicit user-specified lag L
+    NEWEY_WEST_PLUGIN = "NEWEY_WEST_PLUGIN"             # L = floor(4 * (T / 100)^(2/9))
+    ANDREWS_AR1_PLUGIN = "ANDREWS_AR1_PLUGIN"           # Automatic AR(1) plug-in bandwidth
+
+
+class HacInferencePolicy(BaseModel):
+    """Configurable Heteroskedasticity and Autocorrelation Consistent (HAC) inference policy."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    bandwidth_method: HacBandwidthMethod = Field(default=HacBandwidthMethod.FIXED_HORIZON_MINUS_ONE)
+    fixed_lag_value: Optional[int] = None
+    kernel_type: str = Field(default="bartlett")        # "bartlett", "parzen", "quadratic_spectral"
+    run_bandwidth_robustness_check: bool = Field(default=True)
+    robustness_lags: List[int] = Field(default_factory=lambda: [1, 5, 10, 20])
+```
+
+- **Robustness Check Matrix:** When `run_bandwidth_robustness_check=True`, the engine reports t-statistics across multiple bandwidths to verify inference stability against kernel specification.
 
 ---
 
@@ -182,30 +221,63 @@ Every candidate signal is evaluated through a strict 3-tiered waterfall:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 5.1 Cost Parameter Specifications
-$$\text{Cost}_{\text{roundtrip}} = \frac{P_{\text{ask}} - P_{\text{bid}}}{P_{\text{mid}}} + 2 \cdot \text{Fee}_{\text{broker}} + \text{Slippage}_{\text{model}}(\text{Volume}, \text{Depth})$$
+```python
+class CostModelConfig(BaseModel):
+    """Versioned friction and execution cost configuration."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-$$\text{Edge}_{\text{net}} = \mathbb{E}\left[ R_{\text{fwd}} \cdot \text{Signal} \right] - \text{Cost}_{\text{roundtrip}} \cdot |\text{Turnover}|$$
+    quoted_spread_bps: Decimal = Field(default=Decimal("1.0"), ge=Decimal("0.0"))
+    roundtrip_broker_fee_bps: Decimal = Field(default=Decimal("0.5"), ge=Decimal("0.0"))
+    fixed_slippage_bps: Decimal = Field(default=Decimal("0.5"), ge=Decimal("0.0"))
+    latency_delay_ms: int = Field(default=50, ge=0)
+```
+
+$$\text{Edge}_{\text{economic}} = \mathbb{E}\left[ R_{\text{fwd}} \cdot \text{Signal} \right] - \left( \text{Spread}_{\text{bps}} + \text{Fees}_{\text{bps}} + \text{Slippage}_{\text{bps}} \right) \cdot |\text{Turnover}|$$
 
 ---
 
-## 6. Multiple Testing & Out-of-Sample (OOS) Discipline
+## 6. Multiple Testing Accounting & Out-of-Sample (OOS) Discipline
 
-### 6.1 Strict 3-Way Temporal Partitioning
-To eliminate data-snooping and overfitting:
+### 6.1 Configurable Split Policy & Blind OOS Gate
+- **Default Baseline:** 60% In-Sample (IS), 20% Validation (VAL), 20% Held-Out OOS.
+- **Configurable Policy:** Split proportions and chronological partition dates are controlled via `SplitPolicy`.
+- **Strict Blind OOS Invariant:**
+  1. OOS data is evaluated strictly ONCE during final Gate verification.
+  2. **Zero OOS Re-Tuning:** If an evaluation on OOS fails, the hypothesis is marked **REJECTED**. The OOS dataset must **NEVER** be used to retune parameters or refine the hypothesis and reported as untouched OOS.
 
+```python
+class OosExposureState(str, Enum):
+    UNEXPOSED = "UNEXPOSED"             # OOS data never accessed
+    EVALUATED_LOCKED = "EVALUATED_LOCKED" # OOS evaluated once; locked
+    EXHAUSTED = "EXHAUSTED"             # OOS compromised/spent
 ```
-├── In-Sample (IS: 60%) ──┤── Validation (VAL: 20%) ──┤── Held-Out Out-of-Sample (OOS: 20%) ──┤
-│    Exploration & Fit    │   Parameter Selection     │      Locked Blind Final Gate          │
+
+---
+
+### 6.2 Full Search & Multiple-Testing Accounting (`ResearchSearchRecord`)
+To prevent unrecorded degrees of freedom (p-hacking / data mining), the engine tracks all research trials:
+
+```python
+class ResearchSearchRecord(BaseModel):
+    """Comprehensive accounting of research search space and multiple-testing exposure."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    experiment_id: str
+    hypothesis_id: str
+    
+    # Degrees of Freedom Tracking
+    parameter_variants_count: int
+    feature_variants_tried: List[str]
+    label_variants_tried: List[str]
+    model_variants_tried: List[str]
+    dataset_window_variants_tried: List[str]
+    
+    # Selection Governance
+    selection_procedure: str            # e.g. "max_in_sample_rank_ic"
+    selected_candidate_id: str
+    total_effective_trials: int
+    oos_exposure_state: OosExposureState
 ```
-
-1. **In-Sample (IS - 60%):** Used for initial hypothesis exploration, IC calculation, and baseline fitting.
-2. **Validation (VAL - 20%):** Used to test parameter sensitivity and select candidate configurations.
-3. **Held-Out OOS (20%):** **Strictly locked.** Accessed exactly ONCE at formal Gate evaluation. Any re-tuning after looking at OOS immediately invalidates the research run.
-
-### 6.2 Experiment Registry & Trial Lineage
-Every query, test run, or parameter iteration produces an immutable `ResearchTrialRecord`:
-- Logs total number of trials $K$ for Family-Wise Error Rate (FWER) and Deflated Sharpe Ratio (DSR) tracking.
 
 ---
 
@@ -226,8 +298,8 @@ These strategies serve strictly as transparent vehicles to benchmark feature pre
 
 To eliminate shared implementation bias between code and test suite:
 - **Hand-calculated reference matrix** for 5-period forward returns with next-bar open entry.
-- **Hand-calculated Pearson IC and Spearman Rank IC** on discrete 5-sample data vectors.
-- **Hand-calculated Newey-West HAC variance** for 2-bar overlapping return sequences.
+- **Hand-calculated Pearson IC and Spearman Rank IC** on discrete numerical test vectors.
+- **Hand-calculated Newey-West HAC variance** across baseline and custom bandwidths.
 - **Hand-calculated 3-tier transaction cost adjustments**.
 
 ---
@@ -239,7 +311,7 @@ class ResearchManifest(BaseModel):
     """Immutable provenance record documenting complete research run lineage and results."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    manifest_id: str                 # e.g. "RES-MANIFEST-HYP001-20260828-ABC123"
+    manifest_id: str
     experiment_id: str
     hypothesis_id: str
     hypothesis_version: str
@@ -248,19 +320,22 @@ class ResearchManifest(BaseModel):
     # Dataset Provenance
     input_feature_hashes: List[str]  # feature_output_sha256 from Phase 3C
     parameter_config_hash: str
+    search_record_hash: str
     
-    # Temporal Partitions
-    in_sample_window: Tuple[str, str]
+    # Temporal Coordinates & Embargo
+    train_window: Tuple[str, str]
     validation_window: Tuple[str, str]
     oos_window: Tuple[str, str]
+    embargo_bars: int
     
     # Statistical Results Summary
     in_sample_rank_ic: Decimal
-    in_sample_t_stat: Decimal
+    in_sample_hac_t_stat: Decimal
     oos_rank_ic: Optional[Decimal]
-    oos_t_stat: Optional[Decimal]
+    oos_hac_t_stat: Optional[Decimal]
     tier3_economic_edge_bps: Decimal
     is_hypothesis_accepted: bool
+    oos_exposure_state: OosExposureState
     
     software_version: str
     computed_at_utc: str
@@ -271,10 +346,11 @@ class ResearchManifest(BaseModel):
 ## 10. Prohibited Anti-Patterns
 
 1. **Lookahead Bias:** Using any information knowable after $T_{\text{decision}}$ to compute signals.
-2. **Data Snooping / P-Hacking:** Running hundreds of parameter combinations and picking the best performing one without multiple-testing penalty.
-3. **OOS Contamination:** Re-tuning parameters after observing poor OOS results.
-4. **Frictionless Delusion:** Claiming alpha based on raw returns without deducting bid/ask spread, exchange fees, slippage, and execution latency.
-5. **Backtest Over-Interpretation:** Treating a positive historical equity curve as mathematical proof of future profitability.
+2. **Data Snooping / P-Hacking:** Running multiple trials and picking the best performing configuration without search accounting.
+3. **OOS Contamination & Re-cycling:** Re-tuning parameters after observing poor OOS results.
+4. **Boundary Leakage:** Failing to purge overlapping label intervals or apply embargoes between train and validation.
+5. **Frictionless Delusion:** Claiming alpha based on raw returns without deducting spread, fees, slippage, and latency.
+6. **Backtest Over-Interpretation:** Treating a positive historical backtest as proof of alpha.
 
 ---
 
@@ -283,9 +359,10 @@ class ResearchManifest(BaseModel):
 - [ ] **Hypothesis Specification Contract:** Formal Pydantic models enforcing pre-registered falsification criteria.
 - [ ] **Hand-Calculated Golden Math:** 100% agreement between manual mathematical vectors and engine calculations for Forward Return, Pearson IC, Spearman Rank IC, Newey-West HAC t-stat, and 3-Tier Costs.
 - [ ] **Next-Bar Entry Alignment:** Verifies signals at bar $t$ enter strictly at bar $t+1$ Open with zero lookahead.
-- [ ] **Overlapping Horizon Correction:** Verifies Newey-West HAC adjusts variance correctly for $H > 1$.
+- [ ] **Temporal Purging & Embargo:** Verifies boundary label overlapping records are purged and embargo periods enforced.
+- [ ] **Configurable HAC Inference:** Verifies bandwidth selection policy and robustness matrix calculation.
 - [ ] **3-Tier Cost Waterfall:** Verifies raw edge, net edge, and economic edge calculations under variable spread and fee configurations.
-- [ ] **OOS Partition Discipline:** Verifies strict isolation of train, validation, and held-out OOS datasets.
+- [ ] **Search Accounting & OOS Discipline:** Verifies `ResearchSearchRecord` tracks trial degrees of freedom and locks OOS exposure.
 - [ ] **ResearchManifest Reproducibility:** Recomputing research trials yields identical results and cryptographic fingerprints.
 - [ ] **Zero Production Trading Logic Audit:** Confirms absence of live execution triggers or broker adapters.
 - [ ] **Full Regression Suite:** 100% pytest pass rate (all 122 existing tests + Phase 4 tests), 0 mypy errors across all source files.
