@@ -1,8 +1,8 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.2.0  
-**Date:** 2026-08-27  
+**Version:** 3.3.0  
+**Date:** 2026-08-28  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
 ---
@@ -10,69 +10,72 @@
 ## Roadmap Overview
 
 ```
-Phase 0: Discovery & Architecture [COMPLETED - PASSED]
+✅ Phase 0: Discovery & Architecture ──► [COMPLETED - PASSED]
    │
    ▼
-Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED - PASSED]
+✅ Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED - PASSED — 27/27 Tests]
    │
    ▼
-Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED - PASSED]
+✅ Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED - PASSED — 57/57 Tests]
    │
    ▼
-Phase 3: Point-in-Time Microstructure & Feature Engine (3A/3B/3C) ──► Gate 3 [COMPLETED - PASSED]
+✅ Phase 3: Point-in-Time Microstructure & Feature Engine (3A/3B/3C) ──► Gate 3 [COMPLETED - PASSED — 122/122 Tests]
+   ├─ ✅ Phase 3A: Canonical Trades Domain
+   ├─ ✅ Phase 3B: Canonical Order Book Domain
+   └─ ✅ Phase 3C: Microstructure Feature Engine
    │
    ▼
-Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED - PASSED]
+✅ Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED - PASSED — 139/139 Tests]
    │
    ▼
-Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 [UPCOMING]
+🔄 Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 [IN PROGRESS — v1.1.0 Proposal]
    │
    ▼
-Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6
+⏳ Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6
    │
    ▼
-Phase 7: Regime Engine (Prove or Remove) ──► Gate 7
+⏳ Phase 7: Regime Engine (Prove or Remove) ──► Gate 7
    │
    ▼
-Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
+⏳ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
    │
    ▼
-Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
+⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
    │
    ▼
-Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
+⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
    │
    ▼
-Phase 11: Paper Trading Subsystem ──► Gate 11
+⏳ Phase 11: Paper Trading Subsystem ──► Gate 11
    │
    ▼
-Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
+⏳ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
    │
    ▼
-Phase 13: Live Small Capital (MANDATORY HUMAN APPROVAL) ──► Gate 13
+⏳ Phase 13: Live Small Capital (MANDATORY HUMAN APPROVAL) ──► Gate 13
    │
    ▼
-Phase 14: AI Quantitative Research Layer ──► Gate 14
+⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
    │
    ▼
-Phase 15: Strategy Lifecycle State Machine ──► Gate 15
+⏳ Phase 15: Strategy Lifecycle State Machine ──► Gate 15
    │
    ▼
-Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
+⏳ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 ```
 
 ---
 
 ## Detailed Phase Breakdown
 
-### Phase 0: Discovery & Architecture (Current)
+### ✅ Phase 0: Discovery & Architecture [COMPLETED - PASSED]
 - **Objective:** Evaluate technologies, define domain architecture, produce ADRs, risk register, and establish project boundaries.
 - **Deliverables:** Complete documentation suite in `docs/`.
 - **Gate 0 Criteria:** Technology candidate matrix approved; architecture review signed off; Phase 1 implementation plan approved.
 
 ---
 
-### Phase 1: Foundation & Domain Core
+### ✅ Phase 1: Foundation & Domain Core [COMPLETED - PASSED]
 - **Objective:** Establish the modular monolith structure, domain types, abstract interfaces, configuration management, structured logging, in-memory mock adapters, and correctness test harness.
 - **Deliverables:**
   - Python project environment (`pyproject.toml`, virtual environment).
@@ -81,54 +84,61 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
   - Mock in-memory execution engine and market data provider for unit testing.
   - Structured JSON logger and typed configuration loader (`Pydantic` + `YAML`).
   - Unit and contract test suite verifying domain invariants, invalid states, interface contracts, serialization, and deterministic equivalent outcomes.
-- **Gate 1 Criteria:** All unit tests pass; domain invariants verified; typing strictly enforced (`mypy` clean); zero live broker or Nautilus dependencies in core.
+- **Gate 1 Criteria:** All unit tests pass (27/27); domain invariants verified; typing strictly enforced (`mypy` clean); zero live broker or Nautilus dependencies in core.
 
 ---
 
-### Phase 2: Data Ingestion & Integrity Engine
+### ✅ Phase 2: Data Ingestion & Integrity Engine [COMPLETED - PASSED]
 - **Objective:** Implement reliable ingestion for **one market** and **one primary data source** with strict point-in-time validation.
 - **Deliverables:**
-  - Ingestion adapter (e.g. `yfinance` research adapter / local Parquet for single liquid symbol).
+  - Ingestion adapter (`yfinance` research adapter / local Parquet for single liquid symbol).
   - Normalization pipeline with timestamp timezone enforcement (UTC only) and sequencing verification.
   - Automated data integrity checker (detects missing timestamps, impossible negative prices, duplicates, unit errors).
   - Provenance tracker recording dataset hash and retrieval metadata.
-- **Gate 2 Criteria:** Data validation suite catches 100% of synthetic data corruption test cases.
+  - Recoverable Batch Commit Protocol (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`).
+  - DuckDB Point-in-Time qualification layer with multi-source isolation and lookahead prevention.
+- **Gate 2 Criteria:** Data validation suite catches 100% of synthetic data corruption test cases (57/57 tests pass, `mypy` clean).
 
 ---
 
-### Phase 3: Point-in-Time Feature Engine
-- **Objective:** Build modular, deterministic feature calculations with zero look-ahead bias.
+### ✅ Phase 3: Point-in-Time Feature Engine (3A/3B/3C) [COMPLETED - PASSED]
+- **Objective:** Build modular, deterministic feature calculations with zero look-ahead bias across Trades, Order Book, and Microstructure.
 - **Deliverables:**
-  - Price/Return features (log returns, rolling volatility, ATR, momentum oscillators).
-  - Volume features (relative volume, rolling VWAP, volume anomalies).
-  - Anti-leakage pipeline guaranteeing $Feature(t)$ uses only data $\le t$.
-  - Feature evaluation harness measuring Information Coefficient (IC) and mutual information.
-- **Gate 3 Criteria:** Automated leakage unit tests verify zero future bar indexing; each feature demonstrates positive incremental predictive metric or is discarded.
+  - **Phase 3A:** Canonical Trades Domain (Time & Sales, Aggressor Side flags, length-prefixed hashing).
+  - **Phase 3B:** Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO, deterministic 5-tuple order).
+  - **Phase 3C:** Microstructure Feature Engine (Session VWAP, Volume Profile with POC lower-price tie-breakers, Value Area 70% bounds, Footprint Analytics, Depth-Weighted Micro-Price).
+  - Dual-temporal point-in-time filtering ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$).
+- **Gate 3 Criteria:** Automated leakage unit tests verify zero future bar indexing; 122/122 tests pass, `mypy` clean.
 
 ---
 
-### Phase 4: Alpha Research Engine & Baseline Hypotheses
-- **Objective:** Implement formal hypothesis registration and initial transparent strategy baselines.
+### ✅ Phase 4: Alpha Research Engine & Baseline Hypotheses [COMPLETED - PASSED]
+- **Objective:** Implement formal hypothesis registration, econometric OLS slope Beta HAC inference under Bartlett kernel, discrete forward returns, interval-based purging/embargo, and durable Blind OOS governance.
 - **Deliverables:**
-  - Hypothesis specification schema (rationale, assumptions, parameters, invalidation conditions).
-  - Baseline Strategy 1: Trend / Momentum (e.g. Time-Series Momentum).
-  - Baseline Strategy 2: Mean Reversion (e.g. Statistical Bollinger / RSI Band Reversion).
-  - Signal generator producing expected returns and uncertainty estimates.
-- **Gate 4 Criteria:** Strategies generate reproducible signals on historical data without look-ahead errors.
+  - Hypothesis specification schema (`HypothesisSpecification`, `InvalidationCriteria`, parameter spaces).
+  - Discrete bar-indexed forward returns ($R(t,H)$) with next-bar open entry alignment.
+  - Econometric OLS slope $\hat{\beta}_H$ inference with Newey-West HAC covariance under Bartlett kernel.
+  - Descriptive non-parametric association metrics: Pearson IC, Spearman Rank IC (fractional ties), autocorrelation.
+  - 3-tier friction waterfall (Raw Edge $\to$ Net Edge $\to$ Economic Edge).
+  - Interval-based boundary purging and unallocated embargo gaps ($\ge \max(H)$ bars).
+  - Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) with strict re-tuning locks (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
+  - Baseline research models: Microstructure Imbalance Skew, VWAP Mean Reversion, Multi-Horizon Momentum.
+- **Gate 4 Criteria:** Strategies generate reproducible signals on historical data without look-ahead errors; 139/139 unit tests pass, `mypy` clean.
 
 ---
 
-### Phase 5: Backtesting Substrate & NautilusTrader PoC
-- **Objective:** Evaluate and establish the deterministic simulation backtest engine.
+### 🔄 Phase 5: Backtesting Substrate & NautilusTrader PoC [DESIGN STAGE — v1.1.0 Proposal]
+- **Objective:** Evaluate and establish the deterministic simulation backtest engine using NautilusTrader as substrate while preserving ACASH as single source of truth.
 - **Deliverables:**
   - Lightweight custom vectorized / event backtester for rapid research.
-  - NautilusTrader Proof of Concept (PoC) adapter benchmark.
-  - Realistic friction simulation (fees, bid/ask spread, basic slippage).
-- **Gate 5 Criteria:** PoC comparison completed; backtest outputs produce deterministic equivalent outcomes for identical inputs and configuration.
+  - NautilusTrader Proof of Concept (PoC) adapter benchmark with EventOrderingPolicy.
+  - Realistic friction simulation (fees, bid/ask spread, basic slippage, dual-sided latency).
+  - Independent double-entry shadow ledger with $|\text{AccountingResidual}| \le 10^{-10}$.
+- **Gate 5 Criteria:** PoC comparison completed; backtest outputs produce deterministic equivalent outcomes for identical inputs and configuration under pinned execution environment.
 
 ---
 
-### Phase 6: Statistical Validation & OOS Hard Gate
+### ⏳ Phase 6: Statistical Validation & OOS Hard Gate [UPCOMING]
 - **Objective:** Enforce quantitative validation gates to eliminate data-snooping bias.
 - **Deliverables:**
   - Strict 3-way partition harness: In-Sample (Train) $\to$ Validation $\to$ Held-Out Out-of-Sample (OOS).
@@ -139,7 +149,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 7: Regime Engine
+### ⏳ Phase 7: Regime Engine [UPCOMING]
 - **Objective:** Detect market regimes (volatility, trend, liquidity) and verify their utility.
 - **Deliverables:**
   - Volatility regime detector (Realized Volatility percentile / GARCH filter).
@@ -149,7 +159,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 8: Portfolio Engine (skfolio & Baselines)
+### ⏳ Phase 8: Portfolio Engine (skfolio & Baselines) [UPCOMING]
 - **Objective:** Allocate capital across candidate assets/signals and cash ("NOWHERE").
 - **Deliverables:**
   - Transparent Baseline Allocators: Equal Weight (1/N), Inverse Volatility (1/$\sigma$), 100% Cash.
@@ -159,7 +169,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 9: Deterministic Risk Engine & Kill Switch
+### ⏳ Phase 9: Deterministic Risk Engine & Kill Switch [UPCOMING]
 - **Objective:** Implement non-negotiable risk boundaries that overrule all upstream models.
 - **Deliverables:**
   - Position limits, maximum leverage limit, maximum portfolio drawdown limit, daily loss limit.
@@ -169,7 +179,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 10: Transaction Cost & Slippage Modeling
+### ⏳ Phase 10: Transaction Cost & Slippage Modeling [UPCOMING]
 - **Objective:** Embed high-fidelity friction models into every strategy evaluation.
 - **Deliverables:**
   - Non-linear slippage models based on market volatility and order size relative to volume.
@@ -179,7 +189,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 11: Paper Trading Subsystem
+### ⏳ Phase 11: Paper Trading Subsystem [UPCOMING]
 - **Objective:** Real-time simulated execution against live market feeds.
 - **Deliverables:**
   - Live data ingestion stream $\to$ Signal $\to$ Portfolio $\to$ Risk $\to$ Paper Execution.
@@ -189,7 +199,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 12: MT5 & Venue Execution Adapters
+### ⏳ Phase 12: MT5 & Venue Execution Adapters [UPCOMING]
 - **Objective:** Build thin, secure broker connectivity adapters.
 - **Deliverables:**
   - MetaTrader 5 (MT5) IPC Gateway / Execution Adapter.
@@ -199,7 +209,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 13: Live Small Capital Deployment
+### ⏳ Phase 13: Live Small Capital Deployment [UPCOMING]
 - **Objective:** Real-world execution validation with micro-capital.
 - **Deliverables:**
   - Live execution harness with minimum position sizes (micro-lots).
@@ -209,7 +219,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 14: AI Quantitative Research Layer
+### ⏳ Phase 14: AI Quantitative Research Layer [UPCOMING]
 - **Objective:** Augment quant research with AI-driven hypothesis generation and reporting.
 - **Deliverables:**
   - LLM hypothesis formulation assistant (`acash.research.ai`).
@@ -219,7 +229,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 15: Strategy Lifecycle Management
+### ⏳ Phase 15: Strategy Lifecycle Management [UPCOMING]
 - **Objective:** Enforce automated governance from idea generation to retirement.
 - **Deliverables:**
   - Strategy lifecycle state machine (`IDEA` $\to \dots \to$ `PRODUCTION` $\to$ `REDUCE` $\to$ `RETIRE`).
@@ -228,114 +238,21 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 
 ---
 
-### Phase 16: Performance Degradation & Data Flywheel
-- **Objective:** Build continuous learning and proprietary decision memory.
+### ⏳ Phase 16: Performance Degradation & Data Flywheel [UPCOMING]
+- **Objective:** Build long-term memory of decisions, outcomes, and market states.
 - **Deliverables:**
-  - Immutable Decision Ledger storing market state, features, signals, allocations, risk verdicts, and outcomes.
-  - Post-mortem analytics pipeline feeding research back into hypothesis generation.
-- **Gate 16 Criteria:** Closed-loop feedback cycle functioning as an automated research memory.
+  - Decision outcome recorder linking decisions to multi-horizon forward returns.
+  - Degradation detector measuring statistical divergence in live vs backtest performance.
+  - Proprietary decision memory database.
+- **Gate 16 Criteria:** Continuous logging of all live decisions and automated alert on performance divergence.
 
 ---
 
-## Engineering Workflow Addendum
+## Reality Gap Analysis & Execution Deviation
 
-For ACASH development, follow an agentic engineering workflow:
-
-1. Inspect the existing repository, architecture, ADRs, tests, and git history before modifying code.
-2. Do not implement large changes immediately. First explain the impact, assumptions, affected modules, and implementation plan.
-3. Preserve ACASH architectural boundaries and source-of-truth documentation.
-4. Prefer minimal, reversible changes over broad refactors.
-5. After implementation, run tests, static typing, invariant checks, and review the final diff.
-6. Perform a self-review: identify assumptions, possible regressions, violated invariants, and unintended scope changes.
-7. Record important architectural lessons or recurring mistakes in the appropriate project documentation.
-8. Never grant an AI agent authority to bypass ACASH risk controls, decision boundaries, or execution safeguards.
-9. External tools such as Agentic Trading Lab may be used only as independent research/evaluation references and must not become ACASH core dependencies without an explicit architectural decision.
-
-### Core Engineering Loop:
-$$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \text{IMPLEMENT} \to \text{TEST} \to \text{SELF-REVIEW} \to \text{DOCUMENT}$$
-
----
-
-## Engineering Research Addendum
-
-Use the referenced trading-platform examples only as independent research references, not as ACASH architecture.
-
-### Potential Future Concepts Worth Preserving:
-- Multi-source news / external evidence ingestion
-- Evidence provenance and timestamps
-- Forward / out-of-sample testing
-- Research reproducibility
-- Portfolio analytics
-
-*Do NOT expand Phase 1 scope for these concepts.*
-
-### Important Architectural Rules:
-1. **Append-Only Immutable Lineage:** `DecisionRecord` is immutable and append-only. Do not mutate it later to attach Fill/PnL outcomes. Preserve lineage through immutable references/correlation IDs so the complete decision $\to$ execution $\to$ outcome chain can be reconstructed without modifying historical records.
-2. **Evidence-Driven Rigor:** Do not treat AI confidence scores, huge backtest returns, or large data-source counts as evidence of trading edge without proper calibration, bias checks, and out-of-sample validation.
-3. **Strict External System Isolation:** External systems such as MT4/MT5 or Agentic Trading Lab may only be future adapters/research references and must never become ACASH core dependencies without an explicit ADR.
-4. **Phase 1 Boundary:** Keep Phase 1 strictly foundational.
-
----
-
-## Research Lessons — Trading Systems
-
-1. **Data Quality and Provenance:**
-   $$\text{Source} \to \text{Ingestion} \to \text{Validation} \to \text{Normalization} \to \text{Evidence} \to \text{Decision}$$
-2. **AI as Analytical Component, NOT Authority:**
-   AI must remain an analytical component, NOT the final trading authority. Never treat AI confidence as proven probability/edge.
-3. **Multi-Source Evidence Treatment:**
-   News, macro, options, Greeks, IV, and external data should be treated as evidence/research inputs, not automatic signals.
-4. **Explainability & Traceability:**
-   Every decision should be explainable and traceable back to its evidence, data, calculations, and timestamp.
-5. **Backtest Metrics $\neq$ Proven Edge:**
-   Backtest metrics (win rate, PF, Sharpe, expectancy, etc.) do NOT prove a real edge without proper OOS/forward testing, leakage checks, costs, slippage, and regime validation.
-6. **Observability Hierarchy:**
-   $$\text{System State} \to \text{Metrics} \to \text{Monitoring} \to \text{Audit/Investigation}$$
-7. **Decoupled External Platforms:**
-   External platforms/data providers may be used for independent research/evaluation, but must NOT become ACASH core dependencies without an explicit architectural decision.
-
-> [!IMPORTANT]
-> **Boundary Preservation:** Do not add new features or perform broad refactors based on these lessons. Preserve current ACASH boundaries and apply only minimal, reversible documentation/architecture updates where justified.
-
-**Core Research Loop:**
-$$\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \to \text{Outcome} \to \text{Audit/Learning}$$
-
----
-
-## Final Research Lesson — Market Structure
-
-- **Options Flow as Positioning:** Do NOT interpret Options Flow simply as bullish/bearish sentiment. Flow is an observation of transactions/positioning; the core question is: *"At this price/structure, who is forced to react, and what happens if price reaches that level?"*
-- **Market Structure Precedes Strategy:** Market structure comes before strategy. Identify important levels/zones and how price behaves around them before choosing a strategy.
-- **3-Dimensional Options Evaluation:** For options, evaluate at least 3 dimensions concurrently: $\text{Direction} \times \text{Volatility} \times \text{Time}$. Do not judge an option setup from direction alone.
-- **Market State $\neq$ Trade Signal:** Distinguish "market state / setup" $\neq$ "trade signal". The system should explain what condition exists and what actions/risk responses become relevant, rather than blindly outputting BUY/SELL.
-- **Real Arbitrage Exploitability:** Arbitrage is only meaningful when the pricing relationship is actually demonstrably exploitable after transaction costs, liquidity, execution risk, and timing friction.
-
-**Market Structure Decision Loop:**
-$$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$$
-
----
-
-## Quantitative Reasoning & Deterministic Risk Pipeline
-
-1. **Risk State Representation:** Continuous tracking of portfolio risk capacity, limit headroom, and drawdown state.
-2. **Margin Buffer Safety Threshold:** Mandatory buffer between utilized margin and maintenance thresholds before approving any allocation.
-3. **Net & Dollar Exposure Tracking:** Explicit dollar-denominated exposure accounting ($\text{Gross Exposure} = \sum |\text{Dollar Value}|$, $\text{Net Exposure} = \sum \text{Dollar Value}$).
-4. **Deterministic Edge Metrics:** All performance metrics (Sharpe, DSR, Information Ratio, expectancy, max drawdown) are calculated strictly by deterministic mathematical algorithms.
-5. **Separation of Raw Metrics from AI Reasoning:** Raw quantitative metrics remain pure and immutable. AI reasoning operates strictly downstream as an explanatory research tool, NEVER generating unverified numbers or placing trades.
-
-### Core Processing Flow:
-$$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
-
-$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$
-
----
-
-## Reality Gap Analysis & Execution Deviation Architecture
-
-The core empirical objective of ACASH is measuring and understanding:
+The core empirical objective of ACASH is measuring:
 > *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
-### Architecture Pipeline:
 ```
                  BACKTEST SIMULATION
                           │
@@ -349,33 +266,12 @@ The core empirical objective of ACASH is measuring and understanding:
                REALITY GAP ATTRIBUTION
 ```
 
-### Multi-Phase Execution Pipeline:
-- **Phase 2+ (Data Quality & Market Data):**
-  - Data fidelity aligned with strategy horizon and microstructure sensitivity
-  - Timestamp integrity ($t_{\text{knowledge}} \ge t_{\text{event}}$)
-  - Data provenance and hashing
-  - Bid-ask spread capture
-  - Tick-to-bar aggregation consistency
-- **Phase 5+ (Event-Driven Backtesting):**
-  - Tick-aware event simulation
-  - Spread modeled at highest fidelity supported by data
-  - Graduated slippage models (simple $\to$ calibrated $\to$ liquidity-aware)
-  - Fee schedules and execution assumptions
-- **Phase 6+ (Statistical Validation):**
-  - Out-of-sample (OOS) validation
-  - Walk-forward matrix analysis
-  - Forward paper testing
-  - Extreme event stress testing
-  - Market regime analysis
-- **Phase 12+ (Live Execution):**
-  - Actual broker fills
-  - Realized spread capture
-  - Actual fill slippage
-  - Round-trip latency measurement
-  - Account and portfolio reconciliation
-- **Phase 13+ (Reality Gap Attribution):**
-  - Systematic comparison ($\text{Backtest} \to \text{Paper/Shadow} \to \text{Live}$)
-  - Attribution to: **Data error**, **Model/alpha error**, **Execution error**, or **Broker/venue conditions**
+### Multi-Phase Reality Pipeline:
+- **Phase 2+ (Data Quality):** Data fidelity matching strategy horizon, timestamp integrity, provenance, spread capture.
+- **Phase 5+ (Backtest):** Tick-aware simulation, data-supported spread fidelity, graduated slippage models (simple $\to$ calibrated $\to$ liquidity-aware).
+- **Phase 6+ (Validation):** OOS, walk-forward matrix, forward testing, stress testing, regime analysis.
+- **Phase 12+ (Live):** Actual fills, realized spreads, actual slippage, latency, broker reconciliation.
+- **Phase 13+ (Reality Gap Attribution):** Systematic deviation tracking attributed to: Data error, Model/alpha error, Execution error, or Venue conditions.
 
 ### Deviation Metrics & Example:
 | Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
@@ -386,33 +282,9 @@ The core empirical objective of ACASH is measuring and understanding:
 | **Trade PnL** | +$240 | +$181 | **-24.6%** |
 | **Roundtrip Latency** | 15 ms | 120 ms | **+105 ms** |
 
-### Methodological Principles:
-1. **Spread Modeling:** Execution-sensitive research must model spread at highest fidelity supported by data; lower-fidelity assumptions are permitted when appropriate, with explicit limitations.
-2. **Slippage Modeling:** Graduated complexity ($\text{simple assumption} \to \text{calibrated} \to \text{liquidity/size-aware} \to \text{nonlinear only when justified by evidence}$).
-3. **Capital Flows:** External capital flows (deposits/withdrawals) are first-class events, strictly excluded from trading-performance attribution.
-4. **Martingale & Exposure Escalation:** Classify Martingale-like exposure escalation as a **HARD RISK FLAG** requiring explicit risk, tail-loss, and ruin analysis; never bypasses risk gates.
-5. **Data Fidelity:** Fidelity must match strategy horizon and execution sensitivity; higher-fidelity tick/quote data is required when lower-resolution data cannot adequately represent execution assumptions.
-
-| Concept / Assertion | ACASH Empirical Stance |
-| :--- | :--- |
-| **Backtest $\neq$ Guarantee** | 🔥 **Adopted**: Backtest is a hypothesis test, never a guarantee of future edge. |
-| **Real Ticks vs Synthetic** | ✅ **Adopted**: Real tick/quote data is mandatory for high-fidelity execution modeling. |
-| **Spread Dynamics** | 🔥 **Adopted**: Variable spread modeling is mandatory across all timeframes. |
-| **Slippage Dynamics** | 🔥 **Adopted**: Non-linear slippage models based on liquidity and order size. |
-| **Backtest/Live Gap Analysis** | 🔥🔥 **Core Capability**: Continuous reality gap monitoring and automated learning. |
-| **Deposit/Withdrawal Provenance** | 🔥 **Adopted**: Explicit capital flow tracking in cash and account state. |
-| **Drawdown Priority over Returns** | 🔥 **Adopted**: Risk capacity and drawdown constraint dominate capital allocation. |
-| **2x Max DD Rule** | ❌ **Rejected as Hard-code**: Dynamically modeled via probabilistic risk engine, not static heuristics. |
-| **Myfxbook as Proof** | ❌ **Rejected as Proof**: Public track records without raw data and audit lineage are unverified marketing. |
-| **Daily Backtest Match = Proven** | ⚠️ **Validation Signal Only**: Short-term alignment is insufficient without statistical sample size. |
-| **Martingale Strategies** | ⚠️ **Hard Red Flag**: Non-convex ruin risk; strictly prohibited in sovereign strategies. |
-| **+100% Return = Good Strategy** | ❌ **Rejected**: High returns without risk-adjusted metrics, DSR, and max drawdown are meaningless. |
-| **1:2000 Extreme Leverage** | 🚨 **Strict Risk Variable**: Explicitly constrained by sovereign portfolio leverage limits. |
-
 ---
 
 ## License Notice
 
 **Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  
 Proprietary and Confidential. Unauthorized copying, distribution, modification, or extraction is strictly prohibited.
-

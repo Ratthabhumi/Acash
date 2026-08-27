@@ -5,7 +5,6 @@
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
 [![Status: Phase 4 Complete](https://img.shields.io/badge/status-Phase%204%20Gate%20Passed%20(139%2F139%20Tests)-success.svg)](#)
 
-
 ---
 
 ## 1. Executive Summary & North Star
@@ -31,41 +30,41 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 ACASH is built as a sovereign **Modular Monolith** in Python executing locally on a single workstation (AIO):
 
 ```
-                               ACASH SYSTEM CORE
-                                      │
-                      ┌───────────────┴───────────────┐
-                      │                               │
-             1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
-           (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
-                      │                               │
-                      └───────────────┬───────────────┘
-                                      │
-                                      ▼
-                                3. ALPHA ENGINE
-                         (Signals & Expected Returns)
-                                      │
-                                      ▼
-                            4. VALIDATION ENGINE
-                           (Purged CPCV & DSR Gate)
-                                      │
-                                      ▼
-                            5. PORTFOLIO ENGINE
-                    (skfolio + Baselines: EW/InvVol/Cash)
-                                      │
-                                      ▼
-                             6. RISK ENGINE
-                     (Hard Deterministic Boundary)
-                                      │
-                                      ▼
-                            7. EXECUTION ENGINE
-                             (IExecutionEngine)
-                                /           \
-                          MT5 Adapter      Nautilus Adapter
-                          (Initial)        (Phase 5 PoC Gate)
-                                │
-                                ▼
-                   LOCAL TRANSACTIONAL CONTROL PLANE
-                      (SQLite Append-Only Ledger)
+                                ACASH SYSTEM CORE
+                                       │
+                       ┌───────────────┴───────────────┐
+                       │                               │
+              1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
+            (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
+                       │                               │
+                       └───────────────┬───────────────┘
+                                       │
+                                       ▼
+                                 3. ALPHA ENGINE
+                          (Signals & Expected Returns)
+                                       │
+                                       ▼
+                             4. VALIDATION ENGINE
+                            (Purged CPCV & DSR Gate)
+                                       │
+                                       ▼
+                             5. PORTFOLIO ENGINE
+                     (skfolio + Baselines: EW/InvVol/Cash)
+                                       │
+                                       ▼
+                              6. RISK ENGINE
+                      (Hard Deterministic Boundary)
+                                       │
+                                       ▼
+                             7. EXECUTION ENGINE
+                              (IExecutionEngine)
+                                 /           \
+                           MT5 Adapter      Nautilus Adapter
+                           (Initial)        (Phase 5 PoC Gate)
+                                 │
+                                 ▼
+                    LOCAL TRANSACTIONAL CONTROL PLANE
+                       (SQLite Append-Only Ledger)
 ```
 
 ### Layer Responsibilities
@@ -116,7 +115,6 @@ ACASH explicitly decouples state management from decision and execution flows:
                                                 ──► NEW PortfolioState
                                                 ──► NEW AccountState
 
-
         CROSS-CUTTING AUDIT LINEAGE
         ───────────────────────────
                DecisionRecord (Append-Only)
@@ -131,129 +129,29 @@ ACASH explicitly decouples state management from decision and execution flows:
 
 ---
 
-## 4. Technology Decision Matrix Summary
-
-| Technology / Tool | Decision | ACASH Role | Key Rationale |
-| :--- | :--- | :--- | :--- |
-| **ACASH Core** | **ADOPT** | Sovereign Control Plane | Sovereign domain logic, deterministic risk boundary, append-only decision ledger. |
-| **skfolio** | **ADOPT** | Portfolio Optimizer Engine | Modern scikit-learn API, HRP, ERC, CVaR; must prove out-of-sample incremental value over baselines. |
-| **NautilusTrader** | **ADAPT** | Tier-2 Event Sim Candidate | High-fidelity Rust event core; isolated behind adapters; requires Phase 5 PoC gate before live use. |
-| **vectorbt (OSS)** | **ADAPT** | Tier-1 Fast Screening | Numba-accelerated vectorized parameter sweeps to filter noisy hypotheses before event simulation. |
-| **yfinance** | **ADAPT** | Research Data Adapter | Research data adapter with no paid subscription requirement for research; strictly isolated. |
-| **Plotly** | **ADOPT** | Analytics Visualization | Interactive equity curves, drawdown waterfalls, and research tear sheets in telemetry/notebooks. |
-| **Parquet + DuckDB**| **ADOPT** | Local Analytical Storage | Local columnar storage + embedded query engine; zero server overhead. |
-| **SQLite** | **ADOPT** | Local Transactional State | V1 append-only decision ledger and operational order/position state persistence. |
-| **PostgreSQL** | **DEFERRED**| Enterprise Control Plane | Deferred until concurrent writers, production durability, or multi-user access justify it. |
-| **MetaTrader 5** | **ADAPT** | Retail Broker Gateway | Thin Windows IPC execution adapter; zero strategy logic inside MQL5. |
-| **PyPortfolioOpt** | **REJECT** | None (Redundant) | Redundant to `skfolio`; lacks native scikit-learn pipeline design and CPCV. |
-| **QuantConnect LEAN**| **REFERENCE**| Architectural Reference | Reference for multi-asset slicing and fill models; rejected runtime to avoid .NET CLR bloat. |
-| **C++ / Rust** | **PYTHON-FIRST**| Performance Strategy | Python-first; Rust via NautilusTrader pre-compiled core; custom C++ rejected for V1. |
-
----
-
-## 5. Absolute Engineering & Quantitative Rules
-
-1. **Deterministic Risk Boundary:** The Risk Engine is a non-negotiable software gate. If Risk says `REJECT`, outcome is strictly **`REJECT`**. No AI model or optimizer can override risk limits.
-2. **Baseline Beating Rule:** `skfolio` allocations must demonstrate statistically significant outperformance over Equal Weight and Inverse Volatility out-of-sample; otherwise, ACASH selects the simple baseline.
-3. **No Look-Ahead Bias:** Strict bi-temporal indexing ($t_{\text{knowledge}} \le T_{\text{decision}}$). Feature calculations must use data available strictly at or before decision time.
-4. **Append-Only Decision Ledger:** Historical decisions are never overwritten or deleted during normal operation.
-5. **Immutable State Transitions:** State updates never mutate existing frozen objects. Fills produce new snapshot instances.
-
-### ENGINEERING WORKFLOW ADDENDUM
-
-For ACASH development, follow an agentic engineering workflow:
-
-1. Inspect the existing repository, architecture, ADRs, tests, and git history before modifying code.
-2. Do not implement large changes immediately. First explain the impact, assumptions, affected modules, and implementation plan.
-3. Preserve ACASH architectural boundaries and source-of-truth documentation.
-4. Prefer minimal, reversible changes over broad refactors.
-5. After implementation, run tests, static typing, invariant checks, and review the final diff.
-6. Perform a self-review: identify assumptions, possible regressions, violated invariants, and unintended scope changes.
-7. Record important architectural lessons or recurring mistakes in the appropriate project documentation.
-8. Never grant an AI agent authority to bypass ACASH risk controls, decision boundaries, or execution safeguards.
-9. External tools such as Agentic Trading Lab may be used only as independent research/evaluation references and must not become ACASH core dependencies without an explicit architectural decision.
-
-Core loop:
-
-$$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \text{IMPLEMENT} \to \text{TEST} \to \text{SELF-REVIEW} \to \text{DOCUMENT}$$
-
-### ENGINEERING RESEARCH ADDENDUM
-
-Use the referenced trading-platform examples only as independent research references, not as ACASH architecture.
-
-Potential future concepts worth preserving:
-- Multi-source news / external evidence ingestion
-- Evidence provenance and timestamps
-- Forward / out-of-sample testing
-- Research reproducibility
-- Portfolio analytics
-
-Do NOT expand Phase 1 scope for these concepts.
-
-**Important architectural rule:**
-`DecisionRecord` is immutable and append-only. Do not mutate it later to attach Fill/PnL outcomes. Preserve lineage through immutable references/correlation IDs so the complete decision $\to$ execution $\to$ outcome chain can be reconstructed without modifying historical records.
-
-Do not treat AI confidence scores, huge backtest returns, or large data-source counts as evidence of trading edge without proper calibration, bias checks, and out-of-sample validation.
-
-External systems such as MT4/MT5 or Agentic Trading Lab may only be future adapters/research references and must never become ACASH core dependencies without an explicit ADR.
-
-Keep Phase 1 strictly foundational.
-
-### RESEARCH LESSONS — TRADING SYSTEMS
-
-From external trading-system examples/research, incorporate these principles into ACASH documentation/architecture only where appropriate:
-
-1. **Data Quality & Provenance are Critical:**
-   $$\text{Source} \to \text{Ingestion} \to \text{Validation} \to \text{Normalization} \to \text{Evidence} \to \text{Decision}$$
-2. **AI is Analytical, NOT Execution Authority:**
-   AI must remain an analytical component, NOT the final trading authority. Never treat AI confidence as proven probability/edge.
-3. **Multi-Source Evidence Treatment:**
-   News, macro, options, Greeks, IV, and external data should be treated as evidence/research inputs, not automatic signals.
-4. **Explainability & Traceability:**
-   Every decision should be explainable and traceable back to its evidence, data, calculations, and timestamp.
-5. **Backtest Metrics $\neq$ Edge:**
-   Backtest metrics (win rate, PF, Sharpe, expectancy, etc.) do NOT prove a real edge without proper OOS/forward testing, leakage checks, costs, slippage, and regime validation.
-6. **Observability Matters:**
-   $$\text{System State} \to \text{Metrics} \to \text{Monitoring} \to \text{Audit/Investigation}$$
-7. **Decoupled External Systems:**
-   External platforms/data providers may be used for independent research/evaluation, but must NOT become ACASH core dependencies without an explicit architectural decision.
-
-> [!IMPORTANT]
-> **Do not add new features or perform broad refactors based on these lessons.** Preserve current ACASH boundaries and apply only minimal, reversible documentation/architecture updates where justified.
-
-**Core Research Loop:**
-$$\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \to \text{Outcome} \to \text{Audit/Learning}$$
-
-### FINAL RESEARCH LESSON — MARKET STRUCTURE
-
-- **Options Flow is Positioning, Not Sentiment:** Do NOT interpret Options Flow simply as bullish/bearish sentiment. Flow is an observation of transactions/positioning; the essential question is: *"At this price/structure, who is forced to react, and what happens if price reaches that level?"*
-- **Market Structure Precedes Strategy:** Market structure comes before strategy. Identify key levels/zones and how price behaves around them before selecting a strategy.
-- **3-Dimensional Options Evaluation:** For options, evaluate at least 3 dimensions concurrently: $\text{Direction} \times \text{Volatility} \times \text{Time}$. Never judge an option setup from direction alone.
-- **Market State $\neq$ Trade Signal:** Distinguish "market state / setup" $\neq$ "trade signal". The system should explain what condition exists and what actions/risk responses become relevant, rather than blindly outputting BUY/SELL.
-- **Strict Arbitrage Exploitation:** Arbitrage is only meaningful when the pricing relationship is demonstrably exploitable after transaction costs, liquidity, execution risk, and timing friction.
-
-**Market Structure Decision Loop:**
-$$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$$
-
-### QUANTITATIVE REASONING & DETERMINISTIC RISK PIPELINE
-                      ▼
-               DecisionRecord (Append-Only Audit)
-```
-
----
-
-## 4. Completed Milestones & Quality Gates (Phases 0–4)
+## 4. Completed Milestones & Quality Gates (Phases 0–16)
 
 ```
-Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
-Phase 1: Foundation & Domain Core ──► [GATE 1 PASSED — 27/27 Unit Tests, mypy clean]
-Phase 2: Data Ingestion & Integrity Engine ──► [GATE 2 PASSED — 57/57 Tests, mypy clean]
-Phase 3: Market Microstructure & PIT Feature Engine ──► [GATE 3 PASSED — 122/122 Tests, mypy clean]
-   ├─ Phase 3A: Canonical Trades Domain (Time & Sales, Aggressor Side)
-   ├─ Phase 3B: Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
-   └─ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
-Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
-Phase 5: Backtesting Substrate & NautilusTrader PoC ──► [PROPOSED — v1.1.0 Design Proposal]
+✅ Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
+✅ Phase 1: Foundation & Domain Core ──► [GATE 1 PASSED — 27/27 Unit Tests, mypy clean]
+✅ Phase 2: Data Ingestion & Integrity Engine ──► [GATE 2 PASSED — 57/57 Tests, mypy clean]
+✅ Phase 3: Market Microstructure & PIT Feature Engine ──► [GATE 3 PASSED — 122/122 Tests, mypy clean]
+   ├─ ✅ Phase 3A: Canonical Trades Domain (Time & Sales, Aggressor Side)
+   ├─ ✅ Phase 3B: Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
+   └─ ✅ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
+✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
+🔄 Phase 5: Backtesting Substrate & NautilusTrader PoC ──► [IN PROGRESS — v1.1.0 Design Proposal]
+⏳ Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6 (Purged CPCV & DSR)
+⏳ Phase 7: Regime Engine (Trend/Vol Classifiers) ──► Gate 7
+⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
+⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
+⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
+⏳ Phase 11: Paper Trading Subsystem ──► Gate 11
+⏳ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
+⏳ Phase 13: Live Small Capital Deployment ──► Gate 13 (MANDATORY HUMAN APPROVAL)
+⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
+⏳ Phase 15: Strategy Lifecycle State Machine ──► Gate 15
+⏳ Phase 16: Performance Degradation & Learning Flywheel ──► Ongoing
 ```
 
 ### Detailed Summary of Delivered Capabilities:
