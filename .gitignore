@@ -27,7 +27,8 @@ Thumbs.db
 *~
 
 # Data & Artefacts
-data/
+/data/
 *.parquet
 *.duckdb
-logs/
+/logs/
+

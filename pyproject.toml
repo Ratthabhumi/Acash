@@ -11,7 +11,11 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "structlog>=23.1.0",
+    "duckdb>=1.0.0",
+    "pyarrow>=14.0.0",
+    "pandas>=2.0.0",
 ]
+
 
 [dependency-groups]
 dev = [
@@ -44,3 +48,8 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 show_error_codes = true
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = ["pyarrow.*", "pandas.*", "duckdb.*"]
+ignore_missing_imports = true
+
