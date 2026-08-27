@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.12.0 (Canonical Content Fingerprint Scope & First-Acceptance Tie-Breaker Finalized)  
+**Version:** 1.13.0 (One Batch = One Canonical Part Ingestion Unit & Idempotency Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout, Global Batch Idempotency & Concurrency Boundaries
+## 3. Storage Layout, Global Batch Scope & Idempotency Contract
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -59,7 +59,14 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 └── ...
 ```
 
-### Storage & Ingestion Invariants:
+### 3.1 Strict Batch Scope (1:1 Mapping Invariant):
+For Phase 2, a canonical batch is strictly defined as:
+$$\text{ONE batch\_id} \equiv \text{ONE Ingestion Unit} \equiv \text{ONE source\_id} \equiv \text{ONE symbol} \equiv \text{ONE timeframe} \equiv \text{ONE year partition} \equiv \text{ONE immutable part file}$$
+
+- **Multi-Stream & Multi-Partition Splitting:** If an incoming raw input payload contains multiple streams or spans multiple year partitions, the ingestion pipeline splits it into distinct, independent ingestion units, each receiving its own globally unique `batch_id`.
+- **Exact 1:1 Path Mapping:** A `batch_id` maps to **exactly one** canonical part file path: `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`. A single batch never maps to multiple files or partition directories.
+
+### 3.2 Storage & Ingestion Invariants:
 1. **Append-Only Parts:** Each successful batch ingestion writes a new, uniquely identified immutable part file.
 2. **Never Overwrite Existing Parts:** Normal ingestion never overwrites, truncates, or replaces existing part files.
 3. **Partition Scanning:** DuckDB reads the full historical dataset across all parts using parquet file globs:
@@ -69,9 +76,9 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
    Under supported filesystem semantics, readers will not observe the final path as a partially written staging file, and a failed write leaves existing parts completely intact.
 5. **Global Batch Idempotency Contract:**
    - `batch_id` is a **globally unique immutable ingestion identity across the entire ACASH canonical dataset**.
-   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (no-op; returns the existing part path without creating duplicate parts).
+   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (no-op; returns the single existing part path without creating duplicate parts).
    - Ingesting an existing `batch_id` with differing canonical content is rejected with a fatal `BatchCollisionError`.
-   - `batch_id` is recorded in the provenance audit record.
+   - Each `batch_id` produces **exactly one provenance audit record** containing its canonical part path in the Provenance Ledger (`data/provenance_ledger.jsonl`).
 6. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
 
 ---
@@ -207,11 +214,11 @@ Every ingestion run records an entry in the **append-only application audit log*
   "batch_id": "batch_20260827_001_a1b2c3d4",
   "source_id": "binance_public",
   "source_uri_or_path": "data/raw/btc_usdt_1m.csv",
-  "part_file_path": "data/parquet/BTC-USDT/M1/year=2026/part-000001-a1b2c3d4.parquet",
+  "part_file_path": "data/parquet/BTC-USDT/M1/year=2026/part-batch_20260827_001_a1b2c3d4.parquet",
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.12.0",
+  "schema_version": "1.13.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

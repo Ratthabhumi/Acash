@@ -196,10 +196,14 @@
   1. **Immutable Append-Only Part Storage:** Datasets are stored as partitioned immutable part files:
      `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`
      Normal ingestion never overwrites existing part files; DuckDB queries scan all parts via Parquet globs.
-  2. **Global Batch Idempotency Contract:**
-     - `batch_id` is a globally unique immutable ingestion identity across the entire ACASH canonical dataset.
-     - Retrying the same `batch_id` with identical canonical content is safely idempotent (no-op).
+  2. **Global Batch Idempotency & Strict 1:1 Ingestion Unit Contract:**
+     - A canonical batch is defined as: $\text{ONE batch\_id} \equiv \text{ONE ingestion unit} \equiv \text{ONE source\_id} \equiv \text{ONE symbol} \equiv \text{ONE timeframe} \equiv \text{ONE year partition} \equiv \text{ONE immutable part file}$.
+     - Multi-stream or multi-partition raw inputs are split into independent ingestion units with unique batch IDs.
+     - `batch_id` is a globally unique immutable identity mapping to exactly one part path: `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`.
+     - Retrying the same `batch_id` with identical canonical content is safely idempotent (no-op returning existing part path).
      - Ingestion of an existing `batch_id` with differing canonical content is rejected with `BatchCollisionError`.
+     - Each `batch_id` produces exactly one provenance audit record.
+
   3. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(38, 18)` (Canonical representation supporting up to 18 fractional scale places; out-of-bound or non-finite values rejected).
