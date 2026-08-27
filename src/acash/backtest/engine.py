@@ -109,15 +109,40 @@ class SimulatedOrderBook:
         bids: Sequence[Tuple[Decimal, Decimal]],
         asks: Sequence[Tuple[Decimal, Decimal]],
     ) -> None:
-        """Atomically replace entire order book state with a complete snapshot frame."""
-        self.bids.clear()
-        self.asks.clear()
+        """Atomically replace entire order book state with a complete snapshot frame.
+
+        Enforces transactional build-then-swap semantics:
+        - Validates all prices and sizes upfront into local dictionaries.
+        - Raises ValueError on invalid items before modifying existing book.
+        - Swaps self.bids and self.asks atomically upon complete validation.
+        """
+        new_bids: Dict[Decimal, Decimal] = {}
+        new_asks: Dict[Decimal, Decimal] = {}
+
         for px, sz in bids:
+            if not isinstance(px, Decimal) or not isinstance(sz, Decimal):
+                raise ValueError(f"Price and size in bids snapshot must be Decimal, got ({type(px)}, {type(sz)}).")
+            if not px.is_finite() or px <= Decimal("0.0"):
+                raise ValueError(f"Snapshot bid price must be positive finite Decimal, got {px}.")
+            if not sz.is_finite() or sz < Decimal("0.0"):
+                raise ValueError(f"Snapshot bid size must be non-negative finite Decimal, got {sz}.")
             if sz > Decimal("0.0"):
-                self.bids[px] = sz
+                new_bids[px] = sz
+
         for px, sz in asks:
+            if not isinstance(px, Decimal) or not isinstance(sz, Decimal):
+                raise ValueError(f"Price and size in asks snapshot must be Decimal, got ({type(px)}, {type(sz)}).")
+            if not px.is_finite() or px <= Decimal("0.0"):
+                raise ValueError(f"Snapshot ask price must be positive finite Decimal, got {px}.")
+            if not sz.is_finite() or sz < Decimal("0.0"):
+                raise ValueError(f"Snapshot ask size must be non-negative finite Decimal, got {sz}.")
             if sz > Decimal("0.0"):
-                self.asks[px] = sz
+                new_asks[px] = sz
+
+        # Atomic state swap (Transactional / Exception Safe)
+        self.bids = new_bids
+        self.asks = new_asks
+
 
 
 

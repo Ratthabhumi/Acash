@@ -152,3 +152,44 @@ def test_canonical_feature_table_sha256_row_order_invariance() -> None:
     assert hash_orig != hash_mut
 
 
+def test_canonical_feature_table_sha256_duplicate_timestamps_permutation_invariance() -> None:
+    """Verify calculate_canonical_feature_table_sha256 is 100% permutation invariant even with duplicate timestamps and ties."""
+    import itertools
+    from acash.research.pipeline import calculate_canonical_feature_table_sha256
+
+    t_shared = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+
+    # 3 rows with identical timestamp but different feature values
+    rows = [
+        {"timestamp_utc": t_shared, "feature_a": Decimal("100.00"), "feature_b": True, "tag": "ALPHA"},
+        {"timestamp_utc": t_shared, "feature_a": Decimal("200.00"), "feature_b": False, "tag": "BETA"},
+        {"timestamp_utc": t_shared, "feature_a": Decimal("300.00"), "feature_b": True, "tag": "GAMMA"},
+    ]
+
+    hashes = set()
+    for perm in itertools.permutations(rows):
+        tbl = pa.Table.from_pydict({
+            "timestamp_utc": [r["timestamp_utc"] for r in perm],
+            "feature_a": [r["feature_a"] for r in perm],
+            "feature_b": [r["feature_b"] for r in perm],
+            "tag": [r["tag"] for r in perm],
+        })
+        h = calculate_canonical_feature_table_sha256(tbl)
+        hashes.add(h)
+
+    # Invariant: ALL 6 permutations MUST yield the exact same SHA-256 hash!
+    assert len(hashes) == 1
+
+    # Type Distinguishability Invariant: bool(True) vs int(1)
+    tbl_bool = pa.Table.from_pydict({
+        "timestamp_utc": [t_shared],
+        "flag": [True],
+    })
+    tbl_int = pa.Table.from_pydict({
+        "timestamp_utc": [t_shared],
+        "flag": [1],
+    })
+    assert calculate_canonical_feature_table_sha256(tbl_bool) != calculate_canonical_feature_table_sha256(tbl_int)
+
+
+

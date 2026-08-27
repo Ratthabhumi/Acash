@@ -92,6 +92,59 @@ def test_snapshot_multi_row_application_and_clear_all() -> None:
     assert len(book.bids) == 0 and len(book.asks) == 0
 
 
+def test_snapshot_replacement_injected_failure_preserves_old_state() -> None:
+    """Verify apply_snapshot_frame maintains transactional exception safety on invalid inputs."""
+    book = SimulatedOrderBook()
+    book.apply_delta("ADD", "BID", Decimal("5000.00"), Decimal("5.0"))
+    book.apply_delta("ADD", "ASK", Decimal("5001.00"), Decimal("7.0"))
+
+    # Initial state verified
+    assert book.best_bid == Decimal("5000.00")
+    assert book.best_ask == Decimal("5001.00")
+    assert len(book.bids) == 1 and len(book.asks) == 1
+
+    # Injected Failure: Invalid negative size in snapshot
+    with pytest.raises(ValueError, match="must be non-negative finite Decimal"):
+        book.apply_snapshot_frame(
+            bids=[(Decimal("4990.00"), Decimal("10.0")), (Decimal("4980.00"), Decimal("-5.0"))],
+            asks=[(Decimal("5010.00"), Decimal("10.0"))],
+        )
+
+    # Invariant: Old book state is completely intact and untouched!
+    assert len(book.bids) == 1 and len(book.asks) == 1
+    assert Decimal("5000.00") in book.bids and book.bids[Decimal("5000.00")] == Decimal("5.0")
+    assert Decimal("5001.00") in book.asks and book.asks[Decimal("5001.00")] == Decimal("7.0")
+    assert book.best_bid == Decimal("5000.00")
+    assert book.best_ask == Decimal("5001.00")
+
+
+def test_snapshot_frame_with_interleaved_bid_ask_rows() -> None:
+    """Verify multi-row snapshot frames with interleaved BID/ASK rows reconstruct book state perfectly."""
+    book = SimulatedOrderBook()
+
+    # Interleaved rows:
+    # 1. SNAPSHOT BID L0 (5000 = 5) -> Clears bids, inserts 5000=5
+    # 2. SNAPSHOT ASK L0 (5001 = 7) -> Clears asks, inserts 5001=7
+    # 3. SNAPSHOT BID L1 (4999 = 10) -> Inserts 4999=10 into bids
+    # 4. SNAPSHOT ASK L1 (5002 = 12) -> Inserts 5002=12 into asks
+    book.apply_delta("SNAPSHOT", "BID", Decimal("5000.00"), Decimal("5.0"), level_idx=0)
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5001.00"), Decimal("7.0"), level_idx=0)
+    book.apply_delta("SNAPSHOT", "BID", Decimal("4999.00"), Decimal("10.0"), level_idx=1)
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5002.00"), Decimal("12.0"), level_idx=1)
+
+    assert len(book.bids) == 2
+    assert len(book.asks) == 2
+    assert book.best_bid == Decimal("5000.00")
+    assert book.best_ask == Decimal("5001.00")
+    assert book.bids[Decimal("5000.00")] == Decimal("5.0")
+    assert book.bids[Decimal("4999.00")] == Decimal("10.0")
+    assert book.asks[Decimal("5001.00")] == Decimal("7.0")
+    assert book.asks[Decimal("5002.00")] == Decimal("12.0")
+    assert book.total_bid_depth == Decimal("15.0")
+    assert book.total_ask_depth == Decimal("19.0")
+
+
+
 
 def test_taker_partial_fill_and_ioc_fok_semantics() -> None:
     """Verify FOK cancels when depth is insufficient or book empty, and Market/IOC remainder is cancelled."""

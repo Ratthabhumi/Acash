@@ -39,105 +39,104 @@ from acash.research.schema import (
     SplitPolicy,
 )
 
-# Canonical binary frame serialization constants
-NULL_UINT32_TAG = 0xFFFFFFFF
-NULL_INT64_SENTINEL = -9223372036854775808
+# Explicit type tags for canonical feature table serialization
+TYPE_TAG_NULL = b"\x00"
+TYPE_TAG_BOOL = b"\x01"
+TYPE_TAG_INT64 = b"\x02"
+TYPE_TAG_FLOAT64 = b"\x03"
+TYPE_TAG_DECIMAL18 = b"\x04"
+TYPE_TAG_TIMESTAMP_US = b"\x05"
+TYPE_TAG_DATE = b"\x06"
+TYPE_TAG_STR = b"\x07"
+
+FIELD_SEPARATOR_BYTE = b"\x1f"
 RECORD_SEPARATOR_BYTE = b"\x1e"
 
 
-def _encode_str(val: Optional[str]) -> bytes:
-    """Encode string with 4-byte big-endian uint32 length prefix."""
+def _encode_field(val: Any) -> bytes:
+    """Encode a scalar value with explicit type tag and length-prefixed binary format."""
     if val is None:
-        return struct.pack(">I", NULL_UINT32_TAG)
-    b = str(val).encode("utf-8")
-    return struct.pack(">I", len(b)) + b
+        return TYPE_TAG_NULL
 
-
-def _encode_dec(val: Optional[Decimal]) -> bytes:
-    """Encode Decimal with 4-byte big-endian length prefix and fixed 18-scale ASCII."""
-    if val is None:
-        return struct.pack(">I", NULL_UINT32_TAG)
-    b = f"{val:.18f}".encode("ascii")
-    return struct.pack(">I", len(b)) + b
-
-
-def _encode_int64(val: Optional[int]) -> bytes:
-    """Encode int64 as 8-byte big-endian signed integer."""
-    if val is None:
-        return struct.pack(">q", NULL_INT64_SENTINEL)
-    return struct.pack(">q", int(val))
-
-
-def _encode_ts_us(val: Any) -> bytes:
-    """Encode microsecond timestamp as 8-byte big-endian int64 epoch microseconds."""
-    if val is None:
-        return struct.pack(">q", NULL_INT64_SENTINEL)
-    if isinstance(val, int):
-        return struct.pack(">q", val)
     if isinstance(val, pa.Scalar):
-        if val.as_py() is None:
-            return struct.pack(">q", NULL_INT64_SENTINEL)
-        return struct.pack(">q", val.value)
+        val = val.as_py()
+        if val is None:
+            return TYPE_TAG_NULL
+
+    # Check bool BEFORE int (since bool is a subclass of int in Python)
+    if isinstance(val, bool):
+        return TYPE_TAG_BOOL + (b"\x01" if val else b"\x00")
+
+    if isinstance(val, int):
+        return TYPE_TAG_INT64 + struct.pack(">q", val)
+
+    if isinstance(val, Decimal):
+        dec_bytes = f"{val:.18f}".encode("ascii")
+        return TYPE_TAG_DECIMAL18 + struct.pack(">I", len(dec_bytes)) + dec_bytes
+
     if isinstance(val, datetime):
         dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
         td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
         total_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
-        return struct.pack(">q", total_us)
-    return struct.pack(">q", int(val))
+        return TYPE_TAG_TIMESTAMP_US + struct.pack(">q", total_us)
+
+    if isinstance(val, date):
+        epoch_days = (val - date(1970, 1, 1)).days
+        return TYPE_TAG_DATE + struct.pack(">i", epoch_days)
+
+    if isinstance(val, float):
+        return TYPE_TAG_FLOAT64 + struct.pack(">d", val)
+
+    s_bytes = str(val).encode("utf-8")
+    return TYPE_TAG_STR + struct.pack(">I", len(s_bytes)) + s_bytes
 
 
 def calculate_canonical_feature_table_sha256(table: pa.Table) -> str:
     """Calculate deterministic canonical length-prefixed binary SHA-256 hash over feature table.
 
     Invariant Rules:
-    1. Canonical row ordering (sorted by timestamp/time column or lexicographically by all columns).
-    2. Length-prefixed binary serialization matching Phase 2/3A/3B data contracts.
-    3. Independent of chunking, memory layout, and column input order.
+    1. 100% Row-order invariant via deterministic total byte-wise row sorting.
+    2. Column-order invariant via sorted canonical column names header.
+    3. Explicit 1-byte type tagging (distinguishing bool, int64, decimal18, timestamps, dates, strings).
+    4. Codec, chunking, and memory-layout invariant.
     """
     if table.num_rows == 0:
         return hashlib.sha256(b"EMPTY_FEATURE_TABLE").hexdigest()
 
-    sort_cols = [c for c in ("timestamp_utc", "bar_start_utc", "exchange_time_utc", "feature_time_utc") if c in table.column_names]
-    if sort_cols:
-        sorted_tbl = table.sort_by([(c, "ascending") for c in sort_cols])
-    else:
-        sort_keys = [(c, "ascending") for c in sorted(table.column_names)]
-        sorted_tbl = table.sort_by(sort_keys)
+    col_names = sorted(table.column_names)
+    pydict = table.to_pydict()
+    num_rows = table.num_rows
 
-    hasher = hashlib.sha256()
-    col_names = sorted(sorted_tbl.column_names)
-
-    # Encode header
-    for c in col_names:
-        hasher.update(_encode_str(c))
-    hasher.update(RECORD_SEPARATOR_BYTE)
-
-    num_rows = sorted_tbl.num_rows
-    pydict = sorted_tbl.to_pydict()
-
+    # 1. Encode every row independently into canonical binary byte string
+    row_bytes_list: List[bytes] = []
     for i in range(num_rows):
-        row_bytes = bytearray()
+        row_parts: List[bytes] = []
         for col in col_names:
             val = pydict[col][i]
-            if isinstance(val, Decimal):
-                row_bytes.extend(_encode_dec(val))
-            elif isinstance(val, int):
-                row_bytes.extend(_encode_int64(val))
-            elif isinstance(val, datetime):
-                row_bytes.extend(_encode_ts_us(val))
-            elif isinstance(val, str):
-                row_bytes.extend(_encode_str(val))
-            elif val is None:
-                row_bytes.extend(_encode_str(None))
-            else:
-                try:
-                    row_bytes.extend(_encode_dec(Decimal(str(val))))
-                except Exception:
-                    row_bytes.extend(_encode_str(str(val)))
-        row_bytes.extend(RECORD_SEPARATOR_BYTE)
-        hasher.update(row_bytes)
+            row_parts.append(_encode_field(val))
+        row_bytes_list.append(FIELD_SEPARATOR_BYTE.join(row_parts))
+
+    # 2. Total Row Ordering: Sort row byte strings lexicographically (guarantees 100% permutation invariance)
+    row_bytes_list.sort()
+
+    # 3. Stream through SHA-256 with Header
+    hasher = hashlib.sha256()
+
+    # Header: Column names with length prefix
+    header_parts: List[bytes] = []
+    for col in col_names:
+        c_bytes = col.encode("utf-8")
+        header_parts.append(struct.pack(">I", len(c_bytes)) + c_bytes)
+    hasher.update(FIELD_SEPARATOR_BYTE.join(header_parts))
+    hasher.update(RECORD_SEPARATOR_BYTE)
+
+    # Rows
+    for row_b in row_bytes_list:
+        hasher.update(row_b)
+        hasher.update(RECORD_SEPARATOR_BYTE)
 
     return hasher.hexdigest()
+
 
 
 class AlphaResearchPipeline:
