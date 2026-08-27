@@ -58,8 +58,9 @@ class SimulatedOrderBook:
         side: str,
         price: Optional[Decimal],
         size: Optional[Decimal],
+        level_idx: Optional[int] = None,
     ) -> None:
-        """Update order book state based on market data delta."""
+        """Update order book state based on market data delta or snapshot."""
         action_upper = action.upper()
         side_upper = side.upper()
 
@@ -74,6 +75,11 @@ class SimulatedOrderBook:
             return
 
         target_book = self.bids if side_upper in ("BID", "BUY") else self.asks
+
+        # Frame-Aware Snapshot Boundary: When a snapshot starts (level_idx == 0 or level_idx is None),
+        # clear the stale ladder for that side so new snapshot atomically replaces all previous levels.
+        if action_upper == "SNAPSHOT" and (level_idx == 0 or level_idx is None):
+            target_book.clear()
 
         if price is None:
             return
@@ -97,6 +103,22 @@ class SimulatedOrderBook:
                     target_book.pop(price, None)
             else:
                 target_book.pop(price, None)
+
+    def apply_snapshot_frame(
+        self,
+        bids: Sequence[Tuple[Decimal, Decimal]],
+        asks: Sequence[Tuple[Decimal, Decimal]],
+    ) -> None:
+        """Atomically replace entire order book state with a complete snapshot frame."""
+        self.bids.clear()
+        self.asks.clear()
+        for px, sz in bids:
+            if sz > Decimal("0.0"):
+                self.bids[px] = sz
+        for px, sz in asks:
+            if sz > Decimal("0.0"):
+                self.asks[px] = sz
+
 
 
     @property
@@ -631,7 +653,9 @@ class EventBacktestRunner:
                     side=event.payload.get("side", "BID"),
                     price=event.payload.get("price"),
                     size=event.payload.get("size"),
+                    level_idx=event.payload.get("level_idx"),
                 )
+
                 if self.order_book.best_bid and self.order_book.best_ask:
                     self.last_price = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
                     self.ledger.update_market_price(event.symbol, self.last_price)

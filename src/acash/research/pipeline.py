@@ -7,11 +7,11 @@ Strictly enforces:
 - Complete ResearchManifest emission.
 """
 
+import hashlib
+import struct
 from datetime import date, datetime, timezone
 from decimal import Decimal
-import hashlib
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-
 import uuid
 import pyarrow as pa
 
@@ -39,9 +39,110 @@ from acash.research.schema import (
     SplitPolicy,
 )
 
+# Canonical binary frame serialization constants
+NULL_UINT32_TAG = 0xFFFFFFFF
+NULL_INT64_SENTINEL = -9223372036854775808
+RECORD_SEPARATOR_BYTE = b"\x1e"
+
+
+def _encode_str(val: Optional[str]) -> bytes:
+    """Encode string with 4-byte big-endian uint32 length prefix."""
+    if val is None:
+        return struct.pack(">I", NULL_UINT32_TAG)
+    b = str(val).encode("utf-8")
+    return struct.pack(">I", len(b)) + b
+
+
+def _encode_dec(val: Optional[Decimal]) -> bytes:
+    """Encode Decimal with 4-byte big-endian length prefix and fixed 18-scale ASCII."""
+    if val is None:
+        return struct.pack(">I", NULL_UINT32_TAG)
+    b = f"{val:.18f}".encode("ascii")
+    return struct.pack(">I", len(b)) + b
+
+
+def _encode_int64(val: Optional[int]) -> bytes:
+    """Encode int64 as 8-byte big-endian signed integer."""
+    if val is None:
+        return struct.pack(">q", NULL_INT64_SENTINEL)
+    return struct.pack(">q", int(val))
+
+
+def _encode_ts_us(val: Any) -> bytes:
+    """Encode microsecond timestamp as 8-byte big-endian int64 epoch microseconds."""
+    if val is None:
+        return struct.pack(">q", NULL_INT64_SENTINEL)
+    if isinstance(val, int):
+        return struct.pack(">q", val)
+    if isinstance(val, pa.Scalar):
+        if val.as_py() is None:
+            return struct.pack(">q", NULL_INT64_SENTINEL)
+        return struct.pack(">q", val.value)
+    if isinstance(val, datetime):
+        dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+        td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        total_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
+        return struct.pack(">q", total_us)
+    return struct.pack(">q", int(val))
+
+
+def calculate_canonical_feature_table_sha256(table: pa.Table) -> str:
+    """Calculate deterministic canonical length-prefixed binary SHA-256 hash over feature table.
+
+    Invariant Rules:
+    1. Canonical row ordering (sorted by timestamp/time column or lexicographically by all columns).
+    2. Length-prefixed binary serialization matching Phase 2/3A/3B data contracts.
+    3. Independent of chunking, memory layout, and column input order.
+    """
+    if table.num_rows == 0:
+        return hashlib.sha256(b"EMPTY_FEATURE_TABLE").hexdigest()
+
+    sort_cols = [c for c in ("timestamp_utc", "bar_start_utc", "exchange_time_utc", "feature_time_utc") if c in table.column_names]
+    if sort_cols:
+        sorted_tbl = table.sort_by([(c, "ascending") for c in sort_cols])
+    else:
+        sort_keys = [(c, "ascending") for c in sorted(table.column_names)]
+        sorted_tbl = table.sort_by(sort_keys)
+
+    hasher = hashlib.sha256()
+    col_names = sorted(sorted_tbl.column_names)
+
+    # Encode header
+    for c in col_names:
+        hasher.update(_encode_str(c))
+    hasher.update(RECORD_SEPARATOR_BYTE)
+
+    num_rows = sorted_tbl.num_rows
+    pydict = sorted_tbl.to_pydict()
+
+    for i in range(num_rows):
+        row_bytes = bytearray()
+        for col in col_names:
+            val = pydict[col][i]
+            if isinstance(val, Decimal):
+                row_bytes.extend(_encode_dec(val))
+            elif isinstance(val, int):
+                row_bytes.extend(_encode_int64(val))
+            elif isinstance(val, datetime):
+                row_bytes.extend(_encode_ts_us(val))
+            elif isinstance(val, str):
+                row_bytes.extend(_encode_str(val))
+            elif val is None:
+                row_bytes.extend(_encode_str(None))
+            else:
+                try:
+                    row_bytes.extend(_encode_dec(Decimal(str(val))))
+                except Exception:
+                    row_bytes.extend(_encode_str(str(val)))
+        row_bytes.extend(RECORD_SEPARATOR_BYTE)
+        hasher.update(row_bytes)
+
+    return hasher.hexdigest()
+
 
 class AlphaResearchPipeline:
     """Orchestrates end-to-end alpha hypothesis research with strict OOS governance and lineage tracking."""
+
 
     def __init__(self, manifest_engine: Optional[ResearchManifestEngine] = None) -> None:
         self.manifest_engine = manifest_engine or ResearchManifestEngine()
@@ -140,12 +241,8 @@ class AlphaResearchPipeline:
         )
 
         # 4. Out-of-Sample Evaluation & State Machine Governance
-        feature_hash = hashlib.sha256()
-        for col_name in sorted(features_table.column_names):
-            feature_hash.update(col_name.encode("utf-8"))
-            for val in features_table[col_name].to_pylist():
-                feature_hash.update(str(val).encode("utf-8"))
-        feature_sha256 = feature_hash.hexdigest()
+        feature_sha256 = calculate_canonical_feature_table_sha256(features_table)
+
 
         hyp_spec_hash = calculate_hypothesis_spec_sha256(hypothesis)
         manifest_seed = (

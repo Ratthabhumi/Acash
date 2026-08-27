@@ -45,18 +45,20 @@ def test_simulated_order_book_vwap_sweeps_and_liquidity_consumption() -> None:
 
 
 def test_snapshot_multi_row_application_and_clear_all() -> None:
-    """Verify multi-row snapshot frames populate all levels and CLEAR ALL empties both books."""
+    """Verify multi-row snapshot frames populate all levels, atomically replace stale state, and CLEAR ALL empties both books."""
     book = SimulatedOrderBook()
 
     # Apply CLEAR ALL
     book.apply_delta("CLEAR", "ALL", None, None)
     assert len(book.bids) == 0 and len(book.asks) == 0
 
-    # Multi-row snapshot frame rows
-    book.apply_delta("SNAPSHOT", "BID", Decimal("5000.00"), Decimal("5.0"))
-    book.apply_delta("SNAPSHOT", "BID", Decimal("4999.00"), Decimal("10.0"))
-    book.apply_delta("SNAPSHOT", "ASK", Decimal("5001.00"), Decimal("7.0"))
-    book.apply_delta("SNAPSHOT", "ASK", Decimal("5002.00"), Decimal("12.0"))
+    # 1. Multi-row Snapshot Frame 1:
+    # BID: 5000 (L0, qty 5), 4999 (L1, qty 10)
+    # ASK: 5001 (L0, qty 7), 5002 (L1, qty 12)
+    book.apply_delta("SNAPSHOT", "BID", Decimal("5000.00"), Decimal("5.0"), level_idx=0)
+    book.apply_delta("SNAPSHOT", "BID", Decimal("4999.00"), Decimal("10.0"), level_idx=1)
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5001.00"), Decimal("7.0"), level_idx=0)
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5002.00"), Decimal("12.0"), level_idx=1)
 
     assert len(book.bids) == 2
     assert len(book.asks) == 2
@@ -65,9 +67,30 @@ def test_snapshot_multi_row_application_and_clear_all() -> None:
     assert book.total_bid_depth == Decimal("15.0")
     assert book.total_ask_depth == Decimal("19.0")
 
-    # CLEAR ALL resets both books
+    # 2. Multi-row Snapshot Frame 2 (New market state arriving later):
+    # BID: 5001 (L0, qty 3.0)
+    # ASK: 5003 (L0, qty 8.0)
+    # Must atomically purge all stale levels from Frame 1 (5000, 4999, 5001, 5002)
+    book.apply_delta("SNAPSHOT", "BID", Decimal("5001.00"), Decimal("3.0"), level_idx=0)
+    book.apply_delta("SNAPSHOT", "ASK", Decimal("5003.00"), Decimal("8.0"), level_idx=0)
+
+    assert len(book.bids) == 1
+    assert len(book.asks) == 1
+    assert Decimal("5000.00") not in book.bids  # Stale level 5000 is removed
+    assert Decimal("4999.00") not in book.bids  # Stale level 4999 is removed
+    assert Decimal("5001.00") in book.bids
+    assert Decimal("5001.00") not in book.asks  # Stale ask level 5001 is removed
+    assert Decimal("5002.00") not in book.asks  # Stale ask level 5002 is removed
+    assert Decimal("5003.00") in book.asks
+    assert book.best_bid == Decimal("5001.00")
+    assert book.best_ask == Decimal("5003.00")
+    assert book.total_bid_depth == Decimal("3.0")
+    assert book.total_ask_depth == Decimal("8.0")
+
+    # 3. CLEAR ALL resets both books
     book.apply_delta("CLEAR", "ALL", None, None)
     assert len(book.bids) == 0 and len(book.asks) == 0
+
 
 
 def test_taker_partial_fill_and_ioc_fok_semantics() -> None:

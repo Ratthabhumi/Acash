@@ -113,3 +113,42 @@ def test_research_pipeline_end_to_end_and_manifest_storage() -> None:
         )
         assert manifest.manifest_id == manifest2.manifest_id
 
+
+def test_canonical_feature_table_sha256_row_order_invariance() -> None:
+    """Verify calculate_canonical_feature_table_sha256 is row-order invariant and detects any data mutation."""
+    from acash.research.pipeline import calculate_canonical_feature_table_sha256
+
+    t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 19, 14, 31, 0, tzinfo=timezone.utc)
+    t2 = datetime(2026, 1, 19, 14, 32, 0, tzinfo=timezone.utc)
+
+    tbl_original = pa.Table.from_pydict({
+        "timestamp_utc": [t0, t1, t2],
+        "vwap_std": [Decimal("1.250000000000000000"), Decimal("2.500000000000000000"), Decimal("3.750000000000000000")],
+        "volume_imbalance": [Decimal("0.100000000000000000"), Decimal("-0.200000000000000000"), Decimal("0.300000000000000000")],
+    })
+
+    # Permuted rows (t2, t0, t1)
+    tbl_permuted = pa.Table.from_pydict({
+        "timestamp_utc": [t2, t0, t1],
+        "vwap_std": [Decimal("3.750000000000000000"), Decimal("1.250000000000000000"), Decimal("2.500000000000000000")],
+        "volume_imbalance": [Decimal("0.300000000000000000"), Decimal("0.100000000000000000"), Decimal("-0.200000000000000000")],
+    })
+
+    # Mutated value
+    tbl_mutated = pa.Table.from_pydict({
+        "timestamp_utc": [t0, t1, t2],
+        "vwap_std": [Decimal("1.250000000000000000"), Decimal("2.500000000000000001"), Decimal("3.750000000000000000")],
+        "volume_imbalance": [Decimal("0.100000000000000000"), Decimal("-0.200000000000000000"), Decimal("0.300000000000000000")],
+    })
+
+    hash_orig = calculate_canonical_feature_table_sha256(tbl_original)
+    hash_perm = calculate_canonical_feature_table_sha256(tbl_permuted)
+    hash_mut = calculate_canonical_feature_table_sha256(tbl_mutated)
+
+    # Invariant: Permuted rows produce identical canonical hash
+    assert hash_orig == hash_perm
+    # Invariant: Any bitwise modification alters hash
+    assert hash_orig != hash_mut
+
+
