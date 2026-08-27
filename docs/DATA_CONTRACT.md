@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.1.0 (Integrity & Provenance Locked)  
+**Version:** 1.2.0 (Source-Aware PIT, Hash Scope & Precision Finalized)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -30,21 +30,24 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 | `event_end_utc` | `timestamp[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microsecond precision) |
 | `knowledge_time_utc`| `timestamp[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microsecond precision) |
 | `revision_seq` | `int64` | Deterministic revision sequence scoped to `(source_id, symbol, timeframe, event_start_utc)` |
-| `open` | `decimal128(28, 10)` | Opening price with exact fixed-point precision |
-| `high` | `decimal128(28, 10)` | Highest traded price during the bar interval |
-| `low` | `decimal128(28, 10)` | Lowest traded price during the bar interval |
-| `close` | `decimal128(28, 10)` | Closing traded price during the bar interval |
-| `volume` | `decimal128(28, 10)` | Total base volume traded |
-| `quote_volume` | `decimal128(28, 10)` | Total quote volume traded |
+| `open` | `decimal128(38, 18)` | Opening price with exact fixed-point precision |
+| `high` | `decimal128(38, 18)` | Highest traded price during the bar interval |
+| `low` | `decimal128(38, 18)` | Lowest traded price during the bar interval |
+| `close` | `decimal128(38, 18)` | Closing traded price during the bar interval |
+| `volume` | `decimal128(38, 18)` | Total base volume traded |
+| `quote_volume` | `decimal128(38, 18)` | Total quote volume traded |
 | `trade_count` | `int64` | Total discrete trade count (-1 if unavailable from source) |
 | `raw_source_sha256` | `string` | SHA-256 hex digest of the raw ingest source payload |
-| `canonical_dataset_sha256` | `string` | SHA-256 hex digest of the normalized canonical dataset partition |
 
-> [!NOTE]
-> **Timestamp Precision Selection:** UTC Microseconds (`timestamp[us, tz=UTC]`) is the canonical Phase 2 bar timestamp representation to match DuckDB native `TIMESTAMPTZ` engine constraints and prevent nanosecond truncation / loss.
+### 2.1 Numeric Precision & Scale Decision (`Decimal128(38, 18)`):
+- **Scale (18 decimal places):** Supports extreme micro-pricing and base asset quantities down to $10^{-18}$ (e.g., crypto satoshi/wei units, sub-pip FX micro-spreads, fractional equities).
+- **Precision (38 total digits):** Provides 20 digits of integer headroom up to $10^{20}$ (e.g., hundreds of trillions in quote volume or market cap).
+- **Engine Compatibility:** Natively supported with exact precision across DuckDB (`DECIMAL(38, 18)`), PyArrow (`pa.decimal128(38, 18)`), and Python `decimal.Decimal`.
+- **Downstream Analytics:** Machine learning and statistical engines explicitly cast to IEEE 754 floating-point (`float64`) when performing vectorized matrix math.
 
-> [!NOTE]
-> **Canonical Numeric Representation:** Financial numbers are stored canonically as `Decimal128(28, 10)`. Downstream statistical and machine learning engines must explicitly convert to floating point when performing vectorized arithmetic.
+### 2.2 Timestamp Precision Decision (`timestamp[us, tz=UTC]`):
+- Canonical bar timestamps use UTC microsecond precision (`timestamp[us, tz=UTC]`).
+- DuckDB's native `TIMESTAMPTZ` operates at microsecond precision; storing microsecond timestamps avoids nanosecond-to-microsecond truncation warnings and precision artifacts when querying Parquet partitions.
 
 ---
 
@@ -61,10 +64,10 @@ ACASH explicitly decouples **Event Time** ($t_{\text{event}}$) from **Knowledge 
 - A single observation is uniquely identified by:
   $$\text{Observation Identity} = (\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
 - `revision_seq` is a deterministic, strictly increasing integer scoped to $(\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc})$.
-- **As-Of Invariant:** At any query reference timestamp $T_{\text{as\_of}}$, there is **at most one authoritative revision** for each event observation.
+- **Zero Premature Source Merging:** Multiple data sources observing the same symbol and timestamp remain distinct independent observations. Phase 2 does NOT merge or prioritize sources without an explicit reconciliation layer.
 
-### 3.3 Point-in-Time (P-I-T) Query Specification:
-DuckDB queries against the canonical Parquet dataset execute revision deduplication:
+### 3.3 Source-Aware Point-in-Time (P-I-T) Query Standard:
+DuckDB queries against the canonical Parquet dataset execute revision deduplication partitioned by `source_id`:
 
 ```sql
 WITH eligible_revisions AS (
@@ -77,15 +80,28 @@ WITH eligible_revisions AS (
 SELECT *
 FROM eligible_revisions
 QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY symbol, timeframe, event_start_utc
-    ORDER BY knowledge_time_utc DESC, revision_seq DESC, canonical_dataset_sha256 DESC
+    PARTITION BY source_id, symbol, timeframe, event_start_utc
+    ORDER BY knowledge_time_utc DESC, revision_seq DESC
 ) = 1
-ORDER BY event_start_utc ASC;
+ORDER BY source_id ASC, event_start_utc ASC;
 ```
 
 ---
 
-## 4. Integrity & Anomaly Boundaries
+## 4. Provenance Hashing & Non-Circular Hash Scope
+
+To eliminate circular self-referencing in canonical dataset hashing:
+1. **Raw Source Hash (`raw_source_sha256`):**
+   - SHA-256 computed over the exact raw input payload bytes / files prior to parsing.
+2. **Canonical Dataset Hash (`canonical_dataset_sha256`):**
+   - Computed strictly over the deterministic binary serialization of the **canonical data columns**:
+     `[source_id, symbol, timeframe, event_start_utc, event_end_utc, knowledge_time_utc, revision_seq, open, high, low, close, volume, quote_volume, trade_count]`
+   - The digest fields themselves are **strictly excluded** from the byte payload being hashed.
+   - The resulting `canonical_dataset_sha256` is recorded in the immutable Provenance Ledger (`data/provenance_ledger.jsonl`) and Parquet metadata key-value store.
+
+---
+
+## 5. Integrity & Anomaly Boundaries
 
 The validator enforces a strict separation between **fatal data corruption** and **empirical market anomalies**:
 
@@ -106,11 +122,11 @@ The validator enforces a strict separation between **fatal data corruption** and
 ```
 
 > [!IMPORTANT]
-> **Deterministic Rule Testing:** Every explicitly defined integrity rule must have deterministic positive and negative test coverage.
+> **Deterministic Rule Test Coverage:** Every explicitly defined integrity rule must have deterministic positive and negative test coverage.
 
 ---
 
-## 5. Session Policies as Configurable Profiles
+## 6. Session Policies as Configurable Profiles
 
 Session calendars are configurable profiles rather than universal hard-coded truths:
 
@@ -123,17 +139,18 @@ Session calendars are configurable profiles rather than universal hard-coded tru
 
 ---
 
-## 6. Atomic Parquet Write Semantics
+## 7. Atomic Parquet Write Semantics
 
-To guarantee that readers never observe partially written or corrupt final files:
+To guarantee that readers under supported filesystem semantics never observe partially written staging files:
 1. **Stage to Temp Path:** Write Parquet output to a hidden staging path (`.tmp_{uuid}_{partition}.parquet`).
-2. **Flush & Sync:** Complete all PyArrow Parquet writer buffers and fsync to disk.
-3. **Verify Integrity:** Run checksum and row count validation against the temporary file.
-4. **Atomic Rename/Replace:** Atomically move/replace the staged file into its canonical partition location (`os.replace` on POSIX/Windows).
+2. **Flush & Sync:** Complete all PyArrow Parquet writer buffers and flush to disk.
+3. **Verify Integrity:** Run row count and schema validation against the temporary staging file.
+4. **Atomic Replace:** Atomically move/replace the staged file into its canonical partition location (`os.replace`).
+5. **Failure Safety:** Any failure during staging immediately deletes the temporary file without touching the existing canonical file.
 
 ---
 
-## 7. Extended Provenance Ledger Record
+## 8. Extended Provenance Ledger Record
 
 Every ingestion run records an immutable audit entry in `data/provenance_ledger.jsonl`:
 
@@ -141,11 +158,11 @@ Every ingestion run records an immutable audit entry in `data/provenance_ledger.
 {
   "provenance_id": "prov_20260827_001",
   "source_id": "binance_public",
-  "source_uri_or_path": "s3://raw-market-data/btc_usdt_1m.csv",
+  "source_uri_or_path": "data/raw/btc_usdt_1m.csv",
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_dataset_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

@@ -62,21 +62,20 @@ Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CON
 | `event_end_utc` | `TIMESTAMP[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microseconds) |
 | `knowledge_time_utc`| `TIMESTAMP[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microseconds) |
 | `revision_seq` | `BIGINT` | Deterministic revision sequence scoped to `(source_id, symbol, timeframe, event_start_utc)` |
-| `open` | `DECIMAL(28, 10)` | Opening price with exact fixed precision |
-| `high` | `DECIMAL(28, 10)` | Highest traded price during bar interval |
-| `low` | `DECIMAL(28, 10)` | Lowest traded price during bar interval |
-| `close` | `DECIMAL(28, 10)` | Closing traded price during bar interval |
-| `volume` | `DECIMAL(28, 10)` | Total base asset volume traded |
-| `quote_volume` | `DECIMAL(28, 10)` | Total quote currency volume traded |
+| `open` | `DECIMAL(38, 18)` | Opening price with exact fixed precision |
+| `high` | `DECIMAL(38, 18)` | Highest traded price during bar interval |
+| `low` | `DECIMAL(38, 18)` | Lowest traded price during bar interval |
+| `close` | `DECIMAL(38, 18)` | Closing traded price during bar interval |
+| `volume` | `DECIMAL(38, 18)` | Total base asset volume traded |
+| `quote_volume` | `DECIMAL(38, 18)` | Total quote currency volume traded |
 | `trade_count` | `BIGINT` | Total discrete trades within the bar (-1 if unavailable) |
 | `raw_source_sha256` | `VARCHAR` | SHA-256 hash of original raw ingest batch |
-| `canonical_dataset_sha256` | `VARCHAR` | SHA-256 hash of normalized canonical partition |
 
 ---
 
 ## 5. Point-in-Time Revision Query Standard
 
-To prevent historical revision leakage, DuckDB queries against Parquet partitions use revision-aware deduplication:
+To prevent historical revision leakage across independent sources, DuckDB queries against Parquet partitions use source-aware revision deduplication:
 
 ```sql
 WITH eligible AS (
@@ -89,10 +88,11 @@ WITH eligible AS (
 SELECT *
 FROM eligible
 QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY symbol, timeframe, event_start_utc
-    ORDER BY knowledge_time_utc DESC, revision_seq DESC, canonical_dataset_sha256 DESC
+    PARTITION BY source_id, symbol, timeframe, event_start_utc
+    ORDER BY knowledge_time_utc DESC, revision_seq DESC
 ) = 1
-ORDER BY event_start_utc ASC;
+ORDER BY source_id ASC, event_start_utc ASC;
 ```
+
 
 
