@@ -289,13 +289,14 @@ class AlphaResearchPipeline:
             },
             "evaluate_oos": evaluate_oos,
         }
-        parameter_config_json = json.dumps(full_param_config, sort_keys=True)
+        parameter_config_json = json.dumps(full_param_config, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         parameter_config_hash = hashlib.sha256(parameter_config_json.encode("utf-8")).hexdigest()
 
         manifest_seed = (
             f"{hypothesis.hypothesis_id}:{hypothesis.hypothesis_version}:{primary_h}:"
             f"{hyp_spec_hash}:{feature_sha256}:{parameter_config_hash}:{evaluate_oos}"
         )
+
         manifest_digest = hashlib.sha256(manifest_seed.encode("utf-8")).hexdigest()[:16]
         manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{manifest_digest}"
 

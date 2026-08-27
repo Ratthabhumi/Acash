@@ -293,5 +293,36 @@ def test_research_manifest_identity_binds_all_configurations() -> None:
         assert m_base.parameter_config_hash != m_cost.parameter_config_hash
 
 
+def test_canonical_parameter_config_json_representation_invariance() -> None:
+    """Verify parameter configuration JSON serialization is strictly key-order and whitespace invariant."""
+    import hashlib
+    import json
+
+    # Dictionary 1: Inserted in order A, B, C
+    cfg1 = {
+        "hypothesis_id": "HYP-01",
+        "hac_policy": {"kernel_type": "bartlett", "bandwidth_method": "andrews_ar1_plugin", "robustness_lags": [1, 5, 10]},
+        "cost_model": {"quoted_spread_bps": "1.0", "roundtrip_broker_fee_bps": "0.5"},
+    }
+
+    # Dictionary 2: Inserted in reversed/permuted key order
+    cfg2 = {
+        "cost_model": {"roundtrip_broker_fee_bps": "0.5", "quoted_spread_bps": "1.0"},
+        "hypothesis_id": "HYP-01",
+        "hac_policy": {"robustness_lags": [1, 5, 10], "bandwidth_method": "andrews_ar1_plugin", "kernel_type": "bartlett"},
+    }
+
+    json1 = json.dumps(cfg1, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    json2 = json.dumps(cfg2, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+    hash1 = hashlib.sha256(json1.encode("utf-8")).hexdigest()
+    hash2 = hashlib.sha256(json2.encode("utf-8")).hexdigest()
+
+    # Invariant: Permuted dictionary keys produce identical canonical JSON and hash
+    assert json1 == json2
+    assert hash1 == hash2
+
+
+
 
 
