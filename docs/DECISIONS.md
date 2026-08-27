@@ -255,6 +255,24 @@
 
 - **Consequences:** Eliminates partition overwrite data-loss risks, decouples event-time sequencing from revision ordering, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
 
+---
+
+## ADR-020: Market Microstructure Canonical Domains & Length-Prefixed Binary Serialization Protocol
+
+- **Status:** **PROPOSED (Pending Phase 3 Sign-off)**
+- **Date:** 2026-08-27
+- **Context:** To support futures market microstructure research (e.g. CME ES/NQ) without violating the single-responsibility principle of the OHLCV Bar schema, ACASH expands to include distinct canonical data domains for Trades (Time & Sales) and Order Book (L2 Depth Snapshots & Deltas). To prevent delimiter collision and nanosecond precision loss during logical cryptographic hashing, an exact binary serialization protocol is required.
+- **Decision:**
+  1. **Domain Decoupling:** OHLCV (Phase 2), Trades (Phase 3A), and Order Book (Phase 3B) remain completely independent canonical domains with separate Arrow schemas, partition layouts, and point-in-time qualification queries.
+  2. **Tri-Temporal Model:** Explicitly distinguishes `exchange_time_utc` (`timestamp[ns, tz=UTC]`, matching engine chronology), `feed_time_utc` (`timestamp[ns, tz=UTC]`, optional network egress), and `knowledge_time_utc` (`timestamp[us, tz=UTC]`, ACASH PIT qualification).
+  3. **Opaque Sequence Scoping:** `source_seq_num` is an opaque upstream sequence identifier scoped to `(source_id, channel_id, symbol, trading_date)`. Reset/restart rules are declared by source feeds and not inferred from calendar boundaries.
+  4. **Message Identity vs. Row Identity:** Exchange network messages (packets) are decoupled from canonical row instances. Multi-trade/multi-depth messages expand deterministically via `match_sub_idx` and `level_idx`.
+  5. **`trade_id` Optionality:** `trade_id` is nullable; ACASH never invents synthetic exchange IDs. Row uniqueness is guaranteed via the compound key.
+  6. **Length-Prefixed Binary Serialization:** Provenance hashes (`canonical_trades_sha256`, `canonical_book_sha256`) use length-prefixed binary encoding `[uint32_be(len)][bytes]`, lossless `int64_be(epoch_nanoseconds)`, and record separator `0x1E`, guaranteeing collision-resistant determinism.
+  7. **Downstream Feature Boundary (Phase 3C):** Order Flow, Footprint Delta, Volume Profile, and VWAP are computed as pure downstream mathematical transformations with zero strategy/signal logic.
+- **Consequences:** Provides a rigorous, mathematically sound foundation for tick-by-tick microstructure research while eliminating look-ahead bias and delimiter ambiguity.
+
+
 
 
 

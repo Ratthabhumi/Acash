@@ -1,9 +1,9 @@
 # ACASH — Phase 3: Market Microstructure & Point-in-Time Feature Subsystem Plan
 
 **Document:** `docs/PHASE_3_PLAN.md`  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Date:** 2026-08-27  
-**Status:** **PROPOSED (Pre-Signoff Corrective Review Pass Completed)**  
+**Status:** **PROPOSED — FINAL PRE-SIGNOFF PASS COMPLETED**  
 
 ---
 
@@ -70,7 +70,7 @@ Microstructure events distinguish between three temporal coordinate systems:
 
 ---
 
-## 3. Session Labeling, Sequence Scoping & Resets
+## 3. Session Labeling, Sequence Scoping & Reset Semantics
 
 ### 3.1 CME Trading Session Labeling (`trading_date`)
 In centralized futures markets (e.g. CME Globex), trading sessions span across calendar day boundaries.
@@ -80,19 +80,25 @@ In centralized futures markets (e.g. CME Globex), trading sessions span across c
   - Monday 17:00 CT $\to$ Tuesday 16:00 CT is assigned `trading_date = Tuesday` (YYYY-MM-DD).
   - *Example:* An event occurring at `2026-01-18 23:30:00 UTC` (which is Sunday 17:30 CT) is labeled with `trading_date = 2026-01-19` (Monday session).
 
-### 3.2 Sequence Number Scoping (`source_seq_num`)
-- **Semantic Definition:** `source_seq_num` represents the raw monotonic integer message/packet sequence number assigned by the exchange feed within `(source_id, channel_id, trading_date)`.
-- **Reset Semantics:** In CME MDP 3.0, message sequence numbers reset to `1` upon weekly session open (Sunday 17:00 CT) or upon channel connection restart/failover.
-- **Gap Detection:** If an incoming message has $\text{source\_seq\_num}_{i+1} > \text{source\_seq\_num}_i + 1$ on the same channel, a `PACKET_GAP_DETECTED` warning is emitted to flag dropped multicast packets.
+### 3.2 Sequence Number Scoping & Reset Semantics (`source_seq_num`)
+> [!IMPORTANT]
+> **Opaque Sequence Identifier & Explicit Discontinuity Classification:**
+> `source_seq_num` is an **opaque upstream/feed sequence identifier**. Reset and restart semantics are source/feed/channel specific and **MUST be declared by the source adapter or feed specification**. ACASH **MUST NOT** infer a reset solely from `trading_date` or session boundaries.
+>
+> Sequence transitions are explicitly classified as:
+> 1. **`EXPECTED_RESET`:** A sequence drop/restart explicitly declared and signaled by the feed/adapter (e.g. channel reconnect, daily maintenance session rollover, weekly open).
+> 2. **`PACKET_GAP`:** An unexpected skipped sequence number ($\text{source\_seq\_num}_{i+1} > \text{source\_seq\_num}_i + 1$) on an active channel without a declared reset, emitting a `PACKET_GAP_DETECTED` warning.
+> 3. **`RECOVERY_DISCONTINUITY`:** Out-of-order sequence arrival during historical replay / snapshot catchup playback.
+> 4. **`UNKNOWN_DISCONTINUITY`:** Unclassified sequence drop without source declaration.
 
 ### 3.3 Global Uniqueness Scope Key
-To guarantee global uniqueness across weekly sequence resets and multiple multicast channels, ACASH constructs compound identity scopes:
+To guarantee global uniqueness across feed sequence resets and multiple multicast channels, ACASH constructs compound identity scopes:
 
 $$\text{Stream Channel Scope Key} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date})$$
 
 ---
 
-## 4. Message Identity vs. Canonical Row Identity
+## 4. Message Identity vs. Canonical Row Identity & `trade_id` Optionality
 
 Exchange protocols (e.g. CME MDP 3.0 SBE, NASDAQ ITCH) frequently emit single network packet messages containing multiple book updates or multiple trade matches.
 
@@ -101,15 +107,22 @@ ACASH explicitly decouples **Message Identity** from **Canonical Row Identity**:
 ```
 [Exchange Network Message / Packet] ──► Message Identity = (source_id, channel_id, trading_date, source_seq_num)
                  │
-                 ├──► Row 1: Level 0 Bid Update ──► Row Identity = (Message Identity, "BID", level=0)
-                 ├──► Row 2: Level 1 Bid Update ──► Row Identity = (Message Identity, "BID", level=1)
-                 └──► Row 3: Level 0 Ask Update ──► Row Identity = (Message Identity, "ASK", level=0)
+                 ├──► Match 0: Trade Match ──► Row Identity = (Message Identity, match_sub_idx=0)
+                 ├──► Match 1: Trade Match ──► Row Identity = (Message Identity, match_sub_idx=1)
+                 └──► Match 2: Trade Match ──► Row Identity = (Message Identity, match_sub_idx=2)
 ```
 
-### Row Identity Definitions:
+### 4.1 `trade_id` Optionality Principle
+> [!IMPORTANT]
+> **Never Invent Synthetic Identifiers:**
+> `trade_id` is a **source-provided identifier when available from the upstream feed**. If a feed does not provide an explicit match/trade ID, `trade_id` is **nullable** in the schema. ACASH **MUST NEVER** invent synthetic fake trade IDs and present them as exchange identifiers.
+>
+> Deterministic Row Identity is fully guaranteed by the compound key with `match_sub_idx` regardless of whether `trade_id` is present or null.
+
+### 4.2 Row Identity Definitions:
 
 1. **Trades Domain (Phase 3A):**
-   $$\text{Trade Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{trade\_id}, \text{match\_sub\_idx})$$
+   $$\text{Trade Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{match\_sub\_idx})$$
 2. **Order Book Snapshots (Phase 3B):**
    $$\text{Book Snapshot Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{side}, \text{level\_idx})$$
 3. **Order Book Incremental Deltas (Phase 3B):**
@@ -133,8 +146,8 @@ CANONICAL_TRADES_SCHEMA = pa.schema([
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
     pa.field("source_seq_num", pa.int64(), nullable=False),
-    pa.field("trade_id", pa.string(), nullable=False),
-    pa.field("match_sub_idx", pa.int32(), nullable=False),
+    pa.field("trade_id", pa.string(), nullable=True),         # Nullable: source-provided when available
+    pa.field("match_sub_idx", pa.int32(), nullable=False),    # 0, 1, 2... for multiple matches per message
     pa.field("price", pa.decimal128(38, 18), nullable=False),
     pa.field("size", pa.decimal128(38, 18), nullable=False),
     pa.field("aggressor_side", pa.string(), nullable=False),  # "BUY", "SELL", "UNKNOWN"
@@ -187,7 +200,7 @@ CANONICAL_BOOK_DELTA_SCHEMA = pa.schema([
 
 ## 6. Unambiguous Length-Prefixed Binary Serialization & Logical Provenance Hashes
 
-To guarantee that provenance hashes are **100% deterministic, collision-proof, file-layout invariant, and codec invariant**, ACASH establishes a strict **Length-Prefixed Binary Serialization Protocol** (avoiding ambiguous text delimiters):
+To guarantee that provenance hashes are **deterministic and computationally collision-resistant under the specified canonical serialization protocol**, invariant to Parquet file layout, chunking, or compression codecs, ACASH establishes a strict **Length-Prefixed Binary Serialization Protocol**:
 
 ### 6.1 Field-Level Binary Encoding Specifications
 
@@ -204,7 +217,7 @@ To guarantee that provenance hashes are **100% deterministic, collision-proof, f
 ### 6.2 Row & Table Hashing Execution Order
 1. **Schema Check:** Fail fast if any required canonical column is missing.
 2. **Deterministic Sort:** Sort rows strictly by **Canonical Row Identity ASC**:
-   - *Trades:* `(source_id, channel_id, symbol, trading_date, source_seq_num, trade_id, match_sub_idx)`
+   - *Trades:* `(source_id, channel_id, symbol, trading_date, source_seq_num, match_sub_idx)`
    - *Book Snapshots:* `(source_id, channel_id, symbol, trading_date, source_seq_num, side, level_idx)`
    - *Book Deltas:* `(source_id, channel_id, symbol, trading_date, source_seq_num, action_sub_idx)`
 3. **Binary Streaming:** Stream each row's fields sequentially using the binary encoding specifications above, followed by a 1-byte row delimiter (`0x1E` Record Separator).
@@ -278,12 +291,16 @@ Phase 3C operates strictly downstream from canonical events, computing derived m
 Phase 3 completion is governed by 3 sequential quality gates:
 
 ### Gate 3A Criteria & Test Matrix (Trades Subsystem):
-- [ ] **Schema & Types:** PyArrow canonical trades schema strictly enforced (`timestamp[ns, tz=UTC]`, `Decimal128(38,18)`).
+- [ ] **Schema & Types:** PyArrow canonical trades schema strictly enforced (`timestamp[ns, tz=UTC]`, `Decimal128(38,18)`, nullable `trade_id`, nullable `feed_time_utc`).
+- [ ] **Declared Sequence Reset Test:** Sequence drop explicitly declared by source adapter is accepted as `EXPECTED_RESET` (`test_trades_sequence_reset_declared_accepted`).
+- [ ] **Undeclared Sequence Gap Test:** Sequence gap without declared reset emits `PACKET_GAP_DETECTED` warning (`test_trades_sequence_gap_emits_warning`).
+- [ ] **Recovery Discontinuity Test:** Out-of-order sequence arrival during historical replay is classified as `RECOVERY_DISCONTINUITY` (`test_trades_recovery_discontinuity_classified`).
+- [ ] **Nullable `trade_id` Identity Test:** Trades without `trade_id` (null) remain deterministically distinguishable and unique via `(source_seq_num, match_sub_idx)` (`test_trades_identity_valid_with_null_trade_id`).
+- [ ] **Channel Isolation Test:** Identical `source_seq_num` occurring on different `channel_id` do NOT collide (`test_trades_different_channel_same_seq_no_collision`).
+- [ ] **Multi-Trade Expansion Test:** Single exchange message containing multiple matches deterministically expands with unique `match_sub_idx` (0, 1, 2...) (`test_trades_multi_trade_message_expansion`).
 - [ ] **Idempotent Replay Test:** Replaying the exact same trades payload is idempotent and creates zero duplicate Parquet files or ledger records (`test_trades_ingestion_replay_idempotent`).
 - [ ] **Batch Collision Test:** Ingesting same `batch_id` with modified trade content raises `BatchCollisionError` (`test_trades_batch_collision_on_same_batch_id`).
 - [ ] **Duplicate Identity Rejection Test:** Ingesting an already persisted Trade Row Identity under a different `batch_id` is rejected as `IntegrityViolationError` (`test_trades_global_duplicate_identity_rejected`).
-- [ ] **Channel Isolation Test:** Identical `source_seq_num` occurring on different `channel_id` do NOT collide (`test_trades_different_channel_same_seq_no_collision`).
-- [ ] **Multi-Trade Expansion Test:** Single exchange message containing multiple matches deterministically expands with unique `match_sub_idx` (`test_trades_multi_trade_message_expansion`).
 - [ ] **Hash Row-Order Invariance Test:** Permuting trade rows produces identical `canonical_trades_sha256` (`test_canonical_trades_hash_row_order_invariance`).
 - [ ] **Hash Layout Invariance Test:** Writing via different Parquet codecs (zstd vs snappy) produces identical `canonical_trades_sha256` (`test_canonical_trades_hash_codec_invariance`).
 - [ ] **Hash Sensitivity Test:** Modifying any canonical field (price, size, aggressor side, condition) alters the hash (`test_canonical_trades_hash_detects_any_modification`).

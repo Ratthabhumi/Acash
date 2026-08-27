@@ -304,3 +304,20 @@ Every ingestion run records an entry in the **append-only application audit log*
 ### 9.2 Filesystem Durability Boundaries
 Phase 2 guarantees **atomic publication semantics** (`os.replace`) under the supported filesystem model. Filesystem-level crash durability against sudden OS/hardware power loss is not claimed unless explicitly fsynced. Manifests are fsynced prior to status updates to ensure crash-safe recovery state progression (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`).
 
+---
+
+## 10. Multi-Domain Market Microstructure Extensions (Phase 3 Architecture)
+
+To support high-frequency Futures Market Microstructure research (CME ES/NQ reference architecture) without polluting the OHLCV Bar contract, ACASH establishes separate canonical domains in Phase 3 (see `docs/PHASE_3_PLAN.md` and `docs/DECISIONS.md#ADR-020`):
+
+1. **Trades Domain (Phase 3A):**
+   - Canonical Schema: `CANONICAL_TRADES_SCHEMA` (`source_id`, `channel_id`, `symbol`, `trading_date`, `exchange_time_utc` [ns], `feed_time_utc` [ns], `knowledge_time_utc` [us], `source_seq_num`, `trade_id` [nullable], `match_sub_idx`, `price`, `size`, `aggressor_side`, `trade_condition`).
+   - Row Identity: `(source_id, channel_id, symbol, trading_date, source_seq_num, match_sub_idx)`.
+2. **Order Book Domain (Phase 3B):**
+   - Canonical Schemas: `CANONICAL_BOOK_SNAPSHOT_SCHEMA` (Top-N depth levels) & `CANONICAL_BOOK_DELTA_SCHEMA` (L2/L3 queue updates).
+3. **Length-Prefixed Binary Serialization:**
+   - Provenance logical hashes use unambiguous length-prefixed binary frames `[uint32_be(len)][bytes]`, lossless `int64_be(epoch_nanoseconds)`, and record separator `0x1E`, guaranteeing collision-resistant determinism.
+4. **Downstream Feature Boundary (Phase 3C):**
+   - VWAP, Volume Profile, Footprint Delta, and Imbalance are computed purely downstream from canonical events with zero look-ahead bias and zero trading strategy logic.
+
+
