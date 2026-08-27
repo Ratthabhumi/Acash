@@ -35,7 +35,9 @@ from acash.backtest.nautilus_bridge import (
     NautilusCatalogExporter,
     NautilusTraderSubstrate,
     SubstrateRuntimeUnavailableError,
+    TradeIdMappingPolicy,
 )
+
 from acash.backtest.schema import (
     BacktestEngineConfig,
     BacktestManifest,
@@ -567,36 +569,69 @@ def test_cross_phase_manifest_64hex_regex_validation() -> None:
 
 
 def test_cross_phase_nautilus_substrate_separation_and_catalog_export() -> None:
-    """Invariant 11: NautilusCatalogExporter writes valid catalog and NautilusTraderSubstrate raises SubstrateRuntimeUnavailableError."""
+    """Invariant 11: NautilusCatalogExporter writes valid catalog with exact nanoseconds, tests TradeIdMappingPolicy, and NautilusTraderSubstrate raises SubstrateRuntimeUnavailableError."""
     with tempfile.TemporaryDirectory() as tmp_dir:
-        exporter = NautilusCatalogExporter(catalog_root=Path(tmp_dir) / "catalog")
+        exporter = NautilusCatalogExporter(
+            catalog_root=Path(tmp_dir) / "catalog",
+            trade_id_policy=TradeIdMappingPolicy.USE_CANONICAL_SOURCE_ORDER_KEY,
+        )
 
         t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
         bars_table = pa.Table.from_pydict({
             "timestamp_utc": [t0],
             "bar_start_utc": [t0],
-            "open": [Decimal("5000.00")],
-            "high": [Decimal("5005.00")],
+            "open": [Decimal("5000.25")],
+            "high": [Decimal("5005.50")],
             "low": [Decimal("4995.00")],
-            "close": [Decimal("5002.00")],
-            "volume": [Decimal("100.0")],
+            "close": [Decimal("5002.75")],
+            "volume": [Decimal("100.5")],
         })
 
-        # Test catalog export
-        exported_path = exporter.export_bars_table(bars_table, symbol="ES")
-        assert exported_path.exists()
-        assert "ES.SIM" in str(exported_path)
+        # 1. Test Bars catalog export
+        exported_bars_path = exporter.export_bars_table(bars_table, symbol="ES")
+        assert exported_bars_path.exists()
+        assert "ES.SIM" in str(exported_bars_path)
 
-        # Test Substrate Runtime Unavailable Error on uninstalled package
+        # Verify exported Parquet has exact integer nanoseconds and exact values
+        import pyarrow.parquet as pq_read
+        bars_read = pq_read.read_table(exported_bars_path)
+        assert bars_read["ts_event"][0].as_py() == 1768833000000000000
+        assert bars_read["close"][0].as_py() == Decimal("5002.75")
+
+        # 2. Test Trades export with USE_CANONICAL_SOURCE_ORDER_KEY fallback
+        trades_table_null_tid = pa.Table.from_pydict({
+            "exchange_time_utc": pa.array([t0], type=pa.timestamp("ns", tz="UTC")),
+            "source_order_key": ["00000000000000000100"],
+            "trade_id": pa.array([None], type=pa.string()),
+            "price": [Decimal("5000.25")],
+            "size": [Decimal("10.0")],
+            "aggressor_side": ["BUY"],
+        })
+        exported_trades_path = exporter.export_trades_table(trades_table_null_tid, symbol="ES")
+        assert exported_trades_path.exists()
+        trades_read = pq_read.read_table(exported_trades_path)
+        assert trades_read["trade_id"][0].as_py() == "ORDKEY_00000000000000000100"
+        assert trades_read["ts_event"][0].as_py() == 1768833000000000000
+
+        # 3. Test Trades export with REJECT_ON_NULL policy
+        exporter_reject = NautilusCatalogExporter(
+            catalog_root=Path(tmp_dir) / "catalog_reject",
+            trade_id_policy=TradeIdMappingPolicy.REJECT_ON_NULL,
+        )
+        with pytest.raises(DataContractError, match="Null trade_id cannot be exported"):
+            exporter_reject.export_trades_table(trades_table_null_tid, symbol="ES")
+
+        # 4. Test Substrate Runtime Unavailable Error on uninstalled package
         substrate = NautilusTraderSubstrate()
         with pytest.raises(SubstrateRuntimeUnavailableError, match="NautilusTrader runtime package"):
             substrate.run_simulation(
-                catalog_path=exported_path,
+                catalog_path=exported_bars_path,
                 hypothesis_spec_sha256="0" * 64,
                 strategy_config_hash="0" * 64,
                 pyproject_toml_sha256="0" * 64,
                 git_commit_hash="a" * 40,
             )
+
 
 
 class CrossPhaseActor:

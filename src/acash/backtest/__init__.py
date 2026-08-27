@@ -21,7 +21,9 @@ from acash.backtest.nautilus_bridge import (
     NautilusCatalogExporter,
     NautilusTraderSubstrate,
     SubstrateRuntimeUnavailableError,
+    TradeIdMappingPolicy,
 )
+
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
     CANONICAL_EQUITY_CURVE_SCHEMA,
@@ -80,7 +82,9 @@ __all__ = [
     "NautilusCatalogExporter",
     "NautilusTraderSubstrate",
     "SubstrateRuntimeUnavailableError",
+    "TradeIdMappingPolicy",
     # Telemetry
+
     "RealityGapAttributionEngine",
     # Strategies
     "MicrostructureImbalanceActor",
