@@ -1,7 +1,7 @@
 # ACASH — Phase 5 Design Proposal: Event-Driven Backtesting Substrate & NautilusTrader PoC Integration
 
 **Document:** `docs/PHASE_5_DESIGN_PROPOSAL.md`  
-**Version:** 1.1.0  
+**Version:** 1.2.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — AWAITING ARCHITECTURAL REVIEW & SIGN-OFF**  
 **Phase Objective:** Bridge the epistemic gap between **Statistical Predictive Association (Phase 4)** and **Simulated Event-Driven Execution Reality (Phase 5)** using NautilusTrader as an execution substrate while maintaining ACASH as the immutable single source of truth for canonical data, features, hypotheses, accounting, and manifests.
@@ -89,22 +89,33 @@
 3. **Execution Slippage Function:**
    $$P_{\text{fill}} = P_{\text{expected}} + \text{Sign}(\text{Side}) \cdot \left(\text{SpreadHalf} + \text{Slippage}_{\text{fixed}} + \text{Impact}(V_{\text{order}}, \text{Depth})\right)$$
 
-### 2.5 Formalized Double-Entry Accounting Conservation & Residual Tolerances
-1. **Explicit Equity Conservation Equation:**
+### 2.5 Formalized Double-Entry Accounting Views & Anti-Double-Counting Invariant
+To prevent fatal double-counting of Realized PnL (since ACASH's `CashBalance` already incorporates closed-trade cash flows and deducted fees), accounting is strictly decoupled into two distinct views:
+
+1. **Balance-Sheet (State Snapshot) View:**
+   $$\text{Ending Equity}_t = \text{CashBalance}_t + \sum_{i} \text{UnrealizedPnL}_{i, t}$$
+   *(where $\text{CashBalance}_t$ is the sovereign realized cash balance including closed-position realized PnL, cash flows, and fees).*
+
+2. **Performance Attribution (Flow Reconciliation) View:**
    $$\text{Ending Equity}_t = \text{Starting Equity}_0 + \sum_{\tau=1}^t \text{External Cash Flows}_\tau + \sum_{\tau=1}^t \text{Realized PnL}_\tau + \text{Unrealized PnL}_t - \sum_{\tau=1}^t \text{Trading Fees}_\tau - \sum_{\tau=1}^t \text{Financing Costs}_\tau$$
-2. **Independent Verification Ledger & Residual Invariant:**
+
+3. **Anti-Double-Counting Invariant:**
+   $$\text{Equity}_{\text{BalanceSheet}, t} \equiv \text{Equity}_{\text{PerformanceAttribution}, t}$$
+   *Rule:* The Balance-Sheet View and Performance Attribution View must NEVER be blended or summed together.
+
+4. **Substrate Independent Verification & Residual Invariant:**
    - ACASH maintains an independent shadow double-entry ledger of all cash balances, margin allocations, and positions.
    - Every simulated fill emitted by NautilusTrader is ingested by ACASH's `DecisionLedger` and verified:
-     $$\text{AccountingResidual}_t = \text{Equity}_{\text{ACASH}, t} - \text{Equity}_{\text{Nautilus}, t}$$
+     $$\text{AccountingResidual}_t = \text{Equity}_{\text{ACASH State}, t} - \text{Equity}_{\text{Nautilus}, t}$$
      $$\text{Invariant: } |\text{AccountingResidual}_t| \le \epsilon$$
      where $\epsilon = \text{Decimal}("0.0000000001")$ (exact numeric zero within fixed-precision Decimal-18 arithmetic). Any non-zero discrepancy outside rounding precision triggers immediate backtest invalidation.
 
 ### 2.6 Historical Replay Determinism & Pinned Environment Reproducibility
 1. **Deterministic Pinned Environment Contract:** Bitwise reproducibility of trade logs, fills, equity curves, and performance metrics is guaranteed under a strictly pinned execution environment:
    - ACASH software version & Git commit hash
+   - `pyproject.toml` configuration & resolved `uv.lock` dependency lockfile
    - NautilusTrader pinned release version
    - Python runtime version (`3.14.x`) and architecture
-   - Pinned dependency lockfile (`requirements.lock` / virtual environment SHA-256)
    - Canonical input data logical hashes (`canonical_data_hashes`)
    - Complete engine and strategy parameter configuration
    - Deterministic integer pseudo-random number generator (PRNG) seed
@@ -167,12 +178,13 @@ src/acash/backtest/
 1. **Substrate Separation:** NautilusTrader operates strictly as an execution substrate; zero leakage of canonical accounting ownership.
 2. **Deterministic Content-Derived Identity:** Rerunning identical canonical data + hypothesis + engine config + strategy config + seed produces bitwise-identical `manifest_id` and backtest logs.
 3. **Event Ordering Compatibility:** Adapter orders events via the canonical Phase 3B `(event_time_utc, source_order_key, message_rank, stream_id, row_sub_index)` contract without assuming generic integer sequence monotonicity.
-4. **Double-Entry Cash Conservation:** ACASH shadow ledger matches Nautilus fills with $|\text{AccountingResidual}| \le 10^{-10}$ (exact numeric zero).
-5. **Reality Gap Accounting:** Telemetry captures exact breakdown of spread, latency, and slippage drag against Phase 4 analytical baselines.
-6. **No Production Execution:** 100% free of live broker adapters, MT5, or live trading connections.
-7. **Regression Integrity:** 100% pytest pass rate across all 139 existing tests + Phase 5 tests, 0 mypy errors.
+4. **Double-Entry Cash Conservation & Anti-Double Counting:** Balance-Sheet View and Performance Attribution View are strictly isolated; ACASH shadow ledger matches Nautilus fills with $|\text{AccountingResidual}| \le 10^{-10}$ (exact numeric zero).
+5. **Pinned Dependency Reproducibility:** Environment reproducibility contract is strictly anchored to `pyproject.toml` + `uv.lock` + ACASH Git commit.
+6. **Reality Gap Accounting:** Telemetry captures exact breakdown of spread, latency, and slippage drag against Phase 4 analytical baselines.
+7. **No Production Execution:** 100% free of live broker adapters, MT5, or live trading connections.
+8. **Regression Integrity:** 100% pytest pass rate across all 139 existing tests + Phase 5 tests, 0 mypy errors.
 
 ---
 
 ## 5. Review & Sign-off State
-**This proposal (v1.1.0) is submitted for human architectural review. No Phase 5 implementation code will be written until formal human sign-off is granted.**
+**This proposal (v1.2.0) is submitted for human architectural review. No Phase 5 implementation code will be written until formal human sign-off is granted.**
