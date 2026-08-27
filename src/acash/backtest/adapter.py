@@ -3,6 +3,7 @@
 Translates canonical Arrow tables (Trades, Order Book L2/L3, Bars) into an event stream
 strictly sequenced by the Phase 3B 5-tuple total ordering contract:
 (event_time_utc, source_order_key, message_rank, stream_id, row_sub_index)
+Guarantees pure integer nanosecond timestamp extraction with zero float precision loss.
 """
 
 from dataclasses import dataclass
@@ -24,6 +25,30 @@ class BacktestEventType(str, Enum):
     BAR = "BAR"
 
 
+def extract_exact_nanoseconds(val: Any) -> int:
+    """Extract integer nanoseconds using pure integer arithmetic, completely avoiding lossy float conversions."""
+    if isinstance(val, int):
+        if val < 10**17:  # Microseconds (e.g. 1768815000000000)
+            return val * 1_000
+        return val
+    elif isinstance(val, datetime):
+        dt_utc = val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+        dt_utc = dt_utc.astimezone(timezone.utc)
+        td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        total_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
+        return total_us * 1_000
+    elif hasattr(val, "value"):  # PyArrow / Pandas timestamp scalar
+        int_val = int(val.value)
+        if int_val < 10**17:
+            return int_val * 1_000
+        return int_val
+    else:
+        int_raw = int(val)
+        if int_raw < 10**17:
+            return int_raw * 1_000
+        return int_raw
+
+
 @dataclass(frozen=True)
 class BacktestMarketEvent:
     """Canonical event fed into the backtest substrate event loop."""
@@ -40,7 +65,9 @@ class BacktestMarketEvent:
     @property
     def event_time_utc(self) -> datetime:
         """Derive UTC datetime from nanosecond timestamp."""
-        return datetime.fromtimestamp(self.event_timestamp_ns / 1_000_000_000, tz=timezone.utc)
+        micros, nanos = divmod(self.event_timestamp_ns, 1_000)
+        secs, us = divmod(micros, 1_000_000)
+        return datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
     @property
     def order_tuple(self) -> Tuple[int, str, int, str, int]:
@@ -70,17 +97,22 @@ class CanonicalDataAdapter:
         events: List[BacktestMarketEvent] = []
         pydict = table.to_pydict()
         num_rows = table.num_rows
+        has_source_key = "source_order_key" in table.column_names
+        has_message_rank = "message_type_rank" in table.column_names
+        has_row_sub_idx = "row_sub_index" in table.column_names
 
         for i in range(num_rows):
-            ts = pydict["timestamp_utc"][i]
-            if isinstance(ts, datetime):
-                ts_ns = int(ts.timestamp() * 1_000_000_000)
-            elif isinstance(ts, int):
-                ts_ns = ts * 1_000 if ts < 10**16 else ts  # microsecond or nanosecond
-            else:
-                ts_ns = int(ts)
+            ts_raw = pydict["timestamp_utc"][i]
+            ts_ns = extract_exact_nanoseconds(ts_raw)
 
-            source_key = f"bar_{i:08d}"
+            source_key = (
+                str(pydict["source_order_key"][i])
+                if has_source_key
+                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
+            )
+            message_rank = int(pydict["message_type_rank"][i]) if has_message_rank else 10
+            row_sub_index = int(pydict["row_sub_index"][i]) if has_row_sub_idx else 0
+
             payload = {
                 "open": Decimal(str(pydict["open"][i])),
                 "high": Decimal(str(pydict["high"][i])),
@@ -89,15 +121,17 @@ class CanonicalDataAdapter:
                 "volume": Decimal(str(pydict["volume"][i])),
                 "bar_index": i,
             }
+            if "vwap" in pydict:
+                payload["vwap"] = Decimal(str(pydict["vwap"][i]))
 
             event = BacktestMarketEvent(
                 event_type=BacktestEventType.BAR,
                 symbol=symbol,
                 event_timestamp_ns=ts_ns,
                 source_order_key=source_key,
-                message_rank=10,
+                message_rank=message_rank,
                 stream_id=stream_id,
-                row_sub_index=0,
+                row_sub_index=row_sub_index,
                 payload=payload,
             )
             events.append(event)
@@ -114,19 +148,21 @@ class CanonicalDataAdapter:
         events: List[BacktestMarketEvent] = []
         pydict = table.to_pydict()
         num_rows = table.num_rows
+        has_source_key = "source_order_key" in table.column_names
+        has_message_rank = "message_type_rank" in table.column_names
+        has_row_sub_idx = "row_sub_index" in table.column_names
 
         for i in range(num_rows):
-            ts = pydict["exchange_time_utc"][i]
-            if isinstance(ts, datetime):
-                ts_ns = int(ts.timestamp() * 1_000_000_000)
-            elif isinstance(ts, int):
-                ts_ns = ts
-            else:
-                ts_ns = int(ts)
+            ts_raw = pydict.get("exchange_time_utc", pydict.get("timestamp_utc"))[i]
+            ts_ns = extract_exact_nanoseconds(ts_raw)
 
-            source_key = str(pydict.get("source_order_key", [f"trade_{i:08d}"])[i])
-            message_rank = int(pydict.get("message_type_rank", [1])[i])
-            row_sub_index = int(pydict.get("row_sub_index", [0])[i])
+            source_key = (
+                str(pydict["source_order_key"][i])
+                if has_source_key
+                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
+            )
+            message_rank = int(pydict["message_type_rank"][i]) if has_message_rank else 1
+            row_sub_index = int(pydict["row_sub_index"][i]) if has_row_sub_idx else 0
 
             payload = {
                 "trade_id": str(pydict.get("trade_id", [f"T-{i}"])[i]),
@@ -137,6 +173,61 @@ class CanonicalDataAdapter:
 
             event = BacktestMarketEvent(
                 event_type=BacktestEventType.TRADE,
+                symbol=symbol,
+                event_timestamp_ns=ts_ns,
+                source_order_key=source_key,
+                message_rank=message_rank,
+                stream_id=stream_id,
+                row_sub_index=row_sub_index,
+                payload=payload,
+            )
+            events.append(event)
+
+        return events
+
+    @staticmethod
+    def from_depth_table(
+        table: pa.Table,
+        symbol: str,
+        stream_id: str = "DEPTH",
+    ) -> List[BacktestMarketEvent]:
+        """Convert canonical Order Book L2/MBP table into BacktestMarketEvent stream."""
+        events: List[BacktestMarketEvent] = []
+        pydict = table.to_pydict()
+        num_rows = table.num_rows
+        has_source_key = "source_order_key" in table.column_names
+        has_message_rank = "message_type_rank" in table.column_names
+        has_row_sub_idx = "row_sub_index" in table.column_names
+
+        for i in range(num_rows):
+            ts_raw = pydict.get("exchange_time_utc", pydict.get("timestamp_utc"))[i]
+            ts_ns = extract_exact_nanoseconds(ts_raw)
+
+            source_key = (
+                str(pydict["source_order_key"][i])
+                if has_source_key
+                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
+            )
+            message_rank = int(pydict["message_type_rank"][i]) if has_message_rank else 2
+            row_sub_index = int(pydict["row_sub_index"][i]) if has_row_sub_idx else 0
+
+            action = str(pydict.get("action", ["MODIFY"])[i]).upper()
+            side = str(pydict.get("side", ["BID"])[i]).upper()
+            price_val = pydict.get("price", [None])[i]
+            size_val = pydict.get("size", [None])[i]
+
+            payload = {
+                "action": action,
+                "side": side,
+                "price": Decimal(str(price_val)) if price_val is not None else None,
+                "size": Decimal(str(size_val)) if size_val is not None else None,
+                "level_idx": int(pydict.get("level_idx", [0])[i]) if "level_idx" in pydict else None,
+            }
+
+            event_type = BacktestEventType.DEPTH_SNAPSHOT if "SNAPSHOT" in action else BacktestEventType.DEPTH_DELTA
+
+            event = BacktestMarketEvent(
+                event_type=event_type,
                 symbol=symbol,
                 event_timestamp_ns=ts_ns,
                 source_order_key=source_key,

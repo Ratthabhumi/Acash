@@ -1,4 +1,4 @@
-"""Unit Tests for Backtesting Engine Determinism, Replay Bitwise Equivalence, and Latency (Phase 5)."""
+"""Unit Tests for Backtesting Engine Determinism, Depth-Aware VWAP Execution, Queue Priority, and Latency (Phase 5)."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 
 from acash.backtest.adapter import BacktestEventType, BacktestMarketEvent
-from acash.backtest.engine import EventBacktestRunner
+from acash.backtest.engine import EventBacktestRunner, SimulatedOrderBook
 from acash.backtest.schema import (
     BacktestEngineConfig,
     BacktestOrderStatus,
@@ -14,7 +14,70 @@ from acash.backtest.schema import (
     OrderType,
     SimulationLatencyConfig,
     SlippageModelConfig,
+    load_current_environment_provenance,
 )
+
+
+def test_simulated_order_book_vwap_sweeps() -> None:
+    """Verify L2 order book depth sweeps compute accurate VWAP and remaining quantity."""
+    book = SimulatedOrderBook()
+
+    # Add 3 ask levels: 5000 (qty 5), 5001 (qty 10), 5002 (qty 20)
+    book.apply_delta("ADD", "ASK", Decimal("5000.00"), Decimal("5.0"))
+    book.apply_delta("ADD", "ASK", Decimal("5001.00"), Decimal("10.0"))
+    book.apply_delta("ADD", "ASK", Decimal("5002.00"), Decimal("20.0"))
+
+    assert book.best_ask == Decimal("5000.00")
+    assert book.total_ask_depth == Decimal("35.0")
+
+    # 1. Sweep 12 units: 5 @ 5000 + 7 @ 5001 -> Cost = 25000 + 35007 = 60007. VWAP = 60007 / 12 = 5000.583333333333333333
+    vwap, filled_qty, remaining = book.sweep_asks(Decimal("12.0"))
+    assert filled_qty == Decimal("12.0")
+    assert remaining == Decimal("0.0")
+    expected_vwap = (Decimal("5.0") * Decimal("5000.00") + Decimal("7.0") * Decimal("5001.00")) / Decimal("12.0")
+    assert vwap == expected_vwap
+
+
+def test_maker_queue_priority_and_trade_through_matching() -> None:
+    """Verify Maker limit orders respect queue volume ahead and execute on trade-through."""
+    config = BacktestEngineConfig(
+        engine_id="BKT-MAKER-QUEUE-TEST",
+        symbol="ES.FUT",
+    )
+    runner = EventBacktestRunner(config=config)
+    runner.current_time_ns = 1_000_000_000
+
+    # Book has 10 units at 5000.00 on Bid
+    runner.order_book.apply_delta("ADD", "BID", Decimal("5000.00"), Decimal("10.0"))
+
+    # Place Buy limit order @ 5000.00 for 2.0 units -> Queue ahead is 10.0 units
+    order = runner.submit_order(
+        order_id="ORD-M-001",
+        symbol="ES.FUT",
+        order_type=OrderType.LIMIT,
+        side="BUY",
+        quantity=Decimal("2.0"),
+        limit_price=Decimal("5000.00"),
+    )
+    assert order.queue_ahead_volume == Decimal("10.0")
+
+    # Trade 1: Sell aggressor trades 6 units @ 5000.00 -> Queue ahead becomes 4.0 (Order not filled yet)
+    runner._process_order_matching(
+        event_timestamp_ns=2_000_000_000,
+        trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("6.0"), "aggressor_side": "SELL"},
+    )
+    status_t1 = runner.orders["ORD-M-001"].status
+    assert status_t1 is BacktestOrderStatus.ACCEPTED
+    assert runner.orders["ORD-M-001"].queue_ahead_volume == Decimal("4.0")
+
+    # Trade 2: Sell aggressor trades 5 units @ 5000.00 -> Queue ahead becomes -1.0 -> Order is FILLED!
+    runner._process_order_matching(
+        event_timestamp_ns=3_000_000_000,
+        trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("5.0"), "aggressor_side": "SELL"},
+    )
+    status_t2 = runner.orders["ORD-M-001"].status
+    assert status_t2 is BacktestOrderStatus.FILLED
+    assert len(runner.fills) == 1
 
 
 
@@ -41,7 +104,7 @@ def _make_deterministic_event_stream() -> list[BacktestMarketEvent]:
             event_type=BacktestEventType.BAR,
             symbol="ES.FUT",
             event_timestamp_ns=ts,
-            source_order_key=f"bar_{i:08d}",
+            source_order_key=f"ES.FUT:BARS:{ts}:{i:08d}",
             message_rank=10,
             stream_id="BARS",
             row_sub_index=0,
@@ -97,6 +160,7 @@ def test_bitwise_replay_invariance() -> None:
 
     hyp_hash = "h" * 64
     strategy_hash = "s" * 64
+    pyproject_sha256, uv_lock_sha256, git_commit = load_current_environment_provenance()
 
     # Run 1
     events1 = _make_deterministic_event_stream()
@@ -105,6 +169,9 @@ def test_bitwise_replay_invariance() -> None:
         events=events1,
         hypothesis_spec_sha256=hyp_hash,
         strategy_config_hash=strategy_hash,
+        pyproject_toml_sha256=pyproject_sha256,
+        uv_lock_sha256=uv_lock_sha256,
+        git_commit_hash=git_commit,
     )
 
     # Run 2
@@ -114,6 +181,9 @@ def test_bitwise_replay_invariance() -> None:
         events=events2,
         hypothesis_spec_sha256=hyp_hash,
         strategy_config_hash=strategy_hash,
+        pyproject_toml_sha256=pyproject_sha256,
+        uv_lock_sha256=uv_lock_sha256,
+        git_commit_hash=git_commit,
     )
 
     # 1. Exact Manifest ID Equivalence
@@ -169,5 +239,3 @@ def test_causal_latency_delay_matching() -> None:
     status_at_2_0s = runner.orders["ORD-LIMIT-001"].status
     assert status_at_2_0s is BacktestOrderStatus.FILLED
     assert len(runner.fills) == 1
-
-

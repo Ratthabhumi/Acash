@@ -19,8 +19,10 @@ from acash.backtest.schema import (
     OrderType,
     SimulationLatencyConfig,
     SlippageModelConfig,
+    load_current_environment_provenance,
 )
 from acash.backtest.strategies.imbalance_actor import MicrostructureImbalanceActor
+
 
 
 def _generate_synthetic_market_history() -> pa.Table:
@@ -114,15 +116,18 @@ def test_end_to_end_backtest_pipeline_execution() -> None:
     actor = EndToEndActor(symbol="ES.FUT")
     runner = EventBacktestRunner(config=config, strategy_actor=actor)
 
+    pyproject_sha256, uv_lock_sha256, git_commit = load_current_environment_provenance()
+
     manifest, fills_tbl, equity_tbl = runner.run_backtest(
         events=events,
-        hypothesis_spec_sha256="hyp_spec_sha256_e2e_vector",
-        strategy_config_hash="strategy_cfg_sha256_e2e_vector",
-        pyproject_toml_sha256="pyproject_sha256_e2e_vector",
-        uv_lock_sha256="uv_lock_sha256_e2e_vector",
-        git_commit_hash="commit_e2e_vector",
+        hypothesis_spec_sha256="a" * 64,
+        strategy_config_hash="b" * 64,
+        pyproject_toml_sha256=pyproject_sha256,
+        uv_lock_sha256=uv_lock_sha256,
+        git_commit_hash=git_commit,
         phase4_analytical_edge_bps=Decimal("25.0"),
     )
+
 
     # 1. Manifest Identity Verification
     assert len(manifest.manifest_id) == 32

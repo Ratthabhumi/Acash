@@ -1,7 +1,7 @@
 """Event-Driven Backtesting Substrate & Simulation Runner (Phase 5).
 
-Provides deterministic event simulation, order lifecycle state machine, FIFO queue priority emulation,
-causal latency modeling, and content-derived manifest emission.
+Provides deterministic event simulation, L2 Depth-Aware VWAP matching, FIFO queue priority emulation,
+causal latency modeling, and mandatory environment provenance enforcement.
 """
 
 from collections import deque
@@ -28,6 +28,120 @@ from acash.backtest.schema import (
     calculate_backtest_manifest_id,
 )
 from acash.data.schema import DataContractError
+
+
+class SimulatedOrderBook:
+    """In-memory Level 2 (Market By Price) order book for simulation execution."""
+
+    def __init__(self) -> None:
+        # price -> size
+        self.bids: Dict[Decimal, Decimal] = {}
+        self.asks: Dict[Decimal, Decimal] = {}
+
+    def clear(self) -> None:
+        self.bids.clear()
+        self.asks.clear()
+
+    def apply_delta(self, action: str, side: str, price: Optional[Decimal], size: Optional[Decimal]) -> None:
+        """Apply incremental L2 delta update."""
+        act = action.upper()
+        side_norm = side.upper()
+
+        if "CLEAR" in act:
+            if side_norm == "BID":
+                self.bids.clear()
+            elif side_norm == "ASK":
+                self.asks.clear()
+            else:
+                self.bids.clear()
+                self.asks.clear()
+            return
+
+        if price is None:
+            return
+
+        target_book = self.bids if side_norm == "BID" else self.asks
+
+        if "DELETE" in act:
+            target_book.pop(price, None)
+        elif "CANCEL" in act:
+            if size is None or size <= Decimal("0.0"):
+                target_book.pop(price, None)
+            else:
+                target_book[price] = size
+        elif "ADD" in act or "MODIFY" in act or "SNAPSHOT" in act:
+            if size is not None and size > Decimal("0.0"):
+                target_book[price] = size
+            else:
+                target_book.pop(price, None)
+
+    @property
+    def best_bid(self) -> Optional[Decimal]:
+        return max(self.bids.keys()) if self.bids else None
+
+    @property
+    def best_ask(self) -> Optional[Decimal]:
+        return min(self.asks.keys()) if self.asks else None
+
+    @property
+    def total_bid_depth(self) -> Decimal:
+        return sum(self.bids.values(), Decimal("0.0"))
+
+    @property
+    def total_ask_depth(self) -> Decimal:
+        return sum(self.asks.values(), Decimal("0.0"))
+
+    def sweep_asks(self, required_qty: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
+        """Sweep ask levels in ascending price order computing VWAP.
+
+        Returns:
+            Tuple[vwap_price, total_executed_qty, remaining_unfilled_qty]
+        """
+        if not self.asks or required_qty <= Decimal("0.0"):
+            return Decimal("0.0"), Decimal("0.0"), required_qty
+
+        sorted_ask_prices = sorted(self.asks.keys())
+        remaining = required_qty
+        cumulative_cost = Decimal("0.0")
+        cumulative_qty = Decimal("0.0")
+
+        for px in sorted_ask_prices:
+            avail_qty = self.asks[px]
+            fill_qty = min(avail_qty, remaining)
+            cumulative_cost += px * fill_qty
+            cumulative_qty += fill_qty
+            remaining -= fill_qty
+            if remaining == Decimal("0.0"):
+                break
+
+        vwap = cumulative_cost / cumulative_qty if cumulative_qty > Decimal("0.0") else Decimal("0.0")
+        return vwap, cumulative_qty, remaining
+
+    def sweep_bids(self, required_qty: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
+        """Sweep bid levels in descending price order computing VWAP.
+
+        Returns:
+            Tuple[vwap_price, total_executed_qty, remaining_unfilled_qty]
+        """
+        if not self.bids or required_qty <= Decimal("0.0"):
+            return Decimal("0.0"), Decimal("0.0"), required_qty
+
+        sorted_bid_prices = sorted(self.bids.keys(), reverse=True)
+        remaining = required_qty
+        cumulative_cost = Decimal("0.0")
+        cumulative_qty = Decimal("0.0")
+
+        for px in sorted_bid_prices:
+            avail_qty = self.bids[px]
+            fill_qty = min(avail_qty, remaining)
+            cumulative_cost += px * fill_qty
+            cumulative_qty += fill_qty
+            remaining -= fill_qty
+            if remaining == Decimal("0.0"):
+                break
+
+        vwap = cumulative_cost / cumulative_qty if cumulative_qty > Decimal("0.0") else Decimal("0.0")
+        return vwap, cumulative_qty, remaining
 
 
 class SimulatedOrder:
@@ -57,6 +171,9 @@ class SimulatedOrder:
         self.remaining_qty: Decimal = quantity
         self.cumulative_cost: Decimal = Decimal("0.0")
 
+        # Queue Emulation State
+        self.queue_ahead_volume: Decimal = Decimal("0.0")
+        self.queue_initialized: bool = False
 
     @property
     def is_active(self) -> bool:
@@ -96,11 +213,10 @@ class EventBacktestRunner:
         self.fills: List[BacktestFillRecord] = []
         self.equity_records: List[Dict[str, Any]] = []
 
-        # Current Market State
+        # Order Book & Market State
+        self.order_book = SimulatedOrderBook()
         self.current_time_ns: int = 0
         self.last_price: Decimal = Decimal("0.0")
-        self.current_bid: Decimal = Decimal("0.0")
-        self.current_ask: Decimal = Decimal("0.0")
 
         # Telemetry & Stats Trackers
         self.total_orders_count: int = 0
@@ -142,6 +258,16 @@ class EventBacktestRunner:
         self.total_orders_count += 1
         order.status = BacktestOrderStatus.SUBMITTED
 
+        # Initialize Queue Priority Position if Depth Available
+        if order.limit_price is not None:
+            if order.side == "BUY":
+                # Queue ahead = existing bid volume at limit_price
+                order.queue_ahead_volume = self.order_book.bids.get(order.limit_price, Decimal("0.0"))
+            else:
+                # Queue ahead = existing ask volume at limit_price
+                order.queue_ahead_volume = self.order_book.asks.get(order.limit_price, Decimal("0.0"))
+            order.queue_initialized = True
+
         self.orders[order_id] = order
         self.order_queue.append(order)
 
@@ -153,7 +279,7 @@ class EventBacktestRunner:
     # Matching Engine & Execution Logic
     # ---------------------------------------------------------------------
 
-    def _process_order_matching(self, event_timestamp_ns: int) -> None:
+    def _process_order_matching(self, event_timestamp_ns: int, trade_event_payload: Optional[Dict[str, Any]] = None) -> None:
         """Match pending orders against prevailing market liquidity adhering to causal latency."""
         match_latency = self.config.latency_config.total_match_latency_ns()
         pending_count = len(self.order_queue)
@@ -175,27 +301,53 @@ class EventBacktestRunner:
             if order.order_type in (OrderType.MARKET, OrderType.IOC, OrderType.FOK):
                 self._execute_taker_order(order, event_timestamp_ns)
             elif order.order_type in (OrderType.LIMIT, OrderType.GTC):
-                matched = self._execute_maker_order(order, event_timestamp_ns)
+                matched = self._execute_maker_order(order, event_timestamp_ns, trade_event_payload)
                 if not matched and order.is_active:
                     self.order_queue.append(order)
 
     def _execute_taker_order(self, order: SimulatedOrder, timestamp_ns: int) -> None:
-        """Execute an aggressive taker order with spread, fee, and slippage calculations."""
-        base_price = self.last_price
-        if base_price <= Decimal("0.0"):
-            order.status = BacktestOrderStatus.REJECTED
-            return
-
-        # 1. Slippage & Spread half
+        """Execute an aggressive taker order with Depth Book Sweep, VWAP, and Dynamic Impact."""
         slippage_bps = self.config.slippage_config.fixed_slippage_bps
         slippage_factor = slippage_bps / Decimal("10000.0")
+        impact_coeff = self.config.slippage_config.impact_coefficient
+
+        executed_price: Decimal = Decimal("0.0")
 
         if order.side == "BUY":
-            executed_price = base_price * (Decimal("1.0") + slippage_factor)
+            # 1. Check L2 Order Book Depth Sweep
+            if self.order_book.asks:
+                vwap, filled_qty, remaining = self.order_book.sweep_asks(order.remaining_qty)
+                if filled_qty > Decimal("0.0"):
+                    # Calculate dynamic depth impact
+                    total_depth = self.order_book.total_ask_depth
+                    impact = (impact_coeff * (order.remaining_qty / total_depth)) if total_depth > Decimal("0.0") else Decimal("0.0")
+                    executed_price = vwap * (Decimal("1.0") + slippage_factor + impact)
+                else:
+                    executed_price = (self.order_book.best_ask or self.last_price) * (Decimal("1.0") + slippage_factor)
+            else:
+                base_price = self.order_book.best_ask or self.last_price
+                if base_price <= Decimal("0.0"):
+                    order.status = BacktestOrderStatus.REJECTED
+                    return
+                executed_price = base_price * (Decimal("1.0") + slippage_factor)
         else:
-            executed_price = base_price * (Decimal("1.0") - slippage_factor)
+            # SELL Order
+            if self.order_book.bids:
+                vwap, filled_qty, remaining = self.order_book.sweep_bids(order.remaining_qty)
+                if filled_qty > Decimal("0.0"):
+                    total_depth = self.order_book.total_bid_depth
+                    impact = (impact_coeff * (order.remaining_qty / total_depth)) if total_depth > Decimal("0.0") else Decimal("0.0")
+                    executed_price = vwap * (Decimal("1.0") - slippage_factor - impact)
+                else:
+                    executed_price = (self.order_book.best_bid or self.last_price) * (Decimal("1.0") - slippage_factor)
+            else:
+                base_price = self.order_book.best_bid or self.last_price
+                if base_price <= Decimal("0.0"):
+                    order.status = BacktestOrderStatus.REJECTED
+                    return
+                executed_price = base_price * (Decimal("1.0") - slippage_factor)
 
-        # 2. Taker Fee
+        # 2. Taker Fee Schedule
         fee_bps = self.config.fee_config.taker_fee_bps
         fee_paid = (executed_price * order.remaining_qty * (fee_bps / Decimal("10000.0"))) + self.config.fee_config.fixed_fee_per_trade
 
@@ -237,16 +389,53 @@ class EventBacktestRunner:
             self.gross_losses += abs(realized_pnl)
             self.total_closed_trades_count += 1
 
-    def _execute_maker_order(self, order: SimulatedOrder, timestamp_ns: int) -> bool:
-        """Attempt to fill resting limit order if market price crosses limit."""
+    def _execute_maker_order(
+        self,
+        order: SimulatedOrder,
+        timestamp_ns: int,
+        trade_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Attempt to fill resting limit order based on trade-through and queue priority emulation."""
         if order.limit_price is None:
             return False
 
         is_filled = False
-        if order.side == "BUY" and self.last_price <= order.limit_price:
-            is_filled = True
-        elif order.side == "SELL" and self.last_price >= order.limit_price:
-            is_filled = True
+
+        if trade_event_payload is not None:
+            trade_price = trade_event_payload["price"]
+            trade_size = trade_event_payload["size"]
+            aggressor = trade_event_payload.get("aggressor_side", "UNKNOWN")
+
+            if order.side == "BUY":
+                if trade_price < order.limit_price:
+                    # Trade-through: Market traded below buy limit -> Immediate fill
+                    is_filled = True
+                elif trade_price == order.limit_price:
+                    # Trade at limit price: Decrement queue ahead
+                    order.queue_ahead_volume -= trade_size
+                    if order.queue_ahead_volume <= Decimal("0.0"):
+                        is_filled = True
+            else:  # SELL limit
+                if trade_price > order.limit_price:
+                    # Trade-through: Market traded above sell limit -> Immediate fill
+                    is_filled = True
+                elif trade_price == order.limit_price:
+                    order.queue_ahead_volume -= trade_size
+                    if order.queue_ahead_volume <= Decimal("0.0"):
+                        is_filled = True
+        else:
+            # Fallback for Bar/Depth trigger without discrete trade stream
+            if self.last_price > Decimal("0.0"):
+                if order.side == "BUY" and self.last_price < order.limit_price:
+                    is_filled = True
+                elif order.side == "SELL" and self.last_price > order.limit_price:
+                    is_filled = True
+                elif not order.queue_initialized or order.queue_ahead_volume <= Decimal("0.0"):
+                    if order.side == "BUY" and self.last_price <= order.limit_price:
+                        is_filled = True
+                    elif order.side == "SELL" and self.last_price >= order.limit_price:
+                        is_filled = True
+
 
         if is_filled:
             executed_price = order.limit_price
@@ -305,9 +494,9 @@ class EventBacktestRunner:
         events: List[BacktestMarketEvent],
         hypothesis_spec_sha256: str,
         strategy_config_hash: str,
-        pyproject_toml_sha256: str = "pinned_pyproject_hash",
-        uv_lock_sha256: Optional[str] = "pinned_uv_lock_hash",
-        git_commit_hash: str = "current_git_commit",
+        pyproject_toml_sha256: str,
+        git_commit_hash: str,
+        uv_lock_sha256: Optional[str] = None,
         phase4_analytical_edge_bps: Decimal = Decimal("10.0"),
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
         """Execute simulation over strictly sequenced market events and emit BacktestManifest."""
@@ -316,17 +505,31 @@ class EventBacktestRunner:
 
         for event in events:
             self.current_time_ns = event.event_timestamp_ns
+            trade_payload = None
 
-            # 1. Update Market Price State
+            # 1. Update Market & Order Book State
             if event.event_type == BacktestEventType.BAR:
                 self.last_price = event.payload["close"]
                 self.ledger.update_market_price(event.symbol, self.last_price)
+
             elif event.event_type == BacktestEventType.TRADE:
                 self.last_price = event.payload["price"]
+                trade_payload = event.payload
                 self.ledger.update_market_price(event.symbol, self.last_price)
 
+            elif event.event_type in (BacktestEventType.DEPTH_SNAPSHOT, BacktestEventType.DEPTH_DELTA):
+                self.order_book.apply_delta(
+                    action=event.payload.get("action", "MODIFY"),
+                    side=event.payload.get("side", "BID"),
+                    price=event.payload.get("price"),
+                    size=event.payload.get("size"),
+                )
+                if self.order_book.best_bid and self.order_book.best_ask:
+                    self.last_price = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+                    self.ledger.update_market_price(event.symbol, self.last_price)
+
             # 2. Process Matching for Pending Orders
-            self._process_order_matching(self.current_time_ns)
+            self._process_order_matching(self.current_time_ns, trade_event_payload=trade_payload)
 
             # 3. Invoke Strategy Actor Handler if present
             if self.strategy_actor is not None:
@@ -386,7 +589,7 @@ class EventBacktestRunner:
             unrealized_pnl=sum((p.unrealized_pnl for p in self.ledger.positions.values()), Decimal("0.0")),
             ending_equity=ending_equity,
             net_return_pct=net_return_pct,
-            sharpe_ratio=None,  # Computed from periodic returns if series long enough
+            sharpe_ratio=None,
             sortino_ratio=None,
             max_drawdown_pct=self.max_drawdown,
             win_rate_pct=win_rate,

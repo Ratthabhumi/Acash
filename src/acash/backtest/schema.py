@@ -8,11 +8,14 @@ from decimal import Decimal
 from enum import Enum
 import hashlib
 import json
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 import pyarrow as pa
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from acash.data.schema import DataContractError
+
 
 
 class OrderType(str, Enum):
@@ -202,6 +205,24 @@ class BacktestManifest(BaseModel):
     computed_at_utc: str
     wall_clock_duration_ms: int
 
+    def model_post_init(self, __context: Any) -> None:
+        """Validate that environment hashes are valid cryptographic fingerprints, not placeholders."""
+        if not self.pyproject_toml_sha256 or len(self.pyproject_toml_sha256) < 32 or "pinned_" in self.pyproject_toml_sha256:
+            raise DataContractError(
+                f"Invalid pyproject_toml_sha256 fingerprint: '{self.pyproject_toml_sha256}'. "
+                "Placeholder or invalid hashes are strictly forbidden for pinned reproducibility."
+            )
+        if not self.git_commit_hash or len(self.git_commit_hash) < 7 or "current_git" in self.git_commit_hash:
+            raise DataContractError(
+                f"Invalid git_commit_hash: '{self.git_commit_hash}'. "
+                "Placeholder or invalid git commits are strictly forbidden for pinned reproducibility."
+            )
+        if self.uv_lock_sha256 is not None and ("pinned_" in self.uv_lock_sha256 or len(self.uv_lock_sha256) < 32):
+            raise DataContractError(
+                f"Invalid uv_lock_sha256 fingerprint: '{self.uv_lock_sha256}'."
+            )
+
+
     def to_canonical_json(self) -> str:
         """Emit canonical JSON excluding volatile runtime metadata."""
         data = {
@@ -297,3 +318,44 @@ CANONICAL_EQUITY_CURVE_SCHEMA = pa.schema(
         pa.field("accounting_residual", pa.decimal128(38, 18), nullable=False),
     ]
 )
+
+
+def load_current_environment_provenance(
+    workspace_root: Optional[Union[str, Path]] = None,
+) -> Tuple[str, Optional[str], str]:
+    """Load exact SHA-256 fingerprints of pyproject.toml, uv.lock, and Git HEAD commit."""
+    root = Path(workspace_root) if workspace_root else Path(__file__).resolve().parent.parent.parent.parent
+
+    # 1. pyproject.toml hash
+    pyproject_path = root / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise DataContractError(f"pyproject.toml not found at {pyproject_path}")
+    pyproject_sha256 = hashlib.sha256(pyproject_path.read_bytes()).hexdigest()
+
+    # 2. uv.lock hash
+    uv_lock_path = root / "uv.lock"
+    uv_lock_sha256 = hashlib.sha256(uv_lock_path.read_bytes()).hexdigest() if uv_lock_path.exists() else None
+
+    # 3. git commit hash
+    git_head_path = root / ".git" / "HEAD"
+    git_commit = "0000000000000000000000000000000000000000"
+    if git_head_path.exists():
+        content = git_head_path.read_text(encoding="utf-8").strip()
+        if content.startswith("ref:"):
+            ref_rel = content[4:].strip()
+            ref_path = root / ".git" / ref_rel
+            if ref_path.exists():
+                git_commit = ref_path.read_text(encoding="utf-8").strip()
+            else:
+                # Packed refs or detached HEAD fallback
+                packed_refs_path = root / ".git" / "packed-refs"
+                if packed_refs_path.exists():
+                    for line in packed_refs_path.read_text(encoding="utf-8").splitlines():
+                        if line and not line.startswith("#") and ref_rel in line:
+                            git_commit = line.split()[0]
+                            break
+        else:
+            git_commit = content
+
+    return pyproject_sha256, uv_lock_sha256, git_commit
+

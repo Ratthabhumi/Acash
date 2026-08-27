@@ -9,10 +9,12 @@ from acash.backtest.adapter import (
     BacktestEventType,
     BacktestMarketEvent,
     CanonicalDataAdapter,
+    extract_exact_nanoseconds,
 )
 from acash.backtest.engine import (
     EventBacktestRunner,
     SimulatedOrder,
+    SimulatedOrderBook,
 )
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
@@ -29,6 +31,7 @@ from acash.backtest.schema import (
     SimulationLatencyConfig,
     SlippageModelConfig,
     calculate_backtest_manifest_id,
+    load_current_environment_provenance,
 )
 from acash.backtest.strategies import (
     MicrostructureImbalanceActor,
@@ -50,17 +53,20 @@ __all__ = [
     "RealityGapSummary",
     "BacktestManifest",
     "calculate_backtest_manifest_id",
+    "load_current_environment_provenance",
     "CANONICAL_BACKTEST_FILLS_SCHEMA",
     "CANONICAL_EQUITY_CURVE_SCHEMA",
     # Adapter
     "BacktestEventType",
     "BacktestMarketEvent",
     "CanonicalDataAdapter",
+    "extract_exact_nanoseconds",
     # Accounting
     "ACCOUNTING_TOLERANCE",
     "ShadowPositionState",
     "ShadowAccountingLedger",
     # Engine
+    "SimulatedOrderBook",
     "SimulatedOrder",
     "EventBacktestRunner",
     # Telemetry
