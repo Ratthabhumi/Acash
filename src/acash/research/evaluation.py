@@ -275,9 +275,15 @@ def evaluate_hypothesis_relationship(
     if n < 3:
         raise DataContractError(f"Minimum 3 valid observations required for evaluation, got {n}")
 
+    # 1. Target Definition: For DISPERSION, target is the absolute return magnitude |R_{t,H}|
+    if hypothesis.expected_direction == ExpectedDirection.DISPERSION:
+        target_returns = [abs(r) for r in forward_returns]
+    else:
+        target_returns = list(forward_returns)
+
     # Compute exact OLS model residuals and score process g_t = (X_t - mean(X)) * eps_t for HAC bandwidth selection
     x_arr = np.array([float(v) for v in features])
-    y_arr = np.array([float(v) for v in forward_returns])
+    y_arr = np.array([float(v) for v in target_returns])
     x_dm = x_arr - np.mean(x_arr)
     y_dm = y_arr - np.mean(y_arr)
     denom = float(np.sum(x_dm ** 2))
@@ -295,22 +301,22 @@ def evaluate_hypothesis_relationship(
     )
 
     # Primary OLS Slope Beta & HAC Inference
-    beta, hac_se, hac_t_stat, p_val = compute_ols_beta_and_hac(features, forward_returns, primary_lag)
+    beta, hac_se, hac_t_stat, p_val = compute_ols_beta_and_hac(features, target_returns, primary_lag)
 
-    # Association Statistics
-    p_ic = calculate_pearson_ic(features, forward_returns)
-    r_ic = calculate_spearman_rank_ic(features, forward_returns)
+    # Association Statistics on Target Returns
+    p_ic = calculate_pearson_ic(features, target_returns)
+    r_ic = calculate_spearman_rank_ic(features, target_returns)
     autocorr = calculate_autocorrelation(features, lag=1)
 
     # Convert directional signals using versioned SignalTransformConfig
     signals = transform_feature_to_signal(features, hypothesis.expected_direction, sig_cfg)
-    t1_bps, t2_bps, t3_bps = calculate_3tier_friction_waterfall(forward_returns, signals, cost_cfg)
+    t1_bps, t2_bps, t3_bps = calculate_3tier_friction_waterfall(target_returns, signals, cost_cfg)
 
     # Robustness Check Matrix across Lags
     robustness_records: List[RobustnessCheckRecord] = []
     if policy.run_bandwidth_robustness_check:
         for r_lag in policy.robustness_lags:
-            b_r, se_r, t_r, p_r = compute_ols_beta_and_hac(features, forward_returns, r_lag)
+            b_r, se_r, t_r, p_r = compute_ols_beta_and_hac(features, target_returns, r_lag)
             robustness_records.append(
                 RobustnessCheckRecord(
                     lag=r_lag,
@@ -338,11 +344,12 @@ def evaluate_hypothesis_relationship(
         if r_ic is None or r_ic > -crit.min_in_sample_rank_ic:
             is_falsified = True
     elif hypothesis.expected_direction == ExpectedDirection.DISPERSION:
-        # DISPERSION evaluates two-sided magnitude of relationship
-        if abs(hac_t_stat) < crit.min_hac_t_stat:
+        # DISPERSION hypothesis posits that feature positively predicts return magnitude |R_{t,H}|
+        if beta <= Decimal("0") or hac_t_stat < crit.min_hac_t_stat:
             is_falsified = True
-        if r_ic is None or abs(r_ic) < crit.min_in_sample_rank_ic:
+        if r_ic is None or r_ic < crit.min_in_sample_rank_ic:
             is_falsified = True
+
 
     if autocorr is not None and abs(autocorr) > crit.max_feature_autocorrelation:
         is_falsified = True

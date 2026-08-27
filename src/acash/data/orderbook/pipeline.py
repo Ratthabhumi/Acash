@@ -1,7 +1,9 @@
 """Ingestion Pipeline for Order Book Snapshots and Deltas (Phase 3B).
 
 Strictly enforces:
-- 1:1 Ingestion Unit mapping per (source_id, symbol, trading_date).
+- 1:1 Ingestion Unit mapping per (source_id, channel_id, symbol, trading_date).
+- Pre-commit validation preventing multi-unit batch_id collision.
+- String-typed channel_id validation (no integer casting or silent empty fallback).
 - Replay idempotency: identical batch replay returns existing part path.
 - Batch collision prevention: modified data under same batch_id raises BatchCollisionError.
 - Global duplicate prevention: duplicate Snapshot/Delta Row Identity raises IntegrityViolationError.
@@ -18,7 +20,7 @@ from acash.data.orderbook.integrity import OrderBookIntegrityValidator
 from acash.data.orderbook.schema import SnapshotShapePolicy
 from acash.data.orderbook.storage import OrderBookStorageEngine
 from acash.data.provenance import calculate_raw_source_sha256
-from acash.data.schema import BatchCollisionError, IntegrityViolationError
+from acash.data.schema import BatchCollisionError, DataContractError, IntegrityViolationError
 
 
 @dataclass
@@ -67,17 +69,35 @@ class OrderBookIngestionPipeline:
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
         # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
+        if "channel_id" not in raw_table.column_names:
+            raise DataContractError("Missing mandatory 'channel_id' column in Order Book Snapshot table.")
+
         symbol_col = raw_table["symbol"].to_pylist()
         date_col = raw_table["trading_date"].to_pylist()
-        channel_col = raw_table["channel_id"].to_pylist() if "channel_id" in raw_table.column_names else [0] * raw_table.num_rows
+        channel_col = raw_table["channel_id"].to_pylist()
 
-        distinct_units: Dict[Tuple[str, int, str, date], List[int]] = {}
+        distinct_units: Dict[Tuple[str, str, str, date], List[int]] = {}
         for i in range(raw_table.num_rows):
-            sym = str(symbol_col[i])
-            ch = int(channel_col[i]) if channel_col[i] is not None else 0
+            sym = str(symbol_col[i]) if symbol_col[i] is not None else ""
+            if not sym or sym.strip() == "":
+                raise DataContractError(f"Row {i}: symbol cannot be null or empty string.")
+
+            raw_ch = channel_col[i]
+            if raw_ch is None or str(raw_ch).strip() == "":
+                raise DataContractError(f"Row {i}: channel_id cannot be null or empty string.")
+            ch = str(raw_ch).strip()
+
             t_d = date_col[i]
+            if t_d is None:
+                raise DataContractError(f"Row {i}: trading_date cannot be null.")
             t_d_val = t_d if isinstance(t_d, date) else date.fromisoformat(str(t_d))
             distinct_units.setdefault((source_id, ch, sym, t_d_val), []).append(i)
+
+        # Pre-commit check: Explicit batch_id is valid ONLY for single-unit payloads
+        if batch_id is not None and len(distinct_units) > 1:
+            raise DataContractError(
+                f"Explicit batch_id '{batch_id}' cannot be applied to a multi-unit payload containing {len(distinct_units)} distinct stream units. Explicit batch_id is only valid for single-unit tables."
+            )
 
         ingested_summaries: List[IngestedBookBatchSummary] = []
         total_rows_ingested = 0
@@ -95,7 +115,8 @@ class OrderBookIngestionPipeline:
             date_str = t_date_val.isoformat()
             norm_sym = sym.replace("/", "-").upper()
             norm_src = src.replace("/", "-").upper()
-            target_batch_id = batch_id or f"batch_book_snap_{norm_src}_ch{ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
+            norm_ch = ch.replace("/", "-").upper()
+            target_batch_id = batch_id or f"batch_book_snap_{norm_src}_ch{norm_ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
 
             # Check existing manifest for idempotency
             existing_manifest = self.storage_engine.provenance_tracker.load_manifest(target_batch_id)
@@ -159,17 +180,35 @@ class OrderBookIngestionPipeline:
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
         # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
+        if "channel_id" not in raw_table.column_names:
+            raise DataContractError("Missing mandatory 'channel_id' column in Order Book Delta table.")
+
         symbol_col = raw_table["symbol"].to_pylist()
         date_col = raw_table["trading_date"].to_pylist()
-        channel_col = raw_table["channel_id"].to_pylist() if "channel_id" in raw_table.column_names else [0] * raw_table.num_rows
+        channel_col = raw_table["channel_id"].to_pylist()
 
-        distinct_units: Dict[Tuple[str, int, str, date], List[int]] = {}
+        distinct_units: Dict[Tuple[str, str, str, date], List[int]] = {}
         for i in range(raw_table.num_rows):
-            sym = str(symbol_col[i])
-            ch = int(channel_col[i]) if channel_col[i] is not None else 0
+            sym = str(symbol_col[i]) if symbol_col[i] is not None else ""
+            if not sym or sym.strip() == "":
+                raise DataContractError(f"Row {i}: symbol cannot be null or empty string.")
+
+            raw_ch = channel_col[i]
+            if raw_ch is None or str(raw_ch).strip() == "":
+                raise DataContractError(f"Row {i}: channel_id cannot be null or empty string.")
+            ch = str(raw_ch).strip()
+
             t_d = date_col[i]
+            if t_d is None:
+                raise DataContractError(f"Row {i}: trading_date cannot be null.")
             t_d_val = t_d if isinstance(t_d, date) else date.fromisoformat(str(t_d))
             distinct_units.setdefault((source_id, ch, sym, t_d_val), []).append(i)
+
+        # Pre-commit check: Explicit batch_id is valid ONLY for single-unit payloads
+        if batch_id is not None and len(distinct_units) > 1:
+            raise DataContractError(
+                f"Explicit batch_id '{batch_id}' cannot be applied to a multi-unit payload containing {len(distinct_units)} distinct stream units. Explicit batch_id is only valid for single-unit tables."
+            )
 
         ingested_summaries: List[IngestedBookBatchSummary] = []
         total_rows_ingested = 0
@@ -186,7 +225,8 @@ class OrderBookIngestionPipeline:
             date_str = t_date_val.isoformat()
             norm_sym = sym.replace("/", "-").upper()
             norm_src = src.replace("/", "-").upper()
-            target_batch_id = batch_id or f"batch_book_delta_{norm_src}_ch{ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
+            norm_ch = ch.replace("/", "-").upper()
+            target_batch_id = batch_id or f"batch_book_delta_{norm_src}_ch{norm_ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
 
             existing_manifest = self.storage_engine.provenance_tracker.load_manifest(target_batch_id)
             existing_lookup = (
@@ -201,7 +241,6 @@ class OrderBookIngestionPipeline:
 
             if not report.is_valid:
                 raise IntegrityViolationError(f"Delta Validation failed for batch '{target_batch_id}'")
-
 
             # Commit
             part_path = self.storage_engine.commit_delta_batch(
@@ -235,3 +274,4 @@ class OrderBookIngestionPipeline:
             batches_ingested=ingested_summaries,
             total_rows=total_rows_ingested,
         )
+

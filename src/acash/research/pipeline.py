@@ -33,6 +33,7 @@ from acash.research.schema import (
     CANONICAL_HYPOTHESIS_EVALUATION_SCHEMA,
     CostModelConfig,
     EvaluationResult,
+    ExpectedDirection,
     HacInferencePolicy,
     HypothesisSpecification,
     OosExposureState,
@@ -41,6 +42,7 @@ from acash.research.schema import (
     SignalTransformConfig,
     SplitPolicy,
 )
+
 
 
 # Explicit type tags for canonical feature table serialization
@@ -361,6 +363,12 @@ class AlphaResearchPipeline:
         p_start_str = str(bars_table["bar_start_utc"][0].as_py())
         p_end_str = str(bars_table["bar_end_utc"][-1].as_py())
 
+        fwd_ret_def = (
+            "ABS_DISCRETE_FORWARD_RETURN_V1"
+            if hypothesis.expected_direction == ExpectedDirection.DISPERSION
+            else "NEXT_BAR_OPEN_TO_HORIZON_CLOSE_V1"
+        )
+
         manifest = ResearchManifest(
             manifest_id=manifest_id,
             experiment_id=search_rec.experiment_id,
@@ -368,8 +376,9 @@ class AlphaResearchPipeline:
             hypothesis_version=hypothesis.hypothesis_version,
             symbol=hypothesis.target_symbol,
             inference_estimator="OLS_SLOPE_BETA_HAC",
-            forward_return_definition="NEXT_BAR_OPEN_TO_HORIZON_CLOSE_V1",
+            forward_return_definition=fwd_ret_def,
             hac_bandwidth_method=hac_cfg.bandwidth_method.value,
+
             hac_bandwidth_value=train_result.selected_hac_lag,
             hac_kernel=hac_cfg.kernel_type,
             cost_model_version="3_TIER_FIXED_PROXY_V1",

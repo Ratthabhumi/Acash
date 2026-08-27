@@ -16,6 +16,12 @@ from acash.backtest.engine import (
     SimulatedOrder,
     SimulatedOrderBook,
 )
+from acash.backtest.nautilus_bridge import (
+    ACASHNativeBacktestEngine,
+    NautilusCatalogExporter,
+    NautilusTraderSubstrate,
+    SubstrateRuntimeUnavailableError,
+)
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
     CANONICAL_EQUITY_CURVE_SCHEMA,
@@ -32,14 +38,6 @@ from acash.backtest.schema import (
     SlippageModelConfig,
     calculate_backtest_manifest_id,
     load_current_environment_provenance,
-)
-from acash.backtest.nautilus_bridge import (
-    NautilusBacktestBridge,
-    NautilusBarData,
-    NautilusDataConverter,
-    NautilusExecutionFill,
-    NautilusOrderBookDeltaData,
-    NautilusTradeTickData,
 )
 from acash.backtest.strategies import (
     MicrostructureImbalanceActor,
@@ -73,21 +71,18 @@ __all__ = [
     "ACCOUNTING_TOLERANCE",
     "ShadowPositionState",
     "ShadowAccountingLedger",
-    # Engine
+    # Engine & Substrates
     "SimulatedOrderBook",
     "SimulatedOrder",
     "EventBacktestRunner",
-    # Nautilus Bridge
-    "NautilusBacktestBridge",
-    "NautilusDataConverter",
-    "NautilusBarData",
-    "NautilusTradeTickData",
-    "NautilusOrderBookDeltaData",
-    "NautilusExecutionFill",
+    "ACASHNativeBacktestEngine",
+    # Nautilus Integration
+    "NautilusCatalogExporter",
+    "NautilusTraderSubstrate",
+    "SubstrateRuntimeUnavailableError",
     # Telemetry
     "RealityGapAttributionEngine",
     # Strategies
     "MicrostructureImbalanceActor",
     "VwapMeanReversionActor",
 ]
-

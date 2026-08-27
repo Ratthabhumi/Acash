@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from acash.data.provenance import calculate_raw_source_sha256
 from acash.data.schema import (
     BatchCollisionError,
+    DataContractError,
     IntegrityViolationError,
 )
 from acash.data.trades.hashing import calculate_canonical_trades_sha256
@@ -102,7 +103,14 @@ class TradesIngestionPipeline:
             t_d_val = t_d if isinstance(t_d, date) else date.fromisoformat(str(t_d))
             distinct_units.setdefault((sym, t_d_val), []).append(i)
 
+        # Pre-commit check: Explicit batch_id is valid ONLY for single-unit payloads
+        if batch_id is not None and len(distinct_units) > 1:
+            raise DataContractError(
+                f"Explicit batch_id '{batch_id}' cannot be applied to a multi-unit payload containing {len(distinct_units)} distinct stream units. Explicit batch_id is only valid for single-unit tables."
+            )
+
         ingested_summaries: List[IngestedTradesBatchSummary] = []
+
         total_rows_ingested = 0
 
         for (sym, t_date_val), indices in distinct_units.items():
