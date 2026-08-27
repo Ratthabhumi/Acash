@@ -49,21 +49,48 @@ ACASH enforces a strict architectural separation between **Analytical Research D
 
 ---
 
-## 4. Bi-Temporal Schema Specification
+## 4. Bi-Temporal Schema & Canonical Types
 
-| Column Name | Type | Description |
+Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)** specification:
+
+| Column Name | Physical Parquet Type | Description |
 | :--- | :--- | :--- |
 | `symbol` | `VARCHAR` | Unique standard symbol (e.g. `BTC/USDT`, `AAPL`, `EUR/USD`) |
-| `timeframe` | `VARCHAR` | Bar resolution (e.g. `1m`, `5m`, `1h`, `1d`) |
-| `event_start_utc` | `TIMESTAMP_NS` | Exact bar opening timestamp in UTC |
-| `event_end_utc` | `TIMESTAMP_NS` | Exact bar closing timestamp in UTC |
-| `knowledge_time_utc`| `TIMESTAMP_NS` | System timestamp when bar was fully ingested |
-| `open` | `DOUBLE` | Opening price |
-| `high` | `DOUBLE` | Highest traded price during bar interval |
-| `low` | `DOUBLE` | Lowest traded price during bar interval |
-| `close` | `DOUBLE` | Closing traded price during bar interval |
-| `volume` | `DOUBLE` | Total base asset volume traded |
-| `quote_volume` | `DOUBLE` | Total quote currency volume traded |
-| `trade_count` | `INTEGER` | Total discrete trades within the bar |
-| `source_id` | `VARCHAR` | Identifier of data provider (e.g. `yfinance`, `mt5_demo`) |
+| `timeframe` | `VARCHAR` | Bar resolution (`M1`, `M5`, `M15`, `H1`, `H4`, `D1`) |
+| `event_start_utc` | `TIMESTAMP[us, tz=UTC]` | Exact bar opening timestamp in UTC (Microseconds) |
+| `event_end_utc` | `TIMESTAMP[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microseconds) |
+| `knowledge_time_utc`| `TIMESTAMP[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microseconds) |
+| `revision_seq` | `BIGINT` | Monotonically increasing revision sequence number |
+| `open` | `DECIMAL(28, 10)` | Opening price with exact fixed precision |
+| `high` | `DECIMAL(28, 10)` | Highest traded price during bar interval |
+| `low` | `DECIMAL(28, 10)` | Lowest traded price during bar interval |
+| `close` | `DECIMAL(28, 10)` | Closing traded price during bar interval |
+| `volume` | `DECIMAL(28, 10)` | Total base asset volume traded |
+| `quote_volume` | `DECIMAL(28, 10)` | Total quote currency volume traded |
+| `trade_count` | `BIGINT` | Total discrete trades within the bar (-1 if unavailable) |
+| `source_id` | `VARCHAR` | Identifier of data provider (e.g. `binance_public`, `dukascopy`) |
 | `provenance_hash` | `VARCHAR` | SHA-256 hash of original raw ingest batch |
+
+---
+
+## 5. Point-in-Time Revision Query Standard
+
+To prevent historical revision leakage, DuckDB queries against Parquet partitions use revision-aware deduplication:
+
+```sql
+WITH eligible AS (
+    SELECT *
+    FROM read_parquet('data/parquet/{symbol}/{timeframe}/**/*.parquet')
+    WHERE knowledge_time_utc <= $as_of_knowledge_time_utc
+      AND event_start_utc >= $start_utc
+      AND event_end_utc <= $end_utc
+)
+SELECT *
+FROM eligible
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY symbol, timeframe, event_start_utc
+    ORDER BY knowledge_time_utc DESC, revision_seq DESC
+) = 1
+ORDER BY event_start_utc ASC;
+```
+

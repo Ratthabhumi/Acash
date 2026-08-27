@@ -187,4 +187,38 @@
   3. **Guiding Principle:** The highest-value empirical capability of ACASH is measuring the difference between quantitative research expectation and live market reality.
 - **Consequences:** Provides actionable empirical feedback to improve simulation realism, prevents erroneous alpha discarding, isolates broker friction, and enforces institutional-grade execution observability.
 
+---
+
+## ADR-019: Canonical Parquet Storage, Bi-Temporal Revision Semantics & Data Contract
+- **Status:** Approved
+- **Context:** Financial market data often arrives late or undergoes historical revision. Standard time-series queries filtering only `knowledge_time <= as_of` return multiple versions of the same event observation, causing look-ahead bias or state desynchronization. Furthermore, float downcasting risks precision loss, and nanosecond timestamps lose precision when ingested into DuckDB's native microsecond `TIMESTAMPTZ`.
+- **Decision:**
+  1. **Canonical Physical Storage:** Datasets are stored in partitioned Parquet files using Arrow schema:
+     - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
+     - Financial Numerics: `Decimal128(28, 10)`.
+     - Partitioning: `data/parquet/{symbol}/{timeframe}/year={YYYY}/data.parquet`.
+  2. **Bi-Temporal Revision-Aware Identity & As-Of Invariant:**
+     - A single event observation may have multiple historical revisions identified by `(symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
+     - At any query reference timestamp $T_{\text{as\_of}}$, there is **at most one authoritative revision** per event observation.
+  3. **P-I-T Deduplication Query Standard:**
+     ```sql
+     WITH eligible AS (
+         SELECT * FROM read_parquet(...)
+         WHERE knowledge_time_utc <= $as_of_knowledge_time_utc
+           AND event_start_utc >= $start_utc AND event_end_utc <= $end_utc
+     )
+     SELECT * FROM eligible
+     QUALIFY ROW_NUMBER() OVER (
+         PARTITION BY symbol, timeframe, event_start_utc
+         ORDER BY knowledge_time_utc DESC, revision_seq DESC
+     ) = 1
+     ORDER BY event_start_utc ASC;
+     ```
+  4. **Strict Error vs Anomaly Boundary:**
+     - **ERROR / INVALID:** Fatal structural, pricing, or temporal violations $\implies$ reject ingest.
+     - **WARNING / ANOMALY:** Extreme price returns, volume spikes, cadence anomalies $\implies$ flag and preserve observation without silent mutation or deletion.
+  5. **Session Cadence Policy:** Cadence gaps are differentiated between expected closed-market intervals (e.g. FX weekends) and unexpected data missingness.
+- **Consequences:** Eliminates bi-temporal revision leakage, preserves full financial precision, prevents DuckDB timestamp precision truncation, and establishes a strict, non-destructive data contract.
+
+
 
