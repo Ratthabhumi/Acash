@@ -3,7 +3,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 4 Complete](https://img.shields.io/badge/status-Phase%204%20Gate%20Passed%20(139%2F139%20Tests)-success.svg)](#)
+[![Status: Phase 5 Complete](https://img.shields.io/badge/status-Phase%205%20Gate%20Passed%20(152%2F152%20Tests)-success.svg)](#)
+
 
 ---
 
@@ -140,8 +141,8 @@ ACASH explicitly decouples state management from decision and execution flows:
    ├─ ✅ Phase 3B: Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
    └─ ✅ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
-🔄 Phase 5: Backtesting Substrate & NautilusTrader PoC ──► [IN PROGRESS — v1.1.0 Design Proposal]
-⏳ Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6 (Purged CPCV & DSR)
+✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 152/152 Tests, mypy clean]
+🔄 Phase 6: Statistical Validation & OOS Hard Gate ──► [UPCOMING]
 ⏳ Phase 7: Regime Engine (Trend/Vol Classifiers) ──► Gate 7
 ⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
 ⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
@@ -186,6 +187,13 @@ ACASH explicitly decouples state management from decision and execution flows:
    - 3-Tier Friction Waterfall: Raw Predictive Edge $\to$ Spread + Fee Net $\to$ Fixed Slippage Proxy Economic Edge.
    - Interval-based boundary purging across partition splits and unallocated embargo buffers ($\ge \max(H)$ bars).
    - Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) locking OOS exposure (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
+8. **Phase 5 — Backtesting Substrate & Simulation Engine:**
+   - Sovereign event-driven simulation substrate with simulated order lifecycle state machine (`CREATED` $\to$ `SUBMITTED` $\to$ `ACCEPTED` $\to$ `FILLED`).
+   - Canonical Data Adapter enforcing Phase 3B total ordering 5-tuple: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
+   - Decoupled double-entry shadow ledger (Balance-Sheet View vs Performance Attribution View) eliminating Realized PnL double counting ($|\text{AccountingResidual}| \le 10^{-10}$).
+   - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
+   - Reality Gap Telemetry Engine decomposing execution drag into spread, latency, and queue drag against Phase 4 analytical baselines.
+   - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
 
 ---
 
@@ -200,7 +208,8 @@ The complete canonical documentation suite is organized in [`docs/`](file:///c:/
 - **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
 - **[docs/PHASE_3C_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
 - **[docs/PHASE_4_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
-- **[docs/PHASE_5_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & NautilusTrader PoC Integration (v1.1.0 Proposed).
+- **[docs/PHASE_5_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
+
 - **[docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
 - **[docs/ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
 - **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.

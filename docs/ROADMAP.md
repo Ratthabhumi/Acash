@@ -127,18 +127,22 @@
 
 ---
 
-### 🔄 Phase 5: Backtesting Substrate & NautilusTrader PoC [DESIGN STAGE — v1.1.0 Proposal]
-- **Objective:** Evaluate and establish the deterministic simulation backtest engine using NautilusTrader as substrate while preserving ACASH as single source of truth.
+### ✅ Phase 5: Backtesting Substrate & Simulation Engine [COMPLETED - PASSED]
+- **Objective:** Establish the deterministic event-driven simulation backtest substrate preserving ACASH as the single source of truth for canonical data, features, accounting, and manifests.
 - **Deliverables:**
-  - Lightweight custom vectorized / event backtester for rapid research.
-  - NautilusTrader Proof of Concept (PoC) adapter benchmark with EventOrderingPolicy.
-  - Realistic friction simulation (fees, bid/ask spread, basic slippage, dual-sided latency).
-  - Independent double-entry shadow ledger with $|\text{AccountingResidual}| \le 10^{-10}$.
-- **Gate 5 Criteria:** PoC comparison completed; backtest outputs produce deterministic equivalent outcomes for identical inputs and configuration under pinned execution environment.
+  - Event-driven backtesting execution substrate with full simulated order lifecycle state machine.
+  - Canonical Data Adapter with Phase 3B total ordering 5-tuple contract: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
+  - Realistic friction simulation (maker/taker fee tiers, bid/ask spread, fixed & dynamic slippage, causal dual-sided latency).
+  - Independent double-entry shadow ledger decoupling Balance-Sheet View from Performance Attribution View ($|\text{AccountingResidual}| \le 10^{-10}$).
+  - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
+  - Reality Gap Telemetry Engine decomposing execution friction into spread, latency, and queue drag.
+  - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
+- **Gate 5 Criteria:** Bitwise-identical replay across identical inputs/configs, exact double-entry cash conservation; 152/152 tests pass, `mypy` clean.
 
 ---
 
-### ⏳ Phase 6: Statistical Validation & OOS Hard Gate [UPCOMING]
+### ⏳ Phase 6: Statistical Validation & Overfitting Controls [UPCOMING]
+
 - **Objective:** Enforce quantitative validation gates to eliminate data-snooping bias.
 - **Deliverables:**
   - Strict 3-way partition harness: In-Sample (Train) $\to$ Validation $\to$ Held-Out Out-of-Sample (OOS).
