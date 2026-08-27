@@ -1,0 +1,23 @@
+system:
+  environment: "base"
+  base_currency: "USD"
+  log_level: "INFO"
+  json_logs: true
+
+data:
+  default_timeframe: "M1"
+  max_lookback_bars: 5000
+  storage_path: "data/parquet"
+
+execution:
+  mode: "mock"
+  default_slippage_model: "zero"
+  default_fee_rate: "0.0001"
+
+risk:
+  max_drawdown_limit_pct: 0.15
+  margin_buffer_threshold: "1000.00"
+  max_gross_leverage: 1.0
+
+telemetry:
+  redact_secrets: true

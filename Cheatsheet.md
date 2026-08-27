@@ -129,3 +129,74 @@ acash/
 - [ ] Mock adapters produce deterministic equivalent outcomes.
 - [ ] `configs/*.yaml` parses with strict Pydantic validation.
 - [ ] `mypy` static type checking passes with zero errors.
+
+---
+
+## 7. Engineering Workflow Addendum
+
+For ACASH development, follow an agentic engineering workflow:
+
+1. Inspect the existing repository, architecture, ADRs, tests, and git history before modifying code.
+2. Do not implement large changes immediately. First explain the impact, assumptions, affected modules, and implementation plan.
+3. Preserve ACASH architectural boundaries and source-of-truth documentation.
+4. Prefer minimal, reversible changes over broad refactors.
+5. After implementation, run tests, static typing, invariant checks, and review the final diff.
+6. Perform a self-review: identify assumptions, possible regressions, violated invariants, and unintended scope changes.
+7. Record important architectural lessons or recurring mistakes in the appropriate project documentation.
+8. Never grant an AI agent authority to bypass ACASH risk controls, decision boundaries, or execution safeguards.
+9. External tools such as Agentic Trading Lab may be used only as independent research/evaluation references and must not become ACASH core dependencies without an explicit architectural decision.
+
+**Core loop:**
+$$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \text{IMPLEMENT} \to \text{TEST} \to \text{SELF-REVIEW} \to \text{DOCUMENT}$$
+
+---
+
+## 8. Engineering Research Addendum
+
+- **Research References:** External trading platforms/examples are strictly research references, not ACASH core architecture.
+- **Future Concepts:** Multi-source news/evidence ingestion, provenance timestamps, OOS testing, research reproducibility, and portfolio analytics are preserved for future phases. (Do NOT expand Phase 1 scope).
+- **Append-Only Decision Record:** `DecisionRecord` is strictly immutable and append-only. Never mutate historical records to attach Fills/PnL outcomes; preserve lineage via immutable references / correlation IDs.
+- **Evidence Over Noise:** No AI confidence score, giant backtest return, or data count is evidence without proper calibration, bias checks, and OOS validation.
+- **Dependency Isolation:** External tools (MT4/MT5, Agentic Trading Lab) are decoupled adapters/references, requiring explicit ADRs before core inclusion.
+- **Phase 1 Discipline:** Keep Phase 1 strictly foundational.
+
+---
+
+## 9. Research Lessons — Trading Systems
+
+- **Data Lineage:** $\text{Source} \to \text{Ingestion} \to \text{Validation} \to \text{Normalization} \to \text{Evidence} \to \text{Decision}$
+- **AI Safety:** AI is analytical only. Never treat AI confidence as probability/edge.
+- **External Data as Evidence:** News, macro, options, Greeks, IV are research inputs, not auto-signals.
+- **Traceability:** Every decision must trace back to raw data, calculations, and exact timestamps.
+- **Backtest Skepticism:** Backtests do NOT prove an edge without OOS testing, leakage checks, friction, and regime stress.
+- **Observability:** $\text{State} \to \text{Metrics} \to \text{Monitoring} \to \text{Audit}$
+- **Core Loop:** $\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \to \text{Outcome} \to \text{Audit/Learning}$
+
+---
+
+## 10. Final Research Lesson — Market Structure
+
+- **Options Flow as Positioning:** Flow is positioning, not simple sentiment. Question: *"Who is forced to react at this level?"*
+- **Structure Precedes Strategy:** Map key levels/zones and behavior before choosing strategy.
+- **3D Options:** Evaluate $\text{Direction} \times \text{Volatility} \times \text{Time}$ together.
+- **State $\neq$ Signal:** Explain conditions & risk response; do not output blind BUY/SELL.
+- **Real Arbitrage:** Valid only if exploitable net of costs, liquidity, execution, and timing.
+- **Core Loop:** $\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$
+
+---
+
+## 11. Quantitative Reasoning & Deterministic Risk Pipeline
+
+1. **Risk State:** Formal monitoring of risk capacity, limit headroom, and drawdown state.
+2. **Margin Buffer:** Strict margin buffer safety margin before allowing new orders.
+3. **Net & Dollar Exposure:** Explicit dollar-denominated gross and net exposure metrics.
+4. **Deterministic Edge:** Analytical metrics (Sharpe, DSR, Expectancy) are 100% mathematical.
+5. **Separate Raw Metrics from AI:** AI reasons on top of verified quant metrics; never trades directly.
+
+$$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
+*$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$*
+
+
+
+
+

@@ -1,7 +1,7 @@
 # ACASH — Architectural Decision Records (ADRs)
 
 **Document:** `docs/DECISIONS.md`  
-**Version:** 3.4.0 (Immutable State Transitions & Normalized Value Applied)  
+**Version:** 3.5.0 (Spot-Like Accounting & Semantic Lock Applied)  
 **Date:** 2026-08-27  
 
 ---
@@ -137,11 +137,30 @@
 - **Status:** Approved
 - **Context:** Modeling domain entities as a single parent-child hierarchy violates the semantic separation between capital/portfolio state and decision/execution events.
 - **Decision:**
-  1. Separate domain entities into two interacting flows:
-     - **Capital State Flow:** $\text{AccountState} \to \text{PortfolioState} \to \text{Positions}$
-     - **Decision Flow:** $\text{Signal} \to \text{TargetAllocation} \to \text{RiskAssessment} \to \text{Order} \to \text{Fill} \to \text{State Transition}$
-  2. **Immutable State Transitions:** State updates never mutate existing frozen objects; receiving a Fill produces **NEW Position**, **NEW PortfolioState**, and **NEW AccountState** snapshots.
-  3. `DecisionRecord` is an **append-only audit and lineage object** referencing the complete decision chain. Historical decisions are never overwritten or deleted.
-  4. Monetary values are normalized in a defined ACASH base currency. $\text{Equity} = \text{Balance} + \text{Unrealized PnL}$ (where Balance is realized cash). $\text{Gross Exposure} = \sum |\text{Normalized Position Value}|$, where **Normalized Position Value** is the position value expressed in ACASH base currency.
-  5. Configuration directory is standardized as `configs/` across documentation and code (`configs/*.yaml`).
+   1. Separate domain entities into decoupled flows:
+      - **External Account State:** Broker / Account source $\to$ `AccountState`
+      - **Internal Portfolio State:** `Positions` + Market Prices $\to$ `PortfolioState`
+      - **Decision Flow:** $\text{Signal} \to \text{TargetAllocation} \to \text{RiskAssessment} \to \text{Order} \to \text{Fill} \to \text{Position/Portfolio State Transition}$
+   2. **Immutable State Transitions:** State updates never mutate existing frozen objects; receiving a Fill produces **NEW Position** and **NEW PortfolioState** snapshots.
+   3. `DecisionRecord` is an **append-only audit and lineage object** referencing the complete decision chain. Historical decisions are never overwritten or retroactively mutated.
+   4. Monetary values are normalized in a defined ACASH base currency.
+   5. Configuration directory is standardized as `configs/` across documentation and code (`configs/*.yaml`).
 - **Consequences:** Establishes mathematically sound domain entities, complete auditability, immutability guarantees, and clean separation of concerns.
+
+---
+
+## ADR-017: Phase 1 Spot-Like Portfolio Valuation, Fill Cash Flows & Allocation Boundary
+- **Status:** Approved
+- **Context:** In a spot-like asset purchase model, cash is exchanged directly for asset holdings. Calculating portfolio equity as `cash_balance + unrealized_pnl` incorrectly assumes a margin/derivative model where cash is not expended on asset acquisition. Furthermore, execution slippage units and allocation validation boundaries require explicit definition.
+- **Decision:**
+  1. **Portfolio Total Equity Source of Truth (Phase 1 Spot Assumption):**
+     $$\text{Portfolio Total Equity} = \text{cash\_balance} + \sum_{i} \text{Position}_i.\text{market\_value}$$
+     where $\text{Position.market\_value} = \text{signed quantity} \times \text{current\_price}$.
+  2. **Fill Cash-Flow Semantics & Zero Double-Counting:**
+     - **BUY Fill:** `cash_balance` decreases by $(\text{fill\_price} \times \text{fill\_quantity}) + \text{fee}$.
+     - **SELL Fill:** `cash_balance` increases by $(\text{fill\_price} \times \text{fill\_quantity}) - \text{fee}$.
+     - **Realized PnL:** Realized PnL is automatically incorporated into `cash_balance` via the trade cash proceeds/payments upon closing/reducing a position. Realized PnL is retained strictly as a reporting metric and MUST NOT be added to cash or equity a second time.
+  3. **Slippage Units & Execution Metric:** `Fill.slippage` is defined as the absolute price difference between the execution reference price and the actual fill price, expressed in price units of the instrument. Because `fill_price` already reflects the executed price, slippage is an execution quality reporting metric only and is NOT subtracted from cash/PnL separately.
+  4. **TargetAllocation Semantic Boundary:** Phase 1 does NOT enforce $\sum \text{weights} + \text{cash\_weight} = 1.0$ as a domain invariant. The domain model validates structural finite values only. Leverage constraints, shorting, gross/net limits, and portfolio feasibility are strictly enforced by future Portfolio and Risk Engines.
+  5. **Order Status Lifecycle:** `Order` includes `status: OrderStatus = OrderStatus.PENDING` (`PENDING`, `SUBMITTED`, `FILLED`, `PARTIALLY_FILLED`, `CANCELLED`, `REJECTED`).
+- **Consequences:** Enforces strict cash conservation, prevents realized-PnL double counting, clarifies slippage units, and preserves architectural flexibility for leveraged/market-neutral strategies.

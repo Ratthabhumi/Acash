@@ -1,11 +1,11 @@
-# ACASH — Project Status & Discovery (Phase 0 Final)
+# ACASH — Project Status & Implementation Progress
 
 **Document:** `docs/PROJECT_STATUS.md`  
 **Project Name:** ACASH (Automated Capital Allocation System)  
-**Status:** Phase 0 Complete — Clean & Ready for Human Approval  
+**Status:** Phase 1 Complete (Gate 1 Verified) — Awaiting Approval for Phase 2  
 **Date:** 2026-08-27  
 **Operating Environment:** Windows 10/11 (AIO workstation)  
-**Runtime:** Python 3.14.6 64-bit, Git 2.55.0  
+**Runtime:** Python 3.14.3 64-bit, Git 2.55.0  
 
 ---
 
@@ -52,3 +52,112 @@ Phase 0 discovery and architecture evaluation is complete. All architectural fou
 8. [x] [docs/RISKS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RISKS.md)
 9. [x] [docs/ROADMAP.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ROADMAP.md)
 10. [x] [docs/PHASE_1_PLAN.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PHASE_1_PLAN.md)
+
+---
+
+## 5. Engineering Workflow Addendum
+
+For ACASH development, follow an agentic engineering workflow:
+
+1. Inspect the existing repository, architecture, ADRs, tests, and git history before modifying code.
+2. Do not implement large changes immediately. First explain the impact, assumptions, affected modules, and implementation plan.
+3. Preserve ACASH architectural boundaries and source-of-truth documentation.
+4. Prefer minimal, reversible changes over broad refactors.
+5. After implementation, run tests, static typing, invariant checks, and review the final diff.
+6. Perform a self-review: identify assumptions, possible regressions, violated invariants, and unintended scope changes.
+7. Record important architectural lessons or recurring mistakes in the appropriate project documentation.
+8. Never grant an AI agent authority to bypass ACASH risk controls, decision boundaries, or execution safeguards.
+9. External tools such as Agentic Trading Lab may be used only as independent research/evaluation references and must not become ACASH core dependencies without an explicit architectural decision.
+
+### Core Engineering Loop:
+$$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \text{IMPLEMENT} \to \text{TEST} \to \text{SELF-REVIEW} \to \text{DOCUMENT}$$
+
+---
+
+## 6. Engineering Research Addendum
+
+Use the referenced trading-platform examples only as independent research references, not as ACASH architecture.
+
+### Potential Future Concepts Worth Preserving:
+- Multi-source news / external evidence ingestion
+- Evidence provenance and timestamps
+- Forward / out-of-sample testing
+- Research reproducibility
+- Portfolio analytics
+
+*Do NOT expand Phase 1 scope for these concepts.*
+
+### Important Architectural Rules:
+1. **Append-Only Immutable Lineage:** `DecisionRecord` is immutable and append-only. Do not mutate it later to attach Fill/PnL outcomes. Preserve lineage through immutable references/correlation IDs so the complete decision $\to$ execution $\to$ outcome chain can be reconstructed without modifying historical records.
+2. **Evidence-Driven Rigor:** Do not treat AI confidence scores, huge backtest returns, or large data-source counts as evidence of trading edge without proper calibration, bias checks, and out-of-sample validation.
+3. **Strict External System Isolation:** External systems such as MT4/MT5 or Agentic Trading Lab may only be future adapters/research references and must never become ACASH core dependencies without an explicit ADR.
+4. **Phase 1 Boundary:** Keep Phase 1 strictly foundational.
+
+---
+
+## 7. Research Lessons — Trading Systems
+
+1. **Data Quality and Provenance:**
+   $$\text{Source} \to \text{Ingestion} \to \text{Validation} \to \text{Normalization} \to \text{Evidence} \to \text{Decision}$$
+2. **AI as Analytical Component, NOT Authority:**
+   AI must remain an analytical component, NOT the final trading authority. Never treat AI confidence as proven probability/edge.
+3. **Multi-Source Evidence Treatment:**
+   News, macro, options, Greeks, IV, and external data should be treated as evidence/research inputs, not automatic signals.
+4. **Explainability & Traceability:**
+   Every decision should be explainable and traceable back to its evidence, data, calculations, and timestamp.
+5. **Backtest Metrics $\neq$ Proven Edge:**
+   Backtest metrics (win rate, PF, Sharpe, expectancy, etc.) do NOT prove a real edge without proper OOS/forward testing, leakage checks, costs, slippage, and regime validation.
+6. **Observability Hierarchy:**
+   $$\text{System State} \to \text{Metrics} \to \text{Monitoring} \to \text{Audit/Investigation}$$
+7. **Decoupled External Platforms:**
+   External platforms/data providers may be used for independent research/evaluation, but must NOT become ACASH core dependencies without an explicit architectural decision.
+
+> [!IMPORTANT]
+> **Boundary Preservation:** Do not add new features or perform broad refactors based on these lessons. Preserve current ACASH boundaries and apply only minimal, reversible documentation/architecture updates where justified.
+
+**Core Research Loop:**
+$$\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \to \text{Outcome} \to \text{Audit/Learning}$$
+
+---
+
+## 8. Final Research Lesson — Market Structure
+
+- **Options Flow as Positioning:** Do NOT interpret Options Flow simply as bullish/bearish sentiment. Flow is an observation of transactions/positioning; the core question is: *"At this price/structure, who is forced to react, and what happens if price reaches that level?"*
+- **Market Structure Precedes Strategy:** Market structure comes before strategy. Identify important levels/zones and how price behaves around them before choosing a strategy.
+- **3-Dimensional Options Evaluation:** For options, evaluate at least 3 dimensions concurrently: $\text{Direction} \times \text{Volatility} \times \text{Time}$. Do not judge an option setup from direction alone.
+- **Market State $\neq$ Trade Signal:** Distinguish "market state / setup" $\neq$ "trade signal". The system should explain what condition exists and what actions/risk responses become relevant, rather than blindly outputting BUY/SELL.
+- **Real Arbitrage Exploitability:** Arbitrage is only meaningful when the pricing relationship is actually demonstrably exploitable after transaction costs, liquidity, execution risk, and timing friction.
+
+**Market Structure Decision Loop:**
+$$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$$
+
+---
+
+## 9. Quantitative Reasoning & Deterministic Risk Pipeline
+
+1. **Risk State Representation:** Continuous tracking of portfolio risk capacity, limit headroom, and drawdown state.
+2. **Margin Buffer Safety Threshold:** Mandatory buffer between utilized margin and maintenance thresholds before approving any allocation.
+3. **Net & Dollar Exposure Tracking:** Explicit dollar-denominated exposure accounting ($\text{Gross Exposure} = \sum |\text{Dollar Value}|$, $\text{Net Exposure} = \sum \text{Dollar Value}$).
+4. **Deterministic Edge Metrics:** All performance metrics (Sharpe, DSR, Information Ratio, expectancy, max drawdown) are calculated strictly by deterministic mathematical algorithms.
+5. **Separation of Raw Metrics from AI Reasoning:** Raw quantitative metrics remain pure and immutable. AI reasoning operates strictly downstream as an explanatory research tool, NEVER generating unverified numbers or placing trades.
+
+### Core Processing Flow:
+$$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
+
+$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$
+
+---
+
+## 10. Phase 1 Implementation & Gate 1 Summary
+
+- **Implementation Date:** 2026-08-27
+- **Test Suite Results:** 27 passed in 0.21s (100% pass rate via `pytest`)
+- **Static Type Check:** Success (0 type errors in 45 source files via `mypy`)
+- **Delivered Packages & Modules:**
+  - `src/acash/core/domain/`: Domain entities (`Instrument`, `Bar`, `MarketDataSnapshot`, `Position`, `PortfolioState`, `AccountState`, `Signal`, `TargetAllocation`, `RiskAssessment`, `Order`, `Fill`, `DecisionRecord`) and pure state transitions (`transitions.py`).
+  - `src/acash/core/interfaces/`: 8 ABC interface contracts (`IMarketDataProvider`, `IFeatureEngine`, `IStrategy`, `IPortfolioOptimizer`, `IRiskEngine`, `IBacktestEngine`, `IExecutionEngine`, `IDecisionLedger`).
+  - `src/acash/core/config/`: Schema and hierarchical YAML loader (`base.yaml`, `research.yaml`, `development.yaml`).
+  - `src/acash/telemetry/`: Structured JSON logging with credential redaction (`api_key`, `secret`, `password`, `token`, `private_key`).
+  - In-Memory Mock Adapters: `MockExecutionEngine`, `MockMarketDataProvider` (zero network), `InMemoryDecisionLedger`.
+  - `pyproject.toml` + `uv.lock`: Sole dependency source of truth.
+- **Gate 1 Status:** **PASSED & VERIFIED**. Awaiting explicit user approval before proceeding to Phase 2.

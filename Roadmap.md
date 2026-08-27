@@ -129,4 +129,93 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing (Proprietary
 
 ---
 
+### ENGINEERING WORKFLOW ADDENDUM
+
+For ACASH development, follow an agentic engineering workflow:
+
+1. Inspect the existing repository, architecture, ADRs, tests, and git history before modifying code.
+2. Do not implement large changes immediately. First explain the impact, assumptions, affected modules, and implementation plan.
+3. Preserve ACASH architectural boundaries and source-of-truth documentation.
+4. Prefer minimal, reversible changes over broad refactors.
+5. After implementation, run tests, static typing, invariant checks, and review the final diff.
+6. Perform a self-review: identify assumptions, possible regressions, violated invariants, and unintended scope changes.
+7. Record important architectural lessons or recurring mistakes in the appropriate project documentation.
+8. Never grant an AI agent authority to bypass ACASH risk controls, decision boundaries, or execution safeguards.
+9. External tools such as Agentic Trading Lab may be used only as independent research/evaluation references and must not become ACASH core dependencies without an explicit architectural decision.
+
+**Core loop:**
+$$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \text{IMPLEMENT} \to \text{TEST} \to \text{SELF-REVIEW} \to \text{DOCUMENT}$$
+
+---
+
+### ENGINEERING RESEARCH ADDENDUM
+
+Use the referenced trading-platform examples only as independent research references, not as ACASH architecture.
+
+Potential future concepts worth preserving:
+- Multi-source news / external evidence ingestion
+- Evidence provenance and timestamps
+- Forward / out-of-sample testing
+- Research reproducibility
+- Portfolio analytics
+
+Do NOT expand Phase 1 scope for these concepts.
+
+**Important architectural rule:**
+`DecisionRecord` is immutable and append-only. Do not mutate it later to attach Fill/PnL outcomes. Preserve lineage through immutable references/correlation IDs so the complete decision $\to$ execution $\to$ outcome chain can be reconstructed without modifying historical records.
+
+Do not treat AI confidence scores, huge backtest returns, or large data-source counts as evidence of trading edge without proper calibration, bias checks, and out-of-sample validation.
+
+External systems such as MT4/MT5 or Agentic Trading Lab may only be future adapters/research references and must never become ACASH core dependencies without an explicit ADR.
+
+Keep Phase 1 strictly foundational.
+
+---
+
+### RESEARCH LESSONS — TRADING SYSTEMS
+
+1. **Data Quality & Provenance:** $\text{Source} \to \text{Ingestion} \to \text{Validation} \to \text{Normalization} \to \text{Evidence} \to \text{Decision}$
+2. **AI is Analytical, NOT Final Authority:** Never treat AI confidence as proven probability/edge.
+3. **Multi-Source Evidence:** Treat news, macro, Greeks, and IV as evidence inputs, not automatic signals.
+4. **Explainability & Traceability:** Every decision must be traceable to data, calculations, and timestamps.
+5. **Backtest Metrics $\neq$ Edge:** Require proper OOS validation, leak checks, slippage, and regime tests.
+6. **Observability:** $\text{System State} \to \text{Metrics} \to \text{Monitoring} \to \text{Audit/Investigation}$
+7. **External Decoupling:** External platforms/data providers are research references only, not core dependencies.
+
+**Core Research Loop:**
+$$\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \to \text{Outcome} \to \text{Audit/Learning}$$
+
+---
+
+### FINAL RESEARCH LESSON — MARKET STRUCTURE
+
+- **Options Flow as Positioning:** Do NOT interpret Options Flow simply as bullish/bearish sentiment. Flow is positioning; ask: *"At this price/structure, who is forced to react, and what happens if price reaches that level?"*
+- **Market Structure Precedes Strategy:** Identify important levels/zones and behavior before choosing a strategy.
+- **3D Options:** Evaluate $\text{Direction} \times \text{Volatility} \times \text{Time}$ together.
+- **State $\neq$ Signal:** "Market state/setup" $\neq$ "trade signal". Explain condition and risk response, not blind BUY/SELL.
+- **Real Arbitrage:** Exploitable only after all costs, liquidity, execution, and timing risks.
+
+**Market Structure Decision Loop:**
+$$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$$
+
+---
+
+### QUANTITATIVE REASONING & RISK PIPELINE
+
+1. **Risk State:** Continuous mathematical tracking of risk capacity and drawdown limits.
+2. **Margin Buffer:** Safety buffer between used margin and limits before approving orders.
+3. **Net & Dollar Exposure:** Explicit dollar-denominated exposure calculations.
+4. **Deterministic Edge Metrics:** Pure mathematical indicators, never probabilistic guesses.
+5. **Separate Raw Metrics from AI:** AI reasons on top of validated quant outputs; never trades directly.
+
+$$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
+*$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$*
+
+---
+
 For in-depth specifications, see **[docs/ROADMAP.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ROADMAP.md)**.
+
+
+
+
+

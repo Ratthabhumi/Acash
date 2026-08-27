@@ -1,0 +1,9 @@
+system:
+  environment: "research"
+  log_level: "DEBUG"
+
+data:
+  max_lookback_bars: 50000
+
+risk:
+  max_drawdown_limit_pct: 0.25

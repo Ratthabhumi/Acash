@@ -1,0 +1,7 @@
+system:
+  environment: "development"
+  log_level: "DEBUG"
+  json_logs: false
+
+execution:
+  mode: "mock"

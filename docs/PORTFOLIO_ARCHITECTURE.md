@@ -73,3 +73,24 @@ The system explicitly supports the answer: **"NOWHERE."** (100% Cash / No-Trade 
 | **Maintenance** | 100% internal control | **Very Active, modern codebase** | Low/Slow maintenance |
 | **License** | Proprietary | **BSD-3-Clause** | MIT |
 | **ACASH Decision** | **PRIMARY BENCHMARK** | **ADOPT (Primary Optimizer Engine)** | **REJECT (Redundant)** |
+
+---
+
+## 4. Risk State, Margin Buffer & Exposure Invariants
+
+ACASH strictly tracks portfolio risk state and capital exposure before and after allocation:
+
+1. **Risk State Integration:**
+   - Formal tracking of account health: $\text{Equity} = \text{Balance} + \text{Unrealized PnL}$.
+   - Drawdown state and distance to max drawdown hard limit.
+2. **Margin Buffer Safety Threshold:**
+   - Explicit margin headroom required prior to order dispatch:
+     $$\text{Free Margin} \ge \text{Margin Buffer Threshold}$$
+   - Prevents aggressive order sizing from approaching broker margin call levels.
+3. **Net & Dollar Exposure Tracking:**
+   - **Dollar Gross Exposure:** $\text{Gross Exposure} = \sum_{i} |\text{Normalized Dollar Value}_i|$
+   - **Dollar Net Exposure:** $\text{Net Exposure} = \sum_{i} \text{Normalized Dollar Value}_i$
+4. **Deterministic Edge Pipeline:**
+   $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
+   *(Raw quantitative metrics remain pure and immutable; AI reasoning operates downstream for explainability, never trading directly).*
+
