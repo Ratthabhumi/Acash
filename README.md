@@ -256,7 +256,36 @@ Measures systematic deviation across Entry Price ($\Delta_{\text{entry}}$), Mark
 
 ---
 
-## 6. Documentation Index (`docs/`)
+## 6. Completed Milestones & Quality Gates (Phases 0–2)
+
+```
+Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
+Phase 1: Foundation & Domain Core ──► [GATE 1 PASSED — 27/27 Unit Tests, mypy clean]
+Phase 2: Data Ingestion & Integrity Engine ──► [GATE 2 PASSED — 57/57 Tests, mypy clean]
+Phase 3: Market Microstructure & PIT Feature Engine ──► [DESIGN STAGE — 3A / 3B / 3C]
+```
+
+### Summary of Accomplishments:
+1. **Phase 0 — Discovery & Architecture:**
+   - Evaluated 17 quantitative & infrastructure technologies across 10 criteria.
+   - Established 7 decoupled layers and 19 Architectural Decision Records (ADR-001 to ADR-019).
+2. **Phase 1 — Foundation & Domain Core:**
+   - Implemented sovereign immutable domain models (`src/acash/core/domain/`) with strict Decimal finite math.
+   - Implemented pure state transitions for 8 signed-quantity position fill scenarios, spot cash flows, and zero Realized PnL double-counting.
+   - Implemented append-only decision audit ledger and structured telemetry logger with recursive secret redaction.
+   - Verified 100% with 27 unit tests and `mypy` 0 errors.
+3. **Phase 2 — Data Ingestion & Integrity Engine:**
+   - Implemented Canonical PyArrow schema (`Decimal128(38,18)`, `timestamp[us, tz=UTC]`) in `src/acash/data/schema.py`.
+   - Built Per-Stream Data Integrity Validator (`integrity.py`) enforcing event end consistency across revisions, distinct event monotonicity, and anomaly preservation without data mutation.
+   - Built Provenance & Manifest Engine (`provenance.py`) supporting raw source SHA-256 and logical canonical batch SHA-256 invariant to Parquet compression and row ordering.
+   - Built Parquet Storage Engine (`storage.py`) with strict 1:1 Ingestion Unit mapping, Recoverable Batch Commit Protocol (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`), crash recovery, and orphan part quarantine.
+   - Built DuckDB Point-in-Time qualification layer with multi-source isolation and lookahead prevention.
+   - Built Ingestion Pipeline (`pipeline.py`) with global revision duplicate prevention and deterministic replay idempotency.
+   - Verified 100% with 57 unit & integration tests and `mypy` 0 errors.
+
+---
+
+## 7. Documentation Index (`docs/`)
 
 The complete canonical documentation suite is organized in [`docs/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs):
 

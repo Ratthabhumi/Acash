@@ -117,18 +117,76 @@ acash/
 
 ---
 
-## 6. Phase 1 Correctness Checklist
+## 6. Comprehensive Phase Summary & Technical Invariant Reference
 
-- [ ] Domain models are immutable (`frozen=True`).
-- [ ] Candlestick geometry invariants enforced ($\text{High} \ge \max(\text{Open}, \text{Close})$, $\text{Low} \le \min(\text{Open}, \text{Close})$, $\text{Price} > 0$).
-- [ ] Normalized Account math invariants verified ($\text{Equity} = \text{Balance} + \text{Unrealized PnL}$).
-- [ ] State transitions create new distinct snapshot instances without mutation.
-- [ ] Semantically invalid timestamps (e.g. `event_start > event_end`) raise exceptions.
-- [ ] Abstract interfaces cannot be instantiated directly.
-- [ ] Decision ledger is strictly append-only (rejects updates/deletes).
-- [ ] Mock adapters produce deterministic equivalent outcomes.
-- [ ] `configs/*.yaml` parses with strict Pydantic validation.
-- [ ] `mypy` static type checking passes with zero errors.
+### Phase 0 — Discovery & Architecture (COMPLETED & APPROVED)
+- **Objective:** Evaluate technologies, define the 7-layer Modular Monolith architecture, and establish Architectural Decision Records (ADR-001 through ADR-018).
+- **Core Architecture:**
+  1. *Research Data Layer:* Partitioned Parquet files + DuckDB vectorized SQL query engine.
+  2. *Transactional Control Plane:* SQLite append-only decision audit ledger + order state machine.
+  3. *Analytics & Quant Research:* `pandas`, `NumPy`, `vectorbt` (Tier-1 screening), `Plotly`.
+  4. *Portfolio Engine:* `skfolio` (HRP, ERC, CVaR) vs transparent baselines (Equal Weight, Inverse Vol, Cash).
+  5. *Event Simulation:* `NautilusTrader` as Tier-2 event-driven candidate (Phase 5 PoC Gate).
+  6. *Execution Subsystem:* Sovereign `IExecutionEngine` abstraction decoupling broker mechanics.
+  7. *Performance Layer:* Python-first $\to$ NumPy/Numba vectorization $\to$ Rust/C++ only after measured profiling.
+- **Key Invariants:**
+  - $\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to \text{ALPHA} \to \text{VALIDATION} \to \text{PORTFOLIO} \to \text{RISK} \to \text{EXECUTION}$
+  - Risk Engine is a non-negotiable hard boundary (Risk `REJECT` $\implies$ `REJECT` always).
+  - No speculative AI trading bots; AI is analytical only.
+
+---
+
+### Phase 1 — Foundation & Domain Core (COMPLETED & VERIFIED — Gate 1)
+- **Objective:** Sovereign domain models, pure immutable state transitions, abstract interfaces, configuration loader, telemetry, and in-memory mock adapters.
+- **Key Deliverables (`src/acash/core/`):**
+  - *Domain Entities (`frozen=True`):* `Instrument`, `Bar`, `MarketDataSnapshot`, `Position`, `PortfolioState`, `AccountState`, `Signal`, `TargetAllocation`, `RiskAssessment`, `Order`, `Fill`, `DecisionRecord`.
+  - *Pure State Transitions (`transitions.py`):*
+    - `apply_fill_to_position`: 8 signed-quantity scenarios (Long Increase, Long Reduce, Long Close, Long $\to$ Short Reversal, Short Increase, Short Reduce, Short Close, Short $\to$ Long Reversal).
+    - `apply_fill_to_portfolio`: Cash flow accounting ($\text{BUY} \implies \text{cash} - \text{val} - \text{fee}$, $\text{SELL} \implies \text{cash} + \text{val} - \text{fee}$), zero Realized PnL double counting, total equity recomputation ($\text{total\_equity} = \text{cash\_balance} + \sum \text{Position.market\_value}$).
+    - `update_portfolio_market_prices`: Revalues active positions and portfolio metrics.
+  - *Append-Only Decision Ledger (`InMemoryDecisionLedger`):* Rejects updates/deletions (`LedgerTamperError`), correlation ID query lineage.
+  - *Configuration & Telemetry:* Strict Pydantic models (`AppConfig`), structured JSON logging with recursive secret redaction (`api_key`, `secret`, `password`, `token`, `private_key`).
+- **Gate 1 Metrics:** 27/27 unit tests passing, `mypy` 0 errors across 45 files.
+
+---
+
+### Phase 2 — Data Ingestion & Integrity Engine (COMPLETED & VERIFIED — Gate 2)
+- **Objective:** Sovereign market data ingestion, data contract enforcement, recoverable batch commit protocol, bi-temporal indexing, and DuckDB Point-in-Time analytical engine.
+- **Key Deliverables (`src/acash/data/`):**
+  - *Canonical Arrow Schema (`schema.py`):*
+    - `Decimal128(38, 18)` exact financial decimal representation (rejects non-finite/NaN/Inf).
+    - `timestamp[us, tz=UTC]` microsecond UTC timestamps matching DuckDB `TIMESTAMPTZ`.
+    - `revision_seq` ($\ge 1$) scoped to Event Observation Key.
+  - *Data Integrity Validator (`integrity.py`):*
+    - Per-stream validation: `(source_id, symbol, timeframe)`.
+    - `event_end_utc` consistency across revisions sharing the same Event Observation Key.
+    - Distinct event monotonicity: $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
+    - Append-only safe revision sequencing: `revision_seq` assigned once upon initial acceptance; never renumbered on historical backfills.
+    - Intra-batch deterministic tie-breaker: `canonical_content_fingerprint ASC` used strictly for unpersisted revisions accepted together with the same knowledge time.
+    - Anomaly preservation: Statistical warnings (price return spikes, volume surges) are flagged as warnings without mutating raw data.
+  - *Provenance & Manifest Engine (`provenance.py`):*
+    - `raw_source_sha256`: SHA-256 over raw input payload bytes.
+    - `canonical_batch_sha256`: Logical data hash invariant to row order, Parquet compression codecs (zstd vs snappy), or chunking.
+    - Fail-fast canonical schema validation: missing columns raise `DataContractError`.
+    - Commit-intent manifests: Lifecycle states `PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED` with `fsync` before atomic replace.
+    - Append-only audit ledger: `data/provenance_ledger.jsonl` with idempotent writes.
+  - *Storage & Recoverable Commit Protocol (`storage.py`):*
+    - Strict 1:1 Ingestion Unit mapping: `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`.
+    - Crash recovery pass: Reconstructs authentic provenance from manifests without guessing; quarantines orphan parts to `data/quarantine/`.
+    - DuckDB Point-in-Time Qualification Query:
+      `QUALIFY ROW_NUMBER() OVER (PARTITION BY source_id, symbol, timeframe, event_start_utc ORDER BY knowledge_time_utc DESC, revision_seq DESC) = 1`
+      (preserves independent source observations without premature merging).
+  - *Ingestion Pipeline (`pipeline.py`):*
+    - Global revision duplicate check against existing canonical Parquet parts prior to acceptance.
+    - Deterministic batch identity derivation:
+      $$\text{batch\_id} = \text{batch\_}\{\text{source\_id}\}\_\{\text{symbol}\}\_\{\text{timeframe}\}\_\{\text{year}\}\_\{\text{raw\_source\_sha256}[:16]\}$$
+    - Idempotent replay: Replaying the same payload returns the existing part path without duplicate files or duplicate ledger records.
+- **Gate 2 Metrics:** 57/57 unit & integration tests passing, `mypy` 0 errors across 60 files.
+
+---
+
+## 7. Phase Correctness Checklist
+
 
 ---
 

@@ -8,19 +8,23 @@
 ## High-Level Progression Diagram
 
 ```
-Phase 0: Discovery & Architecture [COMPLETE — APPROVED]
+Phase 0: Discovery & Architecture [COMPLETED — APPROVED]
    │
    ▼
-Phase 1: Foundation & Domain Core ──► Gate 1 (Packaging, Invariants, Interfaces, Mocks)
+Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED & VERIFIED — 27/27 Tests]
    │
    ▼
-Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 (Single Market, Provenance, Bi-temporal)
+Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED & VERIFIED — 57/57 Tests]
    │
    ▼
-Phase 3: Point-in-Time Feature Engine ──► Gate 3 (Zero Look-Ahead Leakage, IC > 0)
+Phase 3: Market Microstructure & PIT Feature Engine ──► Gate 3 [DESIGN STAGE]
+   ├─ Phase 3A: Canonical Trades Domain (Time & Sales, Aggressor Side)
+   ├─ Phase 3B: Canonical Order Book Domain (L2 Depth Snapshots & Deltas, L3 MBO)
+   └─ Phase 3C: Microstructure Research Engine (VWAP, Volume Profile, Footprint, Delta)
    │
    ▼
 Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 (Momentum & Mean-Reversion Baselines)
+
    │
    ▼
 Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 (Deterministic Event Sim Benchmark)
@@ -67,18 +71,27 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing (Proprietary
 - Comprehensive evaluation of 17 technologies across 10 engineering criteria.
 - Canonical architectural documentation created in [`docs/`](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs).
 
-### Phase 1: Foundation & Domain Core (CURRENT STARTING POINT)
+### Phase 1: Foundation & Domain Core (COMPLETED & VERIFIED — Gate 1 Passed)
 - Sovereign domain entities (`Instrument`, `Bar`, `Position`, `PortfolioState`, `AccountState`, `Signal`, `TargetAllocation`, `RiskAssessment`, `Order`, `Fill`, `DecisionRecord`).
+- Pure immutable state transitions: 8 signed-quantity position fill scenarios, spot cash flows, zero Realized PnL double-counting.
 - Core abstract interface contracts (`IMarketDataProvider`, `IFeatureEngine`, `IStrategy`, `IPortfolioOptimizer`, `IRiskEngine`, `IBacktestEngine`, `IExecutionEngine`, `IDecisionLedger`).
-- In-memory mock adapters and correctness-driven test suite.
+- In-memory mock adapters, append-only decision ledger, structured logging with secret redaction.
+- Verified: 27/27 unit tests passing, `mypy` 0 errors.
 
-### Phase 2: Data Ingestion & Integrity Engine
-- Ingest single liquid asset market with strict UTC point-in-time timestamping.
-- Bi-temporal indexing ($t_{\text{event}}$ vs $t_{\text{knowledge}}$) and SHA-256 batch provenance.
+### Phase 2: Data Ingestion & Integrity Engine (COMPLETED & VERIFIED — Gate 2 Passed)
+- Sovereign market data ingestion with Canonical PyArrow schema (`Decimal128(38, 18)`, `timestamp[us, tz=UTC]`).
+- Data integrity engine: Per-stream validation, `event_end_utc` consistency, distinct event monotonicity, and anomaly preservation without data mutation.
+- Bi-temporal indexing ($t_{\text{event}}$ vs $t_{\text{knowledge}}$), append-only `revision_seq` sequencing, and intra-batch fingerprint tie-breaking.
+- Recoverable Batch Commit Protocol: Commit-intent manifests (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`), crash recovery pass, and orphan part quarantine.
+- DuckDB Point-in-Time qualification query layer with source isolation.
+- Global revision duplicate check and idempotent pipeline ingestion replay.
+- Verified: 57/57 unit and integration tests passing, `mypy` 0 errors.
 
-### Phase 3: Point-in-Time Feature Engine
-- Modular feature extractors (log returns, ATR, rolling VWAP, volume anomalies).
-- Automated unit tests asserting zero forward-looking leakage ($Feature(t) = Feature(t \mid Data_{\le t})$).
+### Phase 3: Market Microstructure & PIT Feature Engine (DESIGN STAGE)
+- **Phase 3A — Canonical Trades Domain:** Time & Sales, tick executions, and aggressor side flags.
+- **Phase 3B — Canonical Order Book Domain:** L2 MBP depth snapshots/deltas and L3 MBO queue reconstruction.
+- **Phase 3C — Microstructure Research Engine:** Pure derived feature transformations (Anchored/Rolling VWAP, Volume & TPO Profile, Footprint/Delta cluster, Imbalance & Absorption detection, and strict Anti-Leakage guard).
+
 
 ### Phase 4: Alpha Research Engine
 - Formal hypothesis schemas (assumptions, parameter ranges, invalidation conditions).
