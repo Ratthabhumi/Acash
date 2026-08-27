@@ -37,10 +37,12 @@ from acash.research.evaluation import (
     evaluate_hypothesis_relationship,
 )
 from acash.research.manifest import (
+    ResearchGovernanceLedger,
     ResearchManifestEngine,
     calculate_hypothesis_spec_sha256,
     calculate_research_search_record_sha256,
 )
+
 from acash.research.outcomes import (
     compute_discrete_forward_returns,
     partition_dataset_with_embargo,
@@ -102,6 +104,8 @@ __all__ = [
     # Manifest & Pipeline
     "calculate_hypothesis_spec_sha256",
     "calculate_research_search_record_sha256",
+    "ResearchGovernanceLedger",
     "ResearchManifestEngine",
     "AlphaResearchPipeline",
 ]
+

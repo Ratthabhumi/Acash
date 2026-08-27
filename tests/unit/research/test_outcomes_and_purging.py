@@ -96,3 +96,32 @@ def test_boundary_purging_and_embargo_partitioning() -> None:
     assert train_e == 49
     assert val_s == 49 + 1 + 5  # 55
     assert oos_s == val_e + 1 + 5
+
+
+def test_multi_horizon_interval_purging_exact_bounds() -> None:
+    """Verify observations with varying horizons purge exactly when label intervals cross train_end_idx."""
+    bars = _make_sample_bars_table(num_bars=15)
+    # train_end_idx = 7
+    # For H=1: bar 7 has exit at 7+1 = 8 > 7 -> purged; bar 6 has exit at 6+1 = 7 <= 7 -> not purged.
+    # For H=3: bar 5 has exit at 5+3 = 8 > 7 -> purged; bar 4 has exit at 4+3 = 7 <= 7 -> not purged.
+    outcomes = compute_discrete_forward_returns(
+        bars_table=bars,
+        symbol="ES.FUT",
+        trading_date=date(2026, 1, 19),
+        horizons=[1, 3],
+        train_end_idx=7,
+    )
+
+    df = outcomes.to_pandas()
+    h1 = df[df["horizon_bars"] == 1].reset_index(drop=True)
+    h3 = df[df["horizon_bars"] == 3].reset_index(drop=True)
+
+    # Check H=1
+    assert bool(h1.loc[6, "is_purged_boundary"]) is False
+    assert bool(h1.loc[7, "is_purged_boundary"]) is True
+
+    # Check H=3
+    assert bool(h3.loc[4, "is_purged_boundary"]) is False
+    assert bool(h3.loc[5, "is_purged_boundary"]) is True
+
+

@@ -36,7 +36,26 @@ def test_hand_calculated_ols_slope_and_pearson_ic() -> None:
     y = [Decimal("2.0"), Decimal("4.0"), Decimal("5.0"), Decimal("4.0"), Decimal("5.0")]
 
     beta, se, t_stat, p_val = compute_ols_beta_and_hac(x, y, lag_bandwidth=1)
+
+    # 1. Exact OLS Beta
     assert beta == Decimal("0.60")
+
+    # 2. Exact Hand-Calculated Newey-West HAC Covariance (L=1, Bartlett Kernel):
+    # u = [1.6, -0.6, 0.0, -0.6, -0.4]
+    # Gamma_0 = 3.44 / 5 = 0.688
+    # Gamma_1 = -0.72 / 5 = -0.144
+    # Omega_hat = 0.688 + 2 * (0.5) * (-0.144) = 0.544
+    # Var(Beta) = (5 * 0.544) / 100 = 0.0272
+    # SE(Beta) = sqrt(0.0272) = 0.16492422502470642
+    # t_stat = 0.60 / sqrt(0.0272) = 3.6380343755449944
+    # p_val = 2 * (1 - Phi(3.6380343755449944)) = 0.0002747372134262
+    expected_se = math.sqrt(0.0272)
+    expected_t = 0.60 / expected_se
+    expected_p = 2.0 * (1.0 - (1.0 + math.erf(expected_t / math.sqrt(2.0))) / 2.0)
+
+    assert math.isclose(float(se), expected_se, rel_tol=1e-5)
+    assert math.isclose(float(t_stat), expected_t, rel_tol=1e-5)
+    assert math.isclose(float(p_val), expected_p, rel_tol=1e-4)
 
     p_ic = calculate_pearson_ic(x, y)
     assert p_ic is not None
@@ -44,12 +63,7 @@ def test_hand_calculated_ols_slope_and_pearson_ic() -> None:
 
 
 def test_hand_calculated_spearman_rank_ic_with_fractional_ties() -> None:
-    """Verify Spearman Rank IC with fractional tie handling against manual derivation.
-
-    X = [1.0, 2.0, 3.0, 4.0, 5.0] -> ranks: [0, 1, 2, 3, 4]
-    Y = [2.0, 4.0, 5.0, 4.0, 5.0] -> unique: 2.0 (rank 0), 4.0 (ranks 1, 2 -> avg 1.5), 5.0 (ranks 3, 4 -> avg 3.5)
-    Y ranks: [0, 1.5, 3.5, 1.5, 3.5]
-    """
+    """Verify Spearman Rank IC with fractional tie handling against manual derivation."""
     x = [Decimal("1.0"), Decimal("2.0"), Decimal("3.0"), Decimal("4.0"), Decimal("5.0")]
     y = [Decimal("2.0"), Decimal("4.0"), Decimal("5.0"), Decimal("4.0"), Decimal("5.0")]
 
@@ -62,20 +76,8 @@ def test_hand_calculated_spearman_rank_ic_with_fractional_ties() -> None:
     assert math.isclose(float(r_ic), expected_corr, rel_tol=1e-6)
 
 
-
 def test_hand_calculated_3tier_friction_waterfall() -> None:
-    """Verify 3-tier friction deductions and basis point conversions.
-
-    Forward Returns: [0.0010, 0.0020] (mean = 0.0015 = 15 bps)
-    Signals: [1.0, 1.0]
-    Tier 1 Raw Edge = 15.0 bps
-    Cost Config:
-      quoted_spread_bps = 2.0 bps
-      roundtrip_broker_fee_bps = 1.0 bps
-      fixed_slippage_bps = 0.5 bps
-    Tier 2 Net Edge = 15.0 - (2.0 + 1.0) = 12.0 bps
-    Tier 3 Economic Edge = 12.0 - 0.5 = 11.5 bps
-    """
+    """Verify 3-tier friction deductions and basis point conversions."""
     fwd_ret = [Decimal("0.0010"), Decimal("0.0020")]
     signals = [Decimal("1.0"), Decimal("1.0")]
     cfg = CostModelConfig(

@@ -140,18 +140,25 @@ class AlphaResearchPipeline:
         )
 
         # 4. Out-of-Sample Evaluation & State Machine Governance
+        manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{uuid.uuid4().hex[:8]}"
         oos_beta: Optional[Decimal] = None
         oos_t_stat: Optional[Decimal] = None
         oos_r_ic: Optional[Decimal] = None
-        oos_state = OosExposureState.UNEXPOSED
+        current_ledger_state = self.manifest_engine.governance_ledger.get_oos_state(hypothesis.hypothesis_id)
+        oos_state = current_ledger_state
 
         if evaluate_oos:
-            if search_record and search_record.oos_exposure_state == OosExposureState.EVALUATED_LOCKED:
-                # Attempted re-evaluation on locked OOS -> mark EXHAUSTED
-                oos_state = OosExposureState.EXHAUSTED
+            if search_record is None:
                 raise DataContractError(
-                    f"Hypothesis '{hypothesis.hypothesis_id}' has already been evaluated against OOS. Re-tuning on OOS is strictly prohibited."
+                    f"Explicit ResearchSearchRecord is mandatory for Blind OOS evaluation of hypothesis '{hypothesis.hypothesis_id}'."
                 )
+
+            # Record and transition state in durable ledger (raises DataContractError if already locked/exhausted)
+            oos_state = self.manifest_engine.governance_ledger.record_oos_evaluation(
+                hypothesis_id=hypothesis.hypothesis_id,
+                search_record=search_record,
+                manifest_id=manifest_id,
+            )
 
             oos_result = evaluate_hypothesis_relationship(
                 features=oos_feat,
@@ -164,7 +171,6 @@ class AlphaResearchPipeline:
             oos_beta = oos_result.beta
             oos_t_stat = oos_result.hac_t_stat
             oos_r_ic = oos_result.spearman_rank_ic
-            oos_state = OosExposureState.EVALUATED_LOCKED
 
         # 5. Build and Commit ResearchManifest
         search_rec = search_record or ResearchSearchRecord(
@@ -175,13 +181,12 @@ class AlphaResearchPipeline:
             label_variants_tried=[f"H_{primary_h}"],
             model_variants_tried=["OLS_BETA_HAC"],
             dataset_window_variants_tried=[hypothesis.target_symbol],
-            selection_procedure="max_in_sample_rank_ic",
+            selection_procedure="in_sample_only",
             selected_candidate_id=hypothesis.hypothesis_id,
             total_effective_trials=1,
             oos_exposure_state=oos_state,
         )
 
-        manifest_id = f"res_{hypothesis.hypothesis_id}_{primary_h}h_{uuid.uuid4().hex[:8]}"
         now_str = datetime.now(timezone.utc).isoformat()
 
         p_start_str = str(bars_table["bar_start_utc"][0].as_py())

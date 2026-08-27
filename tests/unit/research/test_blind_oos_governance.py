@@ -119,18 +119,59 @@ def test_blind_oos_state_machine_and_retuning_lock() -> None:
         )
         assert manifest2.oos_exposure_state == OosExposureState.EVALUATED_LOCKED
 
-        # 3. Attempting to re-evaluate already locked OOS -> Must raise DataContractError
-        search_record_locked = search_record.model_copy(
-            update={"oos_exposure_state": OosExposureState.EVALUATED_LOCKED}
+        # 3. Attempting to re-evaluate already locked OOS -> Must raise DataContractError and transition to EXHAUSTED
+        search_record_retry = search_record.model_copy(
+            update={"experiment_id": "EXP-002-RETUNE"}
         )
-        with pytest.raises(DataContractError, match="strictly prohibited"):
+        with pytest.raises(DataContractError, match="violates blind OOS discipline"):
             pipeline.run_hypothesis_evaluation(
                 features_table=feat_tbl,
                 bars_table=bars_tbl,
                 feature_name="obi_top5",
                 hypothesis=hyp,
                 split_policy=split_policy,
-                search_record=search_record_locked,
+                search_record=search_record_retry,
                 evaluate_oos=True,
             )
+
+        # 4. Verify durable ledger state is now permanently EXHAUSTED
+        assert engine.governance_ledger.get_oos_state(hyp.hypothesis_id) == OosExposureState.EXHAUSTED
+
+
+def test_blind_oos_rejects_missing_search_record() -> None:
+    """Verify evaluating against OOS without an explicit ResearchSearchRecord is rejected."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        engine = ResearchManifestEngine(manifests_dir=Path(tmp_dir) / "manifests")
+        pipeline = AlphaResearchPipeline(manifest_engine=engine)
+
+        feat_tbl, bars_tbl = _make_sample_dataset(num_bars=100)
+
+        hyp = HypothesisSpecification(
+            hypothesis_id="HYP-SEARCH-ACCOUNTING-TEST",
+            hypothesis_version="1.2.0",
+            economic_rationale="OOS Search Governance Verification.",
+            target_symbol="ES.FUT",
+            feature_dependencies=["obi_top5"],
+            parameter_config_json="{}",
+            expected_direction=ExpectedDirection.LONG,
+            target_horizons=[1, 2],
+            primary_horizon=2,
+            invalidation_criteria=InvalidationCriteria(
+                min_in_sample_rank_ic=Decimal("0.01"),
+                min_hac_t_stat=Decimal("1.5"),
+            ),
+            registered_at_utc="2026-08-28T00:00:00Z",
+            author="Quantitative Research",
+        )
+
+        with pytest.raises(DataContractError, match="Explicit ResearchSearchRecord is mandatory"):
+            pipeline.run_hypothesis_evaluation(
+                features_table=feat_tbl,
+                bars_table=bars_tbl,
+                feature_name="obi_top5",
+                hypothesis=hyp,
+                search_record=None,
+                evaluate_oos=True,
+            )
+
 
