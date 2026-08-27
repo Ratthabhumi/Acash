@@ -1,9 +1,9 @@
 # ACASH — Phase 3: Market Microstructure & Point-in-Time Feature Subsystem Plan
 
 **Document:** `docs/PHASE_3_PLAN.md`  
-**Version:** 1.2.0  
+**Version:** 1.3.0  
 **Date:** 2026-08-27  
-**Status:** **PROPOSED — FINAL PRE-SIGNOFF PASS COMPLETED**  
+**Status:** **PROPOSED — AWAITING FINAL ARCHITECTURAL SIGN-OFF**  
 
 ---
 
@@ -72,18 +72,19 @@ Microstructure events distinguish between three temporal coordinate systems:
 
 ## 3. Session Labeling, Sequence Scoping & Reset Semantics
 
-### 3.1 CME Trading Session Labeling (`trading_date`)
-In centralized futures markets (e.g. CME Globex), trading sessions span across calendar day boundaries.
-- **Session Definition:** `trading_date` is the **CME Trading Session Label** determined in `America/Chicago` (CT) timezone, **NOT simply the UTC calendar date**.
-- **Session Boundaries:**
-  - Sunday 17:00 CT $\to$ Monday 16:00 CT is assigned `trading_date = Monday` (YYYY-MM-DD).
-  - Monday 17:00 CT $\to$ Tuesday 16:00 CT is assigned `trading_date = Tuesday` (YYYY-MM-DD).
-  - *Example:* An event occurring at `2026-01-18 23:30:00 UTC` (which is Sunday 17:30 CT) is labeled with `trading_date = 2026-01-19` (Monday session).
-
-### 3.2 Sequence Number Scoping & Reset Semantics (`source_seq_num`)
+### 3.1 Calendar-Driven Trading Session Labeling (`trading_date`)
 > [!IMPORTANT]
-> **Opaque Sequence Identifier & Explicit Discontinuity Classification:**
-> `source_seq_num` is an **opaque upstream/feed sequence identifier**. Reset and restart semantics are source/feed/channel specific and **MUST be declared by the source adapter or feed specification**. ACASH **MUST NOT** infer a reset solely from `trading_date` or session boundaries.
+> **Calendar-Driven Session Determination:**
+> `trading_date` is a **session label produced by a versioned market/session calendar**.
+> - For CME reference datasets, the default calendar may use `America/Chicago` (CT), but session boundaries, holidays, daily maintenance windows, and schedule exceptions **MUST be supplied by the dataset/product calendar specification**.
+> - ACASH **MUST NOT** infer universal session boundaries from UTC time alone.
+
+### 3.2 Sequence Number Scoping & Semantic Boundaries (`source_seq_num`)
+> [!IMPORTANT]
+> **Opaque Sequence Identifier & Semantic Boundary:**
+> `source_seq_num` is an **opaque upstream/feed sequence identifier**.
+> - The canonical schema **MUST NOT** assume that `source_seq_num` is globally unique, contiguous, replay-stable, or sufficient for event identity unless explicitly guaranteed by the source feed specification.
+> - Reset, restart, and rollover semantics are source/feed/channel specific and **MUST be declared by the source adapter or feed specification**. ACASH **MUST NOT** infer a sequence reset solely from `trading_date` or session boundaries.
 >
 > Sequence transitions are explicitly classified as:
 > 1. **`EXPECTED_RESET`:** A sequence drop/restart explicitly declared and signaled by the feed/adapter (e.g. channel reconnect, daily maintenance session rollover, weekly open).
@@ -147,7 +148,7 @@ CANONICAL_TRADES_SCHEMA = pa.schema([
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
     pa.field("source_seq_num", pa.int64(), nullable=False),
     pa.field("trade_id", pa.string(), nullable=True),         # Nullable: source-provided when available
-    pa.field("match_sub_idx", pa.int32(), nullable=False),    # 0, 1, 2... for multiple matches per message
+    pa.field("match_sub_idx", pa.int32(), nullable=False),    # Deterministic sub-index for multi-match packets
     pa.field("price", pa.decimal128(38, 18), nullable=False),
     pa.field("size", pa.decimal128(38, 18), nullable=False),
     pa.field("aggressor_side", pa.string(), nullable=False),  # "BUY", "SELL", "UNKNOWN"
@@ -227,16 +228,16 @@ To guarantee that provenance hashes are **deterministic and computationally coll
 
 ## 7. Storage Layout & Partitioning Strategy
 
-Because high-frequency futures microstructure generates $10^5$ to $10^7$ events daily, storage partitions are organized at **Daily granularity**:
+Partition granularity is selected based on expected event volume, query workload, retention requirements, and benchmark results (e.g. daily partitioning as standard for high-volume tick/depth streams):
 
 ```
 data/
 └── parquet/
     ├── ohlcv/                               # Phase 2 (Annual partition)
     │   └── {symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet
-    ├── trades/                              # Phase 3A (Daily partition)
+    ├── trades/                              # Phase 3A (Configurable / Daily partition)
     │   └── {symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet
-    ├── orderbook/                           # Phase 3B (Daily partition)
+    ├── orderbook/                           # Phase 3B (Configurable / Daily partition)
     │   ├── snapshots/{symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet
     │   └── deltas/{symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet
     └── features/                            # Phase 3C (Precomputed research features)
@@ -249,20 +250,28 @@ data/
 
 ## 8. Phase 3C: Microstructure Research Engine & Feature Reproducibility Contract
 
-### 8.1 Mathematical Feature Scope
-Phase 3C operates strictly downstream from canonical events, computing derived microstructure features:
+### 8.1 Mathematical Feature Scope & Research Conventions
+> [!IMPORTANT]
+> **Configurable Research Conventions (Not Universal Market Truths):**
+> Analytical thresholds (e.g. Value Area % = 70%, Imbalance Ratio = 3.0, Absorption Thresholds) are **configurable research conventions / baseline parameters**, not universal physical market truths.
+>
+> All thresholds and mathematical definitions **MUST**:
+> 1. Live in versioned feature parameter configuration schemas.
+> 2. Be cryptographically hashed into `parameter_config_sha256`.
+> 3. Be captured in the **Feature Manifest** for deterministic reproducibility.
+> 4. Remain strictly downstream research interpretations decoupled from canonical events.
 
 1. **Volume Weighted Average Price (VWAP):**
    $$VWAP_{\text{session}}(t) = \frac{\sum_{i: t_i \le t} P_i \cdot V_i}{\sum_{i: t_i \le t} V_i}, \quad \sigma(t) = \sqrt{\frac{\sum (P_i - VWAP)^2 \cdot V_i}{\sum V_i}}$$
-2. **Volume Profile & Auction Market Theory:**
-   - Point of Control (POC), Value Area High (VAH), Value Area Low (VAL, 70% volume threshold).
+2. **Volume Profile & Auction Market Theory (Configurable):**
+   - Point of Control (POC), Value Area High (VAH), Value Area Low (VAL, default `value_area_pct = 0.70`).
    - High Volume Nodes (HVN) / Low Volume Nodes (LVN).
-3. **Footprint & Order Flow Analytics:**
+3. **Footprint & Order Flow Analytics (Configurable):**
    - Price Tick Bid/Ask Volume Clusters.
    - Bar Delta ($\Delta = V_{\text{ask}} - V_{\text{bid}}$) & Cumulative Volume Delta (CVD).
-   - Diagonal Imbalance ($V_{\text{ask}, P+1} \ge 3 \times V_{\text{bid}, P}$) & Stacked Imbalance.
-   - Absorption Detection (Large trade volume at extreme price with zero price progression).
-4. **Order Book Microstructure Signals:**
+   - Diagonal Imbalance ($V_{\text{ask}, P+1} \ge \text{ratio} \times V_{\text{bid}, P}$, default `imbalance_ratio = 3.0`) & Stacked Imbalance.
+   - Absorption Detection (configurable volume threshold at extreme price with zero price progression).
+4. **Order Book Microstructure Signals (Configurable):**
    - Order Book Imbalance ($OBI = \frac{Q_{\text{bid}} - Q_{\text{ask}}}{Q_{\text{bid}} + Q_{\text{ask}}}$).
    - Micro-Price ($P_{\text{micro}} = \frac{Q_{\text{bid}} \cdot P_{\text{ask}} + Q_{\text{ask}} \cdot P_{\text{bid}}}{Q_{\text{bid}} + Q_{\text{ask}}}$).
 
@@ -305,7 +314,7 @@ Phase 3 completion is governed by 3 sequential quality gates:
 - [ ] **Hash Layout Invariance Test:** Writing via different Parquet codecs (zstd vs snappy) produces identical `canonical_trades_sha256` (`test_canonical_trades_hash_codec_invariance`).
 - [ ] **Hash Sensitivity Test:** Modifying any canonical field (price, size, aggressor side, condition) alters the hash (`test_canonical_trades_hash_detects_any_modification`).
 - [ ] **Nanosecond Distinguishability Test:** Nanosecond timestamp differences in the last 3 digits (e.g. 100ns vs 200ns) produce distinct hashes (`test_canonical_trades_hash_nanosecond_distinguishability`).
-- [ ] **Daily Partitioning & Storage:** Daily Parquet partition storage verified for trades (`data/parquet/trades/{symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet`).
+- [ ] **Partitioning & Storage:** Parquet partition storage verified for trades (`data/parquet/trades/{symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet`).
 - [ ] **DuckDB PIT Query:** Point-in-time qualification query retrieves trades $\le T_{\text{as\_of}}$ with zero look-ahead leakage.
 
 ### Gate 3B Criteria (Order Book Subsystem):
@@ -315,7 +324,7 @@ Phase 3 completion is governed by 3 sequential quality gates:
 - [ ] Monotonic sequence validation flags missing packet gaps (`GAP_DETECTED`).
 
 ### Gate 3C Criteria (Microstructure Research Engine):
-- [ ] VWAP, Volume Profile, Footprint Delta, and Imbalance calculations implemented as pure mathematical functions.
+- [ ] VWAP, Volume Profile, Footprint Delta, and Imbalance calculations implemented as pure mathematical functions with configurable versioned parameters.
 - [ ] **Automated Anti-Leakage Test:** Injected future trades/book updates strictly do not alter feature values for $T \le T_{\text{decision}}$.
 - [ ] Zero trading strategy / BUY-SELL logic present in codebase.
 - [ ] All unit and integration tests pass (100% pass rate) with zero `mypy` type errors.

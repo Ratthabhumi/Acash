@@ -265,11 +265,12 @@
 - **Decision:**
   1. **Domain Decoupling:** OHLCV (Phase 2), Trades (Phase 3A), and Order Book (Phase 3B) remain completely independent canonical domains with separate Arrow schemas, partition layouts, and point-in-time qualification queries.
   2. **Tri-Temporal Model:** Explicitly distinguishes `exchange_time_utc` (`timestamp[ns, tz=UTC]`, matching engine chronology), `feed_time_utc` (`timestamp[ns, tz=UTC]`, optional network egress), and `knowledge_time_utc` (`timestamp[us, tz=UTC]`, ACASH PIT qualification).
-  3. **Opaque Sequence Scoping:** `source_seq_num` is an opaque upstream sequence identifier scoped to `(source_id, channel_id, symbol, trading_date)`. Reset/restart rules are declared by source feeds and not inferred from calendar boundaries.
-  4. **Message Identity vs. Row Identity:** Exchange network messages (packets) are decoupled from canonical row instances. Multi-trade/multi-depth messages expand deterministically via `match_sub_idx` and `level_idx`.
-  5. **`trade_id` Optionality:** `trade_id` is nullable; ACASH never invents synthetic exchange IDs. Row uniqueness is guaranteed via the compound key.
-  6. **Length-Prefixed Binary Serialization:** Provenance hashes (`canonical_trades_sha256`, `canonical_book_sha256`) use length-prefixed binary encoding `[uint32_be(len)][bytes]`, lossless `int64_be(epoch_nanoseconds)`, and record separator `0x1E`, guaranteeing collision-resistant determinism.
-  7. **Downstream Feature Boundary (Phase 3C):** Order Flow, Footprint Delta, Volume Profile, and VWAP are computed as pure downstream mathematical transformations with zero strategy/signal logic.
+  3. **Calendar-Driven Session Determination:** `trading_date` is a session label produced by a versioned market/session calendar, not inferred from UTC time alone.
+  4. **Opaque Sequence Scoping & Boundaries:** `source_seq_num` is an opaque upstream sequence identifier scoped to `(source_id, channel_id, symbol, trading_date)`. The schema does not assume contiguity, global uniqueness, or replay stability unless guaranteed by the source specification. Reset/restart rules are declared by source feeds and not inferred from session boundaries.
+  5. **Message Identity vs. Row Identity:** Exchange network messages (packets) are decoupled from canonical row instances. Multi-trade/multi-depth messages expand deterministically via `match_sub_idx` and `level_idx`.
+  6. **`trade_id` Optionality:** `trade_id` is nullable; ACASH never invents synthetic exchange IDs. Row uniqueness is guaranteed via the compound key.
+  7. **Length-Prefixed Binary Serialization:** Provenance hashes (`canonical_trades_sha256`, `canonical_book_sha256`) use length-prefixed binary encoding `[uint32_be(len)][bytes]`, lossless `int64_be(epoch_nanoseconds)`, and record separator `0x1E`, guaranteeing collision-resistant determinism.
+  8. **Downstream Feature Boundary & Configurable Research Conventions (Phase 3C):** Order Flow, Footprint Delta, Volume Profile (Value Area 70%), Imbalance (3x), and VWAP are computed as pure downstream mathematical transformations with versioned parameter configuration captured in Feature Manifests, containing zero strategy/signal logic.
 - **Consequences:** Provides a rigorous, mathematically sound foundation for tick-by-tick microstructure research while eliminating look-ahead bias and delimiter ambiguity.
 
 
