@@ -1,9 +1,9 @@
 """Canonical PyArrow schema and data contracts for the ACASH Trades Domain (Phase 3A).
 
 Strictly enforces:
-- exchange_time_utc: timestamp[ns, tz=UTC] (lossless nanosecond matching chronology)
-- feed_time_utc: timestamp[ns, tz=UTC] (optional/nullable network egress timestamp)
-- knowledge_time_utc: timestamp[us, tz=UTC] (microsecond ACASH observation timestamp)
+- exchange_time_utc: timestamp[ns, tz=UTC] (source-defined market event timestamp)
+- feed_time_utc: timestamp[ns, tz=UTC] (optional source/feed timing metadata when explicitly supplied)
+- knowledge_time_utc: timestamp[us, tz=UTC] (microsecond ACASH observation timestamp for PIT qualification)
 - source_seq_num: int64 (opaque upstream sequence identifier)
 - trade_id: string (nullable, source-provided when available; never synthetically fabricated)
 - match_sub_idx: int32 (deterministic sub-index for multi-match packets)

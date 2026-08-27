@@ -52,9 +52,10 @@ Microstructure events distinguish between three temporal coordinate systems:
 
 | Timestamp Field | Precision / Type | Semantic Definition | Authoritative Role |
 | :--- | :--- | :--- | :--- |
-| **`exchange_time_utc`** | `timestamp[ns, tz=UTC]` (Required) | Nanosecond matching engine timestamp assigned by exchange (e.g. CME Globex MDP 3.0 match event). | **Chronological Order of Market Reality** |
-| **`feed_time_utc`** | `timestamp[ns, tz=UTC]` (Optional / Nullable) | Nanosecond timestamp assigned by feed gateway / packet multicast router upon network egress. | **Feed Latency & Network Jitter Analysis** |
+| **`exchange_time_utc`** | `timestamp[ns, tz=UTC]` (Required) | Source-defined market event timestamp with nanosecond resolution. Semantic meaning is derived from the source/adapter feed contract. | **Chronological Order of Market Reality** |
+| **`feed_time_utc`** | `timestamp[ns, tz=UTC]` (Optional / Nullable) | Optional source/feed timing metadata when explicitly supplied by the gateway/router. | **Feed Latency & Network Jitter Analysis** |
 | **`knowledge_time_utc`** | `timestamp[us, tz=UTC]` (Required) | Microsecond UTC timestamp when ACASH ingestion pipeline observed and persisted the record. | **ACASH Point-in-Time (P-I-T) Qualification** |
+
 
 ### 2.2 Clock Domain & Invariant Boundary
 > [!IMPORTANT]
