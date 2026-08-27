@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.14.0 (Recoverable Two-Artifact Batch Commit & Crash Recovery Protocol Locked)  
+**Version:** 1.15.0 (Recoverable Batch Commit Protocol with Commit-Intent Manifest Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -10,7 +10,7 @@
 ## 1. Core Principles & Philosophy
 
 The ACASH Data Subsystem operates on one fundamental principle:
-$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Split \& Normalize}} \text{Canonical Ingestion Units} \xrightarrow{\text{logical batch SHA-256}} \text{Recoverable Two-Artifact Commit} \to \text{P-I-T Query}$$
+$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Split \& Normalize}} \text{Canonical Ingestion Units} \xrightarrow{\text{logical batch SHA-256}} \text{Recoverable Batch Commit} \to \text{P-I-T Query}$$
 
 > [!CRITICAL]
 > **Zero Historical Distortion:** The data validator's objective is to certify dataset trustworthiness, **NOT to make historical data look artificially smooth or clean**. Anomalies are flagged, never silently deleted or mutated.
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout, Global Batch Scope & Recoverable Two-Artifact Commit
+## 3. Storage Layout, Global Batch Scope & Recoverable Batch Commit Protocol
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -73,8 +73,8 @@ $$\text{ONE batch\_id} \equiv \text{ONE Ingestion Unit} \equiv \text{ONE source\
    `read_parquet('data/parquet/{symbol}/{timeframe}/**/*.parquet')`
 4. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
 
-### 3.3 Recoverable Two-Artifact Batch Commit & Crash Recovery Protocol:
-The canonical Parquet part and provenance record form a **recoverable two-artifact atomic commit** without requiring external transaction engines:
+### 3.3 Recoverable Batch Commit Protocol (Commit-Intent Manifest):
+To guarantee audit lineage recovery without introducing heavyweight external databases, the ingestion pipeline writes a durable **Commit-Intent Manifest** before publishing the canonical Parquet part:
 
 ```
                           INGESTION & COMMIT LIFECYCLE
@@ -83,31 +83,51 @@ The canonical Parquet part and provenance record form a **recoverable two-artifa
                                        │
                          2. Normalize Data Records
                                        │
-                   3. Compute canonical_batch_sha256
+                        3. Compute raw_source_sha256
                                        │
-                     4. Write Temp Staging Parquet
+                      4. Compute canonical_batch_sha256
+                                       │
+                 5. Write + fsync Commit-Intent Manifest
+                    (data/manifests/manifest-{batch_id}.json)
+                                       │
+                     6. Write Temp Staging Parquet Part
                          (.tmp_part_{uuid}.parquet)
                                        │
-                         5. Validate Staged File
+                         7. Validate Staged File
                                        │
-                 6. Atomic Publish: os.replace(part.parquet)
+                 8. Atomic Publish: os.replace(part.parquet)
                                        │
-               7. Append Provenance: data/provenance_ledger.jsonl
+               9. Append Provenance: data/provenance_ledger.jsonl
+                  (Populated deterministically from manifest)
                                        │
-                       8. Reconcile / Mark Committed
+                     10. Reconcile / Mark Committed
 ```
 
-#### Crash Recovery Rules:
-1. **Crash After Part Publication (Post-Step 6, Pre-Step 7):**
-   - If a crash occurs after the Parquet part is atomically renamed but before the provenance record is appended, the next ingestion pass or recovery check detects `part-{batch_id}.parquet`.
-   - The recovery engine validates the logical data content against `canonical_batch_sha256`:
-     - If matching $\implies$ Reconciles and appends the missing provenance record to `data/provenance_ledger.jsonl` (ensuring exactly one audit record per `batch_id` without duplicate parts).
-     - If differing content $\implies$ Raises a fatal `BatchCollisionError`.
-2. **Crash Before Part Publication (Pre-Step 6):**
-   - Temporary staging files (`.tmp_part_*.parquet`) are discarded, leaving canonical storage completely clean. The ingestion safely restarts.
-3. **Idempotency Guarantee:**
-   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (returns the existing single part path and verifies that provenance is complete).
-   - Provenance log appends are idempotent: no duplicate records are created for the same `batch_id`.
+#### Minimum Required Manifest Fields:
+- `batch_id`: Globally unique immutable batch identity
+- `source_id`: Originating source identifier
+- `source_uri_or_path`: Raw input URI or path
+- `raw_source_sha256`: SHA-256 of raw input payload
+- `canonical_batch_sha256`: Deterministic logical canonical data hash
+- `schema_version`: Data contract schema version (e.g. `1.15.0`)
+- `transform_version`: Transformation logic version
+- `symbol`, `timeframe`, `year_partition`: Target partition coordinates
+- `row_count`, `min_event_time_utc`, `max_event_time_utc`: Stream boundaries and size
+
+#### Deterministic Crash Recovery Rules:
+1. **Case A (Crash after Part Publication, before Provenance Append):**
+   $$\text{Manifest Exists} + \text{Part Exists} + (\text{Recomputed Part Hash} == \text{Manifest Hash}) + \text{Provenance Missing}$$
+   $\implies$ Recovery reconstructs and appends the complete, authentic provenance record from the manifest into `data/provenance_ledger.jsonl` and marks the batch committed. No new part file is created.
+2. **Case B (Crash before Part Publication):**
+   $$\text{Manifest Exists} + \text{Part Missing}$$
+   $\implies$ Temporary staging files are discarded; the operation restarts cleanly from staging.
+3. **Case C (Orphan Part without Manifest & Provenance):**
+   $$\text{Part Exists} + \text{Manifest Missing} + \text{Provenance Missing}$$
+   $\implies$ Recovery **DOES NOT invent or guess missing provenance metadata**. The orphan part is quarantined and an unrecoverable integrity error is raised for operator resolution.
+4. **Case D (Batch Collision):**
+   $$\text{Existing } \text{batch\_id} + \text{Differing Canonical Content}$$
+   $\implies$ Raised as a fatal `BatchCollisionError`.
+5. **Idempotency Guarantee:** Retrying an already committed `batch_id` with identical content is a verified no-op (verifies part existence and provenance entry completeness without creating duplicates).
 
 ---
 
@@ -246,7 +266,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.14.0",
+  "schema_version": "1.15.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

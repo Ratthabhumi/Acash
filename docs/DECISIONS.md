@@ -242,10 +242,11 @@
      - `raw_source_sha256`: SHA-256 of raw input bytes.
      - `canonical_batch_sha256`: SHA-256 computed over the deterministic binary serialization of canonical data columns sorted by Revision Identity (excluding digest fields). Completely invariant to physical Parquet compression, chunking, or input row permutations.
      - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
-  8. **Recoverable Two-Artifact Commit & Crash Recovery Protocol:**
-     - A canonical Parquet part and its provenance ledger record form a recoverable two-artifact commit under the single-writer model.
-     - Sequence: validate $\to$ normalize $\to$ compute `canonical_batch_sha256` $\to$ write/validate staging part $\to$ `os.replace` to `part-{batch_id}.parquet` $\to$ append provenance ledger $\to$ mark committed.
-     - Crash Recovery: If a process crash occurs after part publication but before provenance append, the recovery engine detects the published part, verifies `canonical_batch_sha256`, and deterministically completes the missing provenance record without creating duplicate parts or duplicate ledger entries.
+  8. **Recoverable Batch Commit Protocol (Commit-Intent Manifest):**
+     - Single-writer model without heavy distributed transactions.
+     - Sequence: validate $\to$ normalize $\to$ compute `raw_source_sha256` and `canonical_batch_sha256` $\to$ write/fsync Commit-Intent Manifest (`data/manifests/manifest-{batch_id}.json`) $\to$ write/validate staging part $\to$ `os.replace` to `part-{batch_id}.parquet` $\to$ append provenance ledger from manifest metadata $\to$ mark committed.
+     - Crash Recovery: If a crash occurs after part publication but before provenance append, the recovery engine verifies the published part against the manifest's `canonical_batch_sha256` and reconstructs the complete provenance record from the manifest without guessing. Orphan parts without manifests are quarantined.
+
 
 - **Consequences:** Eliminates partition overwrite data-loss risks, decouples event-time sequencing from revision ordering, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
 
