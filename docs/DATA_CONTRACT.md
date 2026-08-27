@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.13.0 (One Batch = One Canonical Part Ingestion Unit & Idempotency Locked)  
+**Version:** 1.14.0 (Recoverable Two-Artifact Batch Commit & Crash Recovery Protocol Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -10,7 +10,7 @@
 ## 1. Core Principles & Philosophy
 
 The ACASH Data Subsystem operates on one fundamental principle:
-$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Normalize \& Sort}} \text{Canonical Logical Batch} \xrightarrow{\text{logical batch SHA-256}} \text{Immutable Part File} \to \text{P-I-T Query}$$
+$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Split \& Normalize}} \text{Canonical Ingestion Units} \xrightarrow{\text{logical batch SHA-256}} \text{Recoverable Two-Artifact Commit} \to \text{P-I-T Query}$$
 
 > [!CRITICAL]
 > **Zero Historical Distortion:** The data validator's objective is to certify dataset trustworthiness, **NOT to make historical data look artificially smooth or clean**. Anomalies are flagged, never silently deleted or mutated.
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout, Global Batch Scope & Idempotency Contract
+## 3. Storage Layout, Global Batch Scope & Recoverable Two-Artifact Commit
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -71,15 +71,43 @@ $$\text{ONE batch\_id} \equiv \text{ONE Ingestion Unit} \equiv \text{ONE source\
 2. **Never Overwrite Existing Parts:** Normal ingestion never overwrites, truncates, or replaces existing part files.
 3. **Partition Scanning:** DuckDB reads the full historical dataset across all parts using parquet file globs:
    `read_parquet('data/parquet/{symbol}/{timeframe}/**/*.parquet')`
-4. **Atomic Staging Pattern:**
-   $$\text{Write Temp (.tmp\_part\_*.parquet)} \to \text{Flush/Close} \to \text{Validate Staged File} \to \text{os.replace into Canonical Part Path}$$
-   Under supported filesystem semantics, readers will not observe the final path as a partially written staging file, and a failed write leaves existing parts completely intact.
-5. **Global Batch Idempotency Contract:**
-   - `batch_id` is a **globally unique immutable ingestion identity across the entire ACASH canonical dataset**.
-   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (no-op; returns the single existing part path without creating duplicate parts).
-   - Ingesting an existing `batch_id` with differing canonical content is rejected with a fatal `BatchCollisionError`.
-   - Each `batch_id` produces **exactly one provenance audit record** containing its canonical part path in the Provenance Ledger (`data/provenance_ledger.jsonl`).
-6. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
+4. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
+
+### 3.3 Recoverable Two-Artifact Batch Commit & Crash Recovery Protocol:
+The canonical Parquet part and provenance record form a **recoverable two-artifact atomic commit** without requiring external transaction engines:
+
+```
+                          INGESTION & COMMIT LIFECYCLE
+                                       │
+                         1. Validate Input Streams
+                                       │
+                         2. Normalize Data Records
+                                       │
+                   3. Compute canonical_batch_sha256
+                                       │
+                     4. Write Temp Staging Parquet
+                         (.tmp_part_{uuid}.parquet)
+                                       │
+                         5. Validate Staged File
+                                       │
+                 6. Atomic Publish: os.replace(part.parquet)
+                                       │
+               7. Append Provenance: data/provenance_ledger.jsonl
+                                       │
+                       8. Reconcile / Mark Committed
+```
+
+#### Crash Recovery Rules:
+1. **Crash After Part Publication (Post-Step 6, Pre-Step 7):**
+   - If a crash occurs after the Parquet part is atomically renamed but before the provenance record is appended, the next ingestion pass or recovery check detects `part-{batch_id}.parquet`.
+   - The recovery engine validates the logical data content against `canonical_batch_sha256`:
+     - If matching $\implies$ Reconciles and appends the missing provenance record to `data/provenance_ledger.jsonl` (ensuring exactly one audit record per `batch_id` without duplicate parts).
+     - If differing content $\implies$ Raises a fatal `BatchCollisionError`.
+2. **Crash Before Part Publication (Pre-Step 6):**
+   - Temporary staging files (`.tmp_part_*.parquet`) are discarded, leaving canonical storage completely clean. The ingestion safely restarts.
+3. **Idempotency Guarantee:**
+   - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (returns the existing single part path and verifies that provenance is complete).
+   - Provenance log appends are idempotent: no duplicate records are created for the same `batch_id`.
 
 ---
 
@@ -218,7 +246,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.13.0",
+  "schema_version": "1.14.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",
