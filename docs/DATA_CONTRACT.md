@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.9.0 (Revision Sequence Event-Scoped Uniqueness Finalized)  
+**Version:** 1.10.0 (Event End Consistency Across Revisions Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -27,7 +27,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 | `symbol` | `string` | Normalized instrument identifier (e.g. `BTC/USDT`, `EUR/USD`, `AAPL`) |
 | `timeframe` | `string` | Bar resolution string (`M1`, `M5`, `M15`, `H1`, `H4`, `D1`) |
 | `event_start_utc` | `timestamp[us, tz=UTC]` | Exact bar opening timestamp in UTC (Microsecond precision) |
-| `event_end_utc` | `timestamp[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microsecond precision) |
+| `event_end_utc` | `timestamp[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microsecond precision, immutable per event) |
 | `knowledge_time_utc`| `timestamp[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microsecond precision) |
 | `revision_seq` | `int64` | Deterministic revision sequence strictly unique within `Event Observation Key` ($\ge 1$) |
 | `open` | `decimal128(38, 18)` | Opening price within explicit precision/scale limits |
@@ -80,11 +80,12 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 
 ACASH explicitly decouples **Event Time** ($t_{\text{event}}$) from **Knowledge Time** ($t_{\text{knowledge}}$).
 
-### 4.1 Temporal Ordering Invariants (Separation of Event Time vs Revision Ordering):
+### 4.1 Temporal Ordering Invariants:
 1. **Intra-Bar Interval:** $t_{\text{event\_start}} < t_{\text{event\_end}}$
 2. **Knowledge Invariant:** $t_{\text{knowledge}} \ge t_{\text{event\_end}}$ (No observation can be known before its bar interval closes)
-3. **Distinct Event Monotonicity:** For distinct event observation keys $j$ and $j+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
-4. **Revision Ordering Within Event:** Multiple valid revisions sharing the **same** `event_start_utc` are permitted. Revisions within an event are ordered and validated by strictly distinct `(knowledge_time_utc, revision_seq)`. They do **not** violate event-time monotonicity.
+3. **Event End Consistency Across Revisions:** For every `Event Observation Key = (source_id, symbol, timeframe, event_start_utc)`, all historical revisions must have the **exact same `event_end_utc`**. If two revisions for the same Event Observation Key have differing `event_end_utc`, the ingestion is rejected as a **fatal error (`ERROR / INVALID`)**.
+4. **Distinct Event Monotonicity:** For distinct event observation keys $j$ and $j+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
+5. **Revision Ordering Within Event:** Multiple valid revisions sharing the **same** `event_start_utc` and `event_end_utc` are permitted. Revisions within an event are ordered and validated by strictly distinct `(knowledge_time_utc, revision_seq)`. They do **not** violate event-time monotonicity.
 
 ### 4.2 Event Observation Key, Revision Identity & `revision_seq` Contract:
 ACASH makes a strict distinction between the **event being observed** and its **specific historical revision**:
@@ -165,7 +166,8 @@ Integrity validation operates strictly per independent data stream: `(source_id,
    - OHLC Geometry Violations                          - Unexpected Cadence Gap
    - Non-finite (NaN / Inf)                            - High-Low Spread Expansion
    - Invalid / Future Timestamps                       - Missing Secondary Fields (quote_vol, trade_count)
-   - Distinct Event Monotonicity Violations            - Statistically unusual observations
+   - Event End Inconsistency Across Revisions         - Statistically unusual observations
+   - Distinct Event Monotonicity Violations            
    - Duplicate Event-Scoped revision_seq               
    - Duplicate Global Revision Identities              
    - Schema / Type / Precision Boundary Mismatch
@@ -203,7 +205,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.9.0",
+  "schema_version": "1.10.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

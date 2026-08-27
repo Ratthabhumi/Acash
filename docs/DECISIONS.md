@@ -211,9 +211,11 @@
      - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against incoming batches and existing canonical parts under the **Phase 2 single-writer scope**.
 
 
-  5. **Distinct Event Monotonicity vs Revision Ordering:**
+  5. **Distinct Event Monotonicity & `event_end_utc` Consistency Across Revisions:**
+     - All revisions for the same Event Observation Key must have the exact same `event_end_utc` (differing values rejected as `ERROR / INVALID`).
      - Event-time monotonicity is validated over distinct event observation keys: $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
      - Revisions within an event are ordered and validated by distinct `(knowledge_time_utc, revision_seq)` with $t_{\text{knowledge}} \ge t_{\text{event\_end}}$.
+
   6. **Source-Aware P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
