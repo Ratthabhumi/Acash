@@ -1,7 +1,7 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.1.0  
+**Version:** 3.2.0  
 **Date:** 2026-08-27  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
@@ -10,16 +10,16 @@
 ## Roadmap Overview
 
 ```
-Phase 0: Discovery & Architecture [CURRENT - READY FOR APPROVAL]
+Phase 0: Discovery & Architecture [COMPLETED - PASSED]
    │
    ▼
-Phase 1: Foundation & Domain Core ──► Gate 1
+Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED - PASSED]
    │
    ▼
-Phase 2: Data Ingestion & Integrity Engine ──► Gate 2
+Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED - PASSED]
    │
    ▼
-Phase 3: Point-in-Time Feature Engine ──► Gate 3
+Phase 3: Point-in-Time Feature Engine ──► Gate 3 [UPCOMING]
    │
    ▼
 Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4

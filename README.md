@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 0 Complete](https://img.shields.io/badge/status-Phase%200%20Approved-success.svg)](#)
+[![Status: Phase 2 Complete](https://img.shields.io/badge/status-Phase%202%20Gate%20Passed-success.svg)](#)
 
 ---
 
@@ -258,19 +258,20 @@ Measures systematic deviation across Entry Price ($\Delta_{\text{entry}}$), Mark
 
 ## 6. Documentation Index (`docs/`)
 
-The complete canonical documentation suite is organized in [`docs/`](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs):
+The complete canonical documentation suite is organized in [`docs/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs):
 
-- **[docs/PROJECT_STATUS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
-- **[docs/ROADMAP.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
-- **[docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
-- **[docs/ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
-- **[docs/DATA_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) vs Transactional (SQLite), `yfinance` boundaries, and bi-temporal schema.
-- **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
-- **[docs/EXECUTION_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus PoC candidate).
-- **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
-- **[docs/DECISIONS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-018**).
-- **[docs/RISKS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
-- **[docs/PHASE_1_PLAN.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PHASE_1_PLAN.md)**: Scope, dependency classifications, and correctness acceptance criteria for Phase 1.
+- **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)**: Canonical Market Data Contract (v1.16.0), Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
+- **[docs/DATA_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) partitioned immutable parts, bi-temporal P-I-T qualification queries, and provenance ledger.
+- **[docs/DECISIONS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-019**).
+- **[docs/PROJECT_STATUS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
+- **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
+- **[docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
+- **[docs/ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
+- **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
+- **[docs/EXECUTION_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus PoC candidate).
+- **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
+- **[docs/RISKS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
+
 
 ---
 
