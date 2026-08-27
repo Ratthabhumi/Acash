@@ -94,5 +94,19 @@ QUALIFY ROW_NUMBER() OVER (
 ORDER BY source_id ASC, event_start_utc ASC;
 ```
 
+---
 
+## 6. Immutable Append-Only Part Storage Layout
 
+To guarantee that subsequent ingestions never overwrite previous data batches:
+
+```
+data/parquet/{symbol}/{timeframe}/year={YYYY}/
+├── part-000001-{batch_id}.parquet
+├── part-000002-{batch_id}.parquet
+└── ...
+```
+
+- Each ingestion batch is written as a new immutable `.parquet` part file.
+- Writing uses a staging file (`.tmp_part_*.parquet`) validated before atomic replacement (`os.replace`) into its unique canonical part name.
+- DuckDB scans all historical parts concurrently via glob patterns (`**/*.parquet`).

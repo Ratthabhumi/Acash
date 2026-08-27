@@ -189,22 +189,23 @@
 
 ---
 
-## ADR-019: Canonical Parquet Storage, Provenance-Aware Revision Semantics & Data Contract
+## ADR-019: Immutable Part Storage, Provenance-Aware Revisions & Data Contract
 - **Status:** Approved
-- **Context:** Financial market data often arrives late or undergoes historical revision. Standard time-series queries filtering only `knowledge_time <= as_of` return multiple versions of the same event observation, causing look-ahead bias or state desynchronization. Furthermore, float downcasting risks precision loss, and nanosecond timestamps lose precision when ingested into DuckDB's native microsecond `TIMESTAMPTZ`.
+- **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must not cross independent source streams, and duplicate revision identities must be deterministically rejected.
 - **Decision:**
-  1. **Canonical Physical Storage & Types:** Datasets are stored in partitioned Parquet files using Arrow schema:
+  1. **Immutable Append-Only Part Storage:** Datasets are stored as partitioned immutable part files:
+     `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`
+     Normal ingestion never overwrites existing part files; DuckDB queries scan all parts via Parquet globs.
+  2. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
-     - Financial Numerics: `Decimal128(38, 18)` (38 total digits, 18 scale decimal places, supporting satoshis/wei crypto fractions and large volumes without overflow).
-     - Partitioning: `data/parquet/{symbol}/{timeframe}/year={YYYY}/data.parquet`.
-  2. **Provenance-Aware Revision Identity & As-Of Invariant:**
+     - Financial Numerics: `Decimal128(38, 18)` (Canonical representation within explicit precision/scale bounds; out-of-bound or non-finite values rejected).
+  3. **Provenance-Aware Revision Identity & Determinism:**
      - Observation Identity: `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
-     - `revision_seq` is deterministic and scoped to `(source_id, symbol, timeframe, event_start_utc)`.
-     - At any reference timestamp $T_{\text{as\_of}}$, exactly one authoritative revision is returned per source-specific event observation.
-  3. **Source-Aware P-I-T Revision Selection Standard:**
+     - Identical observation identities in a stream are rejected as fatal deterministic errors (`ERROR / INVALID`).
+  4. **Source-Aware P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
-         SELECT * FROM read_parquet(...)
+         SELECT * FROM read_parquet('data/parquet/{symbol}/{timeframe}/**/*.parquet')
          WHERE knowledge_time_utc <= $as_of_knowledge_time_utc
            AND event_start_utc >= $start_utc AND event_end_utc <= $end_utc
      )
@@ -215,14 +216,14 @@
      ) = 1
      ORDER BY source_id ASC, event_start_utc ASC;
      ```
-  4. **Dual Provenance Hashing (Non-Circular):**
-     - `raw_source_sha256`: SHA-256 over exact raw ingested bytes.
-     - `canonical_dataset_sha256`: SHA-256 computed over deterministic binary serialization of canonical data columns, excluding digest fields themselves.
-     - Recorded in the immutable provenance ledger (`data/provenance_ledger.jsonl`).
-  5. **Atomic Write Semantics:** Parquet partitions are written to temporary staging files (`.tmp_*`), flushed, validated, and atomically replaced into canonical paths (`os.replace`) so readers under supported filesystem semantics never observe partially written files.
-  6. **Error vs Anomaly Boundary:** Fatal violations reject ingest (`ERROR`); empirical anomalies (`WARNING`) are flagged without modifying or deleting raw data.
-  7. **Configurable Session Profiles:** Cadence validation supports `CRYPTO_24_7`, `FX_24_5_DEFAULT`, `EQUITY_SESSION_DEFAULT`, and `CUSTOM` profiles.
-- **Consequences:** Eliminates bi-temporal revision leakage across distinct sources, preserves full financial precision across asset classes, avoids DuckDB timestamp truncation, guarantees atomic dataset writes, and establishes an immutable audit trail.
+  5. **Non-Circular Provenance Hashes:**
+     - `raw_source_sha256`: SHA-256 of raw input bytes.
+     - `canonical_batch_sha256`: SHA-256 of deterministic binary serialization of normalized batch columns, excluding digest fields.
+     - Stored in the immutable provenance ledger (`data/provenance_ledger.jsonl`).
+  6. **Per-Stream Validation:** Monotonicity and cadence checks execute strictly per independent `(source_id, symbol, timeframe)` stream.
+  7. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
+- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources, enforces exact precision boundaries, and guarantees atomic append-only dataset growth.
+
 
 
 
