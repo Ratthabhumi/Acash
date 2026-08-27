@@ -118,6 +118,27 @@ class TestProvenanceTracker:
 
         assert mod_hash != original_hash
 
+    def test_canonical_batch_sha256_fails_on_missing_columns(self) -> None:
+        """Fail-fast: Hashing fails explicitly if required canonical schema columns are missing."""
+        from acash.data.schema import DataContractError
+        t0 = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+        t1 = datetime(2026, 1, 1, 10, 1, tzinfo=timezone.utc)
+        incomplete_dict = {
+            "source_id": ["binance"],
+            "symbol": ["BTC/USDT"],
+            "event_start_utc": [t0],
+            "event_end_utc": [t1],
+            "close": [Decimal("100.00")],
+            # Missing open, high, low, volume, timeframe, revision_seq, etc.
+        }
+        incomplete_table = pa.Table.from_pydict(incomplete_dict)
+
+        with pytest.raises(DataContractError) as excinfo:
+            calculate_canonical_batch_sha256(incomplete_table)
+
+        assert "missing required canonical columns" in str(excinfo.value)
+
+
     def test_manifest_lifecycle_and_updates(self, tracker: ProvenanceTracker) -> None:
         batch_id = "batch_test_manifest_001"
         manifest = BatchManifest(

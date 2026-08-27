@@ -289,3 +289,18 @@ Every ingestion run records an entry in the **append-only application audit log*
 
 > [!NOTE]
 > **Audit Log Security Boundaries:** The JSONL provenance ledger is an append-only application audit log, not a cryptographically tamper-evident or chained ledger. The embedded SHA-256 hashes verify logical canonical data content. Cryptographic hash chaining or WORM storage may be evaluated in future enterprise security phases.
+
+---
+
+## 9. Recoverable Batch Commit Protocol & Pipeline Idempotency
+
+### 9.1 Ingestion Pipeline Idempotency & Deterministic Batch Identity
+1. **Deterministic Batch Identity:** In the absence of a caller-provided explicit `batch_id`, the pipeline generates deterministic batch identifiers derived from the stream identity, year partition, and raw content hash:
+   $$\text{batch\_id} = \text{batch\_}\{\text{source\_id}\}\_\{\text{symbol}\}\_\{\text{timeframe}\}\_\{\text{year}\}\_\{\text{raw\_sha256}[:16]\}$$
+2. **Replay Idempotency:** Replaying the identical raw payload is safely idempotent: it verifies matching canonical content and returns the existing part path without writing duplicate Parquet part files or duplicate provenance ledger records.
+3. **Batch Collision Detection:** Ingesting a payload using an existing `batch_id` but with different data content raises an immediate fatal `BatchCollisionError`.
+4. **Global Revision Duplicate Rejection:** The ingestion pipeline queries existing canonical Parquet parts prior to validation. Any incoming revision matching an already-persisted `Revision Identity` $(\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc}, \text{knowledge\_time\_utc}, \text{revision\_seq})$ under a different batch ID is rejected as `IntegrityViolationError` (`GLOBAL_REVISION_IDENTITY_DUPLICATE`).
+
+### 9.2 Filesystem Durability Boundaries
+Phase 2 guarantees **atomic publication semantics** (`os.replace`) under the supported filesystem model. Filesystem-level crash durability against sudden OS/hardware power loss is not claimed unless explicitly fsynced. Manifests are fsynced prior to status updates to ensure crash-safe recovery state progression (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`).
+

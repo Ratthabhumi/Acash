@@ -57,6 +57,7 @@ class IngestionPipeline:
         self,
         source_path_or_uri: Union[str, Path],
         adapter: IDataSourceAdapter,
+        batch_id: Optional[str] = None,
         batch_id_prefix: Optional[str] = None,
         abort_on_validation_error: bool = True,
     ) -> IngestionResult:
@@ -65,16 +66,51 @@ class IngestionPipeline:
         Sequence:
         1. Read raw source bytes & table.
         2. Compute raw_source_sha256.
-        3. Validate integrity and assign deterministic revision sequences.
-        4. Split into distinct 1:1 Ingestion Units by (source_id, symbol, timeframe, year_partition).
-        5. Execute Recoverable Batch Commit Protocol for each unit.
+        3. Query existing canonical revisions for global duplicate identity prevention.
+        4. Validate integrity, monotonicity, and assign deterministic revision sequences.
+        5. Split into distinct 1:1 Ingestion Units by (source_id, symbol, timeframe, year_partition).
+        6. Execute Recoverable Batch Commit Protocol with deterministic batch identity.
         """
         source_str = str(source_path_or_uri)
         raw_bytes, raw_table = adapter.read_source(source_path_or_uri)
         raw_sha256 = calculate_raw_source_sha256(raw_bytes)
 
-        # Validate integrity
-        report, validated_table = self.validator.validate_table(raw_table)
+        # Extract streams in raw table for global duplicate lookup
+        candidate_batch_ids: List[str] = []
+        if raw_table.num_rows > 0:
+            raw_pylist = raw_table.to_pylist()
+            unique_stream_years = list({
+                (
+                    str(r["source_id"]),
+                    str(r["symbol"]),
+                    str(r["timeframe"]),
+                    r["event_start_utc"].year if hasattr(r["event_start_utc"], "year") else 2026
+                )
+                for r in raw_pylist
+            })
+            unique_streams = list({(s[0], s[1], s[2]) for s in unique_stream_years})
+
+            # Calculate candidate batch_ids for idempotent replay exclusion
+            for idx, (src, sym, tf, year) in enumerate(sorted(unique_stream_years)):
+                norm_sym = sym.replace("/", "-")
+                if batch_id:
+                    b_id = batch_id if len(unique_stream_years) == 1 else f"{batch_id}_{year}_{idx+1:03d}"
+                elif batch_id_prefix:
+                    b_id = f"{batch_id_prefix}_{src}_{norm_sym}_{tf}_{year}_{raw_sha256[:12]}"
+                else:
+                    b_id = f"batch_{src}_{norm_sym}_{tf}_{year}_{raw_sha256[:16]}"
+                candidate_batch_ids.append(b_id)
+
+            existing_lookup = self.storage_engine.get_existing_revisions_lookup(
+                unique_streams, exclude_batch_ids=candidate_batch_ids
+            )
+        else:
+            existing_lookup = {}
+
+        # Validate integrity with existing revisions lookup
+        report, validated_table = self.validator.validate_table(
+            raw_table, existing_revisions_lookup=existing_lookup
+        )
 
         if not report.is_valid:
             error_msg = f"Validation failed with {report.error_count} fatal errors."
@@ -117,7 +153,7 @@ class IngestionPipeline:
         ingested_batches: List[IngestedBatchSummary] = []
         committed_part_paths: List[Path] = []
 
-        now_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        total_units = len(split_groups)
 
         # Process each 1:1 Ingestion Unit
         for idx, (group_key, group_rows) in enumerate(sorted(split_groups.items())):
@@ -128,15 +164,21 @@ class IngestionPipeline:
             }
             group_table = pa.Table.from_pydict(group_pydict, schema=CANONICAL_ARROW_SCHEMA)
 
-            # Generate unique batch_id
-            if batch_id_prefix:
-                batch_id = f"{batch_id_prefix}_{year}_{idx+1:03d}_{uuid.uuid4().hex[:6]}"
+            # Deterministic batch_id assignment
+            norm_sym = sym.replace("/", "-")
+            if batch_id:
+                if total_units == 1:
+                    unit_batch_id = batch_id
+                else:
+                    unit_batch_id = f"{batch_id}_{year}_{idx+1:03d}"
+            elif batch_id_prefix:
+                unit_batch_id = f"{batch_id_prefix}_{src}_{norm_sym}_{tf}_{year}_{raw_sha256[:12]}"
             else:
-                batch_id = f"batch_{now_str}_{src}_{sym.replace('/', '-')}_{tf}_{year}_{idx+1:03d}_{uuid.uuid4().hex[:6]}"
+                unit_batch_id = f"batch_{src}_{norm_sym}_{tf}_{year}_{raw_sha256[:16]}"
 
             part_path = self.storage_engine.write_canonical_part(
                 table=group_table,
-                batch_id=batch_id,
+                batch_id=unit_batch_id,
                 source_id=src,
                 source_uri_or_path=source_str,
                 raw_source_sha256=raw_sha256,
@@ -145,11 +187,11 @@ class IngestionPipeline:
                 warning_count=report.warning_count,
             )
 
-            manifest = self.storage_engine.provenance_tracker.load_manifest(batch_id)
+            manifest = self.storage_engine.provenance_tracker.load_manifest(unit_batch_id)
             c_hash = manifest.canonical_batch_sha256 if manifest else ""
 
             summary = IngestedBatchSummary(
-                batch_id=batch_id,
+                batch_id=unit_batch_id,
                 source_id=src,
                 symbol=sym,
                 timeframe=tf,
@@ -160,6 +202,7 @@ class IngestionPipeline:
             )
             ingested_batches.append(summary)
             committed_part_paths.append(part_path)
+
 
         return IngestionResult(
             is_successful=True,

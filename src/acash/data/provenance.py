@@ -121,7 +121,15 @@ def calculate_canonical_batch_sha256(table: pa.Table) -> str:
     if table.num_rows == 0:
         return hashlib.sha256(b"EMPTY_TABLE").hexdigest()
 
-    # Sort table by Revision Identity
+    # Fail-fast if any canonical schema columns are missing
+    missing_columns = [col for col in CANONICAL_COLUMN_NAMES if col not in table.column_names]
+    if missing_columns:
+        from acash.data.schema import DataContractError
+        raise DataContractError(
+            f"Cannot compute canonical batch hash: table is missing required canonical columns: {missing_columns}"
+        )
+
+    # Sort table strictly by Revision Identity
     sort_keys = [
         ("source_id", "ascending"),
         ("symbol", "ascending"),
@@ -130,9 +138,7 @@ def calculate_canonical_batch_sha256(table: pa.Table) -> str:
         ("knowledge_time_utc", "ascending"),
         ("revision_seq", "ascending"),
     ]
-    # Filter to existing sort keys in table
-    valid_sort_keys = [k for k in sort_keys if k[0] in table.column_names]
-    sorted_table = table.sort_by(valid_sort_keys)
+    sorted_table = table.sort_by(sort_keys)
 
     hasher = hashlib.sha256()
 

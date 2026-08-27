@@ -56,6 +56,59 @@ class ParquetStorageEngine:
         normalized_symbol = symbol.replace("/", "-").upper()
         return self.base_dir / normalized_symbol / timeframe.upper() / f"year={year}" / f"part-{batch_id}.parquet"
 
+    def get_existing_revisions_lookup(
+        self,
+        streams: Sequence[Tuple[str, str, str]],
+        exclude_batch_ids: Optional[Sequence[str]] = None,
+    ) -> Dict[Tuple[str, str, str, datetime, datetime, int], bool]:
+        """Scan existing Parquet parts for the given streams and build Revision Identity lookup."""
+        lookup: Dict[Tuple[str, str, str, datetime, datetime, int], bool] = {}
+        excluded_set = set(exclude_batch_ids or [])
+
+        for source_id, symbol, timeframe in streams:
+            normalized_symbol = symbol.replace("/", "-").upper()
+            stream_dir = self.base_dir / normalized_symbol / timeframe.upper()
+            if not stream_dir.exists():
+                continue
+            for part_path in stream_dir.glob("year=*/*.parquet"):
+                if part_path.name.startswith(".tmp_"):
+                    continue
+                # If part belongs to an excluded batch_id, skip for lookup
+                part_stem = part_path.stem
+                if any(part_stem == f"part-{ex_id}" for ex_id in excluded_set):
+                    continue
+
+                try:
+                    tbl = pq.read_table(
+                        part_path,
+                        columns=[
+                            "source_id", "symbol", "timeframe",
+                            "event_start_utc", "knowledge_time_utc", "revision_seq"
+                        ]
+                    )
+                    rows = tbl.to_pylist()
+                    for r in rows:
+                        estart = r["event_start_utc"]
+                        know = r["knowledge_time_utc"]
+                        if isinstance(estart, datetime) and estart.tzinfo is None:
+                            estart = estart.replace(tzinfo=timezone.utc)
+                        if isinstance(know, datetime) and know.tzinfo is None:
+                            know = know.replace(tzinfo=timezone.utc)
+                        rev_key = (
+                            str(r["source_id"]),
+                            str(r["symbol"]),
+                            str(r["timeframe"]),
+                            estart,
+                            know,
+                            int(r["revision_seq"]),
+                        )
+                        lookup[rev_key] = True
+                except Exception:
+                    continue
+        return lookup
+
+
+
     def write_canonical_part(
         self,
         table: pa.Table,
