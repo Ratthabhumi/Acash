@@ -10,24 +10,30 @@ from acash.backtest.adapter import (
     BacktestMarketEvent,
     CanonicalDataAdapter,
     extract_exact_nanoseconds,
+    from_timestamp_ns,
+    from_timestamp_us,
 )
 from acash.data.schema import DataContractError
+
 
 
 def test_extract_exact_nanoseconds_float_free() -> None:
     """Verify exact integer extraction of nanoseconds without floating-point precision truncation."""
     # 1. Microseconds integer -> Nanoseconds integer (exact * 1000)
     us_ts = 1768815000123456
-    assert extract_exact_nanoseconds(us_ts) == 1768815000123456000
+    assert from_timestamp_us(us_ts) == 1768815000123456000
+    assert extract_exact_nanoseconds(us_ts, unit="us") == 1768815000123456000
 
     # 2. Nanoseconds integer -> Exact passthrough
     ns_ts = 1768815000123456789
-    assert extract_exact_nanoseconds(ns_ts) == 1768815000123456789
+    assert from_timestamp_ns(ns_ts) == 1768815000123456789
+    assert extract_exact_nanoseconds(ns_ts, unit="ns") == 1768815000123456789
 
     # 3. Datetime object -> Integer microsecond nanosecond conversion
     dt = datetime(2026, 1, 19, 9, 30, 0, 123456, tzinfo=timezone.utc)
     extracted = extract_exact_nanoseconds(dt)
     assert extracted % 1_000_000_000 == 123456000
+
 
 
 def _make_sample_bars_table() -> pa.Table:

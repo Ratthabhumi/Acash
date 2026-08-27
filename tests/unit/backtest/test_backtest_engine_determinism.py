@@ -1,4 +1,4 @@
-"""Unit Tests for Backtesting Engine Determinism, Depth-Aware VWAP Execution, Queue Priority, and Latency (Phase 5)."""
+"""Unit Tests for Backtesting Engine Determinism, Depth-Aware VWAP Execution, Queue Priority, IOC/FOK, and Latency (Phase 5)."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -18,8 +18,8 @@ from acash.backtest.schema import (
 )
 
 
-def test_simulated_order_book_vwap_sweeps() -> None:
-    """Verify L2 order book depth sweeps compute accurate VWAP and remaining quantity."""
+def test_simulated_order_book_vwap_sweeps_and_liquidity_consumption() -> None:
+    """Verify L2 order book depth sweeps compute accurate VWAP and consume depth from the book."""
     book = SimulatedOrderBook()
 
     # Add 3 ask levels: 5000 (qty 5), 5001 (qty 10), 5002 (qty 20)
@@ -31,11 +31,63 @@ def test_simulated_order_book_vwap_sweeps() -> None:
     assert book.total_ask_depth == Decimal("35.0")
 
     # 1. Sweep 12 units: 5 @ 5000 + 7 @ 5001 -> Cost = 25000 + 35007 = 60007. VWAP = 60007 / 12 = 5000.583333333333333333
-    vwap, filled_qty, remaining = book.sweep_asks(Decimal("12.0"))
+    vwap, filled_qty, remaining = book.sweep_asks(Decimal("12.0"), consume=True)
     assert filled_qty == Decimal("12.0")
     assert remaining == Decimal("0.0")
     expected_vwap = (Decimal("5.0") * Decimal("5000.00") + Decimal("7.0") * Decimal("5001.00")) / Decimal("12.0")
     assert vwap == expected_vwap
+
+    # Check consumed book state: 5000 is deleted, 5001 has 3 left, 5002 has 20 left
+    assert book.best_ask == Decimal("5001.00")
+    assert book.asks[Decimal("5001.00")] == Decimal("3.0")
+    assert book.asks[Decimal("5002.00")] == Decimal("20.0")
+    assert book.total_ask_depth == Decimal("23.0")
+
+
+def test_taker_partial_fill_and_ioc_fok_semantics() -> None:
+    """Verify FOK cancels when depth is insufficient, and IOC fills available and cancels remaining."""
+    config = BacktestEngineConfig(
+        engine_id="BKT-IOC-FOK-TEST",
+        symbol="ES.FUT",
+    )
+
+    # --- Scenario 1: FOK order with insufficient depth ---
+    runner_fok = EventBacktestRunner(config=config)
+    runner_fok.current_time_ns = 1_000_000_000
+    runner_fok.order_book.apply_delta("ADD", "ASK", Decimal("5000.00"), Decimal("5.0"))
+
+    # FOK requires 10.0 units, but only 5.0 available -> Cancelled/Rejected immediately, book untouched
+    order_fok = runner_fok.submit_order(
+        order_id="ORD-FOK-001",
+        symbol="ES.FUT",
+        order_type=OrderType.FOK,
+        side="BUY",
+        quantity=Decimal("10.0"),
+    )
+    assert order_fok.status is BacktestOrderStatus.CANCELLED
+    assert order_fok.filled_qty == Decimal("0.0")
+    assert len(runner_fok.fills) == 0
+    assert runner_fok.order_book.total_ask_depth == Decimal("5.0")
+
+    # --- Scenario 2: IOC order with partial depth ---
+    runner_ioc = EventBacktestRunner(config=config)
+    runner_ioc.current_time_ns = 1_000_000_000
+    runner_ioc.order_book.apply_delta("ADD", "ASK", Decimal("5000.00"), Decimal("5.0"))
+
+    # IOC requires 10.0 units -> Fills 5.0 units, cancels remaining 5.0 units
+    order_ioc = runner_ioc.submit_order(
+        order_id="ORD-IOC-001",
+        symbol="ES.FUT",
+        order_type=OrderType.IOC,
+        side="BUY",
+        quantity=Decimal("10.0"),
+    )
+    assert order_ioc.status is BacktestOrderStatus.CANCELLED
+    assert order_ioc.filled_qty == Decimal("5.0")
+    assert order_ioc.remaining_qty == Decimal("5.0")
+    assert len(runner_ioc.fills) == 1
+    assert runner_ioc.fills[0].fill_qty == Decimal("5.0")
+    assert runner_ioc.order_book.total_ask_depth == Decimal("0.0")
 
 
 def test_maker_queue_priority_and_trade_through_matching() -> None:
@@ -61,6 +113,13 @@ def test_maker_queue_priority_and_trade_through_matching() -> None:
     )
     assert order.queue_ahead_volume == Decimal("10.0")
 
+    # Non-opposing Trade: Buy aggressor trades 4 units @ 5000.00 -> Queue ahead MUST NOT decrease
+    runner._process_order_matching(
+        event_timestamp_ns=1_500_000_000,
+        trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("4.0"), "aggressor_side": "BUY"},
+    )
+    assert runner.orders["ORD-M-001"].queue_ahead_volume == Decimal("10.0")
+
     # Trade 1: Sell aggressor trades 6 units @ 5000.00 -> Queue ahead becomes 4.0 (Order not filled yet)
     runner._process_order_matching(
         event_timestamp_ns=2_000_000_000,
@@ -78,7 +137,6 @@ def test_maker_queue_priority_and_trade_through_matching() -> None:
     status_t2 = runner.orders["ORD-M-001"].status
     assert status_t2 is BacktestOrderStatus.FILLED
     assert len(runner.fills) == 1
-
 
 
 def _make_deterministic_event_stream() -> list[BacktestMarketEvent]:

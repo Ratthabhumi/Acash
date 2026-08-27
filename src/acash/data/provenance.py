@@ -11,12 +11,14 @@ Implements:
 import hashlib
 import json
 import os
+import struct
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional, Sequence
 import pyarrow as pa
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from acash.data.schema import (
@@ -108,13 +110,60 @@ def calculate_canonical_content_fingerprint(
     return hasher.hexdigest()
 
 
+# Binary frame constants
+NULL_UINT32_TAG = 0xFFFFFFFF
+NULL_INT64_SENTINEL = -9223372036854775808
+RECORD_SEPARATOR_BYTE = b"\x1e"
+
+
+def _encode_str(val: Optional[str]) -> bytes:
+    """Encode string with 4-byte big-endian length prefix."""
+    if val is None:
+        return struct.pack(">I", NULL_UINT32_TAG)
+    b = str(val).encode("utf-8")
+    return struct.pack(">I", len(b)) + b
+
+
+def _encode_dec(val: Optional[Decimal]) -> bytes:
+    """Encode Decimal with 4-byte big-endian length prefix and fixed 18-scale ASCII."""
+    if val is None:
+        return struct.pack(">I", NULL_UINT32_TAG)
+    b = f"{val:.18f}".encode("ascii")
+    return struct.pack(">I", len(b)) + b
+
+
+def _encode_ts_us(val: Any) -> bytes:
+    """Encode microsecond timestamp as 8-byte big-endian int64 epoch microseconds."""
+    if val is None:
+        return struct.pack(">q", NULL_INT64_SENTINEL)
+    if isinstance(val, int):
+        return struct.pack(">q", val)
+    if isinstance(val, pa.Scalar):
+        if val.as_py() is None:
+            return struct.pack(">q", NULL_INT64_SENTINEL)
+        return struct.pack(">q", val.value)
+    if isinstance(val, datetime):
+        dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+        td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        total_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
+        return struct.pack(">q", total_us)
+    return struct.pack(">q", int(val))
+
+
+def _encode_int64(val: Optional[int]) -> bytes:
+    """Encode int64 as 8-byte big-endian signed integer."""
+    if val is None:
+        return struct.pack(">q", NULL_INT64_SENTINEL)
+    return struct.pack(">q", int(val))
+
+
 def calculate_canonical_batch_sha256(table: pa.Table) -> str:
     """Calculate deterministic logical canonical batch SHA-256 hash.
 
     Invariant Rules:
     1. Sorts all rows strictly by Revision Identity:
        (source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)
-    2. Encodes each canonical column in fixed binary representation.
+    2. Encodes each canonical column using length-prefixed binary serialization.
     3. Independent of Parquet compression, page/chunk layout, row group boundaries,
        or input row ordering.
     """
@@ -160,42 +209,27 @@ def calculate_canonical_batch_sha256(table: pa.Table) -> str:
 
     num_rows = sorted_table.num_rows
     for i in range(num_rows):
-        # Format timestamps in UTC ISO microseconds
-        def ts_to_bytes(ts: Any) -> bytes:
-            if isinstance(ts, datetime):
-                dt_utc: datetime = ts.replace(tzinfo=timezone.utc) if ts.tzinfo is None else ts.astimezone(timezone.utc)
-                ts_str: str = dt_utc.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-                return ts_str.encode("utf-8")
-            return str(ts).encode("utf-8")
-
-        # Format Decimals to fixed 18 scale
-        def dec_to_bytes(dec: Any) -> bytes:
-            if isinstance(dec, Decimal):
-                dec_str: str = f"{dec:.18f}"
-                return dec_str.encode("utf-8")
-            return str(dec).encode("utf-8")
-
-
-        row_payload = b":".join([
-            str(source_ids[i]).encode("utf-8"),
-            str(symbols[i]).encode("utf-8"),
-            str(timeframes[i]).encode("utf-8"),
-            ts_to_bytes(event_starts[i]),
-            ts_to_bytes(event_ends[i]),
-            ts_to_bytes(knowledge_times[i]),
-            str(revision_seqs[i]).encode("utf-8"),
-            dec_to_bytes(opens[i]),
-            dec_to_bytes(highs[i]),
-            dec_to_bytes(lows[i]),
-            dec_to_bytes(closes[i]),
-            dec_to_bytes(volumes[i]),
-            dec_to_bytes(quote_volumes[i]),
-            str(trade_counts[i]).encode("utf-8"),
-        ])
-        hasher.update(row_payload)
-        hasher.update(b"\n")
+        row_bytes = (
+            _encode_str(source_ids[i])
+            + _encode_str(symbols[i])
+            + _encode_str(timeframes[i])
+            + _encode_ts_us(event_starts[i])
+            + _encode_ts_us(event_ends[i])
+            + _encode_ts_us(knowledge_times[i])
+            + _encode_int64(revision_seqs[i])
+            + _encode_dec(opens[i])
+            + _encode_dec(highs[i])
+            + _encode_dec(lows[i])
+            + _encode_dec(closes[i])
+            + _encode_dec(volumes[i])
+            + _encode_dec(quote_volumes[i])
+            + _encode_int64(trade_counts[i])
+            + RECORD_SEPARATOR_BYTE
+        )
+        hasher.update(row_bytes)
 
     return hasher.hexdigest()
+
 
 
 class ProvenanceTracker:

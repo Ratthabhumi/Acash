@@ -80,9 +80,10 @@ def calculate_session_vwap_and_dispersion(
             weighted_variance_sum += (diff * diff) * sz
 
     variance = weighted_variance_sum / total_volume
-    std_val = Decimal(f"{math.sqrt(float(variance)):.18f}").quantize(DECIMAL_18_PRECISION)
+    std_val = variance.sqrt().quantize(DECIMAL_18_PRECISION)
 
     return vwap, std_val
+
 
 
 

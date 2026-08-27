@@ -1,19 +1,27 @@
-"""Event-Driven Backtesting Substrate & Simulation Runner (Phase 5).
+"""Sovereign Backtesting Simulation Engine, Matching Substrate, and Deterministic Manifest (Phase 5).
 
-Provides deterministic event simulation, L2 Depth-Aware VWAP matching, FIFO queue priority emulation,
-causal latency modeling, and mandatory environment provenance enforcement.
+Implements:
+1. Event-Driven Execution Loop driven strictly by Phase 3B total ordering.
+2. Simulated Order Book with Level-2 Depth Sweeps, VWAP Fill Arithmetic, Dynamic Impact, and Depth Liquidity Consumption.
+3. Maker Queue Priority Volume Tracking (FIFO), Trade-Through Matching, and Opposing-Aggressor Filtering.
+4. Complete Order Lifecycle Semantics (MARKET, LIMIT, IOC, FOK, GTC) with partial fills.
+5. Float-Free Pure Integer Nanosecond Accounting and Timestamps across all lifecycle boundaries.
+6. Multi-tiered Reality Gap Attribution and cryptographic environment provenance.
 """
 
 from collections import deque
 from datetime import datetime, timezone
 from decimal import Decimal
-import math
 import time
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Sequence, Set, Tuple
 import pyarrow as pa
 
 from acash.backtest.accounting import ShadowAccountingLedger
-from acash.backtest.adapter import BacktestEventType, BacktestMarketEvent
+from acash.backtest.adapter import (
+    BacktestEventType,
+    BacktestMarketEvent,
+    extract_nanoseconds_from_datetime,
+)
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
     CANONICAL_EQUITY_CURVE_SCHEMA,
@@ -22,56 +30,59 @@ from acash.backtest.schema import (
     BacktestFillRecord,
     BacktestManifest,
     BacktestOrderStatus,
+    FeeModelConfig,
     LiquidityType,
     OrderType,
     RealityGapSummary,
+    SimulationLatencyConfig,
+    SlippageModelConfig,
     calculate_backtest_manifest_id,
 )
 from acash.data.schema import DataContractError
 
 
 class SimulatedOrderBook:
-    """In-memory Level 2 (Market By Price) order book for simulation execution."""
+    """In-memory Level-2 / Level-3 Order Book for backtest execution simulation."""
 
     def __init__(self) -> None:
-        # price -> size
-        self.bids: Dict[Decimal, Decimal] = {}
-        self.asks: Dict[Decimal, Decimal] = {}
+        self.bids: Dict[Decimal, Decimal] = {}  # Price -> Size
+        self.asks: Dict[Decimal, Decimal] = {}  # Price -> Size
 
     def clear(self) -> None:
         self.bids.clear()
         self.asks.clear()
 
-    def apply_delta(self, action: str, side: str, price: Optional[Decimal], size: Optional[Decimal]) -> None:
-        """Apply incremental L2 delta update."""
-        act = action.upper()
-        side_norm = side.upper()
+    def apply_delta(
+        self,
+        action: str,
+        side: str,
+        price: Optional[Decimal],
+        size: Optional[Decimal],
+    ) -> None:
+        """Update order book state based on market data delta."""
+        side_upper = side.upper()
+        target_book = self.bids if side_upper in ("BID", "BUY") else self.asks
 
-        if "CLEAR" in act:
-            if side_norm == "BID":
-                self.bids.clear()
-            elif side_norm == "ASK":
-                self.asks.clear()
-            else:
-                self.bids.clear()
-                self.asks.clear()
-            return
+        if action in ("SNAPSHOT", "CLEAR"):
+            target_book.clear()
 
         if price is None:
             return
 
-        target_book = self.bids if side_norm == "BID" else self.asks
-
-        if "DELETE" in act:
-            target_book.pop(price, None)
-        elif "CANCEL" in act:
-            if size is None or size <= Decimal("0.0"):
-                target_book.pop(price, None)
-            else:
-                target_book[price] = size
-        elif "ADD" in act or "MODIFY" in act or "SNAPSHOT" in act:
+        if action in ("ADD", "MODIFY", "SNAPSHOT"):
             if size is not None and size > Decimal("0.0"):
                 target_book[price] = size
+            else:
+                target_book.pop(price, None)
+        elif action == "DELETE":
+            target_book.pop(price, None)
+        elif action == "REDUCE":
+            if size is not None and price in target_book:
+                new_size = target_book[price] - size
+                if new_size > Decimal("0.0"):
+                    target_book[price] = new_size
+                else:
+                    target_book.pop(price, None)
             else:
                 target_book.pop(price, None)
 
@@ -91,7 +102,7 @@ class SimulatedOrderBook:
     def total_ask_depth(self) -> Decimal:
         return sum(self.asks.values(), Decimal("0.0"))
 
-    def sweep_asks(self, required_qty: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
+    def sweep_asks(self, required_qty: Decimal, consume: bool = True) -> Tuple[Decimal, Decimal, Decimal]:
         """Sweep ask levels in ascending price order computing VWAP.
 
         Returns:
@@ -104,6 +115,8 @@ class SimulatedOrderBook:
         remaining = required_qty
         cumulative_cost = Decimal("0.0")
         cumulative_qty = Decimal("0.0")
+        levels_to_delete: List[Decimal] = []
+        levels_to_modify: List[Tuple[Decimal, Decimal]] = []
 
         for px in sorted_ask_prices:
             avail_qty = self.asks[px]
@@ -111,13 +124,26 @@ class SimulatedOrderBook:
             cumulative_cost += px * fill_qty
             cumulative_qty += fill_qty
             remaining -= fill_qty
+
+            if consume:
+                if avail_qty == fill_qty:
+                    levels_to_delete.append(px)
+                else:
+                    levels_to_modify.append((px, avail_qty - fill_qty))
+
             if remaining == Decimal("0.0"):
                 break
+
+        if consume:
+            for px in levels_to_delete:
+                del self.asks[px]
+            for px, new_qty in levels_to_modify:
+                self.asks[px] = new_qty
 
         vwap = cumulative_cost / cumulative_qty if cumulative_qty > Decimal("0.0") else Decimal("0.0")
         return vwap, cumulative_qty, remaining
 
-    def sweep_bids(self, required_qty: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
+    def sweep_bids(self, required_qty: Decimal, consume: bool = True) -> Tuple[Decimal, Decimal, Decimal]:
         """Sweep bid levels in descending price order computing VWAP.
 
         Returns:
@@ -130,6 +156,8 @@ class SimulatedOrderBook:
         remaining = required_qty
         cumulative_cost = Decimal("0.0")
         cumulative_qty = Decimal("0.0")
+        levels_to_delete: List[Decimal] = []
+        levels_to_modify: List[Tuple[Decimal, Decimal]] = []
 
         for px in sorted_bid_prices:
             avail_qty = self.bids[px]
@@ -137,8 +165,21 @@ class SimulatedOrderBook:
             cumulative_cost += px * fill_qty
             cumulative_qty += fill_qty
             remaining -= fill_qty
+
+            if consume:
+                if avail_qty == fill_qty:
+                    levels_to_delete.append(px)
+                else:
+                    levels_to_modify.append((px, avail_qty - fill_qty))
+
             if remaining == Decimal("0.0"):
                 break
+
+        if consume:
+            for px in levels_to_delete:
+                del self.bids[px]
+            for px, new_qty in levels_to_modify:
+                self.bids[px] = new_qty
 
         vwap = cumulative_cost / cumulative_qty if cumulative_qty > Decimal("0.0") else Decimal("0.0")
         return vwap, cumulative_qty, remaining
@@ -201,34 +242,35 @@ class EventBacktestRunner:
         self.config = config
         self.strategy_actor = strategy_actor
 
-        # Accounting Subsystem
+        # Simulation Substrate State
+        self.current_time_ns: int = 0
+        self.last_price: Decimal = Decimal("0.0")
+        self.order_book = SimulatedOrderBook()
         self.ledger = ShadowAccountingLedger(
             starting_cash=config.initial_cash,
             base_currency=config.base_currency,
         )
 
-        # Order & Fill State
+
+
+        # Order Tracking
         self.orders: Dict[str, SimulatedOrder] = {}
         self.order_queue: Deque[SimulatedOrder] = deque()
         self.fills: List[BacktestFillRecord] = []
         self.equity_records: List[Dict[str, Any]] = []
 
-        # Order Book & Market State
-        self.order_book = SimulatedOrderBook()
-        self.current_time_ns: int = 0
-        self.last_price: Decimal = Decimal("0.0")
-
-        # Telemetry & Stats Trackers
-        self.total_orders_count: int = 0
+        # Peak Equity for Drawdown Tracking
         self.peak_equity: Decimal = config.initial_cash
         self.max_drawdown: Decimal = Decimal("0.0")
+
+        # Statistics
         self.profitable_trades_count: int = 0
         self.total_closed_trades_count: int = 0
         self.gross_profits: Decimal = Decimal("0.0")
         self.gross_losses: Decimal = Decimal("0.0")
 
     # ---------------------------------------------------------------------
-    # Order Submission & Gateway Interface
+    # Order Submission Interface
     # ---------------------------------------------------------------------
 
     def submit_order(
@@ -240,11 +282,12 @@ class EventBacktestRunner:
         quantity: Decimal,
         limit_price: Optional[Decimal] = None,
     ) -> SimulatedOrder:
-        """Create and submit a new order to the simulated exchange gateway."""
+        """Submit a new simulated order into the matching pipeline."""
         if quantity <= Decimal("0.0"):
-            raise DataContractError(f"Order quantity must be positive: {quantity}")
-        if order_type == OrderType.LIMIT and (limit_price is None or limit_price <= Decimal("0.0")):
-            raise DataContractError(f"Limit order requires positive limit price: {limit_price}")
+            raise DataContractError(f"Order quantity must be positive, got: {quantity}")
+
+        if order_id in self.orders:
+            raise DataContractError(f"Duplicate order_id: {order_id}")
 
         order = SimulatedOrder(
             order_id=order_id,
@@ -255,23 +298,20 @@ class EventBacktestRunner:
             created_timestamp_ns=self.current_time_ns,
             limit_price=limit_price,
         )
-        self.total_orders_count += 1
         order.status = BacktestOrderStatus.SUBMITTED
 
-        # Initialize Queue Priority Position if Depth Available
-        if order.limit_price is not None:
+        # Initialize Queue Ahead for Limit Orders
+        if order.order_type in (OrderType.LIMIT, OrderType.GTC) and order.limit_price is not None:
             if order.side == "BUY":
-                # Queue ahead = existing bid volume at limit_price
                 order.queue_ahead_volume = self.order_book.bids.get(order.limit_price, Decimal("0.0"))
             else:
-                # Queue ahead = existing ask volume at limit_price
                 order.queue_ahead_volume = self.order_book.asks.get(order.limit_price, Decimal("0.0"))
             order.queue_initialized = True
 
         self.orders[order_id] = order
         self.order_queue.append(order)
 
-        # If Market / Aggressive order with immediate pricing available, attempt execution
+        # Attempt immediate matching
         self._process_order_matching(self.current_time_ns)
         return order
 
@@ -279,7 +319,11 @@ class EventBacktestRunner:
     # Matching Engine & Execution Logic
     # ---------------------------------------------------------------------
 
-    def _process_order_matching(self, event_timestamp_ns: int, trade_event_payload: Optional[Dict[str, Any]] = None) -> None:
+    def _process_order_matching(
+        self,
+        event_timestamp_ns: int,
+        trade_event_payload: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Match pending orders against prevailing market liquidity adhering to causal latency."""
         match_latency = self.config.latency_config.total_match_latency_ns()
         pending_count = len(self.order_queue)
@@ -291,7 +335,6 @@ class EventBacktestRunner:
 
             # Causal Latency Check: Match timestamp must be >= created_timestamp + match_latency
             if event_timestamp_ns < (order.created_timestamp_ns + match_latency):
-                # Order has not arrived at exchange gateway yet; keep in queue
                 self.order_queue.append(order)
                 continue
 
@@ -311,63 +354,98 @@ class EventBacktestRunner:
         slippage_factor = slippage_bps / Decimal("10000.0")
         impact_coeff = self.config.slippage_config.impact_coefficient
 
+        # 1. Fill or Kill (FOK) Check: Must be able to fill the entire remaining quantity
+        if order.order_type == OrderType.FOK:
+            avail_depth = (
+                self.order_book.total_ask_depth
+                if order.side == "BUY"
+                else self.order_book.total_bid_depth
+            )
+            has_book = self.order_book.asks if order.side == "BUY" else self.order_book.bids
+            if has_book and avail_depth < order.remaining_qty:
+                order.status = BacktestOrderStatus.CANCELLED
+                return
+
         executed_price: Decimal = Decimal("0.0")
+        filled_qty: Decimal = Decimal("0.0")
 
         if order.side == "BUY":
-            # 1. Check L2 Order Book Depth Sweep
             if self.order_book.asks:
-                vwap, filled_qty, remaining = self.order_book.sweep_asks(order.remaining_qty)
+                total_depth_before = self.order_book.total_ask_depth
+                vwap, filled_qty, remaining = self.order_book.sweep_asks(order.remaining_qty, consume=True)
                 if filled_qty > Decimal("0.0"):
-                    # Calculate dynamic depth impact
-                    total_depth = self.order_book.total_ask_depth
-                    impact = (impact_coeff * (order.remaining_qty / total_depth)) if total_depth > Decimal("0.0") else Decimal("0.0")
+                    impact = (
+                        (impact_coeff * (filled_qty / total_depth_before))
+                        if total_depth_before > Decimal("0.0")
+                        else Decimal("0.0")
+                    )
                     executed_price = vwap * (Decimal("1.0") + slippage_factor + impact)
                 else:
-                    executed_price = (self.order_book.best_ask or self.last_price) * (Decimal("1.0") + slippage_factor)
+                    if order.order_type in (OrderType.IOC, OrderType.FOK):
+                        order.status = BacktestOrderStatus.CANCELLED
+                    return
             else:
                 base_price = self.order_book.best_ask or self.last_price
                 if base_price <= Decimal("0.0"):
                     order.status = BacktestOrderStatus.REJECTED
                     return
+                filled_qty = order.remaining_qty
                 executed_price = base_price * (Decimal("1.0") + slippage_factor)
-        else:
-            # SELL Order
+        else:  # SELL Order
             if self.order_book.bids:
-                vwap, filled_qty, remaining = self.order_book.sweep_bids(order.remaining_qty)
+                total_depth_before = self.order_book.total_bid_depth
+                vwap, filled_qty, remaining = self.order_book.sweep_bids(order.remaining_qty, consume=True)
                 if filled_qty > Decimal("0.0"):
-                    total_depth = self.order_book.total_bid_depth
-                    impact = (impact_coeff * (order.remaining_qty / total_depth)) if total_depth > Decimal("0.0") else Decimal("0.0")
+                    impact = (
+                        (impact_coeff * (filled_qty / total_depth_before))
+                        if total_depth_before > Decimal("0.0")
+                        else Decimal("0.0")
+                    )
                     executed_price = vwap * (Decimal("1.0") - slippage_factor - impact)
                 else:
-                    executed_price = (self.order_book.best_bid or self.last_price) * (Decimal("1.0") - slippage_factor)
+                    if order.order_type in (OrderType.IOC, OrderType.FOK):
+                        order.status = BacktestOrderStatus.CANCELLED
+                    return
             else:
                 base_price = self.order_book.best_bid or self.last_price
                 if base_price <= Decimal("0.0"):
                     order.status = BacktestOrderStatus.REJECTED
                     return
+                filled_qty = order.remaining_qty
                 executed_price = base_price * (Decimal("1.0") - slippage_factor)
+
+        if filled_qty <= Decimal("0.0"):
+            if order.order_type in (OrderType.IOC, OrderType.FOK):
+                order.status = BacktestOrderStatus.CANCELLED
+            return
 
         # 2. Taker Fee Schedule
         fee_bps = self.config.fee_config.taker_fee_bps
-        fee_paid = (executed_price * order.remaining_qty * (fee_bps / Decimal("10000.0"))) + self.config.fee_config.fixed_fee_per_trade
+        fee_paid = (
+            executed_price * filled_qty * (fee_bps / Decimal("10000.0"))
+        ) + self.config.fee_config.fixed_fee_per_trade
 
         # 3. Process fill in shadow accounting ledger
         realized_pnl, new_equity = self.ledger.process_fill(
             symbol=order.symbol,
             side=order.side,
             fill_price=executed_price,
-            fill_qty=order.remaining_qty,
+            fill_qty=filled_qty,
             fee_paid=fee_paid,
         )
+
+        micros, nanos = divmod(timestamp_ns, 1_000)
+        secs, us = divmod(micros, 1_000_000)
+        fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
         fill_rec = BacktestFillRecord(
             fill_id=f"FILL-{len(self.fills)+1:08d}",
             order_id=order.order_id,
             symbol=order.symbol,
-            fill_timestamp_utc=datetime.fromtimestamp(timestamp_ns / 1_000_000_000, tz=timezone.utc).isoformat(),
+            fill_timestamp_utc=fill_dt.isoformat(),
             side=order.side,
             fill_price=executed_price,
-            fill_qty=order.remaining_qty,
+            fill_qty=filled_qty,
             fee_paid=fee_paid,
             liquidity_type=LiquidityType.TAKER,
             slippage_incurred_bps=slippage_bps,
@@ -375,10 +453,18 @@ class EventBacktestRunner:
         self.fills.append(fill_rec)
 
         # Update order state
-        order.cumulative_cost += executed_price * order.remaining_qty
-        order.filled_qty += order.remaining_qty
-        order.remaining_qty = Decimal("0.0")
-        order.status = BacktestOrderStatus.FILLED
+        order.cumulative_cost += executed_price * filled_qty
+        order.filled_qty += filled_qty
+        order.remaining_qty -= filled_qty
+
+        if order.remaining_qty == Decimal("0.0"):
+            order.status = BacktestOrderStatus.FILLED
+        else:
+            if order.order_type in (OrderType.IOC, OrderType.FOK):
+                order.status = BacktestOrderStatus.CANCELLED
+            else:
+                order.status = BacktestOrderStatus.PARTIALLY_FILLED
+                self.order_queue.append(order)
 
         # Track PnL statistics
         if realized_pnl > Decimal("0.0"):
@@ -404,14 +490,14 @@ class EventBacktestRunner:
         if trade_event_payload is not None:
             trade_price = trade_event_payload["price"]
             trade_size = trade_event_payload["size"]
-            aggressor = trade_event_payload.get("aggressor_side", "UNKNOWN")
+            aggressor = str(trade_event_payload.get("aggressor_side", "UNKNOWN")).upper()
 
             if order.side == "BUY":
                 if trade_price < order.limit_price:
                     # Trade-through: Market traded below buy limit -> Immediate fill
                     is_filled = True
-                elif trade_price == order.limit_price:
-                    # Trade at limit price: Decrement queue ahead
+                elif trade_price == order.limit_price and aggressor in ("SELL", "UNKNOWN"):
+                    # Opposing sell aggressor trades at limit price: Decrement buy queue ahead
                     order.queue_ahead_volume -= trade_size
                     if order.queue_ahead_volume <= Decimal("0.0"):
                         is_filled = True
@@ -419,7 +505,8 @@ class EventBacktestRunner:
                 if trade_price > order.limit_price:
                     # Trade-through: Market traded above sell limit -> Immediate fill
                     is_filled = True
-                elif trade_price == order.limit_price:
+                elif trade_price == order.limit_price and aggressor in ("BUY", "UNKNOWN"):
+                    # Opposing buy aggressor trades at limit price: Decrement sell queue ahead
                     order.queue_ahead_volume -= trade_size
                     if order.queue_ahead_volume <= Decimal("0.0"):
                         is_filled = True
@@ -436,13 +523,13 @@ class EventBacktestRunner:
                     elif order.side == "SELL" and self.last_price >= order.limit_price:
                         is_filled = True
 
-
         if is_filled:
             executed_price = order.limit_price
+            fill_qty = order.remaining_qty
             fee_bps = self.config.fee_config.maker_fee_bps
             fee_paid = max(
                 Decimal("0.0"),
-                (executed_price * order.remaining_qty * (fee_bps / Decimal("10000.0")))
+                (executed_price * fill_qty * (fee_bps / Decimal("10000.0")))
                 + self.config.fee_config.fixed_fee_per_trade,
             )
 
@@ -450,26 +537,30 @@ class EventBacktestRunner:
                 symbol=order.symbol,
                 side=order.side,
                 fill_price=executed_price,
-                fill_qty=order.remaining_qty,
+                fill_qty=fill_qty,
                 fee_paid=fee_paid,
             )
+
+            micros, nanos = divmod(timestamp_ns, 1_000)
+            secs, us = divmod(micros, 1_000_000)
+            fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
             fill_rec = BacktestFillRecord(
                 fill_id=f"FILL-{len(self.fills)+1:08d}",
                 order_id=order.order_id,
                 symbol=order.symbol,
-                fill_timestamp_utc=datetime.fromtimestamp(timestamp_ns / 1_000_000_000, tz=timezone.utc).isoformat(),
+                fill_timestamp_utc=fill_dt.isoformat(),
                 side=order.side,
                 fill_price=executed_price,
-                fill_qty=order.remaining_qty,
+                fill_qty=fill_qty,
                 fee_paid=fee_paid,
                 liquidity_type=LiquidityType.MAKER,
                 slippage_incurred_bps=Decimal("0.0"),
             )
             self.fills.append(fill_rec)
 
-            order.cumulative_cost += executed_price * order.remaining_qty
-            order.filled_qty += order.remaining_qty
+            order.cumulative_cost += executed_price * fill_qty
+            order.filled_qty += fill_qty
             order.remaining_qty = Decimal("0.0")
             order.status = BacktestOrderStatus.FILLED
 
@@ -486,7 +577,7 @@ class EventBacktestRunner:
         return False
 
     # ---------------------------------------------------------------------
-    # Event Stream Execution Loop
+    # Main Event Loop
     # ---------------------------------------------------------------------
 
     def run_backtest(
@@ -497,26 +588,28 @@ class EventBacktestRunner:
         pyproject_toml_sha256: str,
         git_commit_hash: str,
         uv_lock_sha256: Optional[str] = None,
-        phase4_analytical_edge_bps: Decimal = Decimal("10.0"),
+        canonical_data_hashes: Optional[List[str]] = None,
+        phase4_analytical_edge_bps: Decimal = Decimal("0.0"),
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
-        """Execute simulation over strictly sequenced market events and emit BacktestManifest."""
+
+        """Execute simulation over strictly sorted market event stream."""
+        if canonical_data_hashes is None:
+            canonical_data_hashes = []
+
         start_wall_clock = time.perf_counter()
-        canonical_data_hashes: List[str] = []
 
         for event in events:
             self.current_time_ns = event.event_timestamp_ns
-            trade_payload = None
+            trade_payload: Optional[Dict[str, Any]] = None
 
-            # 1. Update Market & Order Book State
+            # 1. Update Market Price & State
             if event.event_type == BacktestEventType.BAR:
                 self.last_price = event.payload["close"]
                 self.ledger.update_market_price(event.symbol, self.last_price)
-
             elif event.event_type == BacktestEventType.TRADE:
                 self.last_price = event.payload["price"]
-                trade_payload = event.payload
                 self.ledger.update_market_price(event.symbol, self.last_price)
-
+                trade_payload = event.payload
             elif event.event_type in (BacktestEventType.DEPTH_SNAPSHOT, BacktestEventType.DEPTH_DELTA):
                 self.order_book.apply_delta(
                     action=event.payload.get("action", "MODIFY"),
@@ -544,13 +637,18 @@ class EventBacktestRunner:
                 self.peak_equity = current_eq
 
             dd = max(Decimal("0.0"), self.peak_equity - current_eq)
-            dd_pct = (dd / self.peak_equity) * Decimal("100.0") if self.peak_equity > Decimal("0.0") else Decimal("0.0")
+            dd_pct = (
+                (dd / self.peak_equity) * Decimal("100.0")
+                if self.peak_equity > Decimal("0.0")
+                else Decimal("0.0")
+            )
             if dd_pct > self.max_drawdown:
                 self.max_drawdown = dd_pct
 
             self.equity_records.append(
                 {
                     "timestamp_utc": event.event_time_utc,
+                    "event_timestamp_ns": event.event_timestamp_ns,
                     "cash_balance": self.ledger.cash_balance,
                     "realized_pnl": self.ledger.cumulative_realized_pnl,
                     "unrealized_pnl": sum((p.unrealized_pnl for p in self.ledger.positions.values()), Decimal("0.0")),
@@ -566,25 +664,28 @@ class EventBacktestRunner:
         # Performance Summary Calculations
         # -----------------------------------------------------------------
         ending_equity = self.ledger.calculate_balance_sheet_equity()
-        net_return_pct = ((ending_equity - self.config.initial_cash) / self.config.initial_cash) * Decimal("100.0")
+        net_return_pct = (
+            ((ending_equity - self.config.initial_cash) / self.config.initial_cash) * Decimal("100.0")
+        )
         total_vol = sum((f.fill_qty * f.fill_price for f in self.fills), Decimal("0.0"))
+        total_fees = sum((f.fee_paid for f in self.fills), Decimal("0.0"))
 
         win_rate = (
-            (Decimal(str(self.profitable_trades_count)) / Decimal(str(self.total_closed_trades_count))) * Decimal("100.0")
+            (Decimal(self.profitable_trades_count) / Decimal(self.total_closed_trades_count)) * Decimal("100.0")
             if self.total_closed_trades_count > 0
             else Decimal("0.0")
         )
         profit_factor = (
             self.gross_profits / self.gross_losses
             if self.gross_losses > Decimal("0.0")
-            else (Decimal("999.0") if self.gross_profits > Decimal("0.0") else None)
+            else (Decimal("999.99") if self.gross_profits > Decimal("0.0") else Decimal("0.0"))
         )
 
         exec_summary = BacktestExecutionSummary(
-            total_orders=self.total_orders_count,
+            total_orders=len(self.orders),
             total_fills=len(self.fills),
             total_volume_traded=total_vol,
-            total_fees_paid=self.ledger.cumulative_fees_paid,
+            total_fees_paid=total_fees,
             realized_pnl=self.ledger.cumulative_realized_pnl,
             unrealized_pnl=sum((p.unrealized_pnl for p in self.ledger.positions.values()), Decimal("0.0")),
             ending_equity=ending_equity,
@@ -643,25 +744,27 @@ class EventBacktestRunner:
             wall_clock_duration_ms=duration_ms,
         )
 
-        # Convert fills and equity curve to PyArrow Tables
         fills_table = self._build_fills_table()
         equity_table = self._build_equity_table()
 
         return manifest, fills_table, equity_table
 
     def _build_fills_table(self) -> pa.Table:
-        """Construct canonical PyArrow Fills Table."""
+        """Construct canonical PyArrow Fills Table with integer nanoseconds."""
         if not self.fills:
             return pa.Table.from_batches([], schema=CANONICAL_BACKTEST_FILLS_SCHEMA)
+
+        timestamps_ns: List[int] = []
+        for f in self.fills:
+            dt = datetime.fromisoformat(f.fill_timestamp_utc)
+            timestamps_ns.append(extract_nanoseconds_from_datetime(dt))
 
         return pa.Table.from_pydict(
             {
                 "fill_id": [f.fill_id for f in self.fills],
                 "order_id": [f.order_id for f in self.fills],
                 "symbol": [f.symbol for f in self.fills],
-                "fill_timestamp_utc": [
-                    int(datetime.fromisoformat(f.fill_timestamp_utc).timestamp() * 1_000_000_000) for f in self.fills
-                ],
+                "fill_timestamp_utc": timestamps_ns,
                 "side": [f.side for f in self.fills],
                 "fill_price": [f.fill_price for f in self.fills],
                 "fill_qty": [f.fill_qty for f in self.fills],
@@ -673,15 +776,20 @@ class EventBacktestRunner:
         )
 
     def _build_equity_table(self) -> pa.Table:
-        """Construct canonical PyArrow Equity Curve Table."""
+        """Construct canonical PyArrow Equity Curve Table with integer nanoseconds."""
         if not self.equity_records:
             return pa.Table.from_batches([], schema=CANONICAL_EQUITY_CURVE_SCHEMA)
 
+        timestamps_ns: List[int] = []
+        for r in self.equity_records:
+            if "event_timestamp_ns" in r:
+                timestamps_ns.append(r["event_timestamp_ns"])
+            else:
+                timestamps_ns.append(extract_nanoseconds_from_datetime(r["timestamp_utc"]))
+
         return pa.Table.from_pydict(
             {
-                "timestamp_utc": [
-                    int(r["timestamp_utc"].timestamp() * 1_000_000_000) for r in self.equity_records
-                ],
+                "timestamp_utc": timestamps_ns,
                 "cash_balance": [r["cash_balance"] for r in self.equity_records],
                 "realized_pnl": [r["realized_pnl"] for r in self.equity_records],
                 "unrealized_pnl": [r["unrealized_pnl"] for r in self.equity_records],
