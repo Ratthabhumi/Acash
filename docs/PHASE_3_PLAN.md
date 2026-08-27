@@ -1,9 +1,9 @@
 # ACASH — Phase 3: Market Microstructure & Point-in-Time Feature Subsystem Plan
 
 **Document:** `docs/PHASE_3_PLAN.md`  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Date:** 2026-08-27  
-**Status:** **PROPOSED — AWAITING ARCHITECTURAL REVIEW & APPROVAL**  
+**Status:** **PROPOSED (Pre-Signoff Corrective Review Pass Completed)**  
 
 ---
 
@@ -70,18 +70,25 @@ Microstructure events distinguish between three temporal coordinate systems:
 
 ---
 
-## 3. Sequence Number Scoping, Channel IDs & Session Resets
+## 3. Session Labeling, Sequence Scoping & Resets
 
-### 3.1 CME Sequence Scoping
-In centralized futures markets (e.g. CME Globex MDP 3.0), sequence numbers operate within explicit communication channels and reset across sessions:
-- **Channel ID (`channel_id`):** CME multicast channel identifier (e.g. Channel 310 for ES, Channel 311 for NQ).
-- **Session / Trading Date (`trading_date`):** YYYY-MM-DD representing the CME trading session (Sunday 17:00 CT $\to$ Friday 16:00 CT).
-- **Source Sequence (`source_seq_num`):** Monotonic integer message sequence number assigned by the exchange feed within `(channel_id, trading_date)`. Resets to 1 upon weekly session start or channel failover.
+### 3.1 CME Trading Session Labeling (`trading_date`)
+In centralized futures markets (e.g. CME Globex), trading sessions span across calendar day boundaries.
+- **Session Definition:** `trading_date` is the **CME Trading Session Label** determined in `America/Chicago` (CT) timezone, **NOT simply the UTC calendar date**.
+- **Session Boundaries:**
+  - Sunday 17:00 CT $\to$ Monday 16:00 CT is assigned `trading_date = Monday` (YYYY-MM-DD).
+  - Monday 17:00 CT $\to$ Tuesday 16:00 CT is assigned `trading_date = Tuesday` (YYYY-MM-DD).
+  - *Example:* An event occurring at `2026-01-18 23:30:00 UTC` (which is Sunday 17:30 CT) is labeled with `trading_date = 2026-01-19` (Monday session).
 
-### 3.2 Global Uniqueness Guarantee (Compound Identity)
-To guarantee 100% deterministic uniqueness across session sequence resets, ACASH constructs compound identities:
+### 3.2 Sequence Number Scoping (`source_seq_num`)
+- **Semantic Definition:** `source_seq_num` represents the raw monotonic integer message/packet sequence number assigned by the exchange feed within `(source_id, channel_id, trading_date)`.
+- **Reset Semantics:** In CME MDP 3.0, message sequence numbers reset to `1` upon weekly session open (Sunday 17:00 CT) or upon channel connection restart/failover.
+- **Gap Detection:** If an incoming message has $\text{source\_seq\_num}_{i+1} > \text{source\_seq\_num}_i + 1$ on the same channel, a `PACKET_GAP_DETECTED` warning is emitted to flag dropped multicast packets.
 
-$$\text{Trade Scope Key} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date})$$
+### 3.3 Global Uniqueness Scope Key
+To guarantee global uniqueness across weekly sequence resets and multiple multicast channels, ACASH constructs compound identity scopes:
+
+$$\text{Stream Channel Scope Key} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date})$$
 
 ---
 
@@ -92,7 +99,7 @@ Exchange protocols (e.g. CME MDP 3.0 SBE, NASDAQ ITCH) frequently emit single ne
 ACASH explicitly decouples **Message Identity** from **Canonical Row Identity**:
 
 ```
-[Exchange Network Message / Packet] ──► Message Identity = (source_id, channel_id, trading_date, message_seq_num)
+[Exchange Network Message / Packet] ──► Message Identity = (source_id, channel_id, trading_date, source_seq_num)
                  │
                  ├──► Row 1: Level 0 Bid Update ──► Row Identity = (Message Identity, "BID", level=0)
                  ├──► Row 2: Level 1 Bid Update ──► Row Identity = (Message Identity, "BID", level=1)
@@ -102,11 +109,11 @@ ACASH explicitly decouples **Message Identity** from **Canonical Row Identity**:
 ### Row Identity Definitions:
 
 1. **Trades Domain (Phase 3A):**
-   $$\text{Trade Row Identity} = (\text{source\_id}, \text{symbol}, \text{trading\_date}, \text{sequence\_num}, \text{trade\_id}, \text{match\_sub\_idx})$$
+   $$\text{Trade Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{trade\_id}, \text{match\_sub\_idx})$$
 2. **Order Book Snapshots (Phase 3B):**
-   $$\text{Book Snapshot Row Identity} = (\text{source\_id}, \text{symbol}, \text{trading\_date}, \text{sequence\_num}, \text{side}, \text{level\_idx})$$
+   $$\text{Book Snapshot Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{side}, \text{level\_idx})$$
 3. **Order Book Incremental Deltas (Phase 3B):**
-   $$\text{Book Delta Row Identity} = (\text{source\_id}, \text{symbol}, \text{trading\_date}, \text{sequence\_num}, \text{action\_sub\_idx})$$
+   $$\text{Book Delta Row Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{action\_sub\_idx})$$
 
 ---
 
@@ -125,7 +132,7 @@ CANONICAL_TRADES_SCHEMA = pa.schema([
     pa.field("exchange_time_utc", pa.timestamp("ns", tz="UTC"), nullable=False),
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
-    pa.field("sequence_num", pa.int64(), nullable=False),
+    pa.field("source_seq_num", pa.int64(), nullable=False),
     pa.field("trade_id", pa.string(), nullable=False),
     pa.field("match_sub_idx", pa.int32(), nullable=False),
     pa.field("price", pa.decimal128(38, 18), nullable=False),
@@ -146,7 +153,7 @@ CANONICAL_BOOK_SNAPSHOT_SCHEMA = pa.schema([
     pa.field("exchange_time_utc", pa.timestamp("ns", tz="UTC"), nullable=False),
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
-    pa.field("sequence_num", pa.int64(), nullable=False),
+    pa.field("source_seq_num", pa.int64(), nullable=False),
     pa.field("side", pa.string(), nullable=False),            # "BID", "ASK"
     pa.field("level_idx", pa.int32(), nullable=False),        # 0 = Top of Book (BBO), 1..N Depth
     pa.field("price", pa.decimal128(38, 18), nullable=False),
@@ -166,7 +173,7 @@ CANONICAL_BOOK_DELTA_SCHEMA = pa.schema([
     pa.field("exchange_time_utc", pa.timestamp("ns", tz="UTC"), nullable=False),
     pa.field("feed_time_utc", pa.timestamp("ns", tz="UTC"), nullable=True),
     pa.field("knowledge_time_utc", pa.timestamp("us", tz="UTC"), nullable=False),
-    pa.field("sequence_num", pa.int64(), nullable=False),
+    pa.field("source_seq_num", pa.int64(), nullable=False),
     pa.field("action_sub_idx", pa.int32(), nullable=False),
     pa.field("action", pa.string(), nullable=False),          # "ADD", "MODIFY", "CANCEL", "CLEAR"
     pa.field("side", pa.string(), nullable=False),            # "BID", "ASK"
@@ -178,35 +185,30 @@ CANONICAL_BOOK_DELTA_SCHEMA = pa.schema([
 
 ---
 
-## 6. Deterministic Logical Serialization & Provenance Hashes
+## 6. Unambiguous Length-Prefixed Binary Serialization & Logical Provenance Hashes
 
-To guarantee that provenance hashes are **100% deterministic, file-layout invariant, and codec invariant**, ACASH establishes an exact byte serialization protocol:
+To guarantee that provenance hashes are **100% deterministic, collision-proof, file-layout invariant, and codec invariant**, ACASH establishes a strict **Length-Prefixed Binary Serialization Protocol** (avoiding ambiguous text delimiters):
 
-### 6.1 Binary Field Serialization Protocol
-1. **Strings (`source_id`, `symbol`, `aggressor_side`, etc.):** Encoded as UTF-8 bytes.
-2. **Decimals (`Decimal128(38, 18)`):** Fixed-point 18-decimal precision string `f"{dec:.18f}"` encoded in UTF-8 bytes.
-3. **Timestamps (`timestamp[ns/us, tz=UTC]`):** Formatted in canonical ISO-8601 UTC string:
-   - Nanoseconds: `"%Y-%m-%dT%H:%M:%S.%09fZ"`
-   - Microseconds: `"%Y-%m-%dT%H:%M:%S.%06fZ"`
-4. **Dates (`trading_date`):** Formatted as `"%Y-%m-%d"`.
-5. **Integers (`sequence_num`, `match_sub_idx`, `level_idx`):** String representation of decimal integer in UTF-8 bytes.
-6. **Null Values:** Represented as literal bytes `b"NULL"`.
-7. **Delimiters:**
-   - Field delimiter: `b"|"`
-   - Row delimiter: `b"\n"`
+### 6.1 Field-Level Binary Encoding Specifications
 
-### 6.2 Serialization & Hashing Execution Order
-$$\text{Filter required columns} \to \text{Sort by Canonical Row Identity ASC} \to \text{Stream row-by-row binary serialization} \to \text{SHA-256 Digest}$$
+| Arrow Data Type | Binary Serialization Protocol | Null Representation |
+| :--- | :--- | :--- |
+| **`pa.string()`** | `[uint32_be(len)][utf8_bytes]` | `uint32_be(0xFFFFFFFF)` (4-byte null tag, 0 payload bytes) |
+| **`pa.decimal128(38, 18)`** | ASCII string `f"{dec:.18f}"` $\to$ `[uint32_be(len)][ascii_bytes]` | `uint32_be(0xFFFFFFFF)` |
+| **`pa.timestamp("ns", tz="UTC")`** | `[int64_be(epoch_nanoseconds)]` (8 bytes, lossless nanoseconds) | `[int64_be(-9223372036854775808)]` (`0x8000000000000000`) |
+| **`pa.timestamp("us", tz="UTC")`** | `[int64_be(epoch_microseconds)]` (8 bytes, lossless microseconds) | `[int64_be(-9223372036854775808)]` |
+| **`pa.date32()`** | `[int32_be(epoch_days)]` (4 bytes, signed integer) | `[int32_be(-2147483648)]` (`0x80000000`) |
+| **`pa.int64()`** | `[int64_be(val)]` (8 bytes, signed big-endian) | `[int64_be(-9223372036854775808)]` |
+| **`pa.int32()`** | `[int32_be(val)]` (4 bytes, signed big-endian) | `[int32_be(-2147483648)]` |
 
-```python
-# Exact Logical Canonical Trades SHA-256 Protocol
-# 1. Sort Table by:
-#    (source_id ASC, channel_id ASC, symbol ASC, trading_date ASC, sequence_num ASC, trade_id ASC, match_sub_idx ASC)
-# 2. Serialize fields with '|' delimiter:
-#    source_id | channel_id | symbol | trading_date | exchange_time_utc | feed_time_utc | knowledge_time_utc | sequence_num | trade_id | match_sub_idx | price | size | aggressor_side | trade_condition
-# 3. Terminate row with '\n'
-# 4. Hash full stream via hashlib.sha256()
-```
+### 6.2 Row & Table Hashing Execution Order
+1. **Schema Check:** Fail fast if any required canonical column is missing.
+2. **Deterministic Sort:** Sort rows strictly by **Canonical Row Identity ASC**:
+   - *Trades:* `(source_id, channel_id, symbol, trading_date, source_seq_num, trade_id, match_sub_idx)`
+   - *Book Snapshots:* `(source_id, channel_id, symbol, trading_date, source_seq_num, side, level_idx)`
+   - *Book Deltas:* `(source_id, channel_id, symbol, trading_date, source_seq_num, action_sub_idx)`
+3. **Binary Streaming:** Stream each row's fields sequentially using the binary encoding specifications above, followed by a 1-byte row delimiter (`0x1E` Record Separator).
+4. **SHA-256 Digest:** Feed the raw byte stream into `hashlib.sha256()` to produce `canonical_trades_sha256` or `canonical_book_sha256`.
 
 ---
 
@@ -228,7 +230,7 @@ data/
         └── {symbol}/{feature_set}/year={YYYY}/date={YYYY-MM-DD}/part-{feature_hash}.parquet
 ```
 
-- **Compression & Encoding:** PyArrow writes using `zstd` (compression level 3) with Dictionary Encoding on categorical string columns (`source_id`, `aggressor_side`, `action`), achieving 75–85% storage reduction.
+- **Compression & Encoding:** PyArrow writes using `zstd` (compression level 3) with Dictionary Encoding on categorical string columns (`source_id`, `channel_id`, `aggressor_side`, `action`), achieving 75–85% storage reduction.
 
 ---
 
@@ -271,16 +273,23 @@ Phase 3C operates strictly downstream from canonical events, computing derived m
 
 ---
 
-## 9. Gate 3 Acceptance Criteria & Test Plan
+## 9. Gate 3 Acceptance Criteria & Comprehensive Test Matrix
 
 Phase 3 completion is governed by 3 sequential quality gates:
 
-### Gate 3A Criteria (Trades Subsystem):
-- [ ] PyArrow canonical trades schema strictly enforced (`timestamp[ns, tz=UTC]`, `Decimal128(38,18)`).
-- [ ] Trade data integrity validator enforces positive price, positive size, valid aggressor side (`BUY`/`SELL`/`UNKNOWN`), and session sequence checks.
-- [ ] Deterministic `canonical_trades_sha256` hashing verified (invariant to row permutations and Parquet codecs).
-- [ ] Recoverable Batch Commit Protocol & Daily Parquet partition storage verified for trades.
-- [ ] DuckDB As-Of PIT Query retrieves trades $\le T_{\text{as\_of}}$ with zero look-ahead leakage.
+### Gate 3A Criteria & Test Matrix (Trades Subsystem):
+- [ ] **Schema & Types:** PyArrow canonical trades schema strictly enforced (`timestamp[ns, tz=UTC]`, `Decimal128(38,18)`).
+- [ ] **Idempotent Replay Test:** Replaying the exact same trades payload is idempotent and creates zero duplicate Parquet files or ledger records (`test_trades_ingestion_replay_idempotent`).
+- [ ] **Batch Collision Test:** Ingesting same `batch_id` with modified trade content raises `BatchCollisionError` (`test_trades_batch_collision_on_same_batch_id`).
+- [ ] **Duplicate Identity Rejection Test:** Ingesting an already persisted Trade Row Identity under a different `batch_id` is rejected as `IntegrityViolationError` (`test_trades_global_duplicate_identity_rejected`).
+- [ ] **Channel Isolation Test:** Identical `source_seq_num` occurring on different `channel_id` do NOT collide (`test_trades_different_channel_same_seq_no_collision`).
+- [ ] **Multi-Trade Expansion Test:** Single exchange message containing multiple matches deterministically expands with unique `match_sub_idx` (`test_trades_multi_trade_message_expansion`).
+- [ ] **Hash Row-Order Invariance Test:** Permuting trade rows produces identical `canonical_trades_sha256` (`test_canonical_trades_hash_row_order_invariance`).
+- [ ] **Hash Layout Invariance Test:** Writing via different Parquet codecs (zstd vs snappy) produces identical `canonical_trades_sha256` (`test_canonical_trades_hash_codec_invariance`).
+- [ ] **Hash Sensitivity Test:** Modifying any canonical field (price, size, aggressor side, condition) alters the hash (`test_canonical_trades_hash_detects_any_modification`).
+- [ ] **Nanosecond Distinguishability Test:** Nanosecond timestamp differences in the last 3 digits (e.g. 100ns vs 200ns) produce distinct hashes (`test_canonical_trades_hash_nanosecond_distinguishability`).
+- [ ] **Daily Partitioning & Storage:** Daily Parquet partition storage verified for trades (`data/parquet/trades/{symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet`).
+- [ ] **DuckDB PIT Query:** Point-in-time qualification query retrieves trades $\le T_{\text{as\_of}}$ with zero look-ahead leakage.
 
 ### Gate 3B Criteria (Order Book Subsystem):
 - [ ] PyArrow canonical schemas for L2 Depth Snapshots and Deltas enforced.
