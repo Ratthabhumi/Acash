@@ -203,12 +203,14 @@
   3. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(38, 18)` (Canonical representation supporting up to 18 fractional scale places; out-of-bound or non-finite values rejected).
-  4. **Event Observation Key, Revision Identity & Deterministic `revision_seq`:**
+  4. **Event Observation Key, Revision Identity & Immutable `revision_seq`:**
      - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
      - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
-     - `revision_seq` is an integer $\ge 1$ **strictly unique** within the Event Observation Key (each sequence number occurs at most once per event). Duplicate sequence numbers for the same event are rejected as fatal `ERROR / INVALID`.
-     - **Deterministic Assignment Rules:** If assigned by ACASH, revisions within an event are ordered by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC` and assigned $1, 2, \ldots, N$. Revisions with same event + same knowledge + identical content are rejected as duplicate revision errors (`ERROR / INVALID`).
+     - `revision_seq` is an **immutable sequence value assigned once upon initial acceptance** ($\ge 1$, strictly unique per Event Observation Key, never renumbered or mutated upon historical backfill).
+     - **Deterministic Initial Assignment Rules:** If assigned by ACASH, revisions within an event are ordered by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC` upon first acceptance. Revisions with same event + same knowledge + identical content are rejected as duplicate revision errors (`ERROR / INVALID`).
+     - **P-I-T Temporal Priority:** `knowledge_time_utc` is the primary ordering field (`ORDER BY knowledge_time_utc DESC, revision_seq DESC`); `revision_seq` acts strictly as the deterministic tie-breaker for equal knowledge times.
      - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against incoming batches and existing canonical parts under the **Phase 2 single-writer scope**.
+
 
 
   5. **Distinct Event Monotonicity & `event_end_utc` Consistency Across Revisions:**
