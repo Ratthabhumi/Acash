@@ -87,8 +87,18 @@ def _encode_field(val: Any) -> bytes:
     if isinstance(val, float):
         return TYPE_TAG_FLOAT64 + struct.pack(">d", val)
 
-    s_bytes = str(val).encode("utf-8")
-    return TYPE_TAG_STR + struct.pack(">I", len(s_bytes)) + s_bytes
+    if isinstance(val, str):
+        s_bytes = val.encode("utf-8")
+        return TYPE_TAG_STR + struct.pack(">I", len(s_bytes)) + s_bytes
+
+    if isinstance(val, bytes):
+        return TYPE_TAG_STR + struct.pack(">I", len(val)) + val
+
+    raise DataContractError(
+        f"Unsupported field type in canonical feature table serialization: {type(val)} ({val!r}). "
+        f"Supported types: None, bool, int, Decimal, datetime, date, float, str, bytes."
+    )
+
 
 
 def calculate_canonical_feature_table_sha256(table: pa.Table) -> str:

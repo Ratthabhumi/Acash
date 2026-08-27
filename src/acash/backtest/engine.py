@@ -672,7 +672,25 @@ class EventBacktestRunner:
                 self.last_price = event.payload["price"]
                 self.ledger.update_market_price(event.symbol, self.last_price)
                 trade_payload = event.payload
-            elif event.event_type in (BacktestEventType.DEPTH_SNAPSHOT, BacktestEventType.DEPTH_DELTA):
+            elif event.event_type == BacktestEventType.DEPTH_SNAPSHOT:
+                if "bids" in event.payload and "asks" in event.payload:
+                    self.order_book.apply_snapshot_frame(
+                        bids=event.payload["bids"],
+                        asks=event.payload["asks"],
+                    )
+                else:
+                    self.order_book.apply_delta(
+                        action=event.payload.get("action", "SNAPSHOT"),
+                        side=event.payload.get("side", "BID"),
+                        price=event.payload.get("price"),
+                        size=event.payload.get("size"),
+                        level_idx=event.payload.get("level_idx"),
+                    )
+
+                if self.order_book.best_bid and self.order_book.best_ask:
+                    self.last_price = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+                    self.ledger.update_market_price(event.symbol, self.last_price)
+            elif event.event_type == BacktestEventType.DEPTH_DELTA:
                 self.order_book.apply_delta(
                     action=event.payload.get("action", "MODIFY"),
                     side=event.payload.get("side", "BID"),
@@ -684,6 +702,7 @@ class EventBacktestRunner:
                 if self.order_book.best_bid and self.order_book.best_ask:
                     self.last_price = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
                     self.ledger.update_market_price(event.symbol, self.last_price)
+
 
             # 2. Process Matching for Pending Orders
             self._process_order_matching(self.current_time_ns, trade_event_payload=trade_payload)
