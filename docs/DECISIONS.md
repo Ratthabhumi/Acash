@@ -206,10 +206,12 @@
   4. **Event Observation Key, Revision Identity & Immutable `revision_seq`:**
      - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
      - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
-     - `revision_seq` is an **immutable sequence value assigned once upon initial acceptance** ($\ge 1$, strictly unique per Event Observation Key, never renumbered or mutated upon historical backfill).
-     - **Deterministic Initial Assignment Rules:** If assigned by ACASH, revisions within an event are ordered by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC` upon first acceptance. Revisions with same event + same knowledge + identical content are rejected as duplicate revision errors (`ERROR / INVALID`).
+     - `revision_seq` is an **immutable persistence sequence value assigned once upon initial acceptance** ($\ge 1$, strictly unique per Event Observation Key, never renumbered or mutated).
+     - **Deterministic Initial Tie-Breaker Scope:** `canonical_content_fingerprint ASC` is used as a tie-breaker **ONLY among unpersisted revisions newly accepted together in the same batch/operation** sharing the same `knowledge_time_utc`. It is never used to re-rank or renumber existing persisted records. Revisions arriving in later batches receive the next available sequence numbers (`seq = max(existing_seq) + 1`).
+     - **Duplicate Rejection:** Same event + same knowledge + identical content is rejected as duplicate revision error (`ERROR / INVALID`).
      - **P-I-T Temporal Priority:** `knowledge_time_utc` is the primary ordering field (`ORDER BY knowledge_time_utc DESC, revision_seq DESC`); `revision_seq` acts strictly as the deterministic tie-breaker for equal knowledge times.
      - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against incoming batches and existing canonical parts under the **Phase 2 single-writer scope**.
+
 
 
 

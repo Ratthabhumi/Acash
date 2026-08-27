@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.11.0 (Immutable Append-Only Safe Revision Sequence Semantics Finalized)  
+**Version:** 1.12.0 (Canonical Content Fingerprint Scope & First-Acceptance Tie-Breaker Finalized)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -94,20 +94,22 @@ $$\text{Event Observation Key} = (\text{source\_id}, \text{symbol}, \text{timefr
 
 $$\text{Revision Identity} = (\text{Event Observation Key}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
 
-#### `revision_seq` Contract & Append-Only Invariants:
-- `revision_seq` is an **immutable sequence value assigned once when a revision is first accepted into the canonical dataset**.
+#### `revision_seq` Contract & First-Acceptance Scope:
+- `revision_seq` is an **immutable persistence sequence value assigned once when a revision is first accepted into the canonical dataset**. It is a stable identifier, **NOT a globally recomputed chronological rank**.
 - **Properties:**
   - Integer $\ge 1$.
   - Strictly unique within `Event Observation Key` (each sequence number occurs at most once per event).
-  - **Immutable After Persistence:** Persisted revisions are **never renumbered**, rewritten, or mutated.
+  - **Immutable After Persistence:** Persisted revisions are **never renumbered**, re-ranked, or rewritten.
   - Never reused for another revision of the same Event Observation Key.
 - **Assignment & Validation Rules:**
   1. **Source-Provided Sequence:** Validated for uniqueness ($\ge 1$, no duplicates within event) and preserved as-is.
-  2. **ACASH Deterministic Initial Assignment:**
-     - Assigned once during first acceptance into canonical storage (sequentially starting at 1 or continuing from the existing maximum sequence for that event).
-     - **Same Knowledge Time Tie-Breaker:** If multiple *new* revisions within an incoming batch share identical `knowledge_time_utc` and have different canonical content, they are deterministically assigned sequence numbers using `canonical_content_fingerprint ASC` without touching existing persisted records.
-     - **Duplicate Content Rejection:** If multiple revisions share the same `knowledge_time_utc` and have *identical* canonical content, they are rejected as duplicate revision content (`ERROR / INVALID`).
-  3. **Historical Backfill Invariant:** If a new revision arrives later with an earlier `knowledge_time_utc` than existing persisted revisions, existing persisted revisions are **NOT renumbered**. The new revision receives a new unique sequence number.
+  2. **ACASH Deterministic Initial Assignment (First Acceptance):**
+     - Revisions are assigned the next available sequence number (`seq = max(existing_seq) + 1` or starting at 1 for new events).
+     - **Same Knowledge Time Intra-Batch Tie-Breaker:** `canonical_content_fingerprint` is used as a deterministic tie-breaker **ONLY among unpersisted revisions being newly accepted together in the SAME acceptance operation/batch** that share the same `knowledge_time_utc`. It is **never** used to re-rank or renumber previously persisted revisions.
+     - **Duplicate Content Rejection:** If multiple revisions within the batch or existing dataset share the same `knowledge_time_utc` and have *identical* canonical content (same fingerprint), they are rejected as duplicate revision content (`ERROR / INVALID`).
+  3. **Later Arriving Revisions & Historical Backfills:**
+     - If a new revision arrives in a later batch (whether with older, same, or newer `knowledge_time_utc`), existing persisted revisions are **never renumbered**.
+     - The newly accepted revision simply receives the next available sequence number (`seq = max(existing_seq) + 1`), regardless of whether its content fingerprint is lower or higher than previously persisted records.
   4. **P-I-T Query Ordering Standard:** `knowledge_time_utc` is the **PRIMARY** temporal ordering field (`ORDER BY knowledge_time_utc DESC, revision_seq DESC`); `revision_seq` acts strictly as the stable deterministic tie-breaker for equal knowledge times.
 
 #### Global Revision Identity Uniqueness:
@@ -209,7 +211,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.11.0",
+  "schema_version": "1.12.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",
