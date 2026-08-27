@@ -245,6 +245,15 @@ $$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \
 $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
 *$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$*
 
+### REALITY GAP MONITOR & EXECUTION DEVIATION
+
+The core empirical objective of ACASH is measuring:
+> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
+
+$$\text{ACASH RESEARCH (Expected Execution)} \longleftrightarrow \text{LIVE EXECUTION (Actual Execution)} \implies \text{REALITY GAP}$$
+
+Measures systematic deviation across Entry Price ($\Delta_{\text{entry}}$), Market Spread ($\Delta_{\text{spread}}$), Slippage ($\Delta_{\text{slippage}}$), Round-Trip Latency ($\Delta_{\text{latency}}$), and Trade PnL ($\Delta_{\text{pnl}}$) to isolate alpha decay from execution micro-structure friction.
+
 ---
 
 ## 6. Documentation Index (`docs/`)
@@ -258,8 +267,8 @@ The complete canonical documentation suite is organized in [`docs/`](file:///c:/
 - **[docs/DATA_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) vs Transactional (SQLite), `yfinance` boundaries, and bi-temporal schema.
 - **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
 - **[docs/EXECUTION_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus PoC candidate).
-- **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Plotly charts.
-- **[docs/DECISIONS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-016**).
+- **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
+- **[docs/DECISIONS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-018**).
 - **[docs/RISKS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
 - **[docs/PHASE_1_PLAN.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PHASE_1_PLAN.md)**: Scope, dependency classifications, and correctness acceptance criteria for Phase 1.
 

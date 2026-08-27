@@ -328,7 +328,77 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
 
 $$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$
 
+---
 
+## Reality Gap Analysis & Execution Deviation Architecture
 
+The core empirical objective of ACASH is measuring and understanding:
+> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
+### Architecture Flow:
+```
+                 ACASH RESEARCH
+                       │
+              Expected Execution
+                       │
+                       ▼
+                 LIVE EXECUTION
+                       │
+              Actual Execution
+                       │
+                       ▼
+                Reality Gap
+```
 
+### Multi-Phase Execution Pipeline:
+- **Phase 2+ (Data Quality & Market Data):**
+  - Timestamp integrity ($t_{\text{knowledge}} \ge t_{\text{event}}$)
+  - Data provenance and hashing
+  - Bid-ask spread capture
+  - Tick-to-bar aggregation consistency
+- **Phase 5+ (Event-Driven Backtesting):**
+  - Tick-aware event simulation
+  - Point-in-time spread models
+  - Dynamic slippage models
+  - Fee schedules and execution assumptions
+- **Phase 6+ (Statistical Validation):**
+  - Out-of-sample (OOS) validation
+  - Walk-forward matrix analysis
+  - Forward paper testing
+  - Extreme event stress testing
+  - Market regime analysis
+- **Phase 12+ (Live Execution):**
+  - Actual broker fills
+  - Realized spread capture
+  - Actual fill slippage
+  - Round-trip latency measurement
+  - Account and portfolio reconciliation
+- **Phase 13+ (Reality Gap Analysis):**
+  - Systematic comparison: $\text{Backtest} \longleftrightarrow \text{Live}$
+  - Isolating alpha decay vs execution friction
+
+### Deviation Metrics & Example:
+| Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
+| :--- | :--- | :--- | :--- |
+| **Entry Price** | 100.00 | 100.07 | **+7 bps** |
+| **Prevailing Spread** | 2 bps | 9 bps | **+7 bps** |
+| **Execution Slippage** | 1 bp | 6 bps | **+5 bps** |
+| **Trade PnL** | +$240 | +$181 | **-24.6%** |
+| **Roundtrip Latency** | 15 ms | 120 ms | **+105 ms** |
+
+### Definitive Methodological Assessment:
+| Concept / Assertion | ACASH Empirical Stance |
+| :--- | :--- |
+| **Backtest $\neq$ Guarantee** | 🔥 **Adopted**: Backtest is a hypothesis test, never a guarantee of future edge. |
+| **Real Ticks vs Synthetic** | ✅ **Adopted**: Real tick/quote data is mandatory for high-fidelity execution modeling. |
+| **Spread Dynamics** | 🔥 **Adopted**: Variable spread modeling is mandatory across all timeframes. |
+| **Slippage Dynamics** | 🔥 **Adopted**: Non-linear slippage models based on liquidity and order size. |
+| **Backtest/Live Gap Analysis** | 🔥🔥 **Core Capability**: Continuous reality gap monitoring and automated learning. |
+| **Deposit/Withdrawal Provenance** | 🔥 **Adopted**: Explicit capital flow tracking in cash and account state. |
+| **Drawdown Priority over Returns** | 🔥 **Adopted**: Risk capacity and drawdown constraint dominate capital allocation. |
+| **2x Max DD Rule** | ❌ **Rejected as Hard-code**: Dynamically modeled via probabilistic risk engine, not static heuristics. |
+| **Myfxbook as Proof** | ❌ **Rejected as Proof**: Public track records without raw data and audit lineage are unverified marketing. |
+| **Daily Backtest Match = Proven** | ⚠️ **Validation Signal Only**: Short-term alignment is insufficient without statistical sample size. |
+| **Martingale Strategies** | ⚠️ **Hard Red Flag**: Non-convex ruin risk; strictly prohibited in sovereign strategies. |
+| **+100% Return = Good Strategy** | ❌ **Rejected**: High returns without risk-adjusted metrics, DSR, and max drawdown are meaningless. |
+| **1:2000 Extreme Leverage** | 🚨 **Strict Risk Variable**: Explicitly constrained by sovereign portfolio leverage limits. |

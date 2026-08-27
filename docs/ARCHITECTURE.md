@@ -244,6 +244,25 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
 
 $$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$
 
+---
 
+## 10. Reality Gap Analysis & Execution Deviation Architecture
 
+ACASH introduces the **Reality Gap Monitor** as a core system component to evaluate the fidelity of research models against live execution:
 
+```
+                 ACASH RESEARCH
+                       │
+              Expected Execution
+                       │
+                       ▼
+                 LIVE EXECUTION
+                       │
+              Actual Execution
+                       │
+                       ▼
+                Reality Gap Monitor
+```
+
+- **Execution Deviation Dimensions:** Measures systematic divergence across Entry Price ($\Delta_{\text{entry}}$), Market Spread ($\Delta_{\text{spread}}$), Slippage ($\Delta_{\text{slippage}}$), Round-Trip Latency ($\Delta_{\text{latency}}$), and Trade PnL ($\Delta_{\text{pnl}}$).
+- **Feedback & Calibration:** Isolates whether strategy underperformance stems from alpha degradation vs execution friction/broker micro-structure assumptions.

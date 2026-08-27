@@ -213,9 +213,40 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
 
 ---
 
-For in-depth specifications, see **[docs/ROADMAP.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ROADMAP.md)**.
+### REALITY GAP ANALYSIS & EXECUTION DEVIATION
 
+The core empirical objective of ACASH is measuring:
+> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
+```
+                 ACASH RESEARCH
+                       │
+              Expected Execution
+                       │
+                       ▼
+                 LIVE EXECUTION
+                       │
+              Actual Execution
+                       │
+                       ▼
+                Reality Gap
+```
 
+**Multi-Phase Reality Pipeline:**
+- **Phase 2+ (Data Quality):** Timestamp integrity, provenance, bid-ask spread, tick/bar consistency.
+- **Phase 5+ (Backtest):** Tick-aware simulation, spread models, dynamic slippage, execution assumptions.
+- **Phase 6+ (Validation):** OOS, walk-forward matrix, forward testing, stress testing, regime analysis.
+- **Phase 12+ (Live):** Actual fills, realized spreads, actual slippage, latency, broker reconciliation.
+- **Phase 13+ (Reality Gap):** Systematic deviation tracking ($\text{Backtest} \longleftrightarrow \text{Live}$) to isolate alpha decay vs execution friction.
 
+| Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
+| :--- | :--- | :--- | :--- |
+| **Entry Price** | 100.00 | 100.07 | **+7 bps** |
+| **Prevailing Spread** | 2 bps | 9 bps | **+7 bps** |
+| **Execution Slippage** | 1 bp | 6 bps | **+5 bps** |
+| **Trade PnL** | +$240 | +$181 | **-24.6%** |
+| **Roundtrip Latency** | 15 ms | 120 ms | **+105 ms** |
 
+---
+
+For in-depth specifications, see **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**.

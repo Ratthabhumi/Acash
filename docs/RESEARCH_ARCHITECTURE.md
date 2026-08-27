@@ -181,6 +181,55 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
 
 $$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$
 
+---
 
+## 10. Reality Gap Analysis & Execution Deviation Architecture
 
+The true empirical value of ACASH lies not in assuming theoretical perfection, but in systematically measuring:
+> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
+### 10.1 The Reality Gap Flow:
+```
+                 ACASH RESEARCH
+                       │
+              Expected Execution
+                       │
+                       ▼
+                 LIVE EXECUTION
+                       │
+              Actual Execution
+                       │
+                       ▼
+                Reality Gap Monitor
+```
+
+### 10.2 Phase-Integrated Reality Pipeline:
+- **Phase 2+ (Data Quality & Market Data):** Timestamp integrity ($t_{\text{knowledge}} \ge t_{\text{event}}$), quote provenance, bid-ask spread tracking, tick/bar consistency.
+- **Phase 5+ (Event-Driven Backtest):** Tick-aware simulation, point-in-time spread models, dynamic slippage curves, execution fee schedules.
+- **Phase 6+ (Statistical Validation):** Out-of-sample (OOS) testing, walk-forward validation matrix, forward paper testing, stress testing, regime shifts.
+- **Phase 12+ (Live Execution):** Actual broker fills, real spreads, realized slippage, round-trip order latency, broker account balance reconciliation.
+- **Phase 13+ (Reality Gap Analysis):** Systematic divergence tracking ($\text{Backtest} \longleftrightarrow \text{Live}$) to determine if models failed or execution assumptions were flawed.
+
+### 10.3 Execution Deviation Metrics:
+$$\Delta_{\text{entry}} = \text{Actual Fill Price} - \text{Expected Model Price}$$
+$$\Delta_{\text{spread}} = \text{Actual Realized Spread} - \text{Expected Model Spread}$$
+$$\Delta_{\text{slippage}} = \text{Actual Slippage} - \text{Assumed Model Slippage}$$
+$$\Delta_{\text{pnl}} = \frac{\text{Actual PnL} - \text{Expected PnL}}{\text{Expected PnL}}$$
+$$\Delta_{\text{latency}} = \text{Round-Trip Latency} - \text{Assumed Model Delay}$$
+
+### 10.4 Empirical Principles & Stance:
+| Concept / Assertion | ACASH Empirical Stance |
+| :--- | :--- |
+| **Backtest $\neq$ Guarantee** | 🔥 **Adopted**: Backtest is a hypothesis test, never a guarantee of future edge. |
+| **Real Ticks vs Synthetic** | ✅ **Adopted**: Real tick/quote data is mandatory for high-fidelity execution modeling. |
+| **Spread Dynamics** | 🔥 **Adopted**: Variable spread modeling is mandatory across all timeframes. |
+| **Slippage Dynamics** | 🔥 **Adopted**: Non-linear slippage models based on liquidity and order size. |
+| **Backtest/Live Gap Analysis** | 🔥🔥 **Core Capability**: Continuous reality gap monitoring and automated learning. |
+| **Deposit/Withdrawal Provenance** | 🔥 **Adopted**: Explicit capital flow tracking in cash and account state. |
+| **Drawdown Priority over Returns** | 🔥 **Adopted**: Risk capacity and drawdown constraint dominate capital allocation. |
+| **2x Max DD Rule** | ❌ **Rejected as Hard-code**: Dynamically modeled via probabilistic risk engine, not static heuristics. |
+| **Myfxbook as Proof** | ❌ **Rejected as Proof**: Public track records without raw data and audit lineage are unverified marketing. |
+| **Daily Backtest Match = Proven** | ⚠️ **Validation Signal Only**: Short-term alignment is insufficient without statistical sample size. |
+| **Martingale Strategies** | ⚠️ **Hard Red Flag**: Non-convex ruin risk; strictly prohibited in sovereign strategies. |
+| **+100% Return = Good Strategy** | ❌ **Rejected**: High returns without risk-adjusted metrics, DSR, and max drawdown are meaningless. |
+| **1:2000 Extreme Leverage** | 🚨 **Strict Risk Variable**: Explicitly constrained by sovereign portfolio leverage limits. |

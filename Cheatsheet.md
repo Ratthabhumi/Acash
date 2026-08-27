@@ -196,7 +196,16 @@ $$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \t
 $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
 *$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$*
 
+---
 
+## 12. Reality Gap Analysis & Execution Deviation
 
-
-
+- **Core Goal:** Measure divergence between simulation assumptions and live market reality:
+  $$\text{ACASH RESEARCH (Expected)} \longleftrightarrow \text{LIVE EXECUTION (Actual)} \implies \text{REALITY GAP}$$
+- **Deviation Metrics:**
+  - $\Delta_{\text{entry}} = \text{Fill Price} - \text{Model Target}$ (bps)
+  - $\Delta_{\text{spread}} = \text{Actual Spread} - \text{Expected Spread}$ (bps)
+  - $\Delta_{\text{slippage}} = \text{Actual Slippage} - \text{Assumed Slippage}$ (bps)
+  - $\Delta_{\text{latency}} = \text{Round-Trip Latency} - \text{Assumed Delay}$ (ms)
+  - $\Delta_{\text{pnl}} = \frac{\text{Actual PnL} - \text{Expected PnL}}{\text{Expected PnL}}$ (%)
+- **Takeaway:** Strategy underperformance may be execution friction, not alpha failure. Reality Gap monitoring isolates the truth.

@@ -164,3 +164,26 @@
   4. **TargetAllocation Semantic Boundary:** Phase 1 does NOT enforce $\sum \text{weights} + \text{cash\_weight} = 1.0$ as a domain invariant. The domain model validates structural finite values only. Leverage constraints, shorting, gross/net limits, and portfolio feasibility are strictly enforced by future Portfolio and Risk Engines.
   5. **Order Status Lifecycle:** `Order` includes `status: OrderStatus = OrderStatus.PENDING` (`PENDING`, `SUBMITTED`, `FILLED`, `PARTIALLY_FILLED`, `CANCELLED`, `REJECTED`).
 - **Consequences:** Enforces strict cash conservation, prevents realized-PnL double counting, clarifies slippage units, and preserves architectural flexibility for leveraged/market-neutral strategies.
+
+---
+
+## ADR-018: Reality Gap Analysis & Execution Deviation Monitoring Architecture
+- **Status:** Approved
+- **Context:** Backtest simulation results and historical paper trades inevitably diverge from live market execution due to spread expansion, quote latency, adverse selection, market impact, execution venue routing, and broker slippage. Treating strategy underperformance purely as an alpha failure without isolating execution friction leads to false model refactoring.
+- **Decision:**
+  1. **Reality Gap Monitor:** Establish a dedicated capability comparing Expected Simulation Execution against Actual Live Execution across multiple analytical dimensions:
+     - **Entry / Fill Deviation:** Difference between target/model entry price and realized fill price ($\text{bps}$ or price units).
+     - **Spread Deviation:** Model assumed spread vs actual prevailing market spread.
+     - **Slippage Deviation:** Model assumed slippage vs actual execution slippage.
+     - **Latency Deviation:** Model assumed order execution latency vs round-trip execution latency.
+     - **PnL Deviation:** Expected backtest trade PnL vs actual trade realized PnL.
+     - **Exposure / Cash Deviation:** Model target portfolio exposure vs actual broker position exposure.
+  2. **Pipeline Phase Integration:**
+     - **Phase 2+ (Data Quality):** Enforce timestamp integrity, quote provenance, bid-ask spread tracking, and tick/bar consistency.
+     - **Phase 5+ (Event-Driven Backtesting):** Implement tick-aware simulation, realistic spread models, dynamic slippage curves, and execution cost models.
+     - **Phase 6+ (Validation):** Require Out-Of-Sample (OOS), walk-forward validation, forward testing, stress testing, and regime shifts.
+     - **Phase 12+ (Live Execution):** Record actual fills, real spreads, realized slippage, order transit latency, and account balance reconciliation.
+     - **Phase 13+ (Reality Gap Analysis):** Compute systematic divergence metrics ($\text{Backtest} \longleftrightarrow \text{Live}$) to determine if models failed or execution assumptions were flawed.
+  3. **Guiding Principle:** The highest-value empirical capability of ACASH is measuring the difference between quantitative expectation and live market reality.
+- **Consequences:** Provides actionable empirical feedback to improve simulation realism, prevents erroneous alpha discarding, and enforces institutional-grade execution observability.
+
