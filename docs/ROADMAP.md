@@ -28,7 +28,8 @@
 ✅ Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED - PASSED — 139/139 Tests]
    │
    ▼
-🔄 Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 [IN PROGRESS — v1.1.0 Proposal]
+✅ Phase 5: Backtesting Substrate & Simulation Engine ──► Gate 5 [COMPLETED - PASSED — 164/164 Tests]
+
    │
    ▼
 ⏳ Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6
@@ -137,7 +138,8 @@
   - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
   - Reality Gap Telemetry Engine decomposing execution friction into spread, latency, and queue drag.
   - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
-- **Gate 5 Criteria:** Bitwise-identical replay across identical inputs/configs, exact double-entry cash conservation; 152/152 tests pass, `mypy` clean.
+- **Gate 5 Criteria:** Bitwise-identical replay across identical inputs/configs, exact double-entry cash conservation; 164/164 tests pass, `mypy` clean.
+
 
 ---
 
