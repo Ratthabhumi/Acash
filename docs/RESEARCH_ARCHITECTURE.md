@@ -188,27 +188,26 @@ $$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$
 The true empirical value of ACASH lies not in assuming theoretical perfection, but in systematically measuring:
 > *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
-### 10.1 The Reality Gap Flow:
+### 10.1 The Reality Gap Pipeline:
 ```
-                 ACASH RESEARCH
-                       │
-              Expected Execution
-                       │
-                       ▼
-                 LIVE EXECUTION
-                       │
-              Actual Execution
-                       │
-                       ▼
-                Reality Gap Monitor
+                 BACKTEST SIMULATION
+                          │
+                          ▼
+                 PAPER / SHADOW TRADING
+                          │
+                          ▼
+                    LIVE EXECUTION
+                          │
+                          ▼
+               REALITY GAP ATTRIBUTION
 ```
 
-### 10.2 Phase-Integrated Reality Pipeline:
-- **Phase 2+ (Data Quality & Market Data):** Timestamp integrity ($t_{\text{knowledge}} \ge t_{\text{event}}$), quote provenance, bid-ask spread tracking, tick/bar consistency.
-- **Phase 5+ (Event-Driven Backtest):** Tick-aware simulation, point-in-time spread models, dynamic slippage curves, execution fee schedules.
-- **Phase 6+ (Statistical Validation):** Out-of-sample (OOS) testing, walk-forward validation matrix, forward paper testing, stress testing, regime shifts.
-- **Phase 12+ (Live Execution):** Actual broker fills, real spreads, realized slippage, round-trip order latency, broker account balance reconciliation.
-- **Phase 13+ (Reality Gap Analysis):** Systematic divergence tracking ($\text{Backtest} \longleftrightarrow \text{Live}$) to determine if models failed or execution assumptions were flawed.
+### 10.2 Deviation Attribution Dimensions:
+Execution deviations are systematically attributed to four distinct sources:
+1. **Data Error:** Quote timestamp jitter, stale prices, bar aggregation anomalies, or tick missingness.
+2. **Model / Alpha Error:** Predictive decay, regime shift, or overfitted feature parameters.
+3. **Execution Error:** Fill price slippage, queue priority delay, or internal engine latency.
+4. **Broker / Venue Conditions:** Spread blowout, asymmetric requotes, margin policy shifts, or liquidity holes.
 
 ### 10.3 Execution Deviation Metrics:
 $$\Delta_{\text{entry}} = \text{Actual Fill Price} - \text{Expected Model Price}$$
@@ -217,19 +216,10 @@ $$\Delta_{\text{slippage}} = \text{Actual Slippage} - \text{Assumed Model Slippa
 $$\Delta_{\text{pnl}} = \frac{\text{Actual PnL} - \text{Expected PnL}}{\text{Expected PnL}}$$
 $$\Delta_{\text{latency}} = \text{Round-Trip Latency} - \text{Assumed Model Delay}$$
 
-### 10.4 Empirical Principles & Stance:
-| Concept / Assertion | ACASH Empirical Stance |
-| :--- | :--- |
-| **Backtest $\neq$ Guarantee** | 🔥 **Adopted**: Backtest is a hypothesis test, never a guarantee of future edge. |
-| **Real Ticks vs Synthetic** | ✅ **Adopted**: Real tick/quote data is mandatory for high-fidelity execution modeling. |
-| **Spread Dynamics** | 🔥 **Adopted**: Variable spread modeling is mandatory across all timeframes. |
-| **Slippage Dynamics** | 🔥 **Adopted**: Non-linear slippage models based on liquidity and order size. |
-| **Backtest/Live Gap Analysis** | 🔥🔥 **Core Capability**: Continuous reality gap monitoring and automated learning. |
-| **Deposit/Withdrawal Provenance** | 🔥 **Adopted**: Explicit capital flow tracking in cash and account state. |
-| **Drawdown Priority over Returns** | 🔥 **Adopted**: Risk capacity and drawdown constraint dominate capital allocation. |
-| **2x Max DD Rule** | ❌ **Rejected as Hard-code**: Dynamically modeled via probabilistic risk engine, not static heuristics. |
-| **Myfxbook as Proof** | ❌ **Rejected as Proof**: Public track records without raw data and audit lineage are unverified marketing. |
-| **Daily Backtest Match = Proven** | ⚠️ **Validation Signal Only**: Short-term alignment is insufficient without statistical sample size. |
-| **Martingale Strategies** | ⚠️ **Hard Red Flag**: Non-convex ruin risk; strictly prohibited in sovereign strategies. |
-| **+100% Return = Good Strategy** | ❌ **Rejected**: High returns without risk-adjusted metrics, DSR, and max drawdown are meaningless. |
-| **1:2000 Extreme Leverage** | 🚨 **Strict Risk Variable**: Explicitly constrained by sovereign portfolio leverage limits. |
+### 10.4 Empirical Modeling Principles:
+1. **Spread Modeling:** Execution-sensitive research must model spread at the highest fidelity supported by the available market data and strategy horizon. Lower-fidelity spread assumptions may be used when appropriate, but their limitations must be explicit.
+2. **Slippage Modeling:** Adopt a graduated complexity approach ($\text{simple assumption} \to \text{empirical calibration} \to \text{liquidity/order-size aware} \to \text{nonlinear model only when evidence justifies it}$).
+3. **Capital Flow Separation:** Deposits, withdrawals, and external cash flows are treated as first-class capital flow events, strictly isolated from Trading PnL and performance attribution metrics.
+4. **Martingale & Exposure Escalation:** Classify Martingale-like exposure escalation as a **HARD RISK FLAG** requiring explicit risk justification, tail-loss analysis, ruin probability analysis, and non-bypassable risk-gate enforcement.
+5. **Data Fidelity Alignment:** Data fidelity must match strategy horizon, execution sensitivity, and market microstructure requirements. Higher-fidelity tick/quote data is required when lower-resolution data cannot adequately represent the strategy's execution assumptions.
+

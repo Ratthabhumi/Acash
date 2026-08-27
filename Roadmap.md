@@ -219,25 +219,31 @@ The core empirical objective of ACASH is measuring:
 > *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
 ```
-                 ACASH RESEARCH
-                       │
-              Expected Execution
-                       │
-                       ▼
-                 LIVE EXECUTION
-                       │
-              Actual Execution
-                       │
-                       ▼
-                Reality Gap
+                 BACKTEST SIMULATION
+                          │
+                          ▼
+                 PAPER / SHADOW TRADING
+                          │
+                          ▼
+                    LIVE EXECUTION
+                          │
+                          ▼
+               REALITY GAP ATTRIBUTION
 ```
 
 **Multi-Phase Reality Pipeline:**
-- **Phase 2+ (Data Quality):** Timestamp integrity, provenance, bid-ask spread, tick/bar consistency.
-- **Phase 5+ (Backtest):** Tick-aware simulation, spread models, dynamic slippage, execution assumptions.
+- **Phase 2+ (Data Quality):** Data fidelity matching strategy horizon, timestamp integrity, provenance, spread capture.
+- **Phase 5+ (Backtest):** Tick-aware simulation, data-supported spread fidelity, graduated slippage models (simple $\to$ calibrated $\to$ liquidity-aware).
 - **Phase 6+ (Validation):** OOS, walk-forward matrix, forward testing, stress testing, regime analysis.
 - **Phase 12+ (Live):** Actual fills, realized spreads, actual slippage, latency, broker reconciliation.
-- **Phase 13+ (Reality Gap):** Systematic deviation tracking ($\text{Backtest} \longleftrightarrow \text{Live}$) to isolate alpha decay vs execution friction.
+- **Phase 13+ (Reality Gap Attribution):** Systematic deviation tracking attributed to: Data error, Model/alpha error, Execution error, or Venue conditions.
+
+**Core Methodological Principles:**
+1. **Spread Modeling:** Model spread at highest fidelity supported by data; explicit limitations on lower-resolution assumptions.
+2. **Slippage Modeling:** Graduated complexity based on empirical evidence ($\text{simple} \to \text{calibrated} \to \text{liquidity-aware}$).
+3. **Capital Flows:** External capital flows (deposits/withdrawals) are first-class events, strictly isolated from Trading PnL.
+4. **Martingale:** Classify Martingale-like exposure escalation as a **HARD RISK FLAG** requiring explicit tail and ruin analysis.
+5. **Data Fidelity:** Match fidelity to strategy horizon and execution sensitivity; use tick/quote data when lower resolution is inadequate.
 
 | Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
 | :--- | :--- | :--- | :--- |
@@ -250,3 +256,4 @@ The core empirical objective of ACASH is measuring:
 ---
 
 For in-depth specifications, see **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**.
+

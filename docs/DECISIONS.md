@@ -167,23 +167,24 @@
 
 ---
 
-## ADR-018: Reality Gap Analysis & Execution Deviation Monitoring Architecture
+## ADR-018: Reality Gap Analysis & Execution Deviation Architecture
 - **Status:** Approved
-- **Context:** Backtest simulation results and historical paper trades inevitably diverge from live market execution due to spread expansion, quote latency, adverse selection, market impact, execution venue routing, and broker slippage. Treating strategy underperformance purely as an alpha failure without isolating execution friction leads to false model refactoring.
+- **Context:** Backtest simulation results and paper trades inevitably diverge from live market execution due to spread expansion, quote latency, adverse selection, market impact, execution venue routing, and broker slippage. Treating strategy underperformance purely as an alpha failure without isolating execution friction leads to false model refactoring.
 - **Decision:**
-  1. **Reality Gap Monitor:** Establish a dedicated capability comparing Expected Simulation Execution against Actual Live Execution across multiple analytical dimensions:
-     - **Entry / Fill Deviation:** Difference between target/model entry price and realized fill price ($\text{bps}$ or price units).
-     - **Spread Deviation:** Model assumed spread vs actual prevailing market spread.
-     - **Slippage Deviation:** Model assumed slippage vs actual execution slippage.
-     - **Latency Deviation:** Model assumed order execution latency vs round-trip execution latency.
-     - **PnL Deviation:** Expected backtest trade PnL vs actual trade realized PnL.
-     - **Exposure / Cash Deviation:** Model target portfolio exposure vs actual broker position exposure.
-  2. **Pipeline Phase Integration:**
-     - **Phase 2+ (Data Quality):** Enforce timestamp integrity, quote provenance, bid-ask spread tracking, and tick/bar consistency.
-     - **Phase 5+ (Event-Driven Backtesting):** Implement tick-aware simulation, realistic spread models, dynamic slippage curves, and execution cost models.
-     - **Phase 6+ (Validation):** Require Out-Of-Sample (OOS), walk-forward validation, forward testing, stress testing, and regime shifts.
-     - **Phase 12+ (Live Execution):** Record actual fills, real spreads, realized slippage, order transit latency, and account balance reconciliation.
-     - **Phase 13+ (Reality Gap Analysis):** Compute systematic divergence metrics ($\text{Backtest} \longleftrightarrow \text{Live}$) to determine if models failed or execution assumptions were flawed.
-  3. **Guiding Principle:** The highest-value empirical capability of ACASH is measuring the difference between quantitative expectation and live market reality.
-- **Consequences:** Provides actionable empirical feedback to improve simulation realism, prevents erroneous alpha discarding, and enforces institutional-grade execution observability.
+  1. **Reality Gap Pipeline:** Establish a continuous multi-stage pipeline:
+     $$\text{Backtest} \to \text{Paper / Shadow} \to \text{Live} \to \text{Reality Gap Attribution}$$
+     Attributing execution deviations systematically to:
+     - **Data error** (quote timestamp jitter, stale prices, bar aggregation anomalies)
+     - **Model / alpha error** (signal decay, parameter overfitting, regime shift)
+     - **Execution error** (excess slippage, adverse queue priority, latency spikes)
+     - **Broker / venue conditions** (spread blowout, asymmetric requotes, margin policy change)
+  2. **Methodological Modeling Principles:**
+     - **Spread Model:** Execution-sensitive research must model spread at the highest fidelity supported by available market data and strategy horizon. Lower-fidelity spread assumptions may be used when appropriate, but their limitations must be explicit.
+     - **Slippage Model:** Adopt a graduated complexity approach ($\text{simple assumption} \to \text{empirical calibration} \to \text{liquidity/order-size aware} \to \text{nonlinear model only when evidence justifies it}$).
+     - **Capital Flow Separation:** External capital flows (deposits, withdrawals, transfers) are treated as first-class capital flow events, strictly isolated from Trading PnL and trading-performance attribution metrics.
+     - **Martingale & Exposure Escalation:** Classify Martingale-like exposure escalation as a **HARD RISK FLAG** requiring explicit risk justification, tail-loss analysis, ruin probability analysis, and non-bypassable risk-gate enforcement.
+     - **Data Fidelity:** Data fidelity must match strategy horizon, execution sensitivity, and market microstructure requirements. Higher-fidelity tick/quote data is required when lower-resolution data cannot adequately represent the strategy's execution assumptions.
+  3. **Guiding Principle:** The highest-value empirical capability of ACASH is measuring the difference between quantitative research expectation and live market reality.
+- **Consequences:** Provides actionable empirical feedback to improve simulation realism, prevents erroneous alpha discarding, isolates broker friction, and enforces institutional-grade execution observability.
+
 

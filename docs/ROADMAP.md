@@ -335,31 +335,31 @@ $$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$
 The core empirical objective of ACASH is measuring and understanding:
 > *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
 
-### Architecture Flow:
+### Architecture Pipeline:
 ```
-                 ACASH RESEARCH
-                       │
-              Expected Execution
-                       │
-                       ▼
-                 LIVE EXECUTION
-                       │
-              Actual Execution
-                       │
-                       ▼
-                Reality Gap
+                 BACKTEST SIMULATION
+                          │
+                          ▼
+                 PAPER / SHADOW TRADING
+                          │
+                          ▼
+                    LIVE EXECUTION
+                          │
+                          ▼
+               REALITY GAP ATTRIBUTION
 ```
 
 ### Multi-Phase Execution Pipeline:
 - **Phase 2+ (Data Quality & Market Data):**
+  - Data fidelity aligned with strategy horizon and microstructure sensitivity
   - Timestamp integrity ($t_{\text{knowledge}} \ge t_{\text{event}}$)
   - Data provenance and hashing
   - Bid-ask spread capture
   - Tick-to-bar aggregation consistency
 - **Phase 5+ (Event-Driven Backtesting):**
   - Tick-aware event simulation
-  - Point-in-time spread models
-  - Dynamic slippage models
+  - Spread modeled at highest fidelity supported by data
+  - Graduated slippage models (simple $\to$ calibrated $\to$ liquidity-aware)
   - Fee schedules and execution assumptions
 - **Phase 6+ (Statistical Validation):**
   - Out-of-sample (OOS) validation
@@ -373,9 +373,9 @@ The core empirical objective of ACASH is measuring and understanding:
   - Actual fill slippage
   - Round-trip latency measurement
   - Account and portfolio reconciliation
-- **Phase 13+ (Reality Gap Analysis):**
-  - Systematic comparison: $\text{Backtest} \longleftrightarrow \text{Live}$
-  - Isolating alpha decay vs execution friction
+- **Phase 13+ (Reality Gap Attribution):**
+  - Systematic comparison ($\text{Backtest} \to \text{Paper/Shadow} \to \text{Live}$)
+  - Attribution to: **Data error**, **Model/alpha error**, **Execution error**, or **Broker/venue conditions**
 
 ### Deviation Metrics & Example:
 | Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
@@ -386,7 +386,13 @@ The core empirical objective of ACASH is measuring and understanding:
 | **Trade PnL** | +$240 | +$181 | **-24.6%** |
 | **Roundtrip Latency** | 15 ms | 120 ms | **+105 ms** |
 
-### Definitive Methodological Assessment:
+### Methodological Principles:
+1. **Spread Modeling:** Execution-sensitive research must model spread at highest fidelity supported by data; lower-fidelity assumptions are permitted when appropriate, with explicit limitations.
+2. **Slippage Modeling:** Graduated complexity ($\text{simple assumption} \to \text{calibrated} \to \text{liquidity/size-aware} \to \text{nonlinear only when justified by evidence}$).
+3. **Capital Flows:** External capital flows (deposits/withdrawals) are first-class events, strictly excluded from trading-performance attribution.
+4. **Martingale & Exposure Escalation:** Classify Martingale-like exposure escalation as a **HARD RISK FLAG** requiring explicit risk, tail-loss, and ruin analysis; never bypasses risk gates.
+5. **Data Fidelity:** Fidelity must match strategy horizon and execution sensitivity; higher-fidelity tick/quote data is required when lower-resolution data cannot adequately represent execution assumptions.
+
 | Concept / Assertion | ACASH Empirical Stance |
 | :--- | :--- |
 | **Backtest $\neq$ Guarantee** | 🔥 **Adopted**: Backtest is a hypothesis test, never a guarantee of future edge. |
