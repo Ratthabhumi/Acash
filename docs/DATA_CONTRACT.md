@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.7.0 (Deterministic Revision Tie-Breakers & Global Batch Idempotency Locked)  
+**Version:** 1.8.0 (Deterministic Revision Tie-Breakers & Revision Content Duplicate Semantics Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -93,17 +93,18 @@ $$\text{Event Observation Key} = (\text{source\_id}, \text{symbol}, \text{timefr
 
 $$\text{Revision Identity} = (\text{Event Observation Key}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
 
-#### `revision_seq` Contract:
+#### `revision_seq` Contract & Deterministic Tie-Breakers:
 - Integer $\ge 1$.
 - Scoped strictly to `Event Observation Key`.
 - Deterministic and monotonic.
 - Must not be reused for the same source-specific event observation.
-- **Deterministic Assignment Rule:**
-  - If provided upstream by the data source, source sequence is validated.
-  - If assigned by ACASH, revisions within an `Event Observation Key` are sorted by:
-    $$\text{knowledge\_time\_utc ASC} \to \text{canonical\_content\_fingerprint ASC}$$
-    where `canonical_content_fingerprint` is a deterministic SHA-256 computed over the canonical revision content fields (`open, high, low, close, volume, quote_volume, trade_count`).
-  - Sequence numbers are assigned sequentially starting at 1 based on this deterministic sort.
+- **Deterministic Assignment & Tie-Breaker Rules:**
+  1. If provided upstream by the data source, source sequence is validated.
+  2. If assigned by ACASH, revisions within an `Event Observation Key` follow strict determinism:
+     - **Primary Sort:** `knowledge_time_utc ASC`
+     - **Tie-Breaker Sort (Same Event + Same Knowledge Time + Different Content):** Sorted by `canonical_content_fingerprint ASC`, where `canonical_content_fingerprint` is a deterministic SHA-256 computed over the canonical revision content fields (`open, high, low, close, volume, quote_volume, trade_count`).
+     - **Duplicate Rejection (Same Event + Same Knowledge Time + Identical Content):** If two records share the same `Event Observation Key`, `knowledge_time_utc`, AND identical canonical content (same fingerprint), they represent duplicate revision content. ACASH rejects this condition as a fatal deterministic duplicate error (`ERROR / INVALID`) without assigning diverging sequence numbers.
+     - Sequence numbers (`revision_seq = 1, 2, ...`) are assigned sequentially based on this deterministic sort.
 
 #### Global Revision Uniqueness:
 - An exact `Revision Identity` must be globally unique across the canonical dataset. If an incoming record matches a `Revision Identity` already present in the incoming batch or existing canonical Parquet parts, it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
@@ -202,7 +203,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.7.0",
+  "schema_version": "1.8.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

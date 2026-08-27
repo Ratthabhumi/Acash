@@ -206,8 +206,10 @@
   4. **Event Observation Key, Revision Identity & Deterministic `revision_seq`:**
      - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
      - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
-     - `revision_seq` is an integer $\ge 1$ scoped to the Event Observation Key. If assigned by ACASH, revisions are deterministically sorted by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC` before sequential numbering.
-     - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against the incoming batch and existing canonical parts under the **Phase 2 single-writer scope**.
+     - `revision_seq` is an integer $\ge 1$ scoped to the Event Observation Key.
+     - **Deterministic Assignment Rules:** If assigned by ACASH, revisions within an event are ordered by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC`. Same event + same knowledge + different content uses fingerprint tie-breaker; same event + same knowledge + identical content is rejected as duplicate revision error (`ERROR / INVALID`).
+     - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against incoming batches and existing canonical parts under the **Phase 2 single-writer scope**.
+
   5. **Distinct Event Monotonicity vs Revision Ordering:**
      - Event-time monotonicity is validated over distinct event observation keys: $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
      - Revisions within an event are ordered and validated by distinct `(knowledge_time_utc, revision_seq)` with $t_{\text{knowledge}} \ge t_{\text{event\_end}}$.
