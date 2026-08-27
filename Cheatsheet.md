@@ -90,10 +90,9 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 acash/
 ├── README.md               # Main repository orientation
 ├── Cheatsheet.md           # Developer & Quant quick reference
-├── Roadmap.md              # High-level 16-phase roadmap
-├── Acash_Talk-27-08-2026.md# Complete conversation log
-├── pyproject.toml          # Poetry / Hatch packaging & dependencies
-├── docs/                   # Canonical documentation suite (11 files)
+├── pyproject.toml          # Packaging & dependencies
+├── docs/                   # Canonical documentation suite (including docs/ROADMAP.md)
+
 ├── configs/                # Environment configurations (configs/*.yaml)
 │   ├── base.yaml
 │   ├── research.yaml
