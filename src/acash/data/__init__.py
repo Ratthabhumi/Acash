@@ -53,6 +53,7 @@ from acash.data.storage import (
     DuckDBStorage,
     ParquetStorageEngine,
 )
+from acash.data import trades
 
 __all__ = [
     # Mock
@@ -93,4 +94,7 @@ __all__ = [
     "IngestionPipeline",
     "IngestionResult",
     "IngestedBatchSummary",
+    # Submodules
+    "trades",
 ]
+
