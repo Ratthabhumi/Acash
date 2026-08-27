@@ -244,8 +244,13 @@
      - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
   8. **Recoverable Batch Commit Protocol (Commit-Intent Manifest):**
      - Single-writer model without heavy distributed transactions.
-     - Sequence: validate $\to$ normalize $\to$ compute `raw_source_sha256` and `canonical_batch_sha256` $\to$ write/fsync Commit-Intent Manifest (`data/manifests/manifest-{batch_id}.json`) $\to$ write/validate staging part $\to$ `os.replace` to `part-{batch_id}.parquet` $\to$ append provenance ledger from manifest metadata $\to$ mark committed.
-     - Crash Recovery: If a crash occurs after part publication but before provenance append, the recovery engine verifies the published part against the manifest's `canonical_batch_sha256` and reconstructs the complete provenance record from the manifest without guessing. Orphan parts without manifests are quarantined.
+     - **Manifest Lifecycle States:** `PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED` stored in `data/manifests/manifest-{batch_id}.json` via atomic write/fsync/replace.
+     - **Sequence:** validate $\to$ normalize $\to$ compute `raw_source_sha256` & `canonical_batch_sha256` $\to$ write/fsync manifest (`PREPARED`) $\to$ write/validate staging part $\to$ `os.replace` to `part-{batch_id}.parquet` $\to$ update manifest (`PART_PUBLISHED`) $\to$ idempotent provenance ledger append from manifest metadata $\to$ update manifest (`COMMITTED`).
+     - **Crash Recovery:**
+       - Crash after part publication: recovery verifies `canonical_batch_sha256` from manifest, appends missing provenance, and transitions manifest to `COMMITTED`.
+       - Crash after provenance append: recovery detects existing matching record in provenance ledger, does not append duplicate record, and transitions manifest to `COMMITTED`.
+       - Orphan parts without manifests are quarantined without guessing metadata.
+
 
 
 - **Consequences:** Eliminates partition overwrite data-loss risks, decouples event-time sequencing from revision ordering, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
