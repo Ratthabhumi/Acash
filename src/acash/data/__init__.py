@@ -49,7 +49,7 @@ from acash.data.sources import (
     ParquetSourceAdapter,
     SyntheticSourceAdapter,
 )
-from acash.data import orderbook, trades
+from acash.data import features, orderbook, trades
 
 __all__ = [
     # Mock
@@ -93,6 +93,8 @@ __all__ = [
     # Submodules
     "trades",
     "orderbook",
+    "features",
 ]
+
 
 
