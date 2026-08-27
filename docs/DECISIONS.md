@@ -189,18 +189,19 @@
 
 ---
 
-## ADR-019: Canonical Parquet Storage, Bi-Temporal Revision Semantics & Data Contract
+## ADR-019: Canonical Parquet Storage, Provenance-Aware Revision Semantics & Data Contract
 - **Status:** Approved
 - **Context:** Financial market data often arrives late or undergoes historical revision. Standard time-series queries filtering only `knowledge_time <= as_of` return multiple versions of the same event observation, causing look-ahead bias or state desynchronization. Furthermore, float downcasting risks precision loss, and nanosecond timestamps lose precision when ingested into DuckDB's native microsecond `TIMESTAMPTZ`.
 - **Decision:**
-  1. **Canonical Physical Storage:** Datasets are stored in partitioned Parquet files using Arrow schema:
+  1. **Canonical Physical Storage & Types:** Datasets are stored in partitioned Parquet files using Arrow schema:
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(28, 10)`.
      - Partitioning: `data/parquet/{symbol}/{timeframe}/year={YYYY}/data.parquet`.
-  2. **Bi-Temporal Revision-Aware Identity & As-Of Invariant:**
-     - A single event observation may have multiple historical revisions identified by `(symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
-     - At any query reference timestamp $T_{\text{as\_of}}$, there is **at most one authoritative revision** per event observation.
-  3. **P-I-T Deduplication Query Standard:**
+  2. **Provenance-Aware Revision Identity & As-Of Invariant:**
+     - Observation Identity: `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
+     - `revision_seq` is deterministic and scoped to `(source_id, symbol, timeframe, event_start_utc)`.
+     - At any reference timestamp $T_{\text{as\_of}}$, exactly one authoritative revision is returned per event observation.
+  3. **P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
          SELECT * FROM read_parquet(...)
@@ -210,15 +211,16 @@
      SELECT * FROM eligible
      QUALIFY ROW_NUMBER() OVER (
          PARTITION BY symbol, timeframe, event_start_utc
-         ORDER BY knowledge_time_utc DESC, revision_seq DESC
+         ORDER BY knowledge_time_utc DESC, revision_seq DESC, canonical_dataset_sha256 DESC
      ) = 1
      ORDER BY event_start_utc ASC;
      ```
-  4. **Strict Error vs Anomaly Boundary:**
-     - **ERROR / INVALID:** Fatal structural, pricing, or temporal violations $\implies$ reject ingest.
-     - **WARNING / ANOMALY:** Extreme price returns, volume spikes, cadence anomalies $\implies$ flag and preserve observation without silent mutation or deletion.
-  5. **Session Cadence Policy:** Cadence gaps are differentiated between expected closed-market intervals (e.g. FX weekends) and unexpected data missingness.
-- **Consequences:** Eliminates bi-temporal revision leakage, preserves full financial precision, prevents DuckDB timestamp precision truncation, and establishes a strict, non-destructive data contract.
+  4. **Dual Provenance Hashing:** Separately track `raw_source_sha256` and `canonical_dataset_sha256` in an immutable provenance ledger (`data/provenance_ledger.jsonl`) with transformation metadata.
+  5. **Atomic Write Guarantee:** Parquet partitions are written to temporary staging files (`.tmp_*`), validated, and atomically replaced into canonical paths (`os.replace`) so readers never observe partial writes.
+  6. **Error vs Anomaly Boundary:** Fatal violations reject ingest (`ERROR`); empirical anomalies (`WARNING`) are flagged without modifying raw data.
+  7. **Configurable Session Profiles:** Cadence validation supports `CRYPTO_24_7`, `FX_24_5_DEFAULT`, `EQUITY_SESSION_DEFAULT`, and `CUSTOM` profiles.
+- **Consequences:** Eliminates bi-temporal revision leakage, preserves full financial precision, prevents DuckDB timestamp precision truncation, establishes atomic dataset writes, and enables complete data lineage reconstruction.
+
 
 
 

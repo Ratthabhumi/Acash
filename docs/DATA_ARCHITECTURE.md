@@ -55,12 +55,13 @@ Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CON
 
 | Column Name | Physical Parquet Type | Description |
 | :--- | :--- | :--- |
+| `source_id` | `VARCHAR` | Identifier of data provider (e.g. `binance_public`, `dukascopy`) |
 | `symbol` | `VARCHAR` | Unique standard symbol (e.g. `BTC/USDT`, `AAPL`, `EUR/USD`) |
 | `timeframe` | `VARCHAR` | Bar resolution (`M1`, `M5`, `M15`, `H1`, `H4`, `D1`) |
 | `event_start_utc` | `TIMESTAMP[us, tz=UTC]` | Exact bar opening timestamp in UTC (Microseconds) |
 | `event_end_utc` | `TIMESTAMP[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microseconds) |
 | `knowledge_time_utc`| `TIMESTAMP[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microseconds) |
-| `revision_seq` | `BIGINT` | Monotonically increasing revision sequence number |
+| `revision_seq` | `BIGINT` | Deterministic revision sequence scoped to `(source_id, symbol, timeframe, event_start_utc)` |
 | `open` | `DECIMAL(28, 10)` | Opening price with exact fixed precision |
 | `high` | `DECIMAL(28, 10)` | Highest traded price during bar interval |
 | `low` | `DECIMAL(28, 10)` | Lowest traded price during bar interval |
@@ -68,8 +69,8 @@ Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CON
 | `volume` | `DECIMAL(28, 10)` | Total base asset volume traded |
 | `quote_volume` | `DECIMAL(28, 10)` | Total quote currency volume traded |
 | `trade_count` | `BIGINT` | Total discrete trades within the bar (-1 if unavailable) |
-| `source_id` | `VARCHAR` | Identifier of data provider (e.g. `binance_public`, `dukascopy`) |
-| `provenance_hash` | `VARCHAR` | SHA-256 hash of original raw ingest batch |
+| `raw_source_sha256` | `VARCHAR` | SHA-256 hash of original raw ingest batch |
+| `canonical_dataset_sha256` | `VARCHAR` | SHA-256 hash of normalized canonical partition |
 
 ---
 
@@ -89,8 +90,9 @@ SELECT *
 FROM eligible
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY symbol, timeframe, event_start_utc
-    ORDER BY knowledge_time_utc DESC, revision_seq DESC
+    ORDER BY knowledge_time_utc DESC, revision_seq DESC, canonical_dataset_sha256 DESC
 ) = 1
 ORDER BY event_start_utc ASC;
 ```
+
 
