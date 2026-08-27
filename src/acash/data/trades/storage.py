@@ -225,16 +225,21 @@ class TradesStorageEngine:
 
         # Step 4: Validate staging file
         try:
-            read_back = pq.read_table(temp_part_path)
-            if read_back.num_rows != table.num_rows:
-                raise IOError(f"Staging file corruption: wrote {table.num_rows} rows, read {read_back.num_rows}")
+            with open(temp_part_path, "rb") as f:
+                read_back = pq.read_table(f)
+                if read_back.num_rows != table.num_rows:
+                    raise IOError(f"Staging file corruption: wrote {table.num_rows} rows, read {read_back.num_rows}")
         except Exception as exc:
             if temp_part_path.exists():
-                temp_part_path.unlink()
+                try:
+                    temp_part_path.unlink()
+                except Exception:
+                    pass
             raise IOError(f"Validation of staging part failed: {exc}") from exc
 
         # Step 5: Atomically publish
         os.replace(temp_part_path, target_path)
+
 
         # Step 6: Transition manifest to PART_PUBLISHED
         self.provenance_tracker.update_manifest_status(batch_id, BatchLifecycleStatus.PART_PUBLISHED)

@@ -49,11 +49,7 @@ from acash.data.sources import (
     ParquetSourceAdapter,
     SyntheticSourceAdapter,
 )
-from acash.data.storage import (
-    DuckDBStorage,
-    ParquetStorageEngine,
-)
-from acash.data import trades
+from acash.data import orderbook, trades
 
 __all__ = [
     # Mock
@@ -96,5 +92,7 @@ __all__ = [
     "IngestedBatchSummary",
     # Submodules
     "trades",
+    "orderbook",
 ]
+
 
