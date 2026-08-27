@@ -1,7 +1,7 @@
 # ACASH — Data & Storage Architecture Specification (Phase 0)
 
 **Document:** `docs/DATA_ARCHITECTURE.md`  
-**Version:** 3.1.0 (Micro-Corrections Applied)  
+**Version:** 3.2.0 (Micro-Corrections & Storage Semantics Finalized)  
 **Date:** 2026-08-27  
 
 ---
@@ -75,7 +75,7 @@ Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CON
 
 ## 5. Point-in-Time Revision Query Standard
 
-To prevent historical revision leakage across independent sources, DuckDB queries against Parquet partitions use source-aware revision deduplication:
+DuckDB queries against Parquet partitions partition by **Event Observation Key** to select the authoritative revision as of $T_{\text{as\_of}}$:
 
 ```sql
 WITH eligible AS (
@@ -94,6 +94,9 @@ QUALIFY ROW_NUMBER() OVER (
 ORDER BY source_id ASC, event_start_utc ASC;
 ```
 
+> [!NOTE]
+> **Downstream Source Reconciliation:** The P-I-T layer preserves distinct observations from independent data sources without automatic merging or ranking. Source selection/reconciliation is a separate downstream research layer.
+
 ---
 
 ## 6. Immutable Append-Only Part Storage Layout
@@ -110,3 +113,4 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 - Each ingestion batch is written as a new immutable `.parquet` part file.
 - Writing uses a staging file (`.tmp_part_*.parquet`) validated before atomic replacement (`os.replace`) into its unique canonical part name.
 - DuckDB scans all historical parts concurrently via glob patterns (`**/*.parquet`).
+- **Concurrency Scope:** Phase 2 assumes a single-writer ingestion process. Concurrent writers are out of scope.

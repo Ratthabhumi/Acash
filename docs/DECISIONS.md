@@ -189,7 +189,7 @@
 
 ---
 
-## ADR-019: Immutable Part Storage, Provenance-Aware Revisions & Data Contract
+## ADR-019: Immutable Part Storage, Event-Key/Revision-Identity Semantics & Data Contract
 - **Status:** Approved
 - **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must not cross independent source streams, duplicate revision identities must be deterministically rejected across the entire dataset, and hash calculations must be invariant to input row permutations.
 - **Decision:**
@@ -198,10 +198,11 @@
      Normal ingestion never overwrites existing part files; DuckDB queries scan all parts via Parquet globs.
   2. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
-     - Financial Numerics: `Decimal128(38, 18)` (Canonical representation within explicit precision/scale bounds; out-of-bound or non-finite values rejected).
-  3. **Global Provenance-Aware Revision Identity & Determinism:**
-     - Observation Identity: `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
-     - Identical observation identities are rejected as fatal deterministic errors (`ERROR / INVALID`) against both the current incoming batch and existing canonical Parquet parts.
+     - Financial Numerics: `Decimal128(38, 18)` (Canonical representation supporting up to 18 fractional scale places; out-of-bound or non-finite values rejected).
+  3. **Event Observation Key vs Revision Identity & Concurrency:**
+     - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
+     - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
+     - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against the incoming batch and existing canonical parts under the **Phase 2 single-writer scope**. (Concurrent ingestion is out of scope).
   4. **Source-Aware P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
@@ -216,13 +217,14 @@
      ) = 1
      ORDER BY source_id ASC, event_start_utc ASC;
      ```
-  5. **Deterministic Non-Circular Provenance Hashes:**
+  5. **Deterministic Logical Data Hashes:**
      - `raw_source_sha256`: SHA-256 of raw input bytes.
-     - `canonical_batch_sha256`: SHA-256 of deterministic binary serialization of canonical columns sorted by identity `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`, excluding digest fields.
+     - `canonical_batch_sha256`: SHA-256 computed over the deterministic binary serialization of canonical data columns sorted by Revision Identity (excluding digest fields). Completely invariant to physical Parquet compression, chunking, or input row permutations.
      - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
   6. **Per-Stream Validation:** Monotonicity and cadence checks execute strictly per independent `(source_id, symbol, timeframe)` stream.
   7. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
-- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources and files, guarantees input row order invariance in cryptographic hashing, and enforces deterministic append-only growth.
+- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources and files, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
+
 
 
 

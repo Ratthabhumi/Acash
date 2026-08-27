@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.4.0 (Global Revision Uniqueness, Deterministic Canonical Hash & Multi-Part Testing Locked)  
+**Version:** 1.5.0 (Event Key vs Revision Identity, Logical Hashing & Single-Writer Scope Finalized)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -10,7 +10,7 @@
 ## 1. Core Principles & Philosophy
 
 The ACASH Data Subsystem operates on one fundamental principle:
-$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Normalize \& Sort}} \text{Canonical Batch} \xrightarrow{\text{canonical batch SHA-256}} \text{Immutable Part File} \to \text{P-I-T Query}$$
+$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Normalize \& Sort}} \text{Canonical Logical Batch} \xrightarrow{\text{logical batch SHA-256}} \text{Immutable Part File} \to \text{P-I-T Query}$$
 
 > [!CRITICAL]
 > **Zero Historical Distortion:** The data validator's objective is to certify dataset trustworthiness, **NOT to make historical data look artificially smooth or clean**. Anomalies are flagged, never silently deleted or mutated.
@@ -29,7 +29,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 | `event_start_utc` | `timestamp[us, tz=UTC]` | Exact bar opening timestamp in UTC (Microsecond precision) |
 | `event_end_utc` | `timestamp[us, tz=UTC]` | Exact bar closing timestamp in UTC (Microsecond precision) |
 | `knowledge_time_utc`| `timestamp[us, tz=UTC]` | System knowledge/ingestion timestamp in UTC (Microsecond precision) |
-| `revision_seq` | `int64` | Deterministic revision sequence scoped to `(source_id, symbol, timeframe, event_start_utc)` |
+| `revision_seq` | `int64` | Deterministic revision sequence scoped to `Event Observation Key` |
 | `open` | `decimal128(38, 18)` | Opening price within explicit precision/scale limits |
 | `high` | `decimal128(38, 18)` | Highest traded price during the bar interval |
 | `low` | `decimal128(38, 18)` | Lowest traded price during the bar interval |
@@ -39,7 +39,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 | `trade_count` | `int64` | Total discrete trade count (-1 if unavailable from source) |
 
 ### 2.1 Numeric Precision Policy (`Decimal128(38, 18)`):
-- `Decimal128(38, 18)` is the canonical Phase 2 representation within explicit precision/scale limits (up to 20 integer digits and 18 decimal scale places).
+- `Decimal128(38, 18)` is the canonical Phase 2 representation supporting values requiring up to 18 fractional decimal places within the defined total precision and scale limits (e.g., fractional pricing, Satoshi = $10^{-8}$ BTC, Wei = $10^{-18}$ ETH).
 - Values outside these bounds or attempting non-finite representation are rejected with `DomainValidationError`.
 - Statistical/ML engines explicitly convert to floating-point (`float64`) when performing vectorized analytics.
 
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout: Immutable Append-Only Part Files
+## 3. Storage Layout & Concurrency Boundaries
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -59,7 +59,7 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 └── ...
 ```
 
-### Storage Invariants:
+### Storage & Concurrency Invariants:
 1. **Append-Only Parts:** Each successful batch ingestion writes a new, uniquely identified immutable part file.
 2. **Never Overwrite Existing Parts:** Normal ingestion never overwrites, truncates, or replaces existing part files.
 3. **Partition Scanning:** DuckDB reads the full historical dataset across all parts using parquet file globs:
@@ -67,6 +67,7 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 4. **Atomic Staging Pattern:**
    $$\text{Write Temp (.tmp\_part\_*.parquet)} \to \text{Flush/Close} \to \text{Validate Staged File} \to \text{os.replace into Canonical Part Path}$$
    Under supported filesystem semantics, readers will not observe the final path as a partially written staging file, and a failed write leaves existing parts completely intact.
+5. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
 
 ---
 
@@ -79,17 +80,20 @@ ACASH explicitly decouples **Event Time** ($t_{\text{event}}$) from **Knowledge 
 2. **Knowledge Invariant:** $t_{\text{knowledge}} \ge t_{\text{event\_end}}$ (No observation can be known before its bar interval closes)
 3. **Stream-Isolated Monotonicity:** For sequential bars $i$ and $i+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, i+1} \ge t_{\text{event\_end}, i}$.
 
-### 4.2 Global Observation Identity & Deterministic Uniqueness:
-- A single observation is uniquely identified by:
-  $$\text{Observation Identity} = (\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
-- `revision_seq` is a deterministic, strictly increasing integer scoped to $(\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc})$.
-- **Global Uniqueness Enforcement:** An exact observation identity must be globally unique across the entire canonical dataset. If an incoming record matches an identity already present in:
-  1. The current incoming batch (intra-batch collision), OR
-  2. Any existing canonical Parquet part in the partition (existing-dataset collision)
-  it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
-- **Zero Premature Source Merging:** Multiple data sources observing the same symbol and timestamp remain distinct independent observations.
+### 4.2 Event Observation Key vs Revision Identity:
+ACASH makes a strict distinction between the **event being observed** and its **specific historical revision**:
+
+$$\text{Event Observation Key} = (\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc})$$
+
+$$\text{Revision Identity} = (\text{Event Observation Key}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
+
+- `revision_seq` is a deterministic, strictly increasing integer scoped to the `Event Observation Key`.
+- **Global Revision Uniqueness:** An exact `Revision Identity` must be globally unique across the canonical dataset. If an incoming record matches a `Revision Identity` already present in the incoming batch or existing canonical Parquet parts, it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
+- **Zero Premature Source Merging:** Multiple data sources observing the same symbol and timestamp remain distinct independent observations. Phase 2 PIT queries return source-specific authoritative records and do NOT merge, rank, or reconcile sources. (Source selection and reconciliation is a separate future research layer).
 
 ### 4.3 Source-Aware Point-in-Time (P-I-T) Query Standard:
+DuckDB queries partition by `Event Observation Key` to select the authoritative revision as of $T_{\text{as\_of}}$ across all immutable parts:
+
 ```sql
 WITH eligible_revisions AS (
     SELECT *
@@ -109,15 +113,19 @@ ORDER BY source_id ASC, event_start_utc ASC;
 
 ---
 
-## 5. Provenance Hashes & Deterministic Canonical Ordering
+## 5. Logical Provenance Hashing & Determinism
 
 Provenance is tracked at the batch and source level without circular row-level self-referencing:
 1. **Raw Source Hash (`raw_source_sha256`):**
    - SHA-256 computed over the exact raw input payload bytes prior to parsing.
 2. **Canonical Batch Hash (`canonical_batch_sha256`):**
-   - Computed over the deterministic binary serialization of the normalized batch columns:
+   - SHA-256 computed over the **deterministic logical representation** of the normalized batch columns, **NOT raw Parquet file bytes**:
      `[source_id, symbol, timeframe, event_start_utc, event_end_utc, knowledge_time_utc, revision_seq, open, high, low, close, volume, quote_volume, trade_count]`
-   - **Deterministic Canonical Ordering:** Rows must be sorted by `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)` prior to binary serialization, guaranteeing that `canonical_batch_sha256` is completely invariant to incidental input row ordering.
+   - **Deterministic Logical Normalization:**
+     1. Exclude all digest and file metadata fields.
+     2. Encode numeric decimals and UTC timestamps in canonical fixed-width binary representations.
+     3. Sort rows strictly by `Revision Identity` (`source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq`).
+   - **File-Layout Invariance:** The logical hash is completely invariant to Parquet compression codecs, row-group boundaries, file metadata, or physical storage chunking.
    - Stored in the Provenance Ledger (`data/provenance_ledger.jsonl`) alongside the resulting Parquet part file path.
 
 ---
@@ -173,7 +181,7 @@ Every ingestion run records an entry in the **append-only application audit log*
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.4.0",
+  "schema_version": "1.5.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",
