@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.6.0 (Revision Monotonicity Separation, Batch Idempotency & Revision Sequence Contract Locked)  
+**Version:** 1.7.0 (Deterministic Revision Tie-Breakers & Global Batch Idempotency Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -48,7 +48,7 @@ Datasets stored in the ACASH analytical layer adhere strictly to the following P
 
 ---
 
-## 3. Storage Layout, Batch Idempotency & Concurrency Boundaries
+## 3. Storage Layout, Global Batch Idempotency & Concurrency Boundaries
 
 Parquet files are organized in partitioned directories as **immutable append-only parts**:
 
@@ -67,10 +67,11 @@ data/parquet/{symbol}/{timeframe}/year={YYYY}/
 4. **Atomic Staging Pattern:**
    $$\text{Write Temp (.tmp\_part\_*.parquet)} \to \text{Flush/Close} \to \text{Validate Staged File} \to \text{os.replace into Canonical Part Path}$$
    Under supported filesystem semantics, readers will not observe the final path as a partially written staging file, and a failed write leaves existing parts completely intact.
-5. **Batch Idempotency Contract:**
-   - `batch_id` must be unique within the canonical storage namespace.
+5. **Global Batch Idempotency Contract:**
+   - `batch_id` is a **globally unique immutable ingestion identity across the entire ACASH canonical dataset**.
    - Retrying the exact same `batch_id` with identical canonical content is safely idempotent (no-op; returns the existing part path without creating duplicate parts).
    - Ingesting an existing `batch_id` with differing canonical content is rejected with a fatal `BatchCollisionError`.
+   - `batch_id` is recorded in the provenance audit record.
 6. **Single-Writer Concurrency Scope:** Phase 2 ingestion assumes a **single-writer ingestion process**. Concurrent/multi-process writers are explicitly out of scope for Phase 2. Global duplicate validation operates against the existing partition parts sequentially before writing.
 
 ---
@@ -97,7 +98,12 @@ $$\text{Revision Identity} = (\text{Event Observation Key}, \text{knowledge\_tim
 - Scoped strictly to `Event Observation Key`.
 - Deterministic and monotonic.
 - Must not be reused for the same source-specific event observation.
-- **Assignment Origin:** If provided upstream by the data source, source sequence is validated; otherwise, ACASH deterministically assigns `revision_seq` starting at 1 ordered ascending by `knowledge_time_utc`.
+- **Deterministic Assignment Rule:**
+  - If provided upstream by the data source, source sequence is validated.
+  - If assigned by ACASH, revisions within an `Event Observation Key` are sorted by:
+    $$\text{knowledge\_time\_utc ASC} \to \text{canonical\_content\_fingerprint ASC}$$
+    where `canonical_content_fingerprint` is a deterministic SHA-256 computed over the canonical revision content fields (`open, high, low, close, volume, quote_volume, trade_count`).
+  - Sequence numbers are assigned sequentially starting at 1 based on this deterministic sort.
 
 #### Global Revision Uniqueness:
 - An exact `Revision Identity` must be globally unique across the canonical dataset. If an incoming record matches a `Revision Identity` already present in the incoming batch or existing canonical Parquet parts, it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
@@ -189,13 +195,14 @@ Every ingestion run records an entry in the **append-only application audit log*
 ```json
 {
   "provenance_id": "prov_20260827_001",
+  "batch_id": "batch_20260827_001_a1b2c3d4",
   "source_id": "binance_public",
   "source_uri_or_path": "data/raw/btc_usdt_1m.csv",
   "part_file_path": "data/parquet/BTC-USDT/M1/year=2026/part-000001-a1b2c3d4.parquet",
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.6.0",
+  "schema_version": "1.7.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",

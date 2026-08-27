@@ -196,16 +196,17 @@
   1. **Immutable Append-Only Part Storage:** Datasets are stored as partitioned immutable part files:
      `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`
      Normal ingestion never overwrites existing part files; DuckDB queries scan all parts via Parquet globs.
-  2. **Batch Idempotency Contract:**
-     - Retrying the same `batch_id` with identical canonical content is safely idempotent.
+  2. **Global Batch Idempotency Contract:**
+     - `batch_id` is a globally unique immutable ingestion identity across the entire ACASH canonical dataset.
+     - Retrying the same `batch_id` with identical canonical content is safely idempotent (no-op).
      - Ingestion of an existing `batch_id` with differing canonical content is rejected with `BatchCollisionError`.
   3. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(38, 18)` (Canonical representation supporting up to 18 fractional scale places; out-of-bound or non-finite values rejected).
-  4. **Event Observation Key, Revision Identity & `revision_seq`:**
+  4. **Event Observation Key, Revision Identity & Deterministic `revision_seq`:**
      - `Event Observation Key`: `(source_id, symbol, timeframe, event_start_utc)`.
      - `Revision Identity`: `(event_observation_key, knowledge_time_utc, revision_seq)`.
-     - `revision_seq` is an integer $\ge 1$ scoped to the Event Observation Key (source-provided or deterministically assigned by ACASH).
+     - `revision_seq` is an integer $\ge 1$ scoped to the Event Observation Key. If assigned by ACASH, revisions are deterministically sorted by `knowledge_time_utc ASC` $\to$ `canonical_content_fingerprint ASC` before sequential numbering.
      - Duplicate Revision Identities are rejected as fatal errors (`ERROR / INVALID`) against the incoming batch and existing canonical parts under the **Phase 2 single-writer scope**.
   5. **Distinct Event Monotonicity vs Revision Ordering:**
      - Event-time monotonicity is validated over distinct event observation keys: $t_{\text{event\_start}, j+1} \ge t_{\text{event\_end}, j}$.
@@ -230,6 +231,7 @@
      - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
   8. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
 - **Consequences:** Eliminates partition overwrite data-loss risks, decouples event-time sequencing from revision ordering, guarantees logical invariance in cryptographic hashing, and enforces deterministic append-only growth.
+
 
 
 
