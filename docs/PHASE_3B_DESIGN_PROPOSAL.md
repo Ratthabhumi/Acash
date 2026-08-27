@@ -1,9 +1,9 @@
 # ACASH — Phase 3B: Canonical Order Book Subsystem Design Proposal & Data Contract
 
 **Document:** `docs/PHASE_3B_DESIGN_PROPOSAL.md`  
-**Version:** 1.2.0  
-**Date:** 2026-08-27  
-**Status:** **PROPOSED — AWAITING ARCHITECTURAL REVIEW & CONTRACT SIGN-OFF**  
+**Version:** 1.3.0  
+**Date:** 2026-08-28  
+**Status:** **PROPOSED — AWAITING FINAL ARCHITECTURAL SIGN-OFF**  
 
 ---
 
@@ -14,10 +14,11 @@ In market microstructure research (e.g. CME ES/NQ futures), the **Order Book** r
 Unlike **Trades (Phase 3A)**, which are discrete completed matching events (point process), the **Order Book (Phase 3B)** is a **dynamic stateful priority ladder**:
 1. It is communicated via two complementary feed channels:
    - **L2 Depth Snapshots (MBP - Market By Price):** Periodic full state captures of the top $N$ price levels (e.g. Top 10 Bids and Top 10 Asks).
-   - **L2/L3 Incremental Deltas:** High-frequency mutation events (`ADD`, `MODIFY`, `DELETE`, `CLEAR`) with monotonic message sequence numbers.
+   - **L2/L3 Incremental Deltas:** High-frequency mutation events (`ADD`, `MODIFY`, `DELETE`, `CANCEL`, `CLEAR`) with monotonic message sequence numbers.
 2. An analytical research query requesting *"What was the exact Top-10 Depth Ladder at time $T_{\text{target}}$ as observed at or before $T_{\text{knowledge}}$?"* requires a **deterministic Book State Reconstruction Engine** that:
-   - Selects the latest complete **Snapshot Frame** (all multi-level rows sharing the frame's `snapshot_id`) prior to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$.
-   - Applies all subsequent incremental deltas up to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$ using adapter-defined source ordering semantics.
+   - Operates within an **immutable Stream Scope** `(source_id, channel_id, symbol, trading_date)`.
+   - Selects the latest complete **Snapshot Frame** (all multi-level rows sharing the compound Frame Identity) prior to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$, with deterministic tie-breaking.
+   - Applies all subsequent incremental deltas up to $T_{\text{target}}$ knowable at $T_{\text{knowledge}}$ using adapter-defined source ordering semantics and explicit action size payloads.
 
 ```
                                       PHASE 3B ORDER BOOK TOPOLOGY
@@ -26,15 +27,17 @@ Unlike **Trades (Phase 3A)**, which are discrete completed matching events (poin
                  ▼                                                                     ▼
     CANONICAL SNAPSHOTS (MBP)                                             CANONICAL DELTAS (MBP/MBO)
   - Multi-row atomic snapshot frames                                    - Incremental Atomic Mutations
-  - Explicit frame completeness & shape                                 - Explicit MBP vs MBO semantics
-  - Daily Parquet Partition                                             - Daily Parquet Partition
+  - Explicit frame completeness & shape                                 - Explicit action payload semantics
+  - Scoped to (source, channel, symbol, date)                           - Scoped to (source, channel, symbol, date)
                  │                                                                     │
                  └──────────────────────────────────┬──────────────────────────────────┘
                                                     │
                                                     ▼
                                ┌─────────────────────────────────────────┐
                                │  BOOK STATE RECONSTRUCTION ENGINE       │
-                               │  - Selects Full Multi-Row Frame Root    │
+                               │  - Immutable Stream Scope               │
+                               │  - Full Multi-Row Frame Compound Root   │
+                               │  - Deterministic Final Tie-Breaker      │
                                │  - Sequentially applies Deltas          │
                                │  - Adapter-defined SourceOrderingPolicy │
                                │  - Classifies Crossed States            │
@@ -75,29 +78,34 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
 
 ---
 
-## 3. Snapshot Frame Identity, Completeness & Shape Consistency
+## 3. Snapshot Frame Identity, Scoping & Shape Completeness
 
 > [!IMPORTANT]
-> **Snapshot Frame & Multi-Row Completeness Principle:**
+> **Snapshot Frame Compound Identity & Completeness Principle:**
 > A snapshot is **NOT a single row**; it is an **atomic multi-row frame** representing a full price ladder across both sides.
 >
-> 1. **Snapshot Frame Identity (`snapshot_id`):**  
->    Globally unique frame identifier scoped to:
->    $$\text{snapshot\_id} = \text{snap\_}\{\text{source\_id}\}\_\{\text{channel\_id}\}\_\{\text{symbol}\}\_\{\text{trading\_date}\}\_\{\text{source\_seq\_num}\}$$
+> 1. **Snapshot Frame Identity & Uniqueness Scope:**  
+>    The `snapshot_id` string is unique within the compound frame scope:
+>    $$\text{Compound Frame Identity} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date}, \text{source\_seq\_num}, \text{snapshot\_id})$$
 > 2. **Completeness & Shape Verification:**  
 >    `is_snapshot_complete` is **NOT an arbitrary boolean**; it is established by the source adapter via explicit contract checks:
 >    - Verification that all expected depth levels ($0 \dots N-1$) for both `BID` and `ASK` sides are present in the frame.
 >    - Verification of source-provided end-of-snapshot / completion message markers.
->    - **Frame Metadata Consistency:** All rows sharing the same `snapshot_id` **MUST** share identical `exchange_time_utc`, `feed_time_utc`, `knowledge_time_utc`, `trading_date`, `source_seq_num`, and `is_snapshot_complete` flags. Differing metadata within the same `snapshot_id` is rejected as `FRAME_METADATA_INCONSISTENCY`.
+>    - **Frame Metadata Consistency:** All rows sharing the same Compound Frame Identity **MUST** share identical `exchange_time_utc`, `feed_time_utc`, `knowledge_time_utc`, `trading_date`, `source_seq_num`, and `is_snapshot_complete` flags. Differing metadata within the same frame is rejected as `FRAME_METADATA_INCONSISTENCY`.
 > 3. **Reconstructor Rule:**  
 >    The Reconstructor **strictly rejects** partial or incomplete snapshots as state roots (`PARTIAL_SNAPSHOT_REJECTED`).
 
 ---
 
-## 4. Adapter-Defined Source Ordering Policy (`SourceOrderingPolicy`)
+## 4. Immutable Reconstruction Stream Scope & Adapter Ordering Policy
 
 > [!IMPORTANT]
-> **Decoupling Sequence Number from Reconstruction Ordering Primitives:**
+> **1. Immutable Reconstruction Stream Scope:**
+> To prevent cross-channel or cross-symbol contamination, every reconstruction pipeline is bound to an immutable stream scope:
+> $$\text{Stream Scope} = (\text{source\_id}, \text{channel\_id}, \text{symbol}, \text{trading\_date})$$
+> Deltas from a different `channel_id` or `source_id` **CANNOT** be applied to a snapshot from another stream.
+>
+> **2. Decoupling Sequence Number from Reconstruction Ordering Primitives:**
 > In accordance with ADR-020, `source_seq_num` is an opaque upstream identifier. The core engine **MUST NOT** assume that $seq_{i+1} > seq_i$ implies temporal succession or that $seq_{i+1} == seq_i + 1$ implies contiguity across all feeds.
 >
 > Ordering and gap semantics are defined by the **Source Adapter** via explicit policies:
@@ -123,17 +131,19 @@ ACASH strictly decouples **Network Message Identity** from **Canonical Row Ident
 ### 5.1 MBP (Market By Price — L2 Price-Level Deltas)
 - **Target Entity:** Aggregated Price Level (`price`, `side`, `level_idx`).
 - **Action Payloads:**
-  - `ADD`: Insert new price level. `size` represents the **initial aggregated quantity** at this price level.
-  - `MODIFY`: Update price level. `size` represents the **resulting new absolute aggregated quantity** at this price level (not a relative delta).
-  - `DELETE`: Remove price level from the depth ladder (equivalent to resulting quantity = 0).
-  - `CLEAR`: Clear entire side (e.g. market pause or session reset).
+  - `ADD`: Insert new price level. `size` represents the **initial aggregated quantity** at this price level ($> 0$).
+  - `MODIFY`: Update price level. `size` represents the **resulting new absolute aggregated quantity** at this price level ($> 0$).
+  - `DELETE`: Remove price level from the depth ladder. `size` is set to `Decimal("0")` (or ignored; price level is purged from ladder).
+  - `CANCEL`: Reduce depth quantity. `size` represents the **resulting remaining aggregated quantity**; if remaining size is `0`, the level is deleted.
+  - `CLEAR`: Clear entire side. `price = Decimal("0")`, `size = Decimal("0")`, `level_idx = None`; removes all price levels on `side` (or both sides if `side = "ALL"`).
 
 ### 5.2 MBO (Market By Order — L3 Order-Level Deltas)
 - **Target Entity:** Discrete Individual Order (`order_id`, `price`, `side`, `priority`).
 - **Action Payloads:**
-  - `ADD`: Insert new order. `order_id` is required; `size` represents the **initial order quantity** with FIFO priority at `price`.
-  - `MODIFY`: Change existing order. `size` represents the **resulting remaining order quantity**; if `price` changes, the order loses queue priority.
-  - `CANCEL`: Cancel/reduce order. `size` represents the **cancelled quantity** or reduction in order size; if remaining size is 0, the order is removed.
+  - `ADD`: Insert new order. `order_id` is required; `size` represents the **initial order quantity** ($> 0$) placed at `price` with FIFO priority.
+  - `MODIFY`: Update existing order. `order_id` is required; `size` represents the **resulting remaining order quantity** ($> 0$); if `price` changes, queue priority resets.
+  - `CANCEL`: Cancel/reduce order. `order_id` is required; `size` represents the **resulting remaining order quantity** (if 0, order is purged from queue) or explicit cancelled quantity per adapter contract.
+  - `DELETE`: Immediate order purge. `order_id` is required; `size = Decimal("0")`; immediately purges `order_id` from the queue.
 - **L2 Projection:** The MBO Reconstructor maintains discrete order queues and aggregates active orders by price level to emit the canonical L2 depth view.
 
 ---
@@ -179,7 +189,7 @@ CANONICAL_BOOK_DELTA_SCHEMA = pa.schema([
     pa.field("action_sub_idx", pa.int32(), nullable=False),       # 0, 1, 2... within packet
     pa.field("delta_type", pa.string(), nullable=False),         # "MBP" or "MBO"
     pa.field("action", pa.string(), nullable=False),             # "ADD", "MODIFY", "DELETE", "CANCEL", "CLEAR"
-    pa.field("side", pa.string(), nullable=False),               # "BID", "ASK"
+    pa.field("side", pa.string(), nullable=False),               # "BID", "ASK", "ALL" (for CLEAR)
     pa.field("price", pa.decimal128(38, 18), nullable=False),
     pa.field("size", pa.decimal128(38, 18), nullable=False),     # Resulting size (MBP) or Order size (MBO)
     pa.field("order_id", pa.string(), nullable=True),            # Required for MBO, Null for MBP
@@ -234,7 +244,7 @@ To guarantee that provenance hashes are **deterministic and computationally coll
 
 ---
 
-## 9. Storage Layout & Multi-Row Snapshot Frame PIT Reconstruction Queries
+## 9. Storage Layout & Scoped Multi-Row Snapshot Frame PIT Queries
 
 ### 9.1 Storage Layout
 
@@ -248,37 +258,58 @@ data/
             └── {symbol}/year={YYYY}/date={YYYY-MM-DD}/part-{batch_id}.parquet
 ```
 
-### 9.2 Rigorous Two-Stage Multi-Row Point-in-Time (PIT) Queries
-To reconstruct the Order Book state at target exchange time $T_{\text{target}}$ as observed at or before $T_{\text{knowledge}}$:
+### 9.2 Scoped Two-Stage Multi-Row Point-in-Time (PIT) Queries
+To reconstruct the Order Book state for stream `($source_id, $channel_id, $symbol, $trading_date)` at target exchange time $T_{\text{target}}$ as observed at or before $T_{\text{knowledge}}$:
 
-#### Stage 1: Select Candidate Snapshot Frame & Retrieve ALL Frame Rows
+#### Stage 1: Select Candidate Snapshot Frame with Final Deterministic Tie-Breaker & Retrieve ALL Frame Rows
 ```sql
 WITH candidate_frame AS (
     SELECT
+        source_id,
+        channel_id,
+        symbol,
+        trading_date,
+        source_seq_num,
         snapshot_id,
-        exchange_time_utc,
-        source_seq_num
+        exchange_time_utc
     FROM read_parquet('data/parquet/orderbook/snapshots/{symbol}/**/*.parquet')
-    WHERE knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
+    WHERE source_id = ?
+      AND channel_id = ?
+      AND symbol = ?
+      AND trading_date = CAST(? AS DATE)
+      AND knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
       AND exchange_time_utc <= CAST(? AS TIMESTAMPTZ)
       AND is_snapshot_complete = TRUE
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY source_id, channel_id, symbol, trading_date
-        ORDER BY exchange_time_utc DESC, source_seq_num DESC, knowledge_time_utc DESC
+        ORDER BY
+            exchange_time_utc DESC,
+            source_seq_num DESC,
+            knowledge_time_utc DESC,
+            snapshot_id ASC  -- Final deterministic tie-breaker
     ) = 1
 )
 SELECT s.*
 FROM read_parquet('data/parquet/orderbook/snapshots/{symbol}/**/*.parquet') s
 JOIN candidate_frame c
-  ON s.snapshot_id = c.snapshot_id
+  ON s.source_id = c.source_id
+ AND s.channel_id = c.channel_id
+ AND s.symbol = c.symbol
+ AND s.trading_date = c.trading_date
+ AND s.source_seq_num = c.source_seq_num
+ AND s.snapshot_id = c.snapshot_id
 WHERE s.knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
 ORDER BY s.side ASC, s.level_idx ASC;
 ```
 
-#### Stage 2: Select Subsequent Incremental Deltas
+#### Stage 2: Select Subsequent Incremental Deltas Bound to the Same Stream Scope
 ```sql
 SELECT * FROM read_parquet('data/parquet/orderbook/deltas/{symbol}/**/*.parquet')
-WHERE knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
+WHERE source_id = ?
+  AND channel_id = ?
+  AND symbol = ?
+  AND trading_date = CAST(? AS DATE)
+  AND knowledge_time_utc <= CAST(? AS TIMESTAMPTZ)
   AND exchange_time_utc >= CAST(? AS TIMESTAMPTZ)
   AND exchange_time_utc <= CAST(? AS TIMESTAMPTZ)
   AND (
@@ -298,11 +329,13 @@ The Reconstructor initializes the depth ladder with the complete Snapshot Frame 
 Phase 3B completion is governed by the following test matrix:
 
 - [ ] **Schema Conformance:** Both `CANONICAL_BOOK_SNAPSHOT_SCHEMA` and `CANONICAL_BOOK_DELTA_SCHEMA` strictly enforced.
-- [ ] **Multi-Row Snapshot Frame Selection:** Verifies that Stage 1 PIT query selects the full multi-level snapshot frame (not a single level row).
+- [ ] **Deterministic Snapshot Frame Selection:** Stage 1 PIT query selects the full multi-level snapshot frame and uses `snapshot_id ASC` as a deterministic tie-breaker when timestamps and sequences match.
+- [ ] **Compound Join Scope:** Stage 1 PIT retrieval joins on `(source_id, channel_id, symbol, trading_date, source_seq_num, snapshot_id)`, preventing cross-stream collision.
 - [ ] **Snapshot Completeness Validation:** Reconstructor strictly rejects incomplete snapshot frames (`PARTIAL_SNAPSHOT_REJECTED`).
-- [ ] **Frame Metadata Consistency:** Validator rejects snapshot tables where rows with the same `snapshot_id` contain conflicting timestamp/sequence metadata.
-- [ ] **MBP Price-Level Reconstruction:** Accurate state transitions for price-level `ADD`, `MODIFY` (resulting absolute quantity), and `DELETE`.
-- [ ] **MBO Order-Level Reconstruction:** Accurate order queue tracking by `order_id` and L2 depth aggregation.
+- [ ] **Frame Metadata Consistency:** Validator rejects snapshot tables where rows with the same Compound Frame Identity contain conflicting timestamp/sequence metadata.
+- [ ] **MBP Action Payload Semantics:** Verifies accurate ladder state transitions for `ADD` ($>0$), `MODIFY` (resulting absolute size), `DELETE` (size 0), `CANCEL` (remaining size), and `CLEAR` (removes side).
+- [ ] **MBO Order Queue Semantics:** Verifies discrete order queue tracking by `order_id`, FIFO priority, priority reset on price modification, and L2 depth projection.
+- [ ] **Stream Scope Isolation:** Reconstructor enforces that deltas from a different `channel_id` or `source_id` cannot be applied to a snapshot from another stream.
 - [ ] **Adapter SourceOrderingPolicy Compliance:** Reconstructor obeys adapter-defined ordering without imposing generic sequence contiguity on opaque feeds.
 - [ ] **Crossed State Granularity:** Reconstructor distinguishes `CROSSED_TRANSIENT`, `CROSSED_AUCTION_OR_HALT`, and `CROSSED_DUE_TO_INVALID_RECONSTRUCTION`.
 - [ ] **Permutation & Codec Invariance:** Permuting snapshot/delta rows or changing compression codec produces identical hashes.
