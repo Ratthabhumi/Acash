@@ -22,10 +22,10 @@ Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED - PASSED]
 Phase 3: Point-in-Time Microstructure & Feature Engine (3A/3B/3C) ──► Gate 3 [COMPLETED - PASSED]
    │
    ▼
-Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [UPCOMING]
+Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED - PASSED]
    │
    ▼
-Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5
+Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 [UPCOMING]
    │
    ▼
 Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6
