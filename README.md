@@ -3,7 +3,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 2 Complete](https://img.shields.io/badge/status-Phase%202%20Gate%20Passed-success.svg)](#)
+[![Status: Phase 4 Complete](https://img.shields.io/badge/status-Phase%204%20Gate%20Passed%20(139%2F139%20Tests)-success.svg)](#)
+
 
 ---
 
@@ -235,65 +236,73 @@ $$\text{Evidence} \to \text{Analysis} \to \text{Decision} \to \text{Execution} \
 $$\text{OBSERVE} \to \text{IDENTIFY STRUCTURE} \to \text{QUANTIFY RISK/REWARD} \to \text{EVALUATE CONDITIONS} \to \text{DECIDE}$$
 
 ### QUANTITATIVE REASONING & DETERMINISTIC RISK PIPELINE
-
-1. **Explicit Risk State:** Continuous, mathematical monitoring of portfolio risk health, capacity, and drawdown headroom.
-2. **Margin Buffer Safety Threshold:** Mandatory buffer between utilized margin and maintenance limit before allowing new allocations.
-3. **Net & Dollar Exposure Tracking:** Explicit dollar-denominated gross and net exposure accounting ($\text{Gross Exposure} = \sum |\text{Dollar Value}|$, $\text{Net Exposure} = \sum \text{Dollar Value}$).
-4. **Deterministic Edge Metrics:** All analytical performance indicators (Sharpe, DSR, Information Ratio, expectancy, max drawdown) are calculated strictly by sovereign deterministic math engines, never by probabilistic estimation.
-5. **Separation of Raw Metrics from AI Reasoning:** Raw quantitative metrics remain pure and immutable. AI reasoning is strictly downstream as an explanatory research tool, NEVER generating unverified numbers or placing trades.
-
-$$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONING}$$
-*$$\text{NOT: DATA} \to \text{AI} \to \text{Unverified Numbers} \to \text{TRADE}$$*
-
-### REALITY GAP MONITOR & EXECUTION DEVIATION
-
-The core empirical objective of ACASH is measuring:
-> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
-
-$$\text{ACASH RESEARCH (Expected Execution)} \longleftrightarrow \text{LIVE EXECUTION (Actual Execution)} \implies \text{REALITY GAP}$$
-
-Measures systematic deviation across Entry Price ($\Delta_{\text{entry}}$), Market Spread ($\Delta_{\text{spread}}$), Slippage ($\Delta_{\text{slippage}}$), Round-Trip Latency ($\Delta_{\text{latency}}$), and Trade PnL ($\Delta_{\text{pnl}}$) to isolate alpha decay from execution micro-structure friction.
+                      ▼
+               DecisionRecord (Append-Only Audit)
+```
 
 ---
 
-## 6. Completed Milestones & Quality Gates (Phases 0–2)
+## 4. Completed Milestones & Quality Gates (Phases 0–4)
 
 ```
 Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
 Phase 1: Foundation & Domain Core ──► [GATE 1 PASSED — 27/27 Unit Tests, mypy clean]
 Phase 2: Data Ingestion & Integrity Engine ──► [GATE 2 PASSED — 57/57 Tests, mypy clean]
-Phase 3: Market Microstructure & PIT Feature Engine ──► [DESIGN STAGE — 3A / 3B / 3C]
+Phase 3: Market Microstructure & PIT Feature Engine ──► [GATE 3 PASSED — 122/122 Tests, mypy clean]
+   ├─ Phase 3A: Canonical Trades Domain (Time & Sales, Aggressor Side)
+   ├─ Phase 3B: Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
+   └─ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
+Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
+Phase 5: Backtesting Substrate & NautilusTrader PoC ──► [PROPOSED — v1.1.0 Design Proposal]
 ```
 
-### Summary of Accomplishments:
+### Detailed Summary of Delivered Capabilities:
 1. **Phase 0 — Discovery & Architecture:**
-   - Evaluated 17 quantitative & infrastructure technologies across 10 criteria.
+   - Evaluated 17 quantitative & infrastructure technologies across 10 engineering criteria.
    - Established 7 decoupled layers and 19 Architectural Decision Records (ADR-001 to ADR-019).
 2. **Phase 1 — Foundation & Domain Core:**
-   - Implemented sovereign immutable domain models (`src/acash/core/domain/`) with strict Decimal finite math.
-   - Implemented pure state transitions for 8 signed-quantity position fill scenarios, spot cash flows, and zero Realized PnL double-counting.
-   - Implemented append-only decision audit ledger and structured telemetry logger with recursive secret redaction.
-   - Verified 100% with 27 unit tests and `mypy` 0 errors.
+   - Sovereign immutable domain models (`src/acash/core/domain/`) with strict Decimal finite arithmetic.
+   - Pure state transitions for 8 signed-quantity position fill scenarios, spot cash flows, and zero Realized PnL double-counting.
+   - Append-only decision audit ledger and structured telemetry logger with recursive secret redaction.
 3. **Phase 2 — Data Ingestion & Integrity Engine:**
-   - Implemented Canonical PyArrow schema (`Decimal128(38,18)`, `timestamp[us, tz=UTC]`) in `src/acash/data/schema.py`.
-   - Built Per-Stream Data Integrity Validator (`integrity.py`) enforcing event end consistency across revisions, distinct event monotonicity, and anomaly preservation without data mutation.
-   - Built Provenance & Manifest Engine (`provenance.py`) supporting raw source SHA-256 and logical canonical batch SHA-256 invariant to Parquet compression and row ordering.
-   - Built Parquet Storage Engine (`storage.py`) with strict 1:1 Ingestion Unit mapping, Recoverable Batch Commit Protocol (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`), crash recovery, and orphan part quarantine.
-   - Built DuckDB Point-in-Time qualification layer with multi-source isolation and lookahead prevention.
-   - Built Ingestion Pipeline (`pipeline.py`) with global revision duplicate prevention and deterministic replay idempotency.
-   - Verified 100% with 57 unit & integration tests and `mypy` 0 errors.
+   - Canonical PyArrow schema (`Decimal128(38,18)`, `timestamp[us, tz=UTC]`) in `src/acash/data/schema.py`.
+   - Per-Stream Data Integrity Validator (`integrity.py`) enforcing event monotonicity and anomaly preservation without data mutation.
+   - Provenance & Manifest Engine (`provenance.py`) with raw source SHA-256 and canonical logical SHA-256 invariant to Parquet compression and row ordering.
+   - Parquet Storage Engine (`storage.py`) with strict 1:1 Ingestion Unit mapping, Recoverable Batch Commit Protocol (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`), crash recovery, and orphan part quarantine.
+   - DuckDB Point-in-Time qualification query layer with multi-source isolation and lookahead prevention.
+4. **Phase 3A — Canonical Trades Domain:**
+   - Canonical trades schema supporting nanosecond-precision trade records, aggressor side classifications, and trade conditions.
+   - Length-prefixed binary serialization and logical SHA-256 hashing.
+5. **Phase 3B — Canonical Order Book Domain:**
+   - Canonical L2 Market-by-Price (MBP) multi-row frame snapshots and deltas, and L3 Market-by-Order (MBO).
+   - Deterministic 5-tuple order reconstruction (`exchange_time_utc`, `source_order_key`, `message_type_rank`, `stream_id`, `row_sub_index`).
+   - Explicit `CLEAR` level semantics (distinguishing zero-volume deletions from NULL clear operations).
+6. **Phase 3C — Microstructure Feature Engine:**
+   - Derived mathematical features: Session VWAP, Volume-Weighted Dispersion ($\sigma$), Volume Profile with POC lower-price tie-breakers, Value Area 70% bounds, Footprint Analytics (Stacked Imbalances, CVD, Absorption), and Depth-Weighted Micro-Price.
+   - Dual-temporal point-in-time filtering ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$) preventing lookahead and revision leakage.
+7. **Phase 4 — Alpha Research Engine & Hypothesis Contract:**
+   - Formal, pre-registered `HypothesisSpecification` with explicit falsification criteria.
+   - Discrete bar-indexed forward returns ($R(t,H) = \frac{P_{\text{close}, t+H} - P_{\text{open}, t+1}}{P_{\text{open}, t+1}}$) eliminating off-by-one ambiguities.
+   - Primary econometric inference via OLS slope $\hat{\beta}_H$ under Newey-West / HAC covariance using Bartlett kernel with verified analytical reference vector.
+   - Descriptive non-parametric association: Pearson IC, Spearman Rank IC (with fractional tie-handling), and Autocorrelation.
+   - 3-Tier Friction Waterfall: Raw Predictive Edge $\to$ Spread + Fee Net $\to$ Fixed Slippage Proxy Economic Edge.
+   - Interval-based boundary purging across partition splits and unallocated embargo buffers ($\ge \max(H)$ bars).
+   - Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) locking OOS exposure (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
 
 ---
 
-## 7. Documentation Index (`docs/`)
+## 5. Documentation Index (`docs/`)
 
 The complete canonical documentation suite is organized in [`docs/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs):
 
-- **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)**: Canonical Market Data Contract (v1.16.0), Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
+- **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)**: Canonical Market Data Contract, Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
 - **[docs/DATA_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) partitioned immutable parts, bi-temporal P-I-T qualification queries, and provenance ledger.
 - **[docs/DECISIONS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-019**).
 - **[docs/PROJECT_STATUS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
 - **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
+- **[docs/PHASE_3C_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
+- **[docs/PHASE_4_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
+- **[docs/PHASE_5_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & NautilusTrader PoC Integration (v1.1.0 Proposed).
 - **[docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
 - **[docs/ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
 - **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
@@ -301,11 +310,10 @@ The complete canonical documentation suite is organized in [`docs/`](file:///c:/
 - **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
 - **[docs/RISKS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
 
-
 ---
 
-## 7. Additional Reference Files
+## 6. License & Proprietary Rights
 
-- **[Cheatsheet.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/Cheatsheet.md)**: Developer & Quant quick reference cheatsheet.
-- **[Roadmap.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/Roadmap.md)**: High-level visual 16-phase development roadmap.
-- **[Acash_Talk-27-08-2026.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/Acash_Talk-27-08-2026.md)**: Complete exported transcript of Phase 0 engineering dialogue.
+**Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**
+
+This software, including all underlying source code, documentation, schemas, algorithms, and mathematical models, is proprietary and confidential. Unauthorized copying, distribution, modification, public display, reverse engineering, or extraction of any part of this repository, via any medium, is strictly prohibited without explicit written consent.

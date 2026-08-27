@@ -17,17 +17,16 @@ Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED & VERIFIED — 27/
 Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED & VERIFIED — 57/57 Tests]
    │
    ▼
-Phase 3: Market Microstructure & PIT Feature Engine ──► Gate 3 [DESIGN STAGE]
+Phase 3: Market Microstructure & PIT Feature Engine ──► Gate 3 [COMPLETED & VERIFIED — 122/122 Tests]
    ├─ Phase 3A: Canonical Trades Domain (Time & Sales, Aggressor Side)
-   ├─ Phase 3B: Canonical Order Book Domain (L2 Depth Snapshots & Deltas, L3 MBO)
-   └─ Phase 3C: Microstructure Research Engine (VWAP, Volume Profile, Footprint, Delta)
+   ├─ Phase 3B: Canonical Order Book Domain (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
+   └─ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
    │
    ▼
-Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 (Momentum & Mean-Reversion Baselines)
-
+Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED & VERIFIED — 139/139 Tests]
    │
    ▼
-Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 (Deterministic Event Sim Benchmark)
+Phase 5: Backtesting Substrate & Nautilus PoC ──► Gate 5 [DESIGN STAGE — v1.1.0 Proposal]
    │
    ▼
 Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6 (Combinatorial Purged CV & DSR)
@@ -69,7 +68,7 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing (Proprietary
 
 ### Phase 0: Discovery & Architecture (COMPLETE)
 - Comprehensive evaluation of 17 technologies across 10 engineering criteria.
-- Canonical architectural documentation created in [`docs/`](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs).
+- Canonical architectural documentation created in [`docs/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs).
 
 ### Phase 1: Foundation & Domain Core (COMPLETED & VERIFIED — Gate 1 Passed)
 - Sovereign domain entities (`Instrument`, `Bar`, `Position`, `PortfolioState`, `AccountState`, `Signal`, `TargetAllocation`, `RiskAssessment`, `Order`, `Fill`, `DecisionRecord`).
@@ -87,19 +86,28 @@ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing (Proprietary
 - Global revision duplicate check and idempotent pipeline ingestion replay.
 - Verified: 57/57 unit and integration tests passing, `mypy` 0 errors.
 
-### Phase 3: Market Microstructure & PIT Feature Engine (DESIGN STAGE)
-- **Phase 3A — Canonical Trades Domain:** Time & Sales, tick executions, and aggressor side flags.
-- **Phase 3B — Canonical Order Book Domain:** L2 MBP depth snapshots/deltas and L3 MBO queue reconstruction.
-- **Phase 3C — Microstructure Research Engine:** Pure derived feature transformations (Anchored/Rolling VWAP, Volume & TPO Profile, Footprint/Delta cluster, Imbalance & Absorption detection, and strict Anti-Leakage guard).
+### Phase 3: Market Microstructure & PIT Feature Engine (COMPLETED & VERIFIED — Gate 3 Passed)
+- **Phase 3A — Canonical Trades Domain:** Time & Sales, tick executions, aggressor side flags, length-prefixed hashing.
+- **Phase 3B — Canonical Order Book Domain:** L2 MBP depth snapshots/deltas, L3 MBO queue reconstruction, deterministic 5-tuple order, explicit `CLEAR` level semantics.
+- **Phase 3C — Microstructure Feature Engine:** Derived features (Anchored/Rolling VWAP, Volume Profile with lower-price-first tie-breaking, Value Area 70% bounds, Footprint/Delta cluster, Imbalance & Absorption detection, Depth-Weighted Micro-Price, and strict Anti-Leakage PIT guards).
+- Verified: 122/122 unit and integration tests passing, `mypy` 0 errors.
 
+### Phase 4: Alpha Research Engine & Hypotheses (COMPLETED & VERIFIED — Gate 4 Passed)
+- Formal hypothesis schemas (`HypothesisSpecification`, `InvalidationCriteria`, parameter spaces).
+- Discrete bar-indexed forward returns ($R(t,H)$) with next-bar open entry alignment.
+- Econometric OLS slope $\hat{\beta}_H$ inference with Newey-West HAC covariance under Bartlett kernel.
+- Descriptive non-parametric association metrics: Pearson IC, Spearman Rank IC (fractional ties), autocorrelation.
+- 3-tier friction waterfall (Raw Edge $\to$ Net Edge $\to$ Economic Edge).
+- Interval-based boundary purging and unallocated embargo gaps ($\ge \max(H)$ bars).
+- Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) with strict re-tuning locks (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
+- Baseline research models: Microstructure Imbalance Skew, VWAP Mean Reversion, Multi-Horizon Momentum.
+- Verified: 139/139 unit tests passing, `mypy` 0 errors.
 
-### Phase 4: Alpha Research Engine
-- Formal hypothesis schemas (assumptions, parameter ranges, invalidation conditions).
-- Initial transparent baseline strategies: Time-Series Momentum and Statistical Mean-Reversion.
-
-### Phase 5: Backtesting Substrate & NautilusTrader PoC
+### Phase 5: Backtesting Substrate & NautilusTrader PoC (DESIGN STAGE — v1.1.0 Proposal)
 - Benchmark lightweight custom vectorized backtester vs NautilusTrader Rust-native event core.
-- Verify deterministic equivalent outcomes for identical inputs.
+- Verify deterministic equivalent outcomes for identical inputs under pinned execution environment.
+- Independent double-entry shadow ledger with $|\text{AccountingResidual}| \le 10^{-10}$.
+
 
 ### Phase 6: Statistical Validation & OOS Hard Gate
 - 3-way partition: Train $\to$ Validation $\to$ Held-Out Out-of-Sample (OOS).
@@ -269,4 +277,12 @@ The core empirical objective of ACASH is measuring:
 ---
 
 For in-depth specifications, see **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**.
+
+---
+
+## License Notice
+
+**Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  
+Proprietary and Confidential. Unauthorized copying, distribution, modification, or extraction is strictly prohibited.
+
 

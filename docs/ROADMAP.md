@@ -408,3 +408,11 @@ The core empirical objective of ACASH is measuring and understanding:
 | **Martingale Strategies** | ⚠️ **Hard Red Flag**: Non-convex ruin risk; strictly prohibited in sovereign strategies. |
 | **+100% Return = Good Strategy** | ❌ **Rejected**: High returns without risk-adjusted metrics, DSR, and max drawdown are meaningless. |
 | **1:2000 Extreme Leverage** | 🚨 **Strict Risk Variable**: Explicitly constrained by sovereign portfolio leverage limits. |
+
+---
+
+## License Notice
+
+**Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  
+Proprietary and Confidential. Unauthorized copying, distribution, modification, or extraction is strictly prohibited.
+

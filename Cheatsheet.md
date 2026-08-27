@@ -267,3 +267,53 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
   - $\Delta_{\text{latency}} = \text{Round-Trip Latency} - \text{Assumed Delay}$ (ms)
   - $\Delta_{\text{pnl}} = \frac{\text{Actual PnL} - \text{Expected PnL}}{\text{Expected PnL}}$ (%)
 - **Takeaway:** Strategy underperformance may be execution friction, not alpha failure. Reality Gap monitoring isolates the truth.
+
+---
+
+## 13. Completed Architecture & Subsystem Reference (Phases 0–4)
+
+```
+Phase 0: Discovery & Architecture ──► 17 tech evaluated, 7 decoupled layers, ADR-001 to ADR-019
+Phase 1: Foundation & Domain Core ──► Immutable domain models, signed position fills, append ledger (27/27 tests)
+Phase 2: Data Ingestion & Integrity ──► Canonical PyArrow schema, Recoverable 2-Phase Commit, DuckDB PIT (57/57 tests)
+Phase 3: Market Microstructure & Features ──► Trades, L2/L3 Order Book, pure VWAP/Profile/Footprint (122/122 tests)
+Phase 4: Alpha Research & Hypotheses ──► Pre-registered hypotheses, OLS Beta HAC, Blind OOS Ledger (139/139 tests)
+```
+
+### Phase 1: Foundation & Invariant Rules
+- **Signed Quantity Arithmetic:** `qty > 0` = Long, `qty < 0` = Short.
+- **Pure State Transitions:** 8 scenario position updates producing new immutable snapshots; zero Realized PnL double counting.
+- **Double-Entry Balance Rule:** Realized Cash + Unrealized PnL = Equity.
+
+### Phase 2: Data Ingestion & Storage Rules
+- **Canonical Arrow Types:** `price`/`size` = `Decimal128(38, 18)`, `timestamp` = `timestamp[us, tz=UTC]`.
+- **Bi-temporal Indexing:** $t_{\text{event}}$ (exchange event time) vs $t_{\text{knowledge}}$ (system ingestion time).
+- **Recoverable Batch Commit Protocol:** `PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`. Uncommitted parts quarantined.
+- **Idempotency & Replay:** Parquet paths: `data/parquet/{symbol}/{year}/{date}/part-{batch_id}.parquet`. Logical hashing invariant to row ordering and compression codec.
+
+### Phase 3: Market Microstructure & Derived Features
+- **Phase 3A Trades:** Nanosecond execution replay, aggressor side (`BUY`/`SELL`), length-prefixed hashing.
+- **Phase 3B Order Book:** Multi-row frame snapshots and deltas; deterministic 5-tuple order:
+  $$\text{ReconstructionOrder} = (\text{exchange\_time\_utc}, \text{source\_order\_key}, \text{message\_type\_rank}, \text{stream\_id}, \text{row\_sub\_index})$$
+  Explicit `CLEAR` level semantics (distinguishing NULL clear from zero-volume deletion).
+- **Phase 3C Feature Engine:** Pure derived features (Session VWAP, Volume-Weighted Dispersion $\sigma$, Volume Profile with lower-price-first tie-breaking, Value Area 70% bounds, Footprint Analytics, Depth-Weighted Micro-Price).
+- **Dual-Temporal PIT Filter:** $T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$.
+
+### Phase 4: Alpha Research & Econometric Inference
+- **Inference Estimator:** $R(t, H) = \alpha_H + \beta_H X_t + \epsilon_t$ with HAC covariance on $\hat{\beta}_H$ using Bartlett kernel.
+- **Discrete Bar-Indexed Returns:** $R(t, H) = \frac{P_{\text{close}, t+H} - P_{\text{open}, t+1}}{P_{\text{open}, t+1}}$ with exact $\text{label\_interval} = [T_{\text{open}, t+1}, T_{\text{close}, t+H}]$.
+- **Boundary Purging & Embargo:** Training samples with label intervals crossing $T_{\text{train\_end}}$ are purged; embargo gap $\ge \max(H)$ bars enforced between splits.
+- **3-Tier Friction Waterfall:**
+  - Tier 1: $\mathbb{E}[R \cdot \text{Signal}] \times 10{,}000$ (bps)
+  - Tier 2: Tier 1 - $(\text{Quoted Spread} + \text{Roundtrip Fees})$
+  - Tier 3: Tier 2 - $\text{Fixed Slippage Proxy}$
+- **Durable Blind OOS State Machine:** `UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED` persisted in `data/manifests/research/governance_ledger.json`.
+- **Search Accounting:** `ResearchSearchRecord` tracks total effective trials, preventing untracked multiple testing.
+
+---
+
+## 14. License Notice
+
+**Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  
+Proprietary and Confidential. Unauthorized copying, distribution, modification, or extraction is strictly prohibited.
+
