@@ -38,8 +38,10 @@ from acash.research.schema import (
     OosExposureState,
     ResearchManifest,
     ResearchSearchRecord,
+    SignalTransformConfig,
     SplitPolicy,
 )
+
 
 # Explicit type tags for canonical feature table serialization
 TYPE_TAG_NULL = b"\x00"
@@ -169,6 +171,7 @@ class AlphaResearchPipeline:
         split_policy: Optional[SplitPolicy] = None,
         hac_policy: Optional[HacInferencePolicy] = None,
         cost_config: Optional[CostModelConfig] = None,
+        signal_config: Optional[SignalTransformConfig] = None,
         search_record: Optional[ResearchSearchRecord] = None,
         evaluate_oos: bool = False,
         software_version: str = "0.4.0",
@@ -177,6 +180,7 @@ class AlphaResearchPipeline:
         split_cfg = split_policy or SplitPolicy()
         hac_cfg = hac_policy or HacInferencePolicy()
         cost_cfg = cost_config or CostModelConfig()
+        sig_cfg = signal_config or SignalTransformConfig()
 
         if feature_name not in features_table.column_names:
             raise DataContractError(f"Feature '{feature_name}' not found in features table.")
@@ -250,6 +254,7 @@ class AlphaResearchPipeline:
             hypothesis=hypothesis,
             hac_policy=hac_cfg,
             cost_config=cost_cfg,
+            signal_config=sig_cfg,
             purged_count=purged_train_count,
         )
 
@@ -269,6 +274,10 @@ class AlphaResearchPipeline:
             "hypothesis_parameters": hyp_params,
             "feature_name": feature_name,
             "primary_horizon": primary_h,
+            "signal_transform": {
+                "method": sig_cfg.method.value,
+                "clip_limit": str(sig_cfg.clip_limit),
+            },
             "split_policy": {
                 "train_pct": str(split_cfg.train_pct),
                 "val_pct": str(split_cfg.val_pct),
@@ -291,6 +300,7 @@ class AlphaResearchPipeline:
         }
         parameter_config_json = json.dumps(full_param_config, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         parameter_config_hash = hashlib.sha256(parameter_config_json.encode("utf-8")).hexdigest()
+
 
         manifest_seed = (
             f"{hypothesis.hypothesis_id}:{hypothesis.hypothesis_version}:{primary_h}:"

@@ -263,18 +263,30 @@ def calculate_footprint_analytics(
     has_stacked_buy = check_stacked(buy_imbalances, config.stacked_imbalance_min_levels)
     has_stacked_sell = check_stacked(sell_imbalances, config.stacked_imbalance_min_levels)
 
-    # Detect Absorption: high volume spike at bar extreme with zero price progression
+    # Detect Absorption: high volume spike at bar extreme with price rejection / non-continuation
     is_absorption = False
-    if len(sorted_prices) >= 2:
+    if len(sorted_prices) >= 2 and trades:
         high_p = sorted_prices[-1]
         low_p = sorted_prices[0]
+        range_p = high_p - low_p
+        close_p = trades[-1]["price"] if isinstance(trades[-1]["price"], Decimal) else Decimal(str(trades[-1]["price"]))
+        
         avg_vol = (buy_volume + sell_volume) / Decimal(str(len(sorted_prices)))
         high_vol = price_buy_vol[high_p] + price_sell_vol[high_p]
         low_vol = price_buy_vol[low_p] + price_sell_vol[low_p]
+        vol_threshold = avg_vol * config.absorption_volume_multiplier
 
-        threshold = avg_vol * config.absorption_volume_multiplier
-        if (high_vol >= threshold and high_vol > Decimal("0")) or (low_vol >= threshold and low_vol > Decimal("0")):
-            is_absorption = True
+        if range_p > Decimal("0"):
+            # High-side absorption (buyers absorbed by passive asks -> close pulled down from high)
+            rejection_ratio_high = (high_p - close_p) / range_p
+            is_high_absorption = (high_vol >= vol_threshold and high_vol > Decimal("0") and rejection_ratio_high >= config.absorption_rejection_ratio)
+
+            # Low-side absorption (sellers absorbed by passive bids -> close pushed up from low)
+            rejection_ratio_low = (close_p - low_p) / range_p
+            is_low_absorption = (low_vol >= vol_threshold and low_vol > Decimal("0") and rejection_ratio_low >= config.absorption_rejection_ratio)
+
+            is_absorption = is_high_absorption or is_low_absorption
+
 
     return {
         "buy_volume": buy_volume,

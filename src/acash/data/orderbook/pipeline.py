@@ -66,21 +66,23 @@ class OrderBookIngestionPipeline:
         if raw_table.num_rows == 0:
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
-        # 1. Group table by (symbol, trading_date)
+        # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
         symbol_col = raw_table["symbol"].to_pylist()
         date_col = raw_table["trading_date"].to_pylist()
+        channel_col = raw_table["channel_id"].to_pylist() if "channel_id" in raw_table.column_names else [0] * raw_table.num_rows
 
-        distinct_units: Dict[Tuple[str, date], List[int]] = {}
+        distinct_units: Dict[Tuple[str, int, str, date], List[int]] = {}
         for i in range(raw_table.num_rows):
             sym = str(symbol_col[i])
+            ch = int(channel_col[i]) if channel_col[i] is not None else 0
             t_d = date_col[i]
             t_d_val = t_d if isinstance(t_d, date) else date.fromisoformat(str(t_d))
-            distinct_units.setdefault((sym, t_d_val), []).append(i)
+            distinct_units.setdefault((source_id, ch, sym, t_d_val), []).append(i)
 
         ingested_summaries: List[IngestedBookBatchSummary] = []
         total_rows_ingested = 0
 
-        for (sym, t_date_val), indices in distinct_units.items():
+        for (src, ch, sym, t_date_val), indices in distinct_units.items():
             unit_table = raw_table.take(indices)
 
             # Compute raw source sha256 via IPC serialization
@@ -92,8 +94,8 @@ class OrderBookIngestionPipeline:
 
             date_str = t_date_val.isoformat()
             norm_sym = sym.replace("/", "-").upper()
-            norm_src = source_id.replace("/", "-").upper()
-            target_batch_id = batch_id or f"batch_book_snap_{norm_src}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
+            norm_src = src.replace("/", "-").upper()
+            target_batch_id = batch_id or f"batch_book_snap_{norm_src}_ch{ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
 
             # Check existing manifest for idempotency
             existing_manifest = self.storage_engine.provenance_tracker.load_manifest(target_batch_id)
@@ -156,21 +158,23 @@ class OrderBookIngestionPipeline:
         if raw_table.num_rows == 0:
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
-        # 1. Group table by (symbol, trading_date)
+        # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
         symbol_col = raw_table["symbol"].to_pylist()
         date_col = raw_table["trading_date"].to_pylist()
+        channel_col = raw_table["channel_id"].to_pylist() if "channel_id" in raw_table.column_names else [0] * raw_table.num_rows
 
-        distinct_units: Dict[Tuple[str, date], List[int]] = {}
+        distinct_units: Dict[Tuple[str, int, str, date], List[int]] = {}
         for i in range(raw_table.num_rows):
             sym = str(symbol_col[i])
+            ch = int(channel_col[i]) if channel_col[i] is not None else 0
             t_d = date_col[i]
             t_d_val = t_d if isinstance(t_d, date) else date.fromisoformat(str(t_d))
-            distinct_units.setdefault((sym, t_d_val), []).append(i)
+            distinct_units.setdefault((source_id, ch, sym, t_d_val), []).append(i)
 
         ingested_summaries: List[IngestedBookBatchSummary] = []
         total_rows_ingested = 0
 
-        for (sym, t_date_val), indices in distinct_units.items():
+        for (src, ch, sym, t_date_val), indices in distinct_units.items():
             unit_table = raw_table.take(indices)
 
             sink = pa.BufferOutputStream()
@@ -181,8 +185,8 @@ class OrderBookIngestionPipeline:
 
             date_str = t_date_val.isoformat()
             norm_sym = sym.replace("/", "-").upper()
-            norm_src = source_id.replace("/", "-").upper()
-            target_batch_id = batch_id or f"batch_book_delta_{norm_src}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
+            norm_src = src.replace("/", "-").upper()
+            target_batch_id = batch_id or f"batch_book_delta_{norm_src}_ch{ch}_{norm_sym}_{date_str}_{raw_source_sha256[:16]}"
 
             existing_manifest = self.storage_engine.provenance_tracker.load_manifest(target_batch_id)
             existing_lookup = (
@@ -197,6 +201,7 @@ class OrderBookIngestionPipeline:
 
             if not report.is_valid:
                 raise IntegrityViolationError(f"Delta Validation failed for batch '{target_batch_id}'")
+
 
             # Commit
             part_path = self.storage_engine.commit_delta_batch(

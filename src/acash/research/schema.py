@@ -41,11 +41,27 @@ class HacBandwidthMethod(str, Enum):
     ANDREWS_AR1_PLUGIN = "ANDREWS_AR1_PLUGIN"            # Automatic AR(1) plug-in bandwidth
 
 
+class SignalTransformMethod(str, Enum):
+    """Canonical mapping from raw feature values to standardized bounded trading signals."""
+    TANH_ZSCORE = "TANH_ZSCORE"        # S(X) = tanh(z_score(X)) in [-1, 1]
+    SIGN = "SIGN"                      # S(X) = sign(X) in {-1, 0, 1}
+    IDENTITY_CLIPPED = "IDENTITY_CLIPPED" # S(X) = clip(X, -1, 1)
+
+
+class SignalTransformConfig(BaseModel):
+    """Versioned configuration for transforming raw features into bounded trading signals."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method: SignalTransformMethod = Field(default=SignalTransformMethod.TANH_ZSCORE)
+    clip_limit: Decimal = Field(default=Decimal("3.0"), gt=Decimal("0.0"))
+
+
 class OosExposureState(str, Enum):
     """Strict Blind Out-of-Sample Lifecycle State Machine."""
     UNEXPOSED = "UNEXPOSED"             # OOS data never accessed for this hypothesis
     EVALUATED_LOCKED = "EVALUATED_LOCKED" # OOS evaluated once; permanently locked
     EXHAUSTED = "EXHAUSTED"             # OOS compromised/spent via unauthorized re-tuning
+
 
 
 # ---------------------------------------------------------------------------

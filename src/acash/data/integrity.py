@@ -111,6 +111,17 @@ class DataIntegrityValidator:
         warnings: List[ValidationAnomalyRecord] = []
 
         if table.num_rows == 0:
+            from acash.data.schema import CANONICAL_COLUMN_NAMES
+            missing = [c for c in CANONICAL_COLUMN_NAMES if c not in table.column_names]
+            if missing:
+                errors.append(
+                    ValidationErrorRecord(
+                        rule="EMPTY_TABLE_SCHEMA_MISMATCH",
+                        message=f"Empty table is missing required canonical columns: {missing}",
+                        stream_key="GLOBAL:EMPTY",
+                    )
+                )
+                return ValidationReport(is_valid=False, errors=errors, warnings=[]), table
             report = ValidationReport(
                 is_valid=True,
                 errors=[],
@@ -118,6 +129,7 @@ class DataIntegrityValidator:
                 metrics=ValidationMetrics(total_rows=0, stream_count=0),
             )
             return report, table
+
 
         # Convert table to records for per-stream processing
         rows = table.to_pylist()

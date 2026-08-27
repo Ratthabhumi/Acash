@@ -28,6 +28,7 @@ class TradeFeaturesConfig(BaseModel):
     min_imbalance_volume_diff: Decimal = Field(default=Decimal("10.0"), ge=Decimal("0.0"))
     stacked_imbalance_min_levels: int = Field(default=3, ge=2)
     absorption_volume_multiplier: Decimal = Field(default=Decimal("2.5"), ge=Decimal("1.0"))
+    absorption_rejection_ratio: Decimal = Field(default=Decimal("0.30"), ge=Decimal("0.0"), le=Decimal("1.0"))
     bar_interval_seconds: int = Field(default=60, ge=1)
     tick_size: Decimal = Field(default=Decimal("0.25"), gt=Decimal("0.0"))
 
@@ -39,10 +40,12 @@ class TradeFeaturesConfig(BaseModel):
             "min_imbalance_volume_diff": f"{self.min_imbalance_volume_diff:.4f}",
             "stacked_imbalance_min_levels": self.stacked_imbalance_min_levels,
             "absorption_volume_multiplier": f"{self.absorption_volume_multiplier:.4f}",
+            "absorption_rejection_ratio": f"{self.absorption_rejection_ratio:.4f}",
             "bar_interval_seconds": self.bar_interval_seconds,
             "tick_size": f"{self.tick_size:.4f}",
         }
         return json.dumps(d, sort_keys=True)
+
 
 
 class BookFeaturesConfig(BaseModel):

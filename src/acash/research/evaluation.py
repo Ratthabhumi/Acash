@@ -18,10 +18,13 @@ from acash.data.schema import DataContractError
 from acash.research.schema import (
     CostModelConfig,
     EvaluationResult,
+    ExpectedDirection,
     HacBandwidthMethod,
     HacInferencePolicy,
     HypothesisSpecification,
     RobustnessCheckRecord,
+    SignalTransformConfig,
+    SignalTransformMethod,
 )
 
 
@@ -111,9 +114,9 @@ def determine_hac_bandwidth(
     sample_size: int,
     horizon: int,
     fixed_lag: Optional[int] = None,
-    residuals: Optional[np.ndarray] = None,
+    score_process: Optional[np.ndarray] = None,
 ) -> int:
-    """Determine HAC kernel lag truncation bandwidth L."""
+    """Determine HAC kernel lag truncation bandwidth L using regression score process g_t."""
     if method == HacBandwidthMethod.FIXED_HORIZON_MINUS_ONE:
         return max(0, horizon - 1)
     elif method == HacBandwidthMethod.FIXED_LAG:
@@ -122,9 +125,9 @@ def determine_hac_bandwidth(
         # Standard Newey-West (1994) rule-of-thumb plug-in: floor(4 * (T / 100)^(2/9))
         return max(0, int(math.floor(4.0 * ((sample_size / 100.0) ** (2.0 / 9.0)))))
     elif method == HacBandwidthMethod.ANDREWS_AR1_PLUGIN:
-        if residuals is not None and len(residuals) > 2:
-            r1 = residuals[:-1]
-            r2 = residuals[1:]
+        if score_process is not None and len(score_process) > 2:
+            r1 = score_process[:-1]
+            r2 = score_process[1:]
             if np.std(r1) > 0 and np.std(r2) > 0:
                 rho = float(np.corrcoef(r1, r2)[0, 1])
                 rho = max(-0.99, min(0.99, rho))
@@ -142,7 +145,7 @@ def compute_ols_beta_and_hac(
     """Compute OLS slope beta, HAC standard error, HAC t-stat, and asymptotic p-value using Bartlett kernel.
 
     Model: Y_t = alpha + beta * X_t + eps_t
-    Score: u_t = (X_t - mean(X)) * eps_t
+    Score process: g_t = (X_t - mean(X)) * eps_t
     """
     n = len(x)
     if n < 3:
@@ -194,28 +197,23 @@ def compute_ols_beta_and_hac(
     )
 
 
-
 def calculate_3tier_friction_waterfall(
     fwd_returns: Sequence[Decimal],
     signals: Sequence[Decimal],
-    cost_config: Optional[CostModelConfig] = None,
+    cost_config: CostModelConfig,
 ) -> Tuple[Decimal, Decimal, Decimal]:
-    """Calculate 3-Tier Friction Waterfall in basis points (bps).
-
-    Tier 1 (Raw Predictive Edge): E[R * Signal] * 10000
-    Tier 2 (Spread & Fee Net): Tier 1 - (Quoted Spread + Roundtrip Broker Fees)
-    Tier 3 (Economic Edge): Tier 2 - Fixed Slippage Proxy
-    """
-    cfg = cost_config or CostModelConfig()
-    if not fwd_returns or not signals or len(fwd_returns) != len(signals):
+    """Calculate 3-tier friction waterfall return expectations in basis points."""
+    n = len(fwd_returns)
+    if n == 0 or len(signals) != n:
         return Decimal("0"), Decimal("0"), Decimal("0")
 
-    # Raw expected product return
-    n = len(fwd_returns)
-    raw_returns = [float(fwd_returns[i]) * float(signals[i]) for i in range(n)]
-    tier1_raw_bps = Decimal(str(np.mean(raw_returns) * 10000.0))
+    cfg = cost_config
+    # Expected gross predictive return (in bps)
+    strat_returns = [float(r) * float(s) for r, s in zip(fwd_returns, signals)]
+    mean_strat_return = float(np.mean(strat_returns))
+    tier1_raw_bps = Decimal(str(mean_strat_return)) * Decimal("10000")
 
-    # Tier 2: Deduct Quoted Spread + Roundtrip Fees
+    # Tier 2: Deduct Quoted Spread + Roundtrip Broker Fee
     tier2_cost_bps = cfg.quoted_spread_bps + cfg.roundtrip_broker_fee_bps
     tier2_net_bps = tier1_raw_bps - tier2_cost_bps
 
@@ -229,6 +227,35 @@ def calculate_3tier_friction_waterfall(
     )
 
 
+def transform_feature_to_signal(
+    features: Sequence[Decimal],
+    direction: ExpectedDirection,
+    config: SignalTransformConfig,
+) -> List[Decimal]:
+    """Transform raw feature values into standardized bounded trading signals S(X) in [-1, 1]."""
+    f_arr = np.array([float(v) for v in features])
+    dir_mult = 1.0 if direction == ExpectedDirection.LONG else (-1.0 if direction == ExpectedDirection.SHORT else 1.0)
+
+    if config.method == SignalTransformMethod.TANH_ZSCORE:
+        std_f = float(np.std(f_arr))
+        if std_f > 1e-12:
+            z = (f_arr - float(np.mean(f_arr))) / std_f
+            clip_val = float(config.clip_limit)
+            z_clipped = np.clip(z, -clip_val, clip_val)
+            s = np.tanh(z_clipped) * dir_mult
+        else:
+            s = np.zeros_like(f_arr)
+    elif config.method == SignalTransformMethod.SIGN:
+        s = np.sign(f_arr) * dir_mult
+    elif config.method == SignalTransformMethod.IDENTITY_CLIPPED:
+        clip_val = float(config.clip_limit)
+        s = np.clip(f_arr, -clip_val, clip_val) * dir_mult
+    else:
+        s = np.sign(f_arr) * dir_mult
+
+    return [to_decimal18(Decimal(f"{float(val):.18f}")) or Decimal("0") for val in s]
+
+
 def evaluate_hypothesis_relationship(
     features: Sequence[Decimal],
     forward_returns: Sequence[Decimal],
@@ -236,17 +263,19 @@ def evaluate_hypothesis_relationship(
     hypothesis: HypothesisSpecification,
     hac_policy: Optional[HacInferencePolicy] = None,
     cost_config: Optional[CostModelConfig] = None,
+    signal_config: Optional[SignalTransformConfig] = None,
     purged_count: int = 0,
 ) -> EvaluationResult:
     """Evaluate full statistical inference, IC metrics, 3-tier friction, and robustness matrix."""
     policy = hac_policy or HacInferencePolicy()
     cost_cfg = cost_config or CostModelConfig()
+    sig_cfg = signal_config or SignalTransformConfig()
     n = len(features)
 
     if n < 3:
         raise DataContractError(f"Minimum 3 valid observations required for evaluation, got {n}")
 
-    # Compute exact OLS model residuals e_t = y_t - (alpha_hat + beta_hat * x_t) for HAC plug-in bandwidth
+    # Compute exact OLS model residuals and score process g_t = (X_t - mean(X)) * eps_t for HAC bandwidth selection
     x_arr = np.array([float(v) for v in features])
     y_arr = np.array([float(v) for v in forward_returns])
     x_dm = x_arr - np.mean(x_arr)
@@ -255,15 +284,15 @@ def evaluate_hypothesis_relationship(
     beta_hat = float(np.sum(x_dm * y_dm) / denom) if denom > 0 else 0.0
     alpha_hat = float(np.mean(y_arr) - beta_hat * np.mean(x_arr))
     ols_residuals = y_arr - (alpha_hat + beta_hat * x_arr)
+    ols_scores = x_dm * ols_residuals  # Score process g_t
 
     primary_lag = determine_hac_bandwidth(
         policy.bandwidth_method,
         sample_size=n,
         horizon=horizon,
         fixed_lag=policy.fixed_lag_value,
-        residuals=ols_residuals,
+        score_process=ols_scores,
     )
-
 
     # Primary OLS Slope Beta & HAC Inference
     beta, hac_se, hac_t_stat, p_val = compute_ols_beta_and_hac(features, forward_returns, primary_lag)
@@ -273,9 +302,8 @@ def evaluate_hypothesis_relationship(
     r_ic = calculate_spearman_rank_ic(features, forward_returns)
     autocorr = calculate_autocorrelation(features, lag=1)
 
-    # Convert directional signals
-    dir_mult = Decimal("1.0") if hypothesis.expected_direction == "LONG" else Decimal("-1.0")
-    signals = [f * dir_mult for f in features]
+    # Convert directional signals using versioned SignalTransformConfig
+    signals = transform_feature_to_signal(features, hypothesis.expected_direction, sig_cfg)
     t1_bps, t2_bps, t3_bps = calculate_3tier_friction_waterfall(forward_returns, signals, cost_cfg)
 
     # Robustness Check Matrix across Lags
@@ -293,16 +321,31 @@ def evaluate_hypothesis_relationship(
                 )
             )
 
-    # Falsification Checks against InvalidationCriteria
+    # Direction-Aware Falsification Checks against InvalidationCriteria
     crit = hypothesis.invalidation_criteria
     is_falsified = False
-    if r_ic is None or abs(r_ic) < crit.min_in_sample_rank_ic:
-        is_falsified = True
-    if abs(hac_t_stat) < crit.min_hac_t_stat:
-        is_falsified = True
+
+    if hypothesis.expected_direction == ExpectedDirection.LONG:
+        # LONG requires positive beta, positive t-stat >= min_hac_t_stat, and Rank IC >= min_in_sample_rank_ic
+        if beta <= Decimal("0") or hac_t_stat < crit.min_hac_t_stat:
+            is_falsified = True
+        if r_ic is None or r_ic < crit.min_in_sample_rank_ic:
+            is_falsified = True
+    elif hypothesis.expected_direction == ExpectedDirection.SHORT:
+        # SHORT requires negative beta, negative t-stat <= -min_hac_t_stat, and Rank IC <= -min_in_sample_rank_ic
+        if beta >= Decimal("0") or hac_t_stat > -crit.min_hac_t_stat:
+            is_falsified = True
+        if r_ic is None or r_ic > -crit.min_in_sample_rank_ic:
+            is_falsified = True
+    elif hypothesis.expected_direction == ExpectedDirection.DISPERSION:
+        # DISPERSION evaluates two-sided magnitude of relationship
+        if abs(hac_t_stat) < crit.min_hac_t_stat:
+            is_falsified = True
+        if r_ic is None or abs(r_ic) < crit.min_in_sample_rank_ic:
+            is_falsified = True
+
     if autocorr is not None and abs(autocorr) > crit.max_feature_autocorrelation:
         is_falsified = True
-
 
     is_sig = abs(hac_t_stat) >= Decimal("2.00") and p_val <= Decimal("0.05")
 

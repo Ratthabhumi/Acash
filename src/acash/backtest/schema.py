@@ -9,7 +9,9 @@ from enum import Enum
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
+
 import pyarrow as pa
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -206,21 +208,32 @@ class BacktestManifest(BaseModel):
     wall_clock_duration_ms: int
 
     def model_post_init(self, __context: Any) -> None:
-        """Validate that environment hashes are valid cryptographic fingerprints, not placeholders."""
-        if not self.pyproject_toml_sha256 or len(self.pyproject_toml_sha256) < 32 or "pinned_" in self.pyproject_toml_sha256:
-            raise DataContractError(
-                f"Invalid pyproject_toml_sha256 fingerprint: '{self.pyproject_toml_sha256}'. "
-                "Placeholder or invalid hashes are strictly forbidden for pinned reproducibility."
-            )
-        if not self.git_commit_hash or len(self.git_commit_hash) < 7 or "current_git" in self.git_commit_hash:
-            raise DataContractError(
-                f"Invalid git_commit_hash: '{self.git_commit_hash}'. "
-                "Placeholder or invalid git commits are strictly forbidden for pinned reproducibility."
-            )
-        if self.uv_lock_sha256 is not None and ("pinned_" in self.uv_lock_sha256 or len(self.uv_lock_sha256) < 32):
-            raise DataContractError(
-                f"Invalid uv_lock_sha256 fingerprint: '{self.uv_lock_sha256}'."
-            )
+        """Validate that environment and lineage hashes are valid cryptographic fingerprints, not placeholders."""
+        hex64_pattern = r"^[0-9a-f]{64}$"
+        git_pattern = r"^[0-9a-f]{7,40}$"
+
+        if not re.fullmatch(hex64_pattern, self.hypothesis_spec_sha256):
+            raise DataContractError(f"Invalid hypothesis_spec_sha256: '{self.hypothesis_spec_sha256}'. Must be 64 lowercase hex characters.")
+
+        if not re.fullmatch(hex64_pattern, self.engine_config_hash):
+            raise DataContractError(f"Invalid engine_config_hash: '{self.engine_config_hash}'. Must be 64 lowercase hex characters.")
+
+        if not re.fullmatch(hex64_pattern, self.strategy_config_hash):
+            raise DataContractError(f"Invalid strategy_config_hash: '{self.strategy_config_hash}'. Must be 64 lowercase hex characters.")
+
+        if not re.fullmatch(hex64_pattern, self.pyproject_toml_sha256):
+            raise DataContractError(f"Invalid pyproject_toml_sha256: '{self.pyproject_toml_sha256}'. Must be 64 lowercase hex characters.")
+
+        if self.uv_lock_sha256 is not None and not re.fullmatch(hex64_pattern, self.uv_lock_sha256):
+            raise DataContractError(f"Invalid uv_lock_sha256: '{self.uv_lock_sha256}'. Must be 64 lowercase hex characters.")
+
+        if not re.fullmatch(git_pattern, self.git_commit_hash):
+            raise DataContractError(f"Invalid git_commit_hash: '{self.git_commit_hash}'. Must be 7-40 lowercase hex characters.")
+
+        for h in self.canonical_data_hashes:
+            if not re.fullmatch(hex64_pattern, h):
+                raise DataContractError(f"Invalid canonical_data_hash: '{h}'. Must be 64 lowercase hex characters.")
+
 
 
     def to_canonical_json(self) -> str:

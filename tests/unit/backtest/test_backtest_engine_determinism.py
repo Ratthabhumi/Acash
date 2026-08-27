@@ -352,9 +352,10 @@ def test_bitwise_replay_invariance() -> None:
         prng_seed=42,
     )
 
-    hyp_hash = "h" * 64
-    strategy_hash = "s" * 64
+    hyp_hash = "a" * 64
+    strategy_hash = "b" * 64
     pyproject_sha256, uv_lock_sha256, git_commit = load_current_environment_provenance()
+
 
     # Run 1
     events1 = _make_deterministic_event_stream()

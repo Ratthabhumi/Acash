@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
 import pyarrow as pa
 
 from acash.data.schema import DataContractError
@@ -140,6 +141,7 @@ class CanonicalDataAdapter:
         stream_id: str = "BARS",
     ) -> List[BacktestMarketEvent]:
         """Convert canonical bars table into BacktestMarketEvent stream."""
+        import hashlib
         events: List[BacktestMarketEvent] = []
         num_rows = table.num_rows
         has_source_key = "source_order_key" in table.column_names
@@ -157,23 +159,35 @@ class CanonicalDataAdapter:
         msg_rank_col = table["message_type_rank"] if has_message_rank else None
         row_sub_col = table["row_sub_index"] if has_row_sub_idx else None
 
+        seen_keys: Set[str] = set()
+
         for i in range(num_rows):
             ts_ns = extract_nanoseconds_from_scalar(ts_col[i], ts_col.type)
+            op = str(open_col[i].as_py())
+            hi = str(high_col[i].as_py())
+            lo = str(low_col[i].as_py())
+            cl = str(close_col[i].as_py())
+            vo = str(vol_col[i].as_py())
 
-            source_key = (
-                str(source_key_col[i].as_py())
-                if source_key_col is not None
-                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
-            )
+            if source_key_col is not None:
+                source_key = str(source_key_col[i].as_py())
+            else:
+                fp = hashlib.sha256(f"{ts_ns}:{op}:{hi}:{lo}:{cl}:{vo}".encode("utf-8")).hexdigest()[:16]
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:{fp}"
+
+            if source_key in seen_keys and source_key_col is None:
+                raise DataContractError(f"STATE_UNORDERABLE: Identical duplicate bar rows detected without discriminator at timestamp {ts_ns}.")
+            seen_keys.add(source_key)
+
             message_rank = int(msg_rank_col[i].as_py()) if msg_rank_col is not None else 10
             row_sub_index = int(row_sub_col[i].as_py()) if row_sub_col is not None else 0
 
             payload = {
-                "open": Decimal(str(open_col[i].as_py())),
-                "high": Decimal(str(high_col[i].as_py())),
-                "low": Decimal(str(low_col[i].as_py())),
-                "close": Decimal(str(close_col[i].as_py())),
-                "volume": Decimal(str(vol_col[i].as_py())),
+                "open": Decimal(op),
+                "high": Decimal(hi),
+                "low": Decimal(lo),
+                "close": Decimal(cl),
+                "volume": Decimal(vo),
                 "bar_index": i,
             }
             if vwap_col is not None:
@@ -200,6 +214,7 @@ class CanonicalDataAdapter:
         stream_id: str = "TRADES",
     ) -> List[BacktestMarketEvent]:
         """Convert canonical trades table into BacktestMarketEvent stream."""
+        import hashlib
         events: List[BacktestMarketEvent] = []
         num_rows = table.num_rows
         has_source_key = "source_order_key" in table.column_names
@@ -208,6 +223,7 @@ class CanonicalDataAdapter:
 
         ts_col = table["exchange_time_utc"] if "exchange_time_utc" in table.column_names else table["timestamp_utc"]
         trade_id_col = table["trade_id"] if "trade_id" in table.column_names else None
+        seq_col = table["sequence_num"] if "sequence_num" in table.column_names else None
         price_col = table["price"]
         size_col = table["size"]
         side_col = table["aggressor_side"] if "aggressor_side" in table.column_names else None
@@ -215,25 +231,39 @@ class CanonicalDataAdapter:
         msg_rank_col = table["message_type_rank"] if has_message_rank else None
         row_sub_col = table["row_sub_index"] if has_row_sub_idx else None
 
+        seen_keys: Set[str] = set()
+
         for i in range(num_rows):
             ts_ns = extract_nanoseconds_from_scalar(ts_col[i], ts_col.type)
+            trade_id_val = str(trade_id_col[i].as_py()) if trade_id_col is not None and trade_id_col[i].as_py() is not None else None
+            seq_val = str(seq_col[i].as_py()) if seq_col is not None and seq_col[i].as_py() is not None else None
+            px = str(price_col[i].as_py())
+            sz = str(size_col[i].as_py())
+            side = str(side_col[i].as_py()) if side_col is not None else "UNKNOWN"
 
-            source_key = (
-                str(source_key_col[i].as_py())
-                if source_key_col is not None
-                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
-            )
+            if source_key_col is not None:
+                source_key = str(source_key_col[i].as_py())
+            elif trade_id_val is not None:
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:trd_{trade_id_val}"
+            elif seq_val is not None:
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:seq_{seq_val}"
+            else:
+                fp = hashlib.sha256(f"{ts_ns}:{px}:{sz}:{side}".encode("utf-8")).hexdigest()[:16]
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:{fp}"
+
+            if source_key in seen_keys and source_key_col is None:
+                raise DataContractError(f"STATE_UNORDERABLE: Identical duplicate trade rows detected without unique discriminator at timestamp {ts_ns}.")
+            seen_keys.add(source_key)
+
             message_rank = int(msg_rank_col[i].as_py()) if msg_rank_col is not None else 1
             row_sub_index = int(row_sub_col[i].as_py()) if row_sub_col is not None else 0
 
-            trade_id_val = trade_id_col[i].as_py() if trade_id_col is not None else None
             payload = {
-                "trade_id": str(trade_id_val) if trade_id_val is not None else None,
-                "price": Decimal(str(price_col[i].as_py())),
-                "size": Decimal(str(size_col[i].as_py())),
-                "aggressor_side": str(side_col[i].as_py()) if side_col is not None else "UNKNOWN",
+                "trade_id": trade_id_val,
+                "price": Decimal(px),
+                "size": Decimal(sz),
+                "aggressor_side": side,
             }
-
 
             event = BacktestMarketEvent(
                 event_type=BacktestEventType.TRADE,
@@ -256,6 +286,7 @@ class CanonicalDataAdapter:
         stream_id: str = "DEPTH",
     ) -> List[BacktestMarketEvent]:
         """Convert canonical Order Book L2/MBP table into BacktestMarketEvent stream."""
+        import hashlib
         events: List[BacktestMarketEvent] = []
         num_rows = table.num_rows
         has_source_key = "source_order_key" in table.column_names
@@ -272,28 +303,35 @@ class CanonicalDataAdapter:
         msg_rank_col = table["message_type_rank"] if has_message_rank else None
         row_sub_col = table["row_sub_index"] if has_row_sub_idx else None
 
+        seen_keys: Set[str] = set()
+
         for i in range(num_rows):
             ts_ns = extract_nanoseconds_from_scalar(ts_col[i], ts_col.type)
-
-            source_key = (
-                str(source_key_col[i].as_py())
-                if source_key_col is not None
-                else f"{symbol}:{stream_id}:{ts_ns}:{i:08d}"
-            )
-            message_rank = int(msg_rank_col[i].as_py()) if msg_rank_col is not None else 2
-            row_sub_index = int(row_sub_col[i].as_py()) if row_sub_col is not None else 0
-
             action = str(action_col[i].as_py()).upper() if action_col is not None else "MODIFY"
             side = str(side_col[i].as_py()).upper() if side_col is not None else "BID"
             price_val = price_col[i].as_py() if price_col is not None else None
             size_val = size_col[i].as_py() if size_col is not None else None
+            level_val = int(level_col[i].as_py()) if level_col is not None and level_col[i].as_py() is not None else 0
+
+            if source_key_col is not None:
+                source_key = str(source_key_col[i].as_py())
+            else:
+                fp = hashlib.sha256(f"{ts_ns}:{action}:{side}:{level_val}:{price_val}:{size_val}".encode("utf-8")).hexdigest()[:16]
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:{fp}"
+
+            if source_key in seen_keys and source_key_col is None:
+                raise DataContractError(f"STATE_UNORDERABLE: Identical duplicate order book rows detected without unique discriminator at timestamp {ts_ns}.")
+            seen_keys.add(source_key)
+
+            message_rank = int(msg_rank_col[i].as_py()) if msg_rank_col is not None else 2
+            row_sub_index = int(row_sub_col[i].as_py()) if row_sub_col is not None else 0
 
             payload = {
                 "action": action,
                 "side": side,
                 "price": Decimal(str(price_val)) if price_val is not None else None,
                 "size": Decimal(str(size_val)) if size_val is not None else None,
-                "level_idx": int(level_col[i].as_py()) if level_col is not None else 0,
+                "level_idx": level_val,
             }
 
             event_type = (
@@ -315,6 +353,7 @@ class CanonicalDataAdapter:
             events.append(event)
 
         return events
+
 
     @staticmethod
     def merge_and_sort_event_streams(

@@ -33,6 +33,14 @@ from acash.backtest.schema import (
     calculate_backtest_manifest_id,
     load_current_environment_provenance,
 )
+from acash.backtest.nautilus_bridge import (
+    NautilusBacktestBridge,
+    NautilusBarData,
+    NautilusDataConverter,
+    NautilusExecutionFill,
+    NautilusOrderBookDeltaData,
+    NautilusTradeTickData,
+)
 from acash.backtest.strategies import (
     MicrostructureImbalanceActor,
     VwapMeanReversionActor,
@@ -69,9 +77,17 @@ __all__ = [
     "SimulatedOrderBook",
     "SimulatedOrder",
     "EventBacktestRunner",
+    # Nautilus Bridge
+    "NautilusBacktestBridge",
+    "NautilusDataConverter",
+    "NautilusBarData",
+    "NautilusTradeTickData",
+    "NautilusOrderBookDeltaData",
+    "NautilusExecutionFill",
     # Telemetry
     "RealityGapAttributionEngine",
     # Strategies
     "MicrostructureImbalanceActor",
     "VwapMeanReversionActor",
 ]
+

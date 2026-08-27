@@ -40,7 +40,7 @@ class MicrostructureImbalanceStrategy:
             mid = mid_prices[i]
 
             sig = Decimal("0")
-            if mp is not None and mid > Decimal("0"):
+            if abs(obi) >= self.obi_threshold and mp is not None and mid > Decimal("0"):
                 # Micro-price skew normalized by mid
                 skew = (mp - mid) / mid
                 sig = (obi * Decimal("0.5")) + (skew * Decimal("500.0"))
@@ -50,6 +50,7 @@ class MicrostructureImbalanceStrategy:
             signals.append(to_decimal18(sig) or Decimal("0"))
 
         return signals
+
 
 
 class SessionVwapMeanReversionStrategy:

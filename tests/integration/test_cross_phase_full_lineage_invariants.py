@@ -1,0 +1,484 @@
+"""Cross-Phase End-to-End Invariant and Lineage Test Suite (Phases 1–5).
+
+Enforces:
+1. Identity Conservation: Same inputs, parameters, and seed guarantee identical cryptographic manifest identities.
+2. Direction Conservation & Falsification: LONG/SHORT hypotheses enforce mathematical sign alignment and falsify on contradictions.
+3. Microstructure Absorption Rejection: Verifies price non-continuation requirement for absorption classification.
+4. Stream Scope Isolation: Verifies 4-tuple (source, channel, symbol, date) partition splitting.
+5. Deterministic Fallback Ordering & STATE_UNORDERABLE: Verifies content key permutation invariance and duplicate rejection.
+6. 64-Hex Digest Enforcement: Verifies strict SHA-256 validation on all manifest fields.
+7. Dual-Substrate Nautilus Bridge & Accounting Conservation: Verifies independent shadow ledger equity reconciliation.
+"""
+
+from datetime import date, datetime, timezone
+from decimal import Decimal
+import tempfile
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+import pyarrow as pa
+import pytest
+
+from acash.backtest.adapter import (
+    BacktestEventType,
+    BacktestMarketEvent,
+    CanonicalDataAdapter,
+)
+from acash.backtest.engine import EventBacktestRunner
+from acash.backtest.nautilus_bridge import (
+    NautilusBacktestBridge,
+    NautilusDataConverter,
+)
+from acash.backtest.schema import (
+    BacktestEngineConfig,
+    BacktestManifest,
+    OrderType,
+    calculate_backtest_manifest_id,
+    load_current_environment_provenance,
+)
+from acash.backtest.strategies.imbalance_actor import MicrostructureImbalanceActor
+from acash.data.features.engine import calculate_footprint_analytics
+from acash.data.features.schema import TradeFeaturesConfig
+from acash.data.integrity import DataIntegrityValidator
+from acash.data.orderbook.pipeline import OrderBookIngestionPipeline
+from acash.data.orderbook.storage import OrderBookStorageEngine
+from acash.data.schema import CANONICAL_ARROW_SCHEMA, DataContractError, IntegrityViolationError
+from acash.research.evaluation import (
+    compute_ols_beta_and_hac,
+    determine_hac_bandwidth,
+    evaluate_hypothesis_relationship,
+)
+from acash.research.manifest import ResearchManifestEngine
+from acash.research.pipeline import (
+    AlphaResearchPipeline,
+    calculate_canonical_feature_table_sha256,
+)
+from acash.research.schema import (
+    CostModelConfig,
+    ExpectedDirection,
+    HacBandwidthMethod,
+    HacInferencePolicy,
+    HypothesisSpecification,
+    InvalidationCriteria,
+    SignalTransformConfig,
+    SignalTransformMethod,
+    SplitPolicy,
+)
+from acash.research.strategies import MicrostructureImbalanceStrategy
+
+
+def test_cross_phase_identity_conservation() -> None:
+    """Invariant 1: Same Data + Same Hypothesis + Same Config + Same Seed = Same Manifest Identity."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        engine = ResearchManifestEngine(manifests_dir=Path(tmp_dir) / "manifests")
+        pipeline = AlphaResearchPipeline(manifest_engine=engine)
+
+        num_bars = 60
+        t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+        timestamps = [datetime.fromtimestamp(t0.timestamp() + i * 60, tz=timezone.utc) for i in range(num_bars)]
+        feat_vals = [Decimal(f"{10.0 + (i * 0.1):.4f}") for i in range(num_bars)]
+        prices = [Decimal(f"{100.0 + (i * 0.5):.4f}") for i in range(num_bars)]
+        t_end_timestamps = [datetime.fromtimestamp(t0.timestamp() + (i + 1) * 60, tz=timezone.utc) for i in range(num_bars)]
+        feat_table = pa.Table.from_pydict({
+
+            "timestamp_utc": timestamps,
+            "vwap_std": feat_vals,
+        })
+        bars_table = pa.Table.from_pydict({
+            "timestamp_utc": timestamps,
+            "bar_start_utc": timestamps,
+            "bar_end_utc": t_end_timestamps,
+            "open": prices,
+            "high": [p + Decimal("1.0") for p in prices],
+            "low": [p - Decimal("1.0") for p in prices],
+            "close": prices,
+            "volume": [Decimal("1000") for _ in prices],
+        })
+
+        hyp = HypothesisSpecification(
+            hypothesis_id="HYP-CROSS-PHASE-01",
+            hypothesis_version="1.0.0",
+            economic_rationale="Cross-phase identity test.",
+            target_symbol="ES.FUT",
+            feature_dependencies=["vwap_std"],
+            parameter_config_json='{"z_window": 20}',
+            expected_direction=ExpectedDirection.LONG,
+            target_horizons=[1, 5],
+            primary_horizon=5,
+            invalidation_criteria=InvalidationCriteria(
+                min_in_sample_rank_ic=Decimal("0.01"),
+                min_hac_t_stat=Decimal("1.5"),
+            ),
+            registered_at_utc="2026-08-28T00:00:00Z",
+            author="Quant Lineage Lead",
+        )
+
+        # Run 1
+        m1, r1, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_table,
+            bars_table=bars_table,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+        )
+
+        # Run 2 with identical inputs
+        m2, r2, _ = pipeline.run_hypothesis_evaluation(
+            features_table=feat_table,
+            bars_table=bars_table,
+            feature_name="vwap_std",
+            hypothesis=hyp,
+        )
+
+        # Invariant: Bitwise-identical manifest_id and parameter_config_hash
+        assert m1.manifest_id == m2.manifest_id
+        assert m1.parameter_config_hash == m2.parameter_config_hash
+        assert m1.input_feature_hashes == m2.input_feature_hashes
+
+
+def test_cross_phase_direction_conservation_and_falsification() -> None:
+    """Invariant 2: LONG hypothesis with negative beta is explicitly falsified, and SHORT passes."""
+    # Stationary oscillating/random series with zero autocorrelation
+    x = [Decimal(str(10 + (i % 5))) for i in range(1, 51)]
+    # Perfectly negative relationship: y = -2 * x
+    y_neg = [Decimal(str(-2 * (10 + (i % 5)))) for i in range(1, 51)]
+
+    hyp_long = HypothesisSpecification(
+        hypothesis_id="HYP-DIR-LONG",
+        hypothesis_version="1.0.0",
+        economic_rationale="Expecting positive returns.",
+        target_symbol="ES.FUT",
+        feature_dependencies=["feat_x"],
+        parameter_config_json="{}",
+        expected_direction=ExpectedDirection.LONG,
+        target_horizons=[1],
+        primary_horizon=1,
+        invalidation_criteria=InvalidationCriteria(
+            min_in_sample_rank_ic=Decimal("0.10"),
+            min_hac_t_stat=Decimal("2.0"),
+            max_feature_autocorrelation=Decimal("0.80"),
+        ),
+        registered_at_utc="2026-08-28T00:00:00Z",
+        author="Quant",
+    )
+
+    hyp_short = HypothesisSpecification(
+        hypothesis_id="HYP-DIR-SHORT",
+        hypothesis_version="1.0.0",
+        economic_rationale="Expecting negative returns.",
+        target_symbol="ES.FUT",
+        feature_dependencies=["feat_x"],
+        parameter_config_json="{}",
+        expected_direction=ExpectedDirection.SHORT,
+        target_horizons=[1],
+        primary_horizon=1,
+        invalidation_criteria=InvalidationCriteria(
+            min_in_sample_rank_ic=Decimal("0.10"),
+            min_hac_t_stat=Decimal("2.0"),
+            max_feature_autocorrelation=Decimal("0.80"),
+        ),
+        registered_at_utc="2026-08-28T00:00:00Z",
+        author="Quant",
+    )
+
+    res_long = evaluate_hypothesis_relationship(
+        features=x,
+        forward_returns=y_neg,
+        horizon=1,
+        hypothesis=hyp_long,
+    )
+
+    res_short = evaluate_hypothesis_relationship(
+        features=x,
+        forward_returns=y_neg,
+        horizon=1,
+        hypothesis=hyp_short,
+    )
+
+    # Invariant: LONG is FALSIFIED because relationship is negative despite large |t| and |IC|
+    assert res_long.is_falsified is True
+    # Invariant: SHORT is NOT FALSIFIED because negative relationship matches SHORT expectation
+    assert res_short.is_falsified is False
+
+
+def test_cross_phase_microstructure_absorption_rejection_threshold() -> None:
+    """Invariant 3: Extreme volume with pullback IS absorption; extreme volume without pullback IS NOT absorption."""
+    cfg = TradeFeaturesConfig(
+        absorption_volume_multiplier=Decimal("2.0"),
+        absorption_rejection_ratio=Decimal("0.30"),
+    )
+
+    # Case A: High-side Absorption (Buyers absorbed by passive asks -> Close pulls back from High)
+    trades_absorbed = [
+        {"price": Decimal("100.00"), "size": Decimal("10.0"), "aggressor_side": "BUY"},
+        {"price": Decimal("105.00"), "size": Decimal("10.0"), "aggressor_side": "BUY"},
+        {"price": Decimal("110.00"), "size": Decimal("200.0"), "aggressor_side": "BUY"},  # Extreme volume at high
+        {"price": Decimal("104.00"), "size": Decimal("10.0"), "aggressor_side": "SELL"},  # Close pulled back to 104
+    ]
+    res_absorbed = calculate_footprint_analytics(trades_absorbed, cfg)
+    assert res_absorbed["is_absorption_bar"] is True
+
+    # Case B: Breakout Continuation (Extreme volume at high, but Close closes right at High -> NOT absorption)
+    trades_breakout = [
+        {"price": Decimal("100.00"), "size": Decimal("10.0"), "aggressor_side": "BUY"},
+        {"price": Decimal("105.00"), "size": Decimal("10.0"), "aggressor_side": "BUY"},
+        {"price": Decimal("110.00"), "size": Decimal("200.0"), "aggressor_side": "BUY"},  # Extreme volume at high
+        {"price": Decimal("110.00"), "size": Decimal("10.0"), "aggressor_side": "BUY"},  # Close remains at High 110
+    ]
+    res_breakout = calculate_footprint_analytics(trades_breakout, cfg)
+    assert res_breakout["is_absorption_bar"] is False
+
+
+def test_cross_phase_order_book_stream_scope_isolation() -> None:
+    """Invariant 4: OrderBookIngestionPipeline splits multi-channel table into separate Ingestion Units."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        storage = OrderBookStorageEngine(base_dir=Path(tmp_dir) / "orderbook")
+        pipeline = OrderBookIngestionPipeline(storage_engine=storage)
+
+        t_date = date(2026, 1, 19)
+        t_utc = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+
+        # Multi-channel table: Channel "1" and Channel "2" (string channel_id) with full schema
+        from acash.data.orderbook.schema import CANONICAL_BOOK_SNAPSHOT_SCHEMA
+        table = pa.Table.from_pydict({
+            "source_id": ["CME", "CME"],
+            "channel_id": ["310", "311"],
+            "symbol": ["ES.FUT", "ES.FUT"],
+            "trading_date": [t_date, t_date],
+            "exchange_time_utc": pa.array([t_utc, t_utc], type=pa.timestamp("ns", tz="UTC")),
+            "feed_time_utc": pa.array([None, None], type=pa.timestamp("ns", tz="UTC")),
+            "knowledge_time_utc": pa.array([t_utc, t_utc], type=pa.timestamp("ns", tz="UTC")),
+            "source_seq_num": [100, 200],
+            "source_order_key": ["00000000000000000100", "00000000000000000200"],
+            "snapshot_id": ["snap_1", "snap_2"],
+            "is_snapshot_complete": [True, True],
+            "side": ["BID", "BID"],
+            "level_idx": [0, 0],
+            "price": [Decimal("5000.00"), Decimal("5000.00")],
+            "size": [Decimal("10.0"), Decimal("20.0")],
+            "order_count": [1, 1],
+        }, schema=CANONICAL_BOOK_SNAPSHOT_SCHEMA)
+
+        result = pipeline.ingest_snapshots(
+            raw_table=table,
+            source_id="CME",
+            source_uri="cme://test",
+        )
+
+        # Invariant: 2 distinct ingestion batches created corresponding to Channel 310 and Channel 311
+        assert result.is_success is True
+        assert len(result.batches_ingested) == 2
+        batch_ids = [b.batch_id for b in result.batches_ingested]
+        assert any("_ch310_" in b_id for b_id in batch_ids)
+        assert any("_ch311_" in b_id for b_id in batch_ids)
+
+
+def test_cross_phase_fallback_ordering_key_and_state_unorderable() -> None:
+    """Invariant 5: Stable fallback keys under row permutation, and STATE_UNORDERABLE on identical duplicates."""
+    t_utc = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+
+    # Row 1 and Row 2 with distinct trade_id
+    tbl_a = pa.Table.from_pydict({
+        "timestamp_utc": [t_utc, t_utc],
+        "trade_id": ["T1", "T2"],
+        "price": [Decimal("100.00"), Decimal("101.00")],
+        "size": [Decimal("10.0"), Decimal("20.0")],
+        "aggressor_side": ["BUY", "SELL"],
+    })
+
+    # Permuted rows (T2 then T1)
+    tbl_b = pa.Table.from_pydict({
+        "timestamp_utc": [t_utc, t_utc],
+        "trade_id": ["T2", "T1"],
+        "price": [Decimal("101.00"), Decimal("100.00")],
+        "size": [Decimal("20.0"), Decimal("10.0")],
+        "aggressor_side": ["SELL", "BUY"],
+    })
+
+    events_a = CanonicalDataAdapter.from_trades_table(tbl_a, symbol="ES")
+    events_b = CanonicalDataAdapter.from_trades_table(tbl_b, symbol="ES")
+
+    # Sorted event streams must have identical order tuples
+    sorted_a = sorted(events_a, key=lambda e: e.order_tuple)
+    sorted_b = sorted(events_b, key=lambda e: e.order_tuple)
+    assert [e.order_tuple for e in sorted_a] == [e.order_tuple for e in sorted_b]
+
+    # Duplicate identical rows without unique discriminator must raise STATE_UNORDERABLE
+    tbl_dup = pa.Table.from_pydict({
+        "timestamp_utc": [t_utc, t_utc],
+        "price": [Decimal("100.00"), Decimal("100.00")],
+        "size": [Decimal("10.0"), Decimal("10.0")],
+        "aggressor_side": ["BUY", "BUY"],
+    })
+    with pytest.raises(DataContractError, match="STATE_UNORDERABLE"):
+        CanonicalDataAdapter.from_trades_table(tbl_dup, symbol="ES")
+
+
+def test_cross_phase_manifest_64hex_regex_validation() -> None:
+    """Invariant 6: BacktestManifest strictly enforces 64-hex lowercase hashes and rejects invalid digests."""
+    env = load_current_environment_provenance()
+
+    from acash.backtest.schema import BacktestExecutionSummary, RealityGapSummary
+
+    summary = BacktestExecutionSummary(
+        total_orders=1,
+        total_fills=1,
+        total_volume_traded=Decimal("10.0"),
+        total_fees_paid=Decimal("0.5"),
+        realized_pnl=Decimal("100.0"),
+        unrealized_pnl=Decimal("0.0"),
+        ending_equity=Decimal("100100.0"),
+        net_return_pct=Decimal("0.10"),
+        max_drawdown_pct=Decimal("0.0"),
+        win_rate_pct=Decimal("100.0"),
+    )
+    reality = RealityGapSummary(
+        phase4_analytical_edge_bps=Decimal("5.0"),
+        phase5_simulated_realized_bps=Decimal("4.5"),
+        reality_gap_bps=Decimal("0.5"),
+        spread_drag_bps=Decimal("0.3"),
+        latency_slip_drag_bps=Decimal("0.2"),
+        queue_position_drag_bps=Decimal("0.0"),
+    )
+
+    valid_sha = "0" * 64
+    valid_git = "a" * 40
+
+    # Valid manifest passes
+    m = BacktestManifest(
+        manifest_id="res_HYP-01_1h_abcdef1234567890",
+        hypothesis_id="HYP-01",
+        hypothesis_spec_sha256=valid_sha,
+        canonical_data_hashes=[valid_sha],
+        engine_config_hash=valid_sha,
+        strategy_config_hash=valid_sha,
+        prng_seed=42,
+        pyproject_toml_sha256=valid_sha,
+        git_commit_hash=valid_git,
+        execution_summary=summary,
+        reality_gap=reality,
+        computed_at_utc="2026-08-28T00:00:00Z",
+        wall_clock_duration_ms=10,
+    )
+    assert m is not None
+
+    # Invalid non-hex / short SHA-256 raises DataContractError
+    with pytest.raises(DataContractError, match="Invalid hypothesis_spec_sha256"):
+        BacktestManifest(
+            manifest_id="res_HYP-01_1h_abcdef1234567890",
+            hypothesis_id="HYP-01",
+            hypothesis_spec_sha256="not_a_valid_64_hex_sha256",
+            canonical_data_hashes=[valid_sha],
+            engine_config_hash=valid_sha,
+            strategy_config_hash=valid_sha,
+            prng_seed=42,
+            pyproject_toml_sha256=valid_sha,
+            git_commit_hash=valid_git,
+            execution_summary=summary,
+            reality_gap=reality,
+            computed_at_utc="2026-08-28T00:00:00Z",
+            wall_clock_duration_ms=10,
+        )
+
+
+class CrossPhaseActor:
+    """Actor placing simulated orders into backtest runner on market events."""
+
+    def __init__(self, symbol: str) -> None:
+        self.symbol = symbol
+        self.order_placed = False
+
+    def on_bar(self, event: Any, runner: Any) -> None:
+        if not self.order_placed:
+            runner.submit_order(
+                order_id="ORD-CROSS-001",
+                symbol=self.symbol,
+                order_type=OrderType.MARKET,
+                side="BUY",
+                quantity=Decimal("2.0"),
+            )
+            self.order_placed = True
+
+    def on_trade(self, event: Any, runner: Any) -> None:
+        pass
+
+
+def test_cross_phase_nautilus_bridge_and_shadow_accounting_reconciliation() -> None:
+    """Invariant 7: NautilusBacktestBridge translates events and reconciles fills via ACASH independent shadow ledger."""
+    actor = CrossPhaseActor(symbol="ES.FUT")
+    config = BacktestEngineConfig(engine_id="BKT-TEST-CROSS", symbol="ES.FUT", initial_cash=Decimal("100000.00"))
+    bridge = NautilusBacktestBridge(config=config, strategy_actor=actor)
+
+    t0_ns = 1768833000_000_000_000  # 2026-01-19T14:30:00Z
+
+    # L2 Depth Snapshot event (Asks = 5001.00)
+    snap_event = BacktestMarketEvent(
+        event_type=BacktestEventType.DEPTH_SNAPSHOT,
+        symbol="ES.FUT",
+        event_timestamp_ns=t0_ns,
+        source_order_key="ES.FUT:DEPTH:0:snap1",
+        message_rank=0,
+        stream_id="DEPTH",
+        row_sub_index=0,
+        payload={
+            "bids": [(Decimal("5000.00"), Decimal("10.0")), (Decimal("4999.00"), Decimal("20.0"))],
+            "asks": [(Decimal("5001.00"), Decimal("10.0")), (Decimal("5002.00"), Decimal("20.0"))],
+        },
+    )
+
+    # Bar Event triggering actor on_bar
+    bar_event = BacktestMarketEvent(
+        event_type=BacktestEventType.BAR,
+        symbol="ES.FUT",
+        event_timestamp_ns=t0_ns + 60_000_000_000,
+        source_order_key="ES.FUT:BARS:1",
+        message_rank=10,
+        stream_id="BARS",
+        row_sub_index=0,
+        payload={
+            "open": Decimal("5001.00"),
+            "high": Decimal("5005.00"),
+            "low": Decimal("5000.00"),
+            "close": Decimal("5004.00"),
+            "volume": Decimal("500.0"),
+            "bar_index": 0,
+        },
+    )
+
+    events = [snap_event, bar_event]
+    valid_sha = "0" * 64
+    valid_git = "a" * 40
+
+    manifest, fills_tbl, equity_tbl = bridge.run_bridge_simulation(
+        events=events,
+        hypothesis_spec_sha256=valid_sha,
+        strategy_config_hash=valid_sha,
+        pyproject_toml_sha256=valid_sha,
+        git_commit_hash=valid_git,
+        canonical_data_hashes=[valid_sha],
+    )
+
+    # Invariants:
+    # 1. Total fills executed
+    assert manifest.execution_summary.total_fills == 1
+    # 2. ACASH Shadow Ledger internal double-entry conservation verified
+    bridge.shadow_ledger.verify_internal_conservation()
+    # 3. Position recorded accurately in shadow ledger
+    pos = bridge.shadow_ledger.positions.get("ES.FUT")
+    assert pos is not None
+    assert pos.quantity == Decimal("2.0")
+
+
+def test_cross_phase_empty_table_schema_validation() -> None:
+
+    """Invariant 8: DataIntegrityValidator validates schema for empty tables."""
+    validator = DataIntegrityValidator()
+
+    # Empty table with invalid schema (missing required columns)
+    empty_invalid = pa.Table.from_pydict({"wrong_column": pa.array([], type=pa.string())})
+    report, _ = validator.validate_table(empty_invalid)
+    assert report.is_valid is False
+    assert any(err.rule == "EMPTY_TABLE_SCHEMA_MISMATCH" for err in report.errors)
+
+    # Empty table with correct canonical schema
+    empty_valid = CANONICAL_ARROW_SCHEMA.empty_table()
+    report_valid, _ = validator.validate_table(empty_valid)
+    assert report_valid.is_valid is True
