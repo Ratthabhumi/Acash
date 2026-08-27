@@ -191,7 +191,7 @@
 
 ## ADR-019: Immutable Part Storage, Provenance-Aware Revisions & Data Contract
 - **Status:** Approved
-- **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must not cross independent source streams, and duplicate revision identities must be deterministically rejected.
+- **Context:** Overwriting a single `data.parquet` file per partition creates serious data-loss and concurrency risks upon subsequent batch ingestions. Furthermore, timestamp monotonicity and cadence checks must not cross independent source streams, duplicate revision identities must be deterministically rejected across the entire dataset, and hash calculations must be invariant to input row permutations.
 - **Decision:**
   1. **Immutable Append-Only Part Storage:** Datasets are stored as partitioned immutable part files:
      `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`
@@ -199,9 +199,9 @@
   2. **Canonical Types & Precision Limits:**
      - Timestamps: `timestamp[us, tz=UTC]` (UTC microsecond precision).
      - Financial Numerics: `Decimal128(38, 18)` (Canonical representation within explicit precision/scale bounds; out-of-bound or non-finite values rejected).
-  3. **Provenance-Aware Revision Identity & Determinism:**
+  3. **Global Provenance-Aware Revision Identity & Determinism:**
      - Observation Identity: `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`.
-     - Identical observation identities in a stream are rejected as fatal deterministic errors (`ERROR / INVALID`).
+     - Identical observation identities are rejected as fatal deterministic errors (`ERROR / INVALID`) against both the current incoming batch and existing canonical Parquet parts.
   4. **Source-Aware P-I-T Revision Selection Standard:**
      ```sql
      WITH eligible AS (
@@ -216,13 +216,14 @@
      ) = 1
      ORDER BY source_id ASC, event_start_utc ASC;
      ```
-  5. **Non-Circular Provenance Hashes:**
+  5. **Deterministic Non-Circular Provenance Hashes:**
      - `raw_source_sha256`: SHA-256 of raw input bytes.
-     - `canonical_batch_sha256`: SHA-256 of deterministic binary serialization of normalized batch columns, excluding digest fields.
-     - Stored in the immutable provenance ledger (`data/provenance_ledger.jsonl`).
+     - `canonical_batch_sha256`: SHA-256 of deterministic binary serialization of canonical columns sorted by identity `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)`, excluding digest fields.
+     - Recorded in the append-only application audit log (`data/provenance_ledger.jsonl`).
   6. **Per-Stream Validation:** Monotonicity and cadence checks execute strictly per independent `(source_id, symbol, timeframe)` stream.
   7. **Atomic Staging Pattern:** Write staging part `.tmp_part_*.parquet` $\to$ flush/close $\to$ validate $\to$ `os.replace` into new canonical part path.
-- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources, enforces exact precision boundaries, and guarantees atomic append-only dataset growth.
+- **Consequences:** Eliminates partition overwrite data-loss risks, preserves bi-temporal revision integrity across sources and files, guarantees input row order invariance in cryptographic hashing, and enforces deterministic append-only growth.
+
 
 
 

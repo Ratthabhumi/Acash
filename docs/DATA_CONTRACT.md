@@ -1,7 +1,7 @@
 # ACASH Data Contract Specification
 
 **Document:** `docs/DATA_CONTRACT.md`  
-**Version:** 1.3.0 (Immutable Part Storage, Batch Hashing & Stream Isolation Locked)  
+**Version:** 1.4.0 (Global Revision Uniqueness, Deterministic Canonical Hash & Multi-Part Testing Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
 
@@ -10,7 +10,7 @@
 ## 1. Core Principles & Philosophy
 
 The ACASH Data Subsystem operates on one fundamental principle:
-$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Normalize}} \text{Canonical Batch} \xrightarrow{\text{canonical batch SHA-256}} \text{Immutable Part File} \to \text{P-I-T Query}$$
+$$\text{Raw Source} \xrightarrow{\text{raw SHA-256}} \text{Per-Stream Validation} \xrightarrow{\text{Normalize \& Sort}} \text{Canonical Batch} \xrightarrow{\text{canonical batch SHA-256}} \text{Immutable Part File} \to \text{P-I-T Query}$$
 
 > [!CRITICAL]
 > **Zero Historical Distortion:** The data validator's objective is to certify dataset trustworthiness, **NOT to make historical data look artificially smooth or clean**. Anomalies are flagged, never silently deleted or mutated.
@@ -79,11 +79,14 @@ ACASH explicitly decouples **Event Time** ($t_{\text{event}}$) from **Knowledge 
 2. **Knowledge Invariant:** $t_{\text{knowledge}} \ge t_{\text{event\_end}}$ (No observation can be known before its bar interval closes)
 3. **Stream-Isolated Monotonicity:** For sequential bars $i$ and $i+1$ within the **same stream** `(source_id, symbol, timeframe)`, $t_{\text{event\_start}, i+1} \ge t_{\text{event\_end}, i}$.
 
-### 4.2 Provenance-Aware Revision Identity & Determinism:
+### 4.2 Global Observation Identity & Deterministic Uniqueness:
 - A single observation is uniquely identified by:
   $$\text{Observation Identity} = (\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc}, \text{knowledge\_time\_utc}, \text{revision\_seq})$$
 - `revision_seq` is a deterministic, strictly increasing integer scoped to $(\text{source\_id}, \text{symbol}, \text{timeframe}, \text{event\_start\_utc})$.
-- **Fatal Duplicate Identity:** If two records in an ingestion stream have identical observation identities, it is treated as a **fatal deterministic ingestion error (`ERROR / INVALID`)** and rejected. The PIT query is never permitted to make arbitrary tie-breaker choices.
+- **Global Uniqueness Enforcement:** An exact observation identity must be globally unique across the entire canonical dataset. If an incoming record matches an identity already present in:
+  1. The current incoming batch (intra-batch collision), OR
+  2. Any existing canonical Parquet part in the partition (existing-dataset collision)
+  it is rejected as a **fatal deterministic ingestion error (`ERROR / INVALID`)**.
 - **Zero Premature Source Merging:** Multiple data sources observing the same symbol and timestamp remain distinct independent observations.
 
 ### 4.3 Source-Aware Point-in-Time (P-I-T) Query Standard:
@@ -106,16 +109,16 @@ ORDER BY source_id ASC, event_start_utc ASC;
 
 ---
 
-## 5. Non-Circular Provenance Hashes
+## 5. Provenance Hashes & Deterministic Canonical Ordering
 
 Provenance is tracked at the batch and source level without circular row-level self-referencing:
 1. **Raw Source Hash (`raw_source_sha256`):**
    - SHA-256 computed over the exact raw input payload bytes prior to parsing.
 2. **Canonical Batch Hash (`canonical_batch_sha256`):**
-   - SHA-256 computed over the deterministic canonical binary serialization of the normalized batch columns:
+   - Computed over the deterministic binary serialization of the normalized batch columns:
      `[source_id, symbol, timeframe, event_start_utc, event_end_utc, knowledge_time_utc, revision_seq, open, high, low, close, volume, quote_volume, trade_count]`
-   - Excludes all digest metadata fields.
-   - Stored in the immutable Provenance Ledger (`data/provenance_ledger.jsonl`) alongside the resulting Parquet part file path.
+   - **Deterministic Canonical Ordering:** Rows must be sorted by `(source_id, symbol, timeframe, event_start_utc, knowledge_time_utc, revision_seq)` prior to binary serialization, guaranteeing that `canonical_batch_sha256` is completely invariant to incidental input row ordering.
+   - Stored in the Provenance Ledger (`data/provenance_ledger.jsonl`) alongside the resulting Parquet part file path.
 
 ---
 
@@ -135,7 +138,7 @@ Integrity validation operates strictly per independent data stream: `(source_id,
    - OHLC Geometry Violations                          - Unexpected Cadence Gap
    - Non-finite (NaN / Inf)                            - High-Low Spread Expansion
    - Invalid / Future Timestamps                       - Missing Secondary Fields (quote_vol, trade_count)
-   - Duplicate Authoritative Revision Identities       - Statistically unusual observations
+   - Duplicate Global Revision Identities              - Statistically unusual observations
    - Schema / Type / Precision Boundary Mismatch
 ```
 
@@ -157,9 +160,9 @@ Session calendars are configurable profiles per data stream:
 
 ---
 
-## 8. Extended Provenance Ledger Record
+## 8. Provenance Ledger & Audit Semantics
 
-Every ingestion run records an immutable audit entry in `data/provenance_ledger.jsonl`:
+Every ingestion run records an entry in the **append-only application audit log** (`data/provenance_ledger.jsonl`):
 
 ```json
 {
@@ -170,7 +173,7 @@ Every ingestion run records an immutable audit entry in `data/provenance_ledger.
   "ingest_time_utc": "2026-08-27T21:30:00.000000Z",
   "raw_source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "canonical_batch_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-  "schema_version": "1.3.0",
+  "schema_version": "1.4.0",
   "transform_version": "normalize_ohlcv_v1",
   "symbol": "BTC/USDT",
   "timeframe": "M1",
@@ -182,3 +185,6 @@ Every ingestion run records an immutable audit entry in `data/provenance_ledger.
   "warning_count": 2
 }
 ```
+
+> [!NOTE]
+> **Audit Log Security Boundaries:** The JSONL provenance ledger is an append-only application audit log, not a cryptographically tamper-evident or chained ledger. The embedded SHA-256 hashes provide dataset integrity verification. Cryptographic hash chaining or WORM storage may be evaluated in future enterprise security phases.
