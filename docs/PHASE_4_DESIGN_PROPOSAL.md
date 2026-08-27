@@ -184,7 +184,8 @@ Alongside formal regression inference, the engine reports standard non-parametri
 1. **Pearson Information Coefficient ($\text{IC}_{\text{linear}}$):** Linear sample correlation $\rho(X_t, R(t, H))$.
 2. **Spearman Rank Information Coefficient ($\text{IC}_{\text{rank}}$):** Rank sample correlation $\rho(\text{rank}(X_t), \text{rank}(R(t, H)))$.
 3. **Zero Variance Handling:** If $\sigma(X) == 0$ or $\sigma(R) == 0$, $\text{IC} = \text{None}$ with status `ZERO_VARIANCE`.
-4. **Minimum Sample Requirement:** Minimum $N \ge 250$ valid non-overlapping equivalent observations per evaluation window.
+4. **Minimum Sample Requirement:** Minimum $N_{\text{valid}} \ge 250$ valid observations per evaluation window. Overlapping forward labels are permitted and are not treated as independent observations. Serial dependence induced by overlapping labels is handled by the configured HAC inference procedure. Optional effective-sample-size diagnostics may be reported separately.
+
 
 ---
 
