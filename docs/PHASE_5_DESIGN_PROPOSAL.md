@@ -1,7 +1,7 @@
 # ACASH — Phase 5 Design Proposal: Event-Driven Backtesting Substrate & NautilusTrader PoC Integration
 
 **Document:** `docs/PHASE_5_DESIGN_PROPOSAL.md`  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — AWAITING ARCHITECTURAL REVIEW & SIGN-OFF**  
 **Phase Objective:** Bridge the epistemic gap between **Statistical Predictive Association (Phase 4)** and **Simulated Event-Driven Execution Reality (Phase 5)** using NautilusTrader as an execution substrate while maintaining ACASH as the immutable single source of truth for canonical data, features, hypotheses, accounting, and manifests.
@@ -43,17 +43,18 @@
 | **Order Matching** | Verification criteria and sanity checks | High-speed matching engine & queue emulation |
 | **Cash & Equity Accounting** | Immutable double-entry ledger (`PortfolioState`, `CashBalance`) | Internal trading node accounting (verified against ACASH) |
 | **Cost & Latency Models** | Mathematical cost formulas & latency distribution parameters | Execution node simulation parameterization |
-| **Provenance & Lineage** | `BacktestManifest` with cryptographic hashes | Generates execution telemetry events |
+| **Provenance & Lineage** | `BacktestManifest` with deterministic content hashes | Generates execution telemetry events |
 
 ---
 
 ## 2. Ten Core Semantic Specifications
 
-### 2.1 Event Ordering Semantics
-1. **Total Order Invariant:** All simulated events within the substrate are strictly sequenced by the 5-tuple:
-   $$\text{EventOrder} = (T_{\text{event\_utc}}, \text{message\_rank}, \text{sequence\_num}, \text{stream\_id}, \text{row\_sub\_index})$$
-2. **Causal Timestamp Integrity:** An order generated at time $t$ in response to a market event arriving at $T_{\text{decision}}$ cannot be matched or processed at a matching engine timestamp $T_{\text{match}} < T_{\text{decision}} + \Delta T_{\text{latency}}$.
-3. **No Retroactive State Reversal:** Market data events and fill messages are append-only.
+### 2.1 Event Ordering Semantics & Adapter Ordering Policy
+1. **Total Order Invariant (Aligning with Phase 3B Contract):** All simulated events within the backtest substrate are strictly sequenced by the deterministic 5-tuple:
+   $$\text{EventOrder} = (T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$$
+2. **Adapter Ordering Policy:** The NautilusTrader adapter MUST NOT assume integer sequence numbers are universally orderable across different feeds. Sequence ordering is source-specific and mediated via the canonical `source_order_key` byte-wise lexicographical order established in Phase 3B.
+3. **Causal Timestamp Integrity:** An order generated at time $t$ in response to a market event arriving at $T_{\text{decision}}$ cannot be matched or processed at a matching engine timestamp $T_{\text{match}} < T_{\text{decision}} + \Delta T_{\text{latency}}$.
+4. **No Retroactive State Reversal:** Market data events and fill messages are append-only.
 
 ### 2.2 Order Lifecycle State Machine
 ```
@@ -88,28 +89,43 @@
 3. **Execution Slippage Function:**
    $$P_{\text{fill}} = P_{\text{expected}} + \text{Sign}(\text{Side}) \cdot \left(\text{SpreadHalf} + \text{Slippage}_{\text{fixed}} + \text{Impact}(V_{\text{order}}, \text{Depth})\right)$$
 
-### 2.5 Portfolio Accounting Boundary & Double-Entry Invariants
-1. **Independent Verification Ledger:**
-   - ACASH maintains an independent shadow ledger of all cash balances, margin allocations, and positions.
-   - Every simulated fill emitted by NautilusTrader is ingested by ACASH's `DecisionLedger` and verified against:
-     $$\text{Equity}_t = \text{CashBalance}_t + \sum_{i} \left( \text{Position}_{i, t} \times P_{\text{market}, i, t} \right) - \text{UnrealizedFees}_t$$
-2. **Cash Conservation Invariant:**
-   - Sum of realized PnL, cash injections, trading fees, and financing costs must strictly balance to zero discrepancy.
+### 2.5 Formalized Double-Entry Accounting Conservation & Residual Tolerances
+1. **Explicit Equity Conservation Equation:**
+   $$\text{Ending Equity}_t = \text{Starting Equity}_0 + \sum_{\tau=1}^t \text{External Cash Flows}_\tau + \sum_{\tau=1}^t \text{Realized PnL}_\tau + \text{Unrealized PnL}_t - \sum_{\tau=1}^t \text{Trading Fees}_\tau - \sum_{\tau=1}^t \text{Financing Costs}_\tau$$
+2. **Independent Verification Ledger & Residual Invariant:**
+   - ACASH maintains an independent shadow double-entry ledger of all cash balances, margin allocations, and positions.
+   - Every simulated fill emitted by NautilusTrader is ingested by ACASH's `DecisionLedger` and verified:
+     $$\text{AccountingResidual}_t = \text{Equity}_{\text{ACASH}, t} - \text{Equity}_{\text{Nautilus}, t}$$
+     $$\text{Invariant: } |\text{AccountingResidual}_t| \le \epsilon$$
+     where $\epsilon = \text{Decimal}("0.0000000001")$ (exact numeric zero within fixed-precision Decimal-18 arithmetic). Any non-zero discrepancy outside rounding precision triggers immediate backtest invalidation.
 
-### 2.6 Historical Replay Determinism
-1. **Zero Randomness without Explicit Seed:** All latency distributions, randomized jitter, or tie-breakers must use deterministic pseudo-random generators seeded with cryptographic run parameters.
-2. **Replay Invariance:** Re-running the identical backtest configuration against identical canonical Parquet files must produce bitwise-identical trade logs, fills, equity curves, and manifests.
+### 2.6 Historical Replay Determinism & Pinned Environment Reproducibility
+1. **Deterministic Pinned Environment Contract:** Bitwise reproducibility of trade logs, fills, equity curves, and performance metrics is guaranteed under a strictly pinned execution environment:
+   - ACASH software version & Git commit hash
+   - NautilusTrader pinned release version
+   - Python runtime version (`3.14.x`) and architecture
+   - Pinned dependency lockfile (`requirements.lock` / virtual environment SHA-256)
+   - Canonical input data logical hashes (`canonical_data_hashes`)
+   - Complete engine and strategy parameter configuration
+   - Deterministic integer pseudo-random number generator (PRNG) seed
+   - Timezone database (`tzdata`) version
+2. **Zero Unseeded Randomness:** Any simulated jitter, network packet reordering, or latency sampling must use deterministic PRNGs initialized with the run seed.
 
-### 2.7 Backtest Reproducibility & BacktestManifest
-Every Phase 5 simulation emits an immutable `BacktestManifest`:
-- `manifest_id`: Unique identifier (`bkt_{hypothesis_id}_{timestamp}_{uuid}`).
-- `hypothesis_id` & `hypothesis_spec_sha256`: Cryptographic linkage to Phase 4 hypothesis.
-- `canonical_data_hashes`: List of SHA-256 digests of all input market data chunks.
-- `engine_config_hash`: Hash of latency, fee, slippage, and execution parameters.
-- `execution_summary`:
-  - Total Fills Count, Volume Executed, Total Fees (bps and USD).
-  - Realized PnL, Sharpe Ratio, Sortino Ratio, Maximum Drawdown (MDD).
-  - Reality Gap Metrics: Difference between Phase 4 Tier 3 Economic Edge and Phase 5 Simulated Net PnL.
+### 2.7 Deterministic BacktestManifest Identity & Lineage
+To eliminate reproducibility contradictions between random UUIDs and bitwise replay invariance, `BacktestManifest` identity is strictly **content-derived**:
+$$\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_spec\_hash} + \text{canonical\_data\_hashes} + \text{engine\_config\_hash} + \text{strategy\_config\_hash} + \text{seed}))[:32]$$
+- **Lineage Structure:**
+  - `manifest_id`: Deterministic 32-character hex string.
+  - `hypothesis_id` & `hypothesis_spec_sha256`: Cryptographic linkage to Phase 4 hypothesis.
+  - `canonical_data_hashes`: List of SHA-256 digests of all input market data chunks.
+  - `engine_config_hash`: Hash of latency, fee, slippage, and execution parameters.
+  - `strategy_config_hash`: Hash of strategy actor configuration.
+  - `prng_seed`: Integer seed.
+  - `execution_summary`:
+    - Total Fills Count, Volume Executed, Total Fees (bps and USD).
+    - Realized PnL, Sharpe Ratio, Sortino Ratio, Maximum Drawdown (MDD).
+    - Reality Gap Metrics: Difference between Phase 4 Tier 3 Economic Edge and Phase 5 Simulated Net PnL.
+- **Volatile Execution Timestamps:** `computed_at_utc` and `wall_clock_duration_ms` are recorded as auxiliary runtime metadata and **MUST NEVER** participate in the reproducibility hash or `manifest_id`.
 
 ### 2.8 Reality-Gap Telemetry Hooks
 Phase 5 introduces explicit telemetry tracking the delta between analytical assumptions and simulated execution:
@@ -135,7 +151,7 @@ $$\Delta_{\text{Reality}} = \text{Edge}_{\text{Phase 4 Analytical (Tier 3)}} - \
 src/acash/backtest/
 ├── __init__.py           # Public exports
 ├── schema.py             # BacktestConfiguration, SimulationLatencyConfig, BacktestManifest
-├── adapter.py            # Canonical DuckDB/Parquet to NautilusTrader Data Adapter
+├── adapter.py            # Canonical DuckDB/Parquet to NautilusTrader Data Adapter with EventOrderingPolicy
 ├── engine.py             # Event-driven backtesting execution runner wrapping Nautilus substrate
 ├── accounting.py         # ACASH Independent Double-Entry Shadow Ledger & Sanity Verifier
 ├── telemetry.py          # Reality Gap telemetry & Attribution Metrics
@@ -149,13 +165,14 @@ src/acash/backtest/
 
 ## 4. Gate 5 Acceptance Criteria
 1. **Substrate Separation:** NautilusTrader operates strictly as an execution substrate; zero leakage of canonical accounting ownership.
-2. **Deterministic Replay:** Identical inputs produce bitwise-identical trade logs, fills, and manifests across multiple execution runs.
-3. **Double-Entry Cash Conservation:** ACASH shadow ledger matches Nautilus fills with 0 cash discrepancy.
-4. **Reality Gap Accounting:** Telemetry captures exact breakdown of spread, latency, and slippage drag against Phase 4 analytical baselines.
-5. **No Production Execution:** 100% free of live broker adapters, MT5, or live trading connections.
-6. **Regression Integrity:** 100% pytest pass rate across all 139 existing tests + Phase 5 tests, 0 mypy errors.
+2. **Deterministic Content-Derived Identity:** Rerunning identical canonical data + hypothesis + engine config + strategy config + seed produces bitwise-identical `manifest_id` and backtest logs.
+3. **Event Ordering Compatibility:** Adapter orders events via the canonical Phase 3B `(event_time_utc, source_order_key, message_rank, stream_id, row_sub_index)` contract without assuming generic integer sequence monotonicity.
+4. **Double-Entry Cash Conservation:** ACASH shadow ledger matches Nautilus fills with $|\text{AccountingResidual}| \le 10^{-10}$ (exact numeric zero).
+5. **Reality Gap Accounting:** Telemetry captures exact breakdown of spread, latency, and slippage drag against Phase 4 analytical baselines.
+6. **No Production Execution:** 100% free of live broker adapters, MT5, or live trading connections.
+7. **Regression Integrity:** 100% pytest pass rate across all 139 existing tests + Phase 5 tests, 0 mypy errors.
 
 ---
 
 ## 5. Review & Sign-off State
-**This proposal is submitted for human architectural review. No Phase 5 implementation code will be written until formal human sign-off is granted.**
+**This proposal (v1.1.0) is submitted for human architectural review. No Phase 5 implementation code will be written until formal human sign-off is granted.**
