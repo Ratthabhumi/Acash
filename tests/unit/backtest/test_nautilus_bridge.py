@@ -1,13 +1,14 @@
 """Unit and Real Integration Tests for NautilusTrader Catalog Exporter and Substrate Adapter Bridge (Phase 5).
 
 Strictly enforces:
-1. Real Runtime Execution: Executes live un-mocked NautilusTrader BacktestEngine and ParquetDataCatalog.
+1. Real Runtime Execution: Executes live un-mocked NautilusTrader BacktestEngine and ParquetDataCatalog (@pytest.mark.nautilus).
 2. Float-Free Nanosecond Precision: Timestamps are converted via extract_exact_nanoseconds().
-3. Decimal Precision Preservation: Prices and quantities are preserved exactly in exported Parquet catalogs.
+3. Zero Silent Rounding & Decimal Preservation: Validates that every source Decimal is exactly representable, rejecting non-representable values with DataContractError.
 4. Explicit TradeId Mapping Policy: REJECT_ON_NULL raises DataContractError; USE_CANONICAL_SOURCE_ORDER_KEY maps safely without fabrication.
 5. Non-Empty Canonical Tables: Asserts non-empty PyArrow fills_table and equity_table emitted from real engine execution.
-6. Proper Futures Contract Modeling: Uses real FuturesContract (ES.SIM) rather than FX helpers.
+6. Proper Futures Contract Modeling: Uses real FuturesContract (ES.SIM) with index asset class and exact multiplier/lot.
 7. Shadow Accounting Reconciliation: Asserts exact internal conservation (|residual| <= 10^-10) on live Nautilus fills.
+8. Provenance & Reproducibility Evidence: Records exact Nautilus version, Python version, uv.lock hash, and git commit.
 """
 
 from datetime import date, datetime, timezone
@@ -34,6 +35,7 @@ from acash.backtest.schema import (
     CANONICAL_EQUITY_CURVE_SCHEMA,
     BacktestEngineConfig,
     BacktestManifest,
+    load_current_environment_provenance,
 )
 from acash.data.schema import DataContractError
 
@@ -47,7 +49,7 @@ except ImportError:
 
 
 def test_nautilus_catalog_exporter_bars_precision_and_nanoseconds() -> None:
-    """Verifies that exported Bars catalog preserves exact integer nanoseconds and exact decimal prices."""
+    """Verifies that exported Bars catalog preserves exact integer nanoseconds and exact decimal prices without mutation."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         cat_dir = Path(tmp_dir) / "catalog"
         exporter = NautilusCatalogExporter(catalog_root=cat_dir)
@@ -56,14 +58,14 @@ def test_nautilus_catalog_exporter_bars_precision_and_nanoseconds() -> None:
         bars_table = pa.Table.from_pydict({
             "timestamp_utc": [t0],
             "bar_start_utc": [t0],
-            "open": [Decimal("5000.12")],
-            "high": [Decimal("5005.98")],
+            "open": [Decimal("5000.25")],
+            "high": [Decimal("5005.75")],
             "low": [Decimal("4995.00")],
-            "close": [Decimal("5002.55")],
+            "close": [Decimal("5002.50")],
             "volume": [Decimal("100.0")],
         })
 
-        dest_file = exporter.export_bars_table(bars_table, symbol="ES")
+        dest_file = exporter.export_bars_table(bars_table, symbol="ES", price_precision=2, size_precision=0)
         assert dest_file.exists()
 
         read_tbl = pq.read_table(dest_file)
@@ -82,8 +84,42 @@ def test_nautilus_catalog_exporter_bars_precision_and_nanoseconds() -> None:
             cat = ParquetDataCatalog(str(cat_dir))
             loaded = cat.bars(bar_types=[BarType.from_str("ES.SIM-1-MINUTE-LAST-EXTERNAL")])
             assert len(loaded) == 1
-            assert loaded[0].open == Price.from_str("5000.12")
-            assert loaded[0].close == Price.from_str("5002.55")
+            # Exact source values survived without numeric mutation
+            assert loaded[0].open == Price.from_str("5000.25")
+            assert loaded[0].close == Price.from_str("5002.50")
+
+
+def test_nautilus_catalog_exporter_unrepresentable_precision_rejection() -> None:
+    """Negative Test: Verifies that unrepresentable prices/quantities raise DataContractError instead of being silently rounded."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exporter = NautilusCatalogExporter(catalog_root=Path(tmp_dir) / "catalog")
+        t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+
+        # 1. Unrepresentable price (3 decimals when target instrument precision is 2)
+        bars_bad_price = pa.Table.from_pydict({
+            "timestamp_utc": [t0],
+            "bar_start_utc": [t0],
+            "open": [Decimal("5000.123")],  # 3 decimals cannot be represented at precision=2
+            "high": [Decimal("5005.00")],
+            "low": [Decimal("4995.00")],
+            "close": [Decimal("5002.00")],
+            "volume": [Decimal("100.0")],
+        })
+        with pytest.raises(DataContractError, match="cannot be exactly represented at target instrument price precision"):
+            exporter.export_bars_table(bars_bad_price, symbol="ES", price_precision=2, size_precision=0)
+
+        # 2. Unrepresentable volume (fractional volume when target size precision is 0)
+        bars_bad_vol = pa.Table.from_pydict({
+            "timestamp_utc": [t0],
+            "bar_start_utc": [t0],
+            "open": [Decimal("5000.25")],
+            "high": [Decimal("5005.00")],
+            "low": [Decimal("4995.00")],
+            "close": [Decimal("5002.00")],
+            "volume": [Decimal("100.75")],  # Fractional lot cannot be represented at size_precision=0
+        })
+        with pytest.raises(DataContractError, match="cannot be exactly represented at target instrument size precision"):
+            exporter.export_bars_table(bars_bad_vol, symbol="ES", price_precision=2, size_precision=0)
 
 
 def test_nautilus_catalog_exporter_trades_policy_and_non_fabrication() -> None:
@@ -171,7 +207,6 @@ def test_nautilus_catalog_exporter_raises_on_native_write_failure(monkeypatch: p
 
 
 def test_nautilus_substrate_empty_catalog_rejection() -> None:
-
     """Verifies that running simulation on an empty catalog raises DataContractError."""
     if not HAS_NAUTILUS:
         pytest.skip("nautilus_trader runtime not installed in environment.")
@@ -188,6 +223,7 @@ def test_nautilus_substrate_empty_catalog_rejection() -> None:
             )
 
 
+@pytest.mark.nautilus
 @pytest.mark.skipif(not HAS_NAUTILUS, reason="Real Nautilus integration requires nautilus_trader package.")
 def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tables() -> None:
     """Invariant: Real, un-mocked NautilusTrader BacktestEngine execution producing real fills, non-empty tables, and Shadow Ledger zero residual."""
@@ -209,7 +245,7 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
         })
 
         # 1. Export canonical table to Nautilus Parquet catalog
-        exporter.export_bars_table(bars_table, symbol="ES")
+        exporter.export_bars_table(bars_table, symbol="ES", price_precision=2, size_precision=0)
 
         # 2. Instantiate and run real NautilusTraderSubstrate
         config = BacktestEngineConfig(
@@ -220,20 +256,28 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
         )
         substrate = NautilusTraderSubstrate(config=config)
 
+        # Provenance metadata
+        pyproject_sha, uv_lock_sha, git_commit = load_current_environment_provenance()
         valid_sha = "0" * 64
-        valid_git = "a" * 40
+
+        assert substrate.nautilus_version == "1.231.0"
+        assert substrate.python_version.startswith("3.")
 
         manifest, fills_table, equity_table = substrate.run_simulation(
             catalog_path=cat_dir,
             hypothesis_spec_sha256=valid_sha,
             strategy_config_hash=valid_sha,
-            pyproject_toml_sha256=valid_sha,
-            git_commit_hash=valid_git,
+            pyproject_toml_sha256=pyproject_sha,
+            uv_lock_sha256=uv_lock_sha,
+            git_commit_hash=git_commit,
         )
 
         # 3. Assertions proving real execution
         assert manifest is not None
         assert manifest.execution_summary.total_fills == 1
+        assert manifest.pyproject_toml_sha256 == pyproject_sha
+        assert manifest.uv_lock_sha256 == uv_lock_sha
+        assert manifest.git_commit_hash == git_commit
 
         # Assert non-empty canonical Arrow tables emitted
         assert fills_table.num_rows == 1

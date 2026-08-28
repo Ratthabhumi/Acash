@@ -584,11 +584,11 @@ def test_cross_phase_nautilus_substrate_separation_and_catalog_export() -> None:
             "high": [Decimal("5005.50")],
             "low": [Decimal("4995.00")],
             "close": [Decimal("5002.75")],
-            "volume": [Decimal("100.5")],
+            "volume": [Decimal("100.0")],
         })
 
         # 1. Test Bars catalog export
-        exported_bars_path = exporter.export_bars_table(bars_table, symbol="ES")
+        exported_bars_path = exporter.export_bars_table(bars_table, symbol="ES", price_precision=2, size_precision=0)
         assert exported_bars_path.exists()
         assert "ES.SIM" in str(exported_bars_path)
 

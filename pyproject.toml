@@ -3,8 +3,9 @@ name = "acash"
 version = "0.1.0"
 description = "Automated Capital Allocation System - Sovereign Quantitative Foundation"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.15"
 authors = [
+
     { name = "ACASH Core Engineering" }
 ]
 dependencies = [
@@ -14,7 +15,7 @@ dependencies = [
     "duckdb>=1.0.0",
     "pyarrow>=14.0.0",
     "pandas>=2.0.0",
-    "nautilus-trader>=1.221.0",
+    "nautilus-trader==1.231.0",
 ]
 
 
@@ -35,6 +36,9 @@ packages = ["src/acash"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-v --strict-markers"
+markers = [
+    "nautilus: Real unmocked NautilusTrader execution and integration tests",
+]
 
 [tool.mypy]
 python_version = "3.14"
@@ -51,6 +55,7 @@ show_error_codes = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pyarrow.*", "pandas.*", "duckdb.*"]
+module = ["pyarrow.*", "pandas.*", "duckdb.*", "nautilus_trader.*"]
 ignore_missing_imports = true
+
 

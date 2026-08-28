@@ -5,6 +5,7 @@ Strictly enforces:
 - Genuine NautilusTrader Integration: Full lifecycle wiring (Venue, FuturesContract/Instrument, Catalog Data Loading, Strategy, Engine Run, Fills Report).
 - Float-Free Nanosecond Timestamps & Numeric Representation: All timestamps converted using pure integer nanoseconds, prices/quantities preserved with exact decimals.
 - Explicit Trade ID Mapping Policy: Nullable trade_id handled with deterministic policy (USE_CANONICAL_SOURCE_ORDER_KEY or REJECT_ON_NULL), zero silent fabrication.
+- Exact Decimal Preservation (Zero Silent Rounding): Validates exact Decimal representability at target precision, strictly rejecting unrepresentable inputs with DataContractError.
 - Transparent Error Policy: Zero silent swallowing of catalog export exceptions; raises NautilusCatalogExportError on native write failures.
 - Non-Empty Canonical Tables: Converts actual Nautilus fill reports into full canonical PyArrow fills_table and equity_table.
 - Sovereign ACASH Accounting: Re-accounting of all executions through ACASH independent double-entry shadow ledger with exact tolerance (|AccountingResidual| <= 10^-10).
@@ -66,15 +67,37 @@ ACASHNativeBacktestEngine = EventBacktestRunner
 
 
 def _format_nautilus_price(val: Any, precision: int = 2) -> str:
-    """Format decimal string for Nautilus Price with exact decimal precision."""
+    """Format and validate source Decimal for Nautilus Price.
+
+    Strictly forbids silent rounding: if the source Decimal has non-zero fractional digits beyond
+    the specified precision, raises DataContractError.
+    """
     dec = Decimal(str(val))
-    return f"{dec:.{precision}f}"
+    target_unit = Decimal(10) ** -precision if precision > 0 else Decimal(1)
+    quantized = dec.quantize(target_unit)
+    if dec != quantized:
+        raise DataContractError(
+            f"Source price '{val}' cannot be exactly represented at target instrument price precision of {precision} decimals "
+            f"without silent precision loss (expected exact multiple of {target_unit}, got difference {dec - quantized})."
+        )
+    return f"{quantized:.{precision}f}"
 
 
 def _format_nautilus_size(val: Any, precision: int = 0) -> str:
-    """Format decimal string for Nautilus Quantity with exact lot precision."""
+    """Format and validate source Decimal for Nautilus Quantity.
+
+    Strictly forbids silent rounding: if the source Decimal has non-zero fractional digits beyond
+    the specified lot/size precision, raises DataContractError.
+    """
     dec = Decimal(str(val))
-    return f"{dec:.{precision}f}"
+    target_unit = Decimal(10) ** -precision if precision > 0 else Decimal(1)
+    quantized = dec.quantize(target_unit)
+    if dec != quantized:
+        raise DataContractError(
+            f"Source size/volume '{val}' cannot be exactly represented at target instrument size precision of {precision} decimals "
+            f"without silent precision loss (expected exact multiple of {target_unit}, got difference {dec - quantized})."
+        )
+    return f"{quantized:.{precision}f}"
 
 
 class NautilusCatalogExporter:
@@ -294,6 +317,8 @@ class NautilusTraderSubstrate:
             self._has_runtime = False
             self.nautilus_version = "unavailable"
 
+        self.python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
         self.shadow_ledger = ShadowAccountingLedger(
             starting_cash=self.config.initial_cash,
             base_currency=self.config.base_currency,
@@ -307,6 +332,7 @@ class NautilusTraderSubstrate:
         pyproject_toml_sha256: str,
         git_commit_hash: str,
         canonical_data_hashes: Optional[List[str]] = None,
+        uv_lock_sha256: Optional[str] = None,
         bar_spec: str = "1-MINUTE-LAST-EXTERNAL",
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
         """Execute simulation via actual NautilusTrader runtime and re-account fills through ACASH Shadow Ledger."""
@@ -314,7 +340,7 @@ class NautilusTraderSubstrate:
             py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
             raise SubstrateRuntimeUnavailableError(
                 f"NautilusTrader runtime package ('nautilus_trader') is not installed in the current environment (Python {py_ver}). "
-                f"To run Nautilus execution substrate simulations, install nautilus_trader in a compatible Python environment (<= 3.13). "
+                f"To run Nautilus execution substrate simulations, install nautilus_trader in a compatible Python environment (>= 3.12, < 3.15). "
                 f"For native sovereign simulations, use ACASHNativeBacktestEngine (EventBacktestRunner)."
             )
 
@@ -522,7 +548,6 @@ class NautilusTraderSubstrate:
         tot_vol = sum((r["fill_qty"] for r in fill_records), Decimal("0.0"))
         tot_fees = sum((r["fee_paid"] for r in fill_records), Decimal("0.0"))
 
-
         summary = BacktestExecutionSummary(
             total_orders=num_fills,
             total_fills=num_fills,
@@ -554,6 +579,7 @@ class NautilusTraderSubstrate:
             strategy_config_hash=strategy_config_hash,
             prng_seed=self.config.prng_seed,
             pyproject_toml_sha256=pyproject_toml_sha256,
+            uv_lock_sha256=uv_lock_sha256,
             git_commit_hash=git_commit_hash,
             execution_summary=summary,
             reality_gap=reality,
