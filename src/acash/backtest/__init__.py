@@ -18,11 +18,13 @@ from acash.backtest.engine import (
 )
 from acash.backtest.nautilus_bridge import (
     ACASHNativeBacktestEngine,
+    NautilusCatalogExportError,
     NautilusCatalogExporter,
     NautilusTraderSubstrate,
     SubstrateRuntimeUnavailableError,
     TradeIdMappingPolicy,
 )
+
 
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
@@ -80,10 +82,12 @@ __all__ = [
     "ACASHNativeBacktestEngine",
     # Nautilus Integration
     "NautilusCatalogExporter",
+    "NautilusCatalogExportError",
     "NautilusTraderSubstrate",
     "SubstrateRuntimeUnavailableError",
     "TradeIdMappingPolicy",
     # Telemetry
+
 
     "RealityGapAttributionEngine",
     # Strategies
