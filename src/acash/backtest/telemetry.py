@@ -5,7 +5,7 @@ and Phase 5 Simulated Event-Driven Realized Edge:
 Reality Gap = Edge_Phase4_Analytical - Edge_Phase5_Simulated = Spread Drag + Slippage Drag + Latency Drag + Fee Drag + Maker Adverse Selection Drag + Unmodelled Residual
 
 Implements a disjoint non-overlapping reference-price decomposition:
-- Latency Drag: Mid-to-mid price drift during transmission (Decision Mid -> Match Arrival Mid)
+- Latency Drag: Mid-to-mid price drift during transmission (Decision Mid -> Match Arrival Mid for Taker)
 - Spread Drag: Half-spread crossing cost (Match Arrival Mid -> Touch Price for Taker)
 - Slippage Drag: Book depth consumption / price impact beyond touch (Touch Price -> Fill Price for Taker)
 - Fee Drag: Exchange, broker, and clearing transaction fees
@@ -69,15 +69,15 @@ class RealityGapAttributionEngine:
         strict_reference_benchmarks: bool = True,
     ) -> RealityGapSummary:
         """Derive empirical friction drag metrics directly from execution fill records and reference prices.
-        
+
         Args:
             fills: List of BacktestFillRecord objects or dicts.
             initial_cash: Starting capital baseline.
             phase4_analytical_edge_bps: Analytical predictive edge assumption.
             phase5_simulated_realized_bps: Realized simulated return.
             total_fees_paid: Optional pre-aggregated fee total.
-            strict_reference_benchmarks: If True (default), fail-fast with DataContractError
-                when fills lack required reference prices, preventing silent approximation.
+            strict_reference_benchmarks: If True (default), strictly enforce complete benchmark
+                field coverage per liquidity type and execute zero fallback branches.
                 If False, allows fallback calculations and marks attribution_provenance='APPROXIMATE_FALLBACK'.
         """
         reality_gap_bps = phase4_analytical_edge_bps - phase5_simulated_realized_bps
@@ -96,38 +96,63 @@ class RealityGapAttributionEngine:
                 attribution_provenance="EXPLICIT_REFERENCE_BENCHMARKS" if strict_reference_benchmarks else "APPROXIMATE_FALLBACK",
             )
 
-        # Validate reference benchmark presence in strict mode
+        # ---------------------------------------------------------------------
+        # 1. Complete Pre-Loop Validation (Strict Mode)
+        # ---------------------------------------------------------------------
         if strict_reference_benchmarks:
-            for f in fills:
-                fill_id = getattr(f, "fill_id", f.get("fill_id", "UNKNOWN") if isinstance(f, dict) else "UNKNOWN")
-                liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
+            for idx, f in enumerate(fills):
+                fill_id = str(getattr(f, "fill_id", f.get("fill_id", f"FILL_{idx}") if isinstance(f, dict) else f"FILL_{idx}"))
+                liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else "")).upper()
+                side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+                
+                if side not in ("BUY", "SELL"):
+                    raise DataContractError(f"Fill '{fill_id}' has invalid side '{side}'. Must be 'BUY' or 'SELL'.")
+
                 arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
                 if arr_mid is None:
                     arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
                 bid_val = getattr(f, "bid_at_fill", f.get("bid_at_fill", None) if isinstance(f, dict) else None)
                 ask_val = getattr(f, "ask_at_fill", f.get("ask_at_fill", None) if isinstance(f, dict) else None)
 
-                if arr_mid is None:
+                # All fills require arrival mid and touch quotes
+                if arr_mid is None or Decimal(str(arr_mid)) <= Decimal("0.0"):
                     raise DataContractError(
-                        f"Fill '{fill_id}' missing explicit 'arrival_mid_price'. "
-                        f"Strict benchmark attribution requires complete execution benchmarks. "
-                        f"Set strict_reference_benchmarks=False to permit approximate fallbacks."
-                    )
-                if bid_val is None or ask_val is None:
-                    raise DataContractError(
-                        f"Fill '{fill_id}' missing explicit touch quotes ('bid_at_fill' / 'ask_at_fill'). "
+                        f"Fill '{fill_id}' ({liq_type}) missing explicit positive 'arrival_mid_price'. "
                         f"Strict benchmark attribution requires complete execution benchmarks."
                     )
-                if "TAKER" in liq_type.upper():
+                if bid_val is None or Decimal(str(bid_val)) <= Decimal("0.0"):
+                    raise DataContractError(
+                        f"Fill '{fill_id}' ({liq_type}) missing explicit positive 'bid_at_fill'. "
+                        f"Strict benchmark attribution requires complete execution benchmarks."
+                    )
+                if ask_val is None or Decimal(str(ask_val)) <= Decimal("0.0"):
+                    raise DataContractError(
+                        f"Fill '{fill_id}' ({liq_type}) missing explicit positive 'ask_at_fill'. "
+                        f"Strict benchmark attribution requires complete execution benchmarks."
+                    )
+                if Decimal(str(ask_val)) < Decimal(str(bid_val)):
+                    raise DataContractError(
+                        f"Fill '{fill_id}' ({liq_type}) has crossed market: ask ({ask_val}) < bid ({bid_val})."
+                    )
+
+                # Taker fills additionally require match_mid_price and touch_price
+                if "TAKER" in liq_type:
                     match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
                     touch_val = getattr(f, "touch_price", f.get("touch_price", None) if isinstance(f, dict) else None)
-                    if match_mid is None or touch_val is None:
+                    if match_mid is None or Decimal(str(match_mid)) <= Decimal("0.0"):
                         raise DataContractError(
-                            f"Taker Fill '{fill_id}' missing explicit 'match_mid_price' or 'touch_price'. "
+                            f"Taker Fill '{fill_id}' missing explicit positive 'match_mid_price'. "
+                            f"Strict benchmark attribution requires complete execution benchmarks."
+                        )
+                    if touch_val is None or Decimal(str(touch_val)) <= Decimal("0.0"):
+                        raise DataContractError(
+                            f"Taker Fill '{fill_id}' missing explicit positive 'touch_price'. "
                             f"Strict benchmark attribution requires complete execution benchmarks."
                         )
 
-        # 1. Empirical Fee Drag (actual fees incurred relative to initial capital)
+        # ---------------------------------------------------------------------
+        # 2. Fee Drag
+        # ---------------------------------------------------------------------
         if total_fees_paid is not None:
             fee_sum = total_fees_paid
         else:
@@ -137,37 +162,43 @@ class RealityGapAttributionEngine:
             )
         fee_drag_bps = (fee_sum / initial_cash) * Decimal("10000.0")
 
-        # 2. Empirical Latency Drag (transmission adverse mid-price drift: Decision Mid -> Match Mid)
+        # ---------------------------------------------------------------------
+        # 3. Latency Drag (Transmission Drift: Decision Mid -> Match Mid)
+        # ---------------------------------------------------------------------
         latency_cost = Decimal("0.0")
         for f in fills:
-            qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
-            side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
-            side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
+            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else "")).upper()
+            if "TAKER" in liq_type:
+                qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
+                side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+                side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
 
-            arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
-            if arr_mid is None:
-                arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
-            match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
+                arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
+                if arr_mid is None:
+                    arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
+                match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
 
-            if arr_mid is not None and match_mid is not None:
-                # Adverse mid drift: BUY suffers when mid rises; SELL suffers when mid falls
-                adverse_drift = side_sign * (Decimal(str(match_mid)) - Decimal(str(arr_mid)))
-                if adverse_drift > Decimal("0.0"):
-                    latency_cost += qty * adverse_drift
-            else:
-                # Fallback to pre-calculated latency_drift_bps if explicit mid benchmarks not attached
-                drift_bps = Decimal(str(getattr(f, "latency_drift_bps", f.get("latency_drift_bps", 0) if isinstance(f, dict) else 0)))
-                px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
-                if drift_bps > Decimal("0.0"):
-                    latency_cost += (qty * px) * (drift_bps / Decimal("10000.0"))
+                if arr_mid is not None and match_mid is not None:
+                    # Adverse mid drift: BUY suffers when mid rises; SELL suffers when mid falls
+                    adverse_drift = side_sign * (Decimal(str(match_mid)) - Decimal(str(arr_mid)))
+                    if adverse_drift > Decimal("0.0"):
+                        latency_cost += qty * adverse_drift
+                elif not strict_reference_benchmarks:
+                    # Approximate fallback allowed ONLY when strict=False
+                    drift_bps = Decimal(str(getattr(f, "latency_drift_bps", f.get("latency_drift_bps", 0) if isinstance(f, dict) else 0)))
+                    px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
+                    if drift_bps > Decimal("0.0"):
+                        latency_cost += (qty * px) * (drift_bps / Decimal("10000.0"))
 
         latency_drag_bps = (latency_cost / initial_cash) * Decimal("10000.0")
 
-        # 3. Empirical Spread Drag (half-spread crossing cost for taker fills: Match Mid -> Touch Price)
+        # ---------------------------------------------------------------------
+        # 4. Spread Drag (Half-Spread Crossing Cost: Match Mid -> Touch Price)
+        # ---------------------------------------------------------------------
         spread_cost = Decimal("0.0")
         for f in fills:
-            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
-            if "TAKER" in liq_type.upper():
+            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else "")).upper()
+            if "TAKER" in liq_type:
                 qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
                 bid_val = getattr(f, "bid_at_fill", f.get("bid_at_fill", None) if isinstance(f, dict) else None)
                 ask_val = getattr(f, "ask_at_fill", f.get("ask_at_fill", None) if isinstance(f, dict) else None)
@@ -180,33 +211,39 @@ class RealityGapAttributionEngine:
 
         spread_drag_bps = (spread_cost / initial_cash) * Decimal("10000.0")
 
-        # 4. Empirical Slippage Drag (depth sweep / price impact beyond touch: Touch Price -> Fill Price)
+        # ---------------------------------------------------------------------
+        # 5. Slippage Drag (Depth Impact beyond Touch: Touch Price -> Fill Price)
+        # ---------------------------------------------------------------------
         slippage_cost = Decimal("0.0")
         for f in fills:
-            qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
-            fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
-            touch_val = getattr(f, "touch_price", f.get("touch_price", None) if isinstance(f, dict) else None)
-            side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else "")).upper()
+            if "TAKER" in liq_type:
+                qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
+                fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
+                touch_val = getattr(f, "touch_price", f.get("touch_price", None) if isinstance(f, dict) else None)
+                side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
 
-            if touch_val is not None:
-                touch_px = Decimal(str(touch_val))
-                # Depth slippage beyond touch: BUY pays fill > touch; SELL receives fill < touch
-                excess_slip = (fill_px - touch_px) if side == "BUY" else (touch_px - fill_px)
-                if excess_slip > Decimal("0.0"):
-                    slippage_cost += qty * excess_slip
-            else:
-                # Fallback to slippage_incurred_bps
-                slip_bps = Decimal(str(getattr(f, "slippage_incurred_bps", f.get("slippage_incurred_bps", 0) if isinstance(f, dict) else 0)))
-                if slip_bps > Decimal("0.0"):
-                    slippage_cost += (qty * fill_px) * (slip_bps / Decimal("10000.0"))
+                if touch_val is not None:
+                    touch_px = Decimal(str(touch_val))
+                    # Depth slippage beyond touch: BUY pays fill > touch; SELL receives fill < touch
+                    excess_slip = (fill_px - touch_px) if side == "BUY" else (touch_px - fill_px)
+                    if excess_slip > Decimal("0.0"):
+                        slippage_cost += qty * excess_slip
+                elif not strict_reference_benchmarks:
+                    # Approximate fallback allowed ONLY when strict=False
+                    slip_bps = Decimal(str(getattr(f, "slippage_incurred_bps", f.get("slippage_incurred_bps", 0) if isinstance(f, dict) else 0)))
+                    if slip_bps > Decimal("0.0"):
+                        slippage_cost += (qty * fill_px) * (slip_bps / Decimal("10000.0"))
 
         slippage_drag_bps = (slippage_cost / initial_cash) * Decimal("10000.0")
 
-        # 5. Empirical Maker Adverse Selection Drag (post-arrival market drift: Arrival Mid -> Fill Mid while resting)
+        # ---------------------------------------------------------------------
+        # 6. Maker Adverse Selection Drag (Post-Arrival Drift: Arrival Mid -> Fill Mid)
+        # ---------------------------------------------------------------------
         maker_adverse_cost = Decimal("0.0")
         for f in fills:
-            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
-            if "MAKER" in liq_type.upper():
+            liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else "")).upper()
+            if "MAKER" in liq_type:
                 qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
                 side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
                 side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
@@ -229,8 +266,8 @@ class RealityGapAttributionEngine:
                     adverse_queue_move = -side_sign * (fill_mid - Decimal(str(arr_mid)))
                     if adverse_queue_move > Decimal("0.0"):
                         maker_adverse_cost += qty * adverse_queue_move
-                elif arr_mid is not None:
-                    # Fallback using fill_price if quotes at fill are not available
+                elif not strict_reference_benchmarks and arr_mid is not None:
+                    # Approximate fallback using fill_price allowed ONLY when strict=False
                     fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
                     adverse_drift = -side_sign * (fill_px - Decimal(str(arr_mid)))
                     if adverse_drift > Decimal("0.0"):
@@ -238,7 +275,9 @@ class RealityGapAttributionEngine:
 
         maker_adverse_selection_drag_bps = (maker_adverse_cost / initial_cash) * Decimal("10000.0")
 
-        # 6. Unmodelled Residual Gap (pure model mismatch / alpha assumption divergence)
+        # ---------------------------------------------------------------------
+        # 7. Unmodelled Residual Gap & Provenance Assembly
+        # ---------------------------------------------------------------------
         accounted = fee_drag_bps + slippage_drag_bps + latency_drag_bps + spread_drag_bps + maker_adverse_selection_drag_bps
         unmodelled_residual_bps = reality_gap_bps - accounted
         provenance = "EXPLICIT_REFERENCE_BENCHMARKS" if strict_reference_benchmarks else "APPROXIMATE_FALLBACK"
@@ -262,7 +301,7 @@ class RealityGapAttributionEngine:
         preserve_decimal_precision: bool = False,
     ) -> Dict[str, Any]:
         """Generate structured diagnostic dictionary for research reporting.
-        
+
         NOTE: Standard float conversion (preserve_decimal_precision=False) is strictly
         intended for human visual inspection, logging, and interactive dashboards.
         For canonical cryptographic manifests and mathematical audit lineage, use

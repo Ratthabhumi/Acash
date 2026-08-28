@@ -533,47 +533,91 @@ def test_unknown_instrument_fails_fast_without_implicit_defaults() -> None:
 
 
 def test_reality_gap_strict_benchmarks_validation_and_fallback() -> None:
-    """Audit P1: RealityGapAttributionEngine strict mode fails-fast on missing benchmarks; fallback mode sets provenance."""
+    """Audit P1: RealityGapAttributionEngine strict mode fails-fast on every missing benchmark component across TAKER and MAKER."""
     from acash.backtest.telemetry import RealityGapAttributionEngine
     from acash.backtest.schema import BacktestFillRecord, LiquidityType
     from acash.core.domain.exceptions import DataContractError
 
-    # Incomplete taker fill missing touch_price and match_mid_price
-    incomplete_fill = BacktestFillRecord(
-        fill_id="F_INCOMPLETE",
-        order_id="O1",
-        symbol="ES.FUT",
-        fill_timestamp_utc="2026-01-19T14:30:00Z",
-        side="BUY",
-        fill_price=Decimal("5000.50"),
-        fill_qty=Decimal("2.0"),
-        fee_paid=Decimal("50.00"),
-        liquidity_type=LiquidityType.TAKER,
-        arrival_mid_price=Decimal("4999.50"),
-        bid_at_fill=Decimal("4999.75"),
-        ask_at_fill=Decimal("5000.25"),
-        # touch_price and match_mid_price are missing
+    initial_cash = Decimal("100000.00")
+
+    # 1. TAKER missing arrival_mid_price
+    taker_no_arr = BacktestFillRecord(
+        fill_id="T_NO_ARR", order_id="O1", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY", fill_price=Decimal("5000.50"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.TAKER, match_mid_price=Decimal("5000.00"),
+        touch_price=Decimal("5000.25"), bid_at_fill=Decimal("4999.75"), ask_at_fill=Decimal("5000.25"),
     )
+    with pytest.raises(DataContractError, match="missing explicit positive 'arrival_mid_price'"):
+        RealityGapAttributionEngine.derive_from_fills([taker_no_arr], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
 
-    # Strict mode MUST raise DataContractError
-    with pytest.raises(DataContractError, match="Taker Fill 'F_INCOMPLETE' missing explicit 'match_mid_price' or 'touch_price'"):
-        RealityGapAttributionEngine.derive_from_fills(
-            fills=[incomplete_fill],
-            initial_cash=Decimal("100000.00"),
-            phase4_analytical_edge_bps=Decimal("30.0"),
-            phase5_simulated_realized_bps=Decimal("15.0"),
-            strict_reference_benchmarks=True,
-        )
+    # 2. TAKER missing match_mid_price
+    taker_no_match = BacktestFillRecord(
+        fill_id="T_NO_MATCH", order_id="O1", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY", fill_price=Decimal("5000.50"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.TAKER, arrival_mid_price=Decimal("4999.50"),
+        touch_price=Decimal("5000.25"), bid_at_fill=Decimal("4999.75"), ask_at_fill=Decimal("5000.25"),
+    )
+    with pytest.raises(DataContractError, match="missing explicit positive 'match_mid_price'"):
+        RealityGapAttributionEngine.derive_from_fills([taker_no_match], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
 
-    # Approximate fallback mode permits execution and marks provenance
+    # 3. TAKER missing touch_price
+    taker_no_touch = BacktestFillRecord(
+        fill_id="T_NO_TOUCH", order_id="O1", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY", fill_price=Decimal("5000.50"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.TAKER, arrival_mid_price=Decimal("4999.50"),
+        match_mid_price=Decimal("5000.00"), bid_at_fill=Decimal("4999.75"), ask_at_fill=Decimal("5000.25"),
+    )
+    with pytest.raises(DataContractError, match="missing explicit positive 'touch_price'"):
+        RealityGapAttributionEngine.derive_from_fills([taker_no_touch], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
+
+    # 4. TAKER missing bid/ask quotes
+    taker_no_quotes = BacktestFillRecord(
+        fill_id="T_NO_QUOTES", order_id="O1", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY", fill_price=Decimal("5000.50"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.TAKER, arrival_mid_price=Decimal("4999.50"),
+        match_mid_price=Decimal("5000.00"), touch_price=Decimal("5000.25"),
+    )
+    with pytest.raises(DataContractError, match="missing explicit positive 'bid_at_fill'"):
+        RealityGapAttributionEngine.derive_from_fills([taker_no_quotes], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
+
+    # 5. MAKER missing arrival_mid_price
+    maker_no_arr = BacktestFillRecord(
+        fill_id="M_NO_ARR", order_id="O2", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:01Z",
+        side="SELL", fill_price=Decimal("5012.00"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.MAKER, bid_at_fill=Decimal("5011.75"), ask_at_fill=Decimal("5012.25"),
+    )
+    with pytest.raises(DataContractError, match="missing explicit positive 'arrival_mid_price'"):
+        RealityGapAttributionEngine.derive_from_fills([maker_no_arr], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
+
+    # 6. MAKER missing bid/ask quotes
+    maker_no_quotes = BacktestFillRecord(
+        fill_id="M_NO_QUOTES", order_id="O2", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:01Z",
+        side="SELL", fill_price=Decimal("5012.00"), fill_qty=Decimal("2.0"), fee_paid=Decimal("5.0"),
+        liquidity_type=LiquidityType.MAKER, arrival_mid_price=Decimal("5010.00"),
+    )
+    with pytest.raises(DataContractError, match="missing explicit positive 'bid_at_fill'"):
+        RealityGapAttributionEngine.derive_from_fills([maker_no_quotes], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
+
+    # 7. Crossed market validation
+    crossed_fill = BacktestFillRecord(
+        fill_id="F_CROSSED", order_id="O3", symbol="ES.FUT", fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY", fill_price=Decimal("5000.00"), fill_qty=Decimal("1.0"), fee_paid=Decimal("1.0"),
+        liquidity_type=LiquidityType.TAKER, arrival_mid_price=Decimal("5000.00"), match_mid_price=Decimal("5000.00"),
+        touch_price=Decimal("4999.00"), bid_at_fill=Decimal("5001.00"), ask_at_fill=Decimal("4999.00"),
+    )
+    with pytest.raises(DataContractError, match="has crossed market: ask"):
+        RealityGapAttributionEngine.derive_from_fills([crossed_fill], initial_cash, Decimal("30.0"), Decimal("15.0"), strict_reference_benchmarks=True)
+
+    # 8. Approximate fallback mode successfully handles incomplete fills and marks provenance
     fallback_summary = RealityGapAttributionEngine.derive_from_fills(
-        fills=[incomplete_fill],
-        initial_cash=Decimal("100000.00"),
+        fills=[taker_no_match],
+        initial_cash=initial_cash,
         phase4_analytical_edge_bps=Decimal("30.0"),
         phase5_simulated_realized_bps=Decimal("15.0"),
         strict_reference_benchmarks=False,
     )
     assert fallback_summary.attribution_provenance == "APPROXIMATE_FALLBACK"
+
 
 
 
