@@ -642,12 +642,12 @@ class NautilusTraderSubstrate:
             if self.config.initial_cash > Decimal("0.0")
             else Decimal("0.0")
         )
-        reality = RealityGapAttributionEngine.calculate_attribution(
+        reality = RealityGapAttributionEngine.derive_from_fills(
+            fills=fill_records,
+            initial_cash=self.config.initial_cash,
             phase4_analytical_edge_bps=phase4_analytical_edge_bps,
             phase5_simulated_realized_bps=simulated_realized_bps,
-            spread_drag_bps=self.config.fee_config.taker_fee_bps,
-            latency_slip_drag_bps=self.config.slippage_config.fixed_slippage_bps,
-            queue_position_drag_bps=Decimal("0.0"),
+            total_fees_paid=tot_fees,
         )
 
 

@@ -366,15 +366,119 @@ def test_nautilus_execution_summary_and_reality_gap_metrics() -> None:
         spread_drag_bps=Decimal("4.0"),
         latency_slip_drag_bps=Decimal("2.5"),
         queue_position_drag_bps=Decimal("0.0"),
+        fee_drag_bps=Decimal("1.0"),
     )
     assert reality.phase4_analytical_edge_bps == Decimal("25.0")
     assert reality.phase5_simulated_realized_bps == Decimal("18.5")
     assert reality.reality_gap_bps == Decimal("6.5")
+    assert reality.fee_drag_bps == Decimal("1.0")
 
     report = RealityGapAttributionEngine.generate_reality_gap_report(reality)
     assert report["verdict"] == "FEASIBLE"
     assert report["phase4_analytical_edge_bps"] == 25.0
     assert report["phase5_simulated_realized_bps"] == 18.5
     assert report["reality_gap_bps"] == 6.5
+    assert report["friction_decomposition"]["fee_drag_bps"] == 1.0
+
+
+def test_trades_adapter_fallback_permutation_invariance_adversarial() -> None:
+    """Audit P1: Fallback source_order_key generation is 100% permutation-invariant when sub-index is absent."""
+    t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 19, 14, 30, 1, tzinfo=timezone.utc)
+
+    # 3 distinct trades without match_sub_idx or row_sub_index
+    rows_forward = {
+        "exchange_time_utc": [t0, t0, t1],
+        "channel_id": ["310", "310", "310"],
+        "source_seq_num": [100, 100, 101],
+        "trade_id": ["TRD_A", "TRD_B", "TRD_C"],
+        "price": [Decimal("5000.00"), Decimal("5000.25"), Decimal("5001.00")],
+        "size": [Decimal("2.0"), Decimal("3.0"), Decimal("1.0")],
+        "aggressor_side": ["BUY", "SELL", "BUY"],
+    }
+    tbl_forward = pa.Table.from_pydict(rows_forward)
+
+    # Reversed row order
+    rows_reversed = {
+        "exchange_time_utc": [t1, t0, t0],
+        "channel_id": ["310", "310", "310"],
+        "source_seq_num": [101, 100, 100],
+        "trade_id": ["TRD_C", "TRD_B", "TRD_A"],
+        "price": [Decimal("5001.00"), Decimal("5000.25"), Decimal("5000.00")],
+        "size": [Decimal("1.0"), Decimal("3.0"), Decimal("2.0")],
+        "aggressor_side": ["BUY", "SELL", "BUY"],
+    }
+    tbl_reversed = pa.Table.from_pydict(rows_reversed)
+
+    events_fwd = CanonicalDataAdapter.from_trades_table(tbl_forward, symbol="ES.FUT")
+    events_rev = CanonicalDataAdapter.from_trades_table(tbl_reversed, symbol="ES.FUT")
+
+    # Both must use content fingerprints, NOT loop row index 'i'
+    for ev in events_fwd + events_rev:
+        assert "_fp" in ev.source_order_key
+
+    # Sort both streams using canonical 5-tuple
+    sorted_fwd = CanonicalDataAdapter.merge_and_sort_event_streams([events_fwd])
+    sorted_rev = CanonicalDataAdapter.merge_and_sort_event_streams([events_rev])
+
+    assert len(sorted_fwd) == len(sorted_rev) == 3
+    assert [ev.order_tuple for ev in sorted_fwd] == [ev.order_tuple for ev in sorted_rev]
+    assert [ev.payload["price"] for ev in sorted_fwd] == [ev.payload["price"] for ev in sorted_rev]
+
+
+def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
+    """Audit P1: RealityGapAttributionEngine derives drag from empirical fills instead of config placeholders."""
+    from acash.backtest.telemetry import RealityGapAttributionEngine
+    from acash.backtest.schema import BacktestFillRecord, LiquidityType
+
+    initial_cash = Decimal("100000.00")
+    fills = [
+        BacktestFillRecord(
+            fill_id="F1",
+            order_id="O1",
+            symbol="ES.FUT",
+            fill_timestamp_utc="2026-01-19T14:30:00Z",
+            side="BUY",
+            fill_price=Decimal("5000.00"),
+            fill_qty=Decimal("2.0"),
+            fee_paid=Decimal("50.00"),
+            liquidity_type=LiquidityType.TAKER,
+            slippage_incurred_bps=Decimal("2.0"),  # 2 bps slippage on $10,000 notional = $2.00 cost
+        ),
+        BacktestFillRecord(
+            fill_id="F2",
+            order_id="O2",
+            symbol="ES.FUT",
+            fill_timestamp_utc="2026-01-19T14:30:01Z",
+            side="SELL",
+            fill_price=Decimal("5010.00"),
+            fill_qty=Decimal("2.0"),
+            fee_paid=Decimal("50.00"),
+            liquidity_type=LiquidityType.MAKER,
+            slippage_incurred_bps=Decimal("0.0"),  # Maker = 0 slippage
+        ),
+    ]
+
+    # Total fees paid = $100.00 -> on $100,000 cash = 10.0 bps fee drag
+    # Total slippage cost = 2.0 * 5000.00 * (2.0 / 10000) = $2.00 -> on $100,000 cash = 0.20 bps slippage drag
+    # Total reality gap = 30.0 - 15.0 = 15.0 bps
+    # Queue / timing drag = 15.0 - (10.0 + 0.20) = 4.80 bps
+    summary = RealityGapAttributionEngine.derive_from_fills(
+        fills=fills,
+        initial_cash=initial_cash,
+        phase4_analytical_edge_bps=Decimal("30.0"),
+        phase5_simulated_realized_bps=Decimal("15.0"),
+    )
+
+    assert summary.reality_gap_bps == Decimal("15.0")
+    assert summary.fee_drag_bps == Decimal("10.0")
+    assert summary.latency_slip_drag_bps == Decimal("0.2")
+    assert summary.queue_position_drag_bps == Decimal("4.8")
+
+    report = RealityGapAttributionEngine.generate_reality_gap_report(summary)
+    assert report["friction_decomposition"]["fee_drag_bps"] == 10.0
+    assert report["friction_decomposition"]["latency_slip_drag_bps"] == 0.2
+    assert report["friction_decomposition"]["queue_position_drag_bps"] == 4.8
+
 
 

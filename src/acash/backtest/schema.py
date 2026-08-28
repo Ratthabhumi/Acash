@@ -277,9 +277,10 @@ class RealityGapSummary(BaseModel):
     phase4_analytical_edge_bps: Decimal
     phase5_simulated_realized_bps: Decimal
     reality_gap_bps: Decimal
-    spread_drag_bps: Decimal
-    latency_slip_drag_bps: Decimal
-    queue_position_drag_bps: Decimal
+    spread_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical spread cost drag in bps.")
+    latency_slip_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical slippage and latency price drift drag in bps.")
+    queue_position_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical queue wait / timing opportunity cost drag in bps.")
+    fee_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transaction and broker fees drag in bps.")
 
 
 class BacktestManifest(BaseModel):

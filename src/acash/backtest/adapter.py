@@ -274,11 +274,14 @@ class CanonicalDataAdapter:
                 chan_val = str(channel_id_col[i].as_py()) if channel_id_col is not None and channel_id_col[i].as_py() is not None else "0"
                 if match_sub_col is not None and match_sub_col[i].as_py() is not None:
                     sub_val = str(match_sub_col[i].as_py())
+                    source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}_sub{sub_val}"
                 elif row_sub_col is not None and row_sub_col[i].as_py() is not None:
                     sub_val = str(row_sub_col[i].as_py())
+                    source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}_sub{sub_val}"
                 else:
-                    sub_val = str(i)
-                source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}_sub{sub_val}"
+                    # Deterministic content-derived fallback invariant to table row permutation
+                    fp = hashlib.sha256(f"{ts_ns}:{chan_val}:{seq_val}:{trade_id_val}:{px}:{sz}:{side}".encode("utf-8")).hexdigest()[:16]
+                    source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}_fp{fp}"
             elif trade_id_val is not None:
                 source_key = f"{symbol}:{stream_id}:{ts_ns}:trd_{trade_id_val}"
             else:

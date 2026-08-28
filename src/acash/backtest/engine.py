@@ -38,6 +38,7 @@ from acash.backtest.schema import (
     SlippageModelConfig,
     calculate_backtest_manifest_id,
 )
+from acash.backtest.telemetry import RealityGapAttributionEngine
 from acash.data.schema import DataContractError
 
 
@@ -821,21 +822,18 @@ class EventBacktestRunner:
             profit_factor=profit_factor,
         )
 
-        # Reality Gap Metrics
+        # Reality Gap Metrics derived empirically from actual fill records
         simulated_realized_bps = (
             (self.ledger.cumulative_realized_pnl / self.config.initial_cash) * Decimal("10000.0")
             if self.config.initial_cash > Decimal("0.0")
             else Decimal("0.0")
         )
-        reality_gap_bps = phase4_analytical_edge_bps - simulated_realized_bps
-
-        reality_gap = RealityGapSummary(
+        reality_gap = RealityGapAttributionEngine.derive_from_fills(
+            fills=self.fills,
+            initial_cash=self.config.initial_cash,
             phase4_analytical_edge_bps=phase4_analytical_edge_bps,
             phase5_simulated_realized_bps=simulated_realized_bps,
-            reality_gap_bps=reality_gap_bps,
-            spread_drag_bps=self.config.fee_config.taker_fee_bps,
-            latency_slip_drag_bps=self.config.slippage_config.fixed_slippage_bps,
-            queue_position_drag_bps=Decimal("0.0"),
+            total_fees_paid=total_fees,
         )
 
         # -----------------------------------------------------------------
