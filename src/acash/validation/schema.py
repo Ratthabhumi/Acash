@@ -3,16 +3,18 @@
 Strictly enforces:
 - Immutable, frozen Pydantic models with extra="forbid".
 - Exact Decimal and int types for canonical parameters.
-- Comprehensive validation models for CPCV, DSR, MinTRL, FWER, PBO, and OOS Hard Gate.
+- Comprehensive validation models for CPCV, DSR, MinTRL, FWER, PBO, SearchTrialLedger, and OOS Hard Gate.
 """
 
 from decimal import Decimal
 from enum import Enum
 import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.features.engine import to_decimal18
 
 
 class ValidationGateVerdict(str, Enum):
@@ -24,7 +26,51 @@ class ValidationGateVerdict(str, Enum):
     REJECT_PARAMETER_FRAGILE = "REJECT_PARAMETER_FRAGILE"
     REJECT_INSUFFICIENT_TRL = "REJECT_INSUFFICIENT_TRL"
     REJECT_OOS_DEGRADATION = "REJECT_OOS_DEGRADATION"
+    REJECT_MISSING_OOS_DATA = "REJECT_MISSING_OOS_DATA"
     REJECT_FRICTION_COLLAPSE = "REJECT_FRICTION_COLLAPSE"
+
+
+class SearchTrialRecord(BaseModel):
+    """Single exploratory trial / parameter configuration tracked in the search space."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trial_id: str = Field(description="Unique deterministic trial identifier.")
+    strategy_id: str
+    hypothesis_id: str
+    feature_names: List[str]
+    parameters: Dict[str, Any]
+    in_sample_sharpe: Decimal
+    p_value: Decimal
+
+
+class SearchTrialLedger(BaseModel):
+    """Sovereign ledger accounting for all exploratory trials to strictly couple search intensity with DSR & FWER."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ledger_id: str = Field(description="Unique deterministic ledger identifier.")
+    hypothesis_id: str
+    trials: List[SearchTrialRecord]
+
+    @property
+    def total_trials(self) -> int:
+        """Total number of exploratory trials K."""
+        return len(self.trials)
+
+    @property
+    def empirical_sharpe_variance(self) -> float:
+        """Empirical variance of Sharpe ratios across all exploratory trials."""
+        if len(self.trials) < 2:
+            return 1.0  # Default normalized unit variance for single trial
+        sharpes = [float(t.in_sample_sharpe) for t in self.trials]
+        var = float(np.var(sharpes, ddof=1))
+        return max(1e-6, var)
+
+    @property
+    def p_values(self) -> List[Decimal]:
+        """All empirical p-values recorded in the ledger."""
+        return [t.p_value for t in self.trials]
 
 
 class CPCVPartition(BaseModel):
@@ -48,8 +94,8 @@ class DSRResult(BaseModel):
     estimated_sharpe: Decimal = Field(description="Sample annualized Sharpe ratio.")
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
     expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials.")
-    sample_skewness: Decimal = Field(description="Unbiased sample skewness of returns.")
-    sample_kurtosis: Decimal = Field(description="Sample kurtosis of returns (Pearson kurtosis, normal = 3.0).")
+    sample_skewness: Decimal = Field(description="Sample Fisher-Pearson skewness of returns.")
+    sample_kurtosis: Decimal = Field(description="Sample Pearson kurtosis of returns (normal = 3.0).")
     effective_trials_k: int = Field(description="Total number of parameter and model variations explored.")
     sample_size_t: int = Field(description="Number of observations / return periods.")
     dsr_statistic: Decimal = Field(description="Standardized asymptotic DSR test statistic z.")
@@ -148,6 +194,8 @@ class ValidationReport(BaseModel):
                 "friction_monotonicity_passed": self.overfitting_report.friction_monotonicity_passed,
                 "is_parameter_stable": self.overfitting_report.is_parameter_stable,
                 "is_pbo_acceptable": self.overfitting_report.is_pbo_acceptable,
+                "logits_distribution_mean": str(self.overfitting_report.logits_distribution_mean),
+                "logits_distribution_std": str(self.overfitting_report.logits_distribution_std),
                 "parameter_fragility_max_curvature": str(self.overfitting_report.parameter_fragility_max_curvature),
                 "pbo_estimate": str(self.overfitting_report.pbo_estimate),
             },

@@ -1,9 +1,9 @@
 """Probability of Backtest Overfitting (PBO) & Parameter Fragility Engine (Phase 6).
 
 Implements:
-- Probability of Backtest Overfitting (PBO) via CPCV log-odds distribution (Bailey et al. 2016).
-- Parameter Sensitivity Surface & Curvature Fragility Metric (penalizing knife-edge local optima).
-- Friction Stress Decay Monotonicity under 1x, 2x, 3x, 5x cost multiples.
+- Probability of Backtest Overfitting (PBO) via CPCV log-odds distribution with mid-rank tie handling (Bailey et al. 2016).
+- Parameter Sensitivity Surface & Curvature Fragility Metric across [0.75 theta_0, theta_0, 1.25 theta_0] perturbations.
+- Friction Stress Decay Monotonicity under cost multipliers.
 """
 
 from decimal import Decimal
@@ -24,7 +24,7 @@ class OverfittingEngine:
         is_sharpe_matrix: np.ndarray,
         oos_sharpe_matrix: np.ndarray,
     ) -> Tuple[float, float, float]:
-        """Calculate empirical Probability of Backtest Overfitting (PBO).
+        """Calculate empirical Probability of Backtest Overfitting (PBO) with exact mid-rank tie handling.
 
         Args:
             is_sharpe_matrix: 2D array of shape (C combinations, M models) for In-Sample Sharpe.
@@ -43,15 +43,17 @@ class OverfittingEngine:
         for c in range(C):
             # 1. Identify optimal in-sample model index m*
             m_star = int(np.argmax(is_sharpe_matrix[c, :]))
+            m_star_val = oos_sharpe_matrix[c, m_star]
 
-            # 2. Determine relative rank of m* in OOS slice
-            oos_scores = oos_sharpe_matrix[c, :]
-            # Sort OOS scores ascending
-            sorted_oos = np.sort(oos_scores)
-            # Find rank of m* (1-indexed)
-            rank = int(np.searchsorted(sorted_oos, oos_scores[m_star])) + 1
+            # 2. Compute exact mid-rank of m* in OOS slice
+            oos_slice = oos_sharpe_matrix[c, :]
+            strictly_less = int(np.sum(oos_slice < m_star_val))
+            equal_count = int(np.sum(oos_slice == m_star_val))
+            # Mid-rank formula (1-indexed): strictly_less + 1 + 0.5 * (equal_count - 1)
+            mid_rank = strictly_less + 1.0 + 0.5 * (equal_count - 1.0)
+
             # Relative rank omega in (0, 1)
-            omega = rank / (M + 1.0)
+            omega = mid_rank / (M + 1.0)
             omega = max(1e-6, min(1.0 - 1e-6, omega))
 
             # 3. Log-odds lambda = ln(omega / (1 - omega))
@@ -77,6 +79,10 @@ class OverfittingEngine:
     ) -> Tuple[float, bool]:
         """Evaluate second-order curvature and degradation stability across parameter perturbations.
 
+        Enforces discrete second derivative curvature:
+        kappa = | (SR(theta + h) - 2*SR(theta) + SR(theta - h)) / h^2 |
+        and verifies that neighbor degradation <= max_degradation_tolerance (default 30%).
+
         Returns:
             Tuple[max_curvature, is_stable]
         """
@@ -90,12 +96,13 @@ class OverfittingEngine:
         peak_idx = int(np.argmax(sharpes))
         peak_sr = sharpes[peak_idx]
 
-        # Discrete second derivative / curvature: (f(x+h) - 2f(x) + f(x-h)) / h^2
         curvatures: List[float] = []
         for i in range(1, n - 1):
-            h = (params[i + 1] - params[i - 1]) / 2.0
-            if h > 1e-12:
-                second_diff = (sharpes[i + 1] - 2.0 * sharpes[i] + sharpes[i - 1]) / (h ** 2)
+            h_left = params[i] - params[i - 1]
+            h_right = params[i + 1] - params[i]
+            h_avg = (h_left + h_right) / 2.0
+            if h_avg > 1e-12:
+                second_diff = (sharpes[i + 1] - 2.0 * sharpes[i] + sharpes[i - 1]) / (h_avg ** 2)
                 curvatures.append(abs(second_diff))
 
         max_curvature = max(curvatures) if curvatures else 0.0
@@ -104,12 +111,12 @@ class OverfittingEngine:
         is_stable = True
         if peak_sr > 0.0:
             if peak_idx > 0:
-                left_degradation = (peak_sr - sharpes[peak_idx - 1]) / peak_sr
-                if left_degradation > max_degradation_tolerance:
+                left_deg = (peak_sr - sharpes[peak_idx - 1]) / peak_sr
+                if left_deg > max_degradation_tolerance:
                     is_stable = False
             if peak_idx < n - 1:
-                right_degradation = (peak_sr - sharpes[peak_idx + 1]) / peak_sr
-                if right_degradation > max_degradation_tolerance:
+                right_deg = (peak_sr - sharpes[peak_idx + 1]) / peak_sr
+                if right_deg > max_degradation_tolerance:
                     is_stable = False
 
         return float(max_curvature), is_stable
@@ -120,12 +127,12 @@ class OverfittingEngine:
         friction_multipliers: Sequence[float] = (1.0, 2.0, 3.0, 5.0),
         base_friction_bps: float = 2.0,
     ) -> bool:
-        """Verify that net returns decrease monotonically as friction scales up."""
+        """Verify that net returns decrease monotonically as friction multipliers increase."""
         prev_return = base_net_return_bps
         for mult in friction_multipliers[1:]:
             stressed_return = base_net_return_bps - (mult - 1.0) * base_friction_bps
             if stressed_return > prev_return + 1e-12:
-                return False  # Non-monotonic behavior detected!
+                return False
             prev_return = stressed_return
         return True
 

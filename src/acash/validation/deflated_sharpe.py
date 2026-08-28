@@ -5,7 +5,7 @@ Mathematical implementation based on:
 - López de Prado, M. (2018). "Advances in Financial Machine Learning." John Wiley & Sons, Chapter 14.
 
 Strictly enforces:
-- Unbiased higher-moment estimation (Sample Skewness gamma_3, Excess Kurtosis gamma_4).
+- Standardized sample higher-moment estimation (Fisher-Pearson Skewness g_1, Pearson Kurtosis g_2).
 - Expected maximum Sharpe under null hypothesis (SR0) via Extreme Value Theory (EVT) with Euler-Mascheroni constant.
 - Asymptotic Deflated Sharpe Ratio (DSR) non-normal test statistic and p-value.
 - Minimum Track Record Length (MinTRL) required sample size calculation.
@@ -18,7 +18,7 @@ import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
-from acash.validation.schema import DSRResult
+from acash.validation.schema import DSRResult, SearchTrialLedger
 
 
 EULER_MASCHERONI_CONSTANT = 0.57721566490153286060
@@ -30,11 +30,10 @@ def _standard_normal_cdf(x: float) -> float:
 
 
 def _standard_normal_ppf(p: float) -> float:
-    """Inverse standard normal cumulative distribution function Z^{-1}(p) via Winitzki/rational approximation."""
+    """Inverse standard normal cumulative distribution function Z^{-1}(p)."""
     if p <= 0.0 or p >= 1.0:
         raise ValueError(f"Probability p must be in (0, 1), got {p}")
 
-    # Accurate approximation for inverse normal CDF
     a = [
         -3.969683028665376e+01,
         2.209460984245205e+02,
@@ -84,37 +83,47 @@ class DeflatedSharpeEngine:
 
     @staticmethod
     def calculate_higher_moments(returns: Sequence[Union[Decimal, float]]) -> Tuple[float, float, float, float]:
-        """Compute sample mean, standard deviation, skewness (gamma_3), and Pearson kurtosis (gamma_4).
+        """Compute sample mean, standard deviation, Fisher-Pearson skewness, and Pearson kurtosis.
+
+        Formulation:
+        - Mean: bar(X) = (1/n) sum X_i
+        - Sample Variance: s^2 = (1/(n-1)) sum (X_i - bar(X))^2
+        - Fisher-Pearson Skewness: g_1 = (n / ((n-1)(n-2))) * sum( ((X_i - bar(X)) / s)^3 )
+        - Pearson Kurtosis: g_2 = sample standardized 4th moment (normal distribution = 3.0)
 
         Returns:
-            Tuple[mean, std, skewness, kurtosis] where normal distribution has kurtosis = 3.0.
+            Tuple[mean, std, skewness, kurtosis]
         """
         arr = np.array([float(r) for r in returns], dtype=np.float64)
         n = len(arr)
         if n < 4:
-            raise DataContractError(f"Minimum 4 return observations required for higher moment estimation, got {n}")
+            raise DataContractError(f"Minimum 4 return observations required for moment estimation, got {n}")
 
         mean = float(np.mean(arr))
         diff = arr - mean
         variance = float(np.sum(diff ** 2) / (n - 1))
         std = math.sqrt(max(1e-18, variance))
 
-        # Sample skewness (Fisher-Pearson standardized third moment)
-        m3 = float(np.sum(diff ** 3) / n)
-        skewness = m3 / (std ** 3) if std > 0 else 0.0
+        if std <= 1e-12:
+            return mean, 0.0, 0.0, 3.0
 
-        # Sample kurtosis (Pearson fourth moment)
-        m4 = float(np.sum(diff ** 4) / n)
-        kurtosis = m4 / (std ** 4) if std > 0 else 3.0
+        # Fisher-Pearson adjusted sample skewness
+        norm_diff = diff / std
+        m3_term = float(np.sum(norm_diff ** 3))
+        skewness = (n / ((n - 1) * (n - 2))) * m3_term
 
-        return mean, std, skewness, kurtosis
+        # Pearson kurtosis (standardized fourth moment)
+        m4_term = float(np.sum(norm_diff ** 4))
+        kurtosis = (1.0 / n) * m4_term
+
+        return mean, std, float(skewness), float(kurtosis)
 
     @staticmethod
     def compute_expected_max_sharpe_sr0(
         effective_trials_k: int,
         variance_of_trials: float = 1.0,
     ) -> float:
-        """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K independent/correlated trials.
+        """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
         Formula (Bailey & López de Prado 2014):
         SR0 = sqrt(V) * [ (1 - gamma_E) * Z^{-1}(1 - 1/K) + gamma_E * Z^{-1}(1 - 1/(K * e)) ]
@@ -130,7 +139,8 @@ class DeflatedSharpeEngine:
         z1 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p1)))
         z2 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p2)))
 
-        sr0 = math.sqrt(variance_of_trials) * ((1.0 - gamma_e) * z1 + gamma_e * z2)
+        v_clamped = max(1e-6, variance_of_trials)
+        sr0 = math.sqrt(v_clamped) * ((1.0 - gamma_e) * z1 + gamma_e * z2)
         return float(sr0)
 
     @classmethod
@@ -138,21 +148,17 @@ class DeflatedSharpeEngine:
         cls,
         returns: Sequence[Union[Decimal, float]],
         effective_trials_k: int = 1,
+        variance_of_trials: float = 1.0,
         benchmark_sharpe: float = 0.0,
         confidence_level_alpha: float = 0.05,
         annualization_factor: float = 1.0,
-        variance_of_trials: float = 1.0,
+        trial_ledger: Optional[SearchTrialLedger] = None,
     ) -> DSRResult:
-        """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
+        """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length."""
+        if trial_ledger is not None:
+            effective_trials_k = trial_ledger.total_trials
+            variance_of_trials = trial_ledger.empirical_sharpe_variance
 
-        Args:
-            returns: Sequence of periodic strategy returns.
-            effective_trials_k: Total number of parameter variations/hypotheses explored.
-            benchmark_sharpe: Baseline Sharpe threshold (default 0.0).
-            confidence_level_alpha: Significance level (default 0.05).
-            annualization_factor: Factor to annualize Sharpe (e.g. sqrt(252) for daily).
-            variance_of_trials: Variance of Sharpe ratios across all exploratory trials.
-        """
         n = len(returns)
         mean, std, skew, kurt = cls.calculate_higher_moments(returns)
 

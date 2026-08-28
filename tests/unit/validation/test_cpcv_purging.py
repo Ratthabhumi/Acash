@@ -50,8 +50,8 @@ def test_cpcv_strict_label_purging_boundary_invariance() -> None:
         assert t_purged not in p_g1.train_indices
 
 
-def test_cpcv_pseudo_oos_paths_reconstruction() -> None:
-    """Verify that pseudo-OOS paths cover the full sample length."""
+def test_cpcv_pseudo_oos_paths_reconstruction_complete_coverage() -> None:
+    """Verify that all phi pseudo-OOS paths cover [0, T) chronologically without duplication or gaps."""
     config = ValidationConfig(num_groups_n=6, num_test_groups_k=2, embargo_bars=1)
     cpcv = CombinatorialPurgedCrossValidation(config)
 
@@ -60,5 +60,10 @@ def test_cpcv_pseudo_oos_paths_reconstruction() -> None:
 
     # Expected paths phi = (k / N) * (N choose k) = (2 / 6) * 15 = 5 paths
     assert len(paths) == 5
+
+    expected_full_series = list(range(120))
     for path in paths:
-        assert len(path) == 120  # Full series coverage
+        assert len(path) == 120
+        # Check that test indices strictly form [0, 1, ..., 119]
+        actual_indices = [idx for _, idx in path]
+        assert actual_indices == expected_full_series

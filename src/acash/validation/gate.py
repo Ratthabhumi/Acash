@@ -1,11 +1,11 @@
 """Statistical Validation Gate Orchestrator (Phase 6).
 
 Implements the master validation gate enforcing:
-1. Deflated Sharpe Ratio & MinTRL significance.
+1. Deflated Sharpe Ratio & MinTRL significance with Search Trial Ledger coupling.
 2. Combinatorial Purged Cross-Validation PBO bounds.
 3. Parameter sensitivity curvature and non-fragility.
 4. Friction decay monotonicity.
-5. Sealed blind Out-of-Sample (OOS) performance retention.
+5. Sealed blind Out-of-Sample (OOS) performance retention (Strict Fail-Closed).
 """
 
 from datetime import datetime, timezone
@@ -24,10 +24,19 @@ from acash.validation.schema import (
     DSRResult,
     MultipleTestingResult,
     OverfittingReport,
+    SearchTrialLedger,
     ValidationConfig,
     ValidationGateVerdict,
     ValidationReport,
 )
+
+
+def _compute_series_sha256(series: Optional[Sequence[Union[Decimal, float]]]) -> str:
+    """Compute deterministic SHA-256 hash of a numerical sequence."""
+    if not series:
+        return "NONE"
+    raw_str = ",".join(f"{float(v):.8f}" for v in series)
+    return hashlib.sha256(raw_str.encode("utf-8")).hexdigest()[:16]
 
 
 class StatisticalValidationGate:
@@ -44,27 +53,43 @@ class StatisticalValidationGate:
         in_sample_returns: Sequence[Union[Decimal, float]],
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         effective_trials_k: int = 1,
+        variance_of_trials: float = 1.0,
+        trial_ledger: Optional[SearchTrialLedger] = None,
         all_trials_p_values: Optional[Sequence[Union[Decimal, float]]] = None,
         is_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         oos_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         param_grid: Optional[Sequence[float]] = None,
         sharpe_profile: Optional[Sequence[float]] = None,
         base_net_return_bps: float = 10.0,
+        fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
-        """Run complete statistical validation battery and emit definitive verdict."""
+        """Run complete statistical validation battery and emit definitive verdict.
+
+        Fails closed: Any missing OOS returns or failed threshold strictly results in REJECT.
+        """
         n_is = len(in_sample_returns)
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
+
+        # Couple with SearchTrialLedger if provided
+        if trial_ledger is not None:
+            effective_trials_k = trial_ledger.total_trials
+            variance_of_trials = trial_ledger.empirical_sharpe_variance
+            p_vals_candidate = trial_ledger.p_values
+        else:
+            p_vals_candidate = None
 
         # 1. Deflated Sharpe Ratio & MinTRL
         dsr_result = DeflatedSharpeEngine.evaluate_dsr(
             returns=in_sample_returns,
             effective_trials_k=effective_trials_k,
+            variance_of_trials=variance_of_trials,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
+            trial_ledger=trial_ledger,
         )
 
         # 2. Multiple Testing FWER & Haircut Sharpe
-        p_vals = all_trials_p_values or [float(dsr_result.dsr_p_value)]
+        p_vals = all_trials_p_values or p_vals_candidate or [float(dsr_result.dsr_p_value)]
         mult_result = MultipleTestingEngine.evaluate_multiple_testing(
             p_values=p_vals,
             estimated_sharpe=float(dsr_result.estimated_sharpe),
@@ -77,11 +102,11 @@ class StatisticalValidationGate:
             is_mat = is_cpcv_sharpe_matrix
             oos_mat = oos_cpcv_sharpe_matrix
         else:
-            # Single-run dummy matrix for baseline testing
+            # Baseline single-run matrix
             is_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
             oos_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
 
-        grid = param_grid or [1.0, 2.0, 3.0]
+        grid = param_grid or [0.75, 1.0, 1.25]
         profile = sharpe_profile or [float(dsr_result.estimated_sharpe)] * len(grid)
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
@@ -93,10 +118,12 @@ class StatisticalValidationGate:
             max_acceptable_pbo=float(self.config.max_acceptable_pbo),
         )
 
-        # 4. Out-of-Sample Performance Evaluation
+        # 4. Out-of-Sample Performance Evaluation (Fail-Closed)
         oos_sr: Optional[Decimal] = None
         retention_pct: Optional[Decimal] = None
-        if out_of_sample_returns and len(out_of_sample_returns) >= 4:
+        has_valid_oos = (out_of_sample_returns is not None) and (len(out_of_sample_returns) >= 4)
+
+        if has_valid_oos and out_of_sample_returns is not None:
             mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)
             raw_oos_sr = mean_oos / std_oos if std_oos > 0 else 0.0
             oos_sr = to_decimal18(Decimal(f"{raw_oos_sr:.12f}")) or Decimal("0.0")
@@ -105,11 +132,15 @@ class StatisticalValidationGate:
                 ret_val = (oos_sr / dsr_result.estimated_sharpe) * Decimal("100.0")
                 retention_pct = to_decimal18(ret_val)
 
-        # 5. Gating Decision Logic
+        # 5. Fail-Closed Gating Decision Logic
         verdict = ValidationGateVerdict.PASS_TRADEABLE_ALPHA
         is_tradeable = True
 
-        if not dsr_result.is_statistically_significant:
+        if not has_valid_oos:
+            # Hard Gate: Missing or insufficient OOS data strictly fails closed!
+            verdict = ValidationGateVerdict.REJECT_MISSING_OOS_DATA
+            is_tradeable = False
+        elif not dsr_result.is_statistically_significant:
             verdict = ValidationGateVerdict.REJECT_OVERFIT_DSR
             is_tradeable = False
         elif not dsr_result.has_sufficient_track_record:
@@ -128,10 +159,14 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_OOS_DEGRADATION
             is_tradeable = False
 
-        # Generate unique deterministic validation report ID
-        now_utc = datetime.now(timezone.utc).isoformat()
-        val_hash = hashlib.sha256(f"{strategy_id}:{hypothesis_id}:{now_utc}:{verdict.value}".encode()).hexdigest()[:16]
+        # Deterministic Content-Derived Validation Report ID (timestamp excluded from hash)
+        is_hash = _compute_series_sha256(in_sample_returns)
+        oos_hash = _compute_series_sha256(out_of_sample_returns)
+        val_content = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{effective_trials_k}:{verdict.value}"
+        val_hash = hashlib.sha256(val_content.encode("utf-8")).hexdigest()[:16]
         val_id = f"VAL_{strategy_id}_{val_hash}"
+
+        now_utc = fixed_created_timestamp_utc or datetime.now(timezone.utc).isoformat()
 
         return ValidationReport(
             validation_id=val_id,

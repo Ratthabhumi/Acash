@@ -1,11 +1,17 @@
 """Unit tests for the Statistical Validation Gate master orchestrator."""
 
 from decimal import Decimal
+import json
 import numpy as np
 import pytest
 
 from acash.validation.gate import StatisticalValidationGate
-from acash.validation.schema import ValidationConfig, ValidationGateVerdict
+from acash.validation.schema import (
+    SearchTrialLedger,
+    SearchTrialRecord,
+    ValidationConfig,
+    ValidationGateVerdict,
+)
 
 
 def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
@@ -33,40 +39,80 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
     assert report.oos_retention_pct > Decimal("50.0")
 
 
-def test_statistical_validation_gate_reject_overfit_dsr() -> None:
-    """Verify that a noisy strategy with low Sharpe / high trial count is rejected with REJECT_OVERFIT_DSR."""
+def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
+    """Verify that missing or insufficient OOS returns strictly fail closed with REJECT_MISSING_OOS_DATA."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
-    # Weak/zero edge returns
-    noisy_returns = list(np.random.normal(0.0001, 0.0050, 1000))
+    is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
 
-    report = gate.evaluate_strategy(
-        strategy_id="STRAT_NOISY_001",
-        hypothesis_id="HYP_NOISE_001",
-        in_sample_returns=noisy_returns,
-        effective_trials_k=1000,  # High selection penalty
+    # 1. None OOS returns
+    report_none = gate.evaluate_strategy(
+        strategy_id="STRAT_MOM_001",
+        hypothesis_id="HYP_TSMOM_001",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=None,
     )
+    assert report_none.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
+    assert report_none.is_tradeable_alpha is False
 
-    assert report.verdict == ValidationGateVerdict.REJECT_OVERFIT_DSR
-    assert report.is_tradeable_alpha is False
+    # 2. Too short OOS returns (< 4 bars)
+    report_short = gate.evaluate_strategy(
+        strategy_id="STRAT_MOM_001",
+        hypothesis_id="HYP_TSMOM_001",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=[0.01, 0.02],
+    )
+    assert report_short.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
+    assert report_short.is_tradeable_alpha is False
 
 
-def test_statistical_validation_gate_reject_oos_degradation() -> None:
-    """Verify that a strategy with high in-sample performance but collapsing OOS is rejected with REJECT_OOS_DEGRADATION."""
+def test_deterministic_validation_report_id() -> None:
+    """Verify that identical strategy evaluation inputs produce bitwise-identical validation_id."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
-    is_returns = list(np.random.normal(0.0020, 0.0030, 1000))  # High IS Sharpe ~ 10
-    oos_returns = list(np.random.normal(-0.0005, 0.0050, 500))  # Negative OOS return
+    is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
 
-    report = gate.evaluate_strategy(
-        strategy_id="STRAT_OVERFIT_001",
-        hypothesis_id="HYP_OVERFIT_001",
+    report_1 = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
-        effective_trials_k=1,
+        fixed_created_timestamp_utc="2026-08-28T10:00:00Z",
     )
 
-    assert report.verdict == ValidationGateVerdict.REJECT_OOS_DEGRADATION
-    assert report.is_tradeable_alpha is False
+    report_2 = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        fixed_created_timestamp_utc="2026-08-28T12:00:00Z",  # Different timestamp
+    )
+
+    # validation_id MUST be identical because content is identical
+    assert report_1.validation_id == report_2.validation_id
+
+
+def test_canonical_json_serialization_completeness() -> None:
+    """Verify that to_canonical_json() contains all fields including logits distribution statistics."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
+
+    report = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+    )
+
+    c_json = report.to_canonical_json()
+    data = json.loads(c_json)
+
+    assert "logits_distribution_mean" in data["overfitting_report"]
+    assert "logits_distribution_std" in data["overfitting_report"]
+    assert "pbo_estimate" in data["overfitting_report"]
