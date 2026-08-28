@@ -496,8 +496,85 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
     assert report["friction_decomposition"]["spread_drag_bps"] == 0.05
     assert report["friction_decomposition"]["slippage_drag_bps"] == 0.05
     assert report["friction_decomposition"]["maker_adverse_selection_drag_bps"] == 0.4
-    assert report["friction_decomposition"]["queue_drag_bps"] == 0.4
     assert report["friction_decomposition"]["unmodelled_residual_bps"] == 4.4
+    assert report["attribution_provenance"] == "EXPLICIT_REFERENCE_BENCHMARKS"
+
+    # Decimal precision preservation test
+    decimal_report = RealityGapAttributionEngine.generate_reality_gap_report(summary, preserve_decimal_precision=True)
+    assert decimal_report["friction_decomposition"]["fee_drag_bps"] == "10.0"
+    assert decimal_report["friction_decomposition"]["latency_drag_bps"] == "0.1"
+    assert decimal_report["friction_decomposition"]["spread_drag_bps"] == "0.05"
+    assert decimal_report["friction_decomposition"]["slippage_drag_bps"] == "0.05"
+    assert decimal_report["friction_decomposition"]["maker_adverse_selection_drag_bps"] == "0.4"
+    assert decimal_report["friction_decomposition"]["unmodelled_residual_bps"] == "4.4"
+
+
+def test_unknown_instrument_fails_fast_without_implicit_defaults() -> None:
+    """Audit P1: Unknown symbols must fail-fast with DataContractError rather than assuming implicit defaults."""
+    from acash.backtest.schema import get_instrument_specification, register_instrument_specification, InstrumentSpecification
+    from acash.core.domain.exceptions import DataContractError
+
+    with pytest.raises(DataContractError, match="Unknown instrument specification for symbol 'UNKNOWN_FOO'"):
+        get_instrument_specification("UNKNOWN_FOO")
+
+    # Explicit registration works
+    custom_spec = InstrumentSpecification(
+        symbol="CUSTOM_BTC",
+        asset_class="CRYPTO",
+        price_precision=2,
+        price_increment=Decimal("0.50"),
+        multiplier=Decimal("1.0"),
+        lot_size=Decimal("0.01"),
+    )
+    register_instrument_specification(custom_spec)
+    resolved = get_instrument_specification("CUSTOM_BTC")
+    assert resolved.symbol == "CUSTOM_BTC"
+    assert resolved.multiplier == Decimal("1.0")
+
+
+def test_reality_gap_strict_benchmarks_validation_and_fallback() -> None:
+    """Audit P1: RealityGapAttributionEngine strict mode fails-fast on missing benchmarks; fallback mode sets provenance."""
+    from acash.backtest.telemetry import RealityGapAttributionEngine
+    from acash.backtest.schema import BacktestFillRecord, LiquidityType
+    from acash.core.domain.exceptions import DataContractError
+
+    # Incomplete taker fill missing touch_price and match_mid_price
+    incomplete_fill = BacktestFillRecord(
+        fill_id="F_INCOMPLETE",
+        order_id="O1",
+        symbol="ES.FUT",
+        fill_timestamp_utc="2026-01-19T14:30:00Z",
+        side="BUY",
+        fill_price=Decimal("5000.50"),
+        fill_qty=Decimal("2.0"),
+        fee_paid=Decimal("50.00"),
+        liquidity_type=LiquidityType.TAKER,
+        arrival_mid_price=Decimal("4999.50"),
+        bid_at_fill=Decimal("4999.75"),
+        ask_at_fill=Decimal("5000.25"),
+        # touch_price and match_mid_price are missing
+    )
+
+    # Strict mode MUST raise DataContractError
+    with pytest.raises(DataContractError, match="Taker Fill 'F_INCOMPLETE' missing explicit 'match_mid_price' or 'touch_price'"):
+        RealityGapAttributionEngine.derive_from_fills(
+            fills=[incomplete_fill],
+            initial_cash=Decimal("100000.00"),
+            phase4_analytical_edge_bps=Decimal("30.0"),
+            phase5_simulated_realized_bps=Decimal("15.0"),
+            strict_reference_benchmarks=True,
+        )
+
+    # Approximate fallback mode permits execution and marks provenance
+    fallback_summary = RealityGapAttributionEngine.derive_from_fills(
+        fills=[incomplete_fill],
+        initial_cash=Decimal("100000.00"),
+        phase4_analytical_edge_bps=Decimal("30.0"),
+        phase5_simulated_realized_bps=Decimal("15.0"),
+        strict_reference_benchmarks=False,
+    )
+    assert fallback_summary.attribution_provenance == "APPROXIMATE_FALLBACK"
+
 
 
 

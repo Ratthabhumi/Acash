@@ -156,29 +156,28 @@ INSTRUMENT_REGISTRY: Dict[str, InstrumentSpecification] = {
         multiplier=Decimal("1000.0"),
         lot_size=Decimal("1.0"),
     ),
-    "DEFAULT": InstrumentSpecification(
-        symbol="DEFAULT",
-        asset_class="INDEX",
-        price_precision=2,
-        price_increment=Decimal("0.25"),
-        multiplier=Decimal("50.0"),
-        lot_size=Decimal("1.0"),
-    ),
 }
 
 
+def register_instrument_specification(spec: InstrumentSpecification) -> None:
+    """Explicitly register or override an instrument specification in the global registry."""
+    INSTRUMENT_REGISTRY[spec.symbol.upper()] = spec
+
+
 def get_instrument_specification(symbol: str) -> InstrumentSpecification:
-    """Retrieve instrument specification from registry or return default configured for symbol."""
+    """Retrieve instrument specification from registry or fail-fast with DataContractError.
+
+    Implicit default fallbacks are strictly prohibited to prevent distorted backtesting assumptions.
+    Unknown instruments must be explicitly registered via register_instrument_specification()
+    or provided in BacktestEngineConfig.instrument_spec.
+    """
     sym_upper = symbol.upper().split(".")[0]
     if sym_upper in INSTRUMENT_REGISTRY:
         return INSTRUMENT_REGISTRY[sym_upper]
-    return InstrumentSpecification(
-        symbol=sym_upper,
-        asset_class="INDEX",
-        price_precision=2,
-        price_increment=Decimal("0.25"),
-        multiplier=Decimal("50.0"),
-        lot_size=Decimal("1.0"),
+    raise DataContractError(
+        f"Unknown instrument specification for symbol '{symbol}'. "
+        f"Implicit defaults are prohibited. Explicitly register via "
+        f"register_instrument_specification() or provide BacktestEngineConfig.instrument_spec."
     )
 
 
@@ -198,8 +197,8 @@ class BacktestEngineConfig(BaseModel):
     queue_priority_model: str = Field(default="FIFO", description="Order book queue priority matching model.")
     prng_seed: int = Field(default=42, description="Deterministic pseudo-random number generator seed.")
 
-    def get_effective_instrument_spec(self) -> InstrumentSpecification:
-        """Return explicit custom spec if provided, else lookup by symbol from registry."""
+    def get_resolved_spec(self) -> InstrumentSpecification:
+        """Resolve instrument specification with custom override taking precedence."""
         if self.instrument_spec is not None:
             return self.instrument_spec
         return get_instrument_specification(self.symbol)
@@ -233,7 +232,7 @@ class BacktestEngineConfig(BaseModel):
 
 
 class BacktestFillRecord(BaseModel):
-    """Sovereign record of an individual simulated order execution."""
+    """Individual execution fill record emitted during event simulation."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -246,21 +245,22 @@ class BacktestFillRecord(BaseModel):
     fill_qty: Decimal
     fee_paid: Decimal
     liquidity_type: LiquidityType
-    slippage_incurred_bps: Decimal = Field(default=Decimal("0.0"))
-    arrival_price: Optional[Decimal] = Field(default=None, description="Benchmark reference market/mid price at decision time.")
-    arrival_mid_price: Optional[Decimal] = Field(default=None, description="Side-neutral benchmark mid-price at order decision time.")
-    match_mid_price: Optional[Decimal] = Field(default=None, description="Side-neutral benchmark mid-price at order match arrival time.")
-    touch_price: Optional[Decimal] = Field(default=None, description="Prevailing touch price at match time (best ask for BUY taker, best bid for SELL taker).")
-    bid_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best bid price at fill.")
-    ask_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best ask price at fill.")
-    decision_timestamp_ns: Optional[int] = Field(default=None, description="Timestamp in nanoseconds when order intent was formulated.")
-    match_timestamp_ns: Optional[int] = Field(default=None, description="Timestamp in nanoseconds when order arrived at matching engine.")
-    latency_drift_bps: Decimal = Field(default=Decimal("0.0"), description="Adverse mid-price drift during transmission latency.")
-    queue_wait_ns: int = Field(default=0, description="Duration in nanoseconds spent resting in maker queue.")
+    slippage_incurred_bps: Decimal = Decimal("0.0")
+    # Reference execution benchmarks for Reality Gap attribution
+    arrival_price: Optional[Decimal] = None
+    arrival_mid_price: Optional[Decimal] = None
+    match_mid_price: Optional[Decimal] = None
+    touch_price: Optional[Decimal] = None
+    bid_at_fill: Optional[Decimal] = None
+    ask_at_fill: Optional[Decimal] = None
+    decision_timestamp_ns: Optional[int] = None
+    match_timestamp_ns: Optional[int] = None
+    latency_drift_bps: Decimal = Decimal("0.0")
+    queue_wait_ns: int = 0
 
 
 class BacktestExecutionSummary(BaseModel):
-    """Aggregate execution and portfolio performance summary."""
+    """Aggregate trade and portfolio outcome metrics of backtesting run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -293,6 +293,10 @@ class RealityGapSummary(BaseModel):
     fee_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transaction and broker fees drag in bps.")
     maker_adverse_selection_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical post-arrival adverse selection drag for maker fills in bps.")
     unmodelled_residual_bps: Decimal = Field(default=Decimal("0.0"), description="Unmodelled residual gap between analytical assumption and empirical friction.")
+    attribution_provenance: str = Field(
+        default="EXPLICIT_REFERENCE_BENCHMARKS",
+        description="Fidelity level and method of the reality gap attribution ('EXPLICIT_REFERENCE_BENCHMARKS' or 'APPROXIMATE_FALLBACK').",
+    )
 
     # Deprecated compatibility accessors (excluded from serialization and hashing)
     @property
@@ -392,14 +396,15 @@ class BacktestManifest(BaseModel):
                 "profit_factor": str(self.execution_summary.profit_factor) if self.execution_summary.profit_factor is not None else None,
             },
             "reality_gap": {
+                "attribution_provenance": self.reality_gap.attribution_provenance,
+                "fee_drag_bps": str(self.reality_gap.fee_drag_bps),
+                "latency_drag_bps": str(self.reality_gap.latency_drag_bps),
+                "maker_adverse_selection_drag_bps": str(self.reality_gap.maker_adverse_selection_drag_bps),
                 "phase4_analytical_edge_bps": str(self.reality_gap.phase4_analytical_edge_bps),
                 "phase5_simulated_realized_bps": str(self.reality_gap.phase5_simulated_realized_bps),
                 "reality_gap_bps": str(self.reality_gap.reality_gap_bps),
-                "spread_drag_bps": str(self.reality_gap.spread_drag_bps),
                 "slippage_drag_bps": str(self.reality_gap.slippage_drag_bps),
-                "latency_drag_bps": str(self.reality_gap.latency_drag_bps),
-                "fee_drag_bps": str(self.reality_gap.fee_drag_bps),
-                "maker_adverse_selection_drag_bps": str(self.reality_gap.maker_adverse_selection_drag_bps),
+                "spread_drag_bps": str(self.reality_gap.spread_drag_bps),
                 "unmodelled_residual_bps": str(self.reality_gap.unmodelled_residual_bps),
             },
         }

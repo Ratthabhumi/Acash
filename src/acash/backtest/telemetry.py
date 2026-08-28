@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 from acash.backtest.schema import RealityGapSummary
+from acash.core.domain.exceptions import DataContractError
 
 
 class RealityGapAttributionEngine:
@@ -32,6 +33,7 @@ class RealityGapAttributionEngine:
         latency_drag_bps: Decimal = Decimal("0.0"),
         fee_drag_bps: Decimal = Decimal("0.0"),
         maker_adverse_selection_drag_bps: Decimal = Decimal("0.0"),
+        attribution_provenance: str = "EXPLICIT_REFERENCE_BENCHMARKS",
     ) -> RealityGapSummary:
         """Decompose total reality gap into constituent friction components."""
         reality_gap_bps = phase4_analytical_edge_bps - phase5_simulated_realized_bps
@@ -54,6 +56,7 @@ class RealityGapAttributionEngine:
             fee_drag_bps=fee_drag_bps,
             maker_adverse_selection_drag_bps=maker_adverse_selection_drag_bps,
             unmodelled_residual_bps=unmodelled_residual,
+            attribution_provenance=attribution_provenance,
         )
 
     @staticmethod
@@ -63,8 +66,20 @@ class RealityGapAttributionEngine:
         phase4_analytical_edge_bps: Decimal,
         phase5_simulated_realized_bps: Decimal,
         total_fees_paid: Optional[Decimal] = None,
+        strict_reference_benchmarks: bool = True,
     ) -> RealityGapSummary:
-        """Derive empirical friction drag metrics directly from execution fill records and reference prices."""
+        """Derive empirical friction drag metrics directly from execution fill records and reference prices.
+        
+        Args:
+            fills: List of BacktestFillRecord objects or dicts.
+            initial_cash: Starting capital baseline.
+            phase4_analytical_edge_bps: Analytical predictive edge assumption.
+            phase5_simulated_realized_bps: Realized simulated return.
+            total_fees_paid: Optional pre-aggregated fee total.
+            strict_reference_benchmarks: If True (default), fail-fast with DataContractError
+                when fills lack required reference prices, preventing silent approximation.
+                If False, allows fallback calculations and marks attribution_provenance='APPROXIMATE_FALLBACK'.
+        """
         reality_gap_bps = phase4_analytical_edge_bps - phase5_simulated_realized_bps
 
         if initial_cash <= Decimal("0.0") or not fills:
@@ -78,7 +93,39 @@ class RealityGapAttributionEngine:
                 fee_drag_bps=Decimal("0.0"),
                 maker_adverse_selection_drag_bps=Decimal("0.0"),
                 unmodelled_residual_bps=reality_gap_bps,
+                attribution_provenance="EXPLICIT_REFERENCE_BENCHMARKS" if strict_reference_benchmarks else "APPROXIMATE_FALLBACK",
             )
+
+        # Validate reference benchmark presence in strict mode
+        if strict_reference_benchmarks:
+            for f in fills:
+                fill_id = getattr(f, "fill_id", f.get("fill_id", "UNKNOWN") if isinstance(f, dict) else "UNKNOWN")
+                liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
+                arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
+                if arr_mid is None:
+                    arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
+                bid_val = getattr(f, "bid_at_fill", f.get("bid_at_fill", None) if isinstance(f, dict) else None)
+                ask_val = getattr(f, "ask_at_fill", f.get("ask_at_fill", None) if isinstance(f, dict) else None)
+
+                if arr_mid is None:
+                    raise DataContractError(
+                        f"Fill '{fill_id}' missing explicit 'arrival_mid_price'. "
+                        f"Strict benchmark attribution requires complete execution benchmarks. "
+                        f"Set strict_reference_benchmarks=False to permit approximate fallbacks."
+                    )
+                if bid_val is None or ask_val is None:
+                    raise DataContractError(
+                        f"Fill '{fill_id}' missing explicit touch quotes ('bid_at_fill' / 'ask_at_fill'). "
+                        f"Strict benchmark attribution requires complete execution benchmarks."
+                    )
+                if "TAKER" in liq_type.upper():
+                    match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
+                    touch_val = getattr(f, "touch_price", f.get("touch_price", None) if isinstance(f, dict) else None)
+                    if match_mid is None or touch_val is None:
+                        raise DataContractError(
+                            f"Taker Fill '{fill_id}' missing explicit 'match_mid_price' or 'touch_price'. "
+                            f"Strict benchmark attribution requires complete execution benchmarks."
+                        )
 
         # 1. Empirical Fee Drag (actual fees incurred relative to initial capital)
         if total_fees_paid is not None:
@@ -98,6 +145,8 @@ class RealityGapAttributionEngine:
             side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
 
             arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
+            if arr_mid is None:
+                arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
             match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
 
             if arr_mid is not None and match_mid is not None:
@@ -192,6 +241,7 @@ class RealityGapAttributionEngine:
         # 6. Unmodelled Residual Gap (pure model mismatch / alpha assumption divergence)
         accounted = fee_drag_bps + slippage_drag_bps + latency_drag_bps + spread_drag_bps + maker_adverse_selection_drag_bps
         unmodelled_residual_bps = reality_gap_bps - accounted
+        provenance = "EXPLICIT_REFERENCE_BENCHMARKS" if strict_reference_benchmarks else "APPROXIMATE_FALLBACK"
 
         return RealityGapSummary(
             phase4_analytical_edge_bps=phase4_analytical_edge_bps,
@@ -203,18 +253,47 @@ class RealityGapAttributionEngine:
             fee_drag_bps=fee_drag_bps,
             maker_adverse_selection_drag_bps=maker_adverse_selection_drag_bps,
             unmodelled_residual_bps=unmodelled_residual_bps,
+            attribution_provenance=provenance,
         )
 
     @staticmethod
-    def generate_reality_gap_report(summary: RealityGapSummary) -> Dict[str, Any]:
-        """Generate structured diagnostic dictionary for research reporting."""
+    def generate_reality_gap_report(
+        summary: RealityGapSummary,
+        preserve_decimal_precision: bool = False,
+    ) -> Dict[str, Any]:
+        """Generate structured diagnostic dictionary for research reporting.
+        
+        NOTE: Standard float conversion (preserve_decimal_precision=False) is strictly
+        intended for human visual inspection, logging, and interactive dashboards.
+        For canonical cryptographic manifests and mathematical audit lineage, use
+        preserve_decimal_precision=True or summary.to_canonical_json().
+        """
         retained_edge_pct = (
             (summary.phase5_simulated_realized_bps / summary.phase4_analytical_edge_bps) * Decimal("100.0")
             if summary.phase4_analytical_edge_bps > Decimal("0.0")
             else Decimal("0.0")
         )
 
+        if preserve_decimal_precision:
+            return {
+                "attribution_provenance": summary.attribution_provenance,
+                "phase4_analytical_edge_bps": str(summary.phase4_analytical_edge_bps),
+                "phase5_simulated_realized_bps": str(summary.phase5_simulated_realized_bps),
+                "reality_gap_bps": str(summary.reality_gap_bps),
+                "retained_edge_percentage": str(retained_edge_pct),
+                "friction_decomposition": {
+                    "spread_drag_bps": str(summary.spread_drag_bps),
+                    "slippage_drag_bps": str(summary.slippage_drag_bps),
+                    "latency_drag_bps": str(summary.latency_drag_bps),
+                    "fee_drag_bps": str(summary.fee_drag_bps),
+                    "maker_adverse_selection_drag_bps": str(summary.maker_adverse_selection_drag_bps),
+                    "unmodelled_residual_bps": str(summary.unmodelled_residual_bps),
+                },
+                "verdict": "FEASIBLE" if summary.phase5_simulated_realized_bps > Decimal("0.0") else "UNREALIZABLE_ALPHA",
+            }
+
         return {
+            "attribution_provenance": summary.attribution_provenance,
             "phase4_analytical_edge_bps": float(summary.phase4_analytical_edge_bps),
             "phase5_simulated_realized_bps": float(summary.phase5_simulated_realized_bps),
             "reality_gap_bps": float(summary.reality_gap_bps),
