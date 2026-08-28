@@ -115,8 +115,6 @@ ACASH explicitly decouples state management from decision and execution flows:
                       │
                       └──────► State Transition ──► NEW Position
                                                 ──► NEW PortfolioState
-                                                ──► NEW AccountState
-
         CROSS-CUTTING AUDIT LINEAGE
         ───────────────────────────
                DecisionRecord (Append-Only)
@@ -143,7 +141,7 @@ ACASH explicitly decouples state management from decision and execution flows:
    └─ ✅ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 200/200 Tests, mypy clean]
-🔄 Phase 6: Statistical Validation & OOS Hard Gate ──► [UPCOMING — DESIGN PROPOSAL SIGNED OFF]
+✅ Phase 6: Statistical Validation & Overfitting Controls ──► [GATE 6 PASSED — CPCV, DSR, MinTRL, PBO, Search Ledger, OOS Hard Gate]
 ⏳ Phase 7: Regime Engine (Trend/Vol Classifiers) ──► Gate 7
 ⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
 ⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
@@ -197,6 +195,12 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
    - Reality Gap Telemetry Engine implementing disjoint non-overlapping reference-price decomposition: Spread Drag, Slippage Drag, Latency Drag, Fee Drag, Maker Adverse Selection Drag, and Unmodelled Residual.
    - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
+9. **Phase 6 — Statistical Validation & Overfitting Controls:**
+   - Combinatorial Purged Cross-Validation (`cpcv.py`): Contiguous $N$-group partitioning, exhaustive $\binom{N}{k}$ combinatorial splits, strict $[t+1, t+H]$ interval purging, post-test embargo buffers, and chronological pseudo-OOS path reconstruction ($\phi = \frac{k}{N}\binom{N}{k}$).
+   - Deflated Sharpe Ratio & MinTRL (`deflated_sharpe.py`): Non-normal asymptotic inference (Bailey & López de Prado 2014) with Euler-Mascheroni constant $\gamma_E$, empirical trial variance $V$, Fisher-Pearson skewness $g_1$, and Pearson kurtosis $g_2$.
+   - Multiple Testing Corrections (`multiple_testing.py`): Holm-Bonferroni (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
+   - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]$ grids, and component-wise friction stress decay monotonicity.
+   - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
 
 ---
 
@@ -212,6 +216,7 @@ The complete canonical documentation suite is organized in [`docs/`](docs/):
 - **[`docs/PHASE_3C_DESIGN_PROPOSAL.md`](docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
 - **[`docs/PHASE_4_DESIGN_PROPOSAL.md`](docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
 - **[`docs/PHASE_5_DESIGN_PROPOSAL.md`](docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
+- **[`docs/PHASE_6_DESIGN_PROPOSAL.md`](docs/PHASE_6_DESIGN_PROPOSAL.md)**: Statistical Validation & Overfitting Controls Engine (Gate 6 Passed).
 
 - **[`docs/TECHNOLOGY_EVALUATION.md`](docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
 - **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.

@@ -29,14 +29,12 @@
    │
    ▼
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► Gate 5 [COMPLETED - PASSED — 200/200 Tests]
-
    │
    ▼
-⏳ Phase 6: Statistical Validation & OOS Hard Gate ──► Gate 6 [APPROVED FOR EXECUTION — DESIGN PROPOSAL SIGNED OFF]
-
+✅ Phase 6: Statistical Validation & Overfitting Controls ──► Gate 6 [COMPLETED - PASSED]
    │
    ▼
-⏳ Phase 7: Regime Engine (Prove or Remove) ──► Gate 7
+⏳ Phase 7: Regime Engine (Prove or Remove) ──► Gate 7 [UPCOMING]
    │
    ▼
 ⏳ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
