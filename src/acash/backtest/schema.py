@@ -93,6 +93,95 @@ class SlippageModelConfig(BaseModel):
     impact_coefficient: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"), description="Linear depth impact coefficient.")
 
 
+class InstrumentSpecification(BaseModel):
+    """Specification of contract/instrument trading mechanics, precision, and multiplier."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    symbol: str = Field(description="Contract symbol (e.g. ES, NQ, YM, RTY).")
+    asset_class: str = Field(default="INDEX", description="Asset class (INDEX, COMMODITY, FX, CRYPTO).")
+    price_precision: int = Field(default=2, ge=0, description="Decimal places for price.")
+    price_increment: Decimal = Field(default=Decimal("0.25"), gt=Decimal("0.0"), description="Minimum tick size increment.")
+    multiplier: Decimal = Field(default=Decimal("50.0"), gt=Decimal("0.0"), description="Contract dollar value multiplier per index point.")
+    lot_size: Decimal = Field(default=Decimal("1.0"), gt=Decimal("0.0"), description="Minimum order lot quantity.")
+    margin_requirement_rate: Decimal = Field(default=Decimal("0.10"), ge=Decimal("0.0"), le=Decimal("1.0"), description="Initial margin rate fraction.")
+
+
+INSTRUMENT_REGISTRY: Dict[str, InstrumentSpecification] = {
+    "ES": InstrumentSpecification(
+        symbol="ES",
+        asset_class="INDEX",
+        price_precision=2,
+        price_increment=Decimal("0.25"),
+        multiplier=Decimal("50.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "NQ": InstrumentSpecification(
+        symbol="NQ",
+        asset_class="INDEX",
+        price_precision=2,
+        price_increment=Decimal("0.25"),
+        multiplier=Decimal("20.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "YM": InstrumentSpecification(
+        symbol="YM",
+        asset_class="INDEX",
+        price_precision=0,
+        price_increment=Decimal("1.00"),
+        multiplier=Decimal("5.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "RTY": InstrumentSpecification(
+        symbol="RTY",
+        asset_class="INDEX",
+        price_precision=1,
+        price_increment=Decimal("0.10"),
+        multiplier=Decimal("50.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "GC": InstrumentSpecification(
+        symbol="GC",
+        asset_class="COMMODITY",
+        price_precision=1,
+        price_increment=Decimal("0.10"),
+        multiplier=Decimal("100.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "CL": InstrumentSpecification(
+        symbol="CL",
+        asset_class="COMMODITY",
+        price_precision=2,
+        price_increment=Decimal("0.01"),
+        multiplier=Decimal("1000.0"),
+        lot_size=Decimal("1.0"),
+    ),
+    "DEFAULT": InstrumentSpecification(
+        symbol="DEFAULT",
+        asset_class="INDEX",
+        price_precision=2,
+        price_increment=Decimal("0.25"),
+        multiplier=Decimal("50.0"),
+        lot_size=Decimal("1.0"),
+    ),
+}
+
+
+def get_instrument_specification(symbol: str) -> InstrumentSpecification:
+    """Retrieve instrument specification from registry or return default configured for symbol."""
+    sym_upper = symbol.upper().split(".")[0]
+    if sym_upper in INSTRUMENT_REGISTRY:
+        return INSTRUMENT_REGISTRY[sym_upper]
+    return InstrumentSpecification(
+        symbol=sym_upper,
+        asset_class="INDEX",
+        price_precision=2,
+        price_increment=Decimal("0.25"),
+        multiplier=Decimal("50.0"),
+        lot_size=Decimal("1.0"),
+    )
+
+
 class BacktestEngineConfig(BaseModel):
     """Complete parameter specification for event backtesting substrate."""
 
@@ -102,11 +191,19 @@ class BacktestEngineConfig(BaseModel):
     symbol: str = Field(description="Target trading instrument.")
     initial_cash: Decimal = Field(default=Decimal("100000.00"), gt=Decimal("0.0"), description="Starting cash allocation.")
     base_currency: str = Field(default="USD", description="Base accounting currency.")
+    instrument_spec: Optional[InstrumentSpecification] = Field(default=None, description="Optional custom contract mechanics specification.")
     latency_config: SimulationLatencyConfig = Field(default_factory=SimulationLatencyConfig)
     fee_config: FeeModelConfig = Field(default_factory=FeeModelConfig)
     slippage_config: SlippageModelConfig = Field(default_factory=SlippageModelConfig)
     queue_priority_model: str = Field(default="FIFO", description="Order book queue priority matching model.")
     prng_seed: int = Field(default=42, description="Deterministic pseudo-random number generator seed.")
+
+    def get_effective_instrument_spec(self) -> InstrumentSpecification:
+        """Return explicit custom spec if provided, else lookup by symbol from registry."""
+        if self.instrument_spec is not None:
+            return self.instrument_spec
+        return get_instrument_specification(self.symbol)
+
 
     def to_canonical_json(self) -> str:
         """Emit deterministic, sorted JSON representation for cryptographic hashing."""

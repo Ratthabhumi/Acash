@@ -265,14 +265,31 @@ def test_maker_queue_priority_and_trade_through_matching() -> None:
     assert status_t1 is BacktestOrderStatus.ACCEPTED
     assert runner.orders["ORD-M-001"].queue_ahead_volume == Decimal("4.0")
 
-    # Trade 2: Sell aggressor trades 5 units @ 5000.00 -> Queue ahead becomes -1.0 -> Order is FILLED!
+    # Trade 2: Sell aggressor trades 5 units @ 5000.00 -> Queue ahead (4.0) consumed -> Available 1.0 -> Fills 1.0 of our 2.0 units (PARTIALLY_FILLED)
     runner._process_order_matching(
         event_timestamp_ns=3_000_000_000,
         trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("5.0"), "aggressor_side": "SELL"},
     )
     status_t2 = runner.orders["ORD-M-001"].status
-    assert status_t2 is BacktestOrderStatus.FILLED
+    assert status_t2 is BacktestOrderStatus.PARTIALLY_FILLED
+    assert runner.orders["ORD-M-001"].filled_qty == Decimal("1.0")
+    assert runner.orders["ORD-M-001"].remaining_qty == Decimal("1.0")
+    assert runner.orders["ORD-M-001"].queue_ahead_volume == Decimal("0.0")
     assert len(runner.fills) == 1
+    assert runner.fills[0].fill_qty == Decimal("1.0")
+
+    # Trade 3: Sell aggressor trades 2 units @ 5000.00 -> Fills remaining 1.0 unit -> FILLED
+    runner._process_order_matching(
+        event_timestamp_ns=4_000_000_000,
+        trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("2.0"), "aggressor_side": "SELL"},
+    )
+    status_t3 = runner.orders["ORD-M-001"].status
+    assert status_t3 is BacktestOrderStatus.FILLED
+    assert runner.orders["ORD-M-001"].filled_qty == Decimal("2.0")
+    assert runner.orders["ORD-M-001"].remaining_qty == Decimal("0.0")
+    assert len(runner.fills) == 2
+    assert runner.fills[1].fill_qty == Decimal("1.0")
+
 
 
 def _make_deterministic_event_stream() -> list[BacktestMarketEvent]:

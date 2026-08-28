@@ -146,8 +146,8 @@ class TestProvenanceTracker:
             status=BatchLifecycleStatus.PREPARED,
             source_id="binance",
             source_uri_or_path="mock://path",
-            raw_source_sha256="raw_123",
-            canonical_batch_sha256="canonical_123",
+            raw_source_sha256="a" * 64,
+            canonical_batch_sha256="b" * 64,
             schema_version="1.16.0",
             transform_version="v1",
             symbol="BTC/USDT",
@@ -188,8 +188,8 @@ class TestProvenanceTracker:
             source_uri_or_path="mock://path",
             part_file_path="part.parquet",
             ingest_time_utc="2026-01-01T10:00:00.000000Z",
-            raw_source_sha256="raw_hash",
-            canonical_batch_sha256="hash_A",
+            raw_source_sha256="a" * 64,
+            canonical_batch_sha256="b" * 64,
             schema_version="1.16.0",
             transform_version="v1",
             symbol="BTC/USDT",
@@ -218,8 +218,8 @@ class TestProvenanceTracker:
             source_uri_or_path="mock://path",
             part_file_path="part.parquet",
             ingest_time_utc="2026-01-01T10:00:00.000000Z",
-            raw_source_sha256="raw_hash",
-            canonical_batch_sha256="hash_DIFFERENT",
+            raw_source_sha256="a" * 64,
+            canonical_batch_sha256="c" * 64,
             schema_version="1.16.0",
             transform_version="v1",
             symbol="BTC/USDT",
@@ -231,3 +231,4 @@ class TestProvenanceTracker:
         )
         with pytest.raises(BatchCollisionError):
             tracker.append_provenance_record(rec1_collision)
+

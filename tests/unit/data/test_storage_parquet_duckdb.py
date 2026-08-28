@@ -84,7 +84,7 @@ class TestStorageAndPointInTime:
             batch_id=batch_id,
             source_id="binance",
             source_uri_or_path="mock://raw",
-            raw_source_sha256="raw_hash_001",
+            raw_source_sha256="a" * 64,
         )
         assert part_path.exists()
         assert "part-batch_unit_001.parquet" in part_path.name
@@ -105,7 +105,7 @@ class TestStorageAndPointInTime:
             batch_id=batch_id,
             source_id="binance",
             source_uri_or_path="mock://raw",
-            raw_source_sha256="raw_hash_001",
+            raw_source_sha256="a" * 64,
         )
         assert part_path_2 == part_path
         # No duplicate records
@@ -122,7 +122,7 @@ class TestStorageAndPointInTime:
             batch_id=batch_id,
             source_id="binance",
             source_uri_or_path="mock://raw",
-            raw_source_sha256="raw_hash_001",
+            raw_source_sha256="a" * 64,
         )
 
         with pytest.raises(BatchCollisionError):
@@ -131,7 +131,7 @@ class TestStorageAndPointInTime:
                 batch_id=batch_id,
                 source_id="binance",
                 source_uri_or_path="mock://raw",
-                raw_source_sha256="raw_hash_001",
+                raw_source_sha256="a" * 64,
             )
 
     def test_crash_recovery_part_published_missing_provenance(self, engine: ParquetStorageEngine) -> None:
@@ -149,7 +149,7 @@ class TestStorageAndPointInTime:
             status=BatchLifecycleStatus.PART_PUBLISHED,
             source_id="binance",
             source_uri_or_path="mock://raw",
-            raw_source_sha256="raw_hash",
+            raw_source_sha256="a" * 64,
             canonical_batch_sha256=c_hash,
             schema_version="1.16.0",
             transform_version="v1",
@@ -198,7 +198,7 @@ class TestStorageAndPointInTime:
             status=BatchLifecycleStatus.PART_PUBLISHED,
             source_id="binance",
             source_uri_or_path="mock://raw",
-            raw_source_sha256="raw_hash",
+            raw_source_sha256="a" * 64,
             canonical_batch_sha256=c_hash,
             schema_version="1.16.0",
             transform_version="v1",
@@ -222,7 +222,7 @@ class TestStorageAndPointInTime:
             source_uri_or_path="mock://raw",
             part_file_path=str(part_path).replace("\\", "/"),
             ingest_time_utc="2026-01-01T10:05:00.000000Z",
-            raw_source_sha256="raw_hash",
+            raw_source_sha256="a" * 64,
             canonical_batch_sha256=c_hash,
             schema_version="1.16.0",
             transform_version="v1",
@@ -276,7 +276,7 @@ class TestStorageAndPointInTime:
             batch_id="batch_part_001",
             source_id="binance",
             source_uri_or_path="mock://part1",
-            raw_source_sha256="raw1",
+            raw_source_sha256="1" * 64,
         )
 
         # Part 2: Historical backfill arriving later with knowledge_time = 11:00 UTC (Close = 105, seq = 2)
@@ -293,7 +293,7 @@ class TestStorageAndPointInTime:
             batch_id="batch_part_002_backfill",
             source_id="binance",
             source_uri_or_path="mock://part2",
-            raw_source_sha256="raw2",
+            raw_source_sha256="2" * 64,
         )
 
         # Query 1: As of 10:30 UTC -> Nothing known yet
@@ -347,7 +347,7 @@ class TestStorageAndPointInTime:
             batch_id="batch_source_a",
             source_id="binance",
             source_uri_or_path="mock://a",
-            raw_source_sha256="raw_a",
+            raw_source_sha256="a" * 64,
         )
 
         # Source B
@@ -363,8 +363,9 @@ class TestStorageAndPointInTime:
             batch_id="batch_source_b",
             source_id="dukascopy",
             source_uri_or_path="mock://b",
-            raw_source_sha256="raw_b",
+            raw_source_sha256="b" * 64,
         )
+
 
         # Query PIT as of 11:00 UTC
         res = duckdb_storage.query_point_in_time(

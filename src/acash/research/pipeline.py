@@ -338,8 +338,10 @@ class AlphaResearchPipeline:
                 hypothesis=hypothesis,
                 hac_policy=hac_cfg,
                 cost_config=cost_cfg,
+                signal_config=sig_cfg,
             )
             oos_beta = oos_result.beta
+
             oos_t_stat = oos_result.hac_t_stat
             oos_r_ic = oos_result.spearman_rank_ic
 

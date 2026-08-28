@@ -248,10 +248,11 @@ def transform_feature_to_signal(
     elif config.method == SignalTransformMethod.SIGN:
         s = np.sign(f_arr) * dir_mult
     elif config.method == SignalTransformMethod.IDENTITY_CLIPPED:
-        clip_val = float(config.clip_limit)
-        s = np.clip(f_arr, -clip_val, clip_val) * dir_mult
+        # Strict contract: S(X) in [-1.0, +1.0]
+        s = np.clip(f_arr, -1.0, 1.0) * dir_mult
     else:
         s = np.sign(f_arr) * dir_mult
+
 
     return [to_decimal18(Decimal(f"{float(val):.18f}")) or Decimal("0") for val in s]
 

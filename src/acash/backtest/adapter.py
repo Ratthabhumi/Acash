@@ -109,6 +109,20 @@ class BacktestMarketEvent:
     row_sub_index: int
     payload: Dict[str, Any]
 
+    def __post_init__(self) -> None:
+        # Enforce ASCII-only validation for source_order_key
+        try:
+            object.__setattr__(self, "_source_order_key_bytes", self.source_order_key.encode("ascii"))
+        except UnicodeEncodeError as exc:
+            raise DataContractError(
+                f"source_order_key must contain ASCII-only characters: '{self.source_order_key}'"
+            ) from exc
+
+    @property
+    def source_order_key_bytes(self) -> bytes:
+        """Byte-level representation for unambiguous unsigned ASCII comparison."""
+        return getattr(self, "_source_order_key_bytes", self.source_order_key.encode("ascii"))
+
     @property
     def event_time_utc(self) -> datetime:
         """Derive UTC datetime from nanosecond timestamp using integer divmod."""
@@ -117,11 +131,11 @@ class BacktestMarketEvent:
         return datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
     @property
-    def order_tuple(self) -> Tuple[int, str, int, str, int]:
-        """5-tuple total ordering key aligning with Phase 3B Data Contract."""
+    def order_tuple(self) -> Tuple[int, bytes, int, str, int]:
+        """5-tuple total ordering key aligning with Phase 3B Data Contract using explicit byte ordering."""
         return (
             self.event_timestamp_ns,
-            self.source_order_key,
+            self.source_order_key_bytes,
             self.message_rank,
             self.stream_id,
             self.row_sub_index,
@@ -223,7 +237,12 @@ class CanonicalDataAdapter:
 
         ts_col = table["exchange_time_utc"] if "exchange_time_utc" in table.column_names else table["timestamp_utc"]
         trade_id_col = table["trade_id"] if "trade_id" in table.column_names else None
-        seq_col = table["sequence_num"] if "sequence_num" in table.column_names else None
+        seq_col = (
+            table["source_seq_num"]
+            if "source_seq_num" in table.column_names
+            else (table["sequence_num"] if "sequence_num" in table.column_names else None)
+        )
+        channel_id_col = table["channel_id"] if "channel_id" in table.column_names else None
         price_col = table["price"]
         size_col = table["size"]
         side_col = table["aggressor_side"] if "aggressor_side" in table.column_names else None
@@ -243,13 +262,15 @@ class CanonicalDataAdapter:
 
             if source_key_col is not None:
                 source_key = str(source_key_col[i].as_py())
+            elif seq_val is not None:
+                chan_val = str(channel_id_col[i].as_py()) if channel_id_col is not None and channel_id_col[i].as_py() is not None else "0"
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}"
             elif trade_id_val is not None:
                 source_key = f"{symbol}:{stream_id}:{ts_ns}:trd_{trade_id_val}"
-            elif seq_val is not None:
-                source_key = f"{symbol}:{stream_id}:{ts_ns}:seq_{seq_val}"
             else:
                 fp = hashlib.sha256(f"{ts_ns}:{px}:{sz}:{side}".encode("utf-8")).hexdigest()[:16]
                 source_key = f"{symbol}:{stream_id}:{ts_ns}:{fp}"
+
 
             if source_key in seen_keys and source_key_col is None:
                 raise DataContractError(f"STATE_UNORDERABLE: Identical duplicate trade rows detected without unique discriminator at timestamp {ts_ns}.")

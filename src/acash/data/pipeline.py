@@ -104,13 +104,20 @@ class IngestionPipeline:
             existing_lookup = self.storage_engine.get_existing_revisions_lookup(
                 unique_streams, exclude_batch_ids=candidate_batch_ids
             )
+            existing_event_max_seq = self.storage_engine.get_existing_event_max_seq(
+                unique_streams, exclude_batch_ids=candidate_batch_ids
+            )
         else:
             existing_lookup = {}
+            existing_event_max_seq = {}
 
-        # Validate integrity with existing revisions lookup
+        # Validate integrity with existing revisions lookup and existing event max sequence
         report, validated_table = self.validator.validate_table(
-            raw_table, existing_revisions_lookup=existing_lookup
+            raw_table,
+            existing_revisions_lookup=existing_lookup,
+            existing_event_max_seq=existing_event_max_seq,
         )
+
 
         if not report.is_valid:
             error_msg = f"Validation failed with {report.error_count} fatal errors."

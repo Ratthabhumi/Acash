@@ -60,7 +60,7 @@ def test_trades_commit_batch_and_storage_layout(tmp_path: Path) -> None:
         table=table,
         source_id="CME",
         source_uri="cme://md3/ch310",
-        raw_source_sha256="dummy_raw_sha256",
+        raw_source_sha256="a" * 64,
     )
 
     # 1. Verify part path partition layout: symbol/year=YYYY/date=YYYY-MM-DD/part-{batch_id}.parquet
@@ -100,7 +100,7 @@ def test_trades_storage_replay_idempotency_and_collision(tmp_path: Path) -> None
         table=table,
         source_id="CME",
         source_uri="cme://md3/ch310",
-        raw_source_sha256="dummy_raw_sha256",
+        raw_source_sha256="a" * 64,
     )
 
     # Replay with identical table
@@ -109,7 +109,7 @@ def test_trades_storage_replay_idempotency_and_collision(tmp_path: Path) -> None
         table=table,
         source_id="CME",
         source_uri="cme://md3/ch310",
-        raw_source_sha256="dummy_raw_sha256",
+        raw_source_sha256="a" * 64,
     )
     assert part1 == part2
 
@@ -124,7 +124,7 @@ def test_trades_storage_replay_idempotency_and_collision(tmp_path: Path) -> None
             table=tbl_mod,
             source_id="CME",
             source_uri="cme://md3/ch310",
-            raw_source_sha256="dummy_raw_sha256",
+            raw_source_sha256="a" * 64,
         )
 
 
@@ -154,7 +154,7 @@ def test_trades_crash_recovery_and_quarantine(tmp_path: Path) -> None:
         status=BatchLifecycleStatus.PART_PUBLISHED,
         source_id="CME",
         source_uri_or_path="cme://md3/ch310",
-        raw_source_sha256="raw_sha",
+        raw_source_sha256="a" * 64,
         canonical_batch_sha256=hash_val,
         schema_version="1.3.0",
         transform_version="1.0.0",
@@ -206,7 +206,7 @@ def test_duckdb_point_in_time_trades_query(tmp_path: Path) -> None:
         table=tbl1,
         source_id="CME",
         source_uri="cme://md3/ch310",
-        raw_source_sha256="raw_1",
+        raw_source_sha256="1" * 64,
     )
 
     # Batch 2 ingested later at knowledge_time 14:30:20
@@ -216,8 +216,9 @@ def test_duckdb_point_in_time_trades_query(tmp_path: Path) -> None:
         table=tbl2,
         source_id="CME",
         source_uri="cme://md3/ch310",
-        raw_source_sha256="raw_2",
+        raw_source_sha256="2" * 64,
     )
+
 
     # PIT Query as-of 14:30:15 (should see only Batch 1, NOT Batch 2)
     as_of_t = datetime(2026, 1, 19, 14, 30, 15, tzinfo=timezone.utc)

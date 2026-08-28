@@ -404,8 +404,8 @@ class EventBacktestRunner:
             if order.order_type in (OrderType.MARKET, OrderType.IOC, OrderType.FOK):
                 self._execute_taker_order(order, event_timestamp_ns)
             elif order.order_type in (OrderType.LIMIT, OrderType.GTC):
-                matched = self._execute_maker_order(order, event_timestamp_ns, trade_event_payload)
-                if not matched and order.is_active:
+                self._execute_maker_order(order, event_timestamp_ns, trade_event_payload)
+                if order.is_active:
                     self.order_queue.append(order)
 
     def _execute_taker_order(self, order: SimulatedOrder, timestamp_ns: int) -> None:
@@ -527,7 +527,6 @@ class EventBacktestRunner:
             # MARKET, IOC, and FOK orders do NOT rest in queue; remainder is cancelled
             order.status = BacktestOrderStatus.CANCELLED
 
-
         # Track PnL statistics
         if realized_pnl > Decimal("0.0"):
             self.profitable_trades_count += 1
@@ -544,50 +543,74 @@ class EventBacktestRunner:
         trade_event_payload: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Attempt to fill resting limit order based on trade-through and queue priority emulation."""
-        if order.limit_price is None:
+        if order.limit_price is None or order.remaining_qty <= Decimal("0.0"):
             return False
 
         is_filled = False
+        fill_qty = Decimal("0.0")
 
         if trade_event_payload is not None:
-            trade_price = trade_event_payload["price"]
-            trade_size = trade_event_payload["size"]
+            trade_price = Decimal(str(trade_event_payload["price"]))
+            trade_size = Decimal(str(trade_event_payload["size"]))
             aggressor = str(trade_event_payload.get("aggressor_side", "UNKNOWN")).upper()
 
             if order.side == "BUY":
                 if trade_price < order.limit_price:
-                    # Trade-through: Market traded below buy limit -> Immediate fill
+                    # Trade-through: Market traded below buy limit -> entire price level surpassed
+                    fill_qty = min(order.remaining_qty, trade_size) if trade_size > Decimal("0.0") else order.remaining_qty
                     is_filled = True
                 elif trade_price == order.limit_price and aggressor in ("SELL", "UNKNOWN"):
-                    # Opposing sell aggressor trades at limit price: Decrement buy queue ahead
-                    order.queue_ahead_volume -= trade_size
-                    if order.queue_ahead_volume <= Decimal("0.0"):
+                    # Opposing sell aggressor trades at limit price
+                    if order.queue_ahead_volume > Decimal("0.0"):
+                        if trade_size > order.queue_ahead_volume:
+                            available_qty = trade_size - order.queue_ahead_volume
+                            order.queue_ahead_volume = Decimal("0.0")
+                            fill_qty = min(order.remaining_qty, available_qty)
+                            is_filled = True
+                        else:
+                            order.queue_ahead_volume -= trade_size
+                    else:
+                        # Already at top of queue
+                        fill_qty = min(order.remaining_qty, trade_size)
                         is_filled = True
             else:  # SELL limit
                 if trade_price > order.limit_price:
-                    # Trade-through: Market traded above sell limit -> Immediate fill
+                    # Trade-through: Market traded above sell limit -> entire price level surpassed
+                    fill_qty = min(order.remaining_qty, trade_size) if trade_size > Decimal("0.0") else order.remaining_qty
                     is_filled = True
                 elif trade_price == order.limit_price and aggressor in ("BUY", "UNKNOWN"):
-                    # Opposing buy aggressor trades at limit price: Decrement sell queue ahead
-                    order.queue_ahead_volume -= trade_size
-                    if order.queue_ahead_volume <= Decimal("0.0"):
+                    # Opposing buy aggressor trades at limit price
+                    if order.queue_ahead_volume > Decimal("0.0"):
+                        if trade_size > order.queue_ahead_volume:
+                            available_qty = trade_size - order.queue_ahead_volume
+                            order.queue_ahead_volume = Decimal("0.0")
+                            fill_qty = min(order.remaining_qty, available_qty)
+                            is_filled = True
+                        else:
+                            order.queue_ahead_volume -= trade_size
+                    else:
+                        # Already at top of queue
+                        fill_qty = min(order.remaining_qty, trade_size)
                         is_filled = True
         else:
             # Fallback for Bar/Depth trigger without discrete trade stream
             if self.last_price > Decimal("0.0"):
                 if order.side == "BUY" and self.last_price < order.limit_price:
+                    fill_qty = order.remaining_qty
                     is_filled = True
                 elif order.side == "SELL" and self.last_price > order.limit_price:
+                    fill_qty = order.remaining_qty
                     is_filled = True
                 elif not order.queue_initialized or order.queue_ahead_volume <= Decimal("0.0"):
                     if order.side == "BUY" and self.last_price <= order.limit_price:
+                        fill_qty = order.remaining_qty
                         is_filled = True
                     elif order.side == "SELL" and self.last_price >= order.limit_price:
+                        fill_qty = order.remaining_qty
                         is_filled = True
 
-        if is_filled:
+        if is_filled and fill_qty > Decimal("0.0"):
             executed_price = order.limit_price
-            fill_qty = order.remaining_qty
             fee_bps = self.config.fee_config.maker_fee_bps
             fee_paid = max(
                 Decimal("0.0"),
@@ -623,8 +646,11 @@ class EventBacktestRunner:
 
             order.cumulative_cost += executed_price * fill_qty
             order.filled_qty += fill_qty
-            order.remaining_qty = Decimal("0.0")
-            order.status = BacktestOrderStatus.FILLED
+            order.remaining_qty -= fill_qty
+            if order.remaining_qty == Decimal("0.0"):
+                order.status = BacktestOrderStatus.FILLED
+            else:
+                order.status = BacktestOrderStatus.PARTIALLY_FILLED
 
             if realized_pnl > Decimal("0.0"):
                 self.profitable_trades_count += 1
@@ -653,14 +679,24 @@ class EventBacktestRunner:
         canonical_data_hashes: Optional[List[str]] = None,
         phase4_analytical_edge_bps: Decimal = Decimal("0.0"),
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
-
         """Execute simulation over strictly sorted market event stream."""
         if canonical_data_hashes is None:
             canonical_data_hashes = []
 
         start_wall_clock = time.perf_counter()
 
-        for event in events:
+        # Boundary Event Ordering Monotonicity Enforcement
+
+        prev_order_tuple: Optional[Tuple[Any, ...]] = None
+        for idx, event in enumerate(events):
+            curr_order_tuple = event.order_tuple
+            if prev_order_tuple is not None and curr_order_tuple < prev_order_tuple:
+                raise DataContractError(
+                    f"Out-of-order event sequence detected at engine boundary at index {idx}: "
+                    f"current event {curr_order_tuple} precedes previous event {prev_order_tuple}."
+                )
+            prev_order_tuple = curr_order_tuple
+
             self.current_time_ns = event.event_timestamp_ns
             trade_payload: Optional[Dict[str, Any]] = None
 

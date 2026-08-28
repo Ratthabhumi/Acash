@@ -16,10 +16,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
+import re
 from typing import Any, Optional, Sequence
 import pyarrow as pa
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from acash.data.schema import (
     BatchCollisionError,
@@ -56,6 +57,13 @@ class BatchManifest(BaseModel):
     created_at_utc: str
     updated_at_utc: str
 
+    @field_validator("raw_source_sha256", "canonical_batch_sha256")
+    @classmethod
+    def validate_sha256_format(cls, v: str) -> str:
+        if not re.fullmatch(r"^[0-9a-f]{64}$", v):
+            raise ValueError(f"Invalid SHA-256 hash: '{v}'. Must be exactly 64 lowercase hexadecimal characters.")
+        return v
+
 
 class ProvenanceRecord(BaseModel):
     """Immutable audit record appended to the JSONL provenance ledger."""
@@ -80,6 +88,13 @@ class ProvenanceRecord(BaseModel):
     error_count: int = 0
     warning_count: int = 0
 
+    @field_validator("raw_source_sha256", "canonical_batch_sha256")
+    @classmethod
+    def validate_sha256_format(cls, v: str) -> str:
+        if not re.fullmatch(r"^[0-9a-f]{64}$", v):
+            raise ValueError(f"Invalid SHA-256 hash: '{v}'. Must be exactly 64 lowercase hexadecimal characters.")
+        return v
+
 
 def calculate_raw_source_sha256(raw_bytes: bytes) -> str:
     """Calculate SHA-256 hash over raw input payload bytes."""
@@ -95,37 +110,36 @@ def calculate_canonical_content_fingerprint(
     quote_volume: Decimal,
     trade_count: int,
 ) -> str:
-    """Calculate deterministic SHA-256 fingerprint over canonical revision fields.
+    """Calculate deterministic SHA-256 fingerprint over canonical revision fields."""
+    payload = {
+        "open": str(open_price),
+        "high": str(high_price),
+        "low": str(low_price),
+        "close": str(close_price),
+        "volume": str(volume),
+        "quote_volume": str(quote_volume),
+        "trade_count": trade_count,
+    }
+    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
-    Used strictly as an intra-batch tie-breaker for newly accepted revisions sharing
-    the same knowledge_time_utc in the same acceptance operation.
-    """
-    hasher = hashlib.sha256()
-    # Normalize decimals to 18 scale fixed decimal strings
-    for dec in (open_price, high_price, low_price, close_price, volume, quote_volume):
-        norm_str = f"{dec:.18f}".encode("utf-8")
-        hasher.update(norm_str)
-        hasher.update(b"|")
-    hasher.update(str(trade_count).encode("utf-8"))
-    return hasher.hexdigest()
 
-
-# Binary frame constants
+# Type tags for length-prefixed binary serialization
 NULL_UINT32_TAG = 0xFFFFFFFF
 NULL_INT64_SENTINEL = -9223372036854775808
 RECORD_SEPARATOR_BYTE = b"\x1e"
 
 
 def _encode_str(val: Optional[str]) -> bytes:
-    """Encode string with 4-byte big-endian length prefix."""
+    """Encode UTF-8 string with 4-byte big-endian length prefix."""
     if val is None:
         return struct.pack(">I", NULL_UINT32_TAG)
-    b = str(val).encode("utf-8")
+    b = val.encode("utf-8")
     return struct.pack(">I", len(b)) + b
 
 
 def _encode_dec(val: Optional[Decimal]) -> bytes:
-    """Encode Decimal with 4-byte big-endian length prefix and fixed 18-scale ASCII."""
+    """Encode Decimal as fixed 18-decimal ASCII string with 4-byte length prefix."""
     if val is None:
         return struct.pack(">I", NULL_UINT32_TAG)
     b = f"{val:.18f}".encode("ascii")
@@ -167,9 +181,6 @@ def calculate_canonical_batch_sha256(table: pa.Table) -> str:
     3. Independent of Parquet compression, page/chunk layout, row group boundaries,
        or input row ordering.
     """
-    if table.num_rows == 0:
-        return hashlib.sha256(b"EMPTY_TABLE").hexdigest()
-
     # Fail-fast if any canonical schema columns are missing
     missing_columns = [col for col in CANONICAL_COLUMN_NAMES if col not in table.column_names]
     if missing_columns:
@@ -177,6 +188,9 @@ def calculate_canonical_batch_sha256(table: pa.Table) -> str:
         raise DataContractError(
             f"Cannot compute canonical batch hash: table is missing required canonical columns: {missing_columns}"
         )
+
+    if table.num_rows == 0:
+        return hashlib.sha256(b"EMPTY_TABLE").hexdigest()
 
     # Sort table strictly by Revision Identity
     sort_keys = [

@@ -220,7 +220,9 @@ def test_nautilus_substrate_empty_catalog_rejection() -> None:
                 strategy_config_hash="0" * 64,
                 pyproject_toml_sha256="0" * 64,
                 git_commit_hash="a" * 40,
+                canonical_data_hashes=["a" * 64],
             )
+
 
 
 @pytest.mark.nautilus
@@ -258,7 +260,8 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
 
         # Provenance metadata
         pyproject_sha, uv_lock_sha, git_commit = load_current_environment_provenance()
-        valid_sha = "0" * 64
+        valid_sha = "a" * 64
+        data_sha = "b" * 64
 
         assert substrate.nautilus_version == "1.231.0"
         assert substrate.python_version.startswith("3.")
@@ -267,10 +270,12 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
             catalog_path=cat_dir,
             hypothesis_spec_sha256=valid_sha,
             strategy_config_hash=valid_sha,
+            canonical_data_hashes=[data_sha],
             pyproject_toml_sha256=pyproject_sha,
             uv_lock_sha256=uv_lock_sha,
             git_commit_hash=git_commit,
         )
+
 
         # 3. Assertions proving real execution
         assert manifest is not None
@@ -281,7 +286,11 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
 
         # Assert non-empty canonical Arrow tables emitted
         assert fills_table.num_rows == 1
-        assert equity_table.num_rows == 1
+        assert equity_table.num_rows == 2
+        pydict_eq = equity_table.to_pydict()
+        assert pydict_eq["unrealized_pnl"][0] == Decimal("0.0")
+        assert pydict_eq["unrealized_pnl"][1] == Decimal("300.0")
+        assert pydict_eq["margin_utilized"][1] == Decimal("25040.0")
 
         # Check fill details
         pydict_fills = fills_table.to_pydict()
@@ -289,6 +298,7 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
         assert pydict_fills["side"][0] == "BUY"
         assert pydict_fills["fill_price"][0] == Decimal("5002.00")
         assert pydict_fills["fill_qty"][0] == Decimal("1")
+
 
         # 4. Assert exact double-entry internal conservation on real fills
         substrate.shadow_ledger.verify_internal_conservation()

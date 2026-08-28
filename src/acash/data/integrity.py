@@ -101,6 +101,7 @@ class DataIntegrityValidator:
         self,
         table: pa.Table,
         existing_revisions_lookup: Optional[Dict[Tuple[str, str, str, datetime, datetime, int], bool]] = None,
+        existing_event_max_seq: Optional[Dict[Tuple[str, str, str, datetime], int]] = None,
     ) -> Tuple[ValidationReport, pa.Table]:
         """Validate a PyArrow table per stream and deterministically assign revision_seq if needed.
 
@@ -110,18 +111,21 @@ class DataIntegrityValidator:
         errors: List[ValidationErrorRecord] = []
         warnings: List[ValidationAnomalyRecord] = []
 
-        if table.num_rows == 0:
-            from acash.data.schema import CANONICAL_COLUMN_NAMES
-            missing = [c for c in CANONICAL_COLUMN_NAMES if c not in table.column_names]
-            if missing:
-                errors.append(
-                    ValidationErrorRecord(
-                        rule="EMPTY_TABLE_SCHEMA_MISMATCH",
-                        message=f"Empty table is missing required canonical columns: {missing}",
-                        stream_key="GLOBAL:EMPTY",
-                    )
+        from acash.data.schema import CANONICAL_COLUMN_NAMES
+        missing = [c for c in CANONICAL_COLUMN_NAMES if c not in table.column_names]
+        if missing:
+            rule_name = "EMPTY_TABLE_SCHEMA_MISMATCH" if table.num_rows == 0 else "SCHEMA_CONFORMANCE"
+            errors.append(
+                ValidationErrorRecord(
+                    rule=rule_name,
+                    message=f"Table is missing required canonical columns: {missing}",
+                    stream_key="GLOBAL:SCHEMA",
                 )
-                return ValidationReport(is_valid=False, errors=errors, warnings=[]), table
+            )
+            return ValidationReport(is_valid=False, errors=errors, warnings=[]), table
+
+
+        if table.num_rows == 0:
             report = ValidationReport(
                 is_valid=True,
                 errors=[],
@@ -129,7 +133,6 @@ class DataIntegrityValidator:
                 metrics=ValidationMetrics(total_rows=0, stream_count=0),
             )
             return report, table
-
 
         # Convert table to records for per-stream processing
         rows = table.to_pylist()
@@ -157,10 +160,12 @@ class DataIntegrityValidator:
                 stream_key=stream_key,
                 stream_items=stream_items,
                 existing_revisions_lookup=existing_revisions_lookup,
+                existing_event_max_seq=existing_event_max_seq,
             )
             errors.extend(stream_errors)
             warnings.extend(stream_warnings)
             processed_rows.extend(sequenced_stream_rows)
+
 
             for r in sequenced_stream_rows:
                 estart = r["event_start_utc"]
@@ -237,11 +242,13 @@ class DataIntegrityValidator:
         stream_key: Tuple[str, str, str],
         stream_items: List[Tuple[int, Dict[str, Any]]],
         existing_revisions_lookup: Optional[Dict[Tuple[str, str, str, datetime, datetime, int], bool]] = None,
+        existing_event_max_seq: Optional[Dict[Tuple[str, str, str, datetime], int]] = None,
     ) -> Tuple[List[ValidationErrorRecord], List[ValidationAnomalyRecord], List[Dict[str, Any]]]:
         """Validate an individual stream and assign deterministic revision sequences."""
         errors: List[ValidationErrorRecord] = []
         warnings: List[ValidationAnomalyRecord] = []
         stream_str = f"{stream_key[0]}:{stream_key[1]}:{stream_key[2]}"
+
 
         # Step 1: Validate individual row boundaries, finite decimals, positive prices, etc.
         validated_stream_rows: List[Dict[str, Any]] = []
@@ -406,6 +413,8 @@ class DataIntegrityValidator:
         sequenced_stream_rows: List[Dict[str, Any]] = []
         for estart in distinct_event_starts:
             group = event_groups[estart]
+            event_obs_key = (stream_key[0], stream_key[1], stream_key[2], estart)
+            existing_max = existing_event_max_seq.get(event_obs_key, 0) if existing_event_max_seq is not None else 0
 
             # Check if source provided revision_seq
             has_source_seq = all(
@@ -442,7 +451,7 @@ class DataIntegrityValidator:
                         trade_count=r["trade_count"],
                     )
 
-                # Check duplicate content at same knowledge time
+                # Check duplicate content at same knowledge time within the batch
                 seen_knowledge_content: set[Tuple[datetime, str]] = set()
                 for r in group:
                     kc_key = (r["knowledge_time_utc"], r["_fingerprint"])
@@ -458,12 +467,15 @@ class DataIntegrityValidator:
                         ))
                     seen_knowledge_content.add(kc_key)
 
-                # Deterministic sorting for unpersisted revisions: knowledge_time_utc ASC -> canonical_content_fingerprint ASC
+                # Deterministic sorting for incoming unpersisted revisions:
+                # knowledge_time_utc ASC -> canonical_content_fingerprint ASC
                 group.sort(key=lambda r: (r["knowledge_time_utc"], r["_fingerprint"]))
                 for seq_idx, r in enumerate(group, start=1):
-                    r["revision_seq"] = seq_idx
+                    # Continue from existing max sequence for this exact event observation
+                    r["revision_seq"] = existing_max + seq_idx
                     r.pop("_fingerprint", None)
                     sequenced_stream_rows.append(r)
+
 
         # Step 5: Validate global Revision Identity uniqueness against existing dataset
         if existing_revisions_lookup is not None:

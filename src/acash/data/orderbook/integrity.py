@@ -142,7 +142,7 @@ class OrderBookIntegrityValidator:
                     f"GLOBAL_SNAPSHOT_IDENTITY_DUPLICATE: Snapshot Row Identity already exists in storage: {row_id}"
                 )
 
-            # E. Frame Metadata Consistency Check
+            # E. Frame Metadata Consistency & Price Level Uniqueness Check
             snap_id = str(pydict["snapshot_id"][i])
             row_meta = {
                 "exchange_time_utc": pydict["exchange_time_utc"][i],
@@ -163,6 +163,15 @@ class OrderBookIntegrityValidator:
                         raise IntegrityViolationError(
                             f"FRAME_METADATA_INCONSISTENCY: Snapshot frame '{snap_id}' has conflicting metadata for '{k}': {existing_meta[k]} != {v}"
                         )
+
+            # F. Price Level Uniqueness per Side within Snapshot Frame
+            snap_side_key = (snap_id, side, px)
+            if snap_side_key in seen_batch_identities:
+                raise IntegrityViolationError(
+                    f"DUPLICATE_PRICE_LEVEL: Duplicate price level {px} detected for side {side} in snapshot frame '{snap_id}'"
+                )
+            seen_batch_identities.add(snap_side_key)
+
 
         metrics = ValidationMetrics(
             total_rows=num_rows,

@@ -56,7 +56,9 @@ def serialize_timestamp_ns_binary(val: Optional[Union[datetime, int]]) -> bytes:
         return NULL_INT64_SENTINEL
     if isinstance(val, int):
         return struct.pack(">q", val)
-    epoch_ns = int(val.astimezone(timezone.utc).timestamp() * 1_000_000_000)
+    dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+    td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    epoch_ns = (td.days * 86400 + td.seconds) * 1_000_000_000 + td.microseconds * 1_000
     return struct.pack(">q", epoch_ns)
 
 
@@ -66,8 +68,11 @@ def serialize_timestamp_us_binary(val: Optional[Union[datetime, int]]) -> bytes:
         return NULL_INT64_SENTINEL
     if isinstance(val, int):
         return struct.pack(">q", val)
-    epoch_us = int(val.astimezone(timezone.utc).timestamp() * 1_000_000)
+    dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+    td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    epoch_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
     return struct.pack(">q", epoch_us)
+
 
 
 def serialize_date32_binary(val: Optional[Union[date, str]]) -> bytes:

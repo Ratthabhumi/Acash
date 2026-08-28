@@ -79,7 +79,7 @@ def test_orderbook_storage_commit_and_idempotency() -> None:
             table=snap_tbl,
             source_id="CME",
             source_uri="s3://cme/snap1",
-            raw_source_sha256="abc123raw",
+            raw_source_sha256="a" * 64,
         )
         assert p1.exists()
 
@@ -89,7 +89,7 @@ def test_orderbook_storage_commit_and_idempotency() -> None:
             table=snap_tbl,
             source_id="CME",
             source_uri="s3://cme/snap1",
-            raw_source_sha256="abc123raw",
+            raw_source_sha256="a" * 64,
         )
         assert p1 == p2
 
@@ -104,7 +104,7 @@ def test_orderbook_storage_commit_and_idempotency() -> None:
                 table=tbl_mod,
                 source_id="CME",
                 source_uri="s3://cme/snap1",
-                raw_source_sha256="abc123raw",
+                raw_source_sha256="a" * 64,
             )
 
 
@@ -127,7 +127,7 @@ def test_duckdb_two_stage_multi_row_pit_query_and_reconstruction() -> None:
             table=snap_tbl,
             source_id="CME",
             source_uri="s3://cme/snap1",
-            raw_source_sha256="raw_snap_1",
+            raw_source_sha256="1" * 64,
         )
 
         # Commit Delta 1 at T=14:30:00.100 (knowledge T=14:30:01) -> updates Bid size to 35
@@ -138,7 +138,7 @@ def test_duckdb_two_stage_multi_row_pit_query_and_reconstruction() -> None:
             table=delta_tbl1,
             source_id="CME",
             source_uri="s3://cme/delta1",
-            raw_source_sha256="raw_delta_1",
+            raw_source_sha256="2" * 64,
         )
 
         # Commit Delta 2 (Late arrived knowledge at T=14:30:05, exchange time T=14:30:00.200) -> updates Bid size to 99
@@ -151,8 +151,9 @@ def test_duckdb_two_stage_multi_row_pit_query_and_reconstruction() -> None:
             table=pa.Table.from_pydict(delta_pydict2, schema=CANONICAL_BOOK_DELTA_SCHEMA),
             source_id="CME",
             source_uri="s3://cme/delta2",
-            raw_source_sha256="raw_delta_2",
+            raw_source_sha256="3" * 64,
         )
+
 
         # Query 1: As of knowledge T=14:30:02 (Delta 2 is NOT knowable yet) -> Bid size should be 35
         state_as_of_2 = engine.point_in_time_reconstruct(

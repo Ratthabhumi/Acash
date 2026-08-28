@@ -107,9 +107,56 @@ class ParquetStorageEngine:
                     continue
         return lookup
 
+    def get_existing_event_max_seq(
+        self,
+        streams: Sequence[Tuple[str, str, str]],
+        exclude_batch_ids: Optional[Sequence[str]] = None,
+    ) -> Dict[Tuple[str, str, str, datetime], int]:
+        """Scan existing Parquet parts and compute max revision_seq for each Event Observation (source, symbol, tf, event_start_utc)."""
+        max_seq_map: Dict[Tuple[str, str, str, datetime], int] = {}
+        excluded_set = set(exclude_batch_ids or [])
+
+        for source_id, symbol, timeframe in streams:
+            normalized_symbol = symbol.replace("/", "-").upper()
+            stream_dir = self.base_dir / normalized_symbol / timeframe.upper()
+            if not stream_dir.exists():
+                continue
+            for part_path in stream_dir.glob("year=*/*.parquet"):
+                if part_path.name.startswith(".tmp_"):
+                    continue
+                part_stem = part_path.stem
+                if any(part_stem == f"part-{ex_id}" for ex_id in excluded_set):
+                    continue
+
+                try:
+                    tbl = pq.read_table(
+                        part_path,
+                        columns=[
+                            "source_id", "symbol", "timeframe",
+                            "event_start_utc", "revision_seq"
+                        ]
+                    )
+                    rows = tbl.to_pylist()
+                    for r in rows:
+                        estart = r["event_start_utc"]
+                        if isinstance(estart, datetime) and estart.tzinfo is None:
+                            estart = estart.replace(tzinfo=timezone.utc)
+                        event_key = (
+                            str(r["source_id"]),
+                            str(r["symbol"]),
+                            str(r["timeframe"]),
+                            estart,
+                        )
+                        seq_val = int(r["revision_seq"])
+                        if event_key not in max_seq_map or seq_val > max_seq_map[event_key]:
+                            max_seq_map[event_key] = seq_val
+                except Exception:
+                    continue
+        return max_seq_map
 
 
     def write_canonical_part(
+
         self,
         table: pa.Table,
         batch_id: str,

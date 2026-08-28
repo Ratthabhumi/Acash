@@ -344,8 +344,14 @@ class NautilusTraderSubstrate:
                 f"For native sovereign simulations, use ACASHNativeBacktestEngine (EventBacktestRunner)."
             )
 
+        if not canonical_data_hashes:
+            raise DataContractError(
+                "canonical_data_hashes is mandatory and must contain non-empty cryptographic digests for Nautilus backtest execution."
+            )
+
         # Real NautilusTrader execution loop
         engine_mod = importlib.import_module("nautilus_trader.backtest.engine")
+
         id_mod = importlib.import_module("nautilus_trader.model.identifiers")
         enums_mod = importlib.import_module("nautilus_trader.model.enums")
         obj_mod = importlib.import_module("nautilus_trader.model.objects")
@@ -374,11 +380,14 @@ class NautilusTraderSubstrate:
         Strategy = getattr(strat_mod, "Strategy")
         StrategyConfig = getattr(strat_mod, "StrategyConfig")
 
-        # 1. Configure and instantiate BacktestEngine
+        # 1. Retrieve Effective Instrument Specification
+        inst_spec = self.config.get_effective_instrument_spec()
+
+        # 2. Configure and instantiate BacktestEngine
         nautilus_engine_config = BacktestEngineConfig(trader_id=TraderId("ACASH-SOVEREIGN-001"))
         engine = BacktestEngine(config=nautilus_engine_config)
 
-        # 2. Add Venue Config
+        # 3. Add Venue Config
         engine.add_venue(
             venue=Venue("SIM"),
             oms_type=OmsType.NETTING,
@@ -387,17 +396,19 @@ class NautilusTraderSubstrate:
             starting_balances=[Money.from_str(f"{self.config.initial_cash} {self.config.base_currency}")],
         )
 
-        # 3. Register Futures Contract Instrument
+        # 4. Register Instrument according to InstrumentSpecification
         inst_id_str = f"{self.config.symbol}.SIM"
+        asset_class_enum = getattr(AssetClass, inst_spec.asset_class, AssetClass.INDEX)
+
         inst = FuturesContract(
             instrument_id=InstrumentId.from_str(inst_id_str),
             raw_symbol=Symbol(self.config.symbol),
-            asset_class=AssetClass.INDEX,
+            asset_class=asset_class_enum,
             currency=Currency.from_str(self.config.base_currency),
-            price_precision=2,
-            price_increment=Price.from_str("0.25"),
-            multiplier=Quantity.from_int(50),
-            lot_size=Quantity.from_int(1),
+            price_precision=inst_spec.price_precision,
+            price_increment=Price.from_str(_format_nautilus_price(inst_spec.price_increment, inst_spec.price_precision)),
+            multiplier=Quantity.from_int(int(inst_spec.multiplier)),
+            lot_size=Quantity.from_int(int(inst_spec.lot_size)),
             underlying=self.config.symbol,
             activation_ns=1577836800_000_000_000,
             expiration_ns=2000000000_000_000_000,
@@ -406,7 +417,7 @@ class NautilusTraderSubstrate:
         )
         engine.add_instrument(inst)
 
-        # 4. Open Catalog & Load Data
+        # 5. Open Catalog & Load Data
         catalog = ParquetDataCatalog(str(catalog_path))
         bar_type_str = f"{inst_id_str}-{bar_spec}"
         nautilus_bar_type = BarType.from_str(bar_type_str)
@@ -424,7 +435,7 @@ class NautilusTraderSubstrate:
         if loaded_ticks:
             engine.add_data(loaded_ticks)
 
-        # 5. Define and Register ACASH Bridge Strategy
+        # 6. Define and Register ACASH Bridge Strategy
         class ACASHBridgeStrategy(Strategy):  # type: ignore
             def __init__(self, strat_cfg: Any, actor: Any = None) -> None:
                 super().__init__(strat_cfg)
@@ -443,7 +454,7 @@ class NautilusTraderSubstrate:
                     order = self.order_factory.market(
                         instrument_id=InstrumentId.from_str(inst_id_str),
                         order_side=OrderSide.BUY,
-                        quantity=Quantity.from_int(1),
+                        quantity=Quantity.from_int(int(inst_spec.lot_size)),
                     )
                     self.submit_order(order)
                     self._submitted = True
@@ -452,10 +463,10 @@ class NautilusTraderSubstrate:
         strategy_instance = ACASHBridgeStrategy(strat_cfg=strat_conf, actor=self.strategy_actor)
         engine.add_strategy(strategy_instance)
 
-        # 6. Execute Engine Simulation
+        # 7. Execute Engine Simulation
         engine.run()
 
-        # 7. Extract fills report and re-account every fill in ACASH Shadow Accounting Ledger
+        # 8. Extract fills report and re-account every fill in ACASH Shadow Accounting Ledger
         fills_report = engine.trader.generate_order_fills_report()
         fill_records: List[Dict[str, Any]] = []
         equity_records: List[Dict[str, Any]] = []
@@ -500,10 +511,38 @@ class NautilusTraderSubstrate:
                     "slippage_incurred_bps": Decimal("0.0"),
                 })
 
-                # Record equity snapshot
+        # 9. Mark-to-market equity curve calculation across bars
+        if loaded_bars:
+            for bar in loaded_bars:
+                bar_ts_ns = int(bar.ts_event)
+                bar_close = Decimal(str(bar.close))
+                self.shadow_ledger.update_market_price(inst_id_str, bar_close)
+                pos_state = self.shadow_ledger.positions.get(inst_id_str, ShadowPositionState(symbol=inst_id_str))
+                signed_pos = pos_state.quantity
+                avg_entry = pos_state.avg_entry_price
+
+                # Exact formula: signed_pos * (mark_price - avg_entry) * multiplier
+                unrealized_pnl = signed_pos * (bar_close - avg_entry) * inst_spec.multiplier
+                margin_util = abs(signed_pos) * bar_close * inst_spec.multiplier * inst_spec.margin_requirement_rate
+                tot_equity = self.shadow_ledger.calculate_balance_sheet_equity()
+
+                equity_records.append({
+                    "timestamp_utc": pa.scalar(bar_ts_ns, type=pa.timestamp("ns", tz="UTC")),
+                    "cash_balance": self.shadow_ledger.cash_balance,
+                    "realized_pnl": self.shadow_ledger.cumulative_realized_pnl,
+                    "unrealized_pnl": unrealized_pnl,
+                    "total_equity": tot_equity,
+                    "margin_utilized": margin_util,
+                    "accounting_residual": Decimal("0.0"),
+                })
+
+        elif fill_records:
+            # Fallback if no bars loaded
+            for r in fill_records:
+                ts_scalar = r["fill_timestamp_utc"]
                 eq_bal = self.shadow_ledger.calculate_balance_sheet_equity()
                 equity_records.append({
-                    "timestamp_utc": pa.scalar(ts_ns_val, type=pa.timestamp("ns", tz="UTC")),
+                    "timestamp_utc": ts_scalar,
                     "cash_balance": self.shadow_ledger.cash_balance,
                     "realized_pnl": self.shadow_ledger.cumulative_realized_pnl,
                     "unrealized_pnl": Decimal("0.0"),
@@ -512,10 +551,10 @@ class NautilusTraderSubstrate:
                     "accounting_residual": Decimal("0.0"),
                 })
 
-        # 8. Verify Internal Conservation
+        # 10. Verify Internal Conservation
         self.shadow_ledger.verify_internal_conservation()
 
-        # 9. Build Non-Empty Canonical Tables
+        # 11. Build Non-Empty Canonical Tables
         if fill_records:
             fills_table = pa.Table.from_pydict({
                 "fill_id": [r["fill_id"] for r in fill_records],
@@ -529,7 +568,10 @@ class NautilusTraderSubstrate:
                 "liquidity_type": [r["liquidity_type"] for r in fill_records],
                 "slippage_incurred_bps": [r["slippage_incurred_bps"] for r in fill_records],
             }, schema=CANONICAL_BACKTEST_FILLS_SCHEMA)
+        else:
+            fills_table = pa.Table.from_batches([], schema=CANONICAL_BACKTEST_FILLS_SCHEMA)
 
+        if equity_records:
             equity_table = pa.Table.from_pydict({
                 "timestamp_utc": pa.array([r["timestamp_utc"].as_py() for r in equity_records], type=pa.timestamp("ns", tz="UTC")),
                 "cash_balance": [r["cash_balance"] for r in equity_records],
@@ -540,13 +582,13 @@ class NautilusTraderSubstrate:
                 "accounting_residual": [r["accounting_residual"] for r in equity_records],
             }, schema=CANONICAL_EQUITY_CURVE_SCHEMA)
         else:
-            fills_table = pa.Table.from_batches([], schema=CANONICAL_BACKTEST_FILLS_SCHEMA)
             equity_table = pa.Table.from_batches([], schema=CANONICAL_EQUITY_CURVE_SCHEMA)
 
-        # 10. Build Manifest
+        # 12. Build Manifest
         num_fills = len(fill_records)
         tot_vol = sum((r["fill_qty"] for r in fill_records), Decimal("0.0"))
         tot_fees = sum((r["fee_paid"] for r in fill_records), Decimal("0.0"))
+        final_equity = equity_records[-1]["total_equity"] if equity_records else self.shadow_ledger.calculate_balance_sheet_equity()
 
         summary = BacktestExecutionSummary(
             total_orders=num_fills,
@@ -554,9 +596,9 @@ class NautilusTraderSubstrate:
             total_volume_traded=tot_vol,
             total_fees_paid=tot_fees,
             realized_pnl=self.shadow_ledger.cumulative_realized_pnl,
-            unrealized_pnl=Decimal("0.0"),
-            ending_equity=self.shadow_ledger.calculate_balance_sheet_equity(),
-            net_return_pct=((self.shadow_ledger.calculate_balance_sheet_equity() - self.config.initial_cash) / self.config.initial_cash) * Decimal("100"),
+            unrealized_pnl=equity_records[-1]["unrealized_pnl"] if equity_records else Decimal("0.0"),
+            ending_equity=final_equity,
+            net_return_pct=((final_equity - self.config.initial_cash) / self.config.initial_cash) * Decimal("100"),
             max_drawdown_pct=Decimal("0.0"),
             win_rate_pct=Decimal("0.0"),
         )
@@ -569,13 +611,28 @@ class NautilusTraderSubstrate:
             queue_position_drag_bps=Decimal("0.0"),
         )
 
-        manifest_id = f"bkt_NAUTILUS_{self.config.symbol}_{hypothesis_spec_sha256[:16]}"
+        if not canonical_data_hashes:
+            raise DataContractError(
+                "canonical_data_hashes is mandatory and must contain non-empty cryptographic digests for Nautilus backtest execution."
+            )
+
+        from acash.backtest.schema import calculate_backtest_manifest_id
+        engine_config_hash = self.config.compute_sha256()
+
+        manifest_id = calculate_backtest_manifest_id(
+            hypothesis_spec_sha256=hypothesis_spec_sha256,
+            canonical_data_hashes=canonical_data_hashes,
+            engine_config_hash=engine_config_hash,
+            strategy_config_hash=strategy_config_hash,
+            prng_seed=self.config.prng_seed,
+        )
+
         manifest = BacktestManifest(
             manifest_id=manifest_id,
             hypothesis_id="HYP-NAUTILUS-SUBSTRATE",
             hypothesis_spec_sha256=hypothesis_spec_sha256,
-            canonical_data_hashes=canonical_data_hashes or ["0" * 64],
-            engine_config_hash=strategy_config_hash,
+            canonical_data_hashes=canonical_data_hashes,
+            engine_config_hash=engine_config_hash,
             strategy_config_hash=strategy_config_hash,
             prng_seed=self.config.prng_seed,
             pyproject_toml_sha256=pyproject_toml_sha256,
@@ -588,3 +645,4 @@ class NautilusTraderSubstrate:
         )
 
         return manifest, fills_table, equity_table
+

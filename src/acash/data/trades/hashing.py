@@ -57,7 +57,8 @@ def _encode_timestamp_ns(val: Any) -> bytes:
         return struct.pack(">q", val.value)
     if isinstance(val, datetime):
         dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
-        epoch_ns = int(dt_utc.timestamp() * 1_000_000_000)
+        td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        epoch_ns = (td.days * 86400 + td.seconds) * 1_000_000_000 + td.microseconds * 1_000
         return struct.pack(">q", epoch_ns)
     raise TypeError(f"Unsupported timestamp_ns type: {type(val)}")
 
@@ -74,9 +75,11 @@ def _encode_timestamp_us(val: Any) -> bytes:
         return struct.pack(">q", val.value)
     if isinstance(val, datetime):
         dt_utc = val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
-        epoch_us = int(dt_utc.timestamp() * 1_000_000)
+        td = dt_utc - datetime(1970, 1, 1, tzinfo=timezone.utc)
+        epoch_us = (td.days * 86400 + td.seconds) * 1_000_000 + td.microseconds
         return struct.pack(">q", epoch_us)
     raise TypeError(f"Unsupported timestamp_us type: {type(val)}")
+
 
 
 def _encode_date32(val: Any) -> bytes:
