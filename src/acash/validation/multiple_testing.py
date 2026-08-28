@@ -1,9 +1,14 @@
 """Multiple-Testing Corrections and Haircut Sharpe Engine (Phase 6).
 
-Implements:
-- Holm-Bonferroni step-down procedure for strict Family-Wise Error Rate (FWER) control.
-- Benjamini-Hochberg procedure for False Discovery Rate (FDR) control.
-- Haircut Sharpe Ratio adjustment (Harvey, Liu, & Zhu 2016).
+Mathematical implementation based on:
+- Holm, S. (1979). "A Simple Sequentially Rejective Multiple Test Procedure." Scandinavian Journal of Statistics, 6(2), 65–70.
+- Benjamini, Y., & Hochberg, Y. (1995). "Controlling the False Discovery Rate: A Practical and Powerful Approach to Multiple Testing." Journal of the Royal Statistical Society: Series B, 57(1), 289–300.
+- Harvey, C. R., Liu, Y., & Zhu, H. (2016). "... and the Cross-Section of Expected Returns." Review of Financial Studies, 29(1), 5–68.
+
+Strictly enforces:
+- Holm-Bonferroni step-down procedure for strict Family-Wise Error Rate (FWER) control across K trials.
+- Benjamini-Hochberg procedure for False Discovery Rate (FDR) q-values.
+- Harvey-Liu-Zhu multiple-testing haircut Sharpe hurdle deduction.
 """
 
 from decimal import Decimal
@@ -76,7 +81,7 @@ class MultipleTestingEngine:
         q_original = np.zeros(K, dtype=np.float64)
         q_original[sorted_indices] = q_sorted
 
-        return [to_decimal18(Decimal(f"{q:.12f}")) or Decimal("1.0") for q in q_original]
+        return [to_decimal18(Decimal(f"{q:.12f}")) or Decimal("1.0") for p in q_original]
 
     @staticmethod
     def calculate_haircut_sharpe(
@@ -86,9 +91,12 @@ class MultipleTestingEngine:
     ) -> Decimal:
         """Calculate Haircut Sharpe Ratio adjusting for K trials and sample length T (Harvey, Liu, & Zhu 2016).
 
-        Formula:
-        Haircut_Factor = 1 - (sqrt(2 * ln(K)) / (estimated_sharpe * sqrt(T)))
-        Haircut_SR = max(0.0, estimated_sharpe * Haircut_Factor)
+        Mathematical Formulation:
+        Under the null hypothesis of zero true alpha across K orthogonal trials, the expected maximum
+        t-statistic asymptotically scales as E[max t_k] ~ sqrt(2 * ln(K)).
+        Since t = SR * sqrt(T), the multiple-testing threshold hurdle is SR_hurdle = sqrt(2 * ln(K)) / sqrt(T).
+        The Haircut Sharpe ratio deducts this selection hurdle:
+        Haircut_SR = max(0.0, estimated_sharpe - (sqrt(2 * ln(K)) / sqrt(T)))
         """
         K = max(1, effective_trials_k)
         T = max(2, sample_size_t)
@@ -97,8 +105,8 @@ class MultipleTestingEngine:
         if K == 1 or sr <= 1e-12:
             return to_decimal18(Decimal(f"{sr:.12f}")) or Decimal("0.0")
 
-        penalty = math.sqrt(2.0 * math.log(K)) / (sr * math.sqrt(T))
-        haircut_sr = max(0.0, sr * (1.0 - penalty))
+        hurdle = math.sqrt(2.0 * math.log(K)) / math.sqrt(T)
+        haircut_sr = max(0.0, sr - hurdle)
 
         return to_decimal18(Decimal(f"{haircut_sr:.12f}")) or Decimal("0.0")
 

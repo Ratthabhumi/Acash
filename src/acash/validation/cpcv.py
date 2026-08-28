@@ -188,9 +188,10 @@ class CombinatorialPurgedCrossValidation:
                 for t in range(g_start, g_end):
                     path_pairs.append((combo_id, t))
 
-            # Invariant check: Each path must cover exactly all sample_size indices in chronological order
-            assert len(path_pairs) == sample_size
-            assert [t for _, t in path_pairs] == list(range(sample_size))
+            # Invariant verification: Each path must cover exactly all sample_size indices in chronological order
+            if len(path_pairs) != sample_size or [t for _, t in path_pairs] != list(range(sample_size)):
+                raise DataContractError(f"Path {path_idx} failed full chronological coverage invariant over [0, {sample_size})")
+
             paths.append(path_pairs)
 
         return paths

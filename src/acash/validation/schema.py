@@ -3,7 +3,9 @@
 Strictly enforces:
 - Immutable, frozen Pydantic models with extra="forbid".
 - Exact Decimal and int types for canonical parameters.
-- Comprehensive validation models for CPCV, DSR, MinTRL, FWER, PBO, SearchTrialLedger, and OOS Hard Gate.
+- Comprehensive validation models for CPCV, DSR, MinTRL, FWER, PBO, SearchTrialLedger,
+  ParameterPerturbationGrid, and FrictionStressTier.
+- Cryptographic separation between evidence_digest, decision_digest, and auxiliary metadata.
 """
 
 from decimal import Decimal
@@ -11,7 +13,7 @@ from enum import Enum
 import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
@@ -52,25 +54,75 @@ class SearchTrialLedger(BaseModel):
     ledger_id: str = Field(description="Unique deterministic ledger identifier.")
     hypothesis_id: str
     trials: List[SearchTrialRecord]
+    sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
 
     @property
     def total_trials(self) -> int:
         """Total number of exploratory trials K."""
         return len(self.trials)
 
-    @property
-    def empirical_sharpe_variance(self) -> float:
-        """Empirical variance of Sharpe ratios across all exploratory trials."""
+    def get_empirical_sharpe_variance(self) -> float:
+        """Empirical sample variance of Sharpe ratios across recorded trials.
+
+        Raises DataContractError if fewer than 2 trials exist and variance is requested.
+        """
         if len(self.trials) < 2:
-            return 1.0  # Default normalized unit variance for single trial
+            raise DataContractError(
+                f"Cannot compute empirical trial variance with fewer than 2 recorded trials (got {len(self.trials)}). "
+                f"Single-trial DSR must explicitly specify is_single_trial=True."
+            )
         sharpes = [float(t.in_sample_sharpe) for t in self.trials]
         var = float(np.var(sharpes, ddof=1))
-        return max(1e-6, var)
+        return max(1e-12, var)
 
     @property
     def p_values(self) -> List[Decimal]:
         """All empirical p-values recorded in the ledger."""
         return [t.p_value for t in self.trials]
+
+
+class ParameterPerturbationGrid(BaseModel):
+    """Strict parameter perturbation grid enforcing +/- 25% boundary invariants."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    base_parameter_name: str
+    base_parameter_value: Decimal = Field(gt=Decimal("0.0"), description="Base parameter theta_0 > 0.")
+    grid_values: List[Decimal] = Field(description="Strict 3-point grid [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0].")
+    sharpe_profile: List[Decimal] = Field(description="Sharpe ratios evaluated at each grid point.")
+
+    @model_validator(mode="after")
+    def validate_grid_geometry(self) -> "ParameterPerturbationGrid":
+        """Enforce strict [0.75, 1.0, 1.25] geometric perturbation invariants."""
+        if len(self.grid_values) != 3 or len(self.sharpe_profile) != 3:
+            raise DataContractError("Parameter perturbation grid must have exactly 3 points [0.75*theta, 1.0*theta, 1.25*theta].")
+
+        theta = self.base_parameter_value
+        expected_left = theta * Decimal("0.75")
+        expected_mid = theta
+        expected_right = theta * Decimal("1.25")
+
+        tol = Decimal("1e-6")
+        if abs(self.grid_values[0] - expected_left) > tol:
+            raise DataContractError(f"Grid left point {self.grid_values[0]} does not equal 0.75 * {theta} = {expected_left}")
+        if abs(self.grid_values[1] - expected_mid) > tol:
+            raise DataContractError(f"Grid mid point {self.grid_values[1]} does not equal 1.0 * {theta} = {expected_mid}")
+        if abs(self.grid_values[2] - expected_right) > tol:
+            raise DataContractError(f"Grid right point {self.grid_values[2]} does not equal 1.25 * {theta} = {expected_right}")
+
+        return self
+
+
+class FrictionStressParameters(BaseModel):
+    """Component-wise friction parameters connecting directly with Phase 4/5 Reality Gap decomposition."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spread_bps: Decimal = Field(default=Decimal("2.0"), ge=Decimal("0.0"))
+    fee_bps: Decimal = Field(default=Decimal("1.0"), ge=Decimal("0.0"))
+    slippage_bps: Decimal = Field(default=Decimal("0.5"), ge=Decimal("0.0"))
+    latency_drift_bps: Decimal = Field(default=Decimal("0.3"), ge=Decimal("0.0"))
+    maker_adverse_selection_bps: Decimal = Field(default=Decimal("0.2"), ge=Decimal("0.0"))
 
 
 class CPCVPartition(BaseModel):
@@ -83,7 +135,7 @@ class CPCVPartition(BaseModel):
     train_indices: List[int] = Field(description="Sample indices assigned to model training.")
     test_indices: List[int] = Field(description="Sample indices assigned to out-of-sample testing.")
     purged_indices: List[int] = Field(description="Sample indices purged due to label window overlap.")
-    embargoed_indices: List[int] = Field(description="Sample indices embargoed to prevent autoregressive leakage.")
+    embargoed_indices: List[int] = Field(description="Sample indices embargoed to prevent boundary leakage.")
 
 
 class DSRResult(BaseModel):
@@ -94,9 +146,10 @@ class DSRResult(BaseModel):
     estimated_sharpe: Decimal = Field(description="Sample annualized Sharpe ratio.")
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
     expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials.")
-    sample_skewness: Decimal = Field(description="Sample Fisher-Pearson skewness of returns.")
-    sample_kurtosis: Decimal = Field(description="Sample Pearson kurtosis of returns (normal = 3.0).")
+    sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
+    sample_kurtosis: Decimal = Field(description="Pearson sample fourth moment kurtosis g_2 of returns (normal = 3.0).")
     effective_trials_k: int = Field(description="Total number of parameter and model variations explored.")
+    trial_variance_used: Decimal = Field(description="Empirical variance of trials V used in SR0 calculation.")
     sample_size_t: int = Field(description="Number of observations / return periods.")
     dsr_statistic: Decimal = Field(description="Standardized asymptotic DSR test statistic z.")
     dsr_p_value: Decimal = Field(description="P-value of null hypothesis rejection (DSR probability).")
@@ -113,7 +166,7 @@ class MultipleTestingResult(BaseModel):
     raw_p_values: List[Decimal]
     holm_bonferroni_p_values: List[Decimal] = Field(description="Step-down FWER adjusted p-values.")
     benjamini_hochberg_q_values: List[Decimal] = Field(description="FDR adjusted q-values.")
-    haircut_sharpe_ratio: Decimal = Field(description="Haircut Sharpe ratio after multiple testing penalty (Harvey, Liu, Zhu 2016).")
+    haircut_sharpe_ratio: Decimal = Field(description="Haircut Sharpe ratio adjusting for K orthogonal trials (Harvey, Liu, Zhu 2016).")
     is_fwer_significant: bool = Field(description="True if top strategy passes Holm-Bonferroni at alpha <= 0.05.")
 
 
@@ -122,13 +175,13 @@ class OverfittingReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    pbo_estimate: Decimal = Field(description="Empirical probability of backtest overfitting (proportion of OOS paths below median).")
+    pbo_estimate: Decimal = Field(description="Empirical probability of backtest overfitting with mid-rank tie handling.")
     logits_distribution_mean: Decimal = Field(description="Mean of relative rank log-odds distribution.")
     logits_distribution_std: Decimal = Field(description="Standard deviation of relative rank log-odds distribution.")
-    parameter_fragility_max_curvature: Decimal = Field(description="Maximum second-order discrete curvature across parameter perturbations.")
+    parameter_fragility_max_curvature: Decimal = Field(description="Second-order discrete curvature across +/- 25% perturbation.")
     is_pbo_acceptable: bool = Field(description="True if PBO < 0.25.")
-    is_parameter_stable: bool = Field(description="True if max curvature is within tolerance and degradation <= 30%.")
-    friction_monotonicity_passed: bool = Field(description="True if returns decay monotonically under 1x, 2x, 3x, 5x friction stress.")
+    is_parameter_stable: bool = Field(description="True if degradation across +/- 25% perturbation <= 30%.")
+    friction_monotonicity_passed: bool = Field(description="True if returns decay monotonically under component-wise friction stress.")
 
 
 class ValidationConfig(BaseModel):
@@ -150,7 +203,9 @@ class ValidationReport(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    validation_id: str = Field(description="Unique cryptographic validation report identifier.")
+    validation_id: str = Field(description="Unique cryptographic validation report identifier (decision_digest).")
+    evidence_digest: str = Field(description="Deterministic SHA-256 digest of underlying statistical evidence.")
+    decision_digest: str = Field(description="Deterministic SHA-256 digest of evidence + governance verdict.")
     strategy_id: str
     hypothesis_id: str
     verdict: ValidationGateVerdict
@@ -161,12 +216,16 @@ class ValidationReport(BaseModel):
     in_sample_sharpe: Decimal
     out_of_sample_sharpe: Optional[Decimal] = None
     oos_retention_pct: Optional[Decimal] = None
-    created_timestamp_utc: str
+    created_timestamp_utc: str = Field(description="Auxiliary non-canonical timestamp.")
 
     def to_canonical_json(self) -> str:
-        """Emit deterministic, sorted JSON representation for cryptographic hashing."""
+        """Emit deterministic, sorted JSON representation for cryptographic hashing.
+
+        Excludes auxiliary non-canonical timestamp (created_timestamp_utc) so that
+        the canonical evidence hash is 100% deterministic and invariant across replay runs.
+        """
         data = {
-            "created_timestamp_utc": self.created_timestamp_utc,
+            "decision_digest": self.decision_digest,
             "dsr_result": {
                 "benchmark_sharpe": str(self.dsr_result.benchmark_sharpe),
                 "dsr_p_value": str(self.dsr_result.dsr_p_value),
@@ -180,7 +239,9 @@ class ValidationReport(BaseModel):
                 "sample_kurtosis": str(self.dsr_result.sample_kurtosis),
                 "sample_size_t": self.dsr_result.sample_size_t,
                 "sample_skewness": str(self.dsr_result.sample_skewness),
+                "trial_variance_used": str(self.dsr_result.trial_variance_used),
             },
+            "evidence_digest": self.evidence_digest,
             "hypothesis_id": self.hypothesis_id,
             "in_sample_sharpe": str(self.in_sample_sharpe),
             "is_tradeable_alpha": self.is_tradeable_alpha,

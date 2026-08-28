@@ -2,8 +2,8 @@
 
 Implements:
 - Probability of Backtest Overfitting (PBO) via CPCV log-odds distribution with mid-rank tie handling (Bailey et al. 2016).
-- Parameter Sensitivity Surface & Curvature Fragility Metric across [0.75 theta_0, theta_0, 1.25 theta_0] perturbations.
-- Friction Stress Decay Monotonicity under cost multipliers.
+- Parameter Sensitivity Surface & Curvature Fragility Metric across [0.75 theta_0, 1.0 theta_0, 1.25 theta_0] perturbations.
+- Component-wise friction stress decay monotonicity (Phase 4/5 reality gap coupling).
 """
 
 from decimal import Decimal
@@ -13,7 +13,7 @@ import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
-from acash.validation.schema import OverfittingReport
+from acash.validation.schema import FrictionStressParameters, OverfittingReport, ParameterPerturbationGrid
 
 
 class OverfittingEngine:
@@ -49,7 +49,6 @@ class OverfittingEngine:
             oos_slice = oos_sharpe_matrix[c, :]
             strictly_less = int(np.sum(oos_slice < m_star_val))
             equal_count = int(np.sum(oos_slice == m_star_val))
-            # Mid-rank formula (1-indexed): strictly_less + 1 + 0.5 * (equal_count - 1)
             mid_rank = strictly_less + 1.0 + 0.5 * (equal_count - 1.0)
 
             # Relative rank omega in (0, 1)
@@ -73,67 +72,59 @@ class OverfittingEngine:
 
     @staticmethod
     def evaluate_parameter_curvature(
-        param_grid: Sequence[float],
-        sharpe_profile: Sequence[float],
+        perturbation_grid: ParameterPerturbationGrid,
         max_degradation_tolerance: float = 0.30,
     ) -> Tuple[float, bool]:
-        """Evaluate second-order curvature and degradation stability across parameter perturbations.
+        """Evaluate second-order discrete curvature and degradation stability across +/- 25% perturbations.
 
-        Enforces discrete second derivative curvature:
-        kappa = | (SR(theta + h) - 2*SR(theta) + SR(theta - h)) / h^2 |
-        and verifies that neighbor degradation <= max_degradation_tolerance (default 30%).
+        Grid is guaranteed to be [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0].
+        Curvature: kappa = | (SR(1.25*theta) - 2*SR(theta) + SR(0.75*theta)) / (0.25*theta)^2 |
+        Neighbor Degradation: max( (SR(theta) - SR(0.75*theta))/SR(theta), (SR(theta) - SR(1.25*theta))/SR(theta) )
 
         Returns:
-            Tuple[max_curvature, is_stable]
+            Tuple[curvature, is_stable]
         """
-        n = len(param_grid)
-        if n < 3 or len(sharpe_profile) != n:
-            return 0.0, True
+        theta = float(perturbation_grid.base_parameter_value)
+        h = 0.25 * theta
 
-        params = np.array(param_grid, dtype=np.float64)
-        sharpes = np.array(sharpe_profile, dtype=np.float64)
+        sr_left = float(perturbation_grid.sharpe_profile[0])
+        sr_mid = float(perturbation_grid.sharpe_profile[1])
+        sr_right = float(perturbation_grid.sharpe_profile[2])
 
-        peak_idx = int(np.argmax(sharpes))
-        peak_sr = sharpes[peak_idx]
+        second_diff = (sr_right - 2.0 * sr_mid + sr_left) / (h ** 2) if h > 1e-12 else 0.0
+        curvature = abs(second_diff)
 
-        curvatures: List[float] = []
-        for i in range(1, n - 1):
-            h_left = params[i] - params[i - 1]
-            h_right = params[i + 1] - params[i]
-            h_avg = (h_left + h_right) / 2.0
-            if h_avg > 1e-12:
-                second_diff = (sharpes[i + 1] - 2.0 * sharpes[i] + sharpes[i - 1]) / (h_avg ** 2)
-                curvatures.append(abs(second_diff))
-
-        max_curvature = max(curvatures) if curvatures else 0.0
-
-        # Check neighbor degradation around peak (within +/- 1 step)
         is_stable = True
-        if peak_sr > 0.0:
-            if peak_idx > 0:
-                left_deg = (peak_sr - sharpes[peak_idx - 1]) / peak_sr
-                if left_deg > max_degradation_tolerance:
-                    is_stable = False
-            if peak_idx < n - 1:
-                right_deg = (peak_sr - sharpes[peak_idx + 1]) / peak_sr
-                if right_deg > max_degradation_tolerance:
-                    is_stable = False
+        if sr_mid > 0.0:
+            left_deg = (sr_mid - sr_left) / sr_mid
+            right_deg = (sr_mid - sr_right) / sr_mid
+            max_deg = max(left_deg, right_deg)
+            if max_deg > max_degradation_tolerance:
+                is_stable = False
 
-        return float(max_curvature), is_stable
+        return float(curvature), is_stable
 
     @staticmethod
     def verify_friction_decay_monotonicity(
-        base_net_return_bps: float,
-        friction_multipliers: Sequence[float] = (1.0, 2.0, 3.0, 5.0),
-        base_friction_bps: float = 2.0,
+        raw_predictive_edge_bps: float,
+        friction_params: Optional[FrictionStressParameters] = None,
+        multipliers: Sequence[float] = (1.0, 2.0, 3.0, 5.0),
     ) -> bool:
-        """Verify that net returns decrease monotonically as friction multipliers increase."""
-        prev_return = base_net_return_bps
-        for mult in friction_multipliers[1:]:
-            stressed_return = base_net_return_bps - (mult - 1.0) * base_friction_bps
-            if stressed_return > prev_return + 1e-12:
-                return False
-            prev_return = stressed_return
+        """Verify component-wise friction stress decay monotonicity using Phase 4/5 reality gap components.
+
+        R_stressed(m) = R_raw - m * (Spread + Fee) - m^1.5 * (Slippage + Latency + Adverse Selection)
+        """
+        params = friction_params or FrictionStressParameters()
+        linear_cost = float(params.spread_bps + params.fee_bps)
+        impact_cost = float(params.slippage_bps + params.latency_drift_bps + params.maker_adverse_selection_bps)
+
+        prev_net = raw_predictive_edge_bps
+        for m in multipliers:
+            stressed_net = raw_predictive_edge_bps - (m * linear_cost) - ((m ** 1.5) * impact_cost)
+            if stressed_net > prev_net + 1e-12:
+                return False  # Non-monotonic behavior detected
+            prev_net = stressed_net
+
         return True
 
     @classmethod
@@ -141,15 +132,15 @@ class OverfittingEngine:
         cls,
         is_sharpe_matrix: np.ndarray,
         oos_sharpe_matrix: np.ndarray,
-        param_grid: Sequence[float],
-        sharpe_profile: Sequence[float],
-        base_net_return_bps: float,
+        perturbation_grid: ParameterPerturbationGrid,
+        raw_predictive_edge_bps: float = 15.0,
+        friction_params: Optional[FrictionStressParameters] = None,
         max_acceptable_pbo: float = 0.25,
     ) -> OverfittingReport:
-        """Run complete overfitting and parameter sensitivity evaluation."""
+        """Run complete overfitting, parameter perturbation curvature, and friction stress battery."""
         pbo, log_mean, log_std = cls.calculate_pbo(is_sharpe_matrix, oos_sharpe_matrix)
-        curvature, is_param_stable = cls.evaluate_parameter_curvature(param_grid, sharpe_profile)
-        is_monotonic = cls.verify_friction_decay_monotonicity(base_net_return_bps)
+        curvature, is_param_stable = cls.evaluate_parameter_curvature(perturbation_grid)
+        is_monotonic = cls.verify_friction_decay_monotonicity(raw_predictive_edge_bps, friction_params)
 
         is_pbo_ok = pbo < max_acceptable_pbo
 
