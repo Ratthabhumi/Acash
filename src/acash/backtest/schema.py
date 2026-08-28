@@ -248,6 +248,9 @@ class BacktestFillRecord(BaseModel):
     liquidity_type: LiquidityType
     slippage_incurred_bps: Decimal = Field(default=Decimal("0.0"))
     arrival_price: Optional[Decimal] = Field(default=None, description="Benchmark reference market/mid price at decision time.")
+    arrival_mid_price: Optional[Decimal] = Field(default=None, description="Side-neutral benchmark mid-price at order decision time.")
+    match_mid_price: Optional[Decimal] = Field(default=None, description="Side-neutral benchmark mid-price at order match arrival time.")
+    touch_price: Optional[Decimal] = Field(default=None, description="Prevailing touch price at match time (best ask for BUY taker, best bid for SELL taker).")
     bid_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best bid price at fill.")
     ask_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best ask price at fill.")
     decision_timestamp_ns: Optional[int] = Field(default=None, description="Timestamp in nanoseconds when order intent was formulated.")

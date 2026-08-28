@@ -3,6 +3,14 @@
 Measures and decomposes the systematic divergence between Phase 4 Analytical Edge
 and Phase 5 Simulated Event-Driven Realized Edge:
 Reality Gap = Edge_Phase4_Analytical - Edge_Phase5_Simulated = Spread Drag + Slippage Drag + Latency Drag + Fee Drag + Queue Drag + Unmodelled Residual
+
+Implements strictly orthogonal, non-overlapping microstructure decompositions:
+- Latency Drag: Mid-to-mid price drift during transmission (Decision Mid -> Match Arrival Mid)
+- Spread Drag: Half-spread crossing cost (Match Arrival Mid -> Touch Price)
+- Slippage Drag: Book depth consumption / price impact beyond touch (Touch Price -> Fill Price)
+- Fee Drag: Exchange, broker, and clearing transaction fees
+- Queue Drag: Adverse selection while resting in queue (Arrival Mid -> Fill Mid for Maker)
+- Unmodelled Residual: Mathematical residual gap (Alpha formula assumption mismatch)
 """
 
 from decimal import Decimal
@@ -80,7 +88,7 @@ class RealityGapAttributionEngine:
                 queue_position_drag_bps=Decimal("0.0"),
             )
 
-        # 1. Empirical fee drag
+        # 1. Empirical Fee Drag (actual fees incurred relative to initial capital)
         if total_fees_paid is not None:
             fee_sum = total_fees_paid
         else:
@@ -90,25 +98,31 @@ class RealityGapAttributionEngine:
             )
         fee_drag_bps = (fee_sum / initial_cash) * Decimal("10000.0")
 
-        # 2. Empirical slippage drag (pure depth impact / price degradation)
-        slippage_cost = Decimal("0.0")
-        for f in fills:
-            qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
-            px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
-            slip_bps = Decimal(str(getattr(f, "slippage_incurred_bps", f.get("slippage_incurred_bps", 0) if isinstance(f, dict) else 0)))
-            slippage_cost += (qty * px) * (slip_bps / Decimal("10000.0"))
-        slippage_drag_bps = (slippage_cost / initial_cash) * Decimal("10000.0")
-
-        # 3. Empirical latency drift drag (price drift during transmission window)
+        # 2. Empirical Latency Drag (transmission adverse mid-price drift: Decision Mid -> Match Mid)
         latency_cost = Decimal("0.0")
         for f in fills:
             qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
-            px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
-            drift_bps = Decimal(str(getattr(f, "latency_drift_bps", f.get("latency_drift_bps", 0) if isinstance(f, dict) else 0)))
-            latency_cost += (qty * px) * (drift_bps / Decimal("10000.0"))
+            side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+            side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
+
+            arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
+            match_mid = getattr(f, "match_mid_price", f.get("match_mid_price", None) if isinstance(f, dict) else None)
+
+            if arr_mid is not None and match_mid is not None:
+                # Adverse mid drift: BUY suffers when mid rises; SELL suffers when mid falls
+                adverse_drift = side_sign * (Decimal(str(match_mid)) - Decimal(str(arr_mid)))
+                if adverse_drift > Decimal("0.0"):
+                    latency_cost += qty * adverse_drift
+            else:
+                # Fallback to pre-calculated latency_drift_bps if explicit mid benchmarks not attached
+                drift_bps = Decimal(str(getattr(f, "latency_drift_bps", f.get("latency_drift_bps", 0) if isinstance(f, dict) else 0)))
+                px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
+                if drift_bps > Decimal("0.0"):
+                    latency_cost += (qty * px) * (drift_bps / Decimal("10000.0"))
+
         latency_drag_bps = (latency_cost / initial_cash) * Decimal("10000.0")
 
-        # 4. Empirical spread drag (half-spread crossing cost for taker fills)
+        # 3. Empirical Spread Drag (half-spread crossing cost for taker fills: Match Mid -> Touch Price)
         spread_cost = Decimal("0.0")
         for f in fills:
             liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
@@ -122,26 +136,68 @@ class RealityGapAttributionEngine:
                     if ask > bid:
                         half_spread = (ask - bid) / Decimal("2.0")
                         spread_cost += qty * half_spread
+
         spread_drag_bps = (spread_cost / initial_cash) * Decimal("10000.0")
 
-        # 5. Empirical queue drag (maker adverse selection drift)
+        # 4. Empirical Slippage Drag (depth sweep / price impact beyond touch: Touch Price -> Fill Price)
+        slippage_cost = Decimal("0.0")
+        for f in fills:
+            qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
+            fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
+            touch_val = getattr(f, "touch_price", f.get("touch_price", None) if isinstance(f, dict) else None)
+            side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+
+            if touch_val is not None:
+                touch_px = Decimal(str(touch_val))
+                # Depth slippage beyond touch: BUY pays fill > touch; SELL receives fill < touch
+                excess_slip = (fill_px - touch_px) if side == "BUY" else (touch_px - fill_px)
+                if excess_slip > Decimal("0.0"):
+                    slippage_cost += qty * excess_slip
+            else:
+                # Fallback to slippage_incurred_bps
+                slip_bps = Decimal(str(getattr(f, "slippage_incurred_bps", f.get("slippage_incurred_bps", 0) if isinstance(f, dict) else 0)))
+                if slip_bps > Decimal("0.0"):
+                    slippage_cost += (qty * fill_px) * (slip_bps / Decimal("10000.0"))
+
+        slippage_drag_bps = (slippage_cost / initial_cash) * Decimal("10000.0")
+
+        # 5. Empirical Queue Drag (maker adverse selection: Arrival Mid -> Fill Mid while resting in queue)
         queue_cost = Decimal("0.0")
         for f in fills:
             liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
             if "MAKER" in liq_type.upper():
-                arr_val = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
-                if arr_val is not None:
-                    arr_px = Decimal(str(arr_val))
+                qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
+                side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
+                side_sign = Decimal("1.0") if side == "BUY" else Decimal("-1.0")
+
+                arr_mid = getattr(f, "arrival_mid_price", f.get("arrival_mid_price", None) if isinstance(f, dict) else None)
+                if arr_mid is None:
+                    arr_mid = getattr(f, "arrival_price", f.get("arrival_price", None) if isinstance(f, dict) else None)
+
+                bid_val = getattr(f, "bid_at_fill", f.get("bid_at_fill", None) if isinstance(f, dict) else None)
+                ask_val = getattr(f, "ask_at_fill", f.get("ask_at_fill", None) if isinstance(f, dict) else None)
+
+                fill_mid: Optional[Decimal] = None
+                if bid_val is not None and ask_val is not None:
+                    fill_mid = (Decimal(str(bid_val)) + Decimal(str(ask_val))) / Decimal("2.0")
+
+                if arr_mid is not None and fill_mid is not None:
+                    # Normalized adverse move:
+                    # BUY maker suffers when mid drops (M_arrival - M_fill > 0)
+                    # SELL maker suffers when mid rises (M_fill - M_arrival > 0)
+                    adverse_queue_move = -side_sign * (fill_mid - Decimal(str(arr_mid)))
+                    if adverse_queue_move > Decimal("0.0"):
+                        queue_cost += qty * adverse_queue_move
+                elif arr_mid is not None:
+                    # Fallback using fill_price if quotes at fill are not available
                     fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
-                    side = str(getattr(f, "side", f.get("side", "") if isinstance(f, dict) else "")).upper()
-                    qty = Decimal(str(getattr(f, "fill_qty", f.get("fill_qty", 0) if isinstance(f, dict) else 0)))
-                    # Maker buy filled lower than arrival mid is positive; filled higher is negative
-                    adverse_drift = (fill_px - arr_px) if side == "BUY" else (arr_px - fill_px)
+                    adverse_drift = -side_sign * (fill_px - Decimal(str(arr_mid)))
                     if adverse_drift > Decimal("0.0"):
                         queue_cost += qty * adverse_drift
+
         queue_drag_bps = (queue_cost / initial_cash) * Decimal("10000.0")
 
-        # 6. Unmodelled residual gap (model mismatch / timing discrepancy)
+        # 6. Unmodelled Residual Gap (pure model mismatch / alpha assumption divergence)
         accounted = fee_drag_bps + slippage_drag_bps + latency_drag_bps + spread_drag_bps + queue_drag_bps
         unmodelled_residual_bps = reality_gap_bps - accounted
 

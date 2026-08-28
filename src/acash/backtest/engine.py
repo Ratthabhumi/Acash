@@ -277,6 +277,7 @@ class SimulatedOrder:
         self.queue_ahead_volume: Decimal = Decimal("0.0")
         self.queue_initialized: bool = False
         self.arrival_price: Optional[Decimal] = None
+        self.arrival_mid_price: Optional[Decimal] = None
         self.submitted_timestamp_ns: Optional[int] = None
         self.latency_drift_bps: Decimal = Decimal("0.0")
 
@@ -362,7 +363,14 @@ class EventBacktestRunner:
             created_timestamp_ns=self.current_time_ns,
             limit_price=limit_price,
         )
-        order.arrival_price = self.last_price if self.last_price > Decimal("0.0") else None
+        current_mid: Optional[Decimal] = None
+        if self.order_book.best_bid is not None and self.order_book.best_ask is not None:
+            current_mid = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+        elif self.last_price > Decimal("0.0"):
+            current_mid = self.last_price
+
+        order.arrival_price = current_mid
+        order.arrival_mid_price = current_mid
         order.submitted_timestamp_ns = self.current_time_ns
         order.status = BacktestOrderStatus.SUBMITTED
 
@@ -508,12 +516,25 @@ class EventBacktestRunner:
         secs, us = divmod(micros, 1_000_000)
         fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
-        # Latency drift measurement
-        arrival_px = order.arrival_price or base_price
+        # Prevailing side-neutral mid-price at match arrival time
+        match_mid: Optional[Decimal] = None
+        if self.order_book.best_bid is not None and self.order_book.best_ask is not None:
+            match_mid = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+        elif self.last_price > Decimal("0.0"):
+            match_mid = self.last_price
+
+        touch_px = self.order_book.best_ask if order.side == "BUY" else self.order_book.best_bid
+        if touch_px is None:
+            touch_px = base_price
+
+        # Side-neutral transmission latency mid-drift: Decision Mid -> Match Mid
+        arrival_mid = order.arrival_mid_price or order.arrival_price or match_mid
         latency_drift_bps = Decimal("0.0")
-        if arrival_px > Decimal("0.0") and base_price > Decimal("0.0"):
-            drift = (base_price - arrival_px) if order.side == "BUY" else (arrival_px - base_price)
-            latency_drift_bps = (drift / arrival_px) * Decimal("10000.0")
+        if arrival_mid is not None and match_mid is not None and arrival_mid > Decimal("0.0"):
+            side_sign = Decimal("1.0") if order.side == "BUY" else Decimal("-1.0")
+            drift = side_sign * (match_mid - arrival_mid)
+            if drift > Decimal("0.0"):
+                latency_drift_bps = (drift / arrival_mid) * Decimal("10000.0")
 
         fill_rec = BacktestFillRecord(
             fill_id=f"FILL-{len(self.fills)+1:08d}",
@@ -526,7 +547,10 @@ class EventBacktestRunner:
             fee_paid=fee_paid,
             liquidity_type=LiquidityType.TAKER,
             slippage_incurred_bps=slippage_bps,
-            arrival_price=arrival_px,
+            arrival_price=arrival_mid,
+            arrival_mid_price=arrival_mid,
+            match_mid_price=match_mid,
+            touch_price=touch_px,
             bid_at_fill=self.order_book.best_bid,
             ask_at_fill=self.order_book.best_ask,
             decision_timestamp_ns=order.created_timestamp_ns,
@@ -654,6 +678,14 @@ class EventBacktestRunner:
             secs, us = divmod(micros, 1_000_000)
             fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
+            # Prevailing side-neutral mid-price at match/fill time
+            match_mid: Optional[Decimal] = None
+            if self.order_book.best_bid is not None and self.order_book.best_ask is not None:
+                match_mid = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+            elif self.last_price > Decimal("0.0"):
+                match_mid = self.last_price
+
+            arrival_mid = order.arrival_mid_price or order.arrival_price or match_mid or executed_price
             queue_wait = max(0, timestamp_ns - (order.submitted_timestamp_ns or order.created_timestamp_ns))
 
             fill_rec = BacktestFillRecord(
@@ -667,7 +699,10 @@ class EventBacktestRunner:
                 fee_paid=fee_paid,
                 liquidity_type=LiquidityType.MAKER,
                 slippage_incurred_bps=Decimal("0.0"),
-                arrival_price=order.arrival_price or executed_price,
+                arrival_price=arrival_mid,
+                arrival_mid_price=arrival_mid,
+                match_mid_price=match_mid,
+                touch_price=executed_price,
                 bid_at_fill=self.order_book.best_bid,
                 ask_at_fill=self.order_book.best_ask,
                 decision_timestamp_ns=order.created_timestamp_ns,
