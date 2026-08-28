@@ -24,6 +24,7 @@ class ShadowPositionState(BaseModel):
     quantity: Decimal = Decimal("0.0")  # Signed: > 0 Long, < 0 Short
     avg_entry_price: Decimal = Decimal("0.0")
     current_market_price: Decimal = Decimal("0.0")
+    multiplier: Decimal = Decimal("1.0")
     realized_pnl: Decimal = Decimal("0.0")  # Cumulative realized PnL for this position
     unrealized_pnl: Decimal = Decimal("0.0")
 
@@ -34,7 +35,7 @@ class ShadowPositionState(BaseModel):
     @property
     def position_value(self) -> Decimal:
         """Mark-to-market position value."""
-        return self.quantity * self.current_market_price
+        return self.quantity * self.current_market_price * self.multiplier
 
 
 class ShadowAccountingLedger:
@@ -72,7 +73,6 @@ class ShadowAccountingLedger:
         """
         total_pos_value = sum((pos.position_value for pos in self.positions.values()), Decimal("0.0"))
         return self.cash_balance + total_pos_value
-
 
     def calculate_performance_attribution_equity(self) -> Decimal:
         """View B: Performance Attribution (Flow Reconciliation) View.
@@ -127,8 +127,8 @@ class ShadowAccountingLedger:
         if pos.is_flat:
             new_unrealized = Decimal("0.0")
         else:
-            # Unrealized PnL = quantity * (current_market_price - avg_entry_price)
-            new_unrealized = pos.quantity * (market_price - pos.avg_entry_price)
+            # Unrealized PnL = quantity * (current_market_price - avg_entry_price) * multiplier
+            new_unrealized = pos.quantity * (market_price - pos.avg_entry_price) * pos.multiplier
 
         self.positions[symbol] = pos.model_copy(
             update={
@@ -145,8 +145,9 @@ class ShadowAccountingLedger:
         fill_price: Decimal,
         fill_qty: Decimal,
         fee_paid: Decimal = Decimal("0.0"),
+        multiplier: Decimal = Decimal("1.0"),
     ) -> Tuple[Decimal, Decimal]:
-        """Process execution fill using signed-quantity position arithmetic.
+        """Process execution fill using signed-quantity position arithmetic with multiplier support.
 
         Returns:
             Tuple[realized_pnl_delta, new_equity]
@@ -157,6 +158,8 @@ class ShadowAccountingLedger:
             raise DataContractError(f"Fill price must be positive: {fill_price}")
         if fee_paid < Decimal("0.0"):
             raise DataContractError(f"Fee paid cannot be negative: {fee_paid}")
+        if multiplier <= Decimal("0.0"):
+            raise DataContractError(f"Multiplier must be positive: {multiplier}")
 
         side_upper = side.upper()
         if side_upper not in ("BUY", "SELL"):
@@ -173,6 +176,7 @@ class ShadowAccountingLedger:
                 quantity=Decimal("0.0"),
                 avg_entry_price=Decimal("0.0"),
                 current_market_price=fill_price,
+                multiplier=multiplier,
                 realized_pnl=Decimal("0.0"),
                 unrealized_pnl=Decimal("0.0"),
             ),
@@ -188,14 +192,13 @@ class ShadowAccountingLedger:
         if old_qty == Decimal("0.0"):
             # Scenario 1: Opening new position from flat
             new_avg_entry = fill_price
-            # Cash deducted: for BUY -> subtract (P*Q + fee), for SELL (short) -> add (P*Q - fee)
-            self.cash_balance -= (signed_qty_delta * fill_price) + fee_paid
+            self.cash_balance -= (signed_qty_delta * fill_price * multiplier) + fee_paid
 
         elif (old_qty > 0 and signed_qty_delta > 0) or (old_qty < 0 and signed_qty_delta < 0):
             # Scenario 2: Increasing existing position in same direction
             total_cost = (abs(old_qty) * pos.avg_entry_price) + (fill_qty * fill_price)
             new_avg_entry = total_cost / abs(new_qty)
-            self.cash_balance -= (signed_qty_delta * fill_price) + fee_paid
+            self.cash_balance -= (signed_qty_delta * fill_price * multiplier) + fee_paid
 
         elif (old_qty > 0 and signed_qty_delta < 0) or (old_qty < 0 and signed_qty_delta > 0):
             # Reducing or reversing existing position
@@ -203,10 +206,10 @@ class ShadowAccountingLedger:
 
             if old_qty > 0:
                 # Closing Long
-                realized_pnl_delta = closed_qty * (fill_price - pos.avg_entry_price)
+                realized_pnl_delta = closed_qty * (fill_price - pos.avg_entry_price) * multiplier
             else:
                 # Closing Short
-                realized_pnl_delta = closed_qty * (pos.avg_entry_price - fill_price)
+                realized_pnl_delta = closed_qty * (pos.avg_entry_price - fill_price) * multiplier
 
             if abs(new_qty) == Decimal("0.0"):
                 # Scenario 3: Exact position closing to flat
@@ -219,24 +222,25 @@ class ShadowAccountingLedger:
                 new_avg_entry = fill_price
 
             # Cash flow: return capital of closed portion + realized PnL - new opening cost - fee
-            self.cash_balance -= (signed_qty_delta * fill_price) + fee_paid
+            self.cash_balance -= (signed_qty_delta * fill_price * multiplier) + fee_paid
 
         else:
             new_avg_entry = fill_price
-            self.cash_balance -= (signed_qty_delta * fill_price) + fee_paid
+            self.cash_balance -= (signed_qty_delta * fill_price * multiplier) + fee_paid
 
         # Update attribution trackers
         self.cumulative_realized_pnl += realized_pnl_delta
         self.cumulative_fees_paid += fee_paid
 
         # Revalue unrealized PnL
-        new_unrealized = Decimal("0.0") if new_qty == Decimal("0.0") else new_qty * (fill_price - new_avg_entry)
+        new_unrealized = Decimal("0.0") if new_qty == Decimal("0.0") else new_qty * (fill_price - new_avg_entry) * multiplier
 
         self.positions[symbol] = ShadowPositionState(
             symbol=symbol,
             quantity=new_qty,
             avg_entry_price=new_avg_entry,
             current_market_price=fill_price,
+            multiplier=multiplier,
             realized_pnl=pos.realized_pnl + realized_pnl_delta,
             unrealized_pnl=new_unrealized,
         )

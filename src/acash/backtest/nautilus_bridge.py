@@ -337,6 +337,7 @@ class NautilusTraderSubstrate:
         uv_lock_sha256: Optional[str] = None,
         bar_spec: str = "1-MINUTE-LAST-EXTERNAL",
         phase4_analytical_edge_bps: Decimal = Decimal("0.0"),
+        strict_reference_benchmarks: bool = False,
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
 
         """Execute simulation via actual NautilusTrader runtime and re-account fills through ACASH Shadow Ledger."""
@@ -502,6 +503,7 @@ class NautilusTraderSubstrate:
                     fill_price=fill_px,
                     fill_qty=fill_qty,
                     fee_paid=fee_val,
+                    multiplier=inst_spec.multiplier,
                 )
                 if realized_pnl_delta > Decimal("0.0"):
                     profitable_trades_count += 1
@@ -648,6 +650,7 @@ class NautilusTraderSubstrate:
             phase4_analytical_edge_bps=phase4_analytical_edge_bps,
             phase5_simulated_realized_bps=simulated_realized_bps,
             total_fees_paid=tot_fees,
+            strict_reference_benchmarks=strict_reference_benchmarks,
         )
 
 

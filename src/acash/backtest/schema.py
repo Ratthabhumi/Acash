@@ -203,6 +203,10 @@ class BacktestEngineConfig(BaseModel):
             return self.instrument_spec
         return get_instrument_specification(self.symbol)
 
+    def get_effective_instrument_spec(self) -> InstrumentSpecification:
+        """Alias for get_resolved_spec."""
+        return self.get_resolved_spec()
+
 
     def to_canonical_json(self) -> str:
         """Emit deterministic, sorted JSON representation for cryptographic hashing."""
