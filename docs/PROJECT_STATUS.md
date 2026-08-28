@@ -2,8 +2,8 @@
 
 **Document:** `docs/PROJECT_STATUS.md`  
 **Project Name:** ACASH (Automated Capital Allocation System)  
-**Status:** Phase 1 Complete (Gate 1 Verified) — Awaiting Approval for Phase 2  
-**Date:** 2026-08-27  
+**Status:** Phases 0–5 Complete (Gate 1–5 Verified & Forensic Audit Signed Off) — Ready for Phase 6  
+**Date:** 2026-08-28  
 **Operating Environment:** Windows 10/11 (AIO workstation)  
 **Runtime:** Python 3.14.3 64-bit, Git 2.55.0  
 
