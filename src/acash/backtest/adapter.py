@@ -243,6 +243,7 @@ class CanonicalDataAdapter:
             else (table["sequence_num"] if "sequence_num" in table.column_names else None)
         )
         channel_id_col = table["channel_id"] if "channel_id" in table.column_names else None
+        match_sub_col = table["match_sub_idx"] if "match_sub_idx" in table.column_names else None
         price_col = table["price"]
         size_col = table["size"]
         side_col = table["aggressor_side"] if "aggressor_side" in table.column_names else None
@@ -260,16 +261,30 @@ class CanonicalDataAdapter:
             sz = str(size_col[i].as_py())
             side = str(side_col[i].as_py()) if side_col is not None else "UNKNOWN"
 
+            px_dec = Decimal(px)
+            sz_dec = Decimal(sz)
+            if px_dec <= Decimal("0.0"):
+                raise DataContractError(f"Trade price must be strictly positive (> 0), got {px_dec}")
+            if sz_dec <= Decimal("0.0"):
+                raise DataContractError(f"Trade size must be strictly positive (> 0), got {sz_dec}")
+
             if source_key_col is not None:
                 source_key = str(source_key_col[i].as_py())
             elif seq_val is not None:
                 chan_val = str(channel_id_col[i].as_py()) if channel_id_col is not None and channel_id_col[i].as_py() is not None else "0"
-                source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}"
+                if match_sub_col is not None and match_sub_col[i].as_py() is not None:
+                    sub_val = str(match_sub_col[i].as_py())
+                elif row_sub_col is not None and row_sub_col[i].as_py() is not None:
+                    sub_val = str(row_sub_col[i].as_py())
+                else:
+                    sub_val = str(i)
+                source_key = f"{symbol}:{stream_id}:{ts_ns}:ch{chan_val}_seq{seq_val}_sub{sub_val}"
             elif trade_id_val is not None:
                 source_key = f"{symbol}:{stream_id}:{ts_ns}:trd_{trade_id_val}"
             else:
                 fp = hashlib.sha256(f"{ts_ns}:{px}:{sz}:{side}".encode("utf-8")).hexdigest()[:16]
                 source_key = f"{symbol}:{stream_id}:{ts_ns}:{fp}"
+
 
 
             if source_key in seen_keys and source_key_col is None:

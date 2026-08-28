@@ -554,11 +554,15 @@ class EventBacktestRunner:
             trade_size = Decimal(str(trade_event_payload["size"]))
             aggressor = str(trade_event_payload.get("aggressor_side", "UNKNOWN")).upper()
 
+            # Strict Invariant: trade_size <= 0 produces ZERO fill (no phantom liquidity)
+            if trade_size <= Decimal("0.0") or trade_price <= Decimal("0.0"):
+                return False
+
             if order.side == "BUY":
                 if trade_price < order.limit_price:
                     # Trade-through: Market traded below buy limit -> entire price level surpassed
-                    fill_qty = min(order.remaining_qty, trade_size) if trade_size > Decimal("0.0") else order.remaining_qty
-                    is_filled = True
+                    fill_qty = min(order.remaining_qty, trade_size)
+                    is_filled = fill_qty > Decimal("0.0")
                 elif trade_price == order.limit_price and aggressor in ("SELL", "UNKNOWN"):
                     # Opposing sell aggressor trades at limit price
                     if order.queue_ahead_volume > Decimal("0.0"):
@@ -566,18 +570,18 @@ class EventBacktestRunner:
                             available_qty = trade_size - order.queue_ahead_volume
                             order.queue_ahead_volume = Decimal("0.0")
                             fill_qty = min(order.remaining_qty, available_qty)
-                            is_filled = True
+                            is_filled = fill_qty > Decimal("0.0")
                         else:
                             order.queue_ahead_volume -= trade_size
                     else:
                         # Already at top of queue
                         fill_qty = min(order.remaining_qty, trade_size)
-                        is_filled = True
+                        is_filled = fill_qty > Decimal("0.0")
             else:  # SELL limit
                 if trade_price > order.limit_price:
                     # Trade-through: Market traded above sell limit -> entire price level surpassed
-                    fill_qty = min(order.remaining_qty, trade_size) if trade_size > Decimal("0.0") else order.remaining_qty
-                    is_filled = True
+                    fill_qty = min(order.remaining_qty, trade_size)
+                    is_filled = fill_qty > Decimal("0.0")
                 elif trade_price == order.limit_price and aggressor in ("BUY", "UNKNOWN"):
                     # Opposing buy aggressor trades at limit price
                     if order.queue_ahead_volume > Decimal("0.0"):
@@ -585,13 +589,14 @@ class EventBacktestRunner:
                             available_qty = trade_size - order.queue_ahead_volume
                             order.queue_ahead_volume = Decimal("0.0")
                             fill_qty = min(order.remaining_qty, available_qty)
-                            is_filled = True
+                            is_filled = fill_qty > Decimal("0.0")
                         else:
                             order.queue_ahead_volume -= trade_size
                     else:
                         # Already at top of queue
                         fill_qty = min(order.remaining_qty, trade_size)
-                        is_filled = True
+                        is_filled = fill_qty > Decimal("0.0")
+
         else:
             # Fallback for Bar/Depth trigger without discrete trade stream
             if self.last_price > Decimal("0.0"):

@@ -179,3 +179,98 @@ def test_empty_table_schema_validation_in_hashing() -> None:
     empty_valid = CANONICAL_ARROW_SCHEMA.empty_table()
     h = calculate_canonical_batch_sha256(empty_valid)
     assert len(h) == 64
+
+
+def test_cross_batch_duplicate_and_conflicting_revision_rejection() -> None:
+    """Audit P0/P1: Validate table rejects duplicate content or conflicting revisions across batches."""
+    from acash.data.provenance import calculate_canonical_content_fingerprint
+    from acash.data.storage import ParquetStorageEngine
+    import tempfile
+    from pathlib import Path
+
+    validator = DataIntegrityValidator()
+    t0 = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 1, 1, 10, 1, tzinfo=timezone.utc)
+    t_know = datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc)
+
+    # 1. Compute fingerprint of initial persisted revision (Close = 100.00)
+    fp_initial = calculate_canonical_content_fingerprint(
+        open_price=Decimal("100.00"),
+        high_price=Decimal("105.00"),
+        low_price=Decimal("95.00"),
+        close_price=Decimal("100.00"),
+        volume=Decimal("10.0"),
+        quote_volume=Decimal("1000.0"),
+        trade_count=50,
+    )
+
+    existing_lookup = {
+        ("binance", "BTC/USDT", "M1", t0, t_know): (1, fp_initial)
+    }
+
+    # Case A: Same Event, Same Knowledge Time, Same Content -> DUPLICATE_REVISION_CONTENT
+    tbl_dup = pa.Table.from_pydict({
+        "source_id": ["binance"],
+        "symbol": ["BTC/USDT"],
+        "timeframe": ["M1"],
+        "event_start_utc": [t0],
+        "event_end_utc": [t1],
+        "knowledge_time_utc": [t_know],
+        "revision_seq": [None],
+        "open": [Decimal("100.00")],
+        "high": [Decimal("105.00")],
+        "low": [Decimal("95.00")],
+        "close": [Decimal("100.00")],
+        "volume": [Decimal("10.0")],
+        "quote_volume": [Decimal("1000.0")],
+        "trade_count": [50],
+    }, schema=CANONICAL_ARROW_SCHEMA)
+
+    report_dup, _ = validator.validate_table(tbl_dup, existing_revisions_lookup=existing_lookup)
+    assert report_dup.is_valid is False
+    assert any(err.rule == "DUPLICATE_REVISION_CONTENT" for err in report_dup.errors)
+
+    # Case B: Same Event, Same Knowledge Time, Conflicting Content (Close = 105.00) -> CONFLICTING_REVISION_AT_SAME_KNOWLEDGE_TIME
+    tbl_conflict = pa.Table.from_pydict({
+        "source_id": ["binance"],
+        "symbol": ["BTC/USDT"],
+        "timeframe": ["M1"],
+        "event_start_utc": [t0],
+        "event_end_utc": [t1],
+        "knowledge_time_utc": [t_know],
+        "revision_seq": [None],
+        "open": [Decimal("100.00")],
+        "high": [Decimal("105.00")],
+        "low": [Decimal("95.00")],
+        "close": [Decimal("105.00")],  # Changed close price!
+        "volume": [Decimal("10.0")],
+        "quote_volume": [Decimal("1000.0")],
+        "trade_count": [50],
+    }, schema=CANONICAL_ARROW_SCHEMA)
+
+    report_conf, _ = validator.validate_table(tbl_conflict, existing_revisions_lookup=existing_lookup)
+    assert report_conf.is_valid is False
+    assert any(err.rule == "CONFLICTING_REVISION_AT_SAME_KNOWLEDGE_TIME" for err in report_conf.errors)
+
+
+def test_storage_corrupted_parquet_raises_integrity_violation_error() -> None:
+    """Audit P2: ParquetStorageEngine raises IntegrityViolationError on corrupt parquet rather than swallowing exceptions."""
+    from acash.data.storage import ParquetStorageEngine
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        engine = ParquetStorageEngine(base_dir=Path(tmp_dir))
+        part_dir = Path(tmp_dir) / "BTC-USDT" / "M1" / "year=2026"
+        part_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write corrupt file
+        corrupt_file = part_dir / "part-corrupt_001.parquet"
+        corrupt_file.write_bytes(b"CORRUPT_GARBAGE_HEADER_NOT_A_PARQUET_FILE")
+
+        with pytest.raises(IntegrityViolationError, match="Corrupted or unreadable"):
+            engine.get_existing_revisions_lookup([("binance", "BTC/USDT", "M1")])
+
+        with pytest.raises(IntegrityViolationError, match="Corrupted or unreadable"):
+            engine.get_existing_event_max_seq([("binance", "BTC/USDT", "M1")])
+

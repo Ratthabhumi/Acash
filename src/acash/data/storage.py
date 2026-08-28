@@ -24,12 +24,15 @@ from acash.data.provenance import (
     ProvenanceRecord,
     ProvenanceTracker,
     calculate_canonical_batch_sha256,
+    calculate_canonical_content_fingerprint,
 )
 from acash.data.schema import (
     BatchCollisionError,
     CANONICAL_ARROW_SCHEMA,
+    IntegrityViolationError,
     OrphanPartError,
 )
+
 
 
 class ParquetStorageEngine:
@@ -60,9 +63,11 @@ class ParquetStorageEngine:
         self,
         streams: Sequence[Tuple[str, str, str]],
         exclude_batch_ids: Optional[Sequence[str]] = None,
-    ) -> Dict[Tuple[str, str, str, datetime, datetime, int], bool]:
-        """Scan existing Parquet parts for the given streams and build Revision Identity lookup."""
-        lookup: Dict[Tuple[str, str, str, datetime, datetime, int], bool] = {}
+    ) -> Dict[Tuple[str, str, str, datetime, datetime], Tuple[int, str]]:
+        """Scan existing Parquet parts and build an in-memory lookup of persisted revision contents:
+        (source_id, symbol, timeframe, event_start_utc, knowledge_time_utc) -> (revision_seq, canonical_content_fingerprint)
+        """
+        lookup: Dict[Tuple[str, str, str, datetime, datetime], Tuple[int, str]] = {}
         excluded_set = set(exclude_batch_ids or [])
 
         for source_id, symbol, timeframe in streams:
@@ -83,28 +88,44 @@ class ParquetStorageEngine:
                         part_path,
                         columns=[
                             "source_id", "symbol", "timeframe",
-                            "event_start_utc", "knowledge_time_utc", "revision_seq"
+                            "event_start_utc", "knowledge_time_utc", "revision_seq",
+                            "open", "high", "low", "close", "volume", "quote_volume", "trade_count",
                         ]
                     )
-                    rows = tbl.to_pylist()
-                    for r in rows:
-                        estart = r["event_start_utc"]
-                        know = r["knowledge_time_utc"]
-                        if isinstance(estart, datetime) and estart.tzinfo is None:
-                            estart = estart.replace(tzinfo=timezone.utc)
-                        if isinstance(know, datetime) and know.tzinfo is None:
-                            know = know.replace(tzinfo=timezone.utc)
-                        rev_key = (
-                            str(r["source_id"]),
-                            str(r["symbol"]),
-                            str(r["timeframe"]),
-                            estart,
-                            know,
-                            int(r["revision_seq"]),
-                        )
-                        lookup[rev_key] = True
-                except Exception:
+                except FileNotFoundError:
                     continue
+                except Exception as exc:
+                    raise IntegrityViolationError(
+                        f"Corrupted or unreadable canonical Parquet part at '{part_path}': {exc}"
+                    ) from exc
+
+                rows = tbl.to_pylist()
+                for r in rows:
+                    estart = r["event_start_utc"]
+                    know = r["knowledge_time_utc"]
+                    if isinstance(estart, datetime) and estart.tzinfo is None:
+                        estart = estart.replace(tzinfo=timezone.utc)
+                    if isinstance(know, datetime) and know.tzinfo is None:
+                        know = know.replace(tzinfo=timezone.utc)
+
+                    from decimal import Decimal
+                    fp = calculate_canonical_content_fingerprint(
+                        open_price=Decimal(str(r["open"])),
+                        high_price=Decimal(str(r["high"])),
+                        low_price=Decimal(str(r["low"])),
+                        close_price=Decimal(str(r["close"])),
+                        volume=Decimal(str(r["volume"])),
+                        quote_volume=Decimal(str(r["quote_volume"])),
+                        trade_count=int(r["trade_count"]),
+                    )
+                    rev_key = (
+                        str(r["source_id"]),
+                        str(r["symbol"]),
+                        str(r["timeframe"]),
+                        estart,
+                        know,
+                    )
+                    lookup[rev_key] = (int(r["revision_seq"]), fp)
         return lookup
 
     def get_existing_event_max_seq(
@@ -133,25 +154,30 @@ class ParquetStorageEngine:
                         part_path,
                         columns=[
                             "source_id", "symbol", "timeframe",
-                            "event_start_utc", "revision_seq"
+                            "event_start_utc", "revision_seq",
                         ]
                     )
-                    rows = tbl.to_pylist()
-                    for r in rows:
-                        estart = r["event_start_utc"]
-                        if isinstance(estart, datetime) and estart.tzinfo is None:
-                            estart = estart.replace(tzinfo=timezone.utc)
-                        event_key = (
-                            str(r["source_id"]),
-                            str(r["symbol"]),
-                            str(r["timeframe"]),
-                            estart,
-                        )
-                        seq_val = int(r["revision_seq"])
-                        if event_key not in max_seq_map or seq_val > max_seq_map[event_key]:
-                            max_seq_map[event_key] = seq_val
-                except Exception:
+                except FileNotFoundError:
                     continue
+                except Exception as exc:
+                    raise IntegrityViolationError(
+                        f"Corrupted or unreadable canonical Parquet part at '{part_path}': {exc}"
+                    ) from exc
+
+                rows = tbl.to_pylist()
+                for r in rows:
+                    estart = r["event_start_utc"]
+                    if isinstance(estart, datetime) and estart.tzinfo is None:
+                        estart = estart.replace(tzinfo=timezone.utc)
+                    event_key = (
+                        str(r["source_id"]),
+                        str(r["symbol"]),
+                        str(r["timeframe"]),
+                        estart,
+                    )
+                    seq_val = int(r["revision_seq"])
+                    if event_key not in max_seq_map or seq_val > max_seq_map[event_key]:
+                        max_seq_map[event_key] = seq_val
         return max_seq_map
 
 

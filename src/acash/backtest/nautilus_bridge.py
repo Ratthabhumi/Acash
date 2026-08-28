@@ -44,7 +44,9 @@ from acash.backtest.schema import (
     OrderType,
     RealityGapSummary,
 )
+from acash.backtest.telemetry import RealityGapAttributionEngine
 from acash.data.schema import DataContractError
+
 
 
 class SubstrateRuntimeUnavailableError(DataContractError):
@@ -334,7 +336,9 @@ class NautilusTraderSubstrate:
         canonical_data_hashes: Optional[List[str]] = None,
         uv_lock_sha256: Optional[str] = None,
         bar_spec: str = "1-MINUTE-LAST-EXTERNAL",
+        phase4_analytical_edge_bps: Decimal = Decimal("0.0"),
     ) -> Tuple[BacktestManifest, pa.Table, pa.Table]:
+
         """Execute simulation via actual NautilusTrader runtime and re-account fills through ACASH Shadow Ledger."""
         if not self._has_runtime:
             py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -470,6 +474,8 @@ class NautilusTraderSubstrate:
         fills_report = engine.trader.generate_order_fills_report()
         fill_records: List[Dict[str, Any]] = []
         equity_records: List[Dict[str, Any]] = []
+        profitable_trades_count = 0
+        total_closed_trades_count = 0
 
         if fills_report is not None and len(fills_report) > 0:
             for idx, (client_order_id, fill_row) in enumerate(fills_report.iterrows()):
@@ -490,13 +496,18 @@ class NautilusTraderSubstrate:
                 ts_ns_val = extract_exact_nanoseconds(fill_row["ts_last"])
 
                 # Re-account fill into sovereign Shadow Accounting Ledger
-                self.shadow_ledger.process_fill(
+                realized_pnl_delta, _ = self.shadow_ledger.process_fill(
                     symbol=sym_str,
                     side=side_str,
                     fill_price=fill_px,
                     fill_qty=fill_qty,
                     fee_paid=fee_val,
                 )
+                if realized_pnl_delta > Decimal("0.0"):
+                    profitable_trades_count += 1
+                    total_closed_trades_count += 1
+                elif realized_pnl_delta < Decimal("0.0"):
+                    total_closed_trades_count += 1
 
                 fill_records.append({
                     "fill_id": fill_id,
@@ -584,14 +595,37 @@ class NautilusTraderSubstrate:
         else:
             equity_table = pa.Table.from_batches([], schema=CANONICAL_EQUITY_CURVE_SCHEMA)
 
-        # 12. Build Manifest
+        # 12. Build Manifest with genuine Execution Statistics and Reality Gap Attribution
         num_fills = len(fill_records)
         tot_vol = sum((r["fill_qty"] for r in fill_records), Decimal("0.0"))
         tot_fees = sum((r["fee_paid"] for r in fill_records), Decimal("0.0"))
         final_equity = equity_records[-1]["total_equity"] if equity_records else self.shadow_ledger.calculate_balance_sheet_equity()
 
+        # Calculate peak-to-trough maximum drawdown
+        peak_equity = self.config.initial_cash
+        max_drawdown = Decimal("0.0")
+        for rec in equity_records:
+            eq = rec["total_equity"]
+            if eq > peak_equity:
+                peak_equity = eq
+            elif peak_equity > Decimal("0.0"):
+                dd = ((peak_equity - eq) / peak_equity) * Decimal("100.0")
+                if dd > max_drawdown:
+                    max_drawdown = dd
+
+        # Calculate genuine win rate
+        win_rate = (
+            (Decimal(str(profitable_trades_count)) / Decimal(str(total_closed_trades_count))) * Decimal("100.0")
+            if total_closed_trades_count > 0
+            else Decimal("0.0")
+        )
+
+        # Extract submitted orders from Nautilus trader report if available
+        orders_report = engine.trader.generate_orders_report()
+        total_submitted_orders = len(orders_report) if orders_report is not None and len(orders_report) > 0 else num_fills
+
         summary = BacktestExecutionSummary(
-            total_orders=num_fills,
+            total_orders=total_submitted_orders,
             total_fills=num_fills,
             total_volume_traded=tot_vol,
             total_fees_paid=tot_fees,
@@ -599,17 +633,23 @@ class NautilusTraderSubstrate:
             unrealized_pnl=equity_records[-1]["unrealized_pnl"] if equity_records else Decimal("0.0"),
             ending_equity=final_equity,
             net_return_pct=((final_equity - self.config.initial_cash) / self.config.initial_cash) * Decimal("100"),
-            max_drawdown_pct=Decimal("0.0"),
-            win_rate_pct=Decimal("0.0"),
+            max_drawdown_pct=max_drawdown,
+            win_rate_pct=win_rate,
         )
-        reality = RealityGapSummary(
-            phase4_analytical_edge_bps=Decimal("0.0"),
-            phase5_simulated_realized_bps=Decimal("0.0"),
-            reality_gap_bps=Decimal("0.0"),
-            spread_drag_bps=Decimal("0.0"),
-            latency_slip_drag_bps=Decimal("0.0"),
+
+        simulated_realized_bps = (
+            (self.shadow_ledger.cumulative_realized_pnl / self.config.initial_cash) * Decimal("10000.0")
+            if self.config.initial_cash > Decimal("0.0")
+            else Decimal("0.0")
+        )
+        reality = RealityGapAttributionEngine.calculate_attribution(
+            phase4_analytical_edge_bps=phase4_analytical_edge_bps,
+            phase5_simulated_realized_bps=simulated_realized_bps,
+            spread_drag_bps=self.config.fee_config.taker_fee_bps,
+            latency_slip_drag_bps=self.config.slippage_config.fixed_slippage_bps,
             queue_position_drag_bps=Decimal("0.0"),
         )
+
 
         if not canonical_data_hashes:
             raise DataContractError(

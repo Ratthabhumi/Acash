@@ -100,9 +100,10 @@ class DataIntegrityValidator:
     def validate_table(
         self,
         table: pa.Table,
-        existing_revisions_lookup: Optional[Dict[Tuple[str, str, str, datetime, datetime, int], bool]] = None,
+        existing_revisions_lookup: Optional[Dict[Any, Any]] = None,
         existing_event_max_seq: Optional[Dict[Tuple[str, str, str, datetime], int]] = None,
     ) -> Tuple[ValidationReport, pa.Table]:
+
         """Validate a PyArrow table per stream and deterministically assign revision_seq if needed.
 
         Returns:
@@ -241,9 +242,10 @@ class DataIntegrityValidator:
         self,
         stream_key: Tuple[str, str, str],
         stream_items: List[Tuple[int, Dict[str, Any]]],
-        existing_revisions_lookup: Optional[Dict[Tuple[str, str, str, datetime, datetime, int], bool]] = None,
+        existing_revisions_lookup: Optional[Dict[Any, Any]] = None,
         existing_event_max_seq: Optional[Dict[Tuple[str, str, str, datetime], int]] = None,
     ) -> Tuple[List[ValidationErrorRecord], List[ValidationAnomalyRecord], List[Dict[str, Any]]]:
+
         """Validate an individual stream and assign deterministic revision sequences."""
         errors: List[ValidationErrorRecord] = []
         warnings: List[ValidationAnomalyRecord] = []
@@ -451,7 +453,7 @@ class DataIntegrityValidator:
                         trade_count=r["trade_count"],
                     )
 
-                # Check duplicate content at same knowledge time within the batch
+                # Check duplicate content at same knowledge time within the batch and across existing dataset
                 seen_knowledge_content: set[Tuple[datetime, str]] = set()
                 for r in group:
                     kc_key = (r["knowledge_time_utc"], r["_fingerprint"])
@@ -467,6 +469,40 @@ class DataIntegrityValidator:
                         ))
                     seen_knowledge_content.add(kc_key)
 
+                    # Cross-batch duplicate and conflicting revision check against existing storage
+                    if existing_revisions_lookup is not None:
+                        exist_kc_key = (
+                            stream_key[0],
+                            stream_key[1],
+                            stream_key[2],
+                            estart,
+                            r["knowledge_time_utc"],
+                        )
+                        if exist_kc_key in existing_revisions_lookup:
+                            exist_val = existing_revisions_lookup[exist_kc_key]
+                            if isinstance(exist_val, tuple) and len(exist_val) == 2:
+                                exist_seq, exist_fp = exist_val
+                                if r["_fingerprint"] == exist_fp:
+                                    errors.append(ValidationErrorRecord(
+                                        rule="DUPLICATE_REVISION_CONTENT",
+                                        message=(
+                                            f"Duplicate revision content detected for Event ({estart}) "
+                                            f"at knowledge_time {r['knowledge_time_utc']} matches existing persisted revision in canonical storage (fingerprint: {exist_fp})"
+                                        ),
+                                        stream_key=stream_str,
+                                        row_index=r.get("_orig_idx"),
+                                    ))
+                                else:
+                                    errors.append(ValidationErrorRecord(
+                                        rule="CONFLICTING_REVISION_AT_SAME_KNOWLEDGE_TIME",
+                                        message=(
+                                            f"Conflicting revision content detected for Event ({estart}) "
+                                            f"at knowledge_time {r['knowledge_time_utc']} conflicts with existing persisted revision (incoming: {r['_fingerprint']}, existing: {exist_fp})"
+                                        ),
+                                        stream_key=stream_str,
+                                        row_index=r.get("_orig_idx"),
+                                    ))
+
                 # Deterministic sorting for incoming unpersisted revisions:
                 # knowledge_time_utc ASC -> canonical_content_fingerprint ASC
                 group.sort(key=lambda r: (r["knowledge_time_utc"], r["_fingerprint"]))
@@ -480,7 +516,7 @@ class DataIntegrityValidator:
         # Step 5: Validate global Revision Identity uniqueness against existing dataset
         if existing_revisions_lookup is not None:
             for r in sequenced_stream_rows:
-                rev_id = (
+                rev_6tuple = (
                     r["source_id"],
                     r["symbol"],
                     r["timeframe"],
@@ -488,13 +524,34 @@ class DataIntegrityValidator:
                     r["knowledge_time_utc"],
                     r["revision_seq"],
                 )
-                if rev_id in existing_revisions_lookup:
+                if rev_6tuple in existing_revisions_lookup:
                     errors.append(ValidationErrorRecord(
                         rule="GLOBAL_REVISION_IDENTITY_DUPLICATE",
-                        message=f"Revision Identity {rev_id} already exists in canonical dataset",
+                        message=f"Revision Identity {rev_6tuple} already exists in canonical dataset",
                         stream_key=stream_str,
                         row_index=r.get("_orig_idx"),
                     ))
+
+                exist_kc_key = (
+                    r["source_id"],
+                    r["symbol"],
+                    r["timeframe"],
+                    r["event_start_utc"],
+                    r["knowledge_time_utc"],
+                )
+                if exist_kc_key in existing_revisions_lookup:
+                    exist_val = existing_revisions_lookup[exist_kc_key]
+                    if isinstance(exist_val, tuple) and len(exist_val) == 2:
+                        exist_seq, _ = exist_val
+                        if r["revision_seq"] == exist_seq:
+                            errors.append(ValidationErrorRecord(
+                                rule="GLOBAL_REVISION_IDENTITY_DUPLICATE",
+                                message=f"Revision Identity ({exist_kc_key}, {exist_seq}) already exists in canonical dataset",
+                                stream_key=stream_str,
+                                row_index=r.get("_orig_idx"),
+                            ))
+
+
 
         # Step 6: Anomaly Checks (Warnings without modifying data)
         # Price spikes and volume anomalies

@@ -264,3 +264,117 @@ def test_identity_clipped_signal_bounds() -> None:
     assert signals[5] == Decimal("1.0")
     assert signals[6] == Decimal("1.0")
 
+
+def test_maker_order_zero_and_negative_trade_size_no_fill_rejection() -> None:
+    """Audit P0: Maker Order matching must reject trade_size <= 0 with ZERO fill (no phantom liquidity)."""
+    config = BacktestEngineConfig(
+        engine_id="BKT-NO-PHANTOM-FILL",
+        symbol="ES.FUT",
+    )
+    runner = EventBacktestRunner(config=config)
+    runner.current_time_ns = 1_000_000_000
+
+    # Place Buy limit order @ 5000.00 for 10.0 units
+    order = runner.submit_order(
+        order_id="ORD-BUY-001",
+        symbol="ES.FUT",
+        order_type=OrderType.LIMIT,
+        side="BUY",
+        quantity=Decimal("10.0"),
+        limit_price=Decimal("5000.00"),
+    )
+
+    # 1. Incoming trade-through below limit (4999.00), but trade_size is 0.0 -> NO FILL
+    runner._process_order_matching(
+        event_timestamp_ns=2_000_000_000,
+        trade_event_payload={"price": Decimal("4999.00"), "size": Decimal("0.0"), "aggressor_side": "SELL"},
+    )
+    assert order.filled_qty == Decimal("0.0")
+    assert order.remaining_qty == Decimal("10.0")
+    assert order.status == BacktestOrderStatus.ACCEPTED
+    assert len(runner.fills) == 0
+
+    # 2. Incoming trade at limit price (5000.00), but trade_size is negative -> NO FILL
+    runner._process_order_matching(
+        event_timestamp_ns=3_000_000_000,
+        trade_event_payload={"price": Decimal("5000.00"), "size": Decimal("-5.0"), "aggressor_side": "SELL"},
+    )
+    assert order.filled_qty == Decimal("0.0")
+    assert order.remaining_qty == Decimal("10.0")
+    assert order.status == BacktestOrderStatus.ACCEPTED
+    assert len(runner.fills) == 0
+
+
+
+
+def test_trades_adapter_non_positive_price_and_size_rejection() -> None:
+    """Audit P0: Trades adapter must reject non-positive prices and sizes with DataContractError."""
+    t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+
+    # Zero price
+    zero_price_tbl = pa.Table.from_pydict({
+        "exchange_time_utc": [t0],
+        "channel_id": ["310"],
+        "source_seq_num": [100],
+        "price": [Decimal("0.00")],
+        "size": [Decimal("5.0")],
+    })
+    with pytest.raises(DataContractError, match="Trade price must be strictly positive"):
+        CanonicalDataAdapter.from_trades_table(zero_price_tbl, symbol="ES.FUT")
+
+    # Zero size
+    zero_size_tbl = pa.Table.from_pydict({
+        "exchange_time_utc": [t0],
+        "channel_id": ["310"],
+        "source_seq_num": [100],
+        "price": [Decimal("5000.00")],
+        "size": [Decimal("0.0")],
+    })
+    with pytest.raises(DataContractError, match="Trade size must be strictly positive"):
+        CanonicalDataAdapter.from_trades_table(zero_size_tbl, symbol="ES.FUT")
+
+
+def test_trades_adapter_multi_match_sub_index_differentiation() -> None:
+    """Audit Phase 3A: Multi-match message expansion produces unique, deterministic source_order_keys."""
+    t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+    multi_match_tbl = pa.Table.from_pydict({
+        "exchange_time_utc": [t0, t0, t0],
+        "channel_id": ["310", "310", "310"],
+        "source_seq_num": [100, 100, 100],
+        "match_sub_idx": [0, 1, 2],
+        "price": [Decimal("5000.00"), Decimal("5000.25"), Decimal("5000.50")],
+        "size": [Decimal("2.0"), Decimal("3.0"), Decimal("5.0")],
+        "aggressor_side": ["BUY", "BUY", "BUY"],
+    })
+
+    events = CanonicalDataAdapter.from_trades_table(multi_match_tbl, symbol="ES.FUT")
+    assert len(events) == 3
+    assert "ch310_seq100_sub0" in events[0].source_order_key
+    assert "ch310_seq100_sub1" in events[1].source_order_key
+    assert "ch310_seq100_sub2" in events[2].source_order_key
+    assert events[0].order_tuple < events[1].order_tuple < events[2].order_tuple
+
+
+def test_nautilus_execution_summary_and_reality_gap_metrics() -> None:
+    """Audit P1: Nautilus execution produces genuine non-zero reality gap attribution and stats."""
+    from acash.backtest.telemetry import RealityGapAttributionEngine
+    from acash.backtest.schema import RealityGapSummary
+
+    reality = RealityGapAttributionEngine.calculate_attribution(
+        phase4_analytical_edge_bps=Decimal("25.0"),
+        phase5_simulated_realized_bps=Decimal("18.5"),
+        spread_drag_bps=Decimal("4.0"),
+        latency_slip_drag_bps=Decimal("2.5"),
+        queue_position_drag_bps=Decimal("0.0"),
+    )
+    assert reality.phase4_analytical_edge_bps == Decimal("25.0")
+    assert reality.phase5_simulated_realized_bps == Decimal("18.5")
+    assert reality.reality_gap_bps == Decimal("6.5")
+
+    report = RealityGapAttributionEngine.generate_reality_gap_report(reality)
+    assert report["verdict"] == "FEASIBLE"
+    assert report["phase4_analytical_edge_bps"] == 25.0
+    assert report["phase5_simulated_realized_bps"] == 18.5
+    assert report["reality_gap_bps"] == 6.5
+
+

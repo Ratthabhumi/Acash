@@ -111,17 +111,23 @@ def calculate_canonical_content_fingerprint(
     trade_count: int,
 ) -> str:
     """Calculate deterministic SHA-256 fingerprint over canonical revision fields."""
+    def _norm(d: Any) -> str:
+        if isinstance(d, Decimal):
+            return f"{d:.18f}"
+        return str(d)
+
     payload = {
-        "open": str(open_price),
-        "high": str(high_price),
-        "low": str(low_price),
-        "close": str(close_price),
-        "volume": str(volume),
-        "quote_volume": str(quote_volume),
+        "open": _norm(open_price),
+        "high": _norm(high_price),
+        "low": _norm(low_price),
+        "close": _norm(close_price),
+        "volume": _norm(volume),
+        "quote_volume": _norm(quote_volume),
         "trade_count": trade_count,
     }
     canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
 
 
 # Type tags for length-prefixed binary serialization
