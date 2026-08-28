@@ -1,8 +1,17 @@
 """Statistical Evaluation, HAC Inference, and 3-Tier Friction Engine (Phase 4).
 
 Strictly enforces:
+- Dual-Precision Architecture & Precision Contract:
+  * Canonical Domain Layer: Exact Decimal representation (zero float rounding) for ledger, manifests, and boundaries.
+  * Statistical Numerical Backend: IEEE 754 numpy.float64 for vectorized linear algebra and transcendental functions.
+  * Boundary Quantization: Statistical outputs cast to exact 18-decimal Decimal via to_decimal18() with epsilon_stat <= 1e-12.
 - Primary Inference: OLS slope beta_H under Heteroskedasticity and Autocorrelation Consistent (HAC) covariance.
-- Configurable HAC Bandwidth: Baseline (H-1), Fixed Lag, Newey-West Plug-in, and Andrews AR(1).
+- Configurable HAC Bandwidth:
+  * Baseline: Horizon - 1
+  * Fixed Lag: User-specified integer lag
+  * Newey-West (1994) Rule-of-Thumb Plug-in: floor(4 * (T / 100)^(2/9))
+  * Andrews (1991, Econometrica 59(3), Table 1) AR(1) Bartlett Plug-in: floor(1.1447 * (alpha(1) * T)^(1/3))
+    where alpha(1) = 4 * rho^2 / (1 - rho^2)^2 derived from score process g_t = (X_t - mean(X)) * eps_t.
 - Non-parametric Association: Pearson IC, Spearman Rank IC (tie-aware), and Autocorrelation.
 - 3-Tier Friction Waterfall: Raw Predictive Edge -> Spread+Fee Net -> Slippage+Latency Economic Edge.
 - Robustness Matrix: Multi-bandwidth stability verification.

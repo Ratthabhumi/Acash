@@ -90,3 +90,65 @@ def test_hand_calculated_3tier_friction_waterfall() -> None:
     assert t1 == Decimal("15.0")
     assert t2 == Decimal("12.0")
     assert t3 == Decimal("11.5")
+
+
+def test_hand_calculated_andrews_ar1_and_newey_west_bandwidths() -> None:
+    """Verify Andrews (1991, Econometrica 59(3)) AR(1) plug-in and Newey-West (1994) lag selection against manual derivations."""
+    from acash.research.evaluation import determine_hac_bandwidth
+    from acash.research.schema import HacBandwidthMethod
+    import numpy as np
+
+    # 1. Newey-West rule-of-thumb: floor(4 * (T / 100)^(2/9))
+    # For T = 1000: floor(4 * 10^(2/9)) = floor(4 * 1.6681005372) = floor(6.6724) = 6
+    nw_bw = determine_hac_bandwidth(HacBandwidthMethod.NEWEY_WEST_PLUGIN, sample_size=1000, horizon=5)
+    assert nw_bw == 6
+
+    # 2. Andrews (1991) AR(1) Bartlett kernel plug-in:
+    # S_T = floor(1.1447 * (alpha(1) * T)^(1/3))
+    # where alpha(1) = 4 * rho^2 / (1 - rho^2)^2
+    # Let rho = 0.5 -> rho^2 = 0.25 -> alpha(1) = 4 * 0.25 / (1 - 0.25)^2 = 1.0 / 0.5625 = 16/9 = 1.7777777778
+    # For T = 1000: (alpha(1) * T)^(1/3) = (1777.7777778)^(1/3) = 12.114137286
+    # S_T = floor(1.1447 * 12.114137286) = floor(13.86705295) = 13
+
+    # Generate synthetic score process with known sample autocorrelation rho ~ 0.50
+    np.random.seed(42)
+    e = np.random.normal(0, 1, 1000)
+    score_proc = np.zeros(1000)
+    for t in range(1, 1000):
+        score_proc[t] = 0.50 * score_proc[t - 1] + e[t]
+
+    sample_rho = float(np.corrcoef(score_proc[:-1], score_proc[1:])[0, 1])
+    expected_alpha = (4.0 * (sample_rho ** 2)) / ((1.0 - (sample_rho ** 2)) ** 2)
+    expected_andrews_bw = int(math.floor(1.1447 * ((expected_alpha * 1000.0) ** (1.0 / 3.0))))
+
+    andrews_bw = determine_hac_bandwidth(
+        HacBandwidthMethod.ANDREWS_AR1_PLUGIN,
+        sample_size=1000,
+        horizon=5,
+        score_process=score_proc,
+    )
+    assert andrews_bw == expected_andrews_bw
+
+
+def test_empty_orderbook_and_trades_tables_validate_canonical_schema() -> None:
+    """Verify that empty tables with malformed schemas fail-fast rather than silently returning success."""
+    from acash.data.orderbook.pipeline import OrderBookIngestionPipeline
+    from acash.data.trades.pipeline import TradesIngestionPipeline
+    from acash.data.schema import IntegrityViolationError
+    import pyarrow as pa
+
+    ob_pipeline = OrderBookIngestionPipeline()
+    trades_pipeline = TradesIngestionPipeline()
+
+    # Empty table with completely invalid schema (missing mandatory fields)
+    bad_empty_table = pa.Table.from_pydict({"invalid_col_a": [], "invalid_col_b": []})
+
+    with pytest.raises(IntegrityViolationError, match="Empty Order Book Snapshot table has invalid canonical schema"):
+        ob_pipeline.ingest_snapshots(raw_table=bad_empty_table, source_id="binance", source_uri="file://test")
+
+    with pytest.raises(IntegrityViolationError, match="Empty Order Book Delta table has invalid canonical schema"):
+        ob_pipeline.ingest_deltas(raw_table=bad_empty_table, source_id="binance", source_uri="file://test")
+
+    with pytest.raises(IntegrityViolationError, match="Empty Trades table has invalid canonical schema"):
+        trades_pipeline.ingest(raw_table=bad_empty_table, source_id="binance", source_uri="file://test")
+

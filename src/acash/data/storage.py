@@ -133,7 +133,12 @@ class ParquetStorageEngine:
         streams: Sequence[Tuple[str, str, str]],
         exclude_batch_ids: Optional[Sequence[str]] = None,
     ) -> Dict[Tuple[str, str, str, datetime], int]:
-        """Scan existing Parquet parts and compute max revision_seq for each Event Observation (source, symbol, tf, event_start_utc)."""
+        """Scan existing Parquet parts and compute max revision_seq for each Event Observation.
+
+        NOTE: Ingestion operates under the Single-Writer Invariant per (symbol, timeframe) partition.
+        Concurrent multi-writer processes targeting the same partition are prohibited without an
+        explicit distributed coordinator lock.
+        """
         max_seq_map: Dict[Tuple[str, str, str, datetime], int] = {}
         excluded_set = set(exclude_batch_ids or [])
 
@@ -159,9 +164,17 @@ class ParquetStorageEngine:
                     )
                 except FileNotFoundError:
                     continue
+                except (pa.ArrowInvalid, pq.ParquetException) as exc:
+                    raise IntegrityViolationError(
+                        f"Corrupted or structurally invalid canonical Parquet part at '{part_path}': {exc}"
+                    ) from exc
+                except PermissionError as exc:
+                    raise DataContractError(
+                        f"Filesystem permission denied while reading canonical Parquet part at '{part_path}': {exc}"
+                    ) from exc
                 except Exception as exc:
                     raise IntegrityViolationError(
-                        f"Corrupted or unreadable canonical Parquet part at '{part_path}': {exc}"
+                        f"Unreadable canonical Parquet part at '{part_path}': {exc}"
                     ) from exc
 
                 rows = tbl.to_pylist()

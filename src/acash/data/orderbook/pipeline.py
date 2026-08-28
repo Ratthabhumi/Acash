@@ -66,6 +66,9 @@ class OrderBookIngestionPipeline:
     ) -> BookIngestionResult:
         """Ingest a table of Order Book Snapshots."""
         if raw_table.num_rows == 0:
+            report, _ = self.validator.validate_snapshot_table(table=raw_table)
+            if not report.is_valid:
+                raise IntegrityViolationError("Empty Order Book Snapshot table has invalid canonical schema.")
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
         # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
@@ -177,6 +180,9 @@ class OrderBookIngestionPipeline:
     ) -> BookIngestionResult:
         """Ingest a table of Order Book Incremental Deltas."""
         if raw_table.num_rows == 0:
+            report, _ = self.validator.validate_delta_table(table=raw_table)
+            if not report.is_valid:
+                raise IntegrityViolationError("Empty Order Book Delta table has invalid canonical schema.")
             return BookIngestionResult(is_success=True, batches_ingested=[], total_rows=0)
 
         # 1. Group table by (source_id, channel_id, symbol, trading_date) Stream Scope
