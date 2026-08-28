@@ -146,15 +146,16 @@
 
 ---
 
-### ⏳ Phase 6: Statistical Validation & Overfitting Controls [UPCOMING]
+### ✅ Phase 6: Statistical Validation & Overfitting Controls [COMPLETED]
 
-- **Objective:** Enforce quantitative validation gates to eliminate data-snooping bias.
+- **Objective:** Enforce quantitative validation gates to eliminate data-snooping, selection bias, and backtest overfitting.
 - **Deliverables:**
-  - Strict 3-way partition harness: In-Sample (Train) $\to$ Validation $\to$ Held-Out Out-of-Sample (OOS).
-  - Combinatorial Purged Cross-Validation (CPCV) module via `skfolio.model_selection`.
-  - Multi-testing tracking: Deflated Sharpe Ratio (DSR) and Haircut Sharpe Ratio calculations.
-  - Automated parameter sensitivity and slippage stress-testing suite.
-- **Gate 6 Criteria:** Strategies must pass Out-of-Sample validation and DSR thresholds to proceed.
+  - Combinatorial Purged Cross-Validation (CPCV) engine with contiguous $N$-group partitioning, exhaustive $\binom{N}{k}$ combinations, strict $[t+1, t+H]$ interval purging, post-test embargo buffers, and continuous pseudo-OOS path reconstruction ($\phi = \frac{k}{N}\binom{N}{k}$).
+  - Deflated Sharpe Ratio (DSR) & Minimum Track Record Length (MinTRL) engine implementing Bailey & López de Prado (2014) non-normal asymptotic inference with Euler-Mascheroni constant $\gamma_E$.
+  - Multiple-testing accounting: Holm-Bonferroni step-down (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
+  - Probability of Backtest Overfitting (PBO) log-odds evaluation and parameter surface curvature / fragility testing.
+  - Sovereign `StatisticalValidationGate` orchestrating multi-gate sequential evaluation and emitting immutable `ValidationReport` certificates.
+- **Gate 6 Criteria:** Strategies must satisfy DSR $\ge 0.95$, MinTRL, PBO $< 0.25$, flat parameter curvature, friction monotonicity, and sealed OOS performance retention ($\text{SR}_{\text{OOS}} \ge 0.50 \cdot \text{SR}_{\text{IS}}$).
 
 ---
 
