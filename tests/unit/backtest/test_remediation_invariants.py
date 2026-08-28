@@ -364,8 +364,9 @@ def test_nautilus_execution_summary_and_reality_gap_metrics() -> None:
         phase4_analytical_edge_bps=Decimal("25.0"),
         phase5_simulated_realized_bps=Decimal("18.5"),
         spread_drag_bps=Decimal("4.0"),
-        latency_slip_drag_bps=Decimal("2.5"),
-        queue_position_drag_bps=Decimal("0.0"),
+        slippage_drag_bps=Decimal("1.5"),
+        latency_drag_bps=Decimal("1.0"),
+        maker_adverse_selection_drag_bps=Decimal("0.0"),
         fee_drag_bps=Decimal("1.0"),
     )
     assert reality.phase4_analytical_edge_bps == Decimal("25.0")

@@ -17,8 +17,9 @@ def test_reality_gap_attribution_decomposition() -> None:
         phase4_analytical_edge_bps=Decimal("15.0"),
         phase5_simulated_realized_bps=Decimal("11.5"),
         spread_drag_bps=Decimal("2.0"),
-        latency_slip_drag_bps=Decimal("1.5"),
-        queue_position_drag_bps=Decimal("0.0"),
+        slippage_drag_bps=Decimal("1.0"),
+        latency_drag_bps=Decimal("0.5"),
+        maker_adverse_selection_drag_bps=Decimal("0.0"),
     )
 
     assert summary.reality_gap_bps == Decimal("3.5")

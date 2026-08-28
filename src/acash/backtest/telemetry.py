@@ -66,9 +66,6 @@ class RealityGapAttributionEngine:
             fee_drag_bps=fee_drag_bps,
             maker_adverse_selection_drag_bps=eff_maker_adverse,
             unmodelled_residual_bps=unmodelled_residual,
-            queue_drag_bps=eff_maker_adverse,
-            latency_slip_drag_bps=eff_latency_slip,
-            queue_position_drag_bps=eff_maker_adverse,
         )
 
     @staticmethod
@@ -93,9 +90,6 @@ class RealityGapAttributionEngine:
                 fee_drag_bps=Decimal("0.0"),
                 maker_adverse_selection_drag_bps=Decimal("0.0"),
                 unmodelled_residual_bps=reality_gap_bps,
-                queue_drag_bps=Decimal("0.0"),
-                latency_slip_drag_bps=Decimal("0.0"),
-                queue_position_drag_bps=Decimal("0.0"),
             )
 
         # 1. Empirical Fee Drag (actual fees incurred relative to initial capital)
@@ -221,9 +215,6 @@ class RealityGapAttributionEngine:
             fee_drag_bps=fee_drag_bps,
             maker_adverse_selection_drag_bps=maker_adverse_selection_drag_bps,
             unmodelled_residual_bps=unmodelled_residual_bps,
-            queue_drag_bps=maker_adverse_selection_drag_bps,
-            latency_slip_drag_bps=latency_drag_bps + slippage_drag_bps,
-            queue_position_drag_bps=maker_adverse_selection_drag_bps,
         )
 
     @staticmethod
@@ -246,10 +237,7 @@ class RealityGapAttributionEngine:
                 "latency_drag_bps": float(summary.latency_drag_bps),
                 "fee_drag_bps": float(summary.fee_drag_bps),
                 "maker_adverse_selection_drag_bps": float(summary.maker_adverse_selection_drag_bps),
-                "queue_drag_bps": float(summary.queue_drag_bps),
                 "unmodelled_residual_bps": float(summary.unmodelled_residual_bps),
-                "latency_slip_drag_bps": float(summary.latency_slip_drag_bps),
-                "queue_position_drag_bps": float(summary.queue_position_drag_bps),
             },
             "verdict": "FEASIBLE" if summary.phase5_simulated_realized_bps > Decimal("0.0") else "UNREALIZABLE_ALPHA",
         }
