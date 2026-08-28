@@ -50,8 +50,8 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
                             (Purged CPCV & DSR Gate)
                                        │
                                        ▼
-                             5. PORTFOLIO ENGINE
-                     (skfolio + Baselines: EW/InvVol/Cash)
+                              5. PORTFOLIO ENGINE
+                      (skfolio + Baselines: EW/InvVol/Cash)
                                        │
                                        ▼
                               6. RISK ENGINE
@@ -61,8 +61,8 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
                              7. EXECUTION ENGINE
                               (IExecutionEngine)
                                  /           \
-                           MT5 Adapter      Nautilus Adapter
-                           (Initial)        (Phase 5 PoC Gate)
+                           MT5 Adapter      NautilusTrader Substrate
+                           (Phase 12)       (Phase 5 Gate Passed)
                                  │
                                  ▼
                     LOCAL TRANSACTIONAL CONTROL PLANE
@@ -74,8 +74,8 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
 2. **Transactional Control Plane (Operational):** `SQLite` handles local ACID operational state, order state machines, and **append-only decision audit records**. `PostgreSQL` is **DEFERRED** until concurrent multi-user/writer requirements justify it.
 3. **Analytics & Quant Research:** `pandas`, `NumPy`, `vectorbt` (Tier-1 rapid parameter screening), and `Plotly` (interactive visualization).
 4. **Portfolio Engine:** `skfolio` (portfolio optimization and risk-allocation methods including HRP, ERC, CVaR) evaluated strictly against transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE).
-5. **Event Simulation:** `NautilusTrader` as a Tier-2 event-driven simulation candidate, subject to a Phase 5 Proof of Concept (PoC) gate.
-6. **Execution Subsystem:** Sovereign `IExecutionEngine` abstraction decoupling broker mechanics.
+5. **Event Simulation Substrate:** Native unmocked `NautilusTrader` Substrate and Sovereign Event Matching Engine (Phase 5 Gate Passed with Level-2 Depth Sweeps, Maker Queue Tracking, Double-Entry Shadow Ledger, and Disjoint Reference-Price Telemetry Attribution).
+6. **Execution Subsystem:** Sovereign `IExecutionEngine` abstraction decoupling broker mechanics (Phase 12 MT5 adapter for live execution).
 7. **Performance Layer:** Python-first $\to$ NumPy/Numba vectorization $\to$ Nautilus Rust core where applicable $\to$ custom C++/Rust only after measured profiling.
 
 ---
@@ -193,31 +193,32 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Sovereign event-driven simulation substrate with simulated order lifecycle state machine (`CREATED` $\to$ `SUBMITTED` $\to$ `ACCEPTED` $\to$ `FILLED`).
    - Canonical Data Adapter enforcing Phase 3B total ordering 5-tuple: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
    - Decoupled double-entry shadow ledger (Balance-Sheet View vs Performance Attribution View) eliminating Realized PnL double counting ($|\text{AccountingResidual}| \le 10^{-10}$).
+   - Unmocked native `NautilusTrader` execution substrate with Parquet catalog bridge and contract specification mapping.
    - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
-   - Reality Gap Telemetry Engine decomposing execution drag into spread, latency, and queue drag against Phase 4 analytical baselines.
+   - Reality Gap Telemetry Engine implementing disjoint non-overlapping reference-price decomposition: Spread Drag, Slippage Drag, Latency Drag, Fee Drag, Maker Adverse Selection Drag, and Unmodelled Residual.
    - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
 
 ---
 
 ## 5. Documentation Index (`docs/`)
 
-The complete canonical documentation suite is organized in [`docs/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs):
+The complete canonical documentation suite is organized in [`docs/`](docs/):
 
-- **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)**: Canonical Market Data Contract, Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
-- **[docs/DATA_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) partitioned immutable parts, bi-temporal P-I-T qualification queries, and provenance ledger.
-- **[docs/DECISIONS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-019**).
-- **[docs/PROJECT_STATUS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
-- **[docs/ROADMAP.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
-- **[docs/PHASE_3C_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
-- **[docs/PHASE_4_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
-- **[docs/PHASE_5_DESIGN_PROPOSAL.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
+- **[`docs/DATA_CONTRACT.md`](docs/DATA_CONTRACT.md)**: Canonical Market Data Contract, Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
+- **[`docs/DATA_ARCHITECTURE.md`](docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) partitioned immutable parts, bi-temporal P-I-T qualification queries, and provenance ledger.
+- **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-019**).
+- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
+- **[`docs/PHASE_3C_DESIGN_PROPOSAL.md`](docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
+- **[`docs/PHASE_4_DESIGN_PROPOSAL.md`](docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
+- **[`docs/PHASE_5_DESIGN_PROPOSAL.md`](docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
 
-- **[docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
-- **[docs/ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
-- **[docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
-- **[docs/EXECUTION_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus PoC candidate).
-- **[docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
-- **[docs/RISKS.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
+- **[`docs/TECHNOLOGY_EVALUATION.md`](docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
+- **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
+- **[`docs/PORTFOLIO_ARCHITECTURE.md`](docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
+- **[`docs/EXECUTION_ARCHITECTURE.md`](docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus substrate).
+- **[`docs/RESEARCH_ARCHITECTURE.md`](docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
+- **[`docs/RISKS.md`](docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
 
 ---
 

@@ -31,29 +31,17 @@ class RealityGapAttributionEngine:
         slippage_drag_bps: Decimal = Decimal("0.0"),
         latency_drag_bps: Decimal = Decimal("0.0"),
         fee_drag_bps: Decimal = Decimal("0.0"),
-        maker_adverse_selection_drag_bps: Optional[Decimal] = None,
-        queue_drag_bps: Optional[Decimal] = None,
-        latency_slip_drag_bps: Optional[Decimal] = None,
-        queue_position_drag_bps: Optional[Decimal] = None,
+        maker_adverse_selection_drag_bps: Decimal = Decimal("0.0"),
     ) -> RealityGapSummary:
         """Decompose total reality gap into constituent friction components."""
         reality_gap_bps = phase4_analytical_edge_bps - phase5_simulated_realized_bps
-
-        eff_latency_slip = (
-            latency_slip_drag_bps
-            if latency_slip_drag_bps is not None
-            else (latency_drag_bps + slippage_drag_bps)
+        accounted = (
+            spread_drag_bps
+            + slippage_drag_bps
+            + latency_drag_bps
+            + fee_drag_bps
+            + maker_adverse_selection_drag_bps
         )
-        
-        eff_maker_adverse = Decimal("0.0")
-        if maker_adverse_selection_drag_bps is not None:
-            eff_maker_adverse = maker_adverse_selection_drag_bps
-        elif queue_drag_bps is not None:
-            eff_maker_adverse = queue_drag_bps
-        elif queue_position_drag_bps is not None:
-            eff_maker_adverse = queue_position_drag_bps
-
-        accounted = spread_drag_bps + slippage_drag_bps + latency_drag_bps + fee_drag_bps + eff_maker_adverse
         unmodelled_residual = reality_gap_bps - accounted
 
         return RealityGapSummary(
@@ -64,7 +52,7 @@ class RealityGapAttributionEngine:
             slippage_drag_bps=slippage_drag_bps,
             latency_drag_bps=latency_drag_bps,
             fee_drag_bps=fee_drag_bps,
-            maker_adverse_selection_drag_bps=eff_maker_adverse,
+            maker_adverse_selection_drag_bps=maker_adverse_selection_drag_bps,
             unmodelled_residual_bps=unmodelled_residual,
         )
 

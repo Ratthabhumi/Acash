@@ -42,7 +42,7 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 | :--- | :--- | :--- | :--- |
 | **ACASH Core** | Sovereign | **ADOPT** | Domain logic, deterministic risk boundary, append-only decision ledger. |
 | **skfolio** | Portfolio | **ADOPT** | Portfolio optimization & risk allocation (HRP, ERC, CVaR) + CPCV. |
-| **NautilusTrader** | Simulation | **ADAPT** | Tier-2 event backtesting candidate (Phase 5 PoC Gate). |
+| **NautilusTrader** | Simulation | **ADOPT** | Tier-2 event backtesting substrate (Phase 5 Gate Passed & Verified). |
 | **vectorbt (OSS)** | Research | **ADAPT** | Tier-1 Numba-accelerated fast parameter sweeps and factor screening. |
 | **yfinance** | Data | **ADAPT** | Research-oriented data adapter (no paid subscription required for research). |
 | **Plotly** | Visualization | **ADOPT** | Interactive charts, equity curves, drawdown waterfalls, and research tear sheets. |
@@ -289,8 +289,8 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
     - True runtime simulation with `BacktestEngine`, `FuturesContract`, custom strategies, and `engine.trader` report ingestion.
     - Peak-to-trough max drawdown, closed trade win rate, and total submitted order telemetry.
   - *Reality Gap Telemetry Engine (`telemetry.py`):*
-    - Decomposes execution divergence against Phase 4 analytical edge:
-      $$\text{Reality Gap} = \text{Analytical Edge (bps)} - \text{Simulated Realized Return (bps)} = \text{Spread Drag} + \text{Latency Slip Drag} + \text{Queue Drag}$$
+    - Decomposes execution divergence against Phase 4 analytical edge via disjoint reference-price decomposition:
+      $$\text{Reality Gap} = \text{Analytical Edge} - \text{Simulated Realized Return} = \text{Spread} + \text{Slippage} + \text{Latency} + \text{Fee} + \text{Maker Adverse Selection} + \text{Unmodelled Residual}$$
   - *Deterministic Backtest Manifest (`schema.py`):*
     - Cryptographic 32-hex manifest ID:
       $$\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{canonical\_data\_hashes} + \text{engine\_config\_hash} + \text{strategy\_config\_hash} + \text{seed}))[:32]$$
@@ -344,7 +344,7 @@ Phase 5: Backtesting Substrate & Simulation ──► Sovereign event runner, do
 - **Event-Driven Runner:** Order matching engine with maker queue consumption, trade-through validation, and zero phantom liquidity (`trade_size <= 0 -> fill = 0`).
 - **Shadow Accounting Ledger:** Double-entry conservation ($|\text{Residual}| \le 10^{-10}$), multiplier-adjusted MTM, zero Realized PnL double counting.
 - **NautilusTrader Substrate:** Unmocked execution bridge with ParquetDataCatalog export, contract specification mapping, and execution reports parsing.
-- **Reality Gap Attribution:** Quantitative decomposition of execution drag into spread, latency, and queue drag against Phase 4 predictive edges.
+- **Reality Gap Attribution:** Quantitative decomposition of execution drag into Spread, Slippage, Latency, Fee, Maker Adverse Selection Drag, and Unmodelled Residual against Phase 4 predictive edges.
 
 
 ---
