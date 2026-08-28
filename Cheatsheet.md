@@ -269,7 +269,36 @@ $$\text{DATA} \to \text{QUANT ENGINE} \to \text{RISK STATE} \to \text{AI REASONI
 
 ---
 
-## 13. Completed Architecture & Subsystem Reference (Phases 0–4)
+### Phase 5 — Backtesting Substrate & Simulation Engine (COMPLETED & HARDENED — Gate 5)
+- **Objective:** Establish sovereign event-driven backtesting substrate, dual double-entry shadow ledger, unmocked NautilusTrader substrate, and Reality Gap telemetry.
+- **Key Deliverables (`src/acash/backtest/`):**
+  - *Sovereign Event Engine (`engine.py`):*
+    - Full simulated order state machine (`CREATED` $\to$ `SUBMITTED` $\to$ `ACCEPTED` $\to$ `PARTIALLY_FILLED` $\to$ `FILLED` $\to$ `CANCELLED` $\to$ `REJECTED`).
+    - Maker queue modeling with depth volume consumption and zero phantom fill invariant (`trade_size <= 0` strictly produces zero fill).
+    - Causal dual-sided latency (submission + ACK roundtrip before active matching).
+  - *Double-Entry Shadow Accounting Ledger (`accounting.py`):*
+    - Decouples Balance-Sheet View ($\text{Cash} + \text{Unrealized PnL} = \text{Total Equity}$) from Performance Attribution View ($\text{Realized PnL} + \text{Unrealized PnL} - \text{Fees}$).
+    - Mark-to-market contract revaluation using dynamic instrument specifications and multipliers (`ES: 50.0`, `NQ: 20.0`, `YM: 5.0`, `RTY: 50.0`, `GC: 100.0`, `CL: 1000.0`).
+    - Internal conservation verification ($|\text{AccountingResidual}| \le 10^{-10}$).
+  - *Canonical Data Adapter (`adapter.py`):*
+    - Total ordering 5-tuple: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
+    - Strict price and size positivity validation (`price > 0`, `size > 0`).
+    - Multi-match sub-index discrimination: `ch{channel}_seq{source_seq}_sub{match_sub_idx}`.
+  - *Unmocked NautilusTrader Integration (`nautilus_bridge.py`):*
+    - Nautilus ParquetDataCatalog export with deterministic nullable trade ID mapping policy.
+    - True runtime simulation with `BacktestEngine`, `FuturesContract`, custom strategies, and `engine.trader` report ingestion.
+    - Peak-to-trough max drawdown, closed trade win rate, and total submitted order telemetry.
+  - *Reality Gap Telemetry Engine (`telemetry.py`):*
+    - Decomposes execution divergence against Phase 4 analytical edge:
+      $$\text{Reality Gap} = \text{Analytical Edge (bps)} - \text{Simulated Realized Return (bps)} = \text{Spread Drag} + \text{Latency Slip Drag} + \text{Queue Drag}$$
+  - *Deterministic Backtest Manifest (`schema.py`):*
+    - Cryptographic 32-hex manifest ID:
+      $$\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{canonical\_data\_hashes} + \text{engine\_config\_hash} + \text{strategy\_config\_hash} + \text{seed}))[:32]$$
+- **Gate 5 Metrics:** 200/200 unit & integration tests passing (including real Nautilus runtime tests), `mypy` 0 errors across 130 files.
+
+---
+
+## 13. Completed Architecture & Subsystem Reference (Phases 0–5)
 
 ```
 Phase 0: Discovery & Architecture ──► 17 tech evaluated, 7 decoupled layers, ADR-001 to ADR-019
@@ -277,6 +306,7 @@ Phase 1: Foundation & Domain Core ──► Immutable domain models, signed posi
 Phase 2: Data Ingestion & Integrity ──► Canonical PyArrow schema, Recoverable 2-Phase Commit, DuckDB PIT (57/57 tests)
 Phase 3: Market Microstructure & Features ──► Trades, L2/L3 Order Book, pure VWAP/Profile/Footprint (122/122 tests)
 Phase 4: Alpha Research & Hypotheses ──► Pre-registered hypotheses, OLS Beta HAC, Blind OOS Ledger (139/139 tests)
+Phase 5: Backtesting Substrate & Simulation ──► Sovereign event runner, double-entry ledger, Nautilus substrate (200/200 tests)
 ```
 
 ### Phase 1: Foundation & Invariant Rules
@@ -288,10 +318,11 @@ Phase 4: Alpha Research & Hypotheses ──► Pre-registered hypotheses, OLS Be
 - **Canonical Arrow Types:** `price`/`size` = `Decimal128(38, 18)`, `timestamp` = `timestamp[us, tz=UTC]`.
 - **Bi-temporal Indexing:** $t_{\text{event}}$ (exchange event time) vs $t_{\text{knowledge}}$ (system ingestion time).
 - **Recoverable Batch Commit Protocol:** `PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`. Uncommitted parts quarantined.
-- **Idempotency & Replay:** Parquet paths: `data/parquet/{symbol}/{year}/{date}/part-{batch_id}.parquet`. Logical hashing invariant to row ordering and compression codec.
+- **Cross-Batch Deduplication:** `(source_id, symbol, tf, event_start, knowledge_time) -> fingerprint` rejecting duplicate/conflicting revisions across batches.
+- **Idempotency & Replay:** Parquet paths: `data/parquet/{symbol}/{timeframe}/year={YYYY}/part-{batch_id}.parquet`. Logical hashing invariant to row ordering and compression codec.
 
 ### Phase 3: Market Microstructure & Derived Features
-- **Phase 3A Trades:** Nanosecond execution replay, aggressor side (`BUY`/`SELL`), length-prefixed hashing.
+- **Phase 3A Trades:** Nanosecond execution replay, aggressor side (`BUY`/`SELL`), multi-match `match_sub_idx` sequencing, length-prefixed hashing.
 - **Phase 3B Order Book:** Multi-row frame snapshots and deltas; deterministic 5-tuple order:
   $$\text{ReconstructionOrder} = (\text{exchange\_time\_utc}, \text{source\_order\_key}, \text{message\_type\_rank}, \text{stream\_id}, \text{row\_sub\_index})$$
   Explicit `CLEAR` level semantics (distinguishing NULL clear from zero-volume deletion).
@@ -308,6 +339,13 @@ Phase 4: Alpha Research & Hypotheses ──► Pre-registered hypotheses, OLS Be
   - Tier 3: Tier 2 - $\text{Fixed Slippage Proxy}$
 - **Durable Blind OOS State Machine:** `UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED` persisted in `data/manifests/research/governance_ledger.json`.
 - **Search Accounting:** `ResearchSearchRecord` tracks total effective trials, preventing untracked multiple testing.
+
+### Phase 5: Backtesting Substrate & Simulation Engine
+- **Event-Driven Runner:** Order matching engine with maker queue consumption, trade-through validation, and zero phantom liquidity (`trade_size <= 0 -> fill = 0`).
+- **Shadow Accounting Ledger:** Double-entry conservation ($|\text{Residual}| \le 10^{-10}$), multiplier-adjusted MTM, zero Realized PnL double counting.
+- **NautilusTrader Substrate:** Unmocked execution bridge with ParquetDataCatalog export, contract specification mapping, and execution reports parsing.
+- **Reality Gap Attribution:** Quantitative decomposition of execution drag into spread, latency, and queue drag against Phase 4 predictive edges.
+
 
 ---
 

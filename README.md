@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 5 Complete](https://img.shields.io/badge/status-Phase%205%20Gate%20Passed%20(164%2F164%20Tests)-success.svg)](#)
+[![Status: Phase 5 Hardened](https://img.shields.io/badge/status-Phase%205%20Gate%20Passed%20(200%2F200%20Tests)-success.svg)](#)
 
 
 
@@ -142,8 +142,8 @@ ACASH explicitly decouples state management from decision and execution flows:
    ├─ ✅ Phase 3B: Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO)
    └─ ✅ Phase 3C: Microstructure Feature Engine (VWAP, Volume Profile, Footprint, OBI, Micro-Price)
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
-✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 152/152 Tests, mypy clean]
-🔄 Phase 6: Statistical Validation & OOS Hard Gate ──► [UPCOMING]
+✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 200/200 Tests, mypy clean]
+🔄 Phase 6: Statistical Validation & OOS Hard Gate ──► [UPCOMING — DESIGN PROPOSAL SIGNED OFF]
 ⏳ Phase 7: Regime Engine (Trend/Vol Classifiers) ──► Gate 7
 ⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
 ⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
@@ -155,6 +155,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 ⏳ Phase 15: Strategy Lifecycle State Machine ──► Gate 15
 ⏳ Phase 16: Performance Degradation & Learning Flywheel ──► Ongoing
 ```
+
 
 ### Detailed Summary of Delivered Capabilities:
 1. **Phase 0 — Discovery & Architecture:**
