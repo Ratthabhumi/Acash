@@ -427,7 +427,7 @@ def test_trades_adapter_fallback_permutation_invariance_adversarial() -> None:
 
 
 def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
-    """Audit P1: RealityGapAttributionEngine derives drag from empirical fills instead of config placeholders."""
+    """Audit P1: RealityGapAttributionEngine derives drag from empirical fills and reference prices without phantom residual attribution."""
     from acash.backtest.telemetry import RealityGapAttributionEngine
     from acash.backtest.schema import BacktestFillRecord, LiquidityType
 
@@ -443,7 +443,11 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
             fill_qty=Decimal("2.0"),
             fee_paid=Decimal("50.00"),
             liquidity_type=LiquidityType.TAKER,
-            slippage_incurred_bps=Decimal("2.0"),  # 2 bps slippage on $10,000 notional = $2.00 cost
+            slippage_incurred_bps=Decimal("2.0"),  # $2.00 cost -> 0.20 bps
+            bid_at_fill=Decimal("4999.75"),
+            ask_at_fill=Decimal("5000.25"),  # half-spread = 0.25 -> 2 * 0.25 = $0.50 -> 0.05 bps
+            latency_drift_bps=Decimal("1.0"),  # 1.0 bps drift on $10,000 = $1.00 -> 0.10 bps
+            arrival_price=Decimal("4999.50"),
         ),
         BacktestFillRecord(
             fill_id="F2",
@@ -456,13 +460,18 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
             fee_paid=Decimal("50.00"),
             liquidity_type=LiquidityType.MAKER,
             slippage_incurred_bps=Decimal("0.0"),  # Maker = 0 slippage
+            arrival_price=Decimal("5012.00"),  # adverse drift for sell = 5012 - 5010 = 2.0 -> 2 * 2.0 = $4.00 -> 0.40 bps
         ),
     ]
 
-    # Total fees paid = $100.00 -> on $100,000 cash = 10.0 bps fee drag
-    # Total slippage cost = 2.0 * 5000.00 * (2.0 / 10000) = $2.00 -> on $100,000 cash = 0.20 bps slippage drag
-    # Total reality gap = 30.0 - 15.0 = 15.0 bps
-    # Queue / timing drag = 15.0 - (10.0 + 0.20) = 4.80 bps
+    # Total fees paid = $100.00 -> 10.00 bps fee drag
+    # Total slippage cost = $2.00 -> 0.20 bps slippage drag
+    # Total latency drift cost = $1.00 -> 0.10 bps latency drag
+    # Total spread crossing cost = $0.50 -> 0.05 bps spread drag
+    # Total queue adverse selection = $4.00 -> 0.40 bps queue drag
+    # Total Accounted Friction = 10.00 + 0.20 + 0.10 + 0.05 + 0.40 = 10.75 bps
+    # Reality Gap = 30.0 - 15.0 = 15.0 bps
+    # Unmodelled Residual Gap = 15.00 - 10.75 = 4.25 bps
     summary = RealityGapAttributionEngine.derive_from_fills(
         fills=fills,
         initial_cash=initial_cash,
@@ -472,13 +481,19 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
 
     assert summary.reality_gap_bps == Decimal("15.0")
     assert summary.fee_drag_bps == Decimal("10.0")
-    assert summary.latency_slip_drag_bps == Decimal("0.2")
-    assert summary.queue_position_drag_bps == Decimal("4.8")
+    assert summary.slippage_drag_bps == Decimal("0.2")
+    assert summary.latency_drag_bps == Decimal("0.1")
+    assert summary.spread_drag_bps == Decimal("0.05")
+    assert summary.queue_drag_bps == Decimal("0.4")
+    assert summary.unmodelled_residual_bps == Decimal("4.25")
 
     report = RealityGapAttributionEngine.generate_reality_gap_report(summary)
     assert report["friction_decomposition"]["fee_drag_bps"] == 10.0
-    assert report["friction_decomposition"]["latency_slip_drag_bps"] == 0.2
-    assert report["friction_decomposition"]["queue_position_drag_bps"] == 4.8
+    assert report["friction_decomposition"]["slippage_drag_bps"] == 0.2
+    assert report["friction_decomposition"]["latency_drag_bps"] == 0.1
+    assert report["friction_decomposition"]["spread_drag_bps"] == 0.05
+    assert report["friction_decomposition"]["queue_drag_bps"] == 0.4
+    assert report["friction_decomposition"]["unmodelled_residual_bps"] == 4.25
 
 
 

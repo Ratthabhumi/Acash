@@ -246,7 +246,14 @@ class BacktestFillRecord(BaseModel):
     fill_qty: Decimal
     fee_paid: Decimal
     liquidity_type: LiquidityType
-    slippage_incurred_bps: Decimal
+    slippage_incurred_bps: Decimal = Field(default=Decimal("0.0"))
+    arrival_price: Optional[Decimal] = Field(default=None, description="Benchmark reference market/mid price at decision time.")
+    bid_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best bid price at fill.")
+    ask_at_fill: Optional[Decimal] = Field(default=None, description="Quoted best ask price at fill.")
+    decision_timestamp_ns: Optional[int] = Field(default=None, description="Timestamp in nanoseconds when order intent was formulated.")
+    match_timestamp_ns: Optional[int] = Field(default=None, description="Timestamp in nanoseconds when order arrived at matching engine.")
+    latency_drift_bps: Decimal = Field(default=Decimal("0.0"), description="Adverse mid-price drift during transmission latency.")
+    queue_wait_ns: int = Field(default=0, description="Duration in nanoseconds spent resting in maker queue.")
 
 
 class BacktestExecutionSummary(BaseModel):
@@ -277,10 +284,15 @@ class RealityGapSummary(BaseModel):
     phase4_analytical_edge_bps: Decimal
     phase5_simulated_realized_bps: Decimal
     reality_gap_bps: Decimal
-    spread_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical spread cost drag in bps.")
-    latency_slip_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical slippage and latency price drift drag in bps.")
-    queue_position_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical queue wait / timing opportunity cost drag in bps.")
+    spread_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical half-spread crossing cost drag in bps.")
+    slippage_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical price impact and depth slippage drag in bps.")
+    latency_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transmission latency adverse drift drag in bps.")
     fee_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transaction and broker fees drag in bps.")
+    queue_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical maker queue wait adverse selection drag in bps.")
+    unmodelled_residual_bps: Decimal = Field(default=Decimal("0.0"), description="Unmodelled residual gap between analytical assumption and empirical friction.")
+    # Backward compatibility aliases
+    latency_slip_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Combined latency and slippage drag in bps.")
+    queue_position_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Maker queue delay drag in bps.")
 
 
 class BacktestManifest(BaseModel):
@@ -368,6 +380,11 @@ class BacktestManifest(BaseModel):
                 "phase5_simulated_realized_bps": str(self.reality_gap.phase5_simulated_realized_bps),
                 "reality_gap_bps": str(self.reality_gap.reality_gap_bps),
                 "spread_drag_bps": str(self.reality_gap.spread_drag_bps),
+                "slippage_drag_bps": str(self.reality_gap.slippage_drag_bps),
+                "latency_drag_bps": str(self.reality_gap.latency_drag_bps),
+                "fee_drag_bps": str(self.reality_gap.fee_drag_bps),
+                "queue_drag_bps": str(self.reality_gap.queue_drag_bps),
+                "unmodelled_residual_bps": str(self.reality_gap.unmodelled_residual_bps),
                 "latency_slip_drag_bps": str(self.reality_gap.latency_slip_drag_bps),
                 "queue_position_drag_bps": str(self.reality_gap.queue_position_drag_bps),
             },

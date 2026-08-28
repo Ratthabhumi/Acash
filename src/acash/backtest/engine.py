@@ -273,9 +273,12 @@ class SimulatedOrder:
         self.remaining_qty: Decimal = quantity
         self.cumulative_cost: Decimal = Decimal("0.0")
 
-        # Queue Emulation State
+        # Queue Emulation & Reference Execution State
         self.queue_ahead_volume: Decimal = Decimal("0.0")
         self.queue_initialized: bool = False
+        self.arrival_price: Optional[Decimal] = None
+        self.submitted_timestamp_ns: Optional[int] = None
+        self.latency_drift_bps: Decimal = Decimal("0.0")
 
     @property
     def is_active(self) -> bool:
@@ -359,6 +362,8 @@ class EventBacktestRunner:
             created_timestamp_ns=self.current_time_ns,
             limit_price=limit_price,
         )
+        order.arrival_price = self.last_price if self.last_price > Decimal("0.0") else None
+        order.submitted_timestamp_ns = self.current_time_ns
         order.status = BacktestOrderStatus.SUBMITTED
 
         # Initialize Queue Ahead for Limit Orders
@@ -503,6 +508,13 @@ class EventBacktestRunner:
         secs, us = divmod(micros, 1_000_000)
         fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
+        # Latency drift measurement
+        arrival_px = order.arrival_price or base_price
+        latency_drift_bps = Decimal("0.0")
+        if arrival_px > Decimal("0.0") and base_price > Decimal("0.0"):
+            drift = (base_price - arrival_px) if order.side == "BUY" else (arrival_px - base_price)
+            latency_drift_bps = (drift / arrival_px) * Decimal("10000.0")
+
         fill_rec = BacktestFillRecord(
             fill_id=f"FILL-{len(self.fills)+1:08d}",
             order_id=order.order_id,
@@ -514,6 +526,12 @@ class EventBacktestRunner:
             fee_paid=fee_paid,
             liquidity_type=LiquidityType.TAKER,
             slippage_incurred_bps=slippage_bps,
+            arrival_price=arrival_px,
+            bid_at_fill=self.order_book.best_bid,
+            ask_at_fill=self.order_book.best_ask,
+            decision_timestamp_ns=order.created_timestamp_ns,
+            match_timestamp_ns=timestamp_ns,
+            latency_drift_bps=latency_drift_bps,
         )
         self.fills.append(fill_rec)
 
@@ -636,6 +654,8 @@ class EventBacktestRunner:
             secs, us = divmod(micros, 1_000_000)
             fill_dt = datetime.fromtimestamp(secs, tz=timezone.utc).replace(microsecond=us)
 
+            queue_wait = max(0, timestamp_ns - (order.submitted_timestamp_ns or order.created_timestamp_ns))
+
             fill_rec = BacktestFillRecord(
                 fill_id=f"FILL-{len(self.fills)+1:08d}",
                 order_id=order.order_id,
@@ -647,6 +667,12 @@ class EventBacktestRunner:
                 fee_paid=fee_paid,
                 liquidity_type=LiquidityType.MAKER,
                 slippage_incurred_bps=Decimal("0.0"),
+                arrival_price=order.arrival_price or executed_price,
+                bid_at_fill=self.order_book.best_bid,
+                ask_at_fill=self.order_book.best_ask,
+                decision_timestamp_ns=order.created_timestamp_ns,
+                match_timestamp_ns=timestamp_ns,
+                queue_wait_ns=queue_wait,
             )
             self.fills.append(fill_rec)
 
