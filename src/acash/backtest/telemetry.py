@@ -2,15 +2,15 @@
 
 Measures and decomposes the systematic divergence between Phase 4 Analytical Edge
 and Phase 5 Simulated Event-Driven Realized Edge:
-Reality Gap = Edge_Phase4_Analytical - Edge_Phase5_Simulated = Spread Drag + Slippage Drag + Latency Drag + Fee Drag + Queue Drag + Unmodelled Residual
+Reality Gap = Edge_Phase4_Analytical - Edge_Phase5_Simulated = Spread Drag + Slippage Drag + Latency Drag + Fee Drag + Maker Adverse Selection Drag + Unmodelled Residual
 
-Implements strictly orthogonal, non-overlapping microstructure decompositions:
+Implements a disjoint non-overlapping reference-price decomposition:
 - Latency Drag: Mid-to-mid price drift during transmission (Decision Mid -> Match Arrival Mid)
-- Spread Drag: Half-spread crossing cost (Match Arrival Mid -> Touch Price)
-- Slippage Drag: Book depth consumption / price impact beyond touch (Touch Price -> Fill Price)
+- Spread Drag: Half-spread crossing cost (Match Arrival Mid -> Touch Price for Taker)
+- Slippage Drag: Book depth consumption / price impact beyond touch (Touch Price -> Fill Price for Taker)
 - Fee Drag: Exchange, broker, and clearing transaction fees
-- Queue Drag: Adverse selection while resting in queue (Arrival Mid -> Fill Mid for Maker)
-- Unmodelled Residual: Mathematical residual gap (Alpha formula assumption mismatch)
+- Maker Adverse Selection Drag: Post-arrival market drift conditional on maker fill (Arrival Mid -> Fill Mid for Maker)
+- Unmodelled Residual: Mathematical residual gap (Alpha analytical formula assumption mismatch)
 """
 
 from decimal import Decimal
@@ -31,7 +31,8 @@ class RealityGapAttributionEngine:
         slippage_drag_bps: Decimal = Decimal("0.0"),
         latency_drag_bps: Decimal = Decimal("0.0"),
         fee_drag_bps: Decimal = Decimal("0.0"),
-        queue_drag_bps: Decimal = Decimal("0.0"),
+        maker_adverse_selection_drag_bps: Optional[Decimal] = None,
+        queue_drag_bps: Optional[Decimal] = None,
         latency_slip_drag_bps: Optional[Decimal] = None,
         queue_position_drag_bps: Optional[Decimal] = None,
     ) -> RealityGapSummary:
@@ -43,9 +44,16 @@ class RealityGapAttributionEngine:
             if latency_slip_drag_bps is not None
             else (latency_drag_bps + slippage_drag_bps)
         )
-        eff_queue = queue_position_drag_bps if queue_position_drag_bps is not None else queue_drag_bps
+        
+        eff_maker_adverse = Decimal("0.0")
+        if maker_adverse_selection_drag_bps is not None:
+            eff_maker_adverse = maker_adverse_selection_drag_bps
+        elif queue_drag_bps is not None:
+            eff_maker_adverse = queue_drag_bps
+        elif queue_position_drag_bps is not None:
+            eff_maker_adverse = queue_position_drag_bps
 
-        accounted = spread_drag_bps + slippage_drag_bps + latency_drag_bps + fee_drag_bps + eff_queue
+        accounted = spread_drag_bps + slippage_drag_bps + latency_drag_bps + fee_drag_bps + eff_maker_adverse
         unmodelled_residual = reality_gap_bps - accounted
 
         return RealityGapSummary(
@@ -56,10 +64,11 @@ class RealityGapAttributionEngine:
             slippage_drag_bps=slippage_drag_bps,
             latency_drag_bps=latency_drag_bps,
             fee_drag_bps=fee_drag_bps,
-            queue_drag_bps=eff_queue,
+            maker_adverse_selection_drag_bps=eff_maker_adverse,
             unmodelled_residual_bps=unmodelled_residual,
+            queue_drag_bps=eff_maker_adverse,
             latency_slip_drag_bps=eff_latency_slip,
-            queue_position_drag_bps=eff_queue,
+            queue_position_drag_bps=eff_maker_adverse,
         )
 
     @staticmethod
@@ -82,8 +91,9 @@ class RealityGapAttributionEngine:
                 slippage_drag_bps=Decimal("0.0"),
                 latency_drag_bps=Decimal("0.0"),
                 fee_drag_bps=Decimal("0.0"),
-                queue_drag_bps=Decimal("0.0"),
+                maker_adverse_selection_drag_bps=Decimal("0.0"),
                 unmodelled_residual_bps=reality_gap_bps,
+                queue_drag_bps=Decimal("0.0"),
                 latency_slip_drag_bps=Decimal("0.0"),
                 queue_position_drag_bps=Decimal("0.0"),
             )
@@ -161,8 +171,8 @@ class RealityGapAttributionEngine:
 
         slippage_drag_bps = (slippage_cost / initial_cash) * Decimal("10000.0")
 
-        # 5. Empirical Queue Drag (maker adverse selection: Arrival Mid -> Fill Mid while resting in queue)
-        queue_cost = Decimal("0.0")
+        # 5. Empirical Maker Adverse Selection Drag (post-arrival market drift: Arrival Mid -> Fill Mid while resting)
+        maker_adverse_cost = Decimal("0.0")
         for f in fills:
             liq_type = str(getattr(f, "liquidity_type", f.get("liquidity_type", "") if isinstance(f, dict) else ""))
             if "MAKER" in liq_type.upper():
@@ -187,18 +197,18 @@ class RealityGapAttributionEngine:
                     # SELL maker suffers when mid rises (M_fill - M_arrival > 0)
                     adverse_queue_move = -side_sign * (fill_mid - Decimal(str(arr_mid)))
                     if adverse_queue_move > Decimal("0.0"):
-                        queue_cost += qty * adverse_queue_move
+                        maker_adverse_cost += qty * adverse_queue_move
                 elif arr_mid is not None:
                     # Fallback using fill_price if quotes at fill are not available
                     fill_px = Decimal(str(getattr(f, "fill_price", f.get("fill_price", 0) if isinstance(f, dict) else 0)))
                     adverse_drift = -side_sign * (fill_px - Decimal(str(arr_mid)))
                     if adverse_drift > Decimal("0.0"):
-                        queue_cost += qty * adverse_drift
+                        maker_adverse_cost += qty * adverse_drift
 
-        queue_drag_bps = (queue_cost / initial_cash) * Decimal("10000.0")
+        maker_adverse_selection_drag_bps = (maker_adverse_cost / initial_cash) * Decimal("10000.0")
 
         # 6. Unmodelled Residual Gap (pure model mismatch / alpha assumption divergence)
-        accounted = fee_drag_bps + slippage_drag_bps + latency_drag_bps + spread_drag_bps + queue_drag_bps
+        accounted = fee_drag_bps + slippage_drag_bps + latency_drag_bps + spread_drag_bps + maker_adverse_selection_drag_bps
         unmodelled_residual_bps = reality_gap_bps - accounted
 
         return RealityGapSummary(
@@ -209,10 +219,11 @@ class RealityGapAttributionEngine:
             slippage_drag_bps=slippage_drag_bps,
             latency_drag_bps=latency_drag_bps,
             fee_drag_bps=fee_drag_bps,
-            queue_drag_bps=queue_drag_bps,
+            maker_adverse_selection_drag_bps=maker_adverse_selection_drag_bps,
             unmodelled_residual_bps=unmodelled_residual_bps,
+            queue_drag_bps=maker_adverse_selection_drag_bps,
             latency_slip_drag_bps=latency_drag_bps + slippage_drag_bps,
-            queue_position_drag_bps=queue_drag_bps,
+            queue_position_drag_bps=maker_adverse_selection_drag_bps,
         )
 
     @staticmethod
@@ -234,6 +245,7 @@ class RealityGapAttributionEngine:
                 "slippage_drag_bps": float(summary.slippage_drag_bps),
                 "latency_drag_bps": float(summary.latency_drag_bps),
                 "fee_drag_bps": float(summary.fee_drag_bps),
+                "maker_adverse_selection_drag_bps": float(summary.maker_adverse_selection_drag_bps),
                 "queue_drag_bps": float(summary.queue_drag_bps),
                 "unmodelled_residual_bps": float(summary.unmodelled_residual_bps),
                 "latency_slip_drag_bps": float(summary.latency_slip_drag_bps),

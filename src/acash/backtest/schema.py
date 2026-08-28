@@ -291,11 +291,12 @@ class RealityGapSummary(BaseModel):
     slippage_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical price impact and depth slippage drag in bps.")
     latency_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transmission latency adverse drift drag in bps.")
     fee_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical transaction and broker fees drag in bps.")
-    queue_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical maker queue wait adverse selection drag in bps.")
+    maker_adverse_selection_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Empirical post-arrival adverse selection drag for maker fills in bps.")
     unmodelled_residual_bps: Decimal = Field(default=Decimal("0.0"), description="Unmodelled residual gap between analytical assumption and empirical friction.")
     # Backward compatibility aliases
+    queue_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Maker adverse selection drag alias in bps.")
     latency_slip_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Combined latency and slippage drag in bps.")
-    queue_position_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Maker queue delay drag in bps.")
+    queue_position_drag_bps: Decimal = Field(default=Decimal("0.0"), description="Maker adverse selection drag alias in bps.")
 
 
 class BacktestManifest(BaseModel):
@@ -386,6 +387,7 @@ class BacktestManifest(BaseModel):
                 "slippage_drag_bps": str(self.reality_gap.slippage_drag_bps),
                 "latency_drag_bps": str(self.reality_gap.latency_drag_bps),
                 "fee_drag_bps": str(self.reality_gap.fee_drag_bps),
+                "maker_adverse_selection_drag_bps": str(self.reality_gap.maker_adverse_selection_drag_bps),
                 "queue_drag_bps": str(self.reality_gap.queue_drag_bps),
                 "unmodelled_residual_bps": str(self.reality_gap.unmodelled_residual_bps),
                 "latency_slip_drag_bps": str(self.reality_gap.latency_slip_drag_bps),

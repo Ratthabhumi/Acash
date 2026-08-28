@@ -485,6 +485,7 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
     assert summary.latency_drag_bps == Decimal("0.1")
     assert summary.spread_drag_bps == Decimal("0.05")
     assert summary.slippage_drag_bps == Decimal("0.05")
+    assert summary.maker_adverse_selection_drag_bps == Decimal("0.4")
     assert summary.queue_drag_bps == Decimal("0.4")
     assert summary.unmodelled_residual_bps == Decimal("4.4")
 
@@ -493,6 +494,7 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
     assert report["friction_decomposition"]["latency_drag_bps"] == 0.1
     assert report["friction_decomposition"]["spread_drag_bps"] == 0.05
     assert report["friction_decomposition"]["slippage_drag_bps"] == 0.05
+    assert report["friction_decomposition"]["maker_adverse_selection_drag_bps"] == 0.4
     assert report["friction_decomposition"]["queue_drag_bps"] == 0.4
     assert report["friction_decomposition"]["unmodelled_residual_bps"] == 4.4
 
