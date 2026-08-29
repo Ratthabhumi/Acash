@@ -109,7 +109,8 @@ class SearchTrialLedger(BaseModel):
             )
         sharpes = [float(t.in_sample_sharpe) for t in self.trials]
         var = float(np.var(sharpes, ddof=1))
-        return max(1e-12, var)
+        return max(0.0, var)
+
 
     @property
     def p_values(self) -> List[Decimal]:

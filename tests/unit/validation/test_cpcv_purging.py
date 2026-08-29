@@ -1,6 +1,9 @@
 """Unit tests for Combinatorial Purged Cross-Validation (CPCV) and boundary purging."""
 
+import math
+import numpy as np
 import pytest
+
 
 from acash.core.domain.exceptions import DataContractError
 from acash.validation.cpcv import CombinatorialPurgedCrossValidation
@@ -131,4 +134,44 @@ def test_cpcv_combinatorial_assignment_structure_invariants() -> None:
         assert group_test_counts_across_paths[g] == phi, (
             f"Group {g} tested {group_test_counts_across_paths[g]} times across paths, expected {phi}."
         )
+
+
+def test_cpcv_cscv_matrix_evaluation_and_pbo_pipeline() -> None:
+    """Verify that evaluate_cscv_sharpe_matrices constructs valid (C, M) IS/OOS matrices and integrates with PBO."""
+    from acash.validation.overfitting import OverfittingEngine
+
+    N = 6
+    k = 2
+    T = 240
+    M = 10
+    config = ValidationConfig(num_groups_n=N, num_test_groups_k=k, embargo_bars=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+
+    # Synthetic return matrix for M models
+    np.random.seed(42)
+    return_matrix = np.random.normal(0.0005, 0.01, (T, M))
+
+    # Evaluate CSCV matrices
+    is_mat, oos_mat = cpcv.evaluate_cscv_sharpe_matrices(
+        return_matrix=return_matrix,
+        label_horizon=4,
+        embargo_bars=2,
+    )
+
+    C = math.comb(N, k)  # 15
+    assert is_mat.shape == (C, M)
+    assert oos_mat.shape == (C, M)
+
+    # Verify no NaN or Inf
+    assert not np.isnan(is_mat).any()
+    assert not np.isnan(oos_mat).any()
+    assert not np.isinf(is_mat).any()
+    assert not np.isinf(oos_mat).any()
+
+    # Pass to calculate_pbo
+    pbo, logits_mean, logits_std = OverfittingEngine.calculate_pbo(is_mat, oos_mat)
+    assert 0.0 <= pbo <= 1.0
+    assert isinstance(logits_mean, float)
+    assert isinstance(logits_std, float)
+
 

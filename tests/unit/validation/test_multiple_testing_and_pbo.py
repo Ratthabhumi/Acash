@@ -35,13 +35,42 @@ def test_authoritative_k_enforcement_in_multiple_testing() -> None:
 
 
 def test_haircut_sharpe_ratio_derivation() -> None:
-    """Verify Haircut Sharpe penalization formula (Harvey, Liu, & Zhu 2016)."""
-    haircut = MultipleTestingEngine.calculate_haircut_sharpe(
-        estimated_sharpe=2.0,
-        effective_trials_k=100,
-        sample_size_t=1000,
+    """Verify non-linear Haircut Sharpe penalization (Harvey, Liu, & Zhu 2016)."""
+    # 1. K = 1 produces zero haircut (Haircut SR == raw SR)
+    haircut_k1 = MultipleTestingEngine.calculate_haircut_sharpe(
+        estimated_sharpe=0.20,
+        effective_trials_k=1,
+        sample_size_t=100,
     )
-    assert math.isclose(float(haircut), 1.90403, rel_tol=1e-3)
+    assert math.isclose(float(haircut_k1), 0.20, abs_tol=1e-5)
+
+    # 2. Marginal Sharpe (SR=0.2, T=100, t_raw=2.0, p_raw=0.0455) with K=10
+    # p_adj = 0.455 -> t_adj = 0.74706 -> Haircut SR = 0.0747 (~62.6% haircut)
+    haircut_marginal = MultipleTestingEngine.calculate_haircut_sharpe(
+        estimated_sharpe=0.20,
+        effective_trials_k=10,
+        sample_size_t=100,
+    )
+    assert math.isclose(float(haircut_marginal), 0.074706, rel_tol=1e-2)
+
+    # 3. High Sharpe (SR=0.60, T=100, t_raw=6.0) with K=100
+    # p_adj = 1.97e-7 -> t_adj = 5.20 -> Haircut SR = 0.520 (~13.3% haircut)
+    haircut_high = MultipleTestingEngine.calculate_haircut_sharpe(
+        estimated_sharpe=0.60,
+        effective_trials_k=100,
+        sample_size_t=100,
+    )
+    assert math.isclose(float(haircut_high), 0.520, rel_tol=1e-2)
+
+    # 4. Strict monotonic decay with increasing K
+    k_vals = [1, 2, 5, 10, 20]
+    haircuts = [
+        float(MultipleTestingEngine.calculate_haircut_sharpe(0.30, k, 100))
+        for k in k_vals
+    ]
+    for i in range(len(haircuts) - 1):
+        assert haircuts[i] >= haircuts[i + 1]
+
 
 
 def test_parameter_curvature_evaluation_with_lineage() -> None:

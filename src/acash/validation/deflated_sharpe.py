@@ -144,10 +144,19 @@ class DeflatedSharpeEngine:
     ) -> float:
         """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
-        Estimator: EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 (Bailey & López de Prado 2014 EVT Approximation)
+        Reference:
+        Bailey, D. H., & López de Prado, M. (2014). "The Deflated Sharpe Ratio: Correcting for Selection
+        Bias, Backtest Overfitting, and Non-Normality." Journal of Portfolio Management, 40(5), 94–107.
+
+        Estimator: EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 (Extreme Value Theory Gumbel Approximation)
         SR0 = sqrt(V) * [ (1 - gamma_E) * Z^{-1}(1 - 1/K) + gamma_E * Z^{-1}(1 - 1/(K * e)) ]
-        where V is the empirical sample variance of the trial distribution in the evaluated frequency space.
+        where:
+        - gamma_E is the Euler-Mascheroni constant (~0.57721566)
+        - V is the empirical sample variance of the trial distribution in the evaluated frequency space.
+        - K is the total search trial count (SearchTrialLedger trials), acting as the governance upper
+          bound on selection bias opportunities.
         """
+
         K = max(1, effective_trials_k)
         if K <= 1 or variance_of_trials <= 1e-12:
             return 0.0

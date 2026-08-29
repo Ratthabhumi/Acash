@@ -33329,6 +33329,54 @@ Verdict: 3 จุดที่ผมทักก่อนหน้านี้: �
    - **239/239 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 112)
+
+<USER_REQUEST>
+ผมตรวจ commit 36166d1bcec25866971043ab68555d3dd10a8633 บน GitHub จริง และเทียบ implementation กับ reference methodology ที่หาได้ ไม่ได้ตัดสินจาก Walkthrough อย่างเดียว
+
+Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประเด็นสำคัญใน mathematical implementation:
+1. 🔴 P0/P1 — Haircut Sharpe ยังไม่ใช่ Harvey–Liu–Zhu ตามที่ประกาศ (ปัจจุบันใช้ linear hurdle subtraction แทนที่จะเป็น non-linear t -> p_raw -> p_adj -> t_adj -> haircut)
+2. 🔴 P1 — CPCV implementation ต้องพิสูจน์ statistical construction ไม่ใช่แค่ index coverage (สร้าง CSCV In-Sample / Out-of-Sample Sharpe matrices สำหรับ PBO)
+3. 🟠 P1 — PBO threshold / rank convention ต้องล็อกให้ชัด (omega = midrank / (M+1))
+4. 🟠 P1 — DSR search intensity K interpretation และ variance_of_trials = 0 baseline behavior
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 112)
+
+### 🛠️ สรุปรายละเอียด Substantive Mathematical Remediation (HLZ Haircut, CSCV Matrix & DSR Qualification)
+
+1. **🔴 Canonical Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio (P0/P1):**
+   - ใน `MultipleTestingEngine.calculate_haircut_sharpe()`:
+     - ปรับปรุงจากการลบ hurdle เชิงเส้น $SR - \frac{\sqrt{2\ln K}}{\sqrt{T}}$ มาเป็น non-linear canonical formulation:
+       $$ t_{\text{raw}} = \hat{SR} \cdot \sqrt{T} $$
+       $$ p_{\text{raw}} = 2 \cdot (1 - \Phi(|t_{\text{raw}}|)) = \text{erfc}\left(\frac{|t_{\text{raw}}|}{\sqrt{2}}\right) $$
+       $$ p_{\text{adj}} = \min(1.0, p_{\text{raw}} \cdot K) $$
+       $$ |t_{\text{adj}}| = \Phi^{-1}\left(1 - \frac{p_{\text{adj}}}{2}\right) \quad (\text{if } p_{\text{adj}} < 1.0 \text{ else } 0.0) $$
+       $$ \text{Haircut } \hat{SR} = \hat{SR} \cdot \frac{t_{\text{adj}}}{\max(10^{-6}, |t_{\text{raw}}|)} $$
+     - ครอบคลุมการทดสอบทั้งกรณี $K=1$ (0% haircut), High Sharpe ($t=6.0, K=100 \implies \approx 13\%$ haircut), Marginal Sharpe ($t=2.0, K=10 \implies > 60\%$ haircut) และการลดลงแบบ monotonic ตาม $K$
+
+2. **🔴 Direct CSCV Matrix Evaluation Pipeline in CPCV (P1):**
+   - เพิ่ม `evaluate_cscv_sharpe_matrices()` บน `CombinatorialPurgedCrossValidation`:
+     - รับ Return Matrix $R \in \mathbb{R}^{T \times M}$ และ Partitions $S = \binom{N}{k}$
+     - คำนวณ $(S, M)$ In-Sample Sharpe Matrix (โดยตัด purged และ embargoed bars ออก 100%) และ $(S, M)$ Out-of-Sample Sharpe Matrix
+     - ส่งต่อเข้าสู่ `OverfittingEngine.calculate_pbo()` เพื่อประเมิน PBO ตามระเบียบวิธีวิจัยของ Bailey et al. (2016)
+
+3. **🟠 PBO Relative Rank Specification & Lock (P1):**
+   - ล็อกและอธิบาย Specification ชัดเจน: $\bar{R}_c = \frac{\text{midrank}}{M+1}$ เพื่อให้อยู่ใน $(0, 1)$ เสมอ ป้องกัน logit divergence และให้ median tie $\bar{R}=0.5 \implies \lambda=0$
+
+4. **🟠 DSR Search Trial Qualification & $SR_0$ Monotonicity Tests (P1):**
+   - บันทึก docstring ระบุชัดเจนว่า $K_{\text{ledger}}$ คือ Search Intensity Upper Bound
+   - เพิ่ม Adversarial Tests: พิสูจน์ Monotonicity ของ $SR_0$ เมื่อ cross-sectional trial variance $V$ เพิ่มขึ้น ($V \in [0.01, 0.04, 0.25, 1.0, 4.0]$) และทดสอบพฤติกรรมกรณี identical trial evidence ($V=0 \implies SR_0=0$)
+
+5. **Full Test Suite & Mypy Status:**
+   - **241/241 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

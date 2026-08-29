@@ -195,3 +195,58 @@ class CombinatorialPurgedCrossValidation:
             paths.append(path_pairs)
 
         return paths
+
+    def evaluate_cscv_sharpe_matrices(
+        self,
+        return_matrix: np.ndarray,
+        label_horizon: int = 1,
+        embargo_bars: Optional[int] = None,
+        annualization_factor: float = 252.0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute In-Sample and Out-of-Sample Sharpe matrices for all M models across all C = (N choose k) splits.
+
+        Implements Combinatorially Symmetric Cross-Validation (CSCV / Bailey et al. 2016) with strict
+        interval purging and post-test embargo buffers (López de Prado 2018).
+
+        Args:
+            return_matrix: 2D numpy array of shape (T observations, M candidate strategies/models).
+            label_horizon: Forward-looking label evaluation window H (bars).
+            embargo_bars: Post-test embargo window (defaults to config.embargo_bars).
+            annualization_factor: Factor for annualized Sharpe ratios (e.g. 252.0 for daily).
+
+        Returns:
+            Tuple[is_sharpe_matrix, oos_sharpe_matrix] where each has shape (C combinations, M models).
+        """
+        if return_matrix.ndim != 2:
+            raise DataContractError(f"return_matrix must be 2D array of shape (T, M), got shape {return_matrix.shape}")
+
+        T, M = return_matrix.shape
+        partitions = self.generate_partitions(sample_size=T, label_horizon=label_horizon, embargo_bars=embargo_bars)
+        C = len(partitions)
+
+        is_sharpe_mat = np.zeros((C, M), dtype=np.float64)
+        oos_sharpe_mat = np.zeros((C, M), dtype=np.float64)
+
+        sqrt_ann = math.sqrt(annualization_factor)
+
+        for c, p in enumerate(partitions):
+            # In-Sample evaluation (purged and embargoed indices excluded)
+            train_idx = p.train_indices
+            if len(train_idx) > 1:
+                is_slice = return_matrix[train_idx, :]
+                is_mean = np.mean(is_slice, axis=0)
+                is_std = np.std(is_slice, axis=0, ddof=1)
+                is_sr = np.where(is_std > 1e-12, (is_mean / is_std) * sqrt_ann, 0.0)
+                is_sharpe_mat[c, :] = is_sr
+
+            # Out-of-Sample evaluation (pure testing window)
+            test_idx = p.test_indices
+            if len(test_idx) > 1:
+                oos_slice = return_matrix[test_idx, :]
+                oos_mean = np.mean(oos_slice, axis=0)
+                oos_std = np.std(oos_slice, axis=0, ddof=1)
+                oos_sr = np.where(oos_std > 1e-12, (oos_mean / oos_std) * sqrt_ann, 0.0)
+                oos_sharpe_mat[c, :] = oos_sr
+
+        return is_sharpe_mat, oos_sharpe_mat
+

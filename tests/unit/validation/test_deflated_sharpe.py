@@ -132,3 +132,42 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
     assert res.is_statistically_significant is False
     assert res.has_sufficient_track_record is False
 
+
+def test_dsr_variance_monotonicity_and_identical_trials() -> None:
+    """Verify that SR0 increases monotonically with cross-sectional trial variance and tests V=0 baseline."""
+    # 1. Monotonicity of SR0 with respect to trial variance V for fixed K=50
+    k = 50
+    variances = [0.01, 0.04, 0.25, 1.0, 4.0]
+    sr0_values = [
+        DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(effective_trials_k=k, variance_of_trials=v)
+        for v in variances
+    ]
+    for i in range(len(sr0_values) - 1):
+        assert sr0_values[i] < sr0_values[i + 1]
+
+    # 2. Identical trials in ledger produce Var(SR_k) == 0.0 -> SR0 == 0.0
+    identical_trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_IDENTICAL",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.500000000000000000"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(20)
+    ]
+    identical_ledger = SearchTrialLedger(
+        ledger_id="LEDGER_IDENTICAL",
+        strategy_id="STRAT_IDENTICAL",
+        hypothesis_id="HYP_01",
+        trials=identical_trials,
+    )
+    assert identical_ledger.get_empirical_sharpe_variance() == 0.0
+
+    returns = list(np.random.normal(0.0015, 0.0040, 500))
+    res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=identical_ledger)
+    assert res.expected_max_sharpe_sr0 == Decimal("0.0")
+
+
