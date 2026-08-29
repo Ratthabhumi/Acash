@@ -33376,6 +33376,43 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **241/241 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 113)
+
+<USER_REQUEST>
+ผมตรวจต่อจาก GitHub commit 5ae0df9 จริง โดยดู source ของ cpcv.py, multiple_testing.py, overfitting.py, gate.py และเทียบกับวิธี CSCV/PBO/DSR ที่ใช้กันใน literature ไม่ได้ยึดตัวเลข 241/241 เป็นหลักฐานความถูกต้องอย่างเดียว
+
+และรอบนี้เจอ จุดสำคัญกว่าเดิม 3 จุด ที่ผมยังไม่ให้ผ่าน Final Mathematical Audit:
+1. 🔴 P0 — Gate ยังสามารถคำนวณ PBO จากข้อมูลสังเคราะห์แทน CSCV จริง (is_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]]))
+2. 🔴 P0 — CPCV engine มี แต่ Gate ไม่บังคับใช้ (CSCV/PBO ต้องใช้ symmetric combinations ของ full strategy/configuration matrix)
+3. 🔴 P1 — Gate ไม่ได้ใช้ Multiple-Testing result เป็น Hard Gate จริง (Holm FWER / Haircut Sharpe ต้องเป็น gating constraint)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 113)
+
+### 🛠️ สรุปรายละเอียด Sovereign Gate Architectural Hardening & Governance Coupling
+
+1. **🔴 Elimination of Synthetic CPCV Fallback (P0):**
+   - ลบโค้ด Fallback สังเคราะห์ `np.array([[float(dsr_result.estimated_sharpe), 0.0]])` ออกจาก `StatisticalValidationGate` 100%
+   - บังคับว่า caller ต้องส่ง `trial_return_matrix` ($T \times M$ โดย $M \ge 2$) หรือ Explicit $(C, M)$ `(is_cpcv_sharpe_matrix, oos_cpcv_sharpe_matrix)`
+   - หากขาดหลักฐาน Empirical CPCV / CSCV ตัว Gate จะปฏิเสธทันทีด้วย verdict ใหม่: `ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE` โดยไม่ประเมินตัวเลขแบบหลอก
+
+2. **🔴 Mandatory CSCV Matrix Engine Integration in Sovereign Gate (P0):**
+   - เมื่อส่ง `trial_return_matrix` ($T \times M$) เข้ามา ตัว Gate จะเรียก `self.cpcv_engine.evaluate_cscv_sharpe_matrices()` โดยตรง เพื่อสร้าง $(S, M)$ IS และ $(S, M)$ OOS Sharpe matrices ที่ผ่านการ purge forward-looking labels และ post-test embargo buffers ตามทฤษฎี CSCV ของ Bailey et al. (2016)
+
+3. **🔴 Hard Gating Coupling for Multiple-Testing & Haircut Sharpe (P1):**
+   - เพิ่ม `REJECT_MULTIPLE_TESTING_FWER` และ `REJECT_HAIRCUT_SHARPE` ใน `ValidationGateVerdict`
+   - ใน `ValidationConfig` เพิ่ม `enforce_fwer_significance: bool = True` และ `min_haircut_sharpe: Decimal = Decimal("0.0")`
+   - เชื่อมต่อเข้าสู่ Gating Hierarchy ของ `evaluate_strategy()`: หากไม่ผ่าน Holm-Bonferroni FWER significance หรือ Haircut Sharpe ต่ำกว่า threshold จะถูก Reject ทันที
+
+4. **Full Test Suite & Mypy Status:**
+   - **244/244 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

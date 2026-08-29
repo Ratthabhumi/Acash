@@ -30,10 +30,14 @@ class ValidationGateVerdict(str, Enum):
     REJECT_HIGH_PBO = "REJECT_HIGH_PBO"
     REJECT_PARAMETER_FRAGILE = "REJECT_PARAMETER_FRAGILE"
     REJECT_MISSING_PERTURBATION_GRID = "REJECT_MISSING_PERTURBATION_GRID"
+    REJECT_MISSING_CPCV_EVIDENCE = "REJECT_MISSING_CPCV_EVIDENCE"
+    REJECT_MULTIPLE_TESTING_FWER = "REJECT_MULTIPLE_TESTING_FWER"
+    REJECT_HAIRCUT_SHARPE = "REJECT_HAIRCUT_SHARPE"
     REJECT_INSUFFICIENT_TRL = "REJECT_INSUFFICIENT_TRL"
     REJECT_OOS_DEGRADATION = "REJECT_OOS_DEGRADATION"
     REJECT_MISSING_OOS_DATA = "REJECT_MISSING_OOS_DATA"
     REJECT_FRICTION_COLLAPSE = "REJECT_FRICTION_COLLAPSE"
+
 
 
 class SelectionCorrectionMode(str, Enum):
@@ -350,6 +354,8 @@ class ValidationPolicyConfig(BaseModel):
     min_dsr_probability: Decimal = Field(default=Decimal("0.95"), ge=Decimal("0.50"), le=Decimal("1.0"))
     max_acceptable_pbo: Decimal = Field(default=Decimal("0.25"), gt=Decimal("0.0"), lt=Decimal("1.0"))
     min_oos_sharpe_retention_pct: Decimal = Field(default=Decimal("50.0"), ge=Decimal("0.0"), description="Minimum OOS Sharpe retention vs In-Sample (%).")
+    enforce_fwer_significance: bool = Field(default=True, description="Whether Holm-Bonferroni FWER significance is required for Gate PASS.")
+    min_haircut_sharpe: Decimal = Field(default=Decimal("0.0"), description="Minimum acceptable Haircut Sharpe Ratio (HLZ 2016).")
 
 
 class ValidationConfig(BaseModel):
@@ -364,6 +370,9 @@ class ValidationConfig(BaseModel):
     min_dsr_probability: Decimal = Field(default=Decimal("0.95"), ge=Decimal("0.50"), le=Decimal("1.0"))
     max_acceptable_pbo: Decimal = Field(default=Decimal("0.25"), gt=Decimal("0.0"), lt=Decimal("1.0"))
     min_oos_sharpe_retention_pct: Decimal = Field(default=Decimal("50.0"), ge=Decimal("0.0"), description="Minimum OOS Sharpe retention vs In-Sample (%).")
+    enforce_fwer_significance: bool = Field(default=True, description="Whether Holm-Bonferroni FWER significance is required for Gate PASS.")
+    min_haircut_sharpe: Decimal = Field(default=Decimal("0.0"), description="Minimum acceptable Haircut Sharpe Ratio (HLZ 2016).")
+
 
 
 class ValidationReport(BaseModel):

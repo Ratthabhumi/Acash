@@ -93,6 +93,7 @@ class StatisticalValidationGate:
         in_sample_returns: Sequence[Union[Decimal, float]],
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         trial_ledger: Optional[SearchTrialLedger] = None,
+        trial_return_matrix: Optional[np.ndarray] = None,
         is_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         oos_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
@@ -101,7 +102,6 @@ class StatisticalValidationGate:
         friction_params: Optional[FrictionStressParameters] = None,
         fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
-
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
 
         # 1. Search Intensity & Trial Coupling (Strict Pre-Flight Fail-Closed on missing ledger)
@@ -202,7 +202,58 @@ class StatisticalValidationGate:
                 created_timestamp_utc=now_utc,
             )
 
-        # 4. In-Sample Observation Sufficiency Check (Evaluated after all prerequisites are verified)
+        # 4. Mandatory CPCV / CSCV Empirical Evidence Requirement (Strict Fail-Closed without surrogate fallback)
+        if trial_return_matrix is not None:
+            if trial_return_matrix.ndim != 2 or trial_return_matrix.shape[1] < 2:
+                raise DataContractError(
+                    f"trial_return_matrix must be 2D array of shape (T, M >= 2), got {getattr(trial_return_matrix, 'shape', None)}"
+                )
+            is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(trial_return_matrix)
+        elif is_cpcv_sharpe_matrix is not None and oos_cpcv_sharpe_matrix is not None:
+            if is_cpcv_sharpe_matrix.ndim != 2 or is_cpcv_sharpe_matrix.shape[1] < 2:
+                raise DataContractError(
+                    f"is_cpcv_sharpe_matrix must have shape (C, M >= 2), got {is_cpcv_sharpe_matrix.shape}"
+                )
+            if oos_cpcv_sharpe_matrix.shape != is_cpcv_sharpe_matrix.shape:
+                raise DataContractError(
+                    f"oos_cpcv_sharpe_matrix shape {oos_cpcv_sharpe_matrix.shape} != is_cpcv_sharpe_matrix shape {is_cpcv_sharpe_matrix.shape}"
+                )
+            is_mat = is_cpcv_sharpe_matrix
+            oos_mat = oos_cpcv_sharpe_matrix
+        else:
+            is_hash = _compute_canonical_series_sha256(in_sample_returns)
+            oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
+            ledger_hash = _compute_ledger_sha256(trial_ledger)
+            grid_hash = _compute_grid_sha256(perturbation_grid)
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:MISSING_CPCV_EVIDENCE"
+            evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
+            verdict = ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE
+            decision_payload = (
+                f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+            )
+            decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
+            val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
+            now_utc = fixed_created_timestamp_utc or datetime.now(timezone.utc).isoformat()
+
+            return ValidationReport(
+                validation_id=val_id,
+                evidence_digest=evidence_digest,
+                decision_digest=decision_digest,
+                strategy_id=strategy_id,
+                hypothesis_id=hypothesis_id,
+                verdict=verdict,
+                is_tradeable_alpha=False,
+                dsr_result=None,
+                multiple_testing_result=None,
+                overfitting_report=None,
+                in_sample_sharpe=None,
+                out_of_sample_sharpe=None,
+                oos_retention_pct=None,
+                created_timestamp_utc=now_utc,
+            )
+
+        # 5. In-Sample Observation Sufficiency Check (Evaluated after all prerequisites are verified)
         n_is = len(in_sample_returns)
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
@@ -223,7 +274,7 @@ class StatisticalValidationGate:
 
         all_p_values = trial_ledger.p_values
 
-        # 4. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger)
+        # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger)
         dsr_result = DeflatedSharpeEngine.evaluate_dsr(
             returns=in_sample_returns,
             effective_trials_k=effective_k,
@@ -231,7 +282,7 @@ class StatisticalValidationGate:
             trial_ledger=trial_ledger,
         )
 
-        # 5. Multiple Testing FWER & Haircut Sharpe (Authoritative K from ledger)
+        # 7. Multiple Testing FWER & Haircut Sharpe (Authoritative K from ledger)
         mult_result = MultipleTestingEngine.evaluate_multiple_testing(
             p_values=all_p_values,
             estimated_sharpe=float(dsr_result.estimated_sharpe),
@@ -240,7 +291,7 @@ class StatisticalValidationGate:
             confidence_level_alpha=float(self.config.confidence_level_alpha),
         )
 
-        # 6. Overfitting & Parameter Fragility
+        # 8. Overfitting & Parameter Fragility
         if manifest_store is not None:
             for pt in perturbation_grid.points:
                 if pt.manifest_id not in manifest_store:
@@ -248,14 +299,6 @@ class StatisticalValidationGate:
                         f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
                     )
                 pt.validate_manifest_binding(manifest_store[pt.manifest_id])
-
-        if is_cpcv_sharpe_matrix is not None and oos_cpcv_sharpe_matrix is not None:
-            is_mat = is_cpcv_sharpe_matrix
-            oos_mat = oos_cpcv_sharpe_matrix
-        else:
-            is_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
-            oos_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
-
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
             is_sharpe_matrix=is_mat,
@@ -266,7 +309,7 @@ class StatisticalValidationGate:
             max_acceptable_pbo=float(self.config.max_acceptable_pbo),
         )
 
-        # 7. Out-of-Sample Performance Evaluation
+        # 9. Out-of-Sample Performance Evaluation
         mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)
         raw_oos_sr = mean_oos / std_oos if std_oos > 0 else 0.0
         oos_sr = to_decimal18(Decimal(f"{raw_oos_sr:.12f}")) or Decimal("0.0")
@@ -276,8 +319,7 @@ class StatisticalValidationGate:
             ret_val = (oos_sr / dsr_result.estimated_sharpe) * Decimal("100.0")
             retention_pct = to_decimal18(ret_val)
 
-
-        # 8. Gating Decision Logic
+        # 10. Gating Decision Logic (Sequential Sovereign Arbiter)
         verdict = ValidationGateVerdict.PASS_TRADEABLE_ALPHA
         is_tradeable = True
 
@@ -286,6 +328,12 @@ class StatisticalValidationGate:
             is_tradeable = False
         elif not dsr_result.has_sufficient_track_record:
             verdict = ValidationGateVerdict.REJECT_INSUFFICIENT_TRL
+            is_tradeable = False
+        elif self.config.enforce_fwer_significance and not mult_result.is_fwer_significant:
+            verdict = ValidationGateVerdict.REJECT_MULTIPLE_TESTING_FWER
+            is_tradeable = False
+        elif mult_result.haircut_sharpe_ratio < self.config.min_haircut_sharpe:
+            verdict = ValidationGateVerdict.REJECT_HAIRCUT_SHARPE
             is_tradeable = False
         elif not overfit_report.is_pbo_acceptable:
             verdict = ValidationGateVerdict.REJECT_HIGH_PBO
@@ -299,6 +347,7 @@ class StatisticalValidationGate:
         elif retention_pct is not None and retention_pct < self.config.min_oos_sharpe_retention_pct:
             verdict = ValidationGateVerdict.REJECT_OOS_DEGRADATION
             is_tradeable = False
+
 
 
         # 7. Cryptographic Lineage Digests (DAG: Evidence -> Decision -> ValidationID)

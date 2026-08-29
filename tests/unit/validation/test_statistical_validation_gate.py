@@ -87,15 +87,21 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
         trials=trials,
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_MOM_001")
+    trial_matrix = np.zeros((1000, 5), dtype=np.float64)
+    for m in range(5):
+        trial_matrix[:, m] = np.random.normal(0.0025 - m * 0.0005, 0.0040, 1000)
 
     report = gate.evaluate_strategy(
+
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
     )
+
 
     assert report.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
     assert report.is_tradeable_alpha is True
@@ -433,6 +439,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         trials=[trial],
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    trial_matrix = np.random.normal(0.0010, 0.0040, (1000, 2))
 
     report_1 = gate.evaluate_strategy(
         strategy_id="STRAT_01",
@@ -440,6 +447,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
         fixed_created_timestamp_utc="2026-08-28T10:00:00Z",
     )
@@ -450,6 +458,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
         fixed_created_timestamp_utc="2026-08-28T12:00:00Z",  # Different runtime timestamp
     )
@@ -484,6 +493,7 @@ def test_canonical_json_serialization_separation() -> None:
         trials=[trial],
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    trial_matrix = np.random.normal(0.0010, 0.0040, (1000, 2))
 
     report = gate.evaluate_strategy(
         strategy_id="STRAT_01",
@@ -491,8 +501,10 @@ def test_canonical_json_serialization_separation() -> None:
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
     )
+
 
     # 1. Canonical Evidence JSON (pure mathematical facts)
     ev_json = report.to_canonical_evidence_json()
@@ -808,13 +820,19 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
         points=points,
     )
 
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.random.normal(0.0025, 0.0040, 1000)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
+
     # 1. Successful verification against manifest_store
+
     report = gate.evaluate_strategy(
         strategy_id="STRAT_STORE_01",
         hypothesis_id="HYP_01",
         in_sample_returns=is_returns,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
         manifest_store=manifest_store,
     )
@@ -829,9 +847,139 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
             in_sample_returns=is_returns,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
             perturbation_grid=grid,
             manifest_store=incomplete_store,
         )
+
+
+def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> None:
+    """Verify that omitting trial_return_matrix and CPCV matrices strictly fails closed with REJECT_MISSING_CPCV_EVIDENCE."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    trial = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.001"),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=[trial],
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+
+    # Omitting CPCV evidence
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        perturbation_grid=grid,
+        trial_return_matrix=None,
+        is_cpcv_sharpe_matrix=None,
+        oos_cpcv_sharpe_matrix=None,
+    )
+    assert rep.verdict == ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE
+    assert rep.is_tradeable_alpha is False
+    assert rep.overfitting_report is None
+
+
+def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
+    """Verify that failing Holm-Bonferroni FWER test triggers REJECT_MULTIPLE_TESTING_FWER."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    # Insignificant trials: p-value = 0.50
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"t_{i}",
+            strategy_id="STRAT_FWER",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.50"),  # High p-value -> FWER fails!
+        )
+        for i in range(3)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L_FWER",
+        strategy_id="STRAT_FWER",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_FWER")
+    trial_matrix = np.random.normal(0.0010, 0.0040, (500, 3))
+
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_FWER",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        perturbation_grid=grid,
+    )
+    assert rep.verdict == ValidationGateVerdict.REJECT_MULTIPLE_TESTING_FWER
+    assert rep.is_tradeable_alpha is False
+
+
+def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
+    """Verify that Haircut Sharpe falling below min_haircut_sharpe threshold triggers REJECT_HAIRCUT_SHARPE."""
+    # Configure high minimum haircut Sharpe requirement
+    cfg = ValidationConfig(min_haircut_sharpe=Decimal("2.50"))
+    gate = StatisticalValidationGate(config=cfg)
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id="t1",
+            strategy_id="STRAT_HC",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L_HC",
+        strategy_id="STRAT_HC",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_HC")
+    trial_matrix = np.random.normal(0.0010, 0.0040, (500, 2))
+
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_HC",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        perturbation_grid=grid,
+    )
+    assert rep.verdict == ValidationGateVerdict.REJECT_HAIRCUT_SHARPE
+    assert rep.is_tradeable_alpha is False
+
 
 
 
