@@ -49,6 +49,13 @@ class SelectionCorrectionMode(str, Enum):
     MULTIPLE_TRIAL = "MULTIPLE_TRIAL"  # K >= 2: Bailey-López de Prado Gumbel EVT selection deflation using empirical trial variance
 
 
+class SharpeSpace(str, Enum):
+    """Explicit frequency space for Sharpe ratios in trial ledgers and statistical validation reports."""
+
+    PERIOD = "PERIOD"
+    ANNUAL = "ANNUAL"
+
+
 class SearchTrialRecord(BaseModel):
     """Single exploratory trial / parameter configuration tracked in the search space."""
 
@@ -57,8 +64,9 @@ class SearchTrialRecord(BaseModel):
     trial_id: str = Field(min_length=1, description="Unique deterministic trial identifier.")
     strategy_id: str = Field(min_length=1)
     hypothesis_id: str = Field(min_length=1)
-    feature_names: List[str]
+    feature_names: Sequence[str] = Field(min_length=1, description="Immutable tuple of feature dependencies.")
     parameters: Dict[str, Any]
+
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
     in_sample_return_series_sha256: str = Field(
@@ -76,16 +84,24 @@ class SearchTrialRecord(BaseModel):
     @staticmethod
     def compute_config_sha256(feature_names: Sequence[str], parameters: Dict[str, Any]) -> str:
         """Deterministic canonical SHA-256 digest of feature dependencies and search parameters."""
-        payload = json.dumps({"features": sorted(list(feature_names)), "params": parameters}, sort_keys=True)
+        payload = json.dumps(
+            {"features": sorted(list(feature_names)), "params": parameters},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @model_validator(mode="before")
     @classmethod
-    def populate_mandatory_hashes(cls, data: Any) -> Any:
+    def populate_mandatory_hashes_and_types(cls, data: Any) -> Any:
         """Ensure cryptographic hashes are strictly populated for all records without synthetic fallback."""
         if isinstance(data, dict):
+            if "feature_names" in data and isinstance(data["feature_names"], (list, set)):
+                data["feature_names"] = tuple(sorted(list(data["feature_names"])))
             if "config_sha256" not in data or data["config_sha256"] is None:
-                features = data.get("feature_names", [])
+                features = data.get("feature_names", ())
                 params = data.get("parameters", {})
                 data["config_sha256"] = cls.compute_config_sha256(features, params)
             if "in_sample_return_series_sha256" not in data or data["in_sample_return_series_sha256"] is None:
@@ -106,7 +122,7 @@ class SearchTrialRecord(BaseModel):
         trial_id: str,
         strategy_id: str,
         hypothesis_id: str,
-        feature_names: List[str],
+        feature_names: Sequence[str],
         parameters: Dict[str, Any],
         in_sample_sharpe: Decimal,
         p_value: Decimal,
@@ -132,7 +148,7 @@ class SearchTrialRecord(BaseModel):
             trial_id=trial_id,
             strategy_id=strategy_id,
             hypothesis_id=hypothesis_id,
-            feature_names=feature_names,
+            feature_names=tuple(sorted(list(feature_names))),
             parameters=parameters,
             in_sample_sharpe=in_sample_sharpe,
             p_value=p_value,
@@ -153,7 +169,10 @@ class SearchTrialLedger(BaseModel):
     trials: Tuple[SearchTrialRecord, ...] = Field(
         min_length=1, description="Non-empty immutable tuple of exploratory trials."
     )
-    sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
+    sharpe_space: SharpeSpace = Field(
+        default=SharpeSpace.PERIOD,
+        description="Explicit SharpeSpace (PERIOD or ANNUAL) frequency of recorded Sharpes.",
+    )
     is_sealed: bool = Field(default=False, description="True if search universe is sealed and immutable.")
     sealed_at_utc: Optional[str] = Field(default=None, description="UTC timestamp when search universe was sealed.")
     ledger_digest: Optional[str] = Field(
@@ -161,6 +180,20 @@ class SearchTrialLedger(BaseModel):
         pattern=r"^[0-9a-f]{64}$",
         description="Cryptographic SHA-256 fingerprint of the sealed ledger universe (64 lowercase hex).",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_trials_tuple(cls, data: Any) -> Any:
+        """Coerce list of trials to immutable tuple."""
+        if isinstance(data, dict):
+            if "trials" in data and isinstance(data["trials"], list):
+                data["trials"] = tuple(data["trials"])
+            if "sharpe_space" in data and isinstance(data["sharpe_space"], str):
+                try:
+                    data["sharpe_space"] = SharpeSpace(data["sharpe_space"])
+                except ValueError as e:
+                    raise DataContractError(f"Invalid sharpe_space '{data['sharpe_space']}': must be 'PERIOD' or 'ANNUAL'.") from e
+        return data
 
     def compute_ledger_digest(self) -> str:
         """Deterministic canonical SHA-256 fingerprint over all candidate trial lineage records.
@@ -170,15 +203,31 @@ class SearchTrialLedger(BaseModel):
         - `sealed_at_utc` represents the OPERATIONAL LIFECYCLE METADATA recording when the sealing occurred.
         - Sealing timestamps do NOT alter the content identity of the underlying search universe.
         """
-        items: List[str] = []
-        for t in self.trials:
-            item = (
-                f"{t.trial_id}:{t.config_sha256}:{t.in_sample_return_series_sha256}:"
-                f"{t.execution_manifest_id}:{Decimal(str(t.in_sample_sharpe)):.18f}:{Decimal(str(t.p_value)):.18f}"
-            )
-            items.append(item)
-        raw_payload = f"{self.ledger_id}:{self.strategy_id}:{self.hypothesis_id}:{self.sharpe_space}:" + ";".join(items)
-        return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+        canonical_obj = {
+            "ledger_id": self.ledger_id,
+            "strategy_id": self.strategy_id,
+            "hypothesis_id": self.hypothesis_id,
+            "sharpe_space": self.sharpe_space.value if isinstance(self.sharpe_space, SharpeSpace) else str(self.sharpe_space),
+            "trials": [
+                {
+                    "trial_id": t.trial_id,
+                    "config_sha256": t.config_sha256,
+                    "in_sample_return_series_sha256": t.in_sample_return_series_sha256,
+                    "execution_manifest_id": t.execution_manifest_id,
+                    "in_sample_sharpe": f"{Decimal(str(t.in_sample_sharpe)):.18f}",
+                    "p_value": f"{Decimal(str(t.p_value)):.18f}",
+                }
+                for t in self.trials
+            ],
+        }
+        payload = json.dumps(
+            canonical_obj,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def seal(self, sealed_at_utc: Optional[str] = None) -> "SearchTrialLedger":
         """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest."""
@@ -232,6 +281,7 @@ class SearchTrialLedger(BaseModel):
                 )
 
         return self
+
 
 
 
@@ -446,8 +496,9 @@ class DSRResult(BaseModel):
     is_statistically_significant: bool = Field(description="True if dsr_p_value >= min_dsr_probability (e.g. 0.95).")
     min_track_record_length_bars: int = Field(description="Minimum Track Record Length (MinTRL) in bars required for statistical significance.")
     has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars.")
-    sharpe_space: str = Field(default="ANNUALIZED", description="Frequency space of the reported Sharpe ratios ('ANNUALIZED').")
-    inference_space: str = Field(default="PER_PERIOD", description="Frequency space of the internal hypothesis test calculations ('PER_PERIOD').")
+    sharpe_space: SharpeSpace = Field(default=SharpeSpace.ANNUAL, description="Frequency space of the reported Sharpe ratios (ANNUAL).")
+    inference_space: SharpeSpace = Field(default=SharpeSpace.PERIOD, description="Frequency space of the internal hypothesis test calculations (PERIOD).")
+
     selection_correction_mode: SelectionCorrectionMode = Field(default=SelectionCorrectionMode.MULTIPLE_TRIAL, description="Selection correction mode.")
 
     sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")

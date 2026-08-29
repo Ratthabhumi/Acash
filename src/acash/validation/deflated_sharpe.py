@@ -23,7 +23,7 @@ import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
-from acash.validation.schema import DSRResult, SearchTrialLedger, SelectionCorrectionMode
+from acash.validation.schema import DSRResult, SearchTrialLedger, SelectionCorrectionMode, SharpeSpace
 
 
 EULER_MASCHERONI_CONSTANT = 0.57721566490153286060
@@ -99,7 +99,6 @@ class DeflatedSharpeEngine:
     resides exclusively in StatisticalValidationGate.
     """
 
-
     @staticmethod
     def calculate_higher_moments(returns: Sequence[Union[Decimal, float]]) -> Tuple[float, float, float, float]:
         """Compute sample mean, standard deviation, Fisher-Pearson skewness g_1, and Pearson kurtosis g_2.
@@ -113,6 +112,11 @@ class DeflatedSharpeEngine:
         Returns:
             Tuple[mean, std, skewness_g1, kurtosis_g2]
         """
+        for r in returns:
+            rf = float(r)
+            if not math.isfinite(rf):
+                raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in return series.")
+
         arr = np.array([float(r) for r in returns], dtype=np.float64)
         n = len(arr)
         if n < 4:
@@ -156,7 +160,6 @@ class DeflatedSharpeEngine:
         - K is the total search trial count (SearchTrialLedger trials), acting as the governance upper
           bound on selection bias opportunities.
         """
-
         K = max(1, effective_trials_k)
         if K <= 1 or variance_of_trials <= 1e-12:
             return 0.0
@@ -190,17 +193,18 @@ class DeflatedSharpeEngine:
         """
         annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
 
-        sharpe_space_label = "PERIOD"
         if trial_ledger is not None:
             effective_trials_k = trial_ledger.total_trials
-            sharpe_space_label = trial_ledger.sharpe_space
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
-                # If ledger Sharpes were annualized, scale variance down to per-period space
-                if trial_ledger.sharpe_space == "ANNUAL" and periods_per_year > 0:
+                if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
+                    if periods_per_year <= 0:
+                        raise DataContractError(f"Invalid periods_per_year {periods_per_year} for ANNUAL SharpeSpace scaling.")
                     variance_of_trials = raw_var / periods_per_year
-                else:
+                elif trial_ledger.sharpe_space == SharpeSpace.PERIOD:
                     variance_of_trials = raw_var
+                else:
+                    raise DataContractError(f"Unsupported SharpeSpace '{trial_ledger.sharpe_space}' in trial_ledger.")
             else:
                 variance_of_trials = 0.0
 
@@ -216,7 +220,6 @@ class DeflatedSharpeEngine:
         # 2. Expected maximum Sharpe under null (per-period and annualized)
         sr0_period = cls.compute_expected_max_sharpe_sr0(effective_trials_k, variance_of_trials)
         sr0_annual = sr0_period * annual_mult
-
 
         # 3. Non-normal asymptotic variance factor:
         # sigma_SR = sqrt( (1 - g_1 * SR + (g_2 - 1)/4 * SR^2) / (T - 1) )
@@ -247,10 +250,9 @@ class DeflatedSharpeEngine:
             selection_correction_mode=mode,
             sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
-            sharpe_space="ANNUALIZED",
-            inference_space="PER_PERIOD",
+            sharpe_space=SharpeSpace.ANNUAL,
+            inference_space=SharpeSpace.PERIOD,
             trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
-
             sample_size_t=n,
             dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),
             dsr_p_value=to_decimal18(Decimal(f"{dsr_prob:.12f}")) or Decimal("0.0"),
@@ -258,3 +260,4 @@ class DeflatedSharpeEngine:
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+

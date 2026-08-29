@@ -39,6 +39,7 @@ from acash.validation.schema import (
     SearchTrialLedger,
     SearchTrialRecord,
     SelectionCorrectionMode,
+    SharpeSpace,
     ValidationConfig,
     ValidationGateVerdict,
     ValidationReport,
@@ -48,10 +49,15 @@ from acash.validation.schema import (
 def _compute_canonical_series_sha256(series: Optional[Union[Sequence[Union[Decimal, float]], np.ndarray]]) -> str:
     """Compute deterministic SHA-256 hash using exact canonical Decimal strings (no float rounding)."""
     if series is None or len(series) == 0:
-
         return "NONE"
 
-    dec_strings = [f"{Decimal(str(v)):.18f}" for v in series]
+    dec_strings: List[str] = []
+    for v in series:
+        vf = float(v)
+        if not math.isfinite(vf):
+            raise DataContractError(f"Non-finite value '{v}' (NaN or Inf) encountered in return series before hashing.")
+        dec_strings.append(f"{Decimal(str(v)):.18f}")
+
     raw_payload = ",".join(dec_strings)
     return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
 
@@ -107,7 +113,17 @@ class StatisticalValidationGate:
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
 
-
+        # Strict Finite Numerical Data Guards
+        for r in in_sample_returns:
+            if not math.isfinite(float(r)):
+                raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in in_sample_returns.")
+        if out_of_sample_returns is not None:
+            for r in out_of_sample_returns:
+                if not math.isfinite(float(r)):
+                    raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in out_of_sample_returns.")
+        if trial_return_matrix is not None:
+            if not np.all(np.isfinite(trial_return_matrix)):
+                raise DataContractError("trial_return_matrix contains non-finite values (NaN or Inf).")
 
         # 0. Mandatory Pre-Registered Hypothesis Specification Sovereign Binding
         if hypothesis_spec is None:
@@ -351,7 +367,23 @@ class StatisticalValidationGate:
                     f"does not match computed parameter/feature configuration SHA-256 ({expected_cfg_hash})."
                 )
 
-            # 3. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
+            # 3. Methodological Sharpe Consistency: Verify recorded ledger Sharpe matches empirical Sharpe of column m
+            mean_m = float(np.mean(trial_return_matrix[:, m]))
+            std_m = float(np.std(trial_return_matrix[:, m], ddof=1)) if n_is > 1 else 1.0
+            sr_m_period = (mean_m / std_m) if std_m > 1e-12 else 0.0
+            if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
+                ann_mult = math.sqrt(float(self.config.periods_per_year)) if float(self.config.periods_per_year) > 0 else 1.0
+                computed_sr_m = sr_m_period * ann_mult
+            else:
+                computed_sr_m = sr_m_period
+
+            if abs(float(trial_rec.in_sample_sharpe) - computed_sr_m) > 1e-3:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' registered in_sample_sharpe ({trial_rec.in_sample_sharpe}) "
+                    f"deviates from actual return series empirical Sharpe ({computed_sr_m:.6f})."
+                )
+
+            # 4. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
@@ -382,6 +414,7 @@ class StatisticalValidationGate:
             )
 
         matrix_evidence_hash = hashlib.sha256(":".join(matrix_evidence_elements).encode("utf-8")).hexdigest()
+
 
         all_p_values = trial_ledger.p_values
 

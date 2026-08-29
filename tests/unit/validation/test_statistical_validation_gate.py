@@ -10,6 +10,7 @@ import pytest
 from acash.backtest.schema import BacktestExecutionSummary, BacktestManifest, RealityGapSummary
 from acash.core.domain.exceptions import DataContractError
 from acash.research.schema import ExpectedDirection, HypothesisSpecification, InvalidationCriteria
+from acash.validation.deflated_sharpe import DeflatedSharpeEngine
 from acash.validation.gate import StatisticalValidationGate, _compute_canonical_series_sha256
 from acash.validation.schema import (
     ParameterPerturbationGrid,
@@ -17,9 +18,11 @@ from acash.validation.schema import (
     SearchTrialLedger,
     SearchTrialRecord,
     SelectionCorrectionMode,
+    SharpeSpace,
     ValidationConfig,
     ValidationGateVerdict,
 )
+
 
 
 def _make_mock_manifest(
@@ -174,7 +177,7 @@ def _make_valid_trial_ledger(
         strategy_id=strategy_id,
         hypothesis_id=hypothesis_id,
         trials=tuple(trials),
-        sharpe_space="PERIOD",
+        sharpe_space=SharpeSpace.PERIOD,
         is_sealed=False,
     )
     if is_sealed:
@@ -226,8 +229,9 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
     assert report.dsr_result.effective_trials_k == 5
     assert report.dsr_result.selection_correction_mode == SelectionCorrectionMode.MULTIPLE_TRIAL
     assert report.dsr_result.sr0_estimator == "EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
-    assert report.dsr_result.sharpe_space == "ANNUALIZED"
-    assert report.dsr_result.inference_space == "PER_PERIOD"
+    assert report.dsr_result.sharpe_space == SharpeSpace.ANNUAL
+    assert report.dsr_result.inference_space == SharpeSpace.PERIOD
+
     assert report.multiple_testing_result is not None
     assert len(report.multiple_testing_result.raw_p_values) == 5  # Strictly coupled K
     assert report.dsr_result.is_statistically_significant is True
@@ -1510,6 +1514,8 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
     # Trial with execution_manifest_id that does not exist in store
+    sr_0 = float(np.mean(trial_matrix[:, 0])) / float(np.std(trial_matrix[:, 0], ddof=1))
+    sr_1 = float(np.mean(trial_matrix[:, 1])) / float(np.std(trial_matrix[:, 1], ddof=1))
     trials = [
         SearchTrialRecord.create(
             trial_id="trial_0",
@@ -1517,7 +1523,7 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             hypothesis_id="HYP_01",
             feature_names=["mom"],
             parameters={"period": 10},
-            in_sample_sharpe=Decimal("1.5"),
+            in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
             p_value=Decimal("0.001"),
             execution_manifest_id="MANIFEST_NON_EXISTENT",
             in_sample_returns=list(trial_matrix[:, 0]),
@@ -1528,7 +1534,7 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             hypothesis_id="HYP_01",
             feature_names=["mom"],
             parameters={"period": 11},
-            in_sample_sharpe=Decimal("1.2"),
+            in_sample_sharpe=Decimal(f"{sr_1:.6f}"),
             p_value=Decimal("0.001"),
             execution_manifest_id="MANIFEST_TRIAL_1",
             in_sample_returns=list(trial_matrix[:, 1]),
@@ -1543,7 +1549,7 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
 
     manifest_store: Dict[str, Any] = {}
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
-    manifest_store["MANIFEST_TRIAL_1"] = _make_mock_manifest("MANIFEST_TRIAL_1")
+    manifest_store["MANIFEST_TRIAL_1"] = _make_mock_manifest("MANIFEST_TRIAL_1", sharpe=Decimal(f"{sr_1:.6f}"))
 
     with pytest.raises(DataContractError, match="execution manifest 'MANIFEST_NON_EXISTENT' missing"):
         gate.evaluate_strategy(
@@ -1653,13 +1659,14 @@ def test_statistical_validation_gate_rejects_manifest_mismatch() -> None:
     manifest_store: Dict[str, Any] = {}
     grid = _make_valid_perturbation_grid(strat_id="STRAT_MISMATCH", manifest_store=manifest_store)
 
+    sr_0 = float(np.mean(trial_matrix[:, 0])) / float(np.std(trial_matrix[:, 0], ddof=1))
     trial = SearchTrialRecord.create(
         trial_id="trial_0",
         strategy_id="STRAT_MISMATCH",
         hypothesis_id="HYP_01",
         feature_names=["mom"],
         parameters={"period": 10},
-        in_sample_sharpe=Decimal("1.5"),
+        in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
         p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_MISMATCH_HYP",
         in_sample_returns=list(trial_matrix[:, 0]),
@@ -1764,13 +1771,14 @@ def test_statistical_validation_gate_rejects_fake_duck_typed_manifest() -> None:
     manifest_store: Dict[str, Any] = {}
     grid = _make_valid_perturbation_grid(strat_id="STRAT_DUCK", manifest_store=manifest_store)
 
+    sr_0 = float(np.mean(trial_matrix[:, 0])) / float(np.std(trial_matrix[:, 0], ddof=1))
     trial = SearchTrialRecord.create(
         trial_id="trial_0",
         strategy_id="STRAT_DUCK",
         hypothesis_id="HYP_01",
         feature_names=["mom"],
         parameters={"period": 10},
-        in_sample_sharpe=Decimal("1.5"),
+        in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
         p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_TRIAL_DUCK",
         in_sample_returns=list(trial_matrix[:, 0]),
@@ -1851,4 +1859,218 @@ def test_search_trial_ledger_tuple_deep_immutability() -> None:
     )
     assert isinstance(ledger.trials, tuple)
     assert not hasattr(ledger.trials, "append")
+
+
+def test_statistical_inputs_reject_nan_and_inf() -> None:
+    """Verify that Gate, DSR engine, and canonical hashers reject NaN and +/- Inf."""
+    gate = StatisticalValidationGate()
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    # 1. _compute_canonical_series_sha256 rejects NaN and Inf
+    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+        _compute_canonical_series_sha256([0.01, float("nan"), 0.02])
+
+    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+        _compute_canonical_series_sha256([0.01, float("inf"), 0.02])
+
+    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+        _compute_canonical_series_sha256([0.01, float("-inf"), 0.02])
+
+    # 2. DeflatedSharpeEngine.calculate_higher_moments rejects NaN and Inf
+    with pytest.raises(DataContractError, match="Non-finite value .* encountered in return series"):
+        DeflatedSharpeEngine.calculate_higher_moments([0.01, float("nan"), 0.02, 0.03])
+
+    # 3. Gate rejects non-finite in_sample_returns
+    with pytest.raises(DataContractError, match="in_sample_returns"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=[0.01, float("nan"), 0.02, 0.03],
+            trial_matrix_column_trial_ids=["t1"],
+            manifest_store=manifest_store,
+        )
+
+    # 4. Gate rejects non-finite out_of_sample_returns
+    clean_is = [0.01, 0.02, 0.03, 0.04, 0.05]
+    with pytest.raises(DataContractError, match="out_of_sample_returns"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=clean_is,
+            trial_matrix_column_trial_ids=["t1"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=[0.01, float("inf"), 0.02, 0.03],
+        )
+
+    # 5. Gate rejects non-finite trial_return_matrix
+    mat_nan = np.array([[0.01], [np.nan], [0.03], [0.04]])
+    h = "a" * 64
+    trial = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=h,
+        config_sha256=h,
+        execution_manifest_id="MAN_01",
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=(trial,),
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    with pytest.raises(DataContractError, match="trial_return_matrix contains non-finite values"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=[0.01, 0.02, 0.03, 0.04],
+            trial_matrix_column_trial_ids=["t1"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=[0.01, 0.02, 0.03, 0.04],
+            trial_ledger=ledger,
+            perturbation_grid=grid,
+            trial_return_matrix=mat_nan,
+        )
+
+
+def test_sharpe_space_closed_enum_rejection() -> None:
+    """Verify that SearchTrialLedger strictly rejects arbitrary string values for sharpe_space."""
+    h = "a" * 64
+    record = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=h,
+        config_sha256=h,
+        execution_manifest_id="MAN_01",
+    )
+
+    # Rejection of arbitrary strings (no silent fallback to PERIOD)
+    with pytest.raises(DataContractError, match="Invalid sharpe_space 'BANANA'"):
+        SearchTrialLedger(
+            ledger_id="L1",
+            strategy_id="S1",
+            hypothesis_id="H1",
+            trials=(record,),
+            sharpe_space="BANANA",  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(DataContractError, match="Invalid sharpe_space 'YEAR'"):
+        SearchTrialLedger(
+            ledger_id="L1",
+            strategy_id="S1",
+            hypothesis_id="H1",
+            trials=(record,),
+            sharpe_space="YEAR",  # type: ignore[arg-type]
+        )
+
+    # Valid enum specifications
+    ledger_period = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        trials=(record,),
+        sharpe_space=SharpeSpace.PERIOD,
+    )
+    assert ledger_period.sharpe_space == SharpeSpace.PERIOD
+
+    ledger_annual = SearchTrialLedger(
+        ledger_id="L2",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        trials=(record,),
+        sharpe_space=SharpeSpace.ANNUAL,
+    )
+    assert ledger_annual.sharpe_space == SharpeSpace.ANNUAL
+
+
+def test_search_trial_record_feature_names_tuple_immutability() -> None:
+    """Verify that SearchTrialRecord feature_names is stored as an immutable tuple."""
+    h = "a" * 64
+    record = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        feature_names=["mom", "vol", "alpha"],  # Passed as list
+        parameters={"lookback": 20},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=h,
+        config_sha256=h,
+        execution_manifest_id="MAN_01",
+    )
+    assert isinstance(record.feature_names, tuple)
+    assert record.feature_names == ("alpha", "mom", "vol")  # Sorted canonical order
+
+
+def test_statistical_validation_gate_rejects_divergent_ledger_sharpe() -> None:
+    """Verify that Gate strictly rejects when registered trial in_sample_sharpe deviates from actual return series Sharpe."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    trial_matrix = np.zeros((500, 1), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_DIVERGE", manifest_store=manifest_store)
+
+    # Registered Sharpe = 5.0, but actual return series Sharpe ~ 0.38
+    trial = SearchTrialRecord.create(
+        trial_id="trial_0",
+        strategy_id="STRAT_DIVERGE",
+        hypothesis_id="HYP_01",
+        feature_names=["mom"],
+        parameters={"period": 10},
+        in_sample_sharpe=Decimal("5.000000"),  # Fabricated divergent Sharpe!
+        p_value=Decimal("0.001"),
+        execution_manifest_id="MANIFEST_TRIAL_DIVERGE",
+        in_sample_returns=list(trial_matrix[:, 0]),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L_DIVERGE",
+        strategy_id="STRAT_DIVERGE",
+        hypothesis_id="HYP_01",
+        trials=(trial,),
+        sharpe_space=SharpeSpace.PERIOD,
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    manifest_store["MANIFEST_TRIAL_DIVERGE"] = _make_mock_manifest(
+        manifest_id="MANIFEST_TRIAL_DIVERGE",
+        hypothesis_id="HYP_01",
+        strategy_config_hash=trial.config_sha256,
+        sharpe=Decimal("5.000000"),
+    )
+
+    with pytest.raises(DataContractError, match="deviates from actual return series empirical Sharpe"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_DIVERGE",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=is_returns,
+            trial_matrix_column_trial_ids=["trial_0"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            perturbation_grid=grid,
+        )
+
 
