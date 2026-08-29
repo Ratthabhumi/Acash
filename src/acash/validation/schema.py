@@ -67,7 +67,9 @@ class SearchTrialRecord(BaseModel):
     config_sha256: str = Field(
         min_length=64, max_length=64, description="Mandatory cryptographic SHA-256 hash of parameter and feature configuration."
     )
-    execution_manifest_id: Optional[str] = Field(default=None, description="Bound BacktestManifest ID for execution lineage.")
+    execution_manifest_id: str = Field(
+        min_length=1, description="Mandatory bound BacktestManifest ID for candidate execution lineage."
+    )
 
     @staticmethod
     def compute_config_sha256(feature_names: Sequence[str], parameters: Dict[str, Any]) -> str:
@@ -78,7 +80,7 @@ class SearchTrialRecord(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def populate_mandatory_hashes(cls, data: Any) -> Any:
-        """Ensure cryptographic hashes are strictly populated for all records."""
+        """Ensure cryptographic hashes are strictly populated for all records without synthetic fallback."""
         if isinstance(data, dict):
             if "config_sha256" not in data or data["config_sha256"] is None:
                 features = data.get("feature_names", [])
@@ -89,13 +91,11 @@ class SearchTrialRecord(BaseModel):
                     from acash.validation.gate import _compute_canonical_series_sha256
                     data["in_sample_return_series_sha256"] = _compute_canonical_series_sha256(data["in_sample_returns"])
                 else:
-                    trial_id = data.get("trial_id", "trial")
-                    strat_id = data.get("strategy_id", "strat")
-                    hyp_id = data.get("hypothesis_id", "hyp")
-                    sr = data.get("in_sample_sharpe", "0.0")
-                    data["in_sample_return_series_sha256"] = hashlib.sha256(
-                        f"{trial_id}:{strat_id}:{hyp_id}:{sr}:unbound_returns".encode("utf-8")
-                    ).hexdigest()
+                    trial_id = data.get("trial_id", "unknown")
+                    raise DataContractError(
+                        f"in_sample_return_series_sha256 requires actual in_sample_returns "
+                        f"or an explicitly supplied verified artifact hash for trial '{trial_id}'."
+                    )
         return data
 
     @classmethod
@@ -108,10 +108,10 @@ class SearchTrialRecord(BaseModel):
         parameters: Dict[str, Any],
         in_sample_sharpe: Decimal,
         p_value: Decimal,
+        execution_manifest_id: str,
         in_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         in_sample_return_series_sha256: Optional[str] = None,
         config_sha256: Optional[str] = None,
-        execution_manifest_id: Optional[str] = None,
     ) -> "SearchTrialRecord":
         """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
         from acash.validation.gate import _compute_canonical_series_sha256
@@ -140,7 +140,6 @@ class SearchTrialRecord(BaseModel):
         )
 
 
-
 class SearchTrialLedger(BaseModel):
     """Sovereign ledger accounting for all exploratory trials to strictly couple search intensity with DSR & FWER."""
 
@@ -151,9 +150,36 @@ class SearchTrialLedger(BaseModel):
     hypothesis_id: str = Field(min_length=1, description="Bound hypothesis identifier.")
     trials: List[SearchTrialRecord] = Field(min_length=1, description="Non-empty list of exploratory trials.")
     sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
-    is_sealed: bool = Field(default=True, description="True if search universe is sealed and immutable.")
+    is_sealed: bool = Field(default=False, description="True if search universe is sealed and immutable.")
     sealed_at_utc: Optional[str] = Field(default=None, description="UTC timestamp when search universe was sealed.")
+    ledger_digest: Optional[str] = Field(default=None, description="Cryptographic SHA-256 fingerprint of the sealed ledger universe.")
 
+    def compute_ledger_digest(self) -> str:
+        """Deterministic canonical SHA-256 fingerprint over all candidate trial lineage records."""
+        items: List[str] = []
+        for t in self.trials:
+            item = (
+                f"{t.trial_id}:{t.config_sha256}:{t.in_sample_return_series_sha256}:"
+                f"{t.execution_manifest_id}:{Decimal(str(t.in_sample_sharpe)):.18f}:{Decimal(str(t.p_value)):.18f}"
+            )
+            items.append(item)
+        raw_payload = f"{self.ledger_id}:{self.strategy_id}:{self.hypothesis_id}:{self.sharpe_space}:" + ";".join(items)
+        return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+
+    def seal(self, sealed_at_utc: Optional[str] = None) -> "SearchTrialLedger":
+        """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest."""
+        if self.is_sealed and self.ledger_digest is not None:
+            return self
+        from datetime import datetime, timezone
+        now_utc = sealed_at_utc or datetime.now(timezone.utc).isoformat()
+        digest = self.compute_ledger_digest()
+        return self.model_copy(
+            update={
+                "is_sealed": True,
+                "sealed_at_utc": now_utc,
+                "ledger_digest": digest,
+            }
+        )
 
     @model_validator(mode="after")
     def validate_ledger_identity_and_uniqueness(self) -> "SearchTrialLedger":
@@ -177,7 +203,17 @@ class SearchTrialLedger(BaseModel):
                     f"Trial {t.trial_id} hypothesis_id '{t.hypothesis_id}' does not match ledger hypothesis_id '{self.hypothesis_id}'."
                 )
 
+        # 3. Enforce ledger_digest integrity if marked sealed with digest
+        if self.is_sealed and self.ledger_digest is not None:
+            expected = self.compute_ledger_digest()
+            if self.ledger_digest != expected:
+                raise DataContractError(
+                    f"SearchTrialLedger '{self.ledger_id}' ledger_digest mismatch: "
+                    f"stored digest '{self.ledger_digest}' does not match computed '{expected}'."
+                )
+
         return self
+
 
     @property
     def total_trials(self) -> int:

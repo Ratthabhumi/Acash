@@ -47,6 +47,7 @@ def test_dsr_single_trial_mode() -> None:
         parameters={},
         in_sample_sharpe=Decimal("1.2"),
         p_value=Decimal("0.01"),
+        execution_manifest_id="MANIFEST_01",
         in_sample_returns=returns,
     )
     ledger = SearchTrialLedger(
@@ -79,6 +80,7 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
             p_value=Decimal("0.01"),
+            execution_manifest_id=f"MANIFEST_{i}",
             in_sample_returns=strong_returns,
         )
         for i in range(10)
@@ -116,6 +118,7 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
             p_value=Decimal("0.01"),
+            execution_manifest_id=f"MANIFEST_{i}",
             in_sample_returns=weak_returns,
         )
         for i in range(10)
@@ -159,6 +162,7 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
             parameters={"p": i},
             in_sample_sharpe=Decimal("1.500000000000000000"),
             p_value=Decimal("0.001"),
+            execution_manifest_id=f"MANIFEST_IDENTICAL_{i}",
             in_sample_returns=dummy_returns,
         )
         for i in range(20)
@@ -174,6 +178,7 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
     returns = list(np.random.normal(0.0015, 0.0040, 500))
     res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=identical_ledger)
     assert res.expected_max_sharpe_sr0 == Decimal("0.0")
+
 
 
 

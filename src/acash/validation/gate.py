@@ -56,15 +56,10 @@ def _compute_canonical_series_sha256(series: Optional[Union[Sequence[Union[Decim
 
 
 def _compute_ledger_sha256(ledger: Optional[SearchTrialLedger]) -> str:
-    """Compute deterministic SHA-256 hash of SearchTrialLedger records."""
+    """Compute deterministic SHA-256 hash of SearchTrialLedger records including full candidate lineage."""
     if ledger is None:
         return "NONE"
-    items = [
-        f"{t.trial_id}:{t.strategy_id}:{t.hypothesis_id}:{Decimal(str(t.in_sample_sharpe)):.18f}:{Decimal(str(t.p_value)):.18f}"
-        for t in ledger.trials
-    ]
-    raw_payload = f"{ledger.ledger_id}:{ledger.strategy_id}:{ledger.hypothesis_id}:" + ";".join(items)
-    return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+    return ledger.compute_ledger_digest()
 
 
 def _compute_grid_sha256(grid: Optional[ParameterPerturbationGrid]) -> str:
@@ -99,17 +94,18 @@ class StatisticalValidationGate:
         hypothesis_spec: HypothesisSpecification,
         in_sample_returns: Sequence[Union[Decimal, float]],
         trial_matrix_column_trial_ids: Sequence[str],
+        manifest_store: Dict[str, Any],
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
-        manifest_store: Optional[Dict[str, Any]] = None,
         embargo_bars: Optional[int] = None,
         raw_predictive_edge_bps: float = 15.0,
         friction_params: Optional[FrictionStressParameters] = None,
         fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
+
 
         # 0. Mandatory Pre-Registered Hypothesis Specification Sovereign Binding
         if hypothesis_spec is None:
@@ -263,8 +259,18 @@ class StatisticalValidationGate:
         # Invariant Check: SearchTrialLedger must be in SEALED state
         if not trial_ledger.is_sealed:
             raise DataContractError(
-                f"SearchTrialLedger '{trial_ledger.ledger_id}' must be in SEALED state before validation."
+                f"SearchTrialLedger '{trial_ledger.ledger_id}' must be in SEALED state before validation. "
+                f"Unsealed or open ledgers are strictly prohibited."
             )
+        expected_ledger_digest = trial_ledger.compute_ledger_digest()
+        if trial_ledger.ledger_digest is not None and trial_ledger.ledger_digest != expected_ledger_digest:
+            raise DataContractError(
+                f"SearchTrialLedger '{trial_ledger.ledger_id}' ledger_digest mismatch: "
+                f"stored '{trial_ledger.ledger_digest}' != computed '{expected_ledger_digest}'."
+            )
+
+        if manifest_store is None or not isinstance(manifest_store, dict):
+            raise DataContractError("Mandatory manifest_store dictionary repository is required for sovereign validation.")
 
         # Enforce strict Authoritative Ledger Invariants:
         # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut == M_CPCV
@@ -339,15 +345,27 @@ class StatisticalValidationGate:
                     f"does not match computed parameter/feature configuration SHA-256 ({expected_cfg_hash})."
                 )
 
-            # 3. Candidate Execution Lineage (Manifest Binding when manifest_store is provided)
-            if manifest_store is not None and trial_rec.execution_manifest_id is not None:
-                if trial_rec.execution_manifest_id not in manifest_store:
-                    raise DataContractError(
-                        f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
-                    )
+            # 3. Candidate Execution Lineage (Mandatory Manifest Repository Verification)
+            if trial_rec.execution_manifest_id not in manifest_store:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
+                )
+            manifest = manifest_store[trial_rec.execution_manifest_id]
+            if hasattr(manifest, "manifest_id") and manifest.manifest_id != trial_rec.execution_manifest_id:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' manifest ID mismatch: expected '{trial_rec.execution_manifest_id}', got '{manifest.manifest_id}'."
+                )
+            if hasattr(manifest, "hypothesis_id") and manifest.hypothesis_id != trial_rec.hypothesis_id:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' manifest hypothesis_id '{manifest.hypothesis_id}' does not match trial hypothesis_id '{trial_rec.hypothesis_id}'."
+                )
+            if hasattr(manifest, "strategy_config_hash") and manifest.strategy_config_hash != trial_rec.config_sha256:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' manifest strategy_config_hash '{manifest.strategy_config_hash}' does not match trial config_sha256 '{trial_rec.config_sha256}'."
+                )
 
             matrix_evidence_elements.append(
-                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id or 'NONE'}"
+                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}"
             )
 
         matrix_evidence_hash = hashlib.sha256(":".join(matrix_evidence_elements).encode("utf-8")).hexdigest()
@@ -373,13 +391,13 @@ class StatisticalValidationGate:
         )
 
         # 8. Sovereign CPCV / CSCV Execution with Real Label Horizon & Embargo Buffers
-        if manifest_store is not None:
-            for pt in perturbation_grid.points:
-                if pt.manifest_id not in manifest_store:
-                    raise DataContractError(
-                        f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
-                    )
-                pt.validate_manifest_binding(manifest_store[pt.manifest_id])
+        for pt in perturbation_grid.points:
+            if pt.manifest_id not in manifest_store:
+                raise DataContractError(
+                    f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
+                )
+            pt.validate_manifest_binding(manifest_store[pt.manifest_id])
+
 
         is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(
             trial_return_matrix,

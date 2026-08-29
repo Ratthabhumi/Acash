@@ -33560,6 +33560,67 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **256/256 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 118)
+
+<USER_REQUEST>
+ผมตรวจ source code จริงบน GitHub commit be1fbe8 เพิ่มแล้วครับ และรอบนี้ผมต้องแก้คำตัดสินจาก “เกือบปิด” เป็น ยังมี 4 จุดสำคัญที่ต้องแก้ก่อน Final Sign-off โดยมี 2 จุดที่เป็น P0 เชิง provenance ชัดเจน:
+1. 🔴 P0 #1 — ยังมี “Synthetic Return Hash” อยู่จริง ใน SearchTrialRecord.populate_mandatory_hashes() ที่สร้าง hash จาก unbound_returns (ลบ branch นี้ทิ้งเด็ดขาด missing returns AND missing hash -> DataContractError)
+2. 🔴 P0 #2 — Execution Manifest ยัง Optional และ Gate ยังตรวจเฉพาะ “ถ้ามี” (execution_manifest_id: str required, manifest_store: required, ตรวจ Trial -> Config Hash -> Execution Manifest -> Return Hash ครบทุก candidate)
+3. 🔴 P1 #3 — SearchTrialLedger.is_sealed=True ยังเป็น default ที่อ่อนเกินไป (เปลี่ยนเป็น is_sealed = False เริ่มต้น แล้วต้องมี explicit transition: OPEN -> SEAL -> SEALED พร้อม sealed_at_utc และ ledger_digest)
+4. 🟠 P1 #4 — Search Ledger Hash ไม่ได้รวม Candidate Lineage ทั้งหมด (Ledger digest ต้อง bind trial_id + config_hash + return_hash + manifest_id + Sharpe + p-value และ ledger seal state)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 118)
+
+### 🛠️ สรุปรายละเอียด Authentic Return Hashes, Complete Candidate Execution DAG, Mandatory Manifest Repository & Ledger Sealing Lifecycle
+
+1. **🔴 Elimination of Synthetic Return Hash Fallback (Zero Synthetic Evidence) (P0):**
+   - ใน `SearchTrialRecord.populate_mandatory_hashes()`:
+     - ลบ branch `"unbound_returns"` ออกจากระบบโดยสิ้นเชิง
+     - หาก caller ไม่ได้ส่งทั้ง `in_sample_return_series_sha256` และ `in_sample_returns` ระบบจะ raise `DataContractError("in_sample_return_series_sha256 requires actual in_sample_returns or an explicitly supplied verified artifact hash...")` ทันที ปราศจากการ fabricate หรือ manufacture synthetic digest ใด ๆ ทั้งสิ้น 100%
+
+2. **🔴 Mandatory Candidate Execution Lineage & Manifest Repository (P0):**
+   - ใน `SearchTrialRecord`:
+     - `execution_manifest_id: str = Field(min_length=1)` กลายเป็น **mandatory required field**
+     - `SearchTrialRecord.create(...)` รับ `execution_manifest_id: str` เป็น mandatory argument
+   - ใน `StatisticalValidationGate.evaluate_strategy()`:
+     - `manifest_store: Dict[str, Any]` (หรือ `Dict[str, BacktestManifest]`) กลายเป็น **mandatory required argument** ปราศจาก default `None`
+     - Gate ทำการ enforce Cryptographic Execution DAG ตลอดทั้ง $m \in [0, M-1]$:
+       $$\boxed{\text{Trial}_m \xrightarrow{H(\text{Config})} \text{ConfigHash}_m \xrightarrow{\text{ManifestRepo}} \text{ExecutionManifest}_m \xrightarrow{H(\text{Return})} \mathbf{R}_{\cdot, m}}$$
+       1. **Return Series Lineage:** $H(\mathbf{R}_{\cdot, m}) \equiv \text{trial\_rec.in\_sample\_return\_series\_sha256}$
+       2. **Configuration Lineage:** `compute_config_sha256(trial_rec.feature_names, trial_rec.parameters) == trial_rec.config_sha256`
+       3. **Execution Manifest Lineage:**
+          - `trial_rec.execution_manifest_id in manifest_store`
+          - `manifest.manifest_id == trial_rec.execution_manifest_id`
+          - `manifest.hypothesis_id == trial_rec.hypothesis_id`
+          - `manifest.strategy_config_hash == trial_rec.config_sha256`
+       4. **Perturbation Points Lineage:** ทุกจุดใน `perturbation_grid` ต้องมี manifest อยู่จริงและผ่าน `validate_manifest_binding()`
+
+3. **🔴 Real Search Universe Sealing Lifecycle (`OPEN -> SEAL -> SEALED`) (P1):**
+   - ใน `SearchTrialLedger`:
+     - `is_sealed: bool = Field(default=False)` (เริ่มต้นเป็น unsealed/open state เสมอ)
+     - `sealed_at_utc: Optional[str] = Field(default=None)`
+     - `ledger_digest: Optional[str] = Field(default=None)`
+     - เพิ่ม method `.seal(sealed_at_utc=...) -> SearchTrialLedger` ซึ่งจะ derive `ledger_digest` ที่แท้จริง และเปลี่ยนสถานะเป็น `is_sealed=True`
+     - ใน `validate_ledger_identity_and_uniqueness()`: หาก ledger ถูกระบุว่า sealed จะตรวจสอบความสมบูรณ์ของ `ledger_digest` ทันที หากมีการแก้ไขข้อมูลย้อนหลังจะ raise `DataContractError`
+   - ใน Gate:
+     - Enforce ว่า `trial_ledger.is_sealed is True` และ `trial_ledger.ledger_digest == trial_ledger.compute_ledger_digest()` มิฉะนั้นจะ raise `DataContractError`
+
+4. **🟠 Search Ledger Complete Candidate Lineage Digest (P1):**
+   - ใน `SearchTrialLedger.compute_ledger_digest()` และ `_compute_ledger_sha256()`:
+     - รวม candidate lineage ทุกมิติเข้าสู่ digest:
+       $$\text{digest} = \text{SHA-256}\left(\text{ledger\_id} : \text{strat\_id} : \text{hyp\_id} : \text{sharpe\_space} : \sum_{m} (\text{trial\_id}_m : \text{config\_hash}_m : \text{return\_hash}_m : \text{manifest\_id}_m : \text{Sharpe}_m : p\text{-val}_m)\right)$$
+     - ป้องกันการ spoofing หรือดัดแปลง candidate metadata ใด ๆ ภายใน ledger ได้อย่างเบ็ดเสร็จ
+
+5. **Full Test Suite & Mypy Status:**
+   - **259/259 tests PASSED (100%)** (เพิ่ม 3 tests สำหรับ synthetic return hash rejection, sealing lifecycle, และ manifest mismatch validation)
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

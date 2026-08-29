@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 import numpy as np
 import pytest
 
+from acash.backtest.schema import BacktestExecutionSummary, BacktestManifest, RealityGapSummary
 from acash.core.domain.exceptions import DataContractError
 from acash.research.schema import ExpectedDirection, HypothesisSpecification, InvalidationCriteria
 from acash.validation.gate import StatisticalValidationGate, _compute_canonical_series_sha256
@@ -21,39 +22,84 @@ from acash.validation.schema import (
 )
 
 
+def _make_mock_manifest(
+    manifest_id: str,
+    hypothesis_id: str = "HYP_01",
+    strategy_config_hash: Optional[str] = None,
+    sharpe: Decimal = Decimal("1.5"),
+) -> BacktestManifest:
+    """Helper creating a cryptographically valid BacktestManifest."""
+    hyp_hash = "1" * 64
+    eng_hash = "2" * 64
+    strat_hash = strategy_config_hash or ("3" * 64)
+    pyp_hash = "4" * 64
+    git_hash = "5" * 40
+    data_hash = "6" * 64
+
+    exec_summary = BacktestExecutionSummary(
+        total_orders=10,
+        total_fills=10,
+        total_volume_traded=Decimal("10000.0"),
+        total_fees_paid=Decimal("10.0"),
+        realized_pnl=Decimal("1000.0"),
+        unrealized_pnl=Decimal("0.0"),
+        ending_equity=Decimal("101000.0"),
+        net_return_pct=Decimal("1.0"),
+        sharpe_ratio=sharpe,
+        max_drawdown_pct=Decimal("0.5"),
+        win_rate_pct=Decimal("60.0"),
+    )
+    reality_gap = RealityGapSummary(
+        phase4_analytical_edge_bps=Decimal("10.0"),
+        phase5_simulated_realized_bps=Decimal("8.0"),
+        reality_gap_bps=Decimal("2.0"),
+    )
+    return BacktestManifest(
+        manifest_id=manifest_id,
+        hypothesis_id=hypothesis_id,
+        hypothesis_spec_sha256=hyp_hash,
+        canonical_data_hashes=[data_hash],
+        engine_config_hash=eng_hash,
+        strategy_config_hash=strat_hash,
+        prng_seed=42,
+        pyproject_toml_sha256=pyp_hash,
+        git_commit_hash=git_hash,
+        execution_summary=exec_summary,
+        reality_gap=reality_gap,
+        computed_at_utc="2026-08-28T10:00:00Z",
+        wall_clock_duration_ms=1000,
+    )
+
+
 def _make_valid_perturbation_grid(
     base_val: Decimal = Decimal("10.0"),
     sr: Decimal = Decimal("1.5"),
     strat_id: str = "STRAT_01",
+    manifest_store: Optional[Dict[str, Any]] = None,
 ) -> ParameterPerturbationGrid:
     """Helper to construct a valid 3-point perturbation grid with distinct execution runs and manifests."""
-    base_hash = hashlib.sha256(f"{strat_id}:test_grid:{base_val}".encode("utf-8")).hexdigest()
-    points = [
-        ParameterPerturbationPoint(
-            parameter_value=base_val * Decimal("0.75"),
-            run_id=f"run_{strat_id}_left_p75",
-            manifest_id=f"MANIFEST_{strat_id}_LEFT",
-            input_artifact_hash=hashlib.sha256(f"{base_hash}:left:in".encode("utf-8")).hexdigest(),
-            output_artifact_hash=hashlib.sha256(f"{base_hash}:left:out".encode("utf-8")).hexdigest(),
+    hyp_hash = "1" * 64
+    strat_hash = "3" * 64
+    expected_in = hashlib.sha256(f"{hyp_hash}:{strat_hash}".encode("utf-8")).hexdigest()
+
+    points = []
+    multipliers = [("left", Decimal("0.75")), ("base", Decimal("1.0")), ("right", Decimal("1.25"))]
+    for label, mult in multipliers:
+        p_val = base_val * mult
+        man_id = f"MANIFEST_{strat_id}_{label.upper()}"
+        man = _make_mock_manifest(manifest_id=man_id, sharpe=sr)
+        if manifest_store is not None:
+            manifest_store[man_id] = man
+        pt = ParameterPerturbationPoint(
+            parameter_value=p_val,
+            run_id=f"run_{strat_id}_{label}",
+            manifest_id=man_id,
+            input_artifact_hash=expected_in,
+            output_artifact_hash=man.compute_sha256(),
             actual_sharpe=sr,
-        ),
-        ParameterPerturbationPoint(
-            parameter_value=base_val,
-            run_id=f"run_{strat_id}_base_100",
-            manifest_id=f"MANIFEST_{strat_id}_BASE",
-            input_artifact_hash=hashlib.sha256(f"{base_hash}:base:in".encode("utf-8")).hexdigest(),
-            output_artifact_hash=hashlib.sha256(f"{base_hash}:base:out".encode("utf-8")).hexdigest(),
-            actual_sharpe=sr,
-        ),
-        ParameterPerturbationPoint(
-            parameter_value=base_val * Decimal("1.25"),
-            run_id=f"run_{strat_id}_right_p125",
-            manifest_id=f"MANIFEST_{strat_id}_RIGHT",
-            input_artifact_hash=hashlib.sha256(f"{base_hash}:right:in".encode("utf-8")).hexdigest(),
-            output_artifact_hash=hashlib.sha256(f"{base_hash}:right:out".encode("utf-8")).hexdigest(),
-            actual_sharpe=sr,
-        ),
-    ]
+        )
+        points.append(pt)
+
     return ParameterPerturbationGrid(
         base_parameter_name="lookback",
         base_parameter_value=base_val,
@@ -90,8 +136,9 @@ def _make_valid_trial_ledger(
     ledger_id: str = "LEDGER_01",
     p_value: Decimal = Decimal("0.001"),
     is_sealed: bool = True,
+    manifest_store: Optional[Dict[str, Any]] = None,
 ) -> SearchTrialLedger:
-    """Helper to construct a sealed SearchTrialLedger bound to trial_return_matrix."""
+    """Helper to construct a sealed SearchTrialLedger bound to trial_return_matrix and populate manifest_store."""
     t_len, k_trials = trial_return_matrix.shape
     trials: List[SearchTrialRecord] = []
     for m in range(k_trials):
@@ -99,26 +146,40 @@ def _make_valid_trial_ledger(
         mean_m = float(np.mean(col_m))
         std_m = float(np.std(col_m, ddof=1)) if len(col_m) > 1 else 1.0
         sr_m_period = (mean_m / std_m) if std_m > 0 else 0.0
+        features = ["mom"]
+        params = {"period": 10 + m}
+        cfg_hash = SearchTrialRecord.compute_config_sha256(features, params)
+        man_id = f"MANIFEST_TRIAL_{strategy_id}_{m}"
         trial = SearchTrialRecord.create(
             trial_id=f"trial_{m}",
             strategy_id=strategy_id,
             hypothesis_id=hypothesis_id,
-            feature_names=["mom"],
-            parameters={"period": 10 + m},
+            feature_names=features,
+            parameters=params,
             in_sample_sharpe=Decimal(f"{sr_m_period:.6f}"),
             p_value=p_value,
+            execution_manifest_id=man_id,
             in_sample_returns=list(col_m),
         )
         trials.append(trial)
-    return SearchTrialLedger(
+        if manifest_store is not None:
+            manifest_store[man_id] = _make_mock_manifest(
+                manifest_id=man_id,
+                hypothesis_id=hypothesis_id,
+                strategy_config_hash=cfg_hash,
+                sharpe=Decimal(f"{sr_m_period:.6f}"),
+            )
+    ledger = SearchTrialLedger(
         ledger_id=ledger_id,
         strategy_id=strategy_id,
         hypothesis_id=hypothesis_id,
         trials=trials,
         sharpe_space="PERIOD",
-        is_sealed=is_sealed,
+        is_sealed=False,
     )
-
+    if is_sealed:
+        return ledger.seal(sealed_at_utc="2026-08-28T00:00:00Z")
+    return ledger
 
 
 def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
@@ -131,7 +192,8 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
     oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
 
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_TSMOM_001", primary_horizon=1)
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_MOM_001")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_MOM_001", manifest_store=manifest_store)
     trial_matrix = np.zeros((1000, 5), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     for m in range(1, 5):
@@ -142,6 +204,7 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
         ledger_id="LEDGER_MOM_001",
+        manifest_store=manifest_store,
     )
 
     report = gate.evaluate_strategy(
@@ -150,6 +213,7 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -189,6 +253,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[],
+        manifest_store={},
         out_of_sample_returns=oos_returns,
         trial_ledger=None,
     )
@@ -225,6 +290,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
         p_value=Decimal("0.01"),
+        execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
     ledger = SearchTrialLedger(
@@ -232,7 +298,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
         trials=[trial],
-    )
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     # 1. None OOS returns
     report_none = gate.evaluate_strategy(
@@ -241,6 +307,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_1"],
+        manifest_store={},
         out_of_sample_returns=None,
         trial_ledger=ledger,
     )
@@ -260,6 +327,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_1"],
+        manifest_store={},
         out_of_sample_returns=[0.01, 0.02],
         trial_ledger=ledger,
     )
@@ -286,6 +354,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() 
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
         p_value=Decimal("0.01"),
+        execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
     ledger = SearchTrialLedger(
@@ -293,7 +362,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() 
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
         trials=[trial],
-    )
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     report = gate.evaluate_strategy(
         strategy_id="STRAT_MOM_001",
@@ -301,6 +370,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() 
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_1"],
+        manifest_store={},
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         perturbation_grid=None,  # Missing perturbation grid
@@ -335,6 +405,7 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
         p_value=Decimal("0.05"),
         in_sample_return_series_sha256=h,
         config_sha256=cfg_h,
+        execution_manifest_id="MAN_01",
     )
     record_2 = SearchTrialRecord(
         trial_id="duplicate_id",
@@ -346,6 +417,7 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
         p_value=Decimal("0.03"),
         in_sample_return_series_sha256=h,
         config_sha256=cfg_h,
+        execution_manifest_id="MAN_02",
     )
 
     with pytest.raises(DataContractError, match="duplicate trial_ids"):
@@ -494,7 +566,8 @@ def test_deterministic_validation_report_id_and_digests() -> None:
     oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     trial_matrix = np.zeros((1000, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
@@ -503,6 +576,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
 
     report_1 = gate.evaluate_strategy(
@@ -511,6 +585,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -524,6 +599,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -546,7 +622,8 @@ def test_canonical_json_serialization_separation() -> None:
     oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     trial_matrix = np.zeros((1000, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
@@ -555,6 +632,7 @@ def test_canonical_json_serialization_separation() -> None:
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
 
     report = gate.evaluate_strategy(
@@ -563,6 +641,7 @@ def test_canonical_json_serialization_separation() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -588,12 +667,6 @@ def test_canonical_json_serialization_separation() -> None:
 
 def test_parameter_perturbation_point_manifest_binding_invariants() -> None:
     """Verify 4-way manifest binding invariants: manifest_id, execution_sharpe, input hash, output hash."""
-    from acash.backtest.schema import (
-        BacktestExecutionSummary,
-        BacktestManifest,
-        RealityGapSummary,
-    )
-
     hyp_hash = "1" * 64
     eng_hash = "2" * 64
     strat_hash = "3" * 64
@@ -717,6 +790,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         hypothesis_spec=spec,
         in_sample_returns=short_is,
         trial_matrix_column_trial_ids=[],
+        manifest_store={},
         out_of_sample_returns=[0.01, 0.02, 0.03, 0.04],
         trial_ledger=None,
     )
@@ -731,6 +805,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
         p_value=Decimal("0.01"),
+        execution_manifest_id="MANIFEST_01",
         in_sample_returns=short_is,
     )
     ledger = SearchTrialLedger(
@@ -738,7 +813,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         trials=[trial],
-    )
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     rep_oos = gate.evaluate_strategy(
         strategy_id="STRAT_01",
@@ -746,6 +821,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         hypothesis_spec=spec,
         in_sample_returns=short_is,
         trial_matrix_column_trial_ids=["t1"],
+        manifest_store={},
         out_of_sample_returns=None,
         trial_ledger=ledger,
     )
@@ -758,6 +834,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         hypothesis_spec=spec,
         in_sample_returns=short_is,
         trial_matrix_column_trial_ids=["t1"],
+        manifest_store={},
         out_of_sample_returns=[0.01, 0.02, 0.03, 0.04],
         trial_ledger=ledger,
         perturbation_grid=None,
@@ -766,13 +843,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
 
 
 def test_statistical_validation_gate_verifies_manifest_store_repository() -> None:
-    """Verify that StatisticalValidationGate strictly verifies all 3 perturbation points against manifest_store."""
-    from acash.backtest.schema import (
-        BacktestExecutionSummary,
-        BacktestManifest,
-        RealityGapSummary,
-    )
-
+    """Verify that StatisticalValidationGate strictly verifies all candidate trials and perturbation points against manifest_store."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -784,79 +855,13 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_STORE_01", manifest_store=manifest_store)
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_STORE_01",
         hypothesis_id="HYP_01",
-    )
-
-    hyp_hash = "1" * 64
-    eng_hash = "2" * 64
-    strat_hash = "3" * 64
-    pyp_hash = "4" * 64
-    git_hash = "5" * 40
-    data_hash = "6" * 64
-    expected_in = hashlib.sha256(f"{hyp_hash}:{strat_hash}".encode("utf-8")).hexdigest()
-
-    manifest_store = {}
-    points = []
-    base_val = Decimal("10.0")
-    multipliers = [("left", Decimal("0.75")), ("base", Decimal("1.0")), ("right", Decimal("1.25"))]
-
-    for label, mult in multipliers:
-        p_val = base_val * mult
-        man_id = f"MANIFEST_RUN_{label.upper()}"
-        sr = Decimal("1.500000000000000000")
-
-        exec_summary = BacktestExecutionSummary(
-            total_orders=10,
-            total_fills=10,
-            total_volume_traded=Decimal("10000.0"),
-            total_fees_paid=Decimal("10.0"),
-            realized_pnl=Decimal("1000.0"),
-            unrealized_pnl=Decimal("0.0"),
-            ending_equity=Decimal("101000.0"),
-            net_return_pct=Decimal("1.0"),
-            sharpe_ratio=sr,
-            max_drawdown_pct=Decimal("0.5"),
-            win_rate_pct=Decimal("60.0"),
-        )
-        reality_gap = RealityGapSummary(
-            phase4_analytical_edge_bps=Decimal("10.0"),
-            phase5_simulated_realized_bps=Decimal("8.0"),
-            reality_gap_bps=Decimal("2.0"),
-        )
-        manifest = BacktestManifest(
-            manifest_id=man_id,
-            hypothesis_id="HYP_01",
-            hypothesis_spec_sha256=hyp_hash,
-            canonical_data_hashes=[data_hash],
-            engine_config_hash=eng_hash,
-            strategy_config_hash=strat_hash,
-            prng_seed=42,
-            pyproject_toml_sha256=pyp_hash,
-            git_commit_hash=git_hash,
-            execution_summary=exec_summary,
-            reality_gap=reality_gap,
-            computed_at_utc="2026-08-28T10:00:00Z",
-            wall_clock_duration_ms=1000,
-        )
-        manifest_store[man_id] = manifest
-
-        pt = ParameterPerturbationPoint(
-            parameter_value=p_val,
-            run_id=f"run_{label}",
-            manifest_id=man_id,
-            input_artifact_hash=expected_in,
-            output_artifact_hash=manifest.compute_sha256(),
-            actual_sharpe=sr,
-        )
-        points.append(pt)
-
-    grid = ParameterPerturbationGrid(
-        base_parameter_name="lookback",
-        base_parameter_value=base_val,
-        points=points,
+        manifest_store=manifest_store,
     )
 
     # 1. Successful verification against manifest_store
@@ -874,8 +879,8 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
     )
     assert report.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
 
-    # 2. Rejection when a manifest is missing from manifest_store
-    incomplete_store = {k: v for k, v in manifest_store.items() if k != "MANIFEST_RUN_RIGHT"}
+    # 2. Rejection when a perturbation manifest is missing from manifest_store
+    incomplete_store = {k: v for k, v in manifest_store.items() if k != "MANIFEST_STRAT_STORE_01_RIGHT"}
     with pytest.raises(DataContractError, match="missing from manifest_store repository"):
         gate.evaluate_strategy(
             strategy_id="STRAT_STORE_01",
@@ -908,6 +913,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
         p_value=Decimal("0.001"),
+        execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
     ledger = SearchTrialLedger(
@@ -915,8 +921,9 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         trials=[trial],
-    )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
 
     # Omitting CPCV evidence
     rep = gate.evaluate_strategy(
@@ -925,6 +932,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["t1"],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         perturbation_grid=grid,
@@ -949,6 +957,9 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
     trial_matrix[:, 1] = np.random.normal(0.0010, 0.0040, 500)
     trial_matrix[:, 2] = np.random.normal(0.0005, 0.0040, 500)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_FWER", manifest_store=manifest_store)
+
     # Insignificant trials: p-value = 0.50 -> FWER fails!
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
@@ -956,8 +967,8 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
         hypothesis_id="HYP_01",
         ledger_id="L_FWER",
         p_value=Decimal("0.50"),
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_FWER")
 
     rep = gate.evaluate_strategy(
         strategy_id="STRAT_FWER",
@@ -965,6 +976,7 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -989,14 +1001,16 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_HC", manifest_store=manifest_store)
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_HC",
         hypothesis_id="HYP_01",
         ledger_id="L_HC",
         p_value=Decimal("0.001"),
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_HC")
 
     rep = gate.evaluate_strategy(
         strategy_id="STRAT_HC",
@@ -1004,6 +1018,7 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -1023,6 +1038,7 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
     # Ledger has K = 3 trials
+    manifest_store: Dict[str, Any] = {}
     trials = [
         SearchTrialRecord.create(
             trial_id=f"t_{i}",
@@ -1032,17 +1048,25 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
             parameters={"p": i},
             in_sample_sharpe=Decimal("1.5"),
             p_value=Decimal("0.001"),
+            execution_manifest_id=f"MAN_{i}",
             in_sample_returns=is_returns,
         )
         for i in range(3)
     ]
+    for t in trials:
+        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
+            manifest_id=t.execution_manifest_id,
+            hypothesis_id="HYP_01",
+            strategy_config_hash=t.config_sha256,
+        )
+
     ledger = SearchTrialLedger(
         ledger_id="L1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         trials=trials,
-    )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     # M = 2 != K = 3
     mismatched_matrix = np.zeros((500, 2), dtype=np.float64)
     mismatched_matrix[:, 0] = np.array([float(x) for x in is_returns])
@@ -1054,6 +1078,7 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["t_0", "t_1", "t_2"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=mismatched_matrix,
@@ -1074,12 +1099,14 @@ def test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
 
     # Column 0 has different random returns
     divergent_matrix = np.random.normal(0.0050, 0.0040, (500, 2))
@@ -1091,6 +1118,7 @@ def test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=divergent_matrix,
@@ -1113,12 +1141,14 @@ def test_statistical_validation_gate_binds_real_label_horizon_and_embargo() -> N
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_HORIZON", manifest_store=manifest_store)
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_HORIZON",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_HORIZON")
 
     # 1. Standard evaluate with H=20, E=10
     rep_h20 = gate.evaluate_strategy(
@@ -1127,6 +1157,7 @@ def test_statistical_validation_gate_binds_real_label_horizon_and_embargo() -> N
         hypothesis_spec=spec_h20,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -1143,6 +1174,7 @@ def test_statistical_validation_gate_binds_real_label_horizon_and_embargo() -> N
         hypothesis_spec=spec_h1,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -1167,12 +1199,14 @@ def test_statistical_validation_gate_rejects_trial_matrix_column_trial_ids_misma
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
 
     # Passing inverted column trial IDs ["trial_1", "trial_0"]
     with pytest.raises(DataContractError, match="does not match ordered ledger trial_ids"):
@@ -1182,6 +1216,7 @@ def test_statistical_validation_gate_rejects_trial_matrix_column_trial_ids_misma
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["trial_1", "trial_0"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=trial_matrix,
@@ -1195,11 +1230,6 @@ def test_overfitting_engine_is_tie_symmetric_policy() -> None:
 
     # 1 split, 3 candidate models where model 0 and model 1 have identical IS Sharpe
     is_mat = np.array([[2.0, 2.0, 1.0]], dtype=np.float64)
-    # Model 0 is top OOS (rank 3), model 1 is bottom OOS (rank 1), model 2 is mid (rank 2)
-    # Ranks for M=3:
-    # Model 0 midrank = 3.0 -> omega = 3.0 / 4.0 = 0.75
-    # Model 1 midrank = 1.0 -> omega = 1.0 / 4.0 = 0.25
-    # Symmetric average omega for tied {0, 1} = (0.75 + 0.25)/2 = 0.50 -> lambda = ln(0.5/0.5) = 0.0 -> PBO = 0.0 (not overfit)
     oos_mat = np.array([[3.0, 1.0, 2.0]], dtype=np.float64)
 
     pbo, logit_mean, logit_std = OverfittingEngine.calculate_pbo(is_mat, oos_mat)
@@ -1216,7 +1246,8 @@ def test_statistical_validation_gate_binds_hypothesis_specification_horizon() ->
     oos_returns = list(np.random.normal(0.0015, 0.0040, 500))
 
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_SPEC_01", primary_horizon=20)
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_SPEC")
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_SPEC", manifest_store=manifest_store)
     trial_matrix = np.zeros((1000, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
@@ -1225,6 +1256,7 @@ def test_statistical_validation_gate_binds_hypothesis_specification_horizon() ->
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_SPEC",
         hypothesis_id="HYP_SPEC_01",
+        manifest_store=manifest_store,
     )
 
     # 1. Successful validation when label_horizon strictly matches spec.primary_horizon (20)
@@ -1234,6 +1266,7 @@ def test_statistical_validation_gate_binds_hypothesis_specification_horizon() ->
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
@@ -1255,12 +1288,14 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_SHA", manifest_store=manifest_store)
     ledger_valid = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_SHA",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_SHA")
 
     # 1. Successful evaluation when ledger registered hashes match matrix columns exactly
     rep = gate.evaluate_strategy(
@@ -1269,6 +1304,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
         hypothesis_spec=spec,
         in_sample_returns=is_returns,
         trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        manifest_store=manifest_store,
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger_valid,
         trial_return_matrix=trial_matrix,
@@ -1289,6 +1325,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
             p_value=Decimal("0.050"),
             in_sample_return_series_sha256="deadbeef" * 8,  # Tampered hash
             config_sha256=ledger_valid.trials[1].config_sha256,
+            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,
         ),
     ]
     ledger_tampered = SearchTrialLedger(
@@ -1296,7 +1333,8 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
         strategy_id="STRAT_SHA",
         hypothesis_id="HYP_01",
         trials=trials_tampered,
-    )
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
     with pytest.raises(DataContractError, match="in_sample_return_series_sha256 .* does not match"):
         gate.evaluate_strategy(
             strategy_id="STRAT_SHA",
@@ -1304,6 +1342,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger_tampered,
             trial_return_matrix=trial_matrix,
@@ -1354,6 +1393,7 @@ def test_statistical_validation_gate_rejects_missing_or_mismatched_hypothesis_sp
             hypothesis_spec=spec_wrong_id,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=[],
+            manifest_store={},
         )
 
 
@@ -1370,14 +1410,17 @@ def test_statistical_validation_gate_rejects_unsealed_trial_ledger() -> None:
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
-    # Unsealed ledger
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    # Unsealed ledger (is_sealed=False)
     unsealed_ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         is_sealed=False,
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
 
     with pytest.raises(DataContractError, match="must be in SEALED state before validation"):
         gate.evaluate_strategy(
@@ -1386,6 +1429,7 @@ def test_statistical_validation_gate_rejects_unsealed_trial_ledger() -> None:
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=unsealed_ledger,
             trial_return_matrix=trial_matrix,
@@ -1406,12 +1450,14 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     ledger_valid = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
     )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
 
     trials_tampered = [
         ledger_valid.trials[0],
@@ -1425,6 +1471,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
             p_value=Decimal("0.050"),
             in_sample_return_series_sha256=ledger_valid.trials[1].in_sample_return_series_sha256,
             config_sha256="deadbeef" * 8,  # Tampered config hash
+            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,
         ),
     ]
     ledger_tampered = SearchTrialLedger(
@@ -1432,7 +1479,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         trials=trials_tampered,
-    )
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     with pytest.raises(DataContractError, match="registered config_sha256 .* does not match"):
         gate.evaluate_strategy(
@@ -1441,6 +1488,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger_tampered,
             trial_return_matrix=trial_matrix,
@@ -1471,8 +1519,8 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             parameters={"period": 10},
             in_sample_sharpe=Decimal("1.5"),
             p_value=Decimal("0.001"),
-            in_sample_returns=list(trial_matrix[:, 0]),
             execution_manifest_id="MANIFEST_NON_EXISTENT",
+            in_sample_returns=list(trial_matrix[:, 0]),
         ),
         SearchTrialRecord.create(
             trial_id="trial_1",
@@ -1482,6 +1530,7 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             parameters={"period": 11},
             in_sample_sharpe=Decimal("1.2"),
             p_value=Decimal("0.001"),
+            execution_manifest_id="MANIFEST_TRIAL_1",
             in_sample_returns=list(trial_matrix[:, 1]),
         ),
     ]
@@ -1490,8 +1539,11 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
         trials=trials,
-    )
-    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+    manifest_store["MANIFEST_TRIAL_1"] = _make_mock_manifest("MANIFEST_TRIAL_1")
 
     with pytest.raises(DataContractError, match="execution manifest 'MANIFEST_NON_EXISTENT' missing"):
         gate.evaluate_strategy(
@@ -1500,9 +1552,142 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             hypothesis_spec=spec,
             in_sample_returns=is_returns,
             trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            manifest_store=manifest_store,
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=trial_matrix,
             perturbation_grid=grid,
-            manifest_store={},  # Empty store
+        )
+
+
+def test_search_trial_record_rejects_missing_returns_and_hash() -> None:
+    """Verify that SearchTrialRecord strictly fails-closed when neither in_sample_returns nor hash is supplied (zero synthetic fallback)."""
+    with pytest.raises(DataContractError, match="in_sample_return_series_sha256 requires actual in_sample_returns"):
+        SearchTrialRecord.model_validate({
+            "trial_id": "trial_missing",
+            "strategy_id": "STRAT_01",
+            "hypothesis_id": "HYP_01",
+            "feature_names": ["f1"],
+            "parameters": {},
+            "in_sample_sharpe": Decimal("1.5"),
+            "p_value": Decimal("0.01"),
+            "execution_manifest_id": "MANIFEST_01",
+            # Omitting both in_sample_returns and in_sample_return_series_sha256
+        })
+
+    with pytest.raises(DataContractError, match="Must provide either in_sample_returns or in_sample_return_series_sha256"):
+        SearchTrialRecord.create(
+            trial_id="trial_missing_create",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.01"),
+            execution_manifest_id="MANIFEST_01",
+            in_sample_returns=None,
+            in_sample_return_series_sha256=None,
+        )
+
+
+
+def test_search_trial_ledger_sealing_lifecycle() -> None:
+    """Verify SearchTrialLedger OPEN -> SEAL -> SEALED lifecycle and tamper detection."""
+    h = "a" * 64
+    cfg_h = "b" * 64
+    record = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f1"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=h,
+        config_sha256=cfg_h,
+        execution_manifest_id="MAN_01",
+    )
+
+    # 1. Unsealed initial state
+    ledger_open = SearchTrialLedger(
+        ledger_id="LEDGER_SEAL_TEST",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=[record],
+    )
+    assert ledger_open.is_sealed is False
+    assert ledger_open.ledger_digest is None
+
+    # 2. Sealing transition
+    ledger_sealed = ledger_open.seal(sealed_at_utc="2026-08-28T12:00:00Z")
+    assert ledger_sealed.is_sealed is True
+    assert ledger_sealed.sealed_at_utc == "2026-08-28T12:00:00Z"
+    assert ledger_sealed.ledger_digest is not None
+    assert len(ledger_sealed.ledger_digest) == 64
+
+    # 3. Tampering with digest triggers DataContractError
+    with pytest.raises(DataContractError, match="ledger_digest mismatch"):
+        SearchTrialLedger(
+            ledger_id="LEDGER_SEAL_TEST",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            trials=[record],
+            is_sealed=True,
+            sealed_at_utc="2026-08-28T12:00:00Z",
+            ledger_digest="deadbeef" * 8,  # Invalid digest
+        )
+
+
+def test_statistical_validation_gate_rejects_manifest_mismatch() -> None:
+    """Verify that Gate rejects when manifest hypothesis or strategy_config_hash does not match candidate trial."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0020, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0015, 0.0040, 200))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    trial_matrix = np.zeros((500, 1), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_MISMATCH", manifest_store=manifest_store)
+
+    trial = SearchTrialRecord.create(
+        trial_id="trial_0",
+        strategy_id="STRAT_MISMATCH",
+        hypothesis_id="HYP_01",
+        feature_names=["mom"],
+        parameters={"period": 10},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.001"),
+        execution_manifest_id="MANIFEST_MISMATCH_HYP",
+        in_sample_returns=list(trial_matrix[:, 0]),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L_MISMATCH",
+        strategy_id="STRAT_MISMATCH",
+        hypothesis_id="HYP_01",
+        trials=[trial],
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    # Manifest with mismatched hypothesis_id
+    manifest_store["MANIFEST_MISMATCH_HYP"] = _make_mock_manifest(
+        manifest_id="MANIFEST_MISMATCH_HYP",
+        hypothesis_id="HYP_DIFFERENT",
+        strategy_config_hash=trial.config_sha256,
+    )
+
+    with pytest.raises(DataContractError, match="manifest hypothesis_id .* does not match trial hypothesis_id"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_MISMATCH",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=is_returns,
+            trial_matrix_column_trial_ids=["trial_0"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            perturbation_grid=grid,
         )
