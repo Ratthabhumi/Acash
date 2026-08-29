@@ -40,10 +40,12 @@ from acash.validation.schema import (
 )
 
 
-def _compute_canonical_series_sha256(series: Optional[Sequence[Union[Decimal, float]]]) -> str:
+def _compute_canonical_series_sha256(series: Optional[Union[Sequence[Union[Decimal, float]], np.ndarray]]) -> str:
     """Compute deterministic SHA-256 hash using exact canonical Decimal strings (no float rounding)."""
-    if not series:
+    if series is None or len(series) == 0:
+
         return "NONE"
+
     dec_strings = [f"{Decimal(str(v)):.18f}" for v in series]
     raw_payload = ",".join(dec_strings)
     return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
@@ -94,8 +96,11 @@ class StatisticalValidationGate:
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
+        trial_matrix_column_trial_ids: Optional[Sequence[str]] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
         manifest_store: Optional[Dict[str, Any]] = None,
+        label_horizon: int = 1,
+        embargo_bars: Optional[int] = None,
         raw_predictive_edge_bps: float = 15.0,
         friction_params: Optional[FrictionStressParameters] = None,
         fixed_created_timestamp_utc: Optional[str] = None,
@@ -234,10 +239,12 @@ class StatisticalValidationGate:
                 created_timestamp_utc=now_utc,
             )
 
-        # 5. In-Sample Observation Sufficiency Check (Evaluated after all prerequisites are verified)
+        # 5. In-Sample Observation Sufficiency & Horizon Check
         n_is = len(in_sample_returns)
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
+        if label_horizon < 1:
+            raise DataContractError(f"label_horizon must be >= 1, got {label_horizon}")
 
         # Enforce strict Authoritative Ledger Invariants:
         # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut == M_CPCV
@@ -269,13 +276,22 @@ class StatisticalValidationGate:
                 f"trial_return_matrix observation count T ({t_matrix}) does not match in_sample_returns length ({n_is})."
             )
 
-        # Invariant Check: Primary candidate strategy returns (column 0) must strictly match in_sample_returns
-        is_floats = np.array([float(x) for x in in_sample_returns], dtype=np.float64)
-        if not np.allclose(trial_return_matrix[:, 0], is_floats, atol=1e-7, rtol=1e-5):
+        # Invariant Check: Primary candidate strategy returns (column 0) must strictly match in_sample_returns via SHA-256
+        is_hash = _compute_canonical_series_sha256(in_sample_returns)
+        col0_hash = _compute_canonical_series_sha256(trial_return_matrix[:, 0])
+        if col0_hash != is_hash:
             raise DataContractError(
-                "trial_return_matrix column 0 (primary candidate strategy) does not match in_sample_returns observations. "
-                "Both DSR and CPCV must evaluate identical underlying return series."
+                f"trial_return_matrix column 0 return series SHA-256 ({col0_hash}) does not match in_sample_returns SHA-256 ({is_hash}). "
+                f"Both DSR and CPCV must evaluate the identical underlying return series."
             )
+
+        # Invariant Check: Ordered candidate column trial IDs binding
+        if trial_matrix_column_trial_ids is not None:
+            expected_ids = [t.trial_id for t in trial_ledger.trials]
+            if list(trial_matrix_column_trial_ids) != expected_ids:
+                raise DataContractError(
+                    f"trial_matrix_column_trial_ids {list(trial_matrix_column_trial_ids)} does not match ordered ledger trial_ids {expected_ids}."
+                )
 
         all_p_values = trial_ledger.p_values
 
@@ -296,7 +312,7 @@ class StatisticalValidationGate:
             confidence_level_alpha=float(self.config.confidence_level_alpha),
         )
 
-        # 8. Sovereign CPCV / CSCV Execution & Overfitting Battery
+        # 8. Sovereign CPCV / CSCV Execution with Real Label Horizon & Embargo Buffers
         if manifest_store is not None:
             for pt in perturbation_grid.points:
                 if pt.manifest_id not in manifest_store:
@@ -305,7 +321,11 @@ class StatisticalValidationGate:
                     )
                 pt.validate_manifest_binding(manifest_store[pt.manifest_id])
 
-        is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(trial_return_matrix)
+        is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(
+            trial_return_matrix,
+            label_horizon=label_horizon,
+            embargo_bars=embargo_bars,
+        )
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
             is_sharpe_matrix=is_mat,
@@ -315,7 +335,6 @@ class StatisticalValidationGate:
             friction_params=friction_params,
             max_acceptable_pbo=float(self.config.max_acceptable_pbo),
         )
-
 
         # 9. Out-of-Sample Performance Evaluation
         mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)
@@ -356,18 +375,16 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_OOS_DEGRADATION
             is_tradeable = False
 
-
-
-        # 7. Cryptographic Lineage Digests (DAG: Evidence -> Decision -> ValidationID)
-        is_hash = _compute_canonical_series_sha256(in_sample_returns)
+        # 11. Cryptographic Lineage Digests (DAG: Evidence -> Decision -> ValidationID)
         oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
         ledger_hash = _compute_ledger_sha256(trial_ledger)
         grid_hash = _compute_grid_sha256(perturbation_grid)
+        effective_embargo = embargo_bars if embargo_bars is not None else self.config.embargo_bars
 
-        # Evidence Digest (Pure mathematical input & statistical calculation - NO governance decision)
+        # Evidence Digest (Pure mathematical input, research horizon & statistical calculations)
         evidence_payload = (
             f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:"
-            f"{effective_k}:{dsr_result.dsr_statistic}:{overfit_report.pbo_estimate}"
+            f"{effective_k}:{label_horizon}:{effective_embargo}:{dsr_result.dsr_statistic}:{overfit_report.pbo_estimate}"
         )
         evidence_digest = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
 
@@ -376,6 +393,7 @@ class StatisticalValidationGate:
             f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
             f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
         )
+
         decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
 
         val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"

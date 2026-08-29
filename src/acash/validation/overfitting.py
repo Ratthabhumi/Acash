@@ -69,27 +69,34 @@ class OverfittingEngine:
         underperforming_count = 0
 
         for c in range(C):
-            # 1. Identify optimal in-sample model index m*
-            m_star = int(np.argmax(is_sharpe_matrix[c, :]))
-            m_star_val = oos_sharpe_matrix[c, m_star]
+            is_slice = is_sharpe_matrix[c, :]
+            max_is_val = float(np.max(is_slice))
 
-            # 2. Compute exact mid-rank of m* in OOS slice
+            # 1. Identify all optimal in-sample model indices m* achieving max IS Sharpe (Symmetric IS-Tie Policy)
+            tied_indices = np.where(np.abs(is_slice - max_is_val) < 1e-12)[0]
+
+            # 2. Compute exact mid-rank of all tied winners in OOS slice and compute average relative rank
             oos_slice = oos_sharpe_matrix[c, :]
-            strictly_less = int(np.sum(oos_slice < m_star_val))
-            equal_count = int(np.sum(oos_slice == m_star_val))
-            mid_rank = strictly_less + 1.0 + 0.5 * (equal_count - 1.0)
+            omega_list: List[float] = []
+            for m_star in tied_indices:
+                m_star_val = oos_slice[m_star]
+                strictly_less = int(np.sum(oos_slice < m_star_val))
+                equal_count = int(np.sum(oos_slice == m_star_val))
+                mid_rank = strictly_less + 1.0 + 0.5 * (equal_count - 1.0)
+                omega_m = mid_rank / (M + 1.0)
+                omega_list.append(omega_m)
 
-            # Relative rank omega in (0, 1)
-            omega = mid_rank / (M + 1.0)
+            omega = float(np.mean(omega_list))
             omega = max(1e-6, min(1.0 - 1e-6, omega))
 
             # 3. Log-odds lambda = ln(omega / (1 - omega))
             logit_val = math.log(omega / (1.0 - omega))
             logits.append(logit_val)
 
-            # 4. If logit < 0 (i.e. omega < 0.5, below median OOS performance), count as overfit
+            # 4. If logit < 0 (i.e. omega < 0.5, strictly below median OOS performance), count as overfit
             if logit_val < 0.0:
                 underperforming_count += 1
+
 
         pbo = underperforming_count / float(C)
         logits_arr = np.array(logits, dtype=np.float64)

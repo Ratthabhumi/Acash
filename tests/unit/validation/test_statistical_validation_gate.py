@@ -1092,6 +1092,134 @@ def test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch
         )
 
 
+def test_statistical_validation_gate_binds_real_label_horizon_and_embargo() -> None:
+    """Verify that Gate strictly evaluates CPCV with custom research label_horizon H and embargo_bars E."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0020, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0015, 0.0040, 500))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_HORIZON",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(2)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L_HORIZON",
+        strategy_id="STRAT_HORIZON",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_HORIZON")
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
+
+    # 1. Standard evaluate with H=20, E=10
+    rep_h20 = gate.evaluate_strategy(
+        strategy_id="STRAT_HORIZON",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        perturbation_grid=grid,
+        label_horizon=20,
+        embargo_bars=10,
+        fixed_created_timestamp_utc="2026-08-28T10:00:00Z",
+    )
+    assert rep_h20.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
+
+    # 2. Evaluate with H=1, E=5
+    rep_h1 = gate.evaluate_strategy(
+        strategy_id="STRAT_HORIZON",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        perturbation_grid=grid,
+        label_horizon=1,
+        embargo_bars=5,
+        fixed_created_timestamp_utc="2026-08-28T10:00:00Z",
+    )
+    # The evidence digest MUST differ because label horizon and embargo are bound into evidence
+    assert rep_h20.evidence_digest != rep_h1.evidence_digest
+
+
+def test_statistical_validation_gate_rejects_trial_matrix_column_trial_ids_mismatch() -> None:
+    """Verify that Gate strictly rejects when trial_matrix_column_trial_ids order does not match ledger."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(2)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
+
+    # Passing inverted column trial IDs ["trial_1", "trial_0"]
+    with pytest.raises(DataContractError, match="does not match ordered ledger trial_ids"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            trial_matrix_column_trial_ids=["trial_1", "trial_0"],
+            perturbation_grid=grid,
+        )
+
+
+def test_overfitting_engine_is_tie_symmetric_policy() -> None:
+    """Verify that OverfittingEngine.calculate_pbo evaluates tied in-sample winners symmetrically without argmax bias."""
+    from acash.validation.overfitting import OverfittingEngine
+
+    # 1 split, 3 candidate models where model 0 and model 1 have identical IS Sharpe
+    is_mat = np.array([[2.0, 2.0, 1.0]], dtype=np.float64)
+    # Model 0 is top OOS (rank 3), model 1 is bottom OOS (rank 1), model 2 is mid (rank 2)
+    # Ranks for M=3:
+    # Model 0 midrank = 3.0 -> omega = 3.0 / 4.0 = 0.75
+    # Model 1 midrank = 1.0 -> omega = 1.0 / 4.0 = 0.25
+    # Symmetric average omega for tied {0, 1} = (0.75 + 0.25)/2 = 0.50 -> lambda = ln(0.5/0.5) = 0.0 -> PBO = 0.0 (not overfit)
+    oos_mat = np.array([[3.0, 1.0, 2.0]], dtype=np.float64)
+
+    pbo, logit_mean, logit_std = OverfittingEngine.calculate_pbo(is_mat, oos_mat)
+    assert pbo == 0.0
+    assert abs(logit_mean) < 1e-6
+
+
+
 
 
 
