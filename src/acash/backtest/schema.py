@@ -17,6 +17,8 @@ import pyarrow as pa
 from pydantic import BaseModel, ConfigDict, Field
 
 from acash.core.domain.exceptions import DataContractError
+from acash.core.serialization import CanonicalConfigSerializer
+
 
 
 
@@ -213,26 +215,28 @@ class BacktestEngineConfig(BaseModel):
         data = {
             "engine_id": self.engine_id,
             "symbol": self.symbol,
-            "initial_cash": str(self.initial_cash),
+            "initial_cash": self.initial_cash,
             "base_currency": self.base_currency,
             "latency_config": self.latency_config.model_dump(),
             "fee_config": {
-                "maker_fee_bps": str(self.fee_config.maker_fee_bps),
-                "taker_fee_bps": str(self.fee_config.taker_fee_bps),
-                "fixed_fee_per_trade": str(self.fee_config.fixed_fee_per_trade),
+                "maker_fee_bps": self.fee_config.maker_fee_bps,
+                "taker_fee_bps": self.fee_config.taker_fee_bps,
+                "fixed_fee_per_trade": self.fee_config.fixed_fee_per_trade,
             },
             "slippage_config": {
-                "fixed_slippage_bps": str(self.slippage_config.fixed_slippage_bps),
-                "impact_coefficient": str(self.slippage_config.impact_coefficient),
+                "fixed_slippage_bps": self.slippage_config.fixed_slippage_bps,
+                "impact_coefficient": self.slippage_config.impact_coefficient,
             },
             "queue_priority_model": self.queue_priority_model,
             "prng_seed": self.prng_seed,
         }
-        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return CanonicalConfigSerializer.to_canonical_json(data)
 
     def compute_sha256(self) -> str:
         """Compute deterministic SHA-256 fingerprint."""
         return hashlib.sha256(self.to_canonical_json().encode("utf-8")).hexdigest()
+
+
 
 
 class BacktestFillRecord(BaseModel):
@@ -412,15 +416,15 @@ class BacktestManifest(BaseModel):
                 "unmodelled_residual_bps": str(self.reality_gap.unmodelled_residual_bps),
             },
         }
-        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+        return CanonicalConfigSerializer.to_canonical_json(data)
 
     def compute_sha256(self) -> str:
         """Compute deterministic SHA-256 fingerprint of the canonical manifest JSON."""
         return hashlib.sha256(self.to_canonical_json().encode("utf-8")).hexdigest()
 
 
-def calculate_backtest_manifest_id(
 
+def calculate_backtest_manifest_id(
     hypothesis_spec_sha256: str,
     canonical_data_hashes: List[str],
     engine_config_hash: str,
@@ -440,8 +444,8 @@ def calculate_backtest_manifest_id(
         "strategy_config_hash": strategy_config_hash,
         "prng_seed": prng_seed,
     }
-    canonical_str = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()[:32]
+    return CanonicalConfigSerializer.compute_sha256(payload)[:32]
+
 
 
 # -------------------------------------------------------------------------
