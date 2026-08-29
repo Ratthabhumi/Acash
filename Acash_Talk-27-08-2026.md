@@ -33097,3 +33097,67 @@ Verdict: ยังไม่ Sign-off Phase 6
 @[docs/ROADMAP.md] @[README.md] อัพเดทอันนี้เลยเขียนดี นะ แล้วก็ Cheat Sheet จัดให้อ่านง่ายเป็นระบบหน่อย @[Cheatsheet.md]
 สุดท้าย Export Chat นี้เพิ่มไปใน @[Acash_Talk-27-08-2026.md]
 </USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 106)
+
+- อัปเดต `docs/ROADMAP.md`, `README.md`, `Cheatsheet.md`
+- บันทึกประวัติการพัฒนา Phase 6 Methodological Remediation v1.2 ลงใน `Acash_Talk-27-08-2026.md`
+
+---
+
+## 👤 User (Turn 107)
+
+<USER_REQUEST>
+ผมเช็ก code จริงบน GitHub ที่ commit 2a94a1f แล้ว ไม่ได้อิงเฉพาะข้อความสรุปของคุณ และ verdict ของผมคือ:
+
+❌ ยังไม่ควรประกาศ Phase 6 ผ่าน
+
+2a94a1f แก้ประเด็นที่ผมทักรอบก่อนหลายข้อได้จริง แต่ยังมี อย่างน้อย 6 จุดที่ผมถือว่าเป็น substantive methodological gaps:
+1. 🔴 P0 — ไม่มี strict enforcement ว่า K_ledger = K_Holm = K_BH
+2. 🔴 P0 — ParameterPerturbationGrid ยังยอมรับ dummy placeholder run_ids ได้
+3. 🟠 P1 — SR0 estimator provenance ยังขาดชื่อเฉพาะเจาะจง (EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1)
+4. 🟠 P1 — Friction monotonicity ยังต้องแยก Analytical Stress Curve ออกจาก Discrete Backtest Simulation
+5. 🟠 P1 — Cryptographic DAG ยังมี cyclic hashing ambiguity ใน ValidationReport
+6. 🟢 Acklam standard normal inverse CDF approximation
+
+Verdict: ✅ PROCEED — แต่ล็อกเพิ่ม 4 ข้อก่อนเขียนโค้ด:
+1. 🔴 SearchTrialLedger — enforce identity trial invariant: K_ledger = |unique trial_id| = |p-values| = K_DSR = K_Holm = K_BH = K_Haircut. ตัด dummy trial fallback 100%
+2. 🔴 ParameterPerturbationGrid — ต้องบรรจุ run_id, input_artifact_hash, output_artifact_hash, actual_sharpe ครบทั้ง 3 จุด
+3. 🟠 SelectionCorrectionMode & Estimator Provenance — ระบุชื่อ EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 ชัดเจน
+4. 🟠 Analytical Friction Monotonicity vs Discrete Simulation — แยกชื่อเมธอดและ field ชัดเจน
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 107)
+
+### 🛠️ สรุปรายละเอียด Phase 6 Methodological Remediation v1.3
+
+1. **Strict 5-Way Authoritative $K$ Invariant Coupling (🔴 P0):**
+   - บังคับ $K_{\text{ledger}} = |\text{unique trial\_id}| = |\text{p-values}| = K_{\text{DSR}} = K_{\text{Holm}} = K_{\text{BH}} = K_{\text{Haircut}}$
+   - ตัด Synthetic Dummy Trial fallback ออก 100% — หากไม่มี ledger จะ Fail-Closed ด้วย `REJECT_MISSING_TRIAL_LEDGER`
+   - ตรวจสอบ `strategy_id` และ `hypothesis_id` ต้องตรงกับ trial ทุกรายการใน ledger
+
+2. **Parameter Perturbation Execution Lineage (🔴 P0):**
+   - `ParameterPerturbationPoint` บรรจุ `run_id`, `input_artifact_hash`, `output_artifact_hash`, `actual_sharpe`
+   - บังคับ 3 distinct execution runs ผ่าน Pydantic validator บนเรขาคณิต $\pm 25\%$
+
+3. **$SR_0$ Estimator Provenance & Mode Discrimination (🟠 P1):**
+   - แยก `SelectionCorrectionMode.SINGLE_TRIAL` ($SR_0 = 0$) และ `MULTIPLE_TRIAL`
+   - บันทึก metadata: `sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"`, `variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1"`
+   - ตรวจสอบ Pearson Kurtosis lower bound $g_2 \ge 1.0$ (Normal = 3.0)
+
+4. **Analytical Friction Stress Monotonicity (🟠 P1):**
+   - เปลี่ยนชื่อเมธอดเป็น `verify_analytical_friction_decay_monotonicity()`
+   - Schema field: `analytical_friction_monotonicity_passed` ชัดเจน แยกจากการจำลอง Backtest
+
+5. **Acyclic Cryptographic DAG Hierarchy (🟠 P1):**
+   - `evidence_digest = SHA256(strategy_id:hypothesis_id:is_hash:oos_hash:ledger_hash:grid_hash:effective_k:dsr_stat:pbo)`
+   - `decision_digest = SHA256(evidence_digest:verdict:min_dsr_prob:max_pbo:min_oos_retention)`
+   - `validation_id = f"VAL_{strategy_id}_{decision_digest[:16]}"`
+
+6. **Full Test Suite Status:**
+   - **234/234 tests PASSED (100%)** ครอบคลุม Phase 0 ถึง Phase 6 พร้อม Invariant Hardening ทั้งหมด
+

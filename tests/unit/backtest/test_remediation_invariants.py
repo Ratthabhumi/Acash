@@ -501,12 +501,13 @@ def test_reality_gap_attribution_empirical_derivation_from_fills() -> None:
 
     # Decimal precision preservation test
     decimal_report = RealityGapAttributionEngine.generate_reality_gap_report(summary, preserve_decimal_precision=True)
-    assert decimal_report["friction_decomposition"]["fee_drag_bps"] == "10.0"
-    assert decimal_report["friction_decomposition"]["latency_drag_bps"] == "0.1"
-    assert decimal_report["friction_decomposition"]["spread_drag_bps"] == "0.05"
-    assert decimal_report["friction_decomposition"]["slippage_drag_bps"] == "0.05"
-    assert decimal_report["friction_decomposition"]["maker_adverse_selection_drag_bps"] == "0.4"
-    assert decimal_report["friction_decomposition"]["unmodelled_residual_bps"] == "4.4"
+    assert Decimal(decimal_report["friction_decomposition"]["fee_drag_bps"]) == Decimal("10.0")
+    assert Decimal(decimal_report["friction_decomposition"]["latency_drag_bps"]) == Decimal("0.1")
+    assert Decimal(decimal_report["friction_decomposition"]["spread_drag_bps"]) == Decimal("0.05")
+    assert Decimal(decimal_report["friction_decomposition"]["slippage_drag_bps"]) == Decimal("0.05")
+    assert Decimal(decimal_report["friction_decomposition"]["maker_adverse_selection_drag_bps"]) == Decimal("0.4")
+    assert Decimal(decimal_report["friction_decomposition"]["unmodelled_residual_bps"]) == Decimal("4.4")
+
 
 
 def test_unknown_instrument_fails_fast_without_implicit_defaults() -> None:

@@ -1,12 +1,15 @@
-"""Unit tests for Multiple Testing Corrections and Probability of Backtest Overfitting (PBO)."""
+"""Unit tests for Multiple Testing Corrections, Parameter Fragility, and PBO."""
 
 from decimal import Decimal
+import hashlib
 import math
 import numpy as np
 import pytest
 
+from acash.core.domain.exceptions import DataContractError
 from acash.validation.multiple_testing import MultipleTestingEngine
 from acash.validation.overfitting import OverfittingEngine
+from acash.validation.schema import ParameterPerturbationGrid, ParameterPerturbationPoint
 
 
 def test_holm_bonferroni_step_down_adjustment() -> None:
@@ -20,6 +23,17 @@ def test_holm_bonferroni_step_down_adjustment() -> None:
     assert math.isclose(float(adj_p[3]), 0.02, abs_tol=1e-5)
 
 
+def test_authoritative_k_enforcement_in_multiple_testing() -> None:
+    """Verify that evaluate_multiple_testing rejects p_values vectors whose length != effective_trials_k."""
+    with pytest.raises(DataContractError, match="MultipleTestingEngine K mismatch"):
+        MultipleTestingEngine.evaluate_multiple_testing(
+            p_values=[Decimal("0.01"), Decimal("0.05")],
+            estimated_sharpe=1.5,
+            sample_size_t=500,
+            effective_trials_k=10,  # Mismatch! 2 != 10
+        )
+
+
 def test_haircut_sharpe_ratio_derivation() -> None:
     """Verify Haircut Sharpe penalization formula (Harvey, Liu, & Zhu 2016)."""
     haircut = MultipleTestingEngine.calculate_haircut_sharpe(
@@ -28,6 +42,50 @@ def test_haircut_sharpe_ratio_derivation() -> None:
         sample_size_t=1000,
     )
     assert math.isclose(float(haircut), 1.90403, rel_tol=1e-3)
+
+
+def test_parameter_curvature_evaluation_with_lineage() -> None:
+    """Verify parameter curvature calculation across +/- 25% perturbation points."""
+    theta = Decimal("10.0")
+    dummy_hash = "f" * 32
+    points = [
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("7.5"),
+            run_id="run_p75",
+            input_artifact_hash=dummy_hash,
+            output_artifact_hash=dummy_hash,
+            actual_sharpe=Decimal("1.4"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("10.0"),
+            run_id="run_p100",
+            input_artifact_hash=dummy_hash,
+            output_artifact_hash=dummy_hash,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("12.5"),
+            run_id="run_p125",
+            input_artifact_hash=dummy_hash,
+            output_artifact_hash=dummy_hash,
+            actual_sharpe=Decimal("1.35"),
+        ),
+    ]
+    grid = ParameterPerturbationGrid(
+        base_parameter_name="lookback",
+        base_parameter_value=theta,
+        points=points,
+    )
+
+    curvature, is_stable = OverfittingEngine.evaluate_parameter_curvature(grid)
+    assert curvature >= 0.0
+    assert is_stable is True  # Max degradation (1.5 - 1.35) / 1.5 = 10% <= 30%
+
+
+def test_analytical_friction_stress_monotonicity() -> None:
+    """Verify component-wise analytical friction stress monotonicity."""
+    is_monotonic = OverfittingEngine.verify_analytical_friction_decay_monotonicity(raw_predictive_edge_bps=15.0)
+    assert is_monotonic is True
 
 
 def test_pbo_calculation_with_midrank_ties() -> None:

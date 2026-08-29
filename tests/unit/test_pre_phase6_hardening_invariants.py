@@ -145,29 +145,43 @@ def test_dispersion_hypothesis_strictly_evaluates_magnitude() -> None:
 
     dispersion_hyp = HypothesisSpecification(
         hypothesis_id="HYP_DISPERSION_001",
-        feature_name="vol_proxy",
-        target_horizon=5,
-        expected_direction=ExpectedDirection.DISPERSION,
-        invalidation_criteria=InvalidationCriteria(min_hac_t_stat=Decimal("2.0"), min_in_sample_rank_ic=Decimal("0.50")),
+        hypothesis_version="1.0.0",
         economic_rationale="High volume dispersion leads to larger absolute price swings.",
+        target_symbol="ES",
+        feature_dependencies=["vol_proxy"],
+        parameter_config_json="{}",
+        expected_direction=ExpectedDirection.DISPERSION,
+        target_horizons=[5],
+        primary_horizon=5,
+        invalidation_criteria=InvalidationCriteria(min_hac_t_stat=Decimal("2.0"), min_in_sample_rank_ic=Decimal("0.50"), max_feature_autocorrelation=Decimal("1.0")),
+        registered_at_utc="2026-08-28T00:00:00Z",
+        author="researcher",
     )
 
     directional_hyp = HypothesisSpecification(
         hypothesis_id="HYP_DIRECTIONAL_001",
-        feature_name="vol_proxy",
-        target_horizon=5,
-        expected_direction=ExpectedDirection.LONG,
-        invalidation_criteria=InvalidationCriteria(min_hac_t_stat=Decimal("2.0"), min_in_sample_rank_ic=Decimal("0.50")),
+        hypothesis_version="1.0.0",
         economic_rationale="Directional long attempt on alternating returns.",
+        target_symbol="ES",
+        feature_dependencies=["vol_proxy"],
+        parameter_config_json="{}",
+        expected_direction=ExpectedDirection.LONG,
+        target_horizons=[5],
+        primary_horizon=5,
+        invalidation_criteria=InvalidationCriteria(min_hac_t_stat=Decimal("2.0"), min_in_sample_rank_ic=Decimal("0.50"), max_feature_autocorrelation=Decimal("1.0")),
+        registered_at_utc="2026-08-28T00:00:00Z",
+        author="researcher",
     )
+
 
     disp_result = evaluate_hypothesis_relationship(features, forward_returns, horizon=5, hypothesis=dispersion_hyp)
     dir_result = evaluate_hypothesis_relationship(features, forward_returns, horizon=5, hypothesis=directional_hyp)
 
     # Dispersion: Target |R| = [0.001, 0.002, 0.003, 0.004, 0.005] -> Perfect positive rank correlation = 1.0, positive beta
-    assert disp_result.spearman_rank_ic == Decimal("1.0")
-    assert disp_result.ols_beta > Decimal("0")
+    assert math.isclose(float(disp_result.spearman_rank_ic), 1.0, rel_tol=1e-5)
+    assert disp_result.beta > Decimal("0")
     assert disp_result.is_falsified is False
+
 
     # Directional: Signed returns have zero/negative linear drift -> Falsified!
     assert dir_result.is_falsified is True
@@ -221,17 +235,33 @@ def test_bitemporal_pit_matrix_and_late_knowledge_query() -> None:
 
 def test_order_book_replay_determinism_and_degeneracy() -> None:
     """Verify order book reconstruction determinism and feature extraction under degenerate book states."""
+    from datetime import date
     engine = OrderBookReconstructionEngine()
     t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
+    t0_date = date(2026, 1, 19)
 
     # Initial Snapshot with thin book
     snap_data = {
-        "exchange_time_utc": [t0, t0], "arrival_time_utc": [t0, t0], "symbol": ["ES", "ES"],
-        "side": ["BID", "ASK"], "price_level": [Decimal("5000.00"), Decimal("5001.00")],
-        "size": [Decimal("10.0"), Decimal("10.0")], "order_count": [1, 1],
+        "source_id": ["DEFAULT", "DEFAULT"],
+        "channel_id": ["L2", "L2"],
+        "symbol": ["ES", "ES"],
+        "trading_date": [t0_date, t0_date],
+        "exchange_time_utc": [t0, t0],
+        "feed_time_utc": [t0, t0],
+        "knowledge_time_utc": [t0, t0],
+        "source_seq_num": [0, 0],
+        "source_order_key": ["0", "0"],
+        "snapshot_id": ["SNAP_0", "SNAP_1"],
+        "is_snapshot_complete": [True, True],
+        "side": ["BID", "ASK"],
+        "level_idx": [0, 0],
+        "price": [Decimal("5000.00"), Decimal("5001.00")],
+        "size": [Decimal("10.0"), Decimal("10.0")],
+        "order_count": [1, 1],
     }
     snap_table = pa.Table.from_pydict(snap_data, schema=CANONICAL_BOOK_SNAPSHOT_SCHEMA)
     state = engine.process_snapshot(snap_table)
+
 
     assert state.best_bid == Decimal("5000.00")
     assert state.best_ask == Decimal("5001.00")
@@ -247,3 +277,4 @@ def test_order_book_replay_determinism_and_degeneracy() -> None:
     # Micro-price calculation on extreme one-sided book (bid=1000, ask=0) -> collapses to best_ask
     mp_skewed = feat_engine.calculate_micro_price(state.best_bid, state.best_ask, Decimal("1000.0"), Decimal("0.0"))
     assert mp_skewed == Decimal("5001.00")
+

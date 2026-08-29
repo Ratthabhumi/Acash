@@ -102,9 +102,12 @@ def test_mandatory_environment_provenance_validation() -> None:
         phase5_simulated_realized_bps=Decimal("8.0"),
         reality_gap_bps=Decimal("2.0"),
         spread_drag_bps=Decimal("1.0"),
-        latency_slip_drag_bps=Decimal("1.0"),
-        queue_position_drag_bps=Decimal("0.0"),
+        slippage_drag_bps=Decimal("0.5"),
+        latency_drag_bps=Decimal("0.5"),
+        fee_drag_bps=Decimal("0.0"),
+        maker_adverse_selection_drag_bps=Decimal("0.0"),
     )
+
 
     # Placeholder pyproject hash rejected
     with pytest.raises(DataContractError, match="Invalid pyproject_toml_sha256"):

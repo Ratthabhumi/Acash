@@ -6,6 +6,7 @@ Mathematical implementation based on:
 - Harvey, C. R., Liu, Y., & Zhu, H. (2016). "... and the Cross-Section of Expected Returns." Review of Financial Studies, 29(1), 5–68.
 
 Strictly enforces:
+- Authoritative K coupling: len(p_values) == effective_trials_k across all estimators.
 - Holm-Bonferroni step-down procedure for strict Family-Wise Error Rate (FWER) control across K trials.
 - Benjamini-Hochberg procedure for False Discovery Rate (FDR) q-values.
 - Harvey-Liu-Zhu multiple-testing haircut Sharpe hurdle deduction.
@@ -52,7 +53,7 @@ class MultipleTestingEngine:
         adj_p_original = np.zeros(K, dtype=np.float64)
         adj_p_original[sorted_indices] = adj_p_sorted
 
-        return [to_decimal18(Decimal(f"{p:.12f}")) or Decimal("1.0") for p in adj_p_original]
+        return [to_decimal18(Decimal(f"{p_val:.12f}")) or Decimal("1.0") for p_val in adj_p_original]
 
     @staticmethod
     def benjamini_hochberg_fdr(p_values: Sequence[Union[Decimal, float]]) -> List[Decimal]:
@@ -81,7 +82,7 @@ class MultipleTestingEngine:
         q_original = np.zeros(K, dtype=np.float64)
         q_original[sorted_indices] = q_sorted
 
-        return [to_decimal18(Decimal(f"{q:.12f}")) or Decimal("1.0") for p in q_original]
+        return [to_decimal18(Decimal(f"{q_val:.12f}")) or Decimal("1.0") for q_val in q_original]
 
     @staticmethod
     def calculate_haircut_sharpe(
@@ -102,7 +103,7 @@ class MultipleTestingEngine:
         T = max(2, sample_size_t)
         sr = max(0.0, estimated_sharpe)
 
-        if K == 1 or sr <= 1e-12:
+        if K <= 1 or sr <= 1e-12:
             return to_decimal18(Decimal(f"{sr:.12f}")) or Decimal("0.0")
 
         hurdle = math.sqrt(2.0 * math.log(K)) / math.sqrt(T)
@@ -116,13 +117,21 @@ class MultipleTestingEngine:
         p_values: Sequence[Union[Decimal, float]],
         estimated_sharpe: float,
         sample_size_t: int,
+        effective_trials_k: Optional[int] = None,
         confidence_level_alpha: float = 0.05,
     ) -> MultipleTestingResult:
-        """Evaluate full multiple testing battery across K trials."""
+        """Evaluate full multiple testing battery across K trials with authoritative K verification."""
+        k_count = len(p_values)
+        if effective_trials_k is not None and k_count != effective_trials_k:
+            raise DataContractError(
+                f"MultipleTestingEngine K mismatch: len(p_values)={k_count} != authoritative effective_trials_k={effective_trials_k}"
+            )
+        authoritative_k = effective_trials_k or k_count
+
         raw_dec = [to_decimal18(Decimal(f"{float(p):.12f}")) or Decimal("1.0") for p in p_values]
         holm_p = cls.holm_bonferroni_correction(p_values)
         bh_q = cls.benjamini_hochberg_fdr(p_values)
-        haircut_sr = cls.calculate_haircut_sharpe(estimated_sharpe, len(p_values), sample_size_t)
+        haircut_sr = cls.calculate_haircut_sharpe(estimated_sharpe, authoritative_k, sample_size_t)
 
         min_holm = min((float(p) for p in holm_p), default=1.0)
         is_significant = min_holm <= confidence_level_alpha

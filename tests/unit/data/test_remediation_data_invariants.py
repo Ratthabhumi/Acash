@@ -268,9 +268,10 @@ def test_storage_corrupted_parquet_raises_integrity_violation_error() -> None:
         corrupt_file = part_dir / "part-corrupt_001.parquet"
         corrupt_file.write_bytes(b"CORRUPT_GARBAGE_HEADER_NOT_A_PARQUET_FILE")
 
-        with pytest.raises(IntegrityViolationError, match="Corrupted or unreadable"):
+        with pytest.raises(IntegrityViolationError, match="Corrupted"):
             engine.get_existing_revisions_lookup([("binance", "BTC/USDT", "M1")])
 
-        with pytest.raises(IntegrityViolationError, match="Corrupted or unreadable"):
+        with pytest.raises(IntegrityViolationError, match="Corrupted"):
             engine.get_existing_event_max_seq([("binance", "BTC/USDT", "M1")])
+
 

@@ -3,11 +3,15 @@
 Mathematical implementation based on:
 - Bailey, D. H., & López de Prado, M. (2014). "The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting, and Non-Normality." Journal of Portfolio Management, 40(5), 94–107.
 - López de Prado, M. (2018). "Advances in Financial Machine Learning." John Wiley & Sons, Chapter 14.
+- Mertens, E. (2002). "Comments on Alternative Measure of Risk."
+- Opdyke, J. D. (2007). "Comparing Sharpe Ratios: So Where are the p-values?" Journal of Asset Management, 8(5), 308–336.
 
 Strictly enforces:
-- Moment estimation: Fisher-Pearson sample skewness g_1 and Pearson sample fourth moment kurtosis g_2 (normal = 3.0).
+- Moment estimation: Fisher-Pearson sample skewness g_1 and Pearson standardized fourth moment kurtosis g_2 >= 1.0 (normal = 3.0).
 - Scale alignment: SR0 and sample Sharpe evaluated in identical frequency space (per-period) before annualization.
-- Search Trial coupling: SR0 variance V derived from empirical SearchTrialLedger (or explicit single-trial mode).
+- Explicit SelectionCorrectionMode:
+  * SINGLE_TRIAL: When K = 1, V = 0, SR0 = 0. Non-normal asymptotic test against hurdle without selection penalty.
+  * MULTIPLE_TRIAL: When K >= 2, SR0 derived via EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 using empirical trial variance V.
 - Asymptotic Deflated Sharpe Ratio (DSR) non-normal test statistic and p-value.
 - Minimum Track Record Length (MinTRL) required sample size calculation.
 """
@@ -19,7 +23,7 @@ import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
-from acash.validation.schema import DSRResult, SearchTrialLedger
+from acash.validation.schema import DSRResult, SearchTrialLedger, SelectionCorrectionMode
 
 
 EULER_MASCHERONI_CONSTANT = 0.57721566490153286060
@@ -31,7 +35,7 @@ def _standard_normal_cdf(x: float) -> float:
 
 
 def _standard_normal_ppf(p: float) -> float:
-    """Inverse standard normal cumulative distribution function Z^{-1}(p)."""
+    """Inverse standard normal CDF using Acklam's rational approximation algorithm."""
     if p <= 0.0 or p >= 1.0:
         raise ValueError(f"Probability p must be in (0, 1), got {p}")
 
@@ -65,18 +69,25 @@ def _standard_normal_ppf(p: float) -> float:
         3.754408661907416e+00,
     ]
 
-    q = p - 0.5
-    if abs(q) <= 0.42:
-        r = q * q
-        num = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q
-        den = (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
-        return num / den
+    p_low = 0.02425
+    p_high = 1.0 - p_low
 
-    r = p if q < 0.0 else 1.0 - p
-    r = math.log(-math.log(r))
-    num = ((((c[0] * r + c[1]) * r + c[2]) * r + c[3]) * r + c[4]) * r + c[5]
-    den = (((d[0] * r + d[1]) * r + d[2]) * r + d[3]) * r + 1.0
-    return -num / den if q < 0.0 else num / den
+    if p < p_low:
+        # Lower tail
+        q = math.sqrt(-2.0 * math.log(p))
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / \
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+    elif p <= p_high:
+        # Central region
+        q = p - 0.5
+        r = q * q
+        return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / \
+               (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1.0)
+    else:
+        # Upper tail
+        q = math.sqrt(-2.0 * math.log(1.0 - p))
+        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / \
+                ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
 
 
 class DeflatedSharpeEngine:
@@ -90,7 +101,7 @@ class DeflatedSharpeEngine:
         - Mean: bar(X) = (1/n) sum X_i
         - Sample Variance: s^2 = (1/(n-1)) sum (X_i - bar(X))^2
         - Fisher-Pearson Skewness: g_1 = (n / ((n-1)(n-2))) * sum( ((X_i - bar(X)) / s)^3 )
-        - Pearson Kurtosis: g_2 = (1/n) * sum( ((X_i - bar(X)) / s)^4 ) (normal distribution = 3.0)
+        - Pearson Kurtosis: g_2 = (1/n) * sum( ((X_i - bar(X)) / s)^4 ) (normal distribution = 3.0, lower bound = 1.0)
 
         Returns:
             Tuple[mean, std, skewness_g1, kurtosis_g2]
@@ -113,9 +124,9 @@ class DeflatedSharpeEngine:
         m3_term = float(np.sum(norm_diff ** 3))
         skewness = (n / ((n - 1) * (n - 2))) * m3_term
 
-        # Pearson standardized fourth moment kurtosis g_2
+        # Pearson standardized fourth moment kurtosis g_2 (bounded below by 1.0)
         m4_term = float(np.sum(norm_diff ** 4))
-        kurtosis = (1.0 / n) * m4_term
+        kurtosis = max(1.0, (1.0 / n) * m4_term)
 
         return mean, std, float(skewness), float(kurtosis)
 
@@ -124,14 +135,14 @@ class DeflatedSharpeEngine:
         effective_trials_k: int,
         variance_of_trials: float = 0.0,
     ) -> float:
-        """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials in the same space.
+        """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
-        Formula (Bailey & López de Prado 2014):
+        Estimator: EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 (Bailey & López de Prado 2014 EVT Approximation)
         SR0 = sqrt(V) * [ (1 - gamma_E) * Z^{-1}(1 - 1/K) + gamma_E * Z^{-1}(1 - 1/(K * e)) ]
-        where V is the empirical variance of the trial distribution in the evaluated frequency space.
+        where V is the empirical sample variance of the trial distribution in the evaluated frequency space.
         """
         K = max(1, effective_trials_k)
-        if K == 1 or variance_of_trials <= 1e-12:
+        if K <= 1 or variance_of_trials <= 1e-12:
             return 0.0
 
         gamma_e = EULER_MASCHERONI_CONSTANT
@@ -159,8 +170,10 @@ class DeflatedSharpeEngine:
 
         All internal inference is executed in per-period space to guarantee exact frequency scale alignment.
         """
+        sharpe_space_label = "PERIOD"
         if trial_ledger is not None:
             effective_trials_k = trial_ledger.total_trials
+            sharpe_space_label = trial_ledger.sharpe_space
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 # If ledger Sharpes were annualized, scale variance down to per-period space
@@ -170,6 +183,8 @@ class DeflatedSharpeEngine:
                     variance_of_trials = raw_var
             else:
                 variance_of_trials = 0.0
+
+        mode = SelectionCorrectionMode.SINGLE_TRIAL if effective_trials_k <= 1 else SelectionCorrectionMode.MULTIPLE_TRIAL
 
         n = len(returns)
         mean, std, skew, kurt = cls.calculate_higher_moments(returns)
@@ -208,6 +223,10 @@ class DeflatedSharpeEngine:
             sample_skewness=to_decimal18(Decimal(f"{skew:.12f}")) or Decimal("0.0"),
             sample_kurtosis=to_decimal18(Decimal(f"{kurt:.12f}")) or Decimal("3.0"),
             effective_trials_k=effective_trials_k,
+            selection_correction_mode=mode,
+            sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
+            variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
+            sharpe_space=sharpe_space_label,
             trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
             sample_size_t=n,
             dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),

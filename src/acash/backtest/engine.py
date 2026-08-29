@@ -447,6 +447,14 @@ class EventBacktestRunner:
                 order.status = BacktestOrderStatus.CANCELLED
                 return
 
+        bid_at_match = self.order_book.best_bid
+        ask_at_match = self.order_book.best_ask
+        if bid_at_match is None and self.last_price > Decimal("0.0"):
+            bid_at_match = self.last_price
+        if ask_at_match is None and self.last_price > Decimal("0.0"):
+            ask_at_match = self.last_price
+
+        base_price: Decimal = (ask_at_match or Decimal("0.0")) if order.side == "BUY" else (bid_at_match or Decimal("0.0"))
         executed_price: Decimal = Decimal("0.0")
         filled_qty: Decimal = Decimal("0.0")
 
@@ -518,12 +526,12 @@ class EventBacktestRunner:
 
         # Prevailing side-neutral mid-price at match arrival time
         match_mid: Optional[Decimal] = None
-        if self.order_book.best_bid is not None and self.order_book.best_ask is not None:
-            match_mid = (self.order_book.best_bid + self.order_book.best_ask) / Decimal("2.0")
+        if bid_at_match is not None and ask_at_match is not None:
+            match_mid = (bid_at_match + ask_at_match) / Decimal("2.0")
         elif self.last_price > Decimal("0.0"):
             match_mid = self.last_price
 
-        touch_px = self.order_book.best_ask if order.side == "BUY" else self.order_book.best_bid
+        touch_px = ask_at_match if order.side == "BUY" else bid_at_match
         if touch_px is None:
             touch_px = base_price
 
@@ -551,13 +559,14 @@ class EventBacktestRunner:
             arrival_mid_price=arrival_mid,
             match_mid_price=match_mid,
             touch_price=touch_px,
-            bid_at_fill=self.order_book.best_bid,
-            ask_at_fill=self.order_book.best_ask,
+            bid_at_fill=bid_at_match,
+            ask_at_fill=ask_at_match,
             decision_timestamp_ns=order.created_timestamp_ns,
             match_timestamp_ns=timestamp_ns,
             latency_drift_bps=latency_drift_bps,
         )
         self.fills.append(fill_rec)
+
 
         # Update order state
         order.cumulative_cost += executed_price * filled_qty

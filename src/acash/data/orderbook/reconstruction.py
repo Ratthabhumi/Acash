@@ -76,6 +76,35 @@ class DepthLadderState:
     crossed_category: Optional[CrossedStateCategory] = None
     applied_deltas_count: int = 0
 
+    @property
+    def best_bid(self) -> Optional[Decimal]:
+        """Best bid price level."""
+        return self.bids[0].price if self.bids else None
+
+    @property
+    def best_ask(self) -> Optional[Decimal]:
+        """Best ask price level."""
+        return self.asks[0].price if self.asks else None
+
+    @property
+    def mid_price(self) -> Optional[Decimal]:
+        """Mid-point price between best bid and best ask."""
+        bb = self.best_bid
+        ba = self.best_ask
+        if bb is not None and ba is not None:
+            return (bb + ba) / Decimal("2")
+        return None
+
+    @property
+    def spread(self) -> Optional[Decimal]:
+        """Top-of-book bid-ask spread."""
+        bb = self.best_bid
+        ba = self.best_ask
+        if bb is not None and ba is not None:
+            return ba - bb
+        return None
+
+
 
 # ---------------------------------------------------------------------------
 # MBP Order Book Reconstructor (Level 2)

@@ -12,12 +12,7 @@ from typing import Final, Sequence
 import pyarrow as pa
 
 
-class DataContractError(Exception):
-    """Base exception for all ACASH data contract violations."""
-
-
-class DomainValidationError(DataContractError):
-    """Raised when incoming field values violate domain invariants (e.g. negative price, non-finite)."""
+from acash.core.domain.exceptions import DataContractError, DomainValidationError
 
 
 class BatchCollisionError(DataContractError):

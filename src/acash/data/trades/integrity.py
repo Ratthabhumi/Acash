@@ -90,6 +90,7 @@ class TradesIntegrityValidator:
         self.max_clock_skew_ms = max_clock_skew_ms
 
     def validate_table(
+
         self,
         table: pa.Table,
         declared_resets: Optional[Set[Tuple[str, str, str, date]]] = None,
@@ -112,6 +113,11 @@ class TradesIntegrityValidator:
         errors: List[TradeValidationErrorRecord] = []
         anomalies: List[TradeValidationAnomalyRecord] = []
 
+        # 1. Schema Conformance Check
+        for field in CANONICAL_TRADES_SCHEMA:
+            if field.name not in table.column_names:
+                raise DataContractError(f"Missing column in Trades table: {field.name}")
+
         if table.num_rows == 0:
             metrics = TradeValidationMetrics(
                 total_rows=0,
@@ -128,6 +134,7 @@ class TradesIntegrityValidator:
             )
             empty_table = pa.Table.from_batches([], schema=CANONICAL_TRADES_SCHEMA)
             return report, empty_table
+
 
         # 1. Cast / Conform to CANONICAL_TRADES_SCHEMA
         try:
@@ -346,3 +353,6 @@ class TradesIntegrityValidator:
             raise IntegrityViolationError(f"Trade validation failed with {len(errors)} error(s): {error_summary}")
 
         return report, canonical_table
+
+    validate_trades_table = validate_table
+

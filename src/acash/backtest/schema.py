@@ -16,7 +16,7 @@ import pyarrow as pa
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from acash.data.schema import DataContractError
+from acash.core.domain.exceptions import DataContractError
 
 
 

@@ -31,9 +31,10 @@
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► Gate 5 [COMPLETED - PASSED — 200/200 Tests]
    │
    ▼
-✅ Phase 6: Statistical Validation & Overfitting Controls ──► Gate 6 [COMPLETED - PASSED]
+✅ Phase 6: Statistical Validation & Overfitting Controls ──► Gate 6 [COMPLETED - PASSED — 234/234 Tests]
    │
    ▼
+
 ⏳ Phase 7: Regime Engine (Prove or Remove) ──► Gate 7 [UPCOMING]
    │
    ▼
@@ -144,16 +145,17 @@
 
 ---
 
-### ✅ Phase 6: Statistical Validation & Overfitting Controls [COMPLETED]
+### ✅ Phase 6: Statistical Validation & Overfitting Controls [COMPLETED - PASSED]
 
 - **Objective:** Enforce quantitative validation gates to eliminate data-snooping, selection bias, and backtest overfitting.
 - **Deliverables:**
   - Combinatorial Purged Cross-Validation (CPCV) engine with contiguous $N$-group partitioning, exhaustive $\binom{N}{k}$ combinations, strict $[t+1, t+H]$ interval purging, post-test embargo buffers, and continuous pseudo-OOS path reconstruction ($\phi = \frac{k}{N}\binom{N}{k}$).
-  - Deflated Sharpe Ratio (DSR) & Minimum Track Record Length (MinTRL) engine implementing Bailey & López de Prado (2014) non-normal asymptotic inference with Euler-Mascheroni constant $\gamma_E$.
+  - Deflated Sharpe Ratio (DSR) & Minimum Track Record Length (MinTRL) engine implementing Bailey & López de Prado (2014) non-normal asymptotic inference with Euler-Mascheroni constant $\gamma_E$, empirical trial variance $V$, Fisher-Pearson skewness $g_1$, and Pearson kurtosis $g_2$.
   - Multiple-testing accounting: Holm-Bonferroni step-down (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
-  - Probability of Backtest Overfitting (PBO) log-odds evaluation and parameter surface curvature / fragility testing.
-  - Sovereign `StatisticalValidationGate` orchestrating multi-gate sequential evaluation and emitting immutable `ValidationReport` certificates.
-- **Gate 6 Criteria:** Strategies must satisfy DSR $\ge 0.95$, MinTRL, PBO $< 0.25$, flat parameter curvature, friction monotonicity, and sealed OOS performance retention ($\text{SR}_{\text{OOS}} \ge 0.50 \cdot \text{SR}_{\text{IS}}$).
+  - Probability of Backtest Overfitting (PBO) log-odds evaluation and parameter surface curvature / fragility testing across mandatory $\pm 25\%$ parameter grids.
+  - Sovereign `StatisticalValidationGate` orchestrating multi-gate sequential evaluation, authoritative $K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$ trial coupling, fail-closed missing data defense, and emitting immutable `ValidationReport` certificates with dual cryptographic lineage digests.
+- **Gate 6 Criteria:** Strategies must satisfy DSR $\ge 0.95$, MinTRL, PBO $< 0.25$, flat parameter curvature, analytical friction monotonicity, and sealed OOS performance retention ($\text{SR}_{\text{OOS}} \ge 0.50 \cdot \text{SR}_{\text{IS}}$); 234/234 tests pass, `mypy` clean.
+
 
 ---
 

@@ -86,9 +86,10 @@ class TradesIngestionPipeline:
         - Global trade duplicate prevention: duplicate Trade Row Identity under a different batch raises IntegrityViolationError.
         """
         if raw_table.num_rows == 0:
-            report, _ = self.validator.validate_trades_table(table=raw_table)
+            report, _ = self.validator.validate_table(table=raw_table)
             if not report.is_valid:
                 raise IntegrityViolationError("Empty Trades table has invalid canonical schema.")
+
             return TradesIngestionResult(
                 is_success=True,
                 batches_ingested=[],

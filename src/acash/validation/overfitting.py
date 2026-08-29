@@ -3,7 +3,7 @@
 Implements:
 - Probability of Backtest Overfitting (PBO) via CPCV log-odds distribution with mid-rank tie handling (Bailey et al. 2016).
 - Parameter Sensitivity Surface & Curvature Fragility Metric across [0.75 theta_0, 1.0 theta_0, 1.25 theta_0] perturbations.
-- Component-wise friction stress decay monotonicity (Phase 4/5 reality gap coupling).
+- Component-wise analytical friction stress decay monotonicity (Phase 4/5 reality gap coupling).
 """
 
 from decimal import Decimal
@@ -17,7 +17,7 @@ from acash.validation.schema import FrictionStressParameters, OverfittingReport,
 
 
 class OverfittingEngine:
-    """Evaluates backtest overfitting probability and parameter stability."""
+    """Evaluates backtest overfitting probability, parameter stability, and analytical friction stress."""
 
     @staticmethod
     def calculate_pbo(
@@ -105,12 +105,12 @@ class OverfittingEngine:
         return float(curvature), is_stable
 
     @staticmethod
-    def verify_friction_decay_monotonicity(
+    def verify_analytical_friction_decay_monotonicity(
         raw_predictive_edge_bps: float,
         friction_params: Optional[FrictionStressParameters] = None,
         multipliers: Sequence[float] = (1.0, 2.0, 3.0, 5.0),
     ) -> bool:
-        """Verify component-wise friction stress decay monotonicity using Phase 4/5 reality gap components.
+        """Verify component-wise analytical friction stress decay monotonicity using Phase 4/5 reality gap components.
 
         R_stressed(m) = R_raw - m * (Spread + Fee) - m^1.5 * (Slippage + Latency + Adverse Selection)
         """
@@ -137,10 +137,10 @@ class OverfittingEngine:
         friction_params: Optional[FrictionStressParameters] = None,
         max_acceptable_pbo: float = 0.25,
     ) -> OverfittingReport:
-        """Run complete overfitting, parameter perturbation curvature, and friction stress battery."""
+        """Run complete overfitting, parameter perturbation curvature, and analytical friction stress battery."""
         pbo, log_mean, log_std = cls.calculate_pbo(is_sharpe_matrix, oos_sharpe_matrix)
         curvature, is_param_stable = cls.evaluate_parameter_curvature(perturbation_grid)
-        is_monotonic = cls.verify_friction_decay_monotonicity(raw_predictive_edge_bps, friction_params)
+        is_monotonic = cls.verify_analytical_friction_decay_monotonicity(raw_predictive_edge_bps, friction_params)
 
         is_pbo_ok = pbo < max_acceptable_pbo
 
@@ -151,5 +151,5 @@ class OverfittingEngine:
             parameter_fragility_max_curvature=to_decimal18(Decimal(f"{curvature:.12f}")) or Decimal("0.0"),
             is_pbo_acceptable=is_pbo_ok,
             is_parameter_stable=is_param_stable,
-            friction_monotonicity_passed=is_monotonic,
+            analytical_friction_monotonicity_passed=is_monotonic,
         )

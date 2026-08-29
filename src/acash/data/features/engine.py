@@ -522,3 +522,25 @@ def compute_book_features_table(
 
     table_data = {col: [r[col] for r in rows] for col in CANONICAL_BOOK_FEATURES_SCHEMA.names}
     return pa.Table.from_pydict(table_data, schema=CANONICAL_BOOK_FEATURES_SCHEMA)
+
+
+class MicrostructureFeatureEngine:
+    """Class interface providing microstructure feature computations."""
+
+    @staticmethod
+    def calculate_micro_price(
+        best_bid: Optional[Decimal],
+        best_ask: Optional[Decimal],
+        bid_size: Optional[Decimal],
+        ask_size: Optional[Decimal],
+    ) -> Optional[Decimal]:
+        """Calculate BBO micro-price: (bid_size * ask_price + ask_size * bid_price) / (bid_size + ask_size)."""
+        if best_bid is None or best_ask is None:
+            return None
+        b_sz = bid_size or Decimal("0")
+        a_sz = ask_size or Decimal("0")
+        denom = b_sz + a_sz
+        if denom <= Decimal("0"):
+            return (best_bid + best_ask) / Decimal("2")
+        return to_decimal18((b_sz * best_ask + a_sz * best_bid) / denom)
+

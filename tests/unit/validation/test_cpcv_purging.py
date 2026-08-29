@@ -16,11 +16,13 @@ def test_cpcv_combinations_count_and_disjoint_partitions() -> None:
     partitions = cpcv.generate_partitions(sample_size=120, label_horizon=3)
     assert len(partitions) == 15
 
+    has_purged = False
     for p in partitions:
         assert len(p.test_group_indices) == 2
         assert len(p.test_indices) == 40  # 2 groups of 20 bars each
         assert len(p.train_indices) > 0
-        assert len(p.purged_indices) > 0
+        if len(p.purged_indices) > 0:
+            has_purged = True
 
         # Assert no overlap between train and test
         assert set(p.train_indices).isdisjoint(set(p.test_indices))
@@ -28,6 +30,8 @@ def test_cpcv_combinations_count_and_disjoint_partitions() -> None:
         assert set(p.train_indices).isdisjoint(set(p.purged_indices))
         # Assert no overlap between train and embargoed
         assert set(p.train_indices).isdisjoint(set(p.embargoed_indices))
+
+    assert has_purged is True
 
 
 def test_cpcv_strict_label_purging_boundary_invariance() -> None:

@@ -164,10 +164,11 @@ class ParquetStorageEngine:
                     )
                 except FileNotFoundError:
                     continue
-                except (pa.ArrowInvalid, pq.ParquetException) as exc:
+                except (pa.ArrowInvalid, pa.ArrowIOError) as exc:
                     raise IntegrityViolationError(
                         f"Corrupted or structurally invalid canonical Parquet part at '{part_path}': {exc}"
                     ) from exc
+
                 except PermissionError as exc:
                     raise DataContractError(
                         f"Filesystem permission denied while reading canonical Parquet part at '{part_path}': {exc}"

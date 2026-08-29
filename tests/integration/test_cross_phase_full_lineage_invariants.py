@@ -524,9 +524,12 @@ def test_cross_phase_manifest_64hex_regex_validation() -> None:
         phase5_simulated_realized_bps=Decimal("4.5"),
         reality_gap_bps=Decimal("0.5"),
         spread_drag_bps=Decimal("0.3"),
-        latency_slip_drag_bps=Decimal("0.2"),
-        queue_position_drag_bps=Decimal("0.0"),
+        slippage_drag_bps=Decimal("0.1"),
+        latency_drag_bps=Decimal("0.1"),
+        fee_drag_bps=Decimal("0.0"),
+        maker_adverse_selection_drag_bps=Decimal("0.0"),
     )
+
 
     valid_sha = "0" * 64
     valid_git = "a" * 40

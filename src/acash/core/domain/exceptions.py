@@ -29,3 +29,9 @@ class ConfigError(DomainError):
 class ConfigParseError(ConfigError):
     """Raised when YAML configuration parsing fails due to malformed syntax."""
     pass
+
+
+class DataContractError(DomainError):
+    """Raised when data contracts, schemas, or geometric invariants are violated."""
+    pass
+

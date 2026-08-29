@@ -6,7 +6,9 @@ Public API exports:
 - MultipleTestingEngine
 - OverfittingEngine
 - StatisticalValidationGate
-- Validation schemas (ValidationConfig, DSRResult, MultipleTestingResult, OverfittingReport, SearchTrialRecord, SearchTrialLedger, ParameterPerturbationGrid, FrictionStressParameters, ValidationReport, ValidationGateVerdict)
+- Validation schemas (ValidationConfig, DSRResult, MultipleTestingResult, OverfittingReport,
+  SearchTrialRecord, SearchTrialLedger, ParameterPerturbationPoint, ParameterPerturbationGrid,
+  FrictionStressParameters, ValidationReport, ValidationGateVerdict, SelectionCorrectionMode)
 """
 
 from acash.validation.cpcv import CombinatorialPurgedCrossValidation
@@ -21,8 +23,10 @@ from acash.validation.schema import (
     MultipleTestingResult,
     OverfittingReport,
     ParameterPerturbationGrid,
+    ParameterPerturbationPoint,
     SearchTrialLedger,
     SearchTrialRecord,
+    SelectionCorrectionMode,
     ValidationConfig,
     ValidationGateVerdict,
     ValidationReport,
@@ -40,8 +44,10 @@ __all__ = [
     "MultipleTestingResult",
     "OverfittingReport",
     "ParameterPerturbationGrid",
+    "ParameterPerturbationPoint",
     "SearchTrialLedger",
     "SearchTrialRecord",
+    "SelectionCorrectionMode",
     "ValidationConfig",
     "ValidationGateVerdict",
     "ValidationReport",
