@@ -2140,14 +2140,21 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
     with pytest.raises(DataContractError, match="Unsupported parameter type"):
         CanonicalConfigSerializer.to_canonical_json({"data": bytearray(b"ABC")})
 
-    # 9. Enum type differentiation: Enum != str and EnumA != EnumB
+    # 9. Enum type differentiation: Enum != str, EnumA != EnumB, and module_a.Side != module_b.Side
     from enum import Enum as PyEnum
 
     class SideEnumA(PyEnum):
         BUY = "BUY"
 
+    SideEnumA.__module__ = "acash.module_a"
+    SideEnumA.__qualname__ = "Side"
+
     class SideEnumB(PyEnum):
         BUY = "BUY"
+
+    SideEnumB.__module__ = "acash.module_b"
+    SideEnumB.__qualname__ = "Side"
+
 
     h_str_buy = CanonicalConfigSerializer.compute_sha256({"side": "BUY"})
     h_enum_a = CanonicalConfigSerializer.compute_sha256({"side": SideEnumA.BUY})
@@ -2155,7 +2162,7 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
 
     assert h_enum_a != h_str_buy
     assert h_enum_b != h_str_buy
-    assert h_enum_a != h_enum_b
+    assert h_enum_a != h_enum_b  # Same class name 'Side', different module -> different hash
 
     # 10. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x) with ROUND_HALF_EVEN
     # Numbers differing beyond 18th decimal place collapse to the same canonical representation
@@ -2171,11 +2178,33 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
     assert d_even_0 == {"__type__": "decimal", "value": "0.000000000000000000"}
     assert d_even_2 == {"__type__": "decimal", "value": "0.000000000000000002"}
 
+    # Ambient Decimal context tampering immunity test
+    import decimal
+    old_prec = decimal.getcontext().prec
+    old_round = decimal.getcontext().rounding
+    try:
+        decimal.getcontext().prec = 2
+        decimal.getcontext().rounding = decimal.ROUND_UP
+        # Under sovereign context, exact precision and half-even rounding remain unaffected
+        tampered_test = CanonicalConfigSerializer.serialize_value(Decimal("0.0000000000000000005"))
+        assert tampered_test == {"__type__": "decimal", "value": "0.000000000000000000"}
+    finally:
+        decimal.getcontext().prec = old_prec
+        decimal.getcontext().rounding = old_round
+
+    # Magnitude boundary enforcement: |x| <= 10^38
+    with pytest.raises(DataContractError, match="exceeds canonical magnitude bound"):
+        CanonicalConfigSerializer.serialize_value(Decimal("1e39"))
+
+    with pytest.raises(DataContractError, match="exceeds canonical magnitude bound"):
+        CanonicalConfigSerializer.serialize_value(Decimal("-1e39"))
+
     # 11. Signed zero canonicalization: Q_18(-0.0) == Q_18(+0.0)
     d_pos_zero = CanonicalConfigSerializer.serialize_value(Decimal("0.0"))
     d_neg_zero = CanonicalConfigSerializer.serialize_value(Decimal("-0.0"))
     assert d_pos_zero == d_neg_zero == {"__type__": "decimal", "value": "0.000000000000000000"}
     assert CanonicalConfigSerializer.compute_sha256(Decimal("-0.0")) == CanonicalConfigSerializer.compute_sha256(Decimal("0.0"))
+
 
 
 

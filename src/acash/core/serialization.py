@@ -6,14 +6,15 @@ across all layers of the quantitative stack (Phase 4 Research, Phase 5 Backtesti
 CANONICAL IDENTITY CONTRACT:
 - Profile: ACASH Canonical JSON Serialization Profile v1
 - Numerical Quantization: Cryptographic identity for Decimal values is defined over
-  quantized canonical representation at 10^-18 precision using explicit ROUND_HALF_EVEN:
+  quantized canonical representation at 10^-18 precision using explicit ROUND_HALF_EVEN
+  executed within a sovereign, isolated Decimal context:
       CanonicalIdentity(x) = Q_18(x) = quantize(x, 10^-18, ROUND_HALF_EVEN)
-  This ensures deterministic fixed-point comparability while bounding float64 precision drift.
+  Magnitude is strictly bounded to Decimal128 envelope (|x| <= 10^38) to guarantee total context independence.
 - Signed Zero: Negative zero is canonicalized to positive zero (+0.0):
       Q_18(-0.0) = Q_18(+0.0) = "0.000000000000000000"
-- Enum Identity: Enums are explicitly type-tagged preserving class name and value:
-      {"__type__": "enum", "class": "EnumClassName", "value": "MEMBER_VALUE"}
-  Ensuring Enum != str and EnumA.X != EnumB.X.
+- Enum Identity: Enums are explicitly type-tagged preserving fully qualified module and class qualname:
+      {"__type__": "enum", "class": "module.qualname", "value": "MEMBER_VALUE"}
+  Ensuring Enum != str and module_a.Enum.X != module_b.Enum.X.
 - Unordered Collections: Sets and frozensets are canonicalized by recursively normalizing
   each member, encoding each member to its canonical JSON string representation, sorting
   the resulting canonical strings lexicographically, and emitting an ordered JSON array.
@@ -23,6 +24,7 @@ CANONICAL IDENTITY CONTRACT:
   dict, list, tuple, set, frozenset, Enum) are allowed; bytearray and arbitrary objects are rejected.
 """
 
+import decimal
 from decimal import Decimal, ROUND_HALF_EVEN
 from enum import Enum
 import hashlib
@@ -36,6 +38,21 @@ from acash.core.domain.exceptions import DataContractError
 
 # Fixed canonical quantization precision constant (10^-18)
 QUANTIZE_18 = Decimal("1e-18")
+
+# Sovereign, isolated Decimal context for deterministic canonical evaluation
+SOVEREIGN_CANONICAL_CONTEXT = decimal.Context(
+    prec=64,
+    rounding=decimal.ROUND_HALF_EVEN,
+    Emin=-999999,
+    Emax=999999,
+    capitals=1,
+    clamp=0,
+    traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],
+)
+
+# Canonical financial magnitude envelope (Decimal128 representation boundary)
+MAX_CANONICAL_DECIMAL = Decimal("1e38")
+MIN_CANONICAL_DECIMAL = Decimal("-1e38")
 
 
 def deep_freeze_value(val: Any) -> Any:
@@ -63,11 +80,12 @@ class CanonicalConfigSerializer:
       * bool != int (e.g. True vs 1)
       * Decimal != float (exact Decimal string vs IEEE-754 float)
       * str != bytes
-      * Enum != str (tagged with class name and member value)
-      * EnumA.X != EnumB.X (differentiated by enum class)
+      * Enum != str (tagged with module.qualname and member value)
+      * module_a.Enum.X != module_b.Enum.X (globally unique enum class identity)
     - String-only dictionary keys: Rejects non-string keys (e.g. {1: 'a', '1': 'b'}) to eliminate key collision.
     - Deterministic unordered collections: Sets and frozensets are sorted by their serialized canonical JSON strings.
-    - Explicit Q_18 quantization: Decimal numbers are quantized to 10^-18 using ROUND_HALF_EVEN.
+    - Explicit Q_18 quantization: Decimal numbers are quantized to 10^-18 using ROUND_HALF_EVEN in sovereign context.
+    - Strict financial magnitude bound: |x| <= 10^38.
     - Signed zero canonicalization: -0.0 -> +0.0 ("0.000000000000000000").
     - Closed-world type validation: Only explicit primitive and collection types are permitted; bytearray is rejected.
     - Zero-tolerance non-finite numeric rejection (NaN, +Inf, -Inf).
@@ -91,13 +109,25 @@ class CanonicalConfigSerializer:
         if isinstance(val, Decimal):
             if not val.is_finite():
                 raise DataContractError(f"Non-finite Decimal value '{val}' cannot be canonically serialized.")
+            if val > MAX_CANONICAL_DECIMAL or val < MIN_CANONICAL_DECIMAL:
+                raise DataContractError(
+                    f"Decimal value '{val}' exceeds canonical magnitude bound (|x| <= 10^38)."
+                )
             normalized_dec = Decimal("0") if val.is_zero() else val
-            quantized_dec = normalized_dec.quantize(QUANTIZE_18, rounding=ROUND_HALF_EVEN)
+            try:
+                with decimal.localcontext(SOVEREIGN_CANONICAL_CONTEXT):
+                    quantized_dec = normalized_dec.quantize(QUANTIZE_18, rounding=ROUND_HALF_EVEN)
+            except decimal.DecimalException as e:
+                raise DataContractError(f"Decimal quantization failed for '{val}': {e}") from e
             return {"__type__": "decimal", "value": f"{quantized_dec:.18f}"}
         if isinstance(val, Enum):
+            enum_cls = type(val)
+            module_name = getattr(enum_cls, "__module__", "") or ""
+            qual_name = getattr(enum_cls, "__qualname__", enum_cls.__name__)
+            full_class_name = f"{module_name}.{qual_name}" if module_name else qual_name
             return {
                 "__type__": "enum",
-                "class": type(val).__name__,
+                "class": full_class_name,
                 "value": str(val.value),
             }
         if isinstance(val, str):
@@ -126,7 +156,6 @@ class CanonicalConfigSerializer:
             return [cls.serialize_value(x) for x in val]
         raise DataContractError(f"Unsupported parameter type for canonical serialization: {type(val).__name__}")
 
-
     @classmethod
     def to_canonical_json(cls, obj: Any) -> str:
         """Convert any data structure into an ACASH Profile v1 canonical, collision-free JSON string."""
@@ -144,4 +173,5 @@ class CanonicalConfigSerializer:
         """Compute 64-hex lowercase SHA-256 of canonical JSON."""
         payload = cls.to_canonical_json(obj)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 

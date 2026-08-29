@@ -33939,6 +33939,51 @@ Verdict ตอนนี้: 9.2/10 — VERY CLOSE, แต่ยังไม่ F
    - **271/271 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 144 source files)
 
+---
+
+## 👤 User (Turn 125)
+
+<USER_REQUEST>
+ผมตรวจ d59d6e3 จริงจาก source/diff บน GitHub แล้ว... มี 2 substantive issues ใหม่ใน Canonical Identity Primitive ที่ผมมองว่าไม่ควรปล่อยผ่านก่อนถือว่า primitive นี้ sealed
+Verdict: 9.3/10 — ยังไม่ Final Sign-off
+1. 🔴 Enum class identity globally unique: ใช้ fully qualified identity (module + qualname) ป้องกัน collision เช่น module_a.Side.BUY vs module_b.Side.BUY
+2. 🔴 Q18 sovereign context & magnitude boundary: ป้องกัน ambient context sensitivity / traps โดยใช้ sovereign isolated context (prec=64, ROUND_HALF_EVEN) และจำกัด magnitude envelope (|x| <= 10^38)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 125)
+
+### 🛠️ สรุปรายละเอียดการ Hardening Globally-Unique Enum Identity & Sovereign Context Isolation
+
+1. **🔴 Globally-Unique Enum Class Identity (`module.qualname`):**
+   - ใน `CanonicalConfigSerializer.serialize_value()`:
+     - `Enum` จะถูก serialize ด้วย fully qualified class name:
+       `{"__type__": "enum", "class": f"{type(val).__module__}.{type(val).__qualname__}", "value": str(val.value)}`
+     - รับประกันความ unique ข้ามโมดูล เช่น `acash.module_a.Side.BUY` $\neq$ `acash.module_b.Side.BUY`
+   - เพิ่ม Adversarial Test: ทดสอบ Enum ชื่อ `Side` ค่า `BUY` เหมือนกัน แต่อยู่คนละ module (`module_a` vs `module_b`) ได้ SHA-256 ต่างกัน 100%
+
+2. **🔴 Sovereign Isolated Decimal Context & Bounded Magnitude Envelope ($|x| \le 10^{38}$):**
+   - กำหนด Sovereign Decimal Context แบบ standalone:
+     ```python
+     SOVEREIGN_CANONICAL_CONTEXT = decimal.Context(
+         prec=64,
+         rounding=decimal.ROUND_HALF_EVEN,
+         traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],
+     )
+     ```
+   - ใน `CanonicalConfigSerializer.serialize_value()`:
+     - รัน `quantize()` ภายใน `with decimal.localcontext(SOVEREIGN_CANONICAL_CONTEXT):` เพื่อให้การคำนวณไม่ขึ้นกับ ambient context ใดๆ ใน process
+     - บังคับ Financial Magnitude Envelope: $|x| \le 10^{38}$ (Decimal128 domain boundary) หากเกินกว่านี้จะ raise `DataContractError("... exceeds canonical magnitude bound")` ทันที
+   - เพิ่ม Adversarial Test:
+     - ทดสอบ Tamper Ambient Context (`prec=2, rounding=ROUND_UP`) แล้ว verify ว่า `CanonicalConfigSerializer` ยังคงรักษา precision และ `ROUND_HALF_EVEN` ได้อย่างสมบูรณ์
+     - ทดสอบ Rejection ของค่า Decimal ที่เกิน Magnitude Envelope เช่น `Decimal("1e39")` และ `Decimal("-1e39")`
+
+3. **Full Test Suite & Mypy Status:**
+   - **271/271 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 144 source files)
+
+
 
 
 
