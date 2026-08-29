@@ -174,28 +174,33 @@ class DeflatedSharpeEngine:
         cls,
         effective_trials_k: int,
         variance_of_trials: float = 0.0,
+        mean_of_trials: float = 0.0,
     ) -> float:
+
         """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
         Reference:
         Bailey, D. H., & López de Prado, M. (2014). "The Deflated Sharpe Ratio: Correcting for Selection
-        Bias, Backtest Overfitting, and Non-Normality." Journal of Portfolio Management, 40(5), 94–107.
+        Bias, Backtest Overfitting, and Non-Normality." Journal of Portfolio Management, 40(5), 94–107, Eq. (10).
 
-        Estimator: EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 (Extreme Value Theory Gumbel Approximation)
-        SR0 = sqrt(V) * [ (1 - gamma_E) * Z^{-1}(1 - 1/K) + gamma_E * Z^{-1}(1 - 1/(K * e)) ]
+        Estimator: Extreme Value Theory (EVT) Gumbel Location-Scale Approximation:
+        SR_0 = mu_trials + sqrt(V_trials) * [ (1 - gamma_E) * Z^{-1}(1 - 1/K) + gamma_E * Z^{-1}(1 - 1/(K * e)) ]
         where:
+        - mu_trials is the expected/null mean of the trial distribution (defaults to 0.0 under ACASH zero-location policy).
         - gamma_E is the Euler-Mascheroni constant (~0.57721566)
-        - V is the empirical sample variance of the trial distribution in the evaluated frequency space.
+        - V_trials is the empirical sample variance of the trial distribution in the evaluated frequency space.
         - K is the total declared search trial count (SearchTrialLedger trials).
 
-        NUMERICAL TOLERANCE & CENSUS POLICY:
-        - If V <= TRIAL_VARIANCE_MIN_THRESHOLD (1e-12) or K <= 1, SR_0 is identically 0.0 by explicit numerical policy.
-        - K represents the declared exploration opportunities from the ledger, acting as a conservative
-          upper bound on independent selection attempts.
+        METHODOLOGICAL & CONDITIONAL PROPERTIES:
+        - Conditional Monotonicity in K: For a FIXED trial variance estimate V > 0, SR_0 is monotonically increasing in K.
+          Across distinct trial universes where both (K, V) vary jointly, SR_0 is determined jointly by location and dispersion.
+        - Zero-Location Policy: By default, ACASH enforces mu_trials = 0.0 (testing against a zero-alpha null benchmark).
+        - Numerical Boundary: If V <= TRIAL_VARIANCE_MIN_THRESHOLD (1e-12) or K <= 1, the EVT dispersion penalty is 0.0,
+          yielding SR_0 = mu_trials (0.0 under default zero-location policy).
         """
         K = max(1, effective_trials_k)
         if K <= 1 or variance_of_trials <= cls.TRIAL_VARIANCE_MIN_THRESHOLD:
-            return 0.0
+            return float(mean_of_trials)
 
         gamma_e = EULER_MASCHERONI_CONSTANT
         p1 = 1.0 - (1.0 / K)
@@ -204,7 +209,8 @@ class DeflatedSharpeEngine:
         z1 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p1)))
         z2 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p2)))
 
-        sr0 = math.sqrt(variance_of_trials) * ((1.0 - gamma_e) * z1 + gamma_e * z2)
+        dispersion_term = math.sqrt(variance_of_trials) * ((1.0 - gamma_e) * z1 + gamma_e * z2)
+        sr0 = float(mean_of_trials) + dispersion_term
         return float(sr0)
 
     @classmethod
@@ -213,23 +219,28 @@ class DeflatedSharpeEngine:
         returns: Sequence[Union[Decimal, float]],
         effective_trials_k: int = 1,
         variance_of_trials: float = 0.0,
+        mean_of_trials: float = 0.0,
         benchmark_sharpe: float = 0.0,
         confidence_level_alpha: float = 0.05,
         periods_per_year: float = 252.0,
         trial_ledger: Optional[SearchTrialLedger] = None,
         declared_trials_k: Optional[int] = None,
         effective_independent_trials_k: Optional[int] = None,
+        null_trial_mean_sharpe: float = 0.0,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
         METHODOLOGICAL SPECIFICATION & TERMINOLOGY (ACASH DSR Governance Variant):
         - Canonical DSR (Bailey & López de Prado, 2014) defines K as the effective number of independent
           trials (or estimates K_eff <= K from cross-trial correlation).
-        - In the ACASH sovereign governance framework, the total declared search opportunities K_declared
-          from the authoritative SearchTrialLedger is utilized as a conservative upper bound:
-            K_DSR = K_declared >= K_effective_independent
-          Since the expected maximum Sharpe SR_0 monotonically increases with K, using K_declared establishes
-          a strictly more conservative hurdle for alpha admission.
+        - In the ACASH sovereign governance framework, under a fixed trial-variance estimate V, increasing
+          declared search opportunities K_declared from the authoritative SearchTrialLedger monotonically
+          increases the EVT selection hurdle SR_0:
+            SR_0(K_declared, V) >= SR_0(K_effective_independent, V)  [for fixed V]
+          Across different trial universes where (K, V, mu) vary jointly, SR_0 is determined jointly by location
+          and dispersion.
+        - Zero-Location Policy: ACASH operates by default under the zero-location null policy (mu_trials = 0.0),
+          testing whether strategy Sharpe exceeds the expected maximum Sharpe of K zero-mean random trials.
         - DSR Probability: Phi(z_DSR) computes the probability that the true strategy Sharpe exceeds the
           expected maximum Sharpe under selection bias and non-normal (skewness g_1, kurtosis g_2) returns.
           This is a non-normal, selection-corrected composite probability, NOT the single-test asymptotic
@@ -254,6 +265,7 @@ class DeflatedSharpeEngine:
         if trial_ledger is not None:
             declared_k = trial_ledger.total_trials
             effective_trials_k = declared_k
+            mean_of_trials = null_trial_mean_sharpe
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
@@ -279,7 +291,11 @@ class DeflatedSharpeEngine:
         sr_hat_annual = sr_hat_period * annual_mult
 
         # 2. Expected maximum Sharpe under null (per-period and annualized)
-        sr0_period = cls.compute_expected_max_sharpe_sr0(effective_trials_k, variance_of_trials)
+        sr0_period = cls.compute_expected_max_sharpe_sr0(
+            effective_trials_k=effective_trials_k,
+            variance_of_trials=variance_of_trials,
+            mean_of_trials=mean_of_trials,
+        )
         sr0_annual = sr0_period * annual_mult
 
         # 3. Non-normal asymptotic variance factor:
@@ -301,6 +317,12 @@ class DeflatedSharpeEngine:
         is_significant = dsr_prob >= (1.0 - confidence_level_alpha)
         has_sufficient_trl = n >= min_trl_bars
 
+        estimator_name = (
+            "ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+            if abs(mean_of_trials) <= 1e-12
+            else "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
+        )
+
         return DSRResult(
             estimated_sharpe=to_decimal18(Decimal(f"{sr_hat_annual:.12f}")) or Decimal("0.0"),
             benchmark_sharpe=to_decimal18(Decimal(f"{benchmark_sharpe:.12f}")) or Decimal("0.0"),
@@ -310,12 +332,13 @@ class DeflatedSharpeEngine:
             effective_trials_k=effective_trials_k,
             declared_trials_k=declared_k,
             effective_independent_trials_k=effective_independent_trials_k,
-            independence_assumption="CONSERVATIVE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
+            independence_assumption="FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
             selection_correction_mode=mode,
-            sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
+            sr0_estimator=estimator_name,
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
             sharpe_space=SharpeSpace.ANNUAL,
             inference_space=SharpeSpace.PERIOD,
+            trial_mean_used=to_decimal18(Decimal(f"{mean_of_trials:.12f}")) or Decimal("0.0"),
             trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
             sample_size_t=n,
             dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),
@@ -324,6 +347,7 @@ class DeflatedSharpeEngine:
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+
 
 
 

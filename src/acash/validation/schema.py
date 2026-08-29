@@ -400,9 +400,16 @@ class SearchTrialLedger(BaseModel):
         var = float(np.var(sharpes, ddof=1))
         return max(0.0, var)
 
+    def get_empirical_sharpe_mean(self) -> float:
+        """Empirical sample mean of Sharpe ratios across recorded trials."""
+        if len(self.trials) == 0:
+            return 0.0
+        sharpes = [float(t.in_sample_sharpe) for t in self.trials]
+        return float(np.mean(sharpes))
 
     @property
     def p_values(self) -> List[Decimal]:
+
         """All empirical p-values recorded in the ledger."""
         return [t.p_value for t in self.trials]
 
@@ -573,25 +580,29 @@ class CPCVPartition(BaseModel):
     purged_indices: List[int] = Field(description="Sample indices purged due to label window overlap.")
     embargoed_indices: List[int] = Field(description="Sample indices embargoed to prevent boundary leakage.")
 
-
 class DSRResult(BaseModel):
     """Statistical output from the Deflated Sharpe Ratio (Bailey & López de Prado 2014) inference engine.
 
-    ACASH DSR GOVERNANCE VARIANCE NOTICE:
-    - Canonical DSR theory uses K as the effective number of independent trials (K_eff).
-    - ACASH operates under the declared search opportunities upper-bound variant:
-        K_DSR = K_declared >= K_effective_independent
-      Because SR_0 monotonically increases with K, using K_declared establishes a strictly more
-      conservative hurdle for alpha admission.
-    - dsr_p_value is the non-normal selection-adjusted probability Phi(z_DSR) that true Sharpe > SR_0.
-      It is strictly distinct from the single-hypothesis asymptotic normal p-values in SearchTrialRecord.
+    ACASH DSR GOVERNANCE SPECIFICATION:
+    1. Conditional Monotonicity of K:
+       - In canonical DSR theory (Eq. 10), expected max Sharpe is SR_0 = mu_trials + sigma_trials * f(K).
+       - For a FIXED trial variance V, increasing declared search trials K monotonically increases SR_0.
+       - Across different trial universes where (K, V, mu) vary jointly, SR_0 is determined jointly by location
+         and dispersion. Declared trials K_declared from the ledger represents the authoritative search count.
+    2. Null Location Policy:
+       - ACASH operates by default under the ZERO-LOCATION NULL POLICY (mu_trials = 0.0), testing against
+         a zero-mean null alpha distribution under empirical dispersion V.
+       - The general location-scale form SR_0 = mu_trials + sigma_trials * f(K) is evaluated when mu_trials != 0.
+    3. Probability Distinction:
+       - dsr_p_value is the non-normal selection-adjusted probability Phi(z_DSR) that true Sharpe > SR_0.
+       - It is strictly distinct from the single-hypothesis asymptotic normal p-values in SearchTrialRecord.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     estimated_sharpe: Decimal = Field(description="Sample annualized Sharpe ratio.")
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
-    expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials.")
+    expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials and variance V.")
     sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
     sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, unconstrained finite sample lower bound).")
     sample_size_t: int = Field(description="Sample length in return periods T.")
@@ -599,11 +610,15 @@ class DSRResult(BaseModel):
     declared_trials_k: int = Field(default=1, description="Authoritative declared search opportunities count recorded in ledger.")
     effective_independent_trials_k: Optional[int] = Field(
         default=None,
-        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K as upper bound in ACASH governance variant.",
+        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K under fixed-variance upper-bound policy.",
     )
     independence_assumption: str = Field(
-        default="CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND",
+        default="FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
         description="Explicit assumption governing the relation between declared trials and statistical independence.",
+    )
+    trial_mean_used: Decimal = Field(
+        default=Decimal("0.0"),
+        description="Location parameter mu_SR used in EVT maximum calculation (defaults to 0.0 under zero-location null policy).",
     )
     trial_variance_used: Decimal = Field(description="Trial Sharpe variance V used in Gumbel maximum calculation.")
     dsr_statistic: Decimal = Field(description="Calculated DSR standard normal test statistic.")
@@ -616,7 +631,7 @@ class DSRResult(BaseModel):
 
     selection_correction_mode: SelectionCorrectionMode = Field(default=SelectionCorrectionMode.MULTIPLE_TRIAL, description="Selection correction mode.")
 
-    sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")
+    sr0_estimator: str = Field(default="ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")
     variance_estimator: str = Field(default="EMPIRICAL_SAMPLE_VARIANCE_DDOF1", description="Identifier of the trial variance estimation method.")
 
     @model_validator(mode="before")
@@ -668,7 +683,6 @@ class MultipleTestingResult(BaseModel):
             elif "haircut_sharpe_ratio" in data and "bonferroni_haircut_sharpe_ratio" not in data:
                 data["bonferroni_haircut_sharpe_ratio"] = data["haircut_sharpe_ratio"]
         return data
-
 
 
 
@@ -734,11 +748,11 @@ class ValidationConfig(BaseModel):
 class ValidationReport(BaseModel):
     """Immutable, sovereign validation certificate emitted by the Statistical Validation Gate.
 
-    STACKED INDEPENDENT GOVERNANCE CONTROLS (Defense-in-Depth Contract):
-    The Statistical Validation Gate enforces 4 independent, non-redundant conservative statistical layers:
+    STACKED DEFENSE-IN-DEPTH GOVERNANCE ARCHITECTURE:
+    The Statistical Validation Gate enforces 4 stacked, complementary conservative governance layers:
     1. Layer 1: Selection Bias & Non-Normality Hurdle (DSR)
        - Evaluates whether the primary strategy's Sharpe ratio exceeds the expected maximum Sharpe ratio SR_0
-         given declared exploratory search opportunities K and higher moments (skewness g_1, kurtosis g_2):
+         given declared exploratory search opportunities K, trial variance V, and higher moments (skewness g_1, kurtosis g_2):
          DSR_prob >= min_dsr_probability (e.g. 0.95).
     2. Layer 2: Family-Wise Error Rate Control (Holm-Bonferroni Step-Down)
        - Controls the probability of at least one false discovery across all K declared exploratory search
@@ -750,8 +764,11 @@ class ValidationReport(BaseModel):
        - Evaluates the probability of backtest overfitting across all combinatorial train/test splits under purged
          and embargoed paths: PBO <= max_acceptable_pbo (e.g. 0.25).
 
-    These layers operate as stacked independent conservative hurdles, guaranteeing institutional-grade defense
-    against data snooping, selection bias, and overfitting.
+    NOTE ON STATISTICAL DEPENDENCE & GOVERNANCE COMPLEMENTARITY:
+    These 4 layers are statistically dependent (sharing the underlying return series, observation count, and candidate
+    search universe), but provide complementary defense-in-depth governance by evaluating orthogonal rejection criteria:
+    selection-adjusted tail probability (Layer 1), family-wise significance (Layer 2), economic hurdle deduction (Layer 3),
+    and cross-validation distribution stability (Layer 4).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -770,7 +787,6 @@ class ValidationReport(BaseModel):
     out_of_sample_sharpe: Optional[Decimal] = None
     oos_retention_pct: Optional[Decimal] = None
     created_timestamp_utc: str = Field(description="Auxiliary non-canonical timestamp.")
-
 
     def to_canonical_evidence_json(self) -> str:
         """Emit deterministic, sorted JSON representation of the underlying mathematical evidence.
@@ -794,6 +810,7 @@ class ValidationReport(BaseModel):
                 "selection_correction_mode": self.dsr_result.selection_correction_mode.value,
                 "sharpe_space": self.dsr_result.sharpe_space,
                 "sr0_estimator": self.dsr_result.sr0_estimator,
+                "trial_mean_used": str(self.dsr_result.trial_mean_used),
                 "trial_variance_used": str(self.dsr_result.trial_variance_used),
                 "variance_estimator": self.dsr_result.variance_estimator,
             } if self.dsr_result is not None else None,
@@ -819,6 +836,7 @@ class ValidationReport(BaseModel):
             "strategy_id": self.strategy_id,
         }
         return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
 
     def to_canonical_report_json(self) -> str:
         """Emit deterministic, sorted JSON representation of the sealed governance report.

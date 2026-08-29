@@ -61,7 +61,8 @@ def test_dsr_single_trial_mode() -> None:
     assert res.effective_trials_k == 1
     assert res.selection_correction_mode == SelectionCorrectionMode.SINGLE_TRIAL
     assert res.expected_max_sharpe_sr0 == Decimal("0.0")
-    assert res.sr0_estimator == "EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+    assert res.sr0_estimator == "ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+
 
 
 def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:

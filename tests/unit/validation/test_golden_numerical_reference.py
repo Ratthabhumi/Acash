@@ -43,16 +43,17 @@ def _independent_higher_moments(returns: list[float]) -> tuple[float, float, flo
     return mean, std, skew, kurt
 
 
-def _independent_evt_gumbel_sr0(k_trials: int, variance: float) -> float:
-    """Compute expected max Sharpe SR_0 via independent EVT Gumbel closed form."""
+def _independent_evt_gumbel_sr0(k_trials: int, variance: float, mean: float = 0.0) -> float:
+    """Compute expected max Sharpe SR_0 via independent EVT Gumbel location-scale closed form."""
     if k_trials <= 1 or variance <= 1e-12:
-        return 0.0
+        return float(mean)
     gamma_e = 0.57721566490153286060651209
     p1 = 1.0 - (1.0 / k_trials)
     p2 = 1.0 - (1.0 / (k_trials * math.e))
     z1 = float(norm.ppf(p1))
     z2 = float(norm.ppf(p2))
-    return float(math.sqrt(variance) * ((1.0 - gamma_e) * z1 + gamma_e * z2))
+    return float(mean + math.sqrt(variance) * ((1.0 - gamma_e) * z1 + gamma_e * z2))
+
 
 
 def _independent_dsr_z_stat(
@@ -166,8 +167,8 @@ def test_golden_reference_higher_moments_and_dsr_analytical_precision() -> None:
 
     # Independence Semantics Assertions (Strict Contract)
     assert dsr_result.declared_trials_k == K
-    assert dsr_result.effective_independent_trials_k is None  # Must remain None unless explicitly estimated!
-    assert dsr_result.independence_assumption == "CONSERVATIVE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+    assert dsr_result.independence_assumption == "FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+
 
 
 def test_golden_reference_zero_variance_and_threshold_guards() -> None:
@@ -305,5 +306,43 @@ def test_golden_reference_bonferroni_haircut_sharpe() -> None:
         periods_per_year=P,
     )
     assert math.isclose(float(acash_haircut_annual), ref_haircut_annual, abs_tol=1e-6)
+
+
+def test_golden_reference_location_scale_dsr_analytical_precision() -> None:
+    """Verify general location-scale EVT Gumbel SR_0 with non-zero location parameter against independent reference."""
+    returns = [0.010, -0.020, 0.015, 0.030, -0.010, 0.005, 0.025, -0.015, 0.020, 0.005]
+    T = len(returns)
+    K = 50
+    V_period = 0.0009
+    mu_period = 0.005
+    P = 252.0
+    alpha = 0.05
+
+    ref_mean, ref_std, ref_skew, ref_kurt = _independent_higher_moments(returns)
+    ref_sr0_period = _independent_evt_gumbel_sr0(K, V_period, mean=mu_period)
+    ref_sr0_annual = ref_sr0_period * math.sqrt(P)
+    ref_z = _independent_dsr_z_stat(ref_mean, ref_std, ref_skew, ref_kurt, ref_sr0_period, T)
+    ref_prob = float(norm.cdf(ref_z))
+
+    acash_sr0_period = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(
+        effective_trials_k=K, variance_of_trials=V_period, mean_of_trials=mu_period
+    )
+    dsr_result = DeflatedSharpeEngine.evaluate_dsr(
+        returns=returns,
+        effective_trials_k=K,
+        variance_of_trials=V_period,
+        mean_of_trials=mu_period,
+        confidence_level_alpha=alpha,
+        periods_per_year=P,
+    )
+
+    assert math.isclose(acash_sr0_period, ref_sr0_period, abs_tol=1e-10)
+    assert math.isclose(float(dsr_result.expected_max_sharpe_sr0), ref_sr0_annual, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_statistic), ref_z, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_p_value), ref_prob, abs_tol=1e-6)
+    assert dsr_result.sr0_estimator == "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
+    assert float(dsr_result.trial_mean_used) == mu_period
+
+
 
 

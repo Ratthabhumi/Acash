@@ -233,7 +233,8 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
     assert report.dsr_result is not None
     assert report.dsr_result.effective_trials_k == 5
     assert report.dsr_result.selection_correction_mode == SelectionCorrectionMode.MULTIPLE_TRIAL
-    assert report.dsr_result.sr0_estimator == "EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+    assert report.dsr_result.sr0_estimator == "ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+
     assert report.dsr_result.sharpe_space == SharpeSpace.ANNUAL
     assert report.dsr_result.inference_space == SharpeSpace.PERIOD
 
