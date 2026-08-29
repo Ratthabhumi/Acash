@@ -175,8 +175,13 @@ class DeflatedSharpeEngine:
         where:
         - gamma_E is the Euler-Mascheroni constant (~0.57721566)
         - V is the empirical sample variance of the trial distribution in the evaluated frequency space.
-        - K is the total search trial count (SearchTrialLedger trials), acting as the governance upper
-          bound on selection bias opportunities.
+        - K is the total declared search trial count (SearchTrialLedger trials).
+
+        SEARCH SPACE CENSUS & DEPENDENCE CONTRACT:
+        K represents the authoritative upper bound on declared selection opportunities across the entire
+        research session. Because explored strategies in quantitative research may exhibit mutual correlation,
+        the effective number of statistically independent trials satisfies K_eff <= K. Using the exhaustive
+        search trial count K provides a rigorous, conservative upper bound on multiple-testing selection bias.
         """
         K = max(1, effective_trials_k)
         if K <= 1 or variance_of_trials <= 1e-12:
@@ -205,10 +210,17 @@ class DeflatedSharpeEngine:
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
-        All internal inference is executed in per-period space to guarantee exact frequency scale alignment.
-        Annualized Sharpe ratios are computed via standard square-root of time scaling:
-        SR_annual = SR_period * sqrt(periods_per_year).
+        FREQUENCY-SPACE INFERENCE INVARIANCE CONTRACT:
+        All statistical hypothesis testing (z-statistic, DSR probability, MinTRL) is evaluated strictly
+        in raw per-period return space (T observations, SR_period, SR0_period).
+        Skewness g_1 and Kurtosis g_2 are dimensionless invariants of the discrete return series.
+        Computing the non-normal asymptotic variance factor in per-period space guarantees that higher-moment
+        interaction terms (g_1 * SR, (g_2 - 1)/4 * SR^2) remain scale-invariant without introducing
+        spurious multi-period cross-product scaling artifacts.
+        For financial readability, the resulting Sharpe ratios are also presented in annualized form via
+        SR_annual = SR_period * sqrt(periods_per_year), with inference_space=PERIOD and sharpe_space=ANNUAL.
         """
+
         annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
 
         if trial_ledger is not None:

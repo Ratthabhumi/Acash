@@ -173,7 +173,16 @@ class SearchTrialRecord(BaseModel):
 
 
 class SearchTrialLedger(BaseModel):
-    """Sovereign ledger accounting for all exploratory trials to strictly couple search intensity with DSR & FWER."""
+    """Sovereign ledger accounting for all exploratory trials to strictly couple search intensity with DSR & FWER.
+
+    SEARCH SPACE CENSUS CONTRACT:
+    Once sealed, SearchTrialLedger constitutes the authoritative, exhaustive census of all exploratory
+    search trials conducted within the research session. The total trial count K = |trials| represents the
+    upper bound on declared selection opportunities, guaranteeing that all downstream multiple-testing
+    and overfitting evaluations (DSR, Holm-Bonferroni FWER, Haircut Sharpe) penalize selection bias
+    conservatively and truthfully across the entire exploration history.
+    """
+
 
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 

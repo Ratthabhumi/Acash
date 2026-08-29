@@ -175,3 +175,41 @@ def test_cpcv_cscv_matrix_evaluation_and_pbo_pipeline() -> None:
     assert isinstance(logits_std, float)
 
 
+def test_cscv_balanced_split_enforcement() -> None:
+    """Verify that CSCV mode strictly enforces balanced half/half partition (N even, k = N / 2)."""
+    # 1. Reject odd N
+    config_odd = ValidationConfig(num_groups_n=5, num_test_groups_k=2)
+    cpcv_odd = CombinatorialPurgedCrossValidation(config_odd)
+    with pytest.raises(DataContractError, match="CSCV .* requires an even number of blocks N and balanced half-splits"):
+        cpcv_odd.generate_partitions(sample_size=100, label_horizon=1, enforce_cscv_balanced=True)
+
+    # 2. Reject unbalanced k (N=6, k=2 != 3)
+    config_unbalanced = ValidationConfig(num_groups_n=6, num_test_groups_k=2)
+    cpcv_unbalanced = CombinatorialPurgedCrossValidation(config_unbalanced)
+    with pytest.raises(DataContractError, match="CSCV .* requires an even number of blocks N and balanced half-splits"):
+        cpcv_unbalanced.generate_partitions(sample_size=120, label_horizon=1, enforce_cscv_balanced=True)
+
+    # 3. Accept balanced (N=6, k=3)
+    config_balanced = ValidationConfig(num_groups_n=6, num_test_groups_k=3)
+    cpcv_balanced = CombinatorialPurgedCrossValidation(config_balanced)
+    partitions = cpcv_balanced.generate_partitions(sample_size=120, label_horizon=1, enforce_cscv_balanced=True)
+    assert len(partitions) == math.comb(6, 3)  # 20 splits
+
+
+def test_cpcv_matrix_rejects_non_finite_returns() -> None:
+    """Verify that evaluate_cscv_sharpe_matrices rejects NaN or Inf return entries."""
+    config = ValidationConfig(num_groups_n=4, num_test_groups_k=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+
+    mat_nan = np.ones((40, 3))
+    mat_nan[5, 1] = np.nan
+    with pytest.raises(DataContractError, match="return_matrix contains non-finite values"):
+        cpcv.evaluate_cscv_sharpe_matrices(mat_nan)
+
+    mat_inf = np.ones((40, 3))
+    mat_inf[10, 0] = np.inf
+    with pytest.raises(DataContractError, match="return_matrix contains non-finite values"):
+        cpcv.evaluate_cscv_sharpe_matrices(mat_inf)
+
+
+

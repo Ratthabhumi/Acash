@@ -157,3 +157,31 @@ def test_pbo_discrimination_noise_vs_true_alpha() -> None:
     oos_signal[:, 0] += 3.0
     pbo_signal, _, _ = OverfittingEngine.calculate_pbo(is_signal, oos_signal)
     assert pbo_signal < 0.10
+
+
+def test_multiple_testing_rejects_invalid_p_values() -> None:
+    """Verify that multiple testing functions reject invalid p-values (< 0, > 1, NaN, Inf)."""
+    # 1. Negative p-value
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.holm_bonferroni_correction([0.05, -0.01])
+
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.benjamini_hochberg_fdr([0.05, -0.01])
+
+    # 2. p-value > 1.0
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.holm_bonferroni_correction([0.05, 1.05])
+
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.benjamini_hochberg_fdr([0.05, 1.05])
+
+    # 3. Non-finite (NaN / Inf)
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.holm_bonferroni_correction([0.05, float("nan")])
+
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.calculate_haircut_sharpe(0.5, 10, 100, raw_p_value=float("inf"))
+
+    with pytest.raises(DataContractError, match="must be finite and within"):
+        MultipleTestingEngine.calculate_haircut_sharpe(0.5, 10, 100, raw_p_value=-0.05)
+

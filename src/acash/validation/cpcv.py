@@ -1,13 +1,18 @@
-"""Combinatorial Purged Cross-Validation (CPCV) Generator (Phase 6).
+"""Combinatorial Purged Cross-Validation (CPCV) & CSCV Generator (Phase 6).
 
-Implements Marcos López de Prado's Combinatorial Purged Cross-Validation:
-- Divides time series of T observations into N contiguous groups.
-- Evaluates all C = (N choose k) combinations of k test groups.
-- Applies strict interval purging: training samples whose forward label windows [t+1, t+H] overlap
-  with test evaluation windows [T_test_start, T_test_end) are purged.
-- Applies post-test embargo buffers [T_test_end, T_test_end + embargo_bars) to prevent post-test
-  boundary dependence leakage.
-- Reconstructs phi = (k / N) * (N choose k) continuous, non-overlapping pseudo-OOS backtest paths.
+Implements:
+1. Combinatorial Purged Cross-Validation (CPCV / Marcos López de Prado 2018):
+   - Divides time series of T observations into N contiguous groups.
+   - Evaluates all C = (N choose k) combinations of k test groups.
+   - Applies strict interval purging: training samples whose forward label windows [t+1, t+H] overlap
+     with test evaluation windows [T_test_start, T_test_end) are purged to eliminate lookahead leakage.
+   - Applies post-test embargo buffers [T_test_end, T_test_end + embargo_bars) to prevent post-test
+     boundary dependency leakage.
+2. Combinatorially Symmetric Cross-Validation (CSCV / Bailey et al. 2016):
+   - Specific PBO evaluation configuration where N is strictly even and k = N / 2 (balanced half/half split).
+   - Evaluates all C = (N choose N/2) symmetric splits for In-Sample (IS) and Out-of-Sample (OOS) performance.
+   - Reconstructs exactly phi = (k / N) * (N choose k) = 0.5 * (N choose N/2) continuous, non-overlapping
+     pseudo-OOS backtest paths through canonical bijective slice decomposition.
 """
 
 from decimal import Decimal
@@ -31,13 +36,15 @@ class CombinatorialPurgedCrossValidation:
         sample_size: int,
         label_horizon: int,
         embargo_bars: Optional[int] = None,
+        enforce_cscv_balanced: bool = False,
     ) -> List[CPCVPartition]:
-        """Generate all C = (N choose k) CPCV partitions with exact boundary purging and embargoing.
+        """Generate all C = (N choose k) CPCV/CSCV partitions with exact boundary purging and embargoing.
 
         Args:
             sample_size: Total number of observations T.
             label_horizon: Forward-looking label evaluation window H (bars).
             embargo_bars: Optional override for post-test embargo buffer (defaults to config.embargo_bars).
+            enforce_cscv_balanced: If True, enforces CSCV balance contract (N is even and k = N / 2).
 
         Returns:
             List of CPCVPartition objects containing explicit index sets.
@@ -45,6 +52,13 @@ class CombinatorialPurgedCrossValidation:
         N = self.config.num_groups_n
         k = self.config.num_test_groups_k
         embargo = embargo_bars if embargo_bars is not None else self.config.embargo_bars
+
+        if enforce_cscv_balanced:
+            if N % 2 != 0 or k != N // 2:
+                raise DataContractError(
+                    f"CSCV (PBO mode) requires an even number of blocks N and balanced half-splits k = N / 2. "
+                    f"Got N={N}, k={k}."
+                )
 
         if sample_size < N * 2:
             raise DataContractError(
@@ -140,8 +154,17 @@ class CombinatorialPurgedCrossValidation:
     ) -> List[List[Tuple[int, int]]]:
         """Reconstruct exactly phi = (k / N) * (N choose k) continuous, non-overlapping pseudo-OOS paths.
 
-        Each path is composed by taking group g's exact slice [g_start, g_end) from the j-th combination
-        that tested group g, guaranteeing complete, non-overlapping coverage of [0, sample_size) per path.
+        Combinatorial Decomposition & Bijective Coverage Proof:
+        1. Universe of OOS slices: Across all C = (N choose k) combinations, exactly C * k testing slices are generated.
+        2. Group slice distribution: By combinatorial symmetry, each group g in {0, ..., N-1} appears in exactly
+           (N-1 choose k-1) = (k / N) * (N choose k) = phi combinations.
+        3. Canonical Path Construction: Let S_g = [c_(g, 0), c_(g, 1), ..., c_(g, phi-1)] be the lexicographically
+           ordered list of combination IDs in which group g is tested. For path p in {0, ..., phi-1}, we extract
+           group g's slice from combination c_(g, p).
+        4. Totality & Non-overlap:
+           - Each path p contains exactly one slice for every group g in {0, ..., N-1}.
+           - Since groups partition [0, sample_size) contiguously, each path p covers [0, sample_size) completely with zero overlap.
+           - Across all phi paths, exactly phi * N = k * C slices are used, establishing an exact bijection with the OOS slice universe.
 
         Returns:
             List of phi paths, where each path is a list of (combination_id, test_sample_index) pairings covering [0, sample_size).
@@ -202,17 +225,19 @@ class CombinatorialPurgedCrossValidation:
         label_horizon: int = 1,
         embargo_bars: Optional[int] = None,
         periods_per_year: float = 252.0,
+        enforce_cscv_balanced: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute In-Sample and Out-of-Sample Sharpe matrices for all M models across all C = (N choose k) splits.
 
-        Implements Combinatorially Symmetric Cross-Validation (CSCV / Bailey et al. 2016) with strict
-        interval purging and post-test embargo buffers (López de Prado 2018).
+        Implements Combinatorial Purged Cross-Validation (CPCV / López de Prado 2018) and Combinatorially Symmetric
+        Cross-Validation (CSCV / Bailey et al. 2016) with strict interval purging and post-test embargo buffers.
 
         Args:
             return_matrix: 2D numpy array of shape (T observations, M candidate strategies/models).
             label_horizon: Forward-looking label evaluation window H (bars).
             embargo_bars: Post-test embargo window (defaults to config.embargo_bars).
             periods_per_year: Number of periods per year for standard sqrt(periods_per_year) Sharpe annualization.
+            enforce_cscv_balanced: If True, strictly enforces balanced CSCV (N even, k = N / 2) for PBO evaluation.
 
         Returns:
             Tuple[is_sharpe_matrix, oos_sharpe_matrix] where each has shape (C combinations, M models).
@@ -220,15 +245,22 @@ class CombinatorialPurgedCrossValidation:
         if return_matrix.ndim != 2:
             raise DataContractError(f"return_matrix must be 2D array of shape (T, M), got shape {return_matrix.shape}")
 
+        if not np.all(np.isfinite(return_matrix)):
+            raise DataContractError("return_matrix contains non-finite values (NaN, +inf, or -inf).")
+
         T, M = return_matrix.shape
-        partitions = self.generate_partitions(sample_size=T, label_horizon=label_horizon, embargo_bars=embargo_bars)
+        partitions = self.generate_partitions(
+            sample_size=T,
+            label_horizon=label_horizon,
+            embargo_bars=embargo_bars,
+            enforce_cscv_balanced=enforce_cscv_balanced,
+        )
         C = len(partitions)
 
         is_sharpe_mat = np.zeros((C, M), dtype=np.float64)
         oos_sharpe_mat = np.zeros((C, M), dtype=np.float64)
 
         sqrt_ann = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
-
 
         for c, p in enumerate(partitions):
             # In-Sample evaluation (purged and embargoed indices excluded)
@@ -250,4 +282,22 @@ class CombinatorialPurgedCrossValidation:
                 oos_sharpe_mat[c, :] = oos_sr
 
         return is_sharpe_mat, oos_sharpe_mat
+
+    def evaluate_balanced_cscv_sharpe_matrices(
+        self,
+        return_matrix: np.ndarray,
+        label_horizon: int = 1,
+        embargo_bars: Optional[int] = None,
+        periods_per_year: float = 252.0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Convenience method enforcing strict CSCV balanced half/half partition (N even, k = N / 2)."""
+        return self.evaluate_cscv_sharpe_matrices(
+            return_matrix=return_matrix,
+            label_horizon=label_horizon,
+            embargo_bars=embargo_bars,
+            periods_per_year=periods_per_year,
+            enforce_cscv_balanced=True,
+        )
+
+
 

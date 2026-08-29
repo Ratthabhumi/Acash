@@ -46,7 +46,13 @@ class MultipleTestingEngine:
         if K == 0:
             return []
 
-        raw_p = [float(p) for p in p_values]
+        raw_p: List[float] = []
+        for idx, p in enumerate(p_values):
+            pf = float(p)
+            if not math.isfinite(pf) or pf < 0.0 or pf > 1.0:
+                raise DataContractError(f"p-value at index {idx} must be finite and within [0.0, 1.0], got {p}")
+            raw_p.append(pf)
+
         sorted_indices = np.argsort(raw_p)
         sorted_p = np.array(raw_p)[sorted_indices]
 
@@ -75,7 +81,13 @@ class MultipleTestingEngine:
         if K == 0:
             return []
 
-        raw_p = [float(p) for p in p_values]
+        raw_p: List[float] = []
+        for idx, p in enumerate(p_values):
+            pf = float(p)
+            if not math.isfinite(pf) or pf < 0.0 or pf > 1.0:
+                raise DataContractError(f"p-value at index {idx} must be finite and within [0.0, 1.0], got {p}")
+            raw_p.append(pf)
+
         sorted_indices = np.argsort(raw_p)
         sorted_p = np.array(raw_p)[sorted_indices]
 
@@ -101,18 +113,14 @@ class MultipleTestingEngine:
         sample_size_t: int,
         raw_p_value: Optional[float] = None,
     ) -> Decimal:
-        """Calculate Haircut Sharpe Ratio adjusting for K trials and sample length T (Harvey, Liu, & Zhu 2016).
+        """Calculate ACASH Multiple-Testing Haircut Sharpe (Bonferroni-Adjusted Empirical p-Value Mapping).
 
-        Reference:
-        Harvey, C. R., Liu, Y., & Zhu, H. (2016). "... and the Cross-Section of Expected Returns."
-        Review of Financial Studies, 29(1), 5–68.
-
-        Canonical Methodology:
+        Methodological Formulation (Inspired by Harvey, Liu, & Zhu 2016 Multiple-Testing Philosophy):
         1. Compute raw t-statistic from estimated Sharpe ratio and sample length T:
            t_raw = estimated_sharpe * sqrt(T)
         2. Compute two-sided single-test unadjusted p-value:
            p_raw = 2 * (1 - Phi(|t_raw|)) = erfc(|t_raw| / sqrt(2)) (or use provided raw_p_value)
-        3. Compute multiple-testing adjusted p-value across K trials:
+        3. Compute multiple-testing adjusted p-value across K trials via Bonferroni hurdle:
            p_adj = min(1.0, p_raw * K)
         4. Derive adjusted t-statistic corresponding to p_adj:
            |t_adj| = Phi^-1(1 - p_adj / 2) if p_adj < 1.0 else 0.0
@@ -133,7 +141,10 @@ class MultipleTestingEngine:
 
         # 2. Single-test two-sided p-value
         if raw_p_value is not None:
-            p_raw = float(raw_p_value)
+            pf = float(raw_p_value)
+            if not math.isfinite(pf) or pf < 0.0 or pf > 1.0:
+                raise DataContractError(f"raw_p_value must be finite and within [0.0, 1.0], got {raw_p_value}")
+            p_raw = pf
         else:
             p_raw = math.erfc(t_raw / math.sqrt(2.0))
 
@@ -155,6 +166,7 @@ class MultipleTestingEngine:
         haircut_sr = max(0.0, t_adj / math.sqrt(T))
 
         return to_decimal18(Decimal(f"{haircut_sr:.12f}")) or Decimal("0.0")
+
 
     @classmethod
     def evaluate_multiple_testing(

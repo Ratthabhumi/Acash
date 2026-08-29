@@ -49,16 +49,17 @@ class OverfittingEngine:
              omega = 0.5 and log-odds lambda = ln(0.5 / 0.5) = 0.0.
            - Log-odds: lambda = ln(omega / (1.0 - omega))
            - Count overfit if lambda < 0.0 (i.e. omega < 0.5, strictly below median OOS performance).
-        2. PBO is the empirical proportion of splits where the IS-optimal model underperforms median OOS:
+        2. PBO is the empirical proportion of CSCV splits where the IS-optimal model underperforms median OOS:
            PBO = (1 / C) * sum_{c=1}^C I(lambda_c < 0.0)
+           where C is the total number of CSCV splits (C = (N choose N/2) in balanced CSCV).
 
         Args:
             is_sharpe_matrix: 2D array of shape (C combinations, M models) for In-Sample Sharpe.
             oos_sharpe_matrix: 2D array of shape (C combinations, M models) for Out-of-Sample Sharpe.
 
-
         Returns:
-            Tuple[pbo_estimate, logits_mean, logits_std]
+            Tuple[pbo_estimate, logits_distribution_mean, logits_distribution_std]
+            where logits_distribution_std is the population standard deviation (ddof=0) over the C splits.
         """
         if not isinstance(is_sharpe_matrix, np.ndarray) or not isinstance(oos_sharpe_matrix, np.ndarray):
             raise DataContractError("CSCV Sharpe matrices must be numpy.ndarray instances.")
@@ -115,12 +116,11 @@ class OverfittingEngine:
             if logit_val < 0.0:
                 underperforming_count += 1
 
-
-
         pbo = underperforming_count / float(C)
         logits_arr = np.array(logits, dtype=np.float64)
         logits_mean = float(np.mean(logits_arr))
-        logits_std = float(np.std(logits_arr))
+        # Population standard deviation over enumerated CSCV partition splits (ddof=0)
+        logits_std = float(np.std(logits_arr, ddof=0))
 
         return pbo, logits_mean, logits_std
 
@@ -164,10 +164,14 @@ class OverfittingEngine:
         friction_params: Optional[FrictionStressParameters] = None,
         multipliers: Sequence[float] = (1.0, 2.0, 3.0, 5.0),
     ) -> bool:
-        """Verify component-wise analytical friction stress decay monotonicity using Phase 4/5 reality gap components.
+        """Verify analytical friction stress decay monotonicity under an explicit super-linear cost-scaling model.
 
-        R_stressed(m) = R_raw - m * (Spread + Fee) - m^1.5 * (Slippage + Latency + Adverse Selection)
+        Cost-Scaling Model:
+        R_stressed(m) = R_raw - m * (Spread + Fee) - (m^1.5) * (Slippage + Latency + Adverse Selection)
+        where m is a stress multiplier evaluating sensitivity to friction expansion (Phase 4/5 reality gap).
+        Note: This is an analytical sensitivity stress test, not a microscopic empirical orderbook simulator.
         """
+
         params = friction_params or FrictionStressParameters()
         linear_cost = float(params.spread_bps + params.fee_bps)
         impact_cost = float(params.slippage_bps + params.latency_drift_bps + params.maker_adverse_selection_bps)
