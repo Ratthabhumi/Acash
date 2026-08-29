@@ -2130,18 +2130,53 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
         CanonicalConfigSerializer.to_canonical_json({Decimal("1.0"): "decimal_key"})
 
 
-    # 8. Closed-world type rejection on unsupported objects
+    # 8. Closed-world type rejection on unsupported objects & bytearray rejection
     class CustomUnsupportedType:
         pass
 
     with pytest.raises(DataContractError, match="Unsupported parameter type"):
         CanonicalConfigSerializer.to_canonical_json({"obj": CustomUnsupportedType()})
 
-    # 9. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x)
+    with pytest.raises(DataContractError, match="Unsupported parameter type"):
+        CanonicalConfigSerializer.to_canonical_json({"data": bytearray(b"ABC")})
+
+    # 9. Enum type differentiation: Enum != str and EnumA != EnumB
+    from enum import Enum as PyEnum
+
+    class SideEnumA(PyEnum):
+        BUY = "BUY"
+
+    class SideEnumB(PyEnum):
+        BUY = "BUY"
+
+    h_str_buy = CanonicalConfigSerializer.compute_sha256({"side": "BUY"})
+    h_enum_a = CanonicalConfigSerializer.compute_sha256({"side": SideEnumA.BUY})
+    h_enum_b = CanonicalConfigSerializer.compute_sha256({"side": SideEnumB.BUY})
+
+    assert h_enum_a != h_str_buy
+    assert h_enum_b != h_str_buy
+    assert h_enum_a != h_enum_b
+
+    # 10. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x) with ROUND_HALF_EVEN
     # Numbers differing beyond 18th decimal place collapse to the same canonical representation
     d1 = Decimal("1.0000000000000000001")
     d2 = Decimal("1.0000000000000000002")
     assert CanonicalConfigSerializer.to_canonical_json(d1) == CanonicalConfigSerializer.to_canonical_json(d2)
+
+    # Banker's rounding (ROUND_HALF_EVEN) test:
+    # 0.0000000000000000005 -> 0.000000000000000000 (rounds to nearest even 0)
+    # 0.0000000000000000015 -> 0.000000000000000002 (rounds to nearest even 2)
+    d_even_0 = CanonicalConfigSerializer.serialize_value(Decimal("0.0000000000000000005"))
+    d_even_2 = CanonicalConfigSerializer.serialize_value(Decimal("0.0000000000000000015"))
+    assert d_even_0 == {"__type__": "decimal", "value": "0.000000000000000000"}
+    assert d_even_2 == {"__type__": "decimal", "value": "0.000000000000000002"}
+
+    # 11. Signed zero canonicalization: Q_18(-0.0) == Q_18(+0.0)
+    d_pos_zero = CanonicalConfigSerializer.serialize_value(Decimal("0.0"))
+    d_neg_zero = CanonicalConfigSerializer.serialize_value(Decimal("-0.0"))
+    assert d_pos_zero == d_neg_zero == {"__type__": "decimal", "value": "0.000000000000000000"}
+    assert CanonicalConfigSerializer.compute_sha256(Decimal("-0.0")) == CanonicalConfigSerializer.compute_sha256(Decimal("0.0"))
+
 
 
 
