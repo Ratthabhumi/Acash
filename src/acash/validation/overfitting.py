@@ -60,28 +60,46 @@ class OverfittingEngine:
         Returns:
             Tuple[pbo_estimate, logits_mean, logits_std]
         """
-        C, M = is_sharpe_matrix.shape
-        if C < 1 or M < 2:
-            return 0.0, 0.0, 0.0
+        if not isinstance(is_sharpe_matrix, np.ndarray) or not isinstance(oos_sharpe_matrix, np.ndarray):
+            raise DataContractError("CSCV Sharpe matrices must be numpy.ndarray instances.")
+        if is_sharpe_matrix.ndim != 2 or oos_sharpe_matrix.ndim != 2:
+            raise DataContractError(
+                f"CSCV Sharpe matrices must be 2-dimensional. Got shapes {is_sharpe_matrix.shape} and {oos_sharpe_matrix.shape}."
+            )
+        if is_sharpe_matrix.shape != oos_sharpe_matrix.shape:
+            raise DataContractError(
+                f"CSCV In-Sample and Out-of-Sample Sharpe matrix shape mismatch: {is_sharpe_matrix.shape} != {oos_sharpe_matrix.shape}."
+            )
 
+        C, M = is_sharpe_matrix.shape
+        if C < 1:
+            raise DataContractError(f"CSCV matrix must contain at least C >= 1 split, got C={C}.")
+        if M < 2:
+            raise DataContractError(f"CSCV matrix must contain at least M >= 2 candidate models, got M={M}.")
+
+        if not np.all(np.isfinite(is_sharpe_matrix)) or not np.all(np.isfinite(oos_sharpe_matrix)):
+            raise DataContractError("CSCV Sharpe matrices contain non-finite values (NaN, +inf, or -inf).")
 
         logits: List[float] = []
         underperforming_count = 0
 
         for c in range(C):
             is_slice = is_sharpe_matrix[c, :]
-            max_is_val = float(np.max(is_slice))
+            # Canonical Decimal Quantization for exact IS tie resolution (10 decimal places)
+            quantized_is = np.round(is_slice, decimals=10)
+            max_is_val = float(np.max(quantized_is))
 
             # 1. Identify all optimal in-sample model indices m* achieving max IS Sharpe (Symmetric IS-Tie Policy)
-            tied_indices = np.where(np.abs(is_slice - max_is_val) < 1e-12)[0]
+            tied_indices = np.where(quantized_is == max_is_val)[0]
 
             # 2. Compute exact mid-rank of all tied winners in OOS slice and compute average relative rank
             oos_slice = oos_sharpe_matrix[c, :]
+            quantized_oos = np.round(oos_slice, decimals=10)
             omega_list: List[float] = []
             for m_star in tied_indices:
-                m_star_val = oos_slice[m_star]
-                strictly_less = int(np.sum(oos_slice < m_star_val))
-                equal_count = int(np.sum(oos_slice == m_star_val))
+                m_star_val = quantized_oos[m_star]
+                strictly_less = int(np.sum(quantized_oos < m_star_val))
+                equal_count = int(np.sum(quantized_oos == m_star_val))
                 mid_rank = strictly_less + 1.0 + 0.5 * (equal_count - 1.0)
                 omega_m = mid_rank / (M + 1.0)
                 omega_list.append(omega_m)
@@ -96,6 +114,7 @@ class OverfittingEngine:
             # 4. If logit < 0 (i.e. omega < 0.5, strictly below median OOS performance), count as overfit
             if logit_val < 0.0:
                 underperforming_count += 1
+
 
 
         pbo = underperforming_count / float(C)

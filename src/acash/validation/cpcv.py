@@ -201,7 +201,7 @@ class CombinatorialPurgedCrossValidation:
         return_matrix: np.ndarray,
         label_horizon: int = 1,
         embargo_bars: Optional[int] = None,
-        annualization_factor: float = 252.0,
+        periods_per_year: float = 252.0,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Compute In-Sample and Out-of-Sample Sharpe matrices for all M models across all C = (N choose k) splits.
 
@@ -212,7 +212,7 @@ class CombinatorialPurgedCrossValidation:
             return_matrix: 2D numpy array of shape (T observations, M candidate strategies/models).
             label_horizon: Forward-looking label evaluation window H (bars).
             embargo_bars: Post-test embargo window (defaults to config.embargo_bars).
-            annualization_factor: Factor for annualized Sharpe ratios (e.g. 252.0 for daily).
+            periods_per_year: Number of periods per year for standard sqrt(periods_per_year) Sharpe annualization.
 
         Returns:
             Tuple[is_sharpe_matrix, oos_sharpe_matrix] where each has shape (C combinations, M models).
@@ -227,7 +227,8 @@ class CombinatorialPurgedCrossValidation:
         is_sharpe_mat = np.zeros((C, M), dtype=np.float64)
         oos_sharpe_mat = np.zeros((C, M), dtype=np.float64)
 
-        sqrt_ann = math.sqrt(annualization_factor)
+        sqrt_ann = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+
 
         for c, p in enumerate(partitions):
             # In-Sample evaluation (purged and embargoed indices excluded)

@@ -14,9 +14,11 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
+import math
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
+
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
@@ -93,12 +95,14 @@ class StatisticalValidationGate:
         strategy_id: str,
         hypothesis_id: str,
         in_sample_returns: Sequence[Union[Decimal, float]],
+        trial_matrix_column_trial_ids: Sequence[str] = (),
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
+
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
-        trial_matrix_column_trial_ids: Optional[Sequence[str]] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
         manifest_store: Optional[Dict[str, Any]] = None,
+        hypothesis_spec: Optional[Any] = None,
         label_horizon: int = 1,
         embargo_bars: Optional[int] = None,
         raw_predictive_edge_bps: float = 15.0,
@@ -246,6 +250,21 @@ class StatisticalValidationGate:
         if label_horizon < 1:
             raise DataContractError(f"label_horizon must be >= 1, got {label_horizon}")
 
+        # Bind and validate HypothesisSpecification if provided
+        hyp_spec_hash = "NONE"
+        if hypothesis_spec is not None:
+            if hasattr(hypothesis_spec, "hypothesis_id") and hypothesis_spec.hypothesis_id != hypothesis_id:
+                raise DataContractError(
+                    f"hypothesis_spec hypothesis_id '{hypothesis_spec.hypothesis_id}' does not match evaluate_strategy hypothesis_id '{hypothesis_id}'."
+                )
+            if hasattr(hypothesis_spec, "primary_horizon") and label_horizon != hypothesis_spec.primary_horizon:
+                raise DataContractError(
+                    f"Gate label_horizon ({label_horizon}) does not match hypothesis_spec.primary_horizon ({hypothesis_spec.primary_horizon}). "
+                    f"CPCV forward purging window must strictly match the research hypothesis evaluation horizon."
+                )
+            if hasattr(hypothesis_spec, "to_canonical_json"):
+                hyp_spec_hash = hashlib.sha256(hypothesis_spec.to_canonical_json().encode("utf-8")).hexdigest()
+
         # Enforce strict Authoritative Ledger Invariants:
         # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut == M_CPCV
         effective_k = trial_ledger.total_trials
@@ -285,21 +304,41 @@ class StatisticalValidationGate:
                 f"Both DSR and CPCV must evaluate the identical underlying return series."
             )
 
-        # Invariant Check: Ordered candidate column trial IDs binding
-        if trial_matrix_column_trial_ids is not None:
-            expected_ids = [t.trial_id for t in trial_ledger.trials]
-            if list(trial_matrix_column_trial_ids) != expected_ids:
-                raise DataContractError(
-                    f"trial_matrix_column_trial_ids {list(trial_matrix_column_trial_ids)} does not match ordered ledger trial_ids {expected_ids}."
-                )
+        # Invariant Check: Mandatory Ordered candidate column trial IDs binding
+        if len(trial_matrix_column_trial_ids) != effective_k:
+            raise DataContractError(
+                f"trial_matrix_column_trial_ids length ({len(trial_matrix_column_trial_ids)}) does not match ledger trial count ({effective_k})."
+            )
+        expected_ids = [t.trial_id for t in trial_ledger.trials]
+        if list(trial_matrix_column_trial_ids) != expected_ids:
+            raise DataContractError(
+                f"trial_matrix_column_trial_ids {list(trial_matrix_column_trial_ids)} does not match ordered ledger trial_ids {expected_ids}."
+            )
+        if trial_matrix_column_trial_ids[0] != trial_ledger.trials[0].trial_id:
+            raise DataContractError("trial_matrix_column_trial_ids[0] must match the primary evaluated trial record.")
 
+        # Invariant Check: Candidate Return Series Cryptographic Lineage Verification
+        all_col_hashes: List[str] = []
+        for m in range(effective_k):
+            col_m_hash = _compute_canonical_series_sha256(trial_return_matrix[:, m])
+            all_col_hashes.append(col_m_hash)
+            trial_rec = trial_ledger.trials[m]
+            if trial_rec.in_sample_return_series_sha256 is not None:
+                if trial_rec.in_sample_return_series_sha256 != col_m_hash:
+                    raise DataContractError(
+                        f"Trial '{trial_rec.trial_id}' registered in_sample_return_series_sha256 ({trial_rec.in_sample_return_series_sha256}) "
+                        f"does not match actual matrix column {m} return series SHA-256 ({col_m_hash})."
+                    )
+
+        matrix_evidence_hash = hashlib.sha256(",".join(all_col_hashes).encode("utf-8")).hexdigest()
         all_p_values = trial_ledger.p_values
 
-        # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger)
+        # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger with Unified Frequency Scale)
         dsr_result = DeflatedSharpeEngine.evaluate_dsr(
             returns=in_sample_returns,
             effective_trials_k=effective_k,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
+            periods_per_year=float(self.config.periods_per_year),
             trial_ledger=trial_ledger,
         )
 
@@ -325,6 +364,7 @@ class StatisticalValidationGate:
             trial_return_matrix,
             label_horizon=label_horizon,
             embargo_bars=embargo_bars,
+            periods_per_year=float(self.config.periods_per_year),
         )
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
@@ -338,7 +378,7 @@ class StatisticalValidationGate:
 
         # 9. Out-of-Sample Performance Evaluation
         mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)
-        raw_oos_sr = mean_oos / std_oos if std_oos > 0 else 0.0
+        raw_oos_sr = (mean_oos / std_oos if std_oos > 0 else 0.0) * math.sqrt(float(self.config.periods_per_year))
         oos_sr = to_decimal18(Decimal(f"{raw_oos_sr:.12f}")) or Decimal("0.0")
 
         retention_pct: Optional[Decimal] = None
@@ -381,10 +421,10 @@ class StatisticalValidationGate:
         grid_hash = _compute_grid_sha256(perturbation_grid)
         effective_embargo = embargo_bars if embargo_bars is not None else self.config.embargo_bars
 
-        # Evidence Digest (Pure mathematical input, research horizon & statistical calculations)
+        # Evidence Digest (Pure mathematical input, research horizon, candidate matrix digest & statistical calculations)
         evidence_payload = (
-            f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:"
-            f"{effective_k}:{label_horizon}:{effective_embargo}:{dsr_result.dsr_statistic}:{overfit_report.pbo_estimate}"
+            f"{strategy_id}:{hypothesis_id}:{hyp_spec_hash}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:"
+            f"{matrix_evidence_hash}:{effective_k}:{label_horizon}:{effective_embargo}:{dsr_result.dsr_statistic}:{overfit_report.pbo_estimate}"
         )
         evidence_digest = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
 
@@ -393,8 +433,8 @@ class StatisticalValidationGate:
             f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
             f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
         )
-
         decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
+
 
         val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
         now_utc = fixed_created_timestamp_utc or datetime.now(timezone.utc).isoformat()

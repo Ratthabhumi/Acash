@@ -99,8 +99,10 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
     )
+
 
 
 
@@ -454,6 +456,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
         fixed_created_timestamp_utc="2026-08-28T10:00:00Z",
     )
@@ -465,6 +468,7 @@ def test_deterministic_validation_report_id_and_digests() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
         fixed_created_timestamp_utc="2026-08-28T12:00:00Z",  # Different runtime timestamp
     )
@@ -513,8 +517,10 @@ def test_canonical_json_serialization_separation() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
     )
+
 
 
 
@@ -855,6 +861,7 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
         manifest_store=manifest_store,
     )
@@ -870,6 +877,7 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=trial_matrix,
+            trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
             perturbation_grid=grid,
             manifest_store=incomplete_store,
         )
@@ -955,6 +963,7 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
     )
     assert rep.verdict == ValidationGateVerdict.REJECT_MULTIPLE_TESTING_FWER
@@ -1001,6 +1010,7 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
         out_of_sample_returns=oos_returns,
         trial_ledger=ledger,
         trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
         perturbation_grid=grid,
     )
     assert rep.verdict == ValidationGateVerdict.REJECT_HAIRCUT_SHARPE
@@ -1046,6 +1056,7 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=mismatched_matrix,
+            trial_matrix_column_trial_ids=["t_0", "t_1", "t_2"],
             perturbation_grid=grid,
         )
 
@@ -1088,8 +1099,10 @@ def test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch
             out_of_sample_returns=oos_returns,
             trial_ledger=ledger,
             trial_return_matrix=divergent_matrix,
+            trial_matrix_column_trial_ids=[t.trial_id for t in ledger.trials],
             perturbation_grid=grid,
         )
+
 
 
 def test_statistical_validation_gate_binds_real_label_horizon_and_embargo() -> None:
@@ -1217,6 +1230,207 @@ def test_overfitting_engine_is_tie_symmetric_policy() -> None:
     pbo, logit_mean, logit_std = OverfittingEngine.calculate_pbo(is_mat, oos_mat)
     assert pbo == 0.0
     assert abs(logit_mean) < 1e-6
+
+
+def test_statistical_validation_gate_binds_hypothesis_specification_horizon() -> None:
+    """Verify that Gate strictly validates label_horizon against pre-registered HypothesisSpecification.primary_horizon."""
+    from acash.research.schema import ExpectedDirection, HypothesisSpecification, InvalidationCriteria
+
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0020, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0015, 0.0040, 500))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_SPEC",
+            hypothesis_id="HYP_SPEC_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(2)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L_SPEC",
+        strategy_id="STRAT_SPEC",
+        hypothesis_id="HYP_SPEC_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_SPEC")
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
+
+    spec = HypothesisSpecification(
+        hypothesis_id="HYP_SPEC_01",
+        hypothesis_version="v1.0.0",
+        economic_rationale="Momentum autocorrelation in microstructure footprint",
+        target_symbol="BTCUSDT",
+        feature_dependencies=["order_flow_imbalance"],
+        parameter_config_json="{}",
+        expected_direction=ExpectedDirection.LONG,
+        target_horizons=[5, 10, 20],
+        primary_horizon=20,  # Formal registered horizon is 20 bars
+        invalidation_criteria=InvalidationCriteria(),
+        registered_at_utc="2026-08-28T00:00:00Z",
+        author="ResearchTeam",
+    )
+
+    # 1. Successful validation when label_horizon strictly matches spec.primary_horizon (20)
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_SPEC",
+        hypothesis_id="HYP_SPEC_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        perturbation_grid=grid,
+        hypothesis_spec=spec,
+        label_horizon=20,
+    )
+    assert rep.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
+
+    # 2. Strict rejection when caller attempts to supply mismatched label_horizon (e.g. 1 != 20)
+    with pytest.raises(DataContractError, match="does not match hypothesis_spec.primary_horizon"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_SPEC",
+            hypothesis_id="HYP_SPEC_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            perturbation_grid=grid,
+            hypothesis_spec=spec,
+            label_horizon=1,  # Attempting unauthorized horizon shortcut
+        )
+
+
+def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -> None:
+    """Verify that Gate strictly checks cryptographic return series SHA-256 for all ledger trials."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0020, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0015, 0.0040, 500))
+
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
+
+    # Compute exact hashes for the two columns
+    from acash.validation.gate import _compute_canonical_series_sha256
+    hash_col0 = _compute_canonical_series_sha256(trial_matrix[:, 0])
+    hash_col1 = _compute_canonical_series_sha256(trial_matrix[:, 1])
+
+    trials_valid = [
+        SearchTrialRecord(
+            trial_id="trial_0",
+            strategy_id="STRAT_SHA",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": 0},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+            in_sample_return_series_sha256=hash_col0,
+        ),
+        SearchTrialRecord(
+            trial_id="trial_1",
+            strategy_id="STRAT_SHA",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal("0.5"),
+            p_value=Decimal("0.050"),
+            in_sample_return_series_sha256=hash_col1,
+        ),
+    ]
+    ledger_valid = SearchTrialLedger(
+        ledger_id="L_SHA",
+        strategy_id="STRAT_SHA",
+        hypothesis_id="HYP_01",
+        trials=trials_valid,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_SHA")
+
+    # 1. Successful evaluation when ledger registered hashes match matrix columns exactly
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_SHA",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger_valid,
+        trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+        perturbation_grid=grid,
+    )
+    assert rep.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
+
+    # 2. Rejection when a trial's return series hash is tampered/mismatched
+    trials_tampered = [
+        trials_valid[0],
+        SearchTrialRecord(
+            trial_id="trial_1",
+            strategy_id="STRAT_SHA",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal("0.5"),
+            p_value=Decimal("0.050"),
+            in_sample_return_series_sha256="deadbeef" * 8,  # Tampered hash
+        ),
+    ]
+    ledger_tampered = SearchTrialLedger(
+        ledger_id="L_SHA",
+        strategy_id="STRAT_SHA",
+        hypothesis_id="HYP_01",
+        trials=trials_tampered,
+    )
+    with pytest.raises(DataContractError, match="in_sample_return_series_sha256 .* does not match"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_SHA",
+            hypothesis_id="HYP_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger_tampered,
+            trial_return_matrix=trial_matrix,
+            trial_matrix_column_trial_ids=["trial_0", "trial_1"],
+            perturbation_grid=grid,
+        )
+
+
+def test_overfitting_engine_rejects_malformed_or_non_finite_matrices() -> None:
+    """Verify that OverfittingEngine.calculate_pbo strictly rejects NaN, Inf, and shape mismatches."""
+    from acash.validation.overfitting import OverfittingEngine
+
+    # 1. NaN in matrix
+    is_nan = np.array([[1.0, np.nan], [2.0, 1.5]], dtype=np.float64)
+    oos_valid = np.array([[1.0, 1.2], [2.0, 1.5]], dtype=np.float64)
+    with pytest.raises(DataContractError, match="contain non-finite values"):
+        OverfittingEngine.calculate_pbo(is_nan, oos_valid)
+
+    # 2. Infinite in matrix
+    is_inf = np.array([[1.0, np.inf], [2.0, 1.5]], dtype=np.float64)
+    with pytest.raises(DataContractError, match="contain non-finite values"):
+        OverfittingEngine.calculate_pbo(is_inf, oos_valid)
+
+    # 3. Shape mismatch
+    oos_mismatch = np.array([[1.0, 1.2, 0.5]], dtype=np.float64)
+    is_valid = np.array([[1.0, 1.2], [2.0, 1.5]], dtype=np.float64)
+    with pytest.raises(DataContractError, match="matrix shape mismatch"):
+        OverfittingEngine.calculate_pbo(is_valid, oos_mismatch)
+
+    # 4. M < 2 models
+    is_m1 = np.array([[1.0], [2.0]], dtype=np.float64)
+    oos_m1 = np.array([[1.0], [2.0]], dtype=np.float64)
+    with pytest.raises(DataContractError, match="must contain at least M >= 2"):
+        OverfittingEngine.calculate_pbo(is_m1, oos_m1)
+
 
 
 

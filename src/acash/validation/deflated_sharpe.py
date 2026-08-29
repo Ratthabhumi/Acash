@@ -179,13 +179,17 @@ class DeflatedSharpeEngine:
         variance_of_trials: float = 0.0,
         benchmark_sharpe: float = 0.0,
         confidence_level_alpha: float = 0.05,
-        annualization_factor: float = 1.0,
+        periods_per_year: float = 252.0,
         trial_ledger: Optional[SearchTrialLedger] = None,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
         All internal inference is executed in per-period space to guarantee exact frequency scale alignment.
+        Annualized Sharpe ratios are computed via standard square-root of time scaling:
+        SR_annual = SR_period * sqrt(periods_per_year).
         """
+        annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+
         sharpe_space_label = "PERIOD"
         if trial_ledger is not None:
             effective_trials_k = trial_ledger.total_trials
@@ -193,8 +197,8 @@ class DeflatedSharpeEngine:
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 # If ledger Sharpes were annualized, scale variance down to per-period space
-                if trial_ledger.sharpe_space == "ANNUAL" and annualization_factor > 0:
-                    variance_of_trials = raw_var / (annualization_factor ** 2)
+                if trial_ledger.sharpe_space == "ANNUAL" and periods_per_year > 0:
+                    variance_of_trials = raw_var / periods_per_year
                 else:
                     variance_of_trials = raw_var
             else:
@@ -205,13 +209,14 @@ class DeflatedSharpeEngine:
         n = len(returns)
         mean, std, skew, kurt = cls.calculate_higher_moments(returns)
 
-        # 1. Estimated sample Sharpe ratio (per-period)
+        # 1. Estimated sample Sharpe ratio (per-period and annualized)
         sr_hat_period = mean / std if std > 0 else 0.0
-        sr_hat_annual = sr_hat_period * annualization_factor
+        sr_hat_annual = sr_hat_period * annual_mult
 
-        # 2. Expected maximum Sharpe under null (per-period)
+        # 2. Expected maximum Sharpe under null (per-period and annualized)
         sr0_period = cls.compute_expected_max_sharpe_sr0(effective_trials_k, variance_of_trials)
-        sr0_annual = sr0_period * annualization_factor
+        sr0_annual = sr0_period * annual_mult
+
 
         # 3. Non-normal asymptotic variance factor:
         # sigma_SR = sqrt( (1 - g_1 * SR + (g_2 - 1)/4 * SR^2) / (T - 1) )

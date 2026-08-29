@@ -59,6 +59,9 @@ class SearchTrialRecord(BaseModel):
     parameters: Dict[str, Any]
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
+    in_sample_return_series_sha256: Optional[str] = Field(default=None, description="Cryptographic SHA-256 hash of the trial in-sample return series.")
+    config_sha256: Optional[str] = Field(default=None, description="Cryptographic SHA-256 hash of the parameter and feature configuration.")
+
 
 
 class SearchTrialLedger(BaseModel):
@@ -372,6 +375,8 @@ class ValidationConfig(BaseModel):
     min_oos_sharpe_retention_pct: Decimal = Field(default=Decimal("50.0"), ge=Decimal("0.0"), description="Minimum OOS Sharpe retention vs In-Sample (%).")
     enforce_fwer_significance: bool = Field(default=True, description="Whether Holm-Bonferroni FWER significance is required for Gate PASS.")
     min_haircut_sharpe: Decimal = Field(default=Decimal("0.0"), description="Minimum acceptable Haircut Sharpe Ratio (HLZ 2016).")
+    periods_per_year: Decimal = Field(default=Decimal("252.0"), gt=Decimal("0.0"), description="Annualization frequency (e.g. 252 for daily, 252*24 for hourly).")
+
 
 
 
