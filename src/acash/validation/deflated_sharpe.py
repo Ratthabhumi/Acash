@@ -113,9 +113,9 @@ class DeflatedSharpeEngine:
 
         Formulation:
         - Mean: bar(X) = (1/n) sum X_i
-        - Sample Variance: s^2 = (1/(n-1)) sum (X_i - bar(X))^2
         - Fisher-Pearson Skewness: G_1 = (n / ((n-1)(n-2))) * sum( ((X_i - bar(X)) / s)^3 )
-        - Pearson Kurtosis: g_2 = (1/n) * sum( ((X_i - bar(X)) / s)^4 ) (normal distribution = 3.0, lower bound = 1.0)
+        - Pearson Kurtosis: g_2 = (1/n) * sum( ((X_i - bar(X)) / s)^4 ) (normal distribution = 3.0, finite-sample lower bound = ((n - 1) / n)^2)
+
 
         Returns:
             Tuple[mean, std, skewness_g1, kurtosis_g2]
@@ -180,7 +180,6 @@ class DeflatedSharpeEngine:
         variance_of_trials: float = 0.0,
         mean_of_trials: float = 0.0,
     ) -> float:
-
         """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
         Reference:
@@ -230,7 +229,6 @@ class DeflatedSharpeEngine:
         trial_ledger: Optional[SearchTrialLedger] = None,
         declared_trials_k: Optional[int] = None,
         effective_independent_trials_k: Optional[int] = None,
-        null_trial_mean_sharpe: float = 0.0,
         use_empirical_trial_mean: bool = False,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
@@ -245,12 +243,12 @@ class DeflatedSharpeEngine:
           Across different trial universes where (K, V, mu) vary jointly, SR_0 is determined jointly by location
           and dispersion.
         - Location Parameter Provenance:
-          * If use_empirical_trial_mean=False (ACASH zero-location policy): mu_trials = null_trial_mean_sharpe (0.0).
+          * If use_empirical_trial_mean=False (ACASH zero-location policy): mu_trials = 0.0 strictly.
           * If use_empirical_trial_mean=True: mu_trials is derived directly from trial_ledger.get_empirical_sharpe_mean().
         - DSR Probability: Phi(z_DSR) computes the probability that the true strategy Sharpe exceeds the
           expected maximum Sharpe under selection bias and non-normal (skewness g_1, kurtosis g_2) returns.
-          This is a non-normal, selection-corrected composite probability, NOT the single-test asymptotic
-          normal p-value stored in the SearchTrialRecord.
+          This is a non-normal, selection-corrected composite probability, strictly distinct from single-test
+          asymptotic normal p-values stored in SearchTrialRecord.
 
         FREQUENCY-SPACE INFERENCE INVARIANCE CONTRACT:
         All statistical hypothesis testing (z-statistic, DSR probability, MinTRL) is evaluated strictly
@@ -282,7 +280,7 @@ class DeflatedSharpeEngine:
                 else:
                     raise DataContractError(f"Unsupported SharpeSpace '{trial_ledger.sharpe_space}' in trial_ledger.")
             else:
-                mean_of_trials = null_trial_mean_sharpe
+                mean_of_trials = 0.0  # ACASH Zero-Location Sovereign Policy (strictly enforced)
 
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
@@ -332,20 +330,27 @@ class DeflatedSharpeEngine:
 
         # 5. Minimum Track Record Length (MinTRL)
         z_alpha = _standard_normal_ppf(1.0 - confidence_level_alpha)
+        min_trl_bars: Optional[int] = None
         if (sr_hat_period - sr0_period) > 1e-12:
-            min_trl_bars = int(math.ceil(1.0 + denominator_term * ((z_alpha / (sr_hat_period - sr0_period)) ** 2)))
+            computed_trl = int(math.ceil(1.0 + denominator_term * ((z_alpha / (sr_hat_period - sr0_period)) ** 2)))
+            min_trl_bars = computed_trl
+            is_unbounded = False
+            has_sufficient_trl = n >= computed_trl
         else:
-            min_trl_bars = int(1e9)  # Infinitely long track record needed if return is at or below null
+            min_trl_bars = None  # Mathematically infinite / unbounded track record needed
+            is_unbounded = True
+            has_sufficient_trl = False
 
 
         is_significant = dsr_prob >= (1.0 - confidence_level_alpha)
-        has_sufficient_trl = n >= min_trl_bars
 
         estimator_name = (
             "ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
             if abs(mean_of_trials) <= 1e-12
             else "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
         )
+
+        dsr_dec = to_decimal18(Decimal(f"{dsr_prob:.12f}")) or Decimal("0.0")
 
         return DSRResult(
             estimated_sharpe=to_decimal18(Decimal(f"{sr_hat_annual:.12f}")) or Decimal("0.0"),
@@ -366,11 +371,14 @@ class DeflatedSharpeEngine:
             trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
             sample_size_t=n,
             dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),
-            dsr_p_value=to_decimal18(Decimal(f"{dsr_prob:.12f}")) or Decimal("0.0"),
+            dsr_probability=dsr_dec,
+            dsr_p_value=dsr_dec,
             min_track_record_length_bars=min_trl_bars,
+            is_min_trl_unbounded=is_unbounded,
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+
 
 
 

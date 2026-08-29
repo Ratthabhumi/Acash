@@ -159,7 +159,9 @@ def test_golden_reference_higher_moments_and_dsr_analytical_precision() -> None:
     assert math.isclose(float(dsr_result.expected_max_sharpe_sr0), ref_sr0_annual, abs_tol=1e-6)
     assert math.isclose(float(dsr_result.dsr_statistic), ref_z, abs_tol=1e-6)
     assert math.isclose(float(dsr_result.dsr_p_value), ref_prob, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_probability), ref_prob, abs_tol=1e-6)
     assert dsr_result.min_track_record_length_bars == ref_trl
+    assert dsr_result.is_min_trl_unbounded is False
     assert dsr_result.sample_size_t == T
     assert math.isclose(float(dsr_result.trial_variance_used), V_period, abs_tol=1e-12)
     assert dsr_result.sharpe_space == SharpeSpace.ANNUAL
@@ -167,7 +169,9 @@ def test_golden_reference_higher_moments_and_dsr_analytical_precision() -> None:
 
     # Independence Semantics Assertions (Strict Contract)
     assert dsr_result.declared_trials_k == K
+    assert dsr_result.effective_independent_trials_k is None
     assert dsr_result.independence_assumption == "FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+
 
 
 
@@ -340,8 +344,10 @@ def test_golden_reference_location_scale_dsr_analytical_precision() -> None:
     assert math.isclose(float(dsr_result.expected_max_sharpe_sr0), ref_sr0_annual, abs_tol=1e-6)
     assert math.isclose(float(dsr_result.dsr_statistic), ref_z, abs_tol=1e-6)
     assert math.isclose(float(dsr_result.dsr_p_value), ref_prob, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_probability), ref_prob, abs_tol=1e-6)
     assert dsr_result.sr0_estimator == "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
     assert float(dsr_result.trial_mean_used) == mu_period
+
 
 
 

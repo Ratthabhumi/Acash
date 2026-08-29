@@ -604,13 +604,13 @@ class DSRResult(BaseModel):
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
     expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials and variance V.")
     sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
-    sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, unconstrained finite sample lower bound).")
+    sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, finite sample lower bound ((n-1)/n)^2).")
     sample_size_t: int = Field(description="Sample length in return periods T.")
-    effective_trials_k: int = Field(description="Effective trial count K derived from SearchTrialLedger.")
+    effective_trials_k: int = Field(description="Effective trial count K_DSR := K_declared derived from SearchTrialLedger by sovereign policy.")
     declared_trials_k: int = Field(default=1, description="Authoritative declared search opportunities count recorded in ledger.")
     effective_independent_trials_k: Optional[int] = Field(
         default=None,
-        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K under fixed-variance upper-bound policy.",
+        description="Informational only; unestimated in standard ACASH sovereign governance where K_DSR := K_declared by sovereign policy.",
     )
     independence_assumption: str = Field(
         default="FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
@@ -622,10 +622,25 @@ class DSRResult(BaseModel):
     )
     trial_variance_used: Decimal = Field(description="Trial Sharpe variance V used in Gumbel maximum calculation.")
     dsr_statistic: Decimal = Field(description="Calculated DSR standard normal test statistic.")
-    dsr_p_value: Decimal = Field(description="Deflated Sharpe Ratio p-value (probability Phi(z_DSR) that true SR > SR_0 under higher moments).")
-    is_statistically_significant: bool = Field(description="True if dsr_p_value >= min_dsr_probability (e.g. 0.95).")
-    min_track_record_length_bars: int = Field(description="Minimum Track Record Length (MinTRL) in bars required for statistical significance.")
-    has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars.")
+    dsr_probability: Decimal = Field(
+        default=Decimal("0.0"),
+        description="Deflated Sharpe Ratio selection probability Phi(z_DSR) that true Sharpe exceeds hurdle SR_0 under higher moments and selection bias.",
+    )
+    dsr_p_value: Decimal = Field(
+        default=Decimal("0.0"),
+        description="Legacy alias for dsr_probability (probability Phi(z_DSR) that true SR > SR_0 under higher moments).",
+    )
+    is_statistically_significant: bool = Field(description="True if dsr_probability >= min_dsr_probability (e.g. 0.95).")
+    min_track_record_length_bars: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Minimum Track Record Length (MinTRL) in bars required for statistical significance. None if estimated Sharpe <= SR_0 (mathematically infinite / unbounded track record).",
+    )
+    is_min_trl_unbounded: bool = Field(
+        default=False,
+        description="True if estimated Sharpe is at or below the selection hurdle SR_0, requiring a mathematically infinite track record.",
+    )
+    has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars (always False if unbounded).")
     sharpe_space: SharpeSpace = Field(default=SharpeSpace.ANNUAL, description="Frequency space of the reported Sharpe ratios (ANNUAL).")
     inference_space: SharpeSpace = Field(default=SharpeSpace.PERIOD, description="Frequency space of the internal hypothesis test calculations (PERIOD).")
 
@@ -640,7 +655,12 @@ class DSRResult(BaseModel):
         if isinstance(data, dict):
             if "declared_trials_k" not in data and "effective_trials_k" in data:
                 data["declared_trials_k"] = data["effective_trials_k"]
+            if "dsr_probability" not in data and "dsr_p_value" in data:
+                data["dsr_probability"] = data["dsr_p_value"]
+            elif "dsr_p_value" not in data and "dsr_probability" in data:
+                data["dsr_p_value"] = data["dsr_probability"]
         return data
+
 
 
 class MultipleTestingResult(BaseModel):
@@ -809,15 +829,18 @@ class ValidationReport(BaseModel):
             "dsr_result": {
                 "benchmark_sharpe": str(self.dsr_result.benchmark_sharpe),
                 "dsr_p_value": str(self.dsr_result.dsr_p_value),
+                "dsr_probability": str(self.dsr_result.dsr_probability),
                 "dsr_statistic": str(self.dsr_result.dsr_statistic),
                 "effective_trials_k": self.dsr_result.effective_trials_k,
                 "estimated_sharpe": str(self.dsr_result.estimated_sharpe),
                 "expected_max_sharpe_sr0": str(self.dsr_result.expected_max_sharpe_sr0),
                 "has_sufficient_track_record": self.dsr_result.has_sufficient_track_record,
+                "is_min_trl_unbounded": self.dsr_result.is_min_trl_unbounded,
                 "is_statistically_significant": self.dsr_result.is_statistically_significant,
                 "min_track_record_length_bars": self.dsr_result.min_track_record_length_bars,
                 "sample_kurtosis": str(self.dsr_result.sample_kurtosis),
                 "sample_size_t": self.dsr_result.sample_size_t,
+
                 "sample_skewness": str(self.dsr_result.sample_skewness),
                 "selection_correction_mode": self.dsr_result.selection_correction_mode.value,
                 "sharpe_space": self.dsr_result.sharpe_space,
