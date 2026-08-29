@@ -62,10 +62,12 @@ class SearchTrialRecord(BaseModel):
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
     in_sample_return_series_sha256: str = Field(
-        min_length=64, max_length=64, description="Mandatory cryptographic SHA-256 hash of the trial in-sample return series."
+        pattern=r"^[0-9a-f]{64}$",
+        description="Mandatory 64-hex SHA-256 hash of the trial in-sample return series.",
     )
     config_sha256: str = Field(
-        min_length=64, max_length=64, description="Mandatory cryptographic SHA-256 hash of parameter and feature configuration."
+        pattern=r"^[0-9a-f]{64}$",
+        description="Mandatory 64-hex SHA-256 hash of parameter and feature configuration.",
     )
     execution_manifest_id: str = Field(
         min_length=1, description="Mandatory bound BacktestManifest ID for candidate execution lineage."
@@ -148,14 +150,26 @@ class SearchTrialLedger(BaseModel):
     ledger_id: str = Field(min_length=1, description="Unique ledger identifier.")
     strategy_id: str = Field(min_length=1, description="Bound strategy identifier.")
     hypothesis_id: str = Field(min_length=1, description="Bound hypothesis identifier.")
-    trials: List[SearchTrialRecord] = Field(min_length=1, description="Non-empty list of exploratory trials.")
+    trials: Tuple[SearchTrialRecord, ...] = Field(
+        min_length=1, description="Non-empty immutable tuple of exploratory trials."
+    )
     sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
     is_sealed: bool = Field(default=False, description="True if search universe is sealed and immutable.")
     sealed_at_utc: Optional[str] = Field(default=None, description="UTC timestamp when search universe was sealed.")
-    ledger_digest: Optional[str] = Field(default=None, description="Cryptographic SHA-256 fingerprint of the sealed ledger universe.")
+    ledger_digest: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description="Cryptographic SHA-256 fingerprint of the sealed ledger universe (64 lowercase hex).",
+    )
 
     def compute_ledger_digest(self) -> str:
-        """Deterministic canonical SHA-256 fingerprint over all candidate trial lineage records."""
+        """Deterministic canonical SHA-256 fingerprint over all candidate trial lineage records.
+
+        CONTRACT SPECIFICATION:
+        - `ledger_digest` represents the pure mathematical CONTENT IDENTITY of the candidate search universe.
+        - `sealed_at_utc` represents the OPERATIONAL LIFECYCLE METADATA recording when the sealing occurred.
+        - Sealing timestamps do NOT alter the content identity of the underlying search universe.
+        """
         items: List[str] = []
         for t in self.trials:
             item = (
@@ -203,8 +217,13 @@ class SearchTrialLedger(BaseModel):
                     f"Trial {t.trial_id} hypothesis_id '{t.hypothesis_id}' does not match ledger hypothesis_id '{self.hypothesis_id}'."
                 )
 
-        # 3. Enforce ledger_digest integrity if marked sealed with digest
-        if self.is_sealed and self.ledger_digest is not None:
+        # 3. Enforce strict ledger_digest invariant on sealed ledgers (No SEALED + NO DIGEST escape hatch)
+        if self.is_sealed:
+            if self.ledger_digest is None:
+                raise DataContractError(
+                    f"SearchTrialLedger '{self.ledger_id}' is marked is_sealed=True but ledger_digest is None. "
+                    f"Sealed ledgers must possess a non-null canonical cryptographic ledger_digest."
+                )
             expected = self.compute_ledger_digest()
             if self.ledger_digest != expected:
                 raise DataContractError(
@@ -213,6 +232,7 @@ class SearchTrialLedger(BaseModel):
                 )
 
         return self
+
 
 
     @property
@@ -266,57 +286,53 @@ class ParameterPerturbationPoint(BaseModel):
         """Verify 4-way cryptographic and execution semantic binding against a real BacktestManifest.
 
         Enforces:
-        1. manifest_id == point.manifest_id
-        2. manifest execution Sharpe == point.actual_sharpe
-        3. manifest canonical output digest (compute_sha256()) == point.output_artifact_hash
-        4. manifest input configuration lineage SHA256(hypothesis_spec_sha256:strategy_config_hash) == point.input_artifact_hash
+        1. manifest is an instance of BacktestManifest (Strict type contract, zero duck-typing)
+        2. manifest_id == point.manifest_id
+        3. manifest execution Sharpe == point.actual_sharpe
+        4. manifest canonical output digest (compute_sha256()) == point.output_artifact_hash
+        5. manifest input configuration lineage SHA256(hypothesis_spec_sha256:strategy_config_hash) == point.input_artifact_hash
         """
-        man_id = getattr(manifest, "manifest_id", None)
-        if man_id != self.manifest_id:
+        from acash.backtest.schema import BacktestManifest
+
+        if not isinstance(manifest, BacktestManifest):
             raise DataContractError(
-                f"Manifest ID mismatch: point has '{self.manifest_id}', manifest has '{man_id}'."
+                f"Point manifest '{self.manifest_id}' must be an instance of BacktestManifest, "
+                f"got {type(manifest).__name__}."
             )
 
-        exec_summary = getattr(manifest, "execution_summary", None)
-        if exec_summary is None:
-            raise DataContractError(f"Manifest '{man_id}' lacks execution_summary.")
-
-        manifest_sr = getattr(exec_summary, "sharpe_ratio", None)
-        if manifest_sr is None:
-            raise DataContractError(f"Manifest '{man_id}' execution_summary has no sharpe_ratio.")
-
-        if Decimal(str(manifest_sr)) != self.actual_sharpe:
+        if manifest.manifest_id != self.manifest_id:
             raise DataContractError(
-                f"Sharpe ratio mismatch: point has {self.actual_sharpe}, manifest has {manifest_sr}."
+                f"Manifest ID mismatch: point has '{self.manifest_id}', manifest has '{manifest.manifest_id}'."
+            )
+
+        exec_summary = manifest.execution_summary
+        if exec_summary.sharpe_ratio is None:
+            raise DataContractError(f"Manifest '{manifest.manifest_id}' execution_summary has no sharpe_ratio.")
+
+        if Decimal(str(exec_summary.sharpe_ratio)) != self.actual_sharpe:
+            raise DataContractError(
+                f"Sharpe ratio mismatch: point has {self.actual_sharpe}, manifest has {exec_summary.sharpe_ratio}."
             )
 
         # Output artifact hash validation: must strictly equal manifest.compute_sha256()
-        if not hasattr(manifest, "compute_sha256"):
-            raise DataContractError(f"Manifest '{man_id}' does not provide compute_sha256().")
-
         manifest_out_hash = manifest.compute_sha256()
         if self.output_artifact_hash != manifest_out_hash:
             raise DataContractError(
                 f"Output artifact hash mismatch: point has '{self.output_artifact_hash}', manifest produced '{manifest_out_hash}'."
             )
 
-
         # Input artifact hash validation: must strictly equal SHA256(hypothesis_spec_sha256:strategy_config_hash)
-        strat_cfg_hash = getattr(manifest, "strategy_config_hash", None)
-        hyp_spec_hash = getattr(manifest, "hypothesis_spec_sha256", None)
-        if not strat_cfg_hash or not hyp_spec_hash:
-            raise DataContractError(
-                f"Manifest '{man_id}' missing strategy_config_hash or hypothesis_spec_sha256."
-            )
-
-        import hashlib
-        expected_in = hashlib.sha256(f"{hyp_spec_hash}:{strat_cfg_hash}".encode("utf-8")).hexdigest()
+        expected_in = hashlib.sha256(
+            f"{manifest.hypothesis_spec_sha256}:{manifest.strategy_config_hash}".encode("utf-8")
+        ).hexdigest()
         if self.input_artifact_hash != expected_in:
             raise DataContractError(
-                f"Input artifact hash mismatch: point has '{self.input_artifact_hash}', expected exact '{expected_in}' = SHA256(hypothesis_spec_sha256:strategy_config_hash)."
+                f"Input artifact hash mismatch: point has '{self.input_artifact_hash}', "
+                f"expected exact '{expected_in}' = SHA256(hypothesis_spec_sha256:strategy_config_hash)."
             )
 
         return True
+
 
 
 

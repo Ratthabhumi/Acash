@@ -54,7 +54,7 @@ def test_dsr_single_trial_mode() -> None:
         ledger_id="LEDGER_01",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=(trial,),
     )
 
     res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=ledger)
@@ -89,7 +89,7 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
         ledger_id="LEDGER_001",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=trials,
+        trials=tuple(trials),
     )
 
     res = DeflatedSharpeEngine.evaluate_dsr(
@@ -127,7 +127,7 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
         ledger_id="LEDGER_001",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=trials,
+        trials=tuple(trials),
     )
 
     res = DeflatedSharpeEngine.evaluate_dsr(
@@ -171,13 +171,14 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
         ledger_id="LEDGER_IDENTICAL",
         strategy_id="STRAT_IDENTICAL",
         hypothesis_id="HYP_01",
-        trials=identical_trials,
+        trials=tuple(identical_trials),
     )
     assert identical_ledger.get_empirical_sharpe_variance() == 0.0
 
     returns = list(np.random.normal(0.0015, 0.0040, 500))
     res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=identical_ledger)
     assert res.expected_max_sharpe_sr0 == Decimal("0.0")
+
 
 
 

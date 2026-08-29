@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 import numpy as np
 
 
+from acash.backtest.schema import BacktestManifest
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
 from acash.research.schema import HypothesisSpecification
@@ -94,7 +95,7 @@ class StatisticalValidationGate:
         hypothesis_spec: HypothesisSpecification,
         in_sample_returns: Sequence[Union[Decimal, float]],
         trial_matrix_column_trial_ids: Sequence[str],
-        manifest_store: Dict[str, Any],
+        manifest_store: Dict[str, BacktestManifest],
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
@@ -105,6 +106,7 @@ class StatisticalValidationGate:
         fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
+
 
 
         # 0. Mandatory Pre-Registered Hypothesis Specification Sovereign Binding
@@ -256,14 +258,18 @@ class StatisticalValidationGate:
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
 
-        # Invariant Check: SearchTrialLedger must be in SEALED state
+        # Invariant Check: SearchTrialLedger must be in SEALED state with non-null matching digest
         if not trial_ledger.is_sealed:
             raise DataContractError(
                 f"SearchTrialLedger '{trial_ledger.ledger_id}' must be in SEALED state before validation. "
                 f"Unsealed or open ledgers are strictly prohibited."
             )
+        if trial_ledger.ledger_digest is None:
+            raise DataContractError(
+                f"SearchTrialLedger '{trial_ledger.ledger_id}' is marked is_sealed=True but ledger_digest is None."
+            )
         expected_ledger_digest = trial_ledger.compute_ledger_digest()
-        if trial_ledger.ledger_digest is not None and trial_ledger.ledger_digest != expected_ledger_digest:
+        if trial_ledger.ledger_digest != expected_ledger_digest:
             raise DataContractError(
                 f"SearchTrialLedger '{trial_ledger.ledger_id}' ledger_digest mismatch: "
                 f"stored '{trial_ledger.ledger_digest}' != computed '{expected_ledger_digest}'."
@@ -345,27 +351,34 @@ class StatisticalValidationGate:
                     f"does not match computed parameter/feature configuration SHA-256 ({expected_cfg_hash})."
                 )
 
-            # 3. Candidate Execution Lineage (Mandatory Manifest Repository Verification)
+            # 3. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
                 )
             manifest = manifest_store[trial_rec.execution_manifest_id]
-            if hasattr(manifest, "manifest_id") and manifest.manifest_id != trial_rec.execution_manifest_id:
+            if not isinstance(manifest, BacktestManifest):
+                raise DataContractError(
+                    f"Candidate trial '{trial_rec.trial_id}' manifest '{trial_rec.execution_manifest_id}' "
+                    f"must be an instance of BacktestManifest, got {type(manifest).__name__}."
+                )
+            if manifest.manifest_id != trial_rec.execution_manifest_id:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' manifest ID mismatch: expected '{trial_rec.execution_manifest_id}', got '{manifest.manifest_id}'."
                 )
-            if hasattr(manifest, "hypothesis_id") and manifest.hypothesis_id != trial_rec.hypothesis_id:
+            if manifest.hypothesis_id != trial_rec.hypothesis_id:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' manifest hypothesis_id '{manifest.hypothesis_id}' does not match trial hypothesis_id '{trial_rec.hypothesis_id}'."
                 )
-            if hasattr(manifest, "strategy_config_hash") and manifest.strategy_config_hash != trial_rec.config_sha256:
+            if manifest.strategy_config_hash != trial_rec.config_sha256:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' manifest strategy_config_hash '{manifest.strategy_config_hash}' does not match trial config_sha256 '{trial_rec.config_sha256}'."
                 )
 
+            manifest_artifact_hash = manifest.compute_sha256()
+
             matrix_evidence_elements.append(
-                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}"
+                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}:{manifest_artifact_hash}"
             )
 
         matrix_evidence_hash = hashlib.sha256(":".join(matrix_evidence_elements).encode("utf-8")).hexdigest()
@@ -396,7 +409,13 @@ class StatisticalValidationGate:
                 raise DataContractError(
                     f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
                 )
-            pt.validate_manifest_binding(manifest_store[pt.manifest_id])
+            man = manifest_store[pt.manifest_id]
+            if not isinstance(man, BacktestManifest):
+                raise DataContractError(
+                    f"Perturbation point '{pt.manifest_id}' manifest must be an instance of BacktestManifest, got {type(man).__name__}."
+                )
+            pt.validate_manifest_binding(man)
+
 
 
         is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(

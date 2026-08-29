@@ -173,7 +173,7 @@ def _make_valid_trial_ledger(
         ledger_id=ledger_id,
         strategy_id=strategy_id,
         hypothesis_id=hypothesis_id,
-        trials=trials,
+        trials=tuple(trials),
         sharpe_space="PERIOD",
         is_sealed=False,
     )
@@ -297,7 +297,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         ledger_id="LEDGER_001",
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
-        trials=[trial],
+        trials=(trial,),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     # 1. None OOS returns
@@ -361,7 +361,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() 
         ledger_id="LEDGER_001",
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
-        trials=[trial],
+        trials=(trial,),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     report = gate.evaluate_strategy(
@@ -425,7 +425,7 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
             ledger_id="LEDGER_01",
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
-            trials=[record_1, record_2],
+            trials=(record_1, record_2),
         )
 
 
@@ -812,7 +812,7 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         ledger_id="L1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=(trial,),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     rep_oos = gate.evaluate_strategy(
@@ -920,7 +920,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         ledger_id="L1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=(trial,),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
     manifest_store: Dict[str, Any] = {}
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
@@ -1064,7 +1064,7 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
         ledger_id="L1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=trials,
+        trials=tuple(trials),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
     # M = 2 != K = 3
@@ -1332,7 +1332,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
         ledger_id="L_SHA_TAMPERED",
         strategy_id="STRAT_SHA",
         hypothesis_id="HYP_01",
-        trials=trials_tampered,
+        trials=tuple(trials_tampered),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     with pytest.raises(DataContractError, match="in_sample_return_series_sha256 .* does not match"):
@@ -1478,7 +1478,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
         ledger_id="L_CFG_TAMPERED",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=trials_tampered,
+        trials=tuple(trials_tampered),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     with pytest.raises(DataContractError, match="registered config_sha256 .* does not match"):
@@ -1538,7 +1538,7 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
         ledger_id="L_MAN",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=trials,
+        trials=tuple(trials),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     manifest_store: Dict[str, Any] = {}
@@ -1613,7 +1613,7 @@ def test_search_trial_ledger_sealing_lifecycle() -> None:
         ledger_id="LEDGER_SEAL_TEST",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[record],
+        trials=(record,),
     )
     assert ledger_open.is_sealed is False
     assert ledger_open.ledger_digest is None
@@ -1631,7 +1631,7 @@ def test_search_trial_ledger_sealing_lifecycle() -> None:
             ledger_id="LEDGER_SEAL_TEST",
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
-            trials=[record],
+            trials=(record,),
             is_sealed=True,
             sealed_at_utc="2026-08-28T12:00:00Z",
             ledger_digest="deadbeef" * 8,  # Invalid digest
@@ -1668,7 +1668,7 @@ def test_statistical_validation_gate_rejects_manifest_mismatch() -> None:
         ledger_id="L_MISMATCH",
         strategy_id="STRAT_MISMATCH",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=(trial,),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
     # Manifest with mismatched hypothesis_id
@@ -1691,3 +1691,164 @@ def test_statistical_validation_gate_rejects_manifest_mismatch() -> None:
             trial_return_matrix=trial_matrix,
             perturbation_grid=grid,
         )
+
+
+def test_sha256_strict_lowercase_64hex_pattern_rejections() -> None:
+    """Verify that SearchTrialRecord, SearchTrialLedger, and ParameterPerturbationPoint strictly reject uppercase, non-hex, 63, and 65-char hashes."""
+    from pydantic import ValidationError
+
+    valid_hex = "a" * 64
+    invalid_cases = [
+        "A" * 64,  # Uppercase hex
+        "z" * 64,  # Non-hex characters
+        "a" * 63,  # 63 chars (short)
+        "a" * 65,  # 65 chars (long)
+        "1234567890abcdef" * 4 + "G",  # Non-hex char
+    ]
+
+    for bad_hash in invalid_cases:
+        # 1. SearchTrialRecord in_sample_return_series_sha256
+        with pytest.raises((ValidationError, DataContractError)):
+            SearchTrialRecord(
+                trial_id="t1",
+                strategy_id="S1",
+                hypothesis_id="H1",
+                feature_names=["f"],
+                parameters={},
+                in_sample_sharpe=Decimal("1.0"),
+                p_value=Decimal("0.05"),
+                in_sample_return_series_sha256=bad_hash,
+                config_sha256=valid_hex,
+                execution_manifest_id="MAN_01",
+            )
+
+        # 2. SearchTrialRecord config_sha256
+        with pytest.raises((ValidationError, DataContractError)):
+            SearchTrialRecord(
+                trial_id="t1",
+                strategy_id="S1",
+                hypothesis_id="H1",
+                feature_names=["f"],
+                parameters={},
+                in_sample_sharpe=Decimal("1.0"),
+                p_value=Decimal("0.05"),
+                in_sample_return_series_sha256=valid_hex,
+                config_sha256=bad_hash,
+                execution_manifest_id="MAN_01",
+            )
+
+        # 3. ParameterPerturbationPoint output_artifact_hash
+        with pytest.raises((ValidationError, DataContractError)):
+            ParameterPerturbationPoint(
+                parameter_value=Decimal("7.5"),
+                run_id="run_1",
+                manifest_id="MANIFEST_01",
+                input_artifact_hash=valid_hex,
+                output_artifact_hash=bad_hash,
+                actual_sharpe=Decimal("1.5"),
+            )
+
+
+def test_statistical_validation_gate_rejects_fake_duck_typed_manifest() -> None:
+    """Verify that Gate strictly rejects non-BacktestManifest objects in manifest_store (zero duck typing)."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0020, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0015, 0.0040, 200))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    trial_matrix = np.zeros((500, 1), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_DUCK", manifest_store=manifest_store)
+
+    trial = SearchTrialRecord.create(
+        trial_id="trial_0",
+        strategy_id="STRAT_DUCK",
+        hypothesis_id="HYP_01",
+        feature_names=["mom"],
+        parameters={"period": 10},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.001"),
+        execution_manifest_id="MANIFEST_TRIAL_DUCK",
+        in_sample_returns=list(trial_matrix[:, 0]),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L_DUCK",
+        strategy_id="STRAT_DUCK",
+        hypothesis_id="HYP_01",
+        trials=(trial,),
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    # Pass arbitrary non-BacktestManifest object in manifest_store
+    manifest_store["MANIFEST_TRIAL_DUCK"] = object()
+
+    with pytest.raises(DataContractError, match="must be an instance of BacktestManifest"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_DUCK",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=is_returns,
+            trial_matrix_column_trial_ids=["trial_0"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            perturbation_grid=grid,
+        )
+
+
+def test_search_trial_ledger_rejects_sealed_without_digest() -> None:
+    """Verify that SearchTrialLedger strictly rejects is_sealed=True when ledger_digest is None."""
+    valid_hex = "a" * 64
+    record = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=valid_hex,
+        config_sha256=valid_hex,
+        execution_manifest_id="MAN_01",
+    )
+
+    with pytest.raises(DataContractError, match="marked is_sealed=True but ledger_digest is None"):
+        SearchTrialLedger(
+            ledger_id="LEDGER_NO_DIGEST",
+            strategy_id="S1",
+            hypothesis_id="H1",
+            trials=(record,),
+            is_sealed=True,
+            ledger_digest=None,  # SEALED + NO DIGEST escape hatch strictly blocked!
+        )
+
+
+def test_search_trial_ledger_tuple_deep_immutability() -> None:
+    """Verify that SearchTrialLedger.trials is an immutable Tuple preventing in-place mutations."""
+    valid_hex = "a" * 64
+    record = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.0"),
+        p_value=Decimal("0.05"),
+        in_sample_return_series_sha256=valid_hex,
+        config_sha256=valid_hex,
+        execution_manifest_id="MAN_01",
+    )
+
+    ledger = SearchTrialLedger(
+        ledger_id="LEDGER_IMMUTABLE",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        trials=(record,),
+    )
+    assert isinstance(ledger.trials, tuple)
+    assert not hasattr(ledger.trials, "append")
+

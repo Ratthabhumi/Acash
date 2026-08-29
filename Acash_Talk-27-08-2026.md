@@ -33620,6 +33620,78 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **259/259 tests PASSED (100%)** (เพิ่ม 3 tests สำหรับ synthetic return hash rejection, sealing lifecycle, และ manifest mismatch validation)
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 119)
+
+<USER_REQUEST>
+ผมตรวจ commit b177f3f จาก source จริงบน GitHub แล้ว ไม่ได้ตัดสินจาก walkthrough อย่างเดียวครับ และรอบนี้มีข้อดีคือ 4 จุดที่เราระบุไว้ก่อนหน้าถูกแก้จริง แต่ยังมีช่องโหว่ใหม่/ตกหล่นอีกหลายจุดที่ผม ยังไม่ให้ Final Sign-off โดยเฉพาะ 3 จุดแรกด้านล่างเป็นเรื่อง provenance จริง ไม่ใช่ cosmetic:
+1. 🔴 P0 #1 — ParameterPerturbationPoint และ SearchTrialRecord ยังไม่ได้บังคับ "64-hex" จริง (Field(pattern=r"^[0-9a-f]{64}$") พร้อม adversarial tests สำหรับ uppercase/non-hex/63/65 chars)
+2. 🔴 P0 #2 — Candidate Manifest Verification ยังใช้ hasattr() ซึ่งทำให้ Fake Manifest ผ่านได้ (เปลี่ยนเป็น isinstance(manifest, BacktestManifest) และ unconditional semantic verification)
+3. 🔴 P0 #3 — ledger_digest ยัง Optional ตอน is_sealed=True (บังคับ is_sealed=True => ledger_digest != None ห้ามมี SEALED + NO DIGEST state)
+4. 🟠 P1 #4 — sealed_at_utc ยังไม่ได้อยู่ใน ledger_digest (ระบุ contract ให้ชัดว่า ledger_digest = pure content identity, sealed_at_utc = operational lifecycle metadata)
+5. 🟠 P1 #5 — SearchTrialLedger ยังเป็น shallow-immutable (เปลี่ยน trials: Tuple[SearchTrialRecord, ...] เพื่อ deep immutability)
+6. 🟠 P1 #6 — Cryptographic Binding of Return & Execution Artifact into Matrix Evidence (bind manifest.compute_sha256() เข้ากับ matrix evidence hash)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 119)
+
+### 🛠️ สรุปรายละเอียด Strict 64-Hex SHA-256 Pattern, Zero Duck-Typing Manifest Verification, Strict Sealed Digest Invariant & Deep Tuple Immutability
+
+1. **🔴 Strict 64-Hex Lowercase SHA-256 Regex Pattern Enforcement (P0):**
+   - ใน `SearchTrialRecord`:
+     - `in_sample_return_series_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")`
+     - `config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")`
+   - ใน `SearchTrialLedger`:
+     - `ledger_digest: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")`
+   - ใน `ParameterPerturbationPoint`:
+     - `input_artifact_hash: str = Field(pattern=r"^[0-9a-f]{64}$")`
+     - `output_artifact_hash: str = Field(pattern=r"^[0-9a-f]{64}$")`
+   - เพิ่ม Adversarial Tests ครอบคลุม: Uppercase hex (`"A" * 64`), Non-hex chars (`"z" * 64`), 63 chars, 65 chars ใน `test_sha256_strict_lowercase_64hex_pattern_rejections()`
+
+2. **🔴 Zero Duck-Typing BacktestManifest Verification in Gate & Schema (P0):**
+   - ใน `StatisticalValidationGate.evaluate_strategy()`:
+     - พารามิเตอร์ `manifest_store: Dict[str, BacktestManifest]` ได้รับการประกาศ type อย่างเข้มงวด
+     - Candidate loop ตรวจสอบ `if not isinstance(manifest, BacktestManifest): raise DataContractError(...)`
+     - ตรวจสอบ fields แบบ unconditional 100%:
+       - `manifest.manifest_id == trial_rec.execution_manifest_id`
+       - `manifest.hypothesis_id == trial_rec.hypothesis_id`
+       - `manifest.strategy_config_hash == trial_rec.config_sha256`
+       - `manifest_artifact_hash = manifest.compute_sha256()`
+     - Perturbation points: ตรวจสอบ `if not isinstance(man, BacktestManifest): raise DataContractError(...)` ก่อนเรียก `validate_manifest_binding(man)`
+   - ใน `ParameterPerturbationPoint.validate_manifest_binding()`:
+     - บังคับ `if not isinstance(manifest, BacktestManifest): raise DataContractError(...)` ปราศจาก `getattr()` หรือ `hasattr()` duck-typing ใด ๆ
+   - เพิ่ม Adversarial Test: `test_statistical_validation_gate_rejects_fake_duck_typed_manifest()`
+
+3. **🔴 Strict Invariant: $is\_sealed = True \implies ledger\_digest \neq None$ (Zero "SEALED + NO DIGEST" State) (P0):**
+   - ใน `SearchTrialLedger.validate_ledger_identity_and_uniqueness()`:
+     - หาก `self.is_sealed is True` และ `self.ledger_digest is None` จะ raise `DataContractError("marked is_sealed=True but ledger_digest is None")` ทันที
+     - ตรวจสอบ `self.ledger_digest == self.compute_ledger_digest()`
+   - ใน Gate:
+     - ตรวจสอบ unconditional: `if not trial_ledger.is_sealed: ...`, `if trial_ledger.ledger_digest is None: ...`, `if trial_ledger.ledger_digest != trial_ledger.compute_ledger_digest(): ...`
+   - เพิ่ม Adversarial Test: `test_search_trial_ledger_rejects_sealed_without_digest()`
+
+4. **🟠 Pure Mathematical Content Identity Contract (`ledger_digest` vs `sealed_at_utc`) (P1):**
+   - ระบุ Contract ใน docstrings ชัดเจน:
+     - `ledger_digest` คือ **Mathematical Content Identity** คำนวณจาก `ledger_id`, `strategy_id`, `hypothesis_id`, `sharpe_space` และ ordered candidate trial lineage
+     - `sealed_at_utc` คือ **Operational Lifecycle Metadata** (timestamp ไม่เปลี่ยน content digest ของ universe)
+
+5. **🟠 Deep Immutability of Sealed Ledger (`trials: Tuple[SearchTrialRecord, ...]`) (P1):**
+   - ใน `SearchTrialLedger`: เปลี่ยน `trials: Tuple[SearchTrialRecord, ...]`
+   - ป้องกัน in-place object mutation (`.append()`, `__setitem__`) โดยตรงระดับโครงสร้างข้อมูล
+   - เพิ่ม Test: `test_search_trial_ledger_tuple_deep_immutability()`
+
+6. **🟠 Full Cryptographic Binding of Return & Execution Manifest Artifacts (P1):**
+   - ใน Gate: ผูก `manifest.compute_sha256()` เข้าสู่ matrix evidence payload โดยตรง:
+     $$\text{evidence}_m = \text{trial\_id}_m : \text{config\_sha256}_m : H(\mathbf{R}_{\cdot, m}) : \text{execution\_manifest\_id}_m : H(\text{ManifestArtifact}_m)$$
+
+7. **Full Test Suite & Mypy Status:**
+   - **263/263 tests PASSED (100%)** (เพิ่ม 4 dedicated adversarial tests)
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 
