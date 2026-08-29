@@ -109,11 +109,15 @@ class OverfittingEngine:
                 omega_list.append(omega_m)
 
             omega = float(np.mean(omega_list))
-            omega = max(1e-6, min(1.0 - 1e-6, omega))
+            if not (0.0 < omega < 1.0) or not math.isfinite(omega):
+                raise DataContractError(
+                    f"PBO relative rank omega={omega} violates mathematical invariant 0 < omega < 1 on CSCV split {c}."
+                )
 
             # 3. Log-odds lambda = ln(omega / (1 - omega))
             logit_val = math.log(omega / (1.0 - omega))
             logits.append(logit_val)
+
 
             # 4. If logit < 0 (i.e. omega < 0.5, strictly below median OOS performance), count as overfit
             if logit_val < 0.0:

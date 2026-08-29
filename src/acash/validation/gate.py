@@ -530,7 +530,9 @@ class StatisticalValidationGate:
             confidence_level_alpha=float(self.config.confidence_level_alpha),
             periods_per_year=float(self.config.periods_per_year),
             trial_ledger=trial_ledger,
+            use_empirical_trial_mean=self.config.use_empirical_trial_mean,
         )
+
 
         # 7. Multiple Testing FWER & Haircut Sharpe (Authoritative K from ledger)
         # Note: Index 0 is the pre-registered primary candidate (bound to in_sample_returns)

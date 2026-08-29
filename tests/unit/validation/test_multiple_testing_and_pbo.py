@@ -233,4 +233,22 @@ def test_multiple_testing_evaluates_primary_candidate_fwer_not_min_p() -> None:
     assert float(res_b.bonferroni_haircut_sharpe_ratio) > 0.35
 
 
+def test_pbo_rejects_non_finite_or_out_of_bounds_omega() -> None:
+    """Verify that OverfittingEngine raises DataContractError if relative rank omega violates 0 < omega < 1."""
+    from unittest.mock import patch
+
+    is_matrix = np.array([[1.0, 0.5], [0.8, 1.2]])
+    oos_matrix = np.array([[0.5, 1.0], [1.1, 0.7]])
+
+    # Mock mean(omega_list) to return an out-of-bounds relative rank (e.g. 0.0 or 1.0)
+    with patch("numpy.mean", return_value=0.0):
+        with pytest.raises(DataContractError, match="violates mathematical invariant 0 < omega < 1"):
+            OverfittingEngine.calculate_pbo(is_matrix, oos_matrix)
+
+    with patch("numpy.mean", return_value=1.0):
+        with pytest.raises(DataContractError, match="violates mathematical invariant 0 < omega < 1"):
+            OverfittingEngine.calculate_pbo(is_matrix, oos_matrix)
+
+
+
 

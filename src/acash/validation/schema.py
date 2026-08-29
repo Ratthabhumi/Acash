@@ -717,6 +717,10 @@ class ValidationPolicyConfig(BaseModel):
         le=Decimal("0.1"),
         description="Methodological tolerance bound epsilon_sr for ledger vs empirical sample Sharpe consistency.",
     )
+    use_empirical_trial_mean: bool = Field(
+        default=False,
+        description="Whether to use empirical trial mean from ledger (True) or zero-location null policy (False, default).",
+    )
 
 
 class ValidationConfig(BaseModel):
@@ -740,6 +744,14 @@ class ValidationConfig(BaseModel):
         le=Decimal("0.1"),
         description="Methodological tolerance bound epsilon_sr for ledger vs empirical sample Sharpe consistency.",
     )
+    use_empirical_trial_mean: bool = Field(
+        default=False,
+        description=(
+            "If False (default), enforces the ACASH Zero-Location DSR null policy (mu_trials = 0.0). "
+            "If True, derives mu_trials empirically from the SearchTrialLedger mean Sharpe ratio."
+        ),
+    )
+
 
 
 

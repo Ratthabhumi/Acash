@@ -7,14 +7,18 @@ Mathematical implementation based on:
 - Opdyke, J. D. (2007). "Comparing Sharpe Ratios: So Where are the p-values?" Journal of Asset Management, 8(5), 308–336.
 
 Strictly enforces:
-- Moment estimation: Fisher-Pearson sample skewness g_1 and Pearson standardized fourth moment kurtosis g_2 >= 1.0 (normal = 3.0).
+- Moment estimation: Fisher-Pearson sample skewness g_1 and Pearson standardized fourth moment kurtosis g_2 >= ((n-1)/n)^2 (normal distribution = 3.0).
 - Scale alignment: SR0 and sample Sharpe evaluated in identical frequency space (per-period) before annualization.
-- Explicit SelectionCorrectionMode:
-  * SINGLE_TRIAL: When K = 1, V = 0, SR0 = 0. Non-normal asymptotic test against hurdle without selection penalty.
-  * MULTIPLE_TRIAL: When K >= 2, SR0 derived via EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1 using empirical trial variance V.
-- Asymptotic Deflated Sharpe Ratio (DSR) non-normal test statistic and p-value.
+- Location-Scale Estimator Form: SR0 = mu_trials + sqrt(V_trials) * f(K).
+  * ZERO_LOCATION variant (default): mu_trials = 0.0 under standard ACASH null governance policy.
+  * EMPIRICAL_LOCATION_SCALE variant: mu_trials derived from trial ledger or explicit input.
+- SelectionCorrectionMode:
+  * SINGLE_TRIAL: When K = 1, V = 0, SR0 = mu_trials. Non-normal asymptotic test against hurdle without selection penalty.
+  * MULTIPLE_TRIAL: When K >= 2, SR0 derived via Gumbel EVT formula using empirical trial variance V and declared search count K.
+- Asymptotic Deflated Sharpe Ratio (DSR) non-normal test statistic and p-value with strict denominator > 0 fail-closed validation.
 - Minimum Track Record Length (MinTRL) required sample size calculation.
 """
+
 
 from decimal import Decimal
 import math
@@ -227,6 +231,7 @@ class DeflatedSharpeEngine:
         declared_trials_k: Optional[int] = None,
         effective_independent_trials_k: Optional[int] = None,
         null_trial_mean_sharpe: float = 0.0,
+        use_empirical_trial_mean: bool = False,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
@@ -239,8 +244,9 @@ class DeflatedSharpeEngine:
             SR_0(K_declared, V) >= SR_0(K_effective_independent, V)  [for fixed V]
           Across different trial universes where (K, V, mu) vary jointly, SR_0 is determined jointly by location
           and dispersion.
-        - Zero-Location Policy: ACASH operates by default under the zero-location null policy (mu_trials = 0.0),
-          testing whether strategy Sharpe exceeds the expected maximum Sharpe of K zero-mean random trials.
+        - Location Parameter Provenance:
+          * If use_empirical_trial_mean=False (ACASH zero-location policy): mu_trials = null_trial_mean_sharpe (0.0).
+          * If use_empirical_trial_mean=True: mu_trials is derived directly from trial_ledger.get_empirical_sharpe_mean().
         - DSR Probability: Phi(z_DSR) computes the probability that the true strategy Sharpe exceeds the
           expected maximum Sharpe under selection bias and non-normal (skewness g_1, kurtosis g_2) returns.
           This is a non-normal, selection-corrected composite probability, NOT the single-test asymptotic
@@ -265,7 +271,19 @@ class DeflatedSharpeEngine:
         if trial_ledger is not None:
             declared_k = trial_ledger.total_trials
             effective_trials_k = declared_k
-            mean_of_trials = null_trial_mean_sharpe
+            if use_empirical_trial_mean:
+                raw_mean = trial_ledger.get_empirical_sharpe_mean()
+                if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
+                    if periods_per_year <= 0:
+                        raise DataContractError(f"Invalid periods_per_year {periods_per_year} for ANNUAL SharpeSpace scaling.")
+                    mean_of_trials = raw_mean / annual_mult
+                elif trial_ledger.sharpe_space == SharpeSpace.PERIOD:
+                    mean_of_trials = raw_mean
+                else:
+                    raise DataContractError(f"Unsupported SharpeSpace '{trial_ledger.sharpe_space}' in trial_ledger.")
+            else:
+                mean_of_trials = null_trial_mean_sharpe
+
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
@@ -301,7 +319,12 @@ class DeflatedSharpeEngine:
         # 3. Non-normal asymptotic variance factor:
         # sigma_SR = sqrt( (1 - g_1 * SR + (g_2 - 1)/4 * SR^2) / (T - 1) )
         denominator_term = 1.0 - (skew * sr_hat_period) + (((kurt - 1.0) / 4.0) * (sr_hat_period ** 2))
-        denominator_term = max(1e-12, denominator_term)
+        if not math.isfinite(denominator_term) or denominator_term <= 0.0:
+            raise DataContractError(
+                f"DSR non-normal asymptotic variance factor is non-positive or non-finite "
+                f"(denominator_term = {denominator_term:.6e} <= 0). Strategy return series higher moments "
+                f"(skew={skew:.4f}, kurt={kurt:.4f}, SR={sr_hat_period:.4f}) violate asymptotic regularity conditions."
+            )
 
         # 4. Asymptotic standardized test statistic z
         z_stat = (sr_hat_period - sr0_period) * math.sqrt(n - 1) / math.sqrt(denominator_term)
@@ -313,6 +336,7 @@ class DeflatedSharpeEngine:
             min_trl_bars = int(math.ceil(1.0 + denominator_term * ((z_alpha / (sr_hat_period - sr0_period)) ** 2)))
         else:
             min_trl_bars = int(1e9)  # Infinitely long track record needed if return is at or below null
+
 
         is_significant = dsr_prob >= (1.0 - confidence_level_alpha)
         has_sufficient_trl = n >= min_trl_bars

@@ -7,7 +7,8 @@ import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.validation.deflated_sharpe import DeflatedSharpeEngine
-from acash.validation.schema import SearchTrialLedger, SearchTrialRecord, SelectionCorrectionMode
+from acash.validation.schema import SearchTrialLedger, SearchTrialRecord, SelectionCorrectionMode, SharpeSpace
+
 
 
 def test_higher_moments_estimation() -> None:
@@ -179,6 +180,69 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
     returns = list(np.random.normal(0.0015, 0.0040, 500))
     res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=identical_ledger)
     assert res.expected_max_sharpe_sr0 == Decimal("0.0")
+
+
+def test_dsr_location_provenance_zero_location_vs_empirical_mean() -> None:
+    """Verify DSR location parameter provenance: zero-location policy vs empirical ledger mean."""
+    returns = list(np.random.normal(0.0020, 0.0040, 500))
+    dummy_returns = [0.01, 0.02, 0.03, 0.04]
+
+    # 10 trials with Sharpes 1.0, 1.2, 1.4, ..., 2.8 (Mean = 1.90, Variance > 0)
+    trials = [
+        SearchTrialRecord.create(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal(f"{1.0 + i * 0.2:.6f}"),
+            p_value=Decimal("0.001"),
+            execution_manifest_id=f"MANIFEST_{i}",
+            in_sample_returns=dummy_returns,
+        )
+        for i in range(10)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="LEDGER_01",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=tuple(trials),
+        sharpe_space=SharpeSpace.PERIOD,
+    )
+
+    # 1. Zero-Location Governance Policy (default): mu_trials = 0.0
+    res_zero = DeflatedSharpeEngine.evaluate_dsr(
+        returns=returns,
+        trial_ledger=ledger,
+        use_empirical_trial_mean=False,
+    )
+    assert res_zero.trial_mean_used == Decimal("0.0")
+    assert res_zero.sr0_estimator == "ZERO_LOCATION_EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+
+    # 2. Empirical Location-Scale Variant: mu_trials derived from ledger mean
+    res_empirical = DeflatedSharpeEngine.evaluate_dsr(
+        returns=returns,
+        trial_ledger=ledger,
+        use_empirical_trial_mean=True,
+    )
+    expected_mean = float(ledger.get_empirical_sharpe_mean())
+    assert math.isclose(float(res_empirical.trial_mean_used), expected_mean, abs_tol=1e-6)
+    assert res_empirical.sr0_estimator == "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
+    assert res_empirical.expected_max_sharpe_sr0 > res_zero.expected_max_sharpe_sr0
+
+
+def test_dsr_rejects_non_positive_denominator_term() -> None:
+    """Verify that DeflatedSharpeEngine raises DataContractError when asymptotic variance denominator is <= 0."""
+    from unittest.mock import patch
+
+    returns = [0.01, -0.02, 0.015, 0.03, -0.01]
+    # Mock higher moments to produce denominator_term <= 0
+    # denominator_term = 1 - skew*SR + (kurt - 1)/4 * SR^2
+    # If skew = 100.0, SR = 1.0, kurt = 1.0 -> denominator_term = 1 - 100 + 0 = -99 <= 0
+    with patch.object(DeflatedSharpeEngine, "calculate_higher_moments", return_value=(1.0, 1.0, 100.0, 1.0)):
+        with pytest.raises(DataContractError, match="non-positive or non-finite"):
+            DeflatedSharpeEngine.evaluate_dsr(returns=returns)
+
 
 
 
