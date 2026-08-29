@@ -18,8 +18,9 @@ Strictly enforces:
 
 from decimal import Decimal
 import math
-from typing import Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 import numpy as np
+from scipy import stats  # type: ignore[import-untyped]
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
@@ -112,17 +113,29 @@ class DeflatedSharpeEngine:
         Returns:
             Tuple[mean, std, skewness_g1, kurtosis_g2]
         """
-        for r in returns:
+        float_values: List[float] = []
+        for idx, r in enumerate(returns):
             if isinstance(r, Decimal):
                 if not r.is_finite():
                     raise DataContractError(f"Non-finite Decimal value '{r}' (NaN or Inf) encountered in return series.")
+                try:
+                    rf = float(r)
+                    if not math.isfinite(rf):
+                        raise DataContractError(
+                            f"Decimal observation '{r}' at index {idx} exceeds float64 representable magnitude boundary."
+                        )
+                except (OverflowError, ValueError) as e:
+                    raise DataContractError(
+                        f"Decimal observation '{r}' at index {idx} exceeds float64 representable magnitude boundary."
+                    ) from e
             else:
                 rf = float(r)
                 if not math.isfinite(rf):
                     raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in return series.")
+            float_values.append(rf)
 
+        arr = np.array(float_values, dtype=np.float64)
 
-        arr = np.array([float(r) for r in returns], dtype=np.float64)
         n = len(arr)
         if n < 4:
             raise DataContractError(f"Minimum 4 return observations required for moment estimation, got {n}")

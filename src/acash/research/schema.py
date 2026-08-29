@@ -107,9 +107,11 @@ class HypothesisSpecification(BaseModel):
     author: str
 
     def to_canonical_json(self) -> str:
-        """Serialize hypothesis specification to canonical JSON."""
-        d = self.model_dump(mode="json")
-        return json.dumps(d, sort_keys=True)
+        """Serialize hypothesis specification to canonical JSON using the universal CanonicalConfigSerializer."""
+        from acash.core.serialization import CanonicalConfigSerializer
+        d = self.model_dump(mode="python")
+        return CanonicalConfigSerializer.to_canonical_json(d)
+
 
 
 class HacInferencePolicy(BaseModel):

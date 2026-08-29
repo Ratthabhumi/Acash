@@ -51,6 +51,16 @@ def _verify_finite_numeric(v: Any, context: str = "value") -> Decimal:
     if isinstance(v, Decimal):
         if not v.is_finite():
             raise DataContractError(f"Non-finite Decimal {context} '{v}' (NaN or Inf) encountered.")
+        try:
+            fv = float(v)
+            if not math.isfinite(fv):
+                raise DataContractError(
+                    f"Decimal {context} '{v}' exceeds float64 representable magnitude boundary."
+                )
+        except (OverflowError, ValueError) as e:
+            raise DataContractError(
+                f"Decimal {context} '{v}' exceeds float64 representable magnitude boundary."
+            ) from e
         return v
     if isinstance(v, (int, np.integer)):
         return Decimal(str(int(v)))
@@ -69,6 +79,16 @@ def _verify_finite_numeric(v: Any, context: str = "value") -> Decimal:
         dec = Decimal(str(v))
         if not dec.is_finite():
             raise DataContractError(f"Non-finite string/numeric {context} '{v}' encountered.")
+        try:
+            fv = float(dec)
+            if not math.isfinite(fv):
+                raise DataContractError(
+                    f"Numeric {context} '{v}' exceeds float64 representable magnitude boundary."
+                )
+        except (OverflowError, ValueError) as e:
+            raise DataContractError(
+                f"Numeric {context} '{v}' exceeds float64 representable magnitude boundary."
+            ) from e
         return dec
     except (InvalidOperation, OverflowError) as e:
         raise DataContractError(f"Invalid numeric representation for {context} '{v}'.") from e
@@ -86,7 +106,6 @@ def _compute_canonical_series_sha256(series: Optional[Union[Sequence[Union[Decim
 
     raw_payload = ",".join(dec_strings)
     return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
-
 
 
 def _compute_ledger_sha256(ledger: Optional[SearchTrialLedger]) -> str:
@@ -172,7 +191,7 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
             decision_payload = (
                 f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
-                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}:{self.config.sharpe_consistency_tolerance}"
             )
             decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
             val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
@@ -204,7 +223,7 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_MISSING_OOS_DATA
             decision_payload = (
                 f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
-                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}:{self.config.sharpe_consistency_tolerance}"
             )
             decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
             val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
@@ -237,7 +256,7 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_MISSING_PERTURBATION_GRID
             decision_payload = (
                 f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
-                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}:{self.config.sharpe_consistency_tolerance}"
             )
             decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
             val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
@@ -271,8 +290,9 @@ class StatisticalValidationGate:
             verdict = ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE
             decision_payload = (
                 f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
-                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}:{self.config.sharpe_consistency_tolerance}"
             )
+
             decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
             val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
             now_utc = fixed_created_timestamp_utc or datetime.now(timezone.utc).isoformat()
@@ -393,7 +413,7 @@ class StatisticalValidationGate:
                 )
 
             # 3. Methodological Sharpe Consistency: Verify recorded ledger Sharpe matches empirical Sharpe of column m
-            # within methodological tolerance bound epsilon_sr = 1e-3
+            # within methodological tolerance bound self.config.sharpe_consistency_tolerance
             mean_m = float(np.mean(trial_return_matrix[:, m]))
             std_m = float(np.std(trial_return_matrix[:, m], ddof=1)) if n_is > 1 else 1.0
             sr_m_period = (mean_m / std_m) if std_m > 1e-12 else 0.0
@@ -403,7 +423,7 @@ class StatisticalValidationGate:
             else:
                 computed_sr_m = sr_m_period
 
-            epsilon_sr = 1e-3
+            epsilon_sr = float(self.config.sharpe_consistency_tolerance)
             diff_sr = abs(float(trial_rec.in_sample_sharpe) - computed_sr_m)
             if diff_sr > epsilon_sr:
                 raise DataContractError(
@@ -411,7 +431,6 @@ class StatisticalValidationGate:
                     f"exceeds methodological tolerance bound (|SR_ledger - SR_computed| = {diff_sr:.6f} > {epsilon_sr}) "
                     f"against empirical Sharpe ({computed_sr_m:.6f})."
                 )
-
 
             # 4. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:
@@ -437,16 +456,30 @@ class StatisticalValidationGate:
                     f"Trial '{trial_rec.trial_id}' manifest strategy_config_hash '{manifest.strategy_config_hash}' does not match trial config_sha256 '{trial_rec.config_sha256}'."
                 )
 
-            manifest_artifact_hash = manifest.compute_sha256()
 
-            matrix_evidence_elements.append(
-                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}:{manifest_artifact_hash}"
-            )
+            # Strict Unconditional Manifest Output Integrity Check
+            if manifest.execution_summary is None:
+                raise DataContractError(
+                    f"Candidate trial '{trial_rec.trial_id}' manifest '{manifest.manifest_id}' has no execution_summary."
+                )
+            manifest_sr = manifest.execution_summary.sharpe_ratio
+            if manifest_sr is None:
+                raise DataContractError(
+                    f"Candidate trial '{trial_rec.trial_id}' manifest '{manifest.manifest_id}' execution_summary has no sharpe_ratio."
+                )
+            if abs(float(trial_rec.in_sample_sharpe) - float(manifest_sr)) > epsilon_sr:
+                raise DataContractError(
+                    f"Candidate trial '{trial_rec.trial_id}' ledger Sharpe ({trial_rec.in_sample_sharpe}) "
+                    f"deviates from manifest execution summary Sharpe ({manifest_sr})."
+                )
 
-        matrix_evidence_hash = hashlib.sha256(":".join(matrix_evidence_elements).encode("utf-8")).hexdigest()
+            # Full Cryptographic Binding: Bind candidate return series, config, manifest ID, and manifest artifact hash
+            manifest_out_hash = manifest.compute_sha256()
+            evidence_item = f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}:{manifest_out_hash}"
+            matrix_evidence_elements.append(evidence_item)
 
-
-        all_p_values = trial_ledger.p_values
+        matrix_evidence_payload = ";".join(matrix_evidence_elements)
+        matrix_evidence_hash = hashlib.sha256(matrix_evidence_payload.encode("utf-8")).hexdigest()
 
         # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger with Unified Frequency Scale)
         dsr_result = DeflatedSharpeEngine.evaluate_dsr(
@@ -459,7 +492,7 @@ class StatisticalValidationGate:
 
         # 7. Multiple Testing FWER & Haircut Sharpe (Authoritative K from ledger)
         mult_result = MultipleTestingEngine.evaluate_multiple_testing(
-            p_values=all_p_values,
+            p_values=trial_ledger.p_values,
             estimated_sharpe=float(dsr_result.estimated_sharpe),
             sample_size_t=n_is,
             effective_trials_k=effective_k,
@@ -478,8 +511,6 @@ class StatisticalValidationGate:
                     f"Perturbation point '{pt.manifest_id}' manifest must be an instance of BacktestManifest, got {type(man).__name__}."
                 )
             pt.validate_manifest_binding(man)
-
-
 
         is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(
             trial_return_matrix,
@@ -507,7 +538,8 @@ class StatisticalValidationGate:
             ret_val = (oos_sr / dsr_result.estimated_sharpe) * Decimal("100.0")
             retention_pct = to_decimal18(ret_val)
 
-        # 10. Gating Decision Logic (Sequential Sovereign Arbiter)
+
+        # 8. Master Verdict Determination
         verdict = ValidationGateVerdict.PASS_TRADEABLE_ALPHA
         is_tradeable = True
 
@@ -549,10 +581,10 @@ class StatisticalValidationGate:
         )
         evidence_digest = hashlib.sha256(evidence_payload.encode("utf-8")).hexdigest()
 
-        # Decision Digest (Evidence + Governance decision + Threshold parameters)
+        # Decision Digest (Evidence + Governance decision + Threshold parameters + Sharpe tolerance)
         decision_payload = (
             f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
-            f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+            f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}:{self.config.sharpe_consistency_tolerance}"
         )
         decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
 

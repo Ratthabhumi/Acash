@@ -12,8 +12,8 @@ from acash.core.domain.exceptions import DataContractError
 from acash.research.schema import ExpectedDirection, HypothesisSpecification, InvalidationCriteria
 from acash.validation.deflated_sharpe import DeflatedSharpeEngine
 from acash.validation.gate import StatisticalValidationGate, _compute_canonical_series_sha256
+from acash.core.serialization import CanonicalConfigSerializer, deep_freeze_value
 from acash.validation.schema import (
-    CanonicalConfigSerializer,
     ParameterPerturbationGrid,
     ParameterPerturbationPoint,
     SearchTrialLedger,
@@ -22,8 +22,8 @@ from acash.validation.schema import (
     SharpeSpace,
     ValidationConfig,
     ValidationGateVerdict,
-    deep_freeze_value,
 )
+
 
 
 
@@ -2146,14 +2146,23 @@ def test_search_trial_record_deep_immutable_parameters() -> None:
 
 
 def test_decimal_is_finite_guards_on_extreme_values() -> None:
-    """Verify that Decimal is_finite guards properly validate extreme Decimal values without overflow."""
-    # Extremely large decimal (hundreds of digits) does not crash with OverflowError
+    """Verify that Decimal is_finite guards properly validate extreme Decimal values and reject float64 overflow."""
+    # 100-digit decimal is within float64 range (< 1.79e308)
     large_dec = Decimal("1" * 100 + ".5")
     assert large_dec.is_finite() is True
 
     from acash.validation.gate import _verify_finite_numeric
     checked = _verify_finite_numeric(large_dec, context="test_large")
     assert checked == large_dec
+
+    # 400-digit decimal exceeds float64 range (> 1.79e308) -> raises DataContractError
+    overflow_dec = Decimal("1" * 400 + ".5")
+    assert overflow_dec.is_finite() is True  # Finite in Decimal
+    with pytest.raises(DataContractError, match="exceeds float64 representable magnitude boundary"):
+        _verify_finite_numeric(overflow_dec, context="overflow_test")
+
+    with pytest.raises(DataContractError, match="exceeds float64 representable magnitude boundary"):
+        DeflatedSharpeEngine.calculate_higher_moments([0.01, 0.02, 0.03, overflow_dec])
 
     # Non-finite Decimals fail closed
     with pytest.raises(DataContractError, match="Non-finite Decimal"):
@@ -2164,6 +2173,42 @@ def test_decimal_is_finite_guards_on_extreme_values() -> None:
 
     with pytest.raises(DataContractError, match="Non-finite Decimal"):
         _verify_finite_numeric(Decimal("-Infinity"), context="neg_inf_test")
+
+
+def test_governance_sharpe_consistency_tolerance_binding() -> None:
+    """Verify that sharpe_consistency_tolerance is configurable and bound into the decision digest."""
+    # Custom config with tighter tolerance 1e-4
+    config_tight = ValidationConfig(sharpe_consistency_tolerance=Decimal("0.0001"))
+    config_loose = ValidationConfig(sharpe_consistency_tolerance=Decimal("0.01"))
+
+    assert config_tight.sharpe_consistency_tolerance == Decimal("0.0001")
+    assert config_loose.sharpe_consistency_tolerance == Decimal("0.01")
+
+    # Verify decision digest differs when sharpe_consistency_tolerance changes
+    gate_tight = StatisticalValidationGate(config=config_tight)
+    gate_loose = StatisticalValidationGate(config=config_loose)
+
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_GOV")
+    report_tight = gate_tight.evaluate_strategy(
+        strategy_id="STRAT_GOV",
+        hypothesis_id="HYP_GOV",
+        hypothesis_spec=spec,
+        in_sample_returns=[0.01, 0.02, 0.03, 0.04],
+        trial_matrix_column_trial_ids=["t1"],
+        manifest_store={},
+    )
+    report_loose = gate_loose.evaluate_strategy(
+        strategy_id="STRAT_GOV",
+        hypothesis_id="HYP_GOV",
+        hypothesis_spec=spec,
+        in_sample_returns=[0.01, 0.02, 0.03, 0.04],
+        trial_matrix_column_trial_ids=["t1"],
+        manifest_store={},
+    )
+    # Different governance tolerance -> different decision digest & validation ID
+    assert report_tight.decision_digest != report_loose.decision_digest
+    assert report_tight.validation_id != report_loose.validation_id
+
 
 
 

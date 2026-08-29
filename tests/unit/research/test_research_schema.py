@@ -45,8 +45,9 @@ def test_hypothesis_specification_model_and_serialization() -> None:
     )
 
     json_str = hyp.to_canonical_json()
-    assert '"hypothesis_id": "HYP-001-OBI-MOMENTUM"' in json_str
-    assert '"primary_horizon": 5' in json_str
+    assert '"hypothesis_id":"HYP-001-OBI-MOMENTUM"' in json_str
+    assert '"primary_horizon":{"__type__":"int","value":5}' in json_str
+
 
 
 def test_cost_model_config_basis_point_conversion() -> None:
