@@ -507,6 +507,15 @@ class DSRResult(BaseModel):
     sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, lower bound 1.0).")
     sample_size_t: int = Field(description="Sample length in return periods T.")
     effective_trials_k: int = Field(description="Effective trial count K derived from SearchTrialLedger.")
+    declared_trials_k: int = Field(default=1, description="Authoritative declared search opportunities count recorded in ledger.")
+    effective_independent_trials_k: Optional[int] = Field(
+        default=None,
+        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K as upper bound.",
+    )
+    independence_assumption: str = Field(
+        default="CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND",
+        description="Explicit assumption governing the relation between declared trials and statistical independence.",
+    )
     trial_variance_used: Decimal = Field(description="Trial Sharpe variance V used in Gumbel maximum calculation.")
     dsr_statistic: Decimal = Field(description="Calculated DSR standard normal test statistic.")
     dsr_p_value: Decimal = Field(description="Deflated Sharpe Ratio p-value (probability that true SR > SR_0).")
@@ -520,6 +529,17 @@ class DSRResult(BaseModel):
 
     sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")
     variance_estimator: str = Field(default="EMPIRICAL_SAMPLE_VARIANCE_DDOF1", description="Identifier of the trial variance estimation method.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_declared_trials(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "declared_trials_k" not in data and "effective_trials_k" in data:
+                data["declared_trials_k"] = data["effective_trials_k"]
+            if "effective_independent_trials_k" not in data:
+                data["effective_independent_trials_k"] = data.get("effective_trials_k", data.get("declared_trials_k", 1))
+        return data
+
 
 
 class MultipleTestingResult(BaseModel):

@@ -34111,6 +34111,52 @@ Verdict: 8.9/10 — Architecture แข็งแรง แต่ยังมี 
    - **274/274 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 144 source files)
 
+---
+
+## 👤 User (Turn 129)
+
+<USER_REQUEST>
+ผมตรวจ 46e77aa ต่อจาก audit รอบก่อนแล้ว และรอบนี้ แก้จุดใหญ่ไปได้จริงหลายจุด แต่ยัง ไม่ให้ 10/10 ครับ
+Verdict รอบนี้: 9.4 / 10
+🟠 P1: DSR K independence semantics (declared_trials_k vs effective_independent_trials_k)
+🟠 P1: Cross-trial variance != correlation correction (explicit assumption docs)
+🟠 P1: Analytical friction exponent m^1.5 เป็น explicit structural stress assumption
+🟡 P2: PBO 10-decimal quantization เป็น ACASH canonicalized ranking policy ไม่ใช่ raw float equality
+🔴 Golden Numerical Reference Suite comparing ACASH against independent analytical derivations (DSR moments, EVT Gumbel SR0, MinTRL, toy CSCV N=6,k=3 decomposition & PBO matrix, Harvey-Liu-Zhu Haircut Sharpe)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 129)
+
+### 🛠️ สรุปรายละเอียดการ Implement Golden Reference Suite & Statistical Model Refinements
+
+1. **🟠 DSR Independence Semantics & Explicit Assumption Governance:**
+   - ใน `src/acash/validation/schema.py` (`DSRResult`) และ `src/acash/validation/deflated_sharpe.py`:
+     - เพิ่มฟิลด์:
+       - `declared_trials_k`: บันทึกจำนวนการทดลองค้นหา (search opportunities) ทั้งหมดใน Ledger
+       - `effective_independent_trials_k`: ค่าประมาณจำนวน independent trials (ค่าเริ่มต้นเท่ากับ `declared_trials_k` เพื่อเป็น conservative upper bound)
+       - `independence_assumption = "CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND"` เพื่อความโปร่งใสว่าไม่ได้เคลมว่าเป็น correlation-adjusted DSR โดยอัตโนมัติ
+
+2. **🟡 PBO Canonicalized Ranking Quantization Policy:**
+   - ใน `src/acash/validation/overfitting.py`:
+     - อัปเดต docstrings ชี้แจงชัดเจนว่าการปัดเศษ 10 ตำแหน่ง ($10^{-10}$ equivalence class) คือ **ACASH Canonicalized Ranking Quantization Policy** สำหรับ deterministic tie resolution ไม่ใช่ exact raw float equality
+
+3. **🟡 Analytical Friction Stress Structural Exponent:**
+   - ใน `src/acash/validation/overfitting.py`:
+     - ระบุชัดเจนว่าเลขชี้กำลัง $\alpha = 1.5$ ใน $R_{\text{stressed}}(m) = R_{\text{raw}} - m(\text{Spread}+\text{Fee}) - m^{1.5}(\text{Impact})$ คือ **Structural Sensitivity Stress Assumption** ไม่ใช่การวัด empirical market impact จาก orderbook จริง
+
+4. **🔴 Golden Numerical Reference Suite (`test_golden_numerical_reference.py`):**
+   - สร้างชุดทดสอบ Golden Reference เทียบผลลัพธ์ ACASH กับการคำนวณทางคณิตศาสตร์อิสระ (Independent Analytical Derivations):
+     - **Test 1:** เปรียบเทียบ sample moments (Fisher-Pearson $G_1$, Pearson $g_2$), Bailey & López de Prado (2014) EVT Gumbel $SR_0$, $z$-statistic, DSR probability, และ MinTRL กับสูตรคำนวณปิด (Analytical Closed-Form) ด้วยความแม่นยำ $10^{-10}$
+     - **Test 2:** Toy Case Combinatorial CSCV $N=6, k=3$ ($\binom{6}{3}=20$ splits, $\phi=10$ paths) และตรวจสอบ Hand-Calculated $4 \times 3$ PBO matrix ($PBO = 0.50$, $\mu_{\lambda} = -0.274653$, $\sigma_{\lambda} = 0.823959$)
+     - **Test 3:** Harvey-Liu-Zhu Haircut Sharpe เทียบกับการแปลง Analytical Bonferroni-Adjusted Student-t/Normal $p$-value mapping
+
+5. **Full Test Suite & Mypy Status:**
+   - **277/277 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 145 source files)
+
+
 
 
 

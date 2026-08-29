@@ -86,7 +86,10 @@ class OverfittingEngine:
 
         for c in range(C):
             is_slice = is_sharpe_matrix[c, :]
-            # Canonical Decimal Quantization for exact IS tie resolution (10 decimal places)
+            # ACASH Canonicalized Ranking Quantization Policy:
+            # Quantize Sharpes to 10 decimal places (1e-10 equivalence class) to ensure deterministic tie
+            # resolution across floating-point platforms. Note: this is an explicit governance ranking
+            # policy rather than exact IEEE float equality.
             quantized_is = np.round(is_slice, decimals=10)
             max_is_val = float(np.max(quantized_is))
 
@@ -168,9 +171,12 @@ class OverfittingEngine:
 
         Cost-Scaling Model:
         R_stressed(m) = R_raw - m * (Spread + Fee) - (m^1.5) * (Slippage + Latency + Adverse Selection)
-        where m is a stress multiplier evaluating sensitivity to friction expansion (Phase 4/5 reality gap).
-        Note: This is an analytical sensitivity stress test, not a microscopic empirical orderbook simulator.
+        where:
+        - m is a stress multiplier evaluating sensitivity to friction expansion (Phase 4/5 reality gap).
+        - Exponent alpha = 1.5 is a structural stress assumption penalizing non-linear market impact.
+        Note: This is an analytical sensitivity stress test evaluating cost scaling, not an empirical market impact measurement.
         """
+
 
         params = friction_params or FrictionStressParameters()
         linear_cost = float(params.spread_bps + params.fee_bps)

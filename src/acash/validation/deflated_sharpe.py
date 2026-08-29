@@ -277,6 +277,9 @@ class DeflatedSharpeEngine:
             sample_skewness=to_decimal18(Decimal(f"{skew:.12f}")) or Decimal("0.0"),
             sample_kurtosis=to_decimal18(Decimal(f"{kurt:.12f}")) or Decimal("3.0"),
             effective_trials_k=effective_trials_k,
+            declared_trials_k=effective_trials_k,
+            effective_independent_trials_k=effective_trials_k,
+            independence_assumption="CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND",
             selection_correction_mode=mode,
             sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
@@ -290,4 +293,5 @@ class DeflatedSharpeEngine:
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+
 
