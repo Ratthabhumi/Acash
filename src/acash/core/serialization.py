@@ -9,12 +9,14 @@ CANONICAL IDENTITY CONTRACT:
   quantized canonical representation at 10^-18 precision using explicit ROUND_HALF_EVEN
   executed within a sovereign, isolated Decimal context:
       CanonicalIdentity(x) = Q_18(x) = quantize(x, 10^-18, ROUND_HALF_EVEN)
-  Magnitude is strictly bounded to Decimal128 envelope (|x| <= 10^38) to guarantee total context independence.
+  Magnitude is strictly bounded to the ACASH Canonical Financial Magnitude Envelope (|x| <= 10^38)
+  to guarantee total context independence and prevent numerical overflow.
 - Signed Zero: Negative zero is canonicalized to positive zero (+0.0):
       Q_18(-0.0) = Q_18(+0.0) = "0.000000000000000000"
-- Enum Identity: Enums are explicitly type-tagged preserving fully qualified module and class qualname:
-      {"__type__": "enum", "class": "module.qualname", "value": "MEMBER_VALUE"}
-  Ensuring Enum != str and module_a.Enum.X != module_b.Enum.X.
+- Enum Identity: Enums are explicitly type-tagged using Fully-Qualified Nominal Identity (module.qualname)
+  and recursive canonical payload serialization:
+      {"__type__": "enum", "class": "module.qualname", "value": CanonicalSerializedValue}
+  Ensuring Enum != str, EnumA.X != EnumB.X, and Enum(1) != Enum("1").
 - Unordered Collections: Sets and frozensets are canonicalized by recursively normalizing
   each member, encoding each member to its canonical JSON string representation, sorting
   the resulting canonical strings lexicographically, and emitting an ordered JSON array.
@@ -50,7 +52,7 @@ SOVEREIGN_CANONICAL_CONTEXT = decimal.Context(
     traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow],
 )
 
-# Canonical financial magnitude envelope (Decimal128 representation boundary)
+# ACASH Canonical Financial Magnitude Envelope (max absolute bound at 10^38)
 MAX_CANONICAL_DECIMAL = Decimal("1e38")
 MIN_CANONICAL_DECIMAL = Decimal("-1e38")
 
@@ -80,12 +82,12 @@ class CanonicalConfigSerializer:
       * bool != int (e.g. True vs 1)
       * Decimal != float (exact Decimal string vs IEEE-754 float)
       * str != bytes
-      * Enum != str (tagged with module.qualname and member value)
-      * module_a.Enum.X != module_b.Enum.X (globally unique enum class identity)
+      * Enum != str (tagged with module.qualname and recursive member value serialization)
+      * module_a.Enum.X != module_b.Enum.X (fully-qualified nominal identity)
     - String-only dictionary keys: Rejects non-string keys (e.g. {1: 'a', '1': 'b'}) to eliminate key collision.
     - Deterministic unordered collections: Sets and frozensets are sorted by their serialized canonical JSON strings.
     - Explicit Q_18 quantization: Decimal numbers are quantized to 10^-18 using ROUND_HALF_EVEN in sovereign context.
-    - Strict financial magnitude bound: |x| <= 10^38.
+    - ACASH magnitude envelope bound: |x| <= 10^38.
     - Signed zero canonicalization: -0.0 -> +0.0 ("0.000000000000000000").
     - Closed-world type validation: Only explicit primitive and collection types are permitted; bytearray is rejected.
     - Zero-tolerance non-finite numeric rejection (NaN, +Inf, -Inf).
@@ -111,7 +113,7 @@ class CanonicalConfigSerializer:
                 raise DataContractError(f"Non-finite Decimal value '{val}' cannot be canonically serialized.")
             if val > MAX_CANONICAL_DECIMAL or val < MIN_CANONICAL_DECIMAL:
                 raise DataContractError(
-                    f"Decimal value '{val}' exceeds canonical magnitude bound (|x| <= 10^38)."
+                    f"Decimal value '{val}' exceeds canonical financial magnitude bound (|x| <= 10^38)."
                 )
             normalized_dec = Decimal("0") if val.is_zero() else val
             try:
@@ -128,8 +130,9 @@ class CanonicalConfigSerializer:
             return {
                 "__type__": "enum",
                 "class": full_class_name,
-                "value": str(val.value),
+                "value": cls.serialize_value(val.value),
             }
+
         if isinstance(val, str):
             return val
         if isinstance(val, bytes):

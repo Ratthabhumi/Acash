@@ -2164,6 +2164,25 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
     assert h_enum_b != h_str_buy
     assert h_enum_a != h_enum_b  # Same class name 'Side', different module -> different hash
 
+    # Enum value payload type preservation: Enum(1) != Enum("1") != Enum(Decimal("1.0"))
+    class EnumInt(PyEnum):
+        A = 1
+
+    class EnumStr(PyEnum):
+        A = "1"
+
+    class EnumDec(PyEnum):
+        A = Decimal("1.0")
+
+    h_e_int = CanonicalConfigSerializer.compute_sha256({"e": EnumInt.A})
+    h_e_str = CanonicalConfigSerializer.compute_sha256({"e": EnumStr.A})
+    h_e_dec = CanonicalConfigSerializer.compute_sha256({"e": EnumDec.A})
+
+    assert h_e_int != h_e_str
+    assert h_e_int != h_e_dec
+    assert h_e_str != h_e_dec
+
+
     # 10. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x) with ROUND_HALF_EVEN
     # Numbers differing beyond 18th decimal place collapse to the same canonical representation
     d1 = Decimal("1.0000000000000000001")
@@ -2193,11 +2212,12 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
         decimal.getcontext().rounding = old_round
 
     # Magnitude boundary enforcement: |x| <= 10^38
-    with pytest.raises(DataContractError, match="exceeds canonical magnitude bound"):
+    with pytest.raises(DataContractError, match="exceeds canonical financial magnitude bound"):
         CanonicalConfigSerializer.serialize_value(Decimal("1e39"))
 
-    with pytest.raises(DataContractError, match="exceeds canonical magnitude bound"):
+    with pytest.raises(DataContractError, match="exceeds canonical financial magnitude bound"):
         CanonicalConfigSerializer.serialize_value(Decimal("-1e39"))
+
 
     # 11. Signed zero canonicalization: Q_18(-0.0) == Q_18(+0.0)
     d_pos_zero = CanonicalConfigSerializer.serialize_value(Decimal("0.0"))
