@@ -86,17 +86,29 @@ def _independent_min_trl(
     return int(math.ceil(1.0 + d_term * ((z_alpha / (sr_hat - sr0_period)) ** 2)))
 
 
-def _independent_bonferroni_haircut_sharpe(sr: float, k_trials: int, t_obs: int, raw_p: float | None = None) -> float:
-    """Compute Bonferroni Haircut Sharpe Ratio via closed-form inverse normal mapping."""
+def _independent_bonferroni_haircut_sharpe(
+    sr: float,
+    k_trials: int,
+    t_obs: int,
+    raw_p: float | None = None,
+    sharpe_space: str = "ANNUAL",
+    periods_per_year: float = 252.0,
+) -> float:
+    """Compute Bonferroni Haircut Sharpe Ratio via closed-form inverse normal mapping in PERIOD inference space."""
     if k_trials <= 1 or sr <= 1e-12:
         return sr
-    t_raw = sr * math.sqrt(t_obs)
+    ann_factor = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+    sr_period = (sr / ann_factor) if sharpe_space == "ANNUAL" else sr
+
+    t_raw = sr_period * math.sqrt(t_obs)
     p_raw = raw_p if raw_p is not None else float(math.erfc(t_raw / math.sqrt(2.0)))
     p_adj = min(1.0, p_raw * k_trials)
     if p_adj >= 1.0 - 1e-15:
         return 0.0
     t_adj = float(norm.ppf(1.0 - (p_adj / 2.0)))
-    return float(max(0.0, t_adj / math.sqrt(t_obs)))
+    haircut_period = float(max(0.0, t_adj / math.sqrt(t_obs)))
+    return (haircut_period * ann_factor) if sharpe_space == "ANNUAL" else haircut_period
+
 
 
 # ======================================================================================
@@ -259,25 +271,39 @@ def test_golden_reference_cscv_pbo_exact_toy_case() -> None:
 
 
 def test_golden_reference_bonferroni_haircut_sharpe() -> None:
-    """Verify ACASH Multiple-Testing Bonferroni Haircut Sharpe against independent derivation."""
-    # Scenario: estimated_sharpe = 0.30, sample_size_t = 100, effective_trials_k = 10
-    SR = 0.30
+    """Verify ACASH Multiple-Testing Bonferroni Haircut Sharpe against independent derivation in both spaces."""
+    # Scenario A: PERIOD space Sharpe = 0.30, T = 100, K = 10
+    SR_period = 0.30
     T = 100
     K = 10
 
-    ref_haircut = _independent_bonferroni_haircut_sharpe(SR, K, T)
-
-    acash_haircut_primary = MultipleTestingEngine.calculate_bonferroni_haircut_sharpe(
-        estimated_sharpe=SR,
+    ref_haircut_period = _independent_bonferroni_haircut_sharpe(
+        SR_period, K, T, sharpe_space="PERIOD", periods_per_year=252.0
+    )
+    acash_haircut_period = MultipleTestingEngine.calculate_bonferroni_haircut_sharpe(
+        estimated_sharpe=SR_period,
         effective_trials_k=K,
         sample_size_t=T,
+        sharpe_space=SharpeSpace.PERIOD,
     )
-    acash_haircut_alias = MultipleTestingEngine.calculate_haircut_sharpe(
-        estimated_sharpe=SR,
-        effective_trials_k=K,
-        sample_size_t=T,
-    )
+    assert math.isclose(float(acash_haircut_period), ref_haircut_period, abs_tol=1e-6)
 
-    assert math.isclose(float(acash_haircut_primary), ref_haircut, abs_tol=1e-6)
-    assert math.isclose(float(acash_haircut_alias), ref_haircut, abs_tol=1e-6)
+    # Scenario B: ANNUAL space Sharpe = 1.50, T = 250, K = 20, periods_per_year = 252.0
+    SR_annual = 1.50
+    T_ann = 250
+    K_ann = 20
+    P = 252.0
+
+    ref_haircut_annual = _independent_bonferroni_haircut_sharpe(
+        SR_annual, K_ann, T_ann, sharpe_space="ANNUAL", periods_per_year=P
+    )
+    acash_haircut_annual = MultipleTestingEngine.calculate_bonferroni_haircut_sharpe(
+        estimated_sharpe=SR_annual,
+        effective_trials_k=K_ann,
+        sample_size_t=T_ann,
+        sharpe_space=SharpeSpace.ANNUAL,
+        periods_per_year=P,
+    )
+    assert math.isclose(float(acash_haircut_annual), ref_haircut_annual, abs_tol=1e-6)
+
 

@@ -21,7 +21,8 @@ import numpy as np
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
 from acash.validation.deflated_sharpe import _standard_normal_ppf
-from acash.validation.schema import MultipleTestingResult
+from acash.validation.schema import MultipleTestingResult, SharpeSpace
+
 
 
 
@@ -69,7 +70,10 @@ class MultipleTestingEngine:
         adj_p_original = np.zeros(K, dtype=np.float64)
         adj_p_original[sorted_indices] = adj_p_sorted
 
-        return [to_decimal18(Decimal(f"{p_val:.12f}")) or Decimal("1.0") for p_val in adj_p_original]
+        return [
+            dec if (dec := to_decimal18(Decimal(f"{p_val:.12f}"))) is not None else Decimal("1.0")
+            for p_val in adj_p_original
+        ]
 
     @staticmethod
     def benjamini_hochberg_fdr(p_values: Sequence[Union[Decimal, float]]) -> List[Decimal]:
@@ -104,7 +108,10 @@ class MultipleTestingEngine:
         q_original = np.zeros(K, dtype=np.float64)
         q_original[sorted_indices] = q_sorted
 
-        return [to_decimal18(Decimal(f"{q_val:.12f}")) or Decimal("1.0") for q_val in q_original]
+        return [
+            dec if (dec := to_decimal18(Decimal(f"{q_val:.12f}"))) is not None else Decimal("1.0")
+            for q_val in q_original
+        ]
 
     @staticmethod
     def calculate_bonferroni_haircut_sharpe(
@@ -112,37 +119,43 @@ class MultipleTestingEngine:
         effective_trials_k: int,
         sample_size_t: int,
         raw_p_value: Optional[float] = None,
+        sharpe_space: SharpeSpace = SharpeSpace.ANNUAL,
+        periods_per_year: float = 252.0,
     ) -> Decimal:
-        """Calculate ACASH Bonferroni Haircut Sharpe Ratio.
+        """Calculate ACASH Bonferroni Haircut Sharpe Ratio in the requested SharpeSpace.
 
         Methodological Specification & Provenance:
         - Inspired by the multiple-testing threshold philosophy of Harvey, Liu, & Zhu (2016).
         - IMPORTANT METHODOLOGICAL DISTINCTION: This implementation uses a direct Bonferroni-adjusted
           two-sided normal tail probability inverse mapping:
-            p_adj = min(1.0, K * p_raw) -> |t_adj| = Phi^-1(1 - p_adj / 2) -> Haircut_SR = |t_adj| / sqrt(T)
-        - This is NOT the multi-factor cross-sectional regression framework or aggregate extreme probability
-          model (p_m = 1 - (1 - p_s)^N) of Harvey, Liu, & Zhu (2016). It is an ACASH multiple-testing
-          empirical Bonferroni hurdle mapping.
-
-        Mathematical Steps:
-        1. Compute raw t-statistic: t_raw = estimated_sharpe * sqrt(T)
-        2. Compute two-sided single-test p-value: p_raw = erfc(|t_raw| / sqrt(2)) (or provided raw_p_value)
-        3. Bonferroni adjustment across K declared trials: p_adj = min(1.0, p_raw * K)
-        4. Invert adjusted p-value to find penalized t-statistic: |t_adj| = Phi^-1(1 - p_adj / 2)
-        5. Compute non-linear Haircut Sharpe: Haircut_SR = max(0.0, |t_adj| / sqrt(T))
+            p_adj = min(1.0, K * p_raw) -> |t_adj| = Phi^-1(1 - p_adj / 2) -> Haircut_SR_period = |t_adj| / sqrt(T)
+        - FREQUENCY-SPACE ALIGNMENT INVARIANT:
+          Statistical t-test inference and p-value inversion are strictly evaluated in PERIOD return space:
+            SR_period = estimated_sharpe / sqrt(periods_per_year)  (if sharpe_space == ANNUAL)
+            t_raw = SR_period * sqrt(T)
+            Haircut_SR_period = max(0.0, |t_adj| / sqrt(T))
+            Haircut_SR_annual = Haircut_SR_period * sqrt(periods_per_year)
         """
         K = max(1, effective_trials_k)
         T = max(2, sample_size_t)
         sr = max(0.0, estimated_sharpe)
 
         if K <= 1 or sr <= 1e-12:
-            return to_decimal18(Decimal(f"{sr:.12f}")) or Decimal("0.0")
+            dec = to_decimal18(Decimal(f"{sr:.12f}"))
+            return dec if dec is not None else Decimal("0.0")
 
-        t_raw = sr * math.sqrt(T)
+        # 1. Frequency Alignment: Convert to PERIOD space for mathematical statistical inference
+        ann_factor = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+        if sharpe_space == SharpeSpace.ANNUAL:
+            sr_period = sr / ann_factor
+        else:
+            sr_period = sr
+
+        t_raw = sr_period * math.sqrt(T)
         if t_raw <= 1e-12:
             return Decimal("0.0")
 
-        # 2. Single-test two-sided p-value
+        # 2. Single-test two-sided p-value in period return space
         if raw_p_value is not None:
             pf = float(raw_p_value)
             if not math.isfinite(pf) or pf < 0.0 or pf > 1.0:
@@ -151,7 +164,7 @@ class MultipleTestingEngine:
         else:
             p_raw = math.erfc(t_raw / math.sqrt(2.0))
 
-        # 3. Multiple-testing adjusted p-value
+        # 3. Multiple-testing adjusted p-value across K declared search trials
         p_adj = min(1.0, p_raw * float(K))
 
         if p_adj >= 1.0 - 1e-15:
@@ -165,10 +178,17 @@ class MultipleTestingEngine:
             prob = max(1e-15, min(1.0 - 1e-15, prob))
             t_adj = _standard_normal_ppf(prob)
 
-        # 5. Non-linear Haircut Sharpe Ratio
-        haircut_sr = max(0.0, t_adj / math.sqrt(T))
+        # 5. Non-linear Haircut Sharpe Ratio in PERIOD space
+        haircut_sr_period = max(0.0, t_adj / math.sqrt(T))
 
-        return to_decimal18(Decimal(f"{haircut_sr:.12f}")) or Decimal("0.0")
+        # 6. Scale to target return space
+        if sharpe_space == SharpeSpace.ANNUAL:
+            haircut_sr_reported = haircut_sr_period * ann_factor
+        else:
+            haircut_sr_reported = haircut_sr_period
+
+        dec_out = to_decimal18(Decimal(f"{haircut_sr_reported:.12f}"))
+        return dec_out if dec_out is not None else Decimal("0.0")
 
     # Backward-compatible alias
     calculate_haircut_sharpe = calculate_bonferroni_haircut_sharpe
@@ -182,6 +202,8 @@ class MultipleTestingEngine:
         effective_trials_k: Optional[int] = None,
         confidence_level_alpha: float = 0.05,
         primary_candidate_index: int = 0,
+        sharpe_space: SharpeSpace = SharpeSpace.ANNUAL,
+        periods_per_year: float = 252.0,
     ) -> MultipleTestingResult:
         """Evaluate full multiple testing battery across K trials targeting the pre-registered primary candidate."""
         K = len(p_values)
@@ -207,17 +229,34 @@ class MultipleTestingEngine:
         # 3. Non-linear ACASH Bonferroni Haircut Sharpe Ratio for the PRIMARY candidate
         # Strict pairing invariant: estimated_sharpe and raw_p_value are both from the primary candidate
         primary_p = float(p_values[primary_candidate_index])
+
+        # Compute Haircut Sharpe in reported space (default ANNUAL)
         haircut_sr = cls.calculate_bonferroni_haircut_sharpe(
             estimated_sharpe=estimated_sharpe,
             effective_trials_k=K,
             sample_size_t=sample_size_t,
             raw_p_value=primary_p,
+            sharpe_space=sharpe_space,
+            periods_per_year=periods_per_year,
+        )
+
+        # Compute Haircut Sharpe strictly in PERIOD space
+        haircut_sr_period = cls.calculate_bonferroni_haircut_sharpe(
+            estimated_sharpe=estimated_sharpe,
+            effective_trials_k=K,
+            sample_size_t=sample_size_t,
+            raw_p_value=primary_p,
+            sharpe_space=SharpeSpace.PERIOD,
+            periods_per_year=periods_per_year,
         )
 
         # Primary candidate FWER significance: check adjusted p-value of primary candidate against alpha hurdle
         primary_holm_p = float(holm_adj[primary_candidate_index])
         is_significant = primary_holm_p <= confidence_level_alpha
-        raw_dec = [to_decimal18(Decimal(f"{float(p):.12f}")) or Decimal("1.0") for p in p_values]
+        raw_dec = [
+            dec if (dec := to_decimal18(Decimal(f"{float(p):.12f}"))) is not None else Decimal("1.0")
+            for p in p_values
+        ]
 
         return MultipleTestingResult(
             effective_trials_k=K,
@@ -226,8 +265,13 @@ class MultipleTestingEngine:
             benjamini_hochberg_q_values=bh_q,
             bonferroni_haircut_sharpe_ratio=haircut_sr,
             haircut_sharpe_ratio=haircut_sr,
+            bonferroni_haircut_sharpe_ratio_period=haircut_sr_period,
+            sharpe_space=sharpe_space,
+            inference_space=SharpeSpace.PERIOD,
             is_fwer_significant=is_significant,
         )
+
+
 
 
 

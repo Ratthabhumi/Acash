@@ -74,6 +74,15 @@ class SearchTrialRecord(BaseModel):
 
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
+    p_value_method: str = Field(
+        default="ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+        description="Statistical hypothesis test method used to derive p_value.",
+    )
+    p_value_input_hash: str = Field(
+        default="",
+        pattern=r"^([0-9a-f]{64})?$",
+        description="Canonical SHA-256 hash binding p_value to return series, config, and test method.",
+    )
     in_sample_return_series_sha256: str = Field(
         pattern=r"^[0-9a-f]{64}$",
         description="Mandatory 64-hex SHA-256 hash of the trial in-sample return series.",
@@ -94,6 +103,36 @@ class SearchTrialRecord(BaseModel):
             "params": parameters,
         }
         return CanonicalConfigSerializer.compute_sha256(config_obj)
+
+    @staticmethod
+    def compute_canonical_p_value(in_sample_returns: Union[Sequence[Union[Decimal, float]], np.ndarray]) -> Decimal:
+
+        """Compute canonical two-sided asymptotic t-test p-value from empirical return series."""
+        arr = np.array([float(x) for x in in_sample_returns], dtype=np.float64)
+        n = len(arr)
+        if n < 2:
+            return Decimal("1.0")
+        mean = float(np.mean(arr))
+        std = float(np.std(arr, ddof=1))
+        if std <= 1e-12:
+            return Decimal("1.0")
+        t_stat = (mean / std) * math.sqrt(n)
+        p_val = math.erfc(abs(t_stat) / math.sqrt(2.0))
+        dec = to_decimal18(Decimal(f"{p_val:.12f}"))
+        return dec if dec is not None else Decimal("1.0")
+
+
+    @staticmethod
+    def compute_p_value_input_hash(
+        return_series_sha256: str,
+        config_sha256: str,
+        p_value: Union[Decimal, str, float],
+        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+    ) -> str:
+        """Deterministic canonical SHA-256 binding p-value to return series, config, and derivation method."""
+        val_str = f"{float(p_value):.12f}" if isinstance(p_value, (Decimal, float)) else str(p_value)
+        payload = f"{return_series_sha256}:{config_sha256}:{val_str}:{p_value_method}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest().lower()
 
     @field_validator("parameters", mode="after")
     @classmethod
@@ -124,6 +163,16 @@ class SearchTrialRecord(BaseModel):
                         f"in_sample_return_series_sha256 requires actual in_sample_returns "
                         f"or an explicitly supplied verified artifact hash for trial '{trial_id}'."
                     )
+            if "p_value" not in data and "in_sample_returns" in data and data["in_sample_returns"] is not None:
+                data["p_value"] = cls.compute_canonical_p_value(data["in_sample_returns"])
+            if ("p_value_input_hash" not in data or not data["p_value_input_hash"]) and "p_value" in data:
+                method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_T_TEST_V1")
+                data["p_value_input_hash"] = cls.compute_p_value_input_hash(
+                    return_series_sha256=data["in_sample_return_series_sha256"],
+                    config_sha256=data["config_sha256"],
+                    p_value=data["p_value"],
+                    p_value_method=method,
+                )
         return data
 
 
@@ -141,6 +190,8 @@ class SearchTrialRecord(BaseModel):
         in_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         in_sample_return_series_sha256: Optional[str] = None,
         config_sha256: Optional[str] = None,
+        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+        p_value_input_hash: Optional[str] = None,
     ) -> "SearchTrialRecord":
         """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
         from acash.validation.gate import _compute_canonical_series_sha256
@@ -158,6 +209,14 @@ class SearchTrialRecord(BaseModel):
         if config_sha256 is None:
             config_sha256 = cls.compute_config_sha256(sorted_features, frozen_params)
 
+        if p_value_input_hash is None:
+            p_value_input_hash = cls.compute_p_value_input_hash(
+                return_series_sha256=in_sample_return_series_sha256,
+                config_sha256=config_sha256,
+                p_value=p_value,
+                p_value_method=p_value_method,
+            )
+
         return cls(
             trial_id=trial_id,
             strategy_id=strategy_id,
@@ -166,6 +225,8 @@ class SearchTrialRecord(BaseModel):
             parameters=frozen_params,
             in_sample_sharpe=in_sample_sharpe,
             p_value=p_value,
+            p_value_method=p_value_method,
+            p_value_input_hash=p_value_input_hash,
             in_sample_return_series_sha256=in_sample_return_series_sha256,
             config_sha256=config_sha256,
             execution_manifest_id=execution_manifest_id,
@@ -182,7 +243,6 @@ class SearchTrialLedger(BaseModel):
     and overfitting evaluations (DSR, Holm-Bonferroni FWER, Haircut Sharpe) penalize selection bias
     conservatively and truthfully across the entire exploration history.
     """
-
 
     model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
@@ -239,11 +299,14 @@ class SearchTrialLedger(BaseModel):
                     "execution_manifest_id": t.execution_manifest_id,
                     "in_sample_sharpe": t.in_sample_sharpe,
                     "p_value": t.p_value,
+                    "p_value_method": t.p_value_method,
+                    "p_value_input_hash": t.p_value_input_hash,
                 }
                 for t in self.trials
             ],
         }
         return CanonicalConfigSerializer.compute_sha256(canonical_obj)
+
 
     def seal(self, sealed_at_utc: Optional[str] = None) -> "SearchTrialLedger":
         """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest."""
@@ -550,11 +613,23 @@ class MultipleTestingResult(BaseModel):
     benjamini_hochberg_q_values: List[Decimal] = Field(description="False Discovery Rate (FDR) adjusted q-values.")
     bonferroni_haircut_sharpe_ratio: Decimal = Field(
         default=Decimal("0.0"),
-        description="ACASH Bonferroni-adjusted multiple-testing Haircut Sharpe Ratio.",
+        description="ACASH Bonferroni-adjusted multiple-testing Haircut Sharpe Ratio (ANNUAL space).",
     )
     haircut_sharpe_ratio: Decimal = Field(
         default=Decimal("0.0"),
         description="Backward-compatible alias for bonferroni_haircut_sharpe_ratio.",
+    )
+    bonferroni_haircut_sharpe_ratio_period: Decimal = Field(
+        default=Decimal("0.0"),
+        description="ACASH Bonferroni-adjusted Haircut Sharpe Ratio evaluated strictly in PERIOD return space.",
+    )
+    sharpe_space: SharpeSpace = Field(
+        default=SharpeSpace.ANNUAL,
+        description="Frequency space of the reported bonferroni_haircut_sharpe_ratio (ANNUAL).",
+    )
+    inference_space: SharpeSpace = Field(
+        default=SharpeSpace.PERIOD,
+        description="Frequency space where statistical hypothesis testing and p-value inversion are conducted (PERIOD).",
     )
     is_fwer_significant: bool = Field(description="True if primary hypothesis satisfies Holm-Bonferroni step-down.")
 
@@ -567,6 +642,7 @@ class MultipleTestingResult(BaseModel):
             elif "haircut_sharpe_ratio" in data and "bonferroni_haircut_sharpe_ratio" not in data:
                 data["bonferroni_haircut_sharpe_ratio"] = data["haircut_sharpe_ratio"]
         return data
+
 
 
 

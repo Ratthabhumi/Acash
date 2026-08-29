@@ -432,7 +432,30 @@ class StatisticalValidationGate:
                     f"against empirical Sharpe ({computed_sr_m:.6f})."
                 )
 
-            # 4. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
+            # 4. Methodological p-value Mathematical and Cryptographic Derivation Verification
+            t_stat_m = sr_m_period * math.sqrt(n_is)
+            computed_p_m = math.erfc(abs(t_stat_m) / math.sqrt(2.0))
+            diff_p = abs(float(trial_rec.p_value) - computed_p_m)
+            if diff_p > epsilon_sr:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' registered p_value ({trial_rec.p_value}) "
+                    f"exceeds methodological tolerance bound (|p_ledger - p_computed| = {diff_p:.6f} > {epsilon_sr}) "
+                    f"against empirical return series two-sided p-value ({computed_p_m:.6f})."
+                )
+
+            if trial_rec.p_value_input_hash:
+                expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(
+                    return_series_sha256=col_m_hash,
+                    config_sha256=trial_rec.config_sha256,
+                    p_value=trial_rec.p_value,
+                    p_value_method=trial_rec.p_value_method,
+                )
+                if trial_rec.p_value_input_hash != expected_p_hash:
+                    raise DataContractError(
+                        f"Trial '{trial_rec.trial_id}' p_value_input_hash mismatch: stored '{trial_rec.p_value_input_hash}' != computed '{expected_p_hash}'."
+                    )
+
+            # 5. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
@@ -456,7 +479,6 @@ class StatisticalValidationGate:
                     f"Trial '{trial_rec.trial_id}' manifest strategy_config_hash '{manifest.strategy_config_hash}' does not match trial config_sha256 '{trial_rec.config_sha256}'."
                 )
 
-
             # Strict Unconditional Manifest Output Integrity Check
             if manifest.execution_summary is None:
                 raise DataContractError(
@@ -475,7 +497,7 @@ class StatisticalValidationGate:
 
             # Full Cryptographic Binding: Bind candidate return series, config, manifest ID, and manifest artifact hash
             manifest_out_hash = manifest.compute_sha256()
-            evidence_item = f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id}:{manifest_out_hash}"
+            evidence_item = f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.p_value_input_hash}:{trial_rec.execution_manifest_id}:{manifest_out_hash}"
             matrix_evidence_elements.append(evidence_item)
 
         matrix_evidence_payload = ";".join(matrix_evidence_elements)
@@ -499,7 +521,10 @@ class StatisticalValidationGate:
             effective_trials_k=effective_k,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
             primary_candidate_index=0,
+            sharpe_space=dsr_result.sharpe_space,
+            periods_per_year=float(self.config.periods_per_year),
         )
+
 
 
         # 8. Sovereign CPCV / CSCV Execution with Real Label Horizon & Embargo Buffers

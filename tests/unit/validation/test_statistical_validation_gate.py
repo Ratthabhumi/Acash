@@ -140,7 +140,7 @@ def _make_valid_trial_ledger(
     strategy_id: str = "STRAT_01",
     hypothesis_id: str = "HYP_01",
     ledger_id: str = "LEDGER_01",
-    p_value: Decimal = Decimal("0.001"),
+    p_value: Optional[Decimal] = None,
     is_sealed: bool = True,
     manifest_store: Optional[Dict[str, Any]] = None,
 ) -> SearchTrialLedger:
@@ -152,6 +152,7 @@ def _make_valid_trial_ledger(
         mean_m = float(np.mean(col_m))
         std_m = float(np.std(col_m, ddof=1)) if len(col_m) > 1 else 1.0
         sr_m_period = (mean_m / std_m) if std_m > 0 else 0.0
+        p_val_m = p_value if p_value is not None else SearchTrialRecord.compute_canonical_p_value(col_m)
         features = ["mom"]
         params = {"period": 10 + m}
         cfg_hash = SearchTrialRecord.compute_config_sha256(features, params)
@@ -163,10 +164,11 @@ def _make_valid_trial_ledger(
             feature_names=features,
             parameters=params,
             in_sample_sharpe=Decimal(f"{sr_m_period:.6f}"),
-            p_value=p_value,
+            p_value=p_val_m,
             execution_manifest_id=man_id,
             in_sample_returns=list(col_m),
         )
+
         trials.append(trial)
         if manifest_store is not None:
             manifest_store[man_id] = _make_mock_manifest(
@@ -952,30 +954,31 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
 
 def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
     """Verify that failing Holm-Bonferroni FWER test triggers REJECT_MULTIPLE_TESTING_FWER."""
-    gate = StatisticalValidationGate()
+    cfg = ValidationConfig(enforce_fwer_significance=True, confidence_level_alpha=Decimal("0.05"))
+    gate = StatisticalValidationGate(config=cfg)
 
     np.random.seed(42)
-    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
-    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+    # T = 500, std = 0.010, mean = 1.751 * 0.010 / sqrt(500) = 0.00078307 -> t = 1.751 -> p ~ 0.080 > 0.05
+    is_returns = list(np.random.normal(0.00078307, 0.010, 500))
+    oos_returns = list(np.random.normal(0.00078307, 0.010, 200))
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
-    trial_matrix = np.zeros((500, 3), dtype=np.float64)
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
-    trial_matrix[:, 1] = np.random.normal(0.0010, 0.0040, 500)
-    trial_matrix[:, 2] = np.random.normal(0.0005, 0.0040, 500)
+    trial_matrix[:, 1] = np.array([float(x) for x in is_returns], dtype=np.float64)
 
     manifest_store: Dict[str, Any] = {}
     grid = _make_valid_perturbation_grid(strat_id="STRAT_FWER", manifest_store=manifest_store)
 
-    # Insignificant trials: p-value = 0.50 -> FWER fails!
     ledger = _make_valid_trial_ledger(
         trial_return_matrix=trial_matrix,
         strategy_id="STRAT_FWER",
         hypothesis_id="HYP_01",
         ledger_id="L_FWER",
-        p_value=Decimal("0.50"),
         manifest_store=manifest_store,
     )
+
+
 
     rep = gate.evaluate_strategy(
         strategy_id="STRAT_FWER",
@@ -2357,9 +2360,10 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
     gate = StatisticalValidationGate(config=config)
 
     np.random.seed(42)
-    # Primary candidate returns (strong Sharpe ~ 1.5, passes DSR easily)
-    is_returns = list(np.random.normal(0.0030, 0.0050, 500))
-    oos_returns = list(np.random.normal(0.0025, 0.0050, 250))
+    # Construct primary candidate returns with t-stat ~ 1.751 -> two-sided p-value ~ 0.080 (fails alpha=0.05 under Holm)
+    # T = 500, std = 0.010, mean = 1.751 * 0.010 / sqrt(500) = 0.00078307
+    is_returns = list(np.random.normal(0.00078307, 0.010, 500))
+    oos_returns = list(np.random.normal(0.00078307, 0.010, 250))
     spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
     manifest_store: Dict[str, Any] = {}
@@ -2367,15 +2371,15 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
 
     trial_matrix = np.zeros((500, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
-    trial_matrix[:, 1] = np.random.normal(0.0035, 0.0050, 500)  # Exploratory return
+    trial_matrix[:, 1] = np.array([float(x) for x in is_returns])  # V=0 -> SR0=0 -> DSR=1.0
 
     col0 = trial_matrix[:, 0]
     col1 = trial_matrix[:, 1]
     sr0 = float(np.mean(col0) / np.std(col0, ddof=1))
     sr1 = float(np.mean(col1) / np.std(col1, ddof=1))
+    p0_canon = SearchTrialRecord.compute_canonical_p_value(col0)
+    p1_canon = SearchTrialRecord.compute_canonical_p_value(col1)
 
-    # Trial 0 (primary): p = 0.08 (fails alpha=0.05 threshold under Holm)
-    # Trial 1 (exploratory): p = 0.0001 (highly significant)
     trials = [
         SearchTrialRecord.create(
             trial_id="t_0",
@@ -2384,7 +2388,7 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
             feature_names=["f"],
             parameters={"p": 0},
             in_sample_sharpe=Decimal(f"{sr0:.6f}"),
-            p_value=Decimal("0.080"),  # Primary fails Holm: adj p = 0.080 > 0.05
+            p_value=p0_canon,
             execution_manifest_id="MAN_0",
             in_sample_returns=is_returns,
         ),
@@ -2393,11 +2397,9 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
             feature_names=["f"],
-
-
             parameters={"p": 1},
             in_sample_sharpe=Decimal(f"{sr1:.6f}"),
-            p_value=Decimal("0.0001"),  # Exploratory is significant!
+            p_value=p1_canon,
             execution_manifest_id="MAN_1",
             in_sample_returns=list(trial_matrix[:, 1]),
         ),
@@ -2409,8 +2411,6 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
             strategy_config_hash=t.config_sha256,
             sharpe=t.in_sample_sharpe,
         )
-
-
 
     ledger = SearchTrialLedger(
         ledger_id="L_FWER_TEST",
@@ -2432,11 +2432,164 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
         perturbation_grid=grid,
     )
 
-    # Primary candidate must be rejected because its Holm-adjusted p-value > 0.05!
     assert rep.verdict == ValidationGateVerdict.REJECT_MULTIPLE_TESTING_FWER
     assert rep.is_tradeable_alpha is False
     assert rep.multiple_testing_result is not None
     assert rep.multiple_testing_result.is_fwer_significant is False
+
+
+
+def test_statistical_validation_gate_rejects_divergent_ledger_p_value() -> None:
+    """Verify that Gate strictly rejects when registered p_value deviates from empirical return series p-value."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0030, 0.0050, 500))
+    oos_returns = list(np.random.normal(0.0025, 0.0050, 250))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
+    trial_matrix[:, 1] = np.random.normal(0.0035, 0.0050, 500)
+
+    sr0 = float(np.mean(trial_matrix[:, 0]) / np.std(trial_matrix[:, 0], ddof=1))
+    sr1 = float(np.mean(trial_matrix[:, 1]) / np.std(trial_matrix[:, 1], ddof=1))
+
+    # Fabricate a fake p_value = 0.50 on trial 0 when actual empirical p_value is ~ 1e-35
+    trials = [
+        SearchTrialRecord.create(
+            trial_id="t_0",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": 0},
+            in_sample_sharpe=Decimal(f"{sr0:.6f}"),
+            p_value=Decimal("0.500000"),  # Fabricated p-value!
+            execution_manifest_id="MAN_0",
+            in_sample_returns=is_returns,
+        ),
+        SearchTrialRecord.create(
+            trial_id="t_1",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal(f"{sr1:.6f}"),
+            p_value=SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 1]),
+            execution_manifest_id="MAN_1",
+            in_sample_returns=list(trial_matrix[:, 1]),
+        ),
+    ]
+    for t in trials:
+        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
+            manifest_id=t.execution_manifest_id,
+            hypothesis_id="HYP_01",
+            strategy_config_hash=t.config_sha256,
+            sharpe=t.in_sample_sharpe,
+        )
+
+    ledger = SearchTrialLedger(
+        ledger_id="L_TAMPERED_P",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=tuple(trials),
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    with pytest.raises(DataContractError, match="registered p_value .* exceeds methodological tolerance bound"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=is_returns,
+            trial_matrix_column_trial_ids=["t_0", "t_1"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            perturbation_grid=grid,
+        )
+
+
+def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> None:
+    """Verify that Gate strictly rejects when a trial's p_value_input_hash has been tampered."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0030, 0.0050, 500))
+    oos_returns = list(np.random.normal(0.0025, 0.0050, 250))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
+    trial_matrix[:, 1] = np.random.normal(0.0035, 0.0050, 500)
+
+    sr0 = float(np.mean(trial_matrix[:, 0]) / np.std(trial_matrix[:, 0], ddof=1))
+    sr1 = float(np.mean(trial_matrix[:, 1]) / np.std(trial_matrix[:, 1], ddof=1))
+    p0 = SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 0])
+    p1 = SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 1])
+
+    trials = [
+        SearchTrialRecord(
+            trial_id="t_0",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=("f",),
+            parameters={},
+            in_sample_sharpe=Decimal(f"{sr0:.6f}"),
+            p_value=p0,
+            p_value_method="ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+            p_value_input_hash="deadbeef" * 8,  # Tampered hash!
+            in_sample_return_series_sha256=_compute_canonical_series_sha256(is_returns),
+            config_sha256=SearchTrialRecord.compute_config_sha256(("f",), {}),
+            execution_manifest_id="MAN_0",
+        ),
+        SearchTrialRecord.create(
+            trial_id="t_1",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal(f"{sr1:.6f}"),
+            p_value=p1,
+            execution_manifest_id="MAN_1",
+            in_sample_returns=list(trial_matrix[:, 1]),
+        ),
+    ]
+    for t in trials:
+        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
+            manifest_id=t.execution_manifest_id,
+            hypothesis_id="HYP_01",
+            strategy_config_hash=t.config_sha256,
+            sharpe=t.in_sample_sharpe,
+        )
+
+    ledger = SearchTrialLedger(
+        ledger_id="L_TAMPERED_HASH",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=tuple(trials),
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    with pytest.raises(DataContractError, match="p_value_input_hash mismatch"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            hypothesis_spec=spec,
+            in_sample_returns=is_returns,
+            trial_matrix_column_trial_ids=["t_0", "t_1"],
+            manifest_store=manifest_store,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=trial_matrix,
+            perturbation_grid=grid,
+        )
+
 
 
 

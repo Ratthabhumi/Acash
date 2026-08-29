@@ -9,7 +9,7 @@ import pytest
 from acash.core.domain.exceptions import DataContractError
 from acash.validation.multiple_testing import MultipleTestingEngine
 from acash.validation.overfitting import OverfittingEngine
-from acash.validation.schema import ParameterPerturbationGrid, ParameterPerturbationPoint
+from acash.validation.schema import ParameterPerturbationGrid, ParameterPerturbationPoint, SharpeSpace
 
 
 def test_holm_bonferroni_step_down_adjustment() -> None:
@@ -35,12 +35,13 @@ def test_authoritative_k_enforcement_in_multiple_testing() -> None:
 
 
 def test_haircut_sharpe_ratio_derivation() -> None:
-    """Verify non-linear Haircut Sharpe penalization (Harvey, Liu, & Zhu 2016)."""
+    """Verify non-linear Haircut Sharpe penalization (Harvey, Liu, & Zhu 2016) in PERIOD space."""
     # 1. K = 1 produces zero haircut (Haircut SR == raw SR)
     haircut_k1 = MultipleTestingEngine.calculate_haircut_sharpe(
         estimated_sharpe=0.20,
         effective_trials_k=1,
         sample_size_t=100,
+        sharpe_space=SharpeSpace.PERIOD,
     )
     assert math.isclose(float(haircut_k1), 0.20, abs_tol=1e-5)
 
@@ -50,6 +51,7 @@ def test_haircut_sharpe_ratio_derivation() -> None:
         estimated_sharpe=0.20,
         effective_trials_k=10,
         sample_size_t=100,
+        sharpe_space=SharpeSpace.PERIOD,
     )
     assert math.isclose(float(haircut_marginal), 0.074706, rel_tol=1e-2)
 
@@ -59,17 +61,19 @@ def test_haircut_sharpe_ratio_derivation() -> None:
         estimated_sharpe=0.60,
         effective_trials_k=100,
         sample_size_t=100,
+        sharpe_space=SharpeSpace.PERIOD,
     )
     assert math.isclose(float(haircut_high), 0.520, rel_tol=1e-2)
 
     # 4. Strict monotonic decay with increasing K
     k_vals = [1, 2, 5, 10, 20]
     haircuts = [
-        float(MultipleTestingEngine.calculate_haircut_sharpe(0.30, k, 100))
+        float(MultipleTestingEngine.calculate_haircut_sharpe(0.30, k, 100, sharpe_space=SharpeSpace.PERIOD))
         for k in k_vals
     ]
     for i in range(len(haircuts) - 1):
         assert haircuts[i] >= haircuts[i + 1]
+
 
 
 
@@ -200,6 +204,7 @@ def test_multiple_testing_evaluates_primary_candidate_fwer_not_min_p() -> None:
         effective_trials_k=3,
         confidence_level_alpha=0.05,
         primary_candidate_index=0,
+        sharpe_space=SharpeSpace.PERIOD,
     )
     # Primary candidate (p=0.20) adjusted by Holm:
     # Sorted order: [0.0001, 0.20, 0.40] -> rank 2 -> multiplier = (3 - 1) = 2 -> adj p = 0.40 > 0.05
@@ -207,6 +212,7 @@ def test_multiple_testing_evaluates_primary_candidate_fwer_not_min_p() -> None:
     # Haircut Sharpe must use primary candidate p=0.20 (NOT min_p=0.0001)
     # With p_raw=0.20, K=3 -> p_adj = 0.60 -> t_adj ~ 0.5244 -> Haircut SR ~ 0.05244 (severe haircut)
     assert float(res_a.bonferroni_haircut_sharpe_ratio) < 0.10
+    assert float(res_a.bonferroni_haircut_sharpe_ratio_period) < 0.10
 
     # Scenario B:
     # Primary candidate (index 0): highly significant p = 0.0001, SR = 0.60
@@ -219,10 +225,12 @@ def test_multiple_testing_evaluates_primary_candidate_fwer_not_min_p() -> None:
         effective_trials_k=3,
         confidence_level_alpha=0.05,
         primary_candidate_index=0,
+        sharpe_space=SharpeSpace.PERIOD,
     )
     # Primary candidate (p=0.0001) adjusted by Holm: 0.0001 * 3 = 0.0003 <= 0.05 -> SIGNIFICANT!
     assert res_b.is_fwer_significant is True
     # Haircut Sharpe uses primary candidate p=0.0001, K=3 -> p_adj = 0.0003 -> t_adj ~ 3.615 -> Haircut SR ~ 0.3615
     assert float(res_b.bonferroni_haircut_sharpe_ratio) > 0.35
+
 
 
