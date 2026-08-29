@@ -2,6 +2,20 @@
 
 Centralizes deterministic, collision-free serialization and deep immutability primitives
 across all layers of the quantitative stack (Phase 4 Research, Phase 5 Backtesting, Phase 6 Validation).
+
+CANONICAL IDENTITY CONTRACT:
+- Profile: ACASH Canonical JSON Serialization Profile v1
+- Numerical Quantization: Cryptographic identity for Decimal values is defined over
+  quantized canonical representation at 10^-18 precision:
+      CanonicalIdentity(x) = Q_18(x)
+  This ensures deterministic fixed-point comparability while bounding float64 precision drift.
+- Unordered Collections: Sets and frozensets are canonicalized by recursively normalizing
+  each member, encoding each member to its canonical JSON string representation, sorting
+  the resulting canonical strings lexicographically, and emitting an ordered JSON array.
+- Dictionary Keys: Configuration dictionaries must strictly use string keys (isinstance(k, str)).
+  Non-string keys (e.g. int, bool) are rejected to eliminate semantic key collisions.
+- Closed-World Typing: Only supported types (None, bool, int, float, Decimal, str, bytes,
+  dict, list, tuple, set, frozenset, Enum) are allowed; arbitrary sequence objects are rejected.
 """
 
 from decimal import Decimal
@@ -10,7 +24,7 @@ import hashlib
 import json
 import math
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
@@ -34,16 +48,19 @@ def deep_freeze_value(val: Any) -> Any:
 
 
 class CanonicalConfigSerializer:
-    """Deterministic, type-safe canonical serializer for ACASH configuration and parameter objects.
+    """Deterministic, type-safe canonical serializer implementing the ACASH Canonical JSON Serialization Profile v1.
 
     ENFORCES:
     - Explicit type-tagging preventing semantic collision across primitive domains:
       * bool != int (e.g. True vs 1)
       * Decimal != float (exact Decimal string vs IEEE-754 float)
       * str != bytes
-    - Strict sorting of all dictionary keys and feature sequences.
+    - String-only dictionary keys: Rejects non-string keys (e.g. {1: 'a', '1': 'b'}) to eliminate key collision.
+    - Deterministic unordered collections: Sets and frozensets are sorted by their serialized canonical JSON strings.
+    - Quantized 18-decimal identity: Decimal numbers are formatted to exactly 18 decimal places (Q_18(x)).
+    - Closed-world type validation: Only explicit primitive and collection types are permitted.
     - Zero-tolerance non-finite numeric rejection (NaN, +Inf, -Inf).
-    - RFC-8785 canonical JSON formatting: separators=(',', ':'), sort_keys=True, ensure_ascii=True, allow_nan=False.
+    - Canonical formatting: separators=(',', ':'), sort_keys=True, ensure_ascii=True, allow_nan=False.
     """
 
     @classmethod
@@ -69,17 +86,30 @@ class CanonicalConfigSerializer:
         if isinstance(val, (bytes, bytearray)):
             return {"__type__": "bytes", "value": bytes(val).hex()}
         if isinstance(val, (dict, Mapping)):
-            return {
-                str(k): cls.serialize_value(v)
-                for k, v in sorted(val.items(), key=lambda item: str(item[0]))
-            }
-        if isinstance(val, (list, tuple, set, frozenset, Sequence)):
+            normalized_dict = {}
+            for k, v in val.items():
+                if not isinstance(k, str):
+                    raise DataContractError(
+                        f"Dictionary keys in canonical configuration must be strictly strings, "
+                        f"got key '{k}' of type '{type(k).__name__}'."
+                    )
+                normalized_dict[k] = cls.serialize_value(v)
+            return {k: normalized_dict[k] for k in sorted(normalized_dict.keys())}
+        if isinstance(val, (set, frozenset)):
+            # Unordered collections: serialize each member, sort by canonical JSON string representation
+            serialized_members = [cls.serialize_value(x) for x in val]
+            return sorted(
+                serialized_members,
+                key=lambda m: json.dumps(m, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False),
+            )
+        if isinstance(val, (list, tuple)):
+            # Ordered sequences: preserve sequential order
             return [cls.serialize_value(x) for x in val]
         raise DataContractError(f"Unsupported parameter type for canonical serialization: {type(val).__name__}")
 
     @classmethod
     def to_canonical_json(cls, obj: Any) -> str:
-        """Convert any data structure into a canonical, collision-free JSON string."""
+        """Convert any data structure into an ACASH Profile v1 canonical, collision-free JSON string."""
         normalized = cls.serialize_value(obj)
         return json.dumps(
             normalized,
@@ -94,3 +124,4 @@ class CanonicalConfigSerializer:
         """Compute 64-hex lowercase SHA-256 of canonical JSON."""
         payload = cls.to_canonical_json(obj)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+

@@ -33846,6 +33846,51 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **271/271 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 144 source files)
 
+---
+
+## 👤 User (Turn 123)
+
+<USER_REQUEST>
+ผมตรวจ โค้ดจริงบน GitHub ของ 901004b และ c9b3a42 แล้ว ไม่ได้อิง walkthrough อย่างเดียว
+ผลคือ 3 ประเด็นจาก 1dd0877 ถูกแก้จริง แต่พบ 4 contract locks ที่ต้องปิดก่อน Phase 6 Final Sign-off (9.1/10):
+1. 🔴 1. Canonical unordered collections (set / frozenset): serialize members -> canonical JSON encode -> sort encoded representations
+2. 🔴 2. Dictionary-key collision policy: String-only dictionary keys (reject non-string keys เช่น {1: "A", "1": "B"})
+3. 🟠 3. ACASH Canonical JSON Serialization Profile v1: เลิก overclaim RFC-8785 และใช้ closed-world typing
+4. 🟠 4. Lock 18-decimal identity semantics: CanonicalIdentity(x) = Q_18(x)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 123)
+
+### 🛠️ สรุปรายละเอียดการ Hardening ACASH Canonical JSON Serialization Profile v1
+
+1. **🔴 Canonical Unordered Collections (`set` / `frozenset` Permutation Invariance):**
+   - ใน `CanonicalConfigSerializer.serialize_value()`:
+     - สมาชิกทุกตัวใน `set` และ `frozenset` จะถูก serialize เป็น primitive representation
+     - นำ representation ของสมาชิกแต่ละตัวมาแปลงเป็น canonical JSON string และทำการ lexicographical sorting
+     - ปล่อย output เป็น ordered JSON array ที่ deterministic 100% ไม่ขึ้นกับ Python hash/set iteration order
+   - เพิ่ม Adversarial Test: `{"ES", "NQ", "YM", "RTY"}` vs `{"YM", "RTY", "ES", "NQ"}` ได้ canonical JSON และ SHA-256 เหมือนกันทุกประการ
+
+2. **🔴 Strict String-Only Dictionary Keys:**
+   - ใน `CanonicalConfigSerializer.serialize_value()` สำหรับ `dict` / `Mapping`:
+     - ตรวจสอบ `isinstance(k, str)` หากพบ non-string key (เช่น `int`, `bool`, `Decimal`, `float`) จะ raise `DataContractError("Dictionary keys in canonical configuration must be strictly strings...")` ทันที
+     - ป้องกัน semantic key collisions เช่น `{1: "A", "1": "B"}` หรือ `{True: "A", 1: "B"}` อย่างสิ้นเชิง
+
+3. **🟠 ACASH Canonical JSON Serialization Profile v1 & Closed-World Typing:**
+   - ปรับปรุง specification และ docstrings จากการอ้างอิง RFC-8785 เป็น **"ACASH Canonical JSON Serialization Profile v1"**
+   - ลบ broad `Sequence` fallback ออก บังคับใช้ closed-world types: `None`, `bool`, `int`, `float`, `Decimal`, `str`, `bytes`, `dict`, `list`, `tuple`, `set`, `frozenset`, `Enum` หากพบ type อื่นนอกเหนือจากนี้จะ raise `DataContractError`
+
+4. **🟠 Lock 18-Decimal Quantization Semantics:**
+   - ระบุ Architecture Contract ชัดเจนในระดับ Core Specification:
+     $$\text{CanonicalIdentity}(x) = Q_{18}(x)$$
+     Cryptographic identity ถูกนิยามบน 18-decimal fixed-point quantized representation ($10^{-18}$)
+
+5. **Full Test Suite & Mypy Status:**
+   - **271/271 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 144 source files)
+
+
 
 
 

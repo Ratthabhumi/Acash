@@ -2106,6 +2106,44 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
     with pytest.raises(DataContractError, match="Non-finite Decimal value"):
         CanonicalConfigSerializer.to_canonical_json({"val": Decimal("NaN")})
 
+    # 6. Unordered collections (set / frozenset) permutation determinism
+    set_a = {"ES", "NQ", "YM", "RTY"}
+    set_b = {"YM", "RTY", "ES", "NQ"}
+    json_set_a = CanonicalConfigSerializer.to_canonical_json(set_a)
+    json_set_b = CanonicalConfigSerializer.to_canonical_json(set_b)
+    assert json_set_a == json_set_b
+    assert CanonicalConfigSerializer.compute_sha256(set_a) == CanonicalConfigSerializer.compute_sha256(set_b)
+
+    frozenset_a = frozenset([Decimal("1.5"), Decimal("0.5"), Decimal("2.0")])
+    frozenset_b = frozenset([Decimal("2.0"), Decimal("1.5"), Decimal("0.5")])
+    assert CanonicalConfigSerializer.to_canonical_json(frozenset_a) == CanonicalConfigSerializer.to_canonical_json(frozenset_b)
+    assert CanonicalConfigSerializer.compute_sha256(frozenset_a) == CanonicalConfigSerializer.compute_sha256(frozenset_b)
+
+    # 7. Non-string dictionary keys strictly rejected (eliminates key-type collisions)
+    with pytest.raises(DataContractError, match="must be strictly strings"):
+        CanonicalConfigSerializer.to_canonical_json({1: "integer_key"})
+
+    with pytest.raises(DataContractError, match="must be strictly strings"):
+        CanonicalConfigSerializer.to_canonical_json({True: "bool_key"})
+
+    with pytest.raises(DataContractError, match="must be strictly strings"):
+        CanonicalConfigSerializer.to_canonical_json({Decimal("1.0"): "decimal_key"})
+
+
+    # 8. Closed-world type rejection on unsupported objects
+    class CustomUnsupportedType:
+        pass
+
+    with pytest.raises(DataContractError, match="Unsupported parameter type"):
+        CanonicalConfigSerializer.to_canonical_json({"obj": CustomUnsupportedType()})
+
+    # 9. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x)
+    # Numbers differing beyond 18th decimal place collapse to the same canonical representation
+    d1 = Decimal("1.0000000000000000001")
+    d2 = Decimal("1.0000000000000000002")
+    assert CanonicalConfigSerializer.to_canonical_json(d1) == CanonicalConfigSerializer.to_canonical_json(d2)
+
+
 
 def test_search_trial_record_deep_immutable_parameters() -> None:
     """Verify that SearchTrialRecord recursively freezes parameters and prevents runtime mutation."""
