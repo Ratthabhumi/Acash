@@ -94,8 +94,6 @@ class StatisticalValidationGate:
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
-        is_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
-        oos_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
         manifest_store: Optional[Dict[str, Any]] = None,
         raw_predictive_edge_bps: float = 15.0,
@@ -203,24 +201,7 @@ class StatisticalValidationGate:
             )
 
         # 4. Mandatory CPCV / CSCV Empirical Evidence Requirement (Strict Fail-Closed without surrogate fallback)
-        if trial_return_matrix is not None:
-            if trial_return_matrix.ndim != 2 or trial_return_matrix.shape[1] < 2:
-                raise DataContractError(
-                    f"trial_return_matrix must be 2D array of shape (T, M >= 2), got {getattr(trial_return_matrix, 'shape', None)}"
-                )
-            is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(trial_return_matrix)
-        elif is_cpcv_sharpe_matrix is not None and oos_cpcv_sharpe_matrix is not None:
-            if is_cpcv_sharpe_matrix.ndim != 2 or is_cpcv_sharpe_matrix.shape[1] < 2:
-                raise DataContractError(
-                    f"is_cpcv_sharpe_matrix must have shape (C, M >= 2), got {is_cpcv_sharpe_matrix.shape}"
-                )
-            if oos_cpcv_sharpe_matrix.shape != is_cpcv_sharpe_matrix.shape:
-                raise DataContractError(
-                    f"oos_cpcv_sharpe_matrix shape {oos_cpcv_sharpe_matrix.shape} != is_cpcv_sharpe_matrix shape {is_cpcv_sharpe_matrix.shape}"
-                )
-            is_mat = is_cpcv_sharpe_matrix
-            oos_mat = oos_cpcv_sharpe_matrix
-        else:
+        if trial_return_matrix is None:
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
             ledger_hash = _compute_ledger_sha256(trial_ledger)
@@ -258,8 +239,8 @@ class StatisticalValidationGate:
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
 
-        # Enforce strict 5-way invariant coupling:
-        # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut
+        # Enforce strict Authoritative Ledger Invariants:
+        # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut == M_CPCV
         effective_k = trial_ledger.total_trials
 
         if effective_k < 1:
@@ -271,6 +252,30 @@ class StatisticalValidationGate:
         unique_ids = {t.trial_id for t in trial_ledger.trials}
         if len(unique_ids) != effective_k:
             raise DataContractError(f"Ledger contains duplicate trial_ids: {len(unique_ids)} unique != {effective_k} total")
+
+        # Invariant Check: trial_return_matrix candidate universe coupling (M == K_ledger)
+        if trial_return_matrix.ndim != 2:
+            raise DataContractError(
+                f"trial_return_matrix must be 2D array of shape (T, M), got ndim={trial_return_matrix.ndim}"
+            )
+        t_matrix, m_matrix = trial_return_matrix.shape
+        if m_matrix != effective_k:
+            raise DataContractError(
+                f"trial_return_matrix candidate count M ({m_matrix}) does not match SearchTrialLedger K ({effective_k}). "
+                f"PBO search universe must strictly equal the authoritative trial ledger universe."
+            )
+        if t_matrix != n_is:
+            raise DataContractError(
+                f"trial_return_matrix observation count T ({t_matrix}) does not match in_sample_returns length ({n_is})."
+            )
+
+        # Invariant Check: Primary candidate strategy returns (column 0) must strictly match in_sample_returns
+        is_floats = np.array([float(x) for x in in_sample_returns], dtype=np.float64)
+        if not np.allclose(trial_return_matrix[:, 0], is_floats, atol=1e-7, rtol=1e-5):
+            raise DataContractError(
+                "trial_return_matrix column 0 (primary candidate strategy) does not match in_sample_returns observations. "
+                "Both DSR and CPCV must evaluate identical underlying return series."
+            )
 
         all_p_values = trial_ledger.p_values
 
@@ -291,7 +296,7 @@ class StatisticalValidationGate:
             confidence_level_alpha=float(self.config.confidence_level_alpha),
         )
 
-        # 8. Overfitting & Parameter Fragility
+        # 8. Sovereign CPCV / CSCV Execution & Overfitting Battery
         if manifest_store is not None:
             for pt in perturbation_grid.points:
                 if pt.manifest_id not in manifest_store:
@@ -299,6 +304,8 @@ class StatisticalValidationGate:
                         f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
                     )
                 pt.validate_manifest_binding(manifest_store[pt.manifest_id])
+
+        is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(trial_return_matrix)
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
             is_sharpe_matrix=is_mat,
@@ -308,6 +315,7 @@ class StatisticalValidationGate:
             friction_params=friction_params,
             max_acceptable_pbo=float(self.config.max_acceptable_pbo),
         )
+
 
         # 9. Out-of-Sample Performance Evaluation
         mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)

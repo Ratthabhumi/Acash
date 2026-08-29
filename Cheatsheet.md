@@ -180,7 +180,8 @@ $$\text{Reality Gap} = \Delta_{\text{spread}} + \Delta_{\text{slippage}} + \Delt
 | **Phase 3** | Microstructure & Features | Trades, L2/L3 Book, VWAP, OBI, Footprint | 122/122 unit tests, mypy clean | ✅ **GATE 3** |
 | **Phase 4** | Alpha Engine & Hypotheses | Pre-registered hypotheses, HAC $\hat{\beta}_H$, Blind OOS | 139/139 unit tests, mypy clean | ✅ **GATE 4** |
 | **Phase 5** | Backtesting & Simulation | Nautilus substrate, Reality Gap drag telemetry | 200/200 unit tests, mypy clean | ✅ **GATE 5** |
-| **Phase 6** | Statistical Validation Gate | CPCV, DSR, MinTRL, PBO, Search Ledger | 244/244 unit tests, mypy clean | ✅ **GATE 6** |
+| **Phase 6** | Statistical Validation Gate | CPCV, DSR, MinTRL, PBO, Search Ledger | 246/246 unit tests, mypy clean | ✅ **GATE 6** |
+
 
 
 

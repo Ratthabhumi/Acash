@@ -88,11 +88,11 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_MOM_001")
     trial_matrix = np.zeros((1000, 5), dtype=np.float64)
-    for m in range(5):
-        trial_matrix[:, m] = np.random.normal(0.0025 - m * 0.0005, 0.0040, 1000)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    for m in range(1, 5):
+        trial_matrix[:, m] = np.random.normal(0.0020 - m * 0.0005, 0.0040, 1000)
 
     report = gate.evaluate_strategy(
-
         strategy_id="STRAT_MOM_001",
         hypothesis_id="HYP_TSMOM_001",
         in_sample_returns=is_returns,
@@ -101,6 +101,7 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
         trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
     )
+
 
 
     assert report.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
@@ -423,23 +424,28 @@ def test_deterministic_validation_report_id_and_digests() -> None:
     is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
     oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
 
-    trial = SearchTrialRecord(
-        trial_id="trial_single",
-        strategy_id="STRAT_01",
-        hypothesis_id="HYP_01",
-        feature_names=["f1"],
-        parameters={},
-        in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.01"),
-    )
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.01"),
+        )
+        for i in range(2)
+    ]
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_01",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=trials,
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
-    trial_matrix = np.random.normal(0.0010, 0.0040, (1000, 2))
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
     report_1 = gate.evaluate_strategy(
         strategy_id="STRAT_01",
@@ -477,23 +483,28 @@ def test_canonical_json_serialization_separation() -> None:
     is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
     oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
 
-    trial = SearchTrialRecord(
-        trial_id="trial_single",
-        strategy_id="STRAT_01",
-        hypothesis_id="HYP_01",
-        feature_names=["f1"],
-        parameters={},
-        in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.01"),
-    )
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"trial_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.01"),
+        )
+        for i in range(2)
+    ]
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_01",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=trials,
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
-    trial_matrix = np.random.normal(0.0010, 0.0040, (1000, 2))
+    trial_matrix = np.zeros((1000, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
     report = gate.evaluate_strategy(
         strategy_id="STRAT_01",
@@ -504,6 +515,7 @@ def test_canonical_json_serialization_separation() -> None:
         trial_return_matrix=trial_matrix,
         perturbation_grid=grid,
     )
+
 
 
     # 1. Canonical Evidence JSON (pure mathematical facts)
@@ -748,7 +760,18 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
         ledger_id="LEDGER_01",
         strategy_id="STRAT_STORE_01",
         hypothesis_id="HYP_01",
-        trials=[trial],
+        trials=[
+            SearchTrialRecord(
+                trial_id=f"trial_{i}",
+                strategy_id="STRAT_STORE_01",
+                hypothesis_id="HYP_01",
+                feature_names=["f1"],
+                parameters={"p": i},
+                in_sample_sharpe=Decimal("1.5"),
+                p_value=Decimal("0.001"),
+            )
+            for i in range(2)
+        ],
     )
 
     hyp_hash = "1" * 64
@@ -821,11 +844,10 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
     )
 
     trial_matrix = np.zeros((1000, 2), dtype=np.float64)
-    trial_matrix[:, 0] = np.random.normal(0.0025, 0.0040, 1000)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
     trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 1000)
 
     # 1. Successful verification against manifest_store
-
     report = gate.evaluate_strategy(
         strategy_id="STRAT_STORE_01",
         hypothesis_id="HYP_01",
@@ -854,7 +876,7 @@ def test_statistical_validation_gate_verifies_manifest_store_repository() -> Non
 
 
 def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> None:
-    """Verify that omitting trial_return_matrix and CPCV matrices strictly fails closed with REJECT_MISSING_CPCV_EVIDENCE."""
+    """Verify that omitting trial_return_matrix strictly fails closed with REJECT_MISSING_CPCV_EVIDENCE."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -887,8 +909,6 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         trial_ledger=ledger,
         perturbation_grid=grid,
         trial_return_matrix=None,
-        is_cpcv_sharpe_matrix=None,
-        oos_cpcv_sharpe_matrix=None,
     )
     assert rep.verdict == ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE
     assert rep.is_tradeable_alpha is False
@@ -923,7 +943,10 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
         trials=trials,
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_FWER")
-    trial_matrix = np.random.normal(0.0010, 0.0040, (500, 3))
+    trial_matrix = np.zeros((500, 3), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0010, 0.0040, 500)
+    trial_matrix[:, 2] = np.random.normal(0.0005, 0.0040, 500)
 
     rep = gate.evaluate_strategy(
         strategy_id="STRAT_FWER",
@@ -950,14 +973,15 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
 
     trials = [
         SearchTrialRecord(
-            trial_id="t1",
+            trial_id=f"t_{i}",
             strategy_id="STRAT_HC",
             hypothesis_id="HYP_01",
             feature_names=["f"],
-            parameters={},
+            parameters={"p": i},
             in_sample_sharpe=Decimal("1.5"),
             p_value=Decimal("0.001"),
         )
+        for i in range(2)
     ]
     ledger = SearchTrialLedger(
         ledger_id="L_HC",
@@ -966,7 +990,9 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
         trials=trials,
     )
     grid = _make_valid_perturbation_grid(strat_id="STRAT_HC")
-    trial_matrix = np.random.normal(0.0010, 0.0040, (500, 2))
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+    trial_matrix[:, 1] = np.random.normal(0.0005, 0.0040, 500)
 
     rep = gate.evaluate_strategy(
         strategy_id="STRAT_HC",
@@ -979,6 +1005,92 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
     )
     assert rep.verdict == ValidationGateVerdict.REJECT_HAIRCUT_SHARPE
     assert rep.is_tradeable_alpha is False
+
+
+def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
+    """Verify that Gate strictly rejects when trial_return_matrix M != ledger K."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"t_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(3)  # K = 3
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    # M = 2 != K = 3
+    mismatched_matrix = np.zeros((500, 2), dtype=np.float64)
+    mismatched_matrix[:, 0] = np.array([float(x) for x in is_returns])
+
+    with pytest.raises(DataContractError, match="candidate count M .* does not match SearchTrialLedger K"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=mismatched_matrix,
+            perturbation_grid=grid,
+        )
+
+
+def test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch() -> None:
+    """Verify that Gate strictly rejects when trial_return_matrix column 0 != in_sample_returns."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 500))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 200))
+
+    trials = [
+        SearchTrialRecord(
+            trial_id=f"t_{i}",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": i},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.001"),
+        )
+        for i in range(2)
+    ]
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=trials,
+    )
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01")
+    # Column 0 has different random returns
+    divergent_matrix = np.random.normal(0.0050, 0.0040, (500, 2))
+
+    with pytest.raises(DataContractError, match="column 0 .* does not match in_sample_returns"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            trial_return_matrix=divergent_matrix,
+            perturbation_grid=grid,
+        )
+
 
 
 

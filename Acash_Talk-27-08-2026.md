@@ -33412,6 +33412,44 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **244/244 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 114)
+
+<USER_REQUEST>
+ผมตรวจ 765e122 ต่อจาก source code จริงบน GitHub ไม่ได้ตัดสินจาก 244/244 tests อย่างเดียว และรอบนี้สถานะดีขึ้นชัดเจน แต่ ผมยังไม่ให้ Final Sign-off เพราะยังมีช่องว่างสำคัญอยู่ 3 จุด โดย 2 จุดเป็นระดับ P0/P1:
+1. 🔴 P0 #1 — K_ledger ยังไม่ถูกผูกกับจำนวน candidate models ใน CPCV (ต้องบังคับ M == K_ledger)
+2. 🔴 P0/P1 #2 — Gate ยังรับ "Explicit CPCV Matrices" ที่ไม่พิสูจน์ provenance (ตัด is_cpcv_sharpe_matrix / oos_cpcv_sharpe_matrix ออก ให้ Gate derive เอง)
+3. 🟠 P1 #3 — trial_return_matrix กับ in_sample_returns ยังอาจเป็นคนละ sample (บังคับ T_matrix == T_IS และ column 0 identity check)
+4. 🟠 P1 #4 — PBO implementation มี documentation/code mismatch (ล็อก contract ชัดเจนเป็น lambda < 0)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 114)
+
+### 🛠️ สรุปรายละเอียด Sovereign CPCV Provenance & Invariant Coupling Hardening
+
+1. **🔴 Strict $M_{\text{CPCV}} \equiv K_{\text{ledger}}$ Search Universe Coupling (P0 #1):**
+   - ใน `StatisticalValidationGate.evaluate_strategy()`: บังคับตรวจ invariant อย่างเข้มงวด:
+     `if trial_return_matrix.shape[1] != effective_k: raise DataContractError(...)`
+     ป้องกันไม่ให้เกิด Universe Split (เช่น DSR ใช้ 100 trials แต่ PBO ใช้ 5 models)
+
+2. **🔴 Elimination of Caller-Supplied Unproven Matrices (P0/P1 #2):**
+   - ตัดพารามิเตอร์ `is_cpcv_sharpe_matrix` และ `oos_cpcv_sharpe_matrix` ออกจาก Sovereign Gate Signature 100%
+   - บังคับว่า Gate เป็นผู้คำนวณ CSCV Partition Matrices เองผ่าน `cpcv_engine.evaluate_cscv_sharpe_matrices(trial_return_matrix)` เท่านั้น ปิด attack surface การส่ง fake matrices จากภายนอก
+
+3. **🟠 Strict $T_{\text{matrix}} \equiv T_{\text{IS}}$ & Primary Strategy Return Identity (P1 #3):**
+   - ตรวจสอบ $T_{\text{matrix}} == T_{\text{IS}}$ และบังคับว่า Column 0 ของ `trial_return_matrix` (primary candidate strategy) ต้องตรงกับ `in_sample_returns` observation-by-observation 100% (`np.allclose(trial_return_matrix[:, 0], is_floats)`) หาก mismatch จะถูก raise `DataContractError` ทันที
+
+4. **🟠 PBO Contract Alignment to $P(\lambda < 0)$ (P1 #4):**
+   - ปรับปรุง docstring และ mathematical formulation ใน `OverfittingEngine.calculate_pbo()` ให้ระบุ $P(\lambda < 0) \iff \bar{R} < 0.5$ สอดคล้องกับ code `logit_val < 0.0` อย่างสมบูรณ์ (โดย median tie $\bar{R} = 0.5 \implies \lambda = 0.0$ คือ median performance ไม่ใช่ underperforming)
+
+5. **Full Test Suite & Mypy Status:**
+   - **246/246 tests PASSED (100%)** (เพิ่ม 2 adversarial invariant tests: `test_statistical_validation_gate_rejects_m_k_ledger_mismatch` และ `test_statistical_validation_gate_rejects_is_returns_matrix_column_0_mismatch`)
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

@@ -48,13 +48,14 @@ class OverfittingEngine:
              finite log-odds logits while ensuring that the exact median mid_rank = (M + 1)/2 yields
              omega = 0.5 and log-odds lambda = ln(0.5 / 0.5) = 0.0.
            - Log-odds: lambda = ln(omega / (1.0 - omega))
-           - Count overfit if lambda <= 0.0 (i.e. omega <= 0.5, below median OOS performance).
+           - Count overfit if lambda < 0.0 (i.e. omega < 0.5, strictly below median OOS performance).
         2. PBO is the empirical proportion of splits where the IS-optimal model underperforms median OOS:
-           PBO = (1 / C) * sum_{c=1}^C I(lambda_c <= 0.0)
+           PBO = (1 / C) * sum_{c=1}^C I(lambda_c < 0.0)
 
         Args:
             is_sharpe_matrix: 2D array of shape (C combinations, M models) for In-Sample Sharpe.
             oos_sharpe_matrix: 2D array of shape (C combinations, M models) for Out-of-Sample Sharpe.
+
 
         Returns:
             Tuple[pbo_estimate, logits_mean, logits_std]
