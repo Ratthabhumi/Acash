@@ -39,7 +39,7 @@ def test_dsr_single_trial_mode() -> None:
     np.random.seed(42)
     returns = list(np.random.normal(0.0010, 0.0050, 500))
 
-    trial = SearchTrialRecord(
+    trial = SearchTrialRecord.create(
         trial_id="trial_1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
@@ -47,6 +47,7 @@ def test_dsr_single_trial_mode() -> None:
         parameters={},
         in_sample_sharpe=Decimal("1.2"),
         p_value=Decimal("0.01"),
+        in_sample_returns=returns,
     )
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_01",
@@ -70,7 +71,7 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
 
     # Create a SearchTrialLedger recording 10 exploratory trials
     trials = [
-        SearchTrialRecord(
+        SearchTrialRecord.create(
             trial_id=f"trial_{i}",
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
@@ -78,6 +79,7 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
             p_value=Decimal("0.01"),
+            in_sample_returns=strong_returns,
         )
         for i in range(10)
     ]
@@ -106,7 +108,7 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
     weak_returns = list(np.random.normal(0.0010, 0.0050, 1000))
 
     trials = [
-        SearchTrialRecord(
+        SearchTrialRecord.create(
             trial_id=f"trial_{i}",
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
@@ -114,6 +116,7 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
             p_value=Decimal("0.01"),
+            in_sample_returns=weak_returns,
         )
         for i in range(10)
     ]
@@ -146,8 +149,9 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
         assert sr0_values[i] < sr0_values[i + 1]
 
     # 2. Identical trials in ledger produce Var(SR_k) == 0.0 -> SR0 == 0.0
+    dummy_returns = [0.01, 0.02, 0.03, 0.04]
     identical_trials = [
-        SearchTrialRecord(
+        SearchTrialRecord.create(
             trial_id=f"trial_{i}",
             strategy_id="STRAT_IDENTICAL",
             hypothesis_id="HYP_01",
@@ -155,6 +159,7 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
             parameters={"p": i},
             in_sample_sharpe=Decimal("1.500000000000000000"),
             p_value=Decimal("0.001"),
+            in_sample_returns=dummy_returns,
         )
         for i in range(20)
     ]
@@ -169,5 +174,6 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
     returns = list(np.random.normal(0.0015, 0.0040, 500))
     res = DeflatedSharpeEngine.evaluate_dsr(returns=returns, trial_ledger=identical_ledger)
     assert res.expected_max_sharpe_sr0 == Decimal("0.0")
+
 
 

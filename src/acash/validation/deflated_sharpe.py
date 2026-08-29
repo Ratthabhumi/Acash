@@ -247,8 +247,10 @@ class DeflatedSharpeEngine:
             selection_correction_mode=mode,
             sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
-            sharpe_space=sharpe_space_label,
+            sharpe_space="ANNUALIZED",
+            inference_space="PER_PERIOD",
             trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
+
             sample_size_t=n,
             dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),
             dsr_p_value=to_decimal18(Decimal(f"{dsr_prob:.12f}")) or Decimal("0.0"),

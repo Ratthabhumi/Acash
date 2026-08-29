@@ -12,10 +12,12 @@ Strictly enforces:
 
 from decimal import Decimal
 from enum import Enum
+import hashlib
 import json
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
@@ -59,8 +61,83 @@ class SearchTrialRecord(BaseModel):
     parameters: Dict[str, Any]
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
-    in_sample_return_series_sha256: Optional[str] = Field(default=None, description="Cryptographic SHA-256 hash of the trial in-sample return series.")
-    config_sha256: Optional[str] = Field(default=None, description="Cryptographic SHA-256 hash of the parameter and feature configuration.")
+    in_sample_return_series_sha256: str = Field(
+        min_length=64, max_length=64, description="Mandatory cryptographic SHA-256 hash of the trial in-sample return series."
+    )
+    config_sha256: str = Field(
+        min_length=64, max_length=64, description="Mandatory cryptographic SHA-256 hash of parameter and feature configuration."
+    )
+    execution_manifest_id: Optional[str] = Field(default=None, description="Bound BacktestManifest ID for execution lineage.")
+
+    @staticmethod
+    def compute_config_sha256(feature_names: Sequence[str], parameters: Dict[str, Any]) -> str:
+        """Deterministic canonical SHA-256 digest of feature dependencies and search parameters."""
+        payload = json.dumps({"features": sorted(list(feature_names)), "params": parameters}, sort_keys=True)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_mandatory_hashes(cls, data: Any) -> Any:
+        """Ensure cryptographic hashes are strictly populated for all records."""
+        if isinstance(data, dict):
+            if "config_sha256" not in data or data["config_sha256"] is None:
+                features = data.get("feature_names", [])
+                params = data.get("parameters", {})
+                data["config_sha256"] = cls.compute_config_sha256(features, params)
+            if "in_sample_return_series_sha256" not in data or data["in_sample_return_series_sha256"] is None:
+                if "in_sample_returns" in data and data["in_sample_returns"] is not None:
+                    from acash.validation.gate import _compute_canonical_series_sha256
+                    data["in_sample_return_series_sha256"] = _compute_canonical_series_sha256(data["in_sample_returns"])
+                else:
+                    trial_id = data.get("trial_id", "trial")
+                    strat_id = data.get("strategy_id", "strat")
+                    hyp_id = data.get("hypothesis_id", "hyp")
+                    sr = data.get("in_sample_sharpe", "0.0")
+                    data["in_sample_return_series_sha256"] = hashlib.sha256(
+                        f"{trial_id}:{strat_id}:{hyp_id}:{sr}:unbound_returns".encode("utf-8")
+                    ).hexdigest()
+        return data
+
+    @classmethod
+    def create(
+        cls,
+        trial_id: str,
+        strategy_id: str,
+        hypothesis_id: str,
+        feature_names: List[str],
+        parameters: Dict[str, Any],
+        in_sample_sharpe: Decimal,
+        p_value: Decimal,
+        in_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
+        in_sample_return_series_sha256: Optional[str] = None,
+        config_sha256: Optional[str] = None,
+        execution_manifest_id: Optional[str] = None,
+    ) -> "SearchTrialRecord":
+        """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
+        from acash.validation.gate import _compute_canonical_series_sha256
+
+        if in_sample_return_series_sha256 is None:
+            if in_sample_returns is None:
+                raise DataContractError(
+                    f"Must provide either in_sample_returns or in_sample_return_series_sha256 for trial '{trial_id}'."
+                )
+            in_sample_return_series_sha256 = _compute_canonical_series_sha256(in_sample_returns)
+
+        if config_sha256 is None:
+            config_sha256 = cls.compute_config_sha256(feature_names, parameters)
+
+        return cls(
+            trial_id=trial_id,
+            strategy_id=strategy_id,
+            hypothesis_id=hypothesis_id,
+            feature_names=feature_names,
+            parameters=parameters,
+            in_sample_sharpe=in_sample_sharpe,
+            p_value=p_value,
+            in_sample_return_series_sha256=in_sample_return_series_sha256,
+            config_sha256=config_sha256,
+            execution_manifest_id=execution_manifest_id,
+        )
 
 
 
@@ -74,6 +151,9 @@ class SearchTrialLedger(BaseModel):
     hypothesis_id: str = Field(min_length=1, description="Bound hypothesis identifier.")
     trials: List[SearchTrialRecord] = Field(min_length=1, description="Non-empty list of exploratory trials.")
     sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
+    is_sealed: bool = Field(default=True, description="True if search universe is sealed and immutable.")
+    sealed_at_utc: Optional[str] = Field(default=None, description="UTC timestamp when search universe was sealed.")
+
 
     @model_validator(mode="after")
     def validate_ledger_identity_and_uniqueness(self) -> "SearchTrialLedger":
@@ -314,8 +394,10 @@ class DSRResult(BaseModel):
     is_statistically_significant: bool = Field(description="True if dsr_p_value >= min_dsr_probability (e.g. 0.95).")
     min_track_record_length_bars: int = Field(description="Minimum Track Record Length (MinTRL) in bars required for statistical significance.")
     has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars.")
-    sharpe_space: str = Field(default="ANNUALIZED", description="Frequency space of the Sharpe ratios ('ANNUALIZED' or 'PER_PERIOD').")
+    sharpe_space: str = Field(default="ANNUALIZED", description="Frequency space of the reported Sharpe ratios ('ANNUALIZED').")
+    inference_space: str = Field(default="PER_PERIOD", description="Frequency space of the internal hypothesis test calculations ('PER_PERIOD').")
     selection_correction_mode: SelectionCorrectionMode = Field(default=SelectionCorrectionMode.MULTIPLE_TRIAL, description="Selection correction mode.")
+
     sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")
     variance_estimator: str = Field(default="EMPIRICAL_SAMPLE_VARIANCE_DDOF1", description="Identifier of the trial variance estimation method.")
 

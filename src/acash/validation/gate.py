@@ -22,7 +22,9 @@ import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.features.engine import to_decimal18
+from acash.research.schema import HypothesisSpecification
 from acash.validation.cpcv import CombinatorialPurgedCrossValidation
+
 from acash.validation.deflated_sharpe import DeflatedSharpeEngine
 from acash.validation.multiple_testing import MultipleTestingEngine
 from acash.validation.overfitting import OverfittingEngine
@@ -94,16 +96,14 @@ class StatisticalValidationGate:
         self,
         strategy_id: str,
         hypothesis_id: str,
+        hypothesis_spec: HypothesisSpecification,
         in_sample_returns: Sequence[Union[Decimal, float]],
-        trial_matrix_column_trial_ids: Sequence[str] = (),
+        trial_matrix_column_trial_ids: Sequence[str],
         out_of_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
-
         trial_ledger: Optional[SearchTrialLedger] = None,
         trial_return_matrix: Optional[np.ndarray] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
         manifest_store: Optional[Dict[str, Any]] = None,
-        hypothesis_spec: Optional[Any] = None,
-        label_horizon: int = 1,
         embargo_bars: Optional[int] = None,
         raw_predictive_edge_bps: float = 15.0,
         friction_params: Optional[FrictionStressParameters] = None,
@@ -111,11 +111,23 @@ class StatisticalValidationGate:
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
 
+        # 0. Mandatory Pre-Registered Hypothesis Specification Sovereign Binding
+        if hypothesis_spec is None:
+            raise DataContractError("Mandatory hypothesis_spec is required for sovereign statistical validation.")
+        if hypothesis_spec.hypothesis_id != hypothesis_id:
+            raise DataContractError(
+                f"hypothesis_spec hypothesis_id '{hypothesis_spec.hypothesis_id}' does not match evaluate_strategy hypothesis_id '{hypothesis_id}'."
+            )
+        label_horizon = hypothesis_spec.primary_horizon
+        if label_horizon < 1:
+            raise DataContractError(f"hypothesis_spec.primary_horizon must be >= 1, got {label_horizon}")
+        hyp_spec_hash = hashlib.sha256(hypothesis_spec.to_canonical_json().encode("utf-8")).hexdigest()
+
         # 1. Search Intensity & Trial Coupling (Strict Pre-Flight Fail-Closed on missing ledger)
         if trial_ledger is None:
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
-            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:MISSING_TRIAL_LEDGER"
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{hyp_spec_hash}:{is_hash}:{oos_hash}:MISSING_TRIAL_LEDGER"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
 
             verdict = ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
@@ -148,7 +160,7 @@ class StatisticalValidationGate:
         if out_of_sample_returns is None or len(out_of_sample_returns) < 4:
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             ledger_hash = _compute_ledger_sha256(trial_ledger)
-            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:MISSING_OOS:{ledger_hash}"
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{hyp_spec_hash}:{is_hash}:MISSING_OOS:{ledger_hash}"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
             verdict = ValidationGateVerdict.REJECT_MISSING_OOS_DATA
             decision_payload = (
@@ -181,7 +193,7 @@ class StatisticalValidationGate:
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
             ledger_hash = _compute_ledger_sha256(trial_ledger)
-            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{ledger_hash}:MISSING_PERTURBATION_GRID"
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{hyp_spec_hash}:{is_hash}:{oos_hash}:{ledger_hash}:MISSING_PERTURBATION_GRID"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
             verdict = ValidationGateVerdict.REJECT_MISSING_PERTURBATION_GRID
             decision_payload = (
@@ -215,7 +227,7 @@ class StatisticalValidationGate:
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
             ledger_hash = _compute_ledger_sha256(trial_ledger)
             grid_hash = _compute_grid_sha256(perturbation_grid)
-            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:MISSING_CPCV_EVIDENCE"
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{hyp_spec_hash}:{is_hash}:{oos_hash}:{ledger_hash}:{grid_hash}:MISSING_CPCV_EVIDENCE"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
             verdict = ValidationGateVerdict.REJECT_MISSING_CPCV_EVIDENCE
             decision_payload = (
@@ -247,23 +259,12 @@ class StatisticalValidationGate:
         n_is = len(in_sample_returns)
         if n_is < 4:
             raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
-        if label_horizon < 1:
-            raise DataContractError(f"label_horizon must be >= 1, got {label_horizon}")
 
-        # Bind and validate HypothesisSpecification if provided
-        hyp_spec_hash = "NONE"
-        if hypothesis_spec is not None:
-            if hasattr(hypothesis_spec, "hypothesis_id") and hypothesis_spec.hypothesis_id != hypothesis_id:
-                raise DataContractError(
-                    f"hypothesis_spec hypothesis_id '{hypothesis_spec.hypothesis_id}' does not match evaluate_strategy hypothesis_id '{hypothesis_id}'."
-                )
-            if hasattr(hypothesis_spec, "primary_horizon") and label_horizon != hypothesis_spec.primary_horizon:
-                raise DataContractError(
-                    f"Gate label_horizon ({label_horizon}) does not match hypothesis_spec.primary_horizon ({hypothesis_spec.primary_horizon}). "
-                    f"CPCV forward purging window must strictly match the research hypothesis evaluation horizon."
-                )
-            if hasattr(hypothesis_spec, "to_canonical_json"):
-                hyp_spec_hash = hashlib.sha256(hypothesis_spec.to_canonical_json().encode("utf-8")).hexdigest()
+        # Invariant Check: SearchTrialLedger must be in SEALED state
+        if not trial_ledger.is_sealed:
+            raise DataContractError(
+                f"SearchTrialLedger '{trial_ledger.ledger_id}' must be in SEALED state before validation."
+            )
 
         # Enforce strict Authoritative Ledger Invariants:
         # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut == M_CPCV
@@ -317,20 +318,40 @@ class StatisticalValidationGate:
         if trial_matrix_column_trial_ids[0] != trial_ledger.trials[0].trial_id:
             raise DataContractError("trial_matrix_column_trial_ids[0] must match the primary evaluated trial record.")
 
-        # Invariant Check: Candidate Return Series Cryptographic Lineage Verification
-        all_col_hashes: List[str] = []
+        # Invariant Check: Candidate Return Series, Config & Execution Cryptographic Lineage Verification
+        matrix_evidence_elements: List[str] = []
         for m in range(effective_k):
             col_m_hash = _compute_canonical_series_sha256(trial_return_matrix[:, m])
-            all_col_hashes.append(col_m_hash)
             trial_rec = trial_ledger.trials[m]
-            if trial_rec.in_sample_return_series_sha256 is not None:
-                if trial_rec.in_sample_return_series_sha256 != col_m_hash:
+
+            # 1. Candidate Return Series Lineage (Hard Invariant: No None escape hatch!)
+            if trial_rec.in_sample_return_series_sha256 != col_m_hash:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' registered in_sample_return_series_sha256 ({trial_rec.in_sample_return_series_sha256}) "
+                    f"does not match actual matrix column {m} return series SHA-256 ({col_m_hash})."
+                )
+
+            # 2. Candidate Configuration Lineage (Deterministic canonical JSON hash of features & params)
+            expected_cfg_hash = SearchTrialRecord.compute_config_sha256(trial_rec.feature_names, trial_rec.parameters)
+            if trial_rec.config_sha256 != expected_cfg_hash:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' registered config_sha256 ({trial_rec.config_sha256}) "
+                    f"does not match computed parameter/feature configuration SHA-256 ({expected_cfg_hash})."
+                )
+
+            # 3. Candidate Execution Lineage (Manifest Binding when manifest_store is provided)
+            if manifest_store is not None and trial_rec.execution_manifest_id is not None:
+                if trial_rec.execution_manifest_id not in manifest_store:
                     raise DataContractError(
-                        f"Trial '{trial_rec.trial_id}' registered in_sample_return_series_sha256 ({trial_rec.in_sample_return_series_sha256}) "
-                        f"does not match actual matrix column {m} return series SHA-256 ({col_m_hash})."
+                        f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
                     )
 
-        matrix_evidence_hash = hashlib.sha256(",".join(all_col_hashes).encode("utf-8")).hexdigest()
+            matrix_evidence_elements.append(
+                f"{trial_rec.trial_id}:{trial_rec.config_sha256}:{col_m_hash}:{trial_rec.execution_manifest_id or 'NONE'}"
+            )
+
+        matrix_evidence_hash = hashlib.sha256(":".join(matrix_evidence_elements).encode("utf-8")).hexdigest()
+
         all_p_values = trial_ledger.p_values
 
         # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger with Unified Frequency Scale)
