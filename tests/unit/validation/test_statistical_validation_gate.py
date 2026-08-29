@@ -617,7 +617,7 @@ def test_parameter_perturbation_point_manifest_binding_invariants() -> None:
     with pytest.raises(DataContractError, match="Output artifact hash mismatch"):
         point_bad_out.validate_manifest_binding(manifest)
 
-    # 5. Input artifact hash mismatch
+    # 5. Input artifact hash mismatch (random hash)
     point_bad_in = ParameterPerturbationPoint(
         parameter_value=Decimal("7.5"),
         run_id="run_p75",
@@ -628,4 +628,84 @@ def test_parameter_perturbation_point_manifest_binding_invariants() -> None:
     )
     with pytest.raises(DataContractError, match="Input artifact hash mismatch"):
         point_bad_in.validate_manifest_binding(manifest)
+
+    # 6. Standalone strategy_config_hash alone strictly rejected (must be composite SHA256(hyp:strat))
+    point_standalone_strat = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash=strat_hash,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Input artifact hash mismatch"):
+        point_standalone_strat.validate_manifest_binding(manifest)
+
+    # 7. Standalone hypothesis_spec_sha256 alone strictly rejected
+    point_standalone_hyp = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash=hyp_hash,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Input artifact hash mismatch"):
+        point_standalone_hyp.validate_manifest_binding(manifest)
+
+
+def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() -> None:
+    """Verify that missing governance prerequisites fail closed through verdict before in-sample size validation."""
+    gate = StatisticalValidationGate()
+
+    # in_sample has only 2 bars (< 4 minimum)
+    short_is = [0.01, 0.02]
+
+    # 1. Missing ledger with short IS -> REJECT_MISSING_TRIAL_LEDGER (not DataContractError)
+    rep_ledger = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=short_is,
+        out_of_sample_returns=[0.01, 0.02, 0.03, 0.04],
+        trial_ledger=None,
+    )
+    assert rep_ledger.verdict == ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
+
+    # 2. Missing OOS with short IS -> REJECT_MISSING_OOS_DATA
+    trial = SearchTrialRecord(
+        trial_id="t1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.01"),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="L1",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=[trial],
+    )
+
+    rep_oos = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=short_is,
+        out_of_sample_returns=None,
+        trial_ledger=ledger,
+    )
+    assert rep_oos.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
+
+    # 3. Missing Perturbation Grid with short IS -> REJECT_MISSING_PERTURBATION_GRID
+    rep_grid = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=short_is,
+        out_of_sample_returns=[0.01, 0.02, 0.03, 0.04],
+        trial_ledger=ledger,
+        perturbation_grid=None,
+    )
+    assert rep_grid.verdict == ValidationGateVerdict.REJECT_MISSING_PERTURBATION_GRID
+
 

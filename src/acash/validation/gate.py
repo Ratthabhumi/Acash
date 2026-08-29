@@ -100,16 +100,14 @@ class StatisticalValidationGate:
         fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
-        n_is = len(in_sample_returns)
-        if n_is < 4:
-            raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
 
-        # 1. Search Intensity & Trial Coupling (Strict Fail-Closed on missing ledger)
+        # 1. Search Intensity & Trial Coupling (Strict Pre-Flight Fail-Closed on missing ledger)
         if trial_ledger is None:
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
             ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:MISSING_TRIAL_LEDGER"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
+
             verdict = ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
             decision_payload = (
                 f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
@@ -201,9 +199,15 @@ class StatisticalValidationGate:
                 created_timestamp_utc=now_utc,
             )
 
+        # 4. In-Sample Observation Sufficiency Check (Evaluated after all prerequisites are verified)
+        n_is = len(in_sample_returns)
+        if n_is < 4:
+            raise DataContractError(f"Insufficient in-sample return observations: {n_is} < 4")
+
         # Enforce strict 5-way invariant coupling:
         # K_ledger == |unique trial_id| == |p-values| == K_DSR == K_Holm == K_BH == K_Haircut
         effective_k = trial_ledger.total_trials
+
         if effective_k < 1:
             raise DataContractError(f"SearchTrialLedger must contain at least 1 trial, got {effective_k}")
         if len(trial_ledger.trials) != effective_k:

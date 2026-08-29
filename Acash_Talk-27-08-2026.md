@@ -33257,5 +33257,43 @@ Verdict: Phase 6 v1.4 Plan — ✅ APPROVED FOR IMPLEMENTATION (with 3 rules loc
    - **237/237 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 110)
+
+<USER_REQUEST>
+ผมเช็ก GitHub main ที่ commit b3a837038f14c9935a6cc05b4770f4afae93a948 จริง แล้ว รวมถึง gate.py, validation/schema.py, cpcv.py, และ test ที่เกี่ยวข้อง ไม่ได้อิงแค่ Walkthrough ที่ส่งมา
+
+Verdict: ยังไม่ควรประกาศ Phase 6 v1.4 “Fully Clean”
+1. 🔴 P0 — validate_manifest_binding() ยัง “ยอมรับ” input hash หลายแบบ (ต้องเป็น single canonical representation: SHA256(hypothesis_spec_sha256:strategy_config_hash))
+2. 🔴 P1 — output_artifact_hash กำลังถูกตีความเป็น “Manifest Hash” ไม่ใช่ “Execution Artifact Hash” (ต้องระบุชัดเจนและ bind กับ canonical BacktestManifest compute_sha256())
+3. 🟠 P1 — “Missing prerequisite = immediate rejection” ยังมี ordering edge case (ตรวจ prerequisite ก่อน len(in_sample_returns) < 4)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 110)
+
+### 🛠️ สรุปรายละเอียด Pre-Sign-Off Contract Hardening
+
+1. **🔴 Strict Single Representation for Input Artifact Hash (P0):**
+   - ใน `ParameterPerturbationPoint.validate_manifest_binding()`:
+     - ตัด fallback allowance ทั้งหมด (`strat_cfg_hash`, `hyp_spec_hash`) ออก 100%
+     - บังคับอย่างเด็ดขาดว่า `self.input_artifact_hash == SHA256(hypothesis_spec_sha256:strategy_config_hash)` เท่านั้น
+     - หากส่ง standalone `strat_cfg_hash` หรือ `hyp_spec_hash` เดี่ยว ๆ จะถูกปฏิเสธด้วย `DataContractError` ทันที
+
+2. **🔴 Strict Manifest Output Artifact Hash Binding (P1):**
+   - ปรับคำอธิบาย `output_artifact_hash` ใน docstrings และ schema field ให้ระบุชัดเจน: เป็น SHA-256 digest ของ BacktestManifest artifact (`manifest.compute_sha256()`)
+   - บังคับ `self.output_artifact_hash == manifest.compute_sha256()` อย่างเคร่งครัด
+
+3. **🟠 Universal Pre-Flight Prerequisite Ordering (P1):**
+   - ย้ายการตรวจสอบ Missing Prerequisites (Missing Ledger, Missing OOS, Missing Perturbation Grid) ไปไว้ที่จุดเริ่มต้นของ `evaluate_strategy()` ก่อนการตรวจสอบ `len(in_sample_returns) < 4`
+   - ผลลัพธ์: หากไม่มี prerequisite แม้จะมี `in_sample_returns` สั้นเพียง 2 bars ระบบก็จะ Fail-Closed ผ่าน Governance Verdict (`REJECT_MISSING_TRIAL_LEDGER`, `REJECT_MISSING_OOS_DATA`, `REJECT_MISSING_PERTURBATION_GRID`) อย่างถูกต้อง ไม่เกิด `DataContractError` แซงหน้า
+
+4. **Full Test Suite & Mypy Status:**
+   - **238/238 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 

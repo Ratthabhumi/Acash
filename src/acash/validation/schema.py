@@ -130,11 +130,11 @@ class ParameterPerturbationPoint(BaseModel):
     )
     input_artifact_hash: str = Field(
         pattern=r"^[0-9a-f]{64}$",
-        description="SHA-256 digest of input configuration & data (64 lowercase hex).",
+        description="SHA-256 digest of composite input lineage SHA256(hypothesis_spec_sha256:strategy_config_hash) (64 lowercase hex).",
     )
     output_artifact_hash: str = Field(
         pattern=r"^[0-9a-f]{64}$",
-        description="SHA-256 digest of backtest execution artifacts (64 lowercase hex).",
+        description="SHA-256 canonical digest of the executed BacktestManifest artifact (64 lowercase hex).",
     )
     actual_sharpe: Decimal = Field(description="Measured Sharpe ratio from this independent execution run.")
 
@@ -144,8 +144,8 @@ class ParameterPerturbationPoint(BaseModel):
         Enforces:
         1. manifest_id == point.manifest_id
         2. manifest execution Sharpe == point.actual_sharpe
-        3. manifest output artifact hash == point.output_artifact_hash
-        4. manifest input configuration lineage == point.input_artifact_hash
+        3. manifest canonical output digest (compute_sha256()) == point.output_artifact_hash
+        4. manifest input configuration lineage SHA256(hypothesis_spec_sha256:strategy_config_hash) == point.input_artifact_hash
         """
         man_id = getattr(manifest, "manifest_id", None)
         if man_id != self.manifest_id:
@@ -166,32 +166,37 @@ class ParameterPerturbationPoint(BaseModel):
                 f"Sharpe ratio mismatch: point has {self.actual_sharpe}, manifest has {manifest_sr}."
             )
 
-        # Output artifact hash validation
+        # Output artifact hash validation: must strictly equal manifest.compute_sha256()
         if hasattr(manifest, "compute_sha256"):
             manifest_out_hash = manifest.compute_sha256()
         elif hasattr(manifest, "to_canonical_json"):
             import hashlib
             manifest_out_hash = hashlib.sha256(manifest.to_canonical_json().encode("utf-8")).hexdigest()
         else:
-            manifest_out_hash = getattr(manifest, "output_artifact_hash", self.output_artifact_hash)
+            raise DataContractError(f"Manifest '{man_id}' does not provide compute_sha256() or to_canonical_json().")
 
-        if manifest_out_hash != self.output_artifact_hash:
+        if self.output_artifact_hash != manifest_out_hash:
             raise DataContractError(
                 f"Output artifact hash mismatch: point has '{self.output_artifact_hash}', manifest produced '{manifest_out_hash}'."
             )
 
-        # Input artifact hash validation
+        # Input artifact hash validation: must strictly equal SHA256(hypothesis_spec_sha256:strategy_config_hash)
         strat_cfg_hash = getattr(manifest, "strategy_config_hash", None)
         hyp_spec_hash = getattr(manifest, "hypothesis_spec_sha256", None)
-        if strat_cfg_hash and hyp_spec_hash:
-            import hashlib
-            expected_in = hashlib.sha256(f"{hyp_spec_hash}:{strat_cfg_hash}".encode("utf-8")).hexdigest()
-            if self.input_artifact_hash not in (expected_in, strat_cfg_hash, hyp_spec_hash):
-                raise DataContractError(
-                    f"Input artifact hash mismatch: point has '{self.input_artifact_hash}', expected '{strat_cfg_hash}' or '{expected_in}'."
-                )
+        if not strat_cfg_hash or not hyp_spec_hash:
+            raise DataContractError(
+                f"Manifest '{man_id}' missing strategy_config_hash or hypothesis_spec_sha256."
+            )
+
+        import hashlib
+        expected_in = hashlib.sha256(f"{hyp_spec_hash}:{strat_cfg_hash}".encode("utf-8")).hexdigest()
+        if self.input_artifact_hash != expected_in:
+            raise DataContractError(
+                f"Input artifact hash mismatch: point has '{self.input_artifact_hash}', expected exact '{expected_in}' = SHA256(hypothesis_spec_sha256:strategy_config_hash)."
+            )
 
         return True
+
 
 
 class ParameterPerturbationGrid(BaseModel):
