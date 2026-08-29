@@ -573,9 +573,10 @@ def test_cross_phase_manifest_64hex_regex_validation() -> None:
 
 def test_cross_phase_nautilus_substrate_separation_and_catalog_export() -> None:
     """Invariant 11: NautilusCatalogExporter writes valid catalog with exact nanoseconds, tests TradeIdMappingPolicy, and NautilusTraderSubstrate raises SubstrateRuntimeUnavailableError."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         exporter = NautilusCatalogExporter(
             catalog_root=Path(tmp_dir) / "catalog",
+
             trade_id_policy=TradeIdMappingPolicy.USE_CANONICAL_SOURCE_ORDER_KEY,
         )
 

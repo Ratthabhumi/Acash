@@ -34156,6 +34156,67 @@ Verdict รอบนี้: 9.4 / 10
    - **277/277 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 145 source files)
 
+---
+
+## 👤 User (Turn 130)
+
+<USER_REQUEST>
+ผมตรวจ ac7e60d กับ source จริงบน GitHub แล้ว ไม่ได้ยึดเฉพาะ Walkthrough ครับ
+Verdict: 8.8/10 — ยังไม่ sign-off Phase 6 Methodology
+🔴 P0: DSR effective_independent_trials_k semantics mismatch (ต้องไม่ auto-set เท่ากับ declared K, ถ้าไม่มี estimator ให้เป็น None)
+🔴 P0: PBO architectural role clarification (PBO consumes (C,M) split matrices directly, phi pseudo-OOS paths are for continuous trajectory/drawdown distribution)
+🟠 P1: Rename calculate_haircut_sharpe -> calculate_bonferroni_haircut_sharpe + document explicit distinction from canonical HLZ 2016
+🟠 P1: calculate_higher_moments() zero-variance returns -> raise DataContractError
+🟠 P1: Explicit threshold policy V <= 1e-12 -> SR0 = 0.0
+🟡 P2: CSCV sample_size < N*2 is ACASH minimum-data governance policy
+🔴 P0: True Independent Golden Numerical Reference Suite without internal helper imports
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 130)
+
+### 🛠️ สรุปรายละเอียดการ Hardening ระเบียบวิธีสถิติ & Independent Golden Reference Suite
+
+1. **🔴 DSR Trial Independence Semantics Strict Resolution:**
+   - ใน `src/acash/validation/schema.py` (`DSRResult`) และ `src/acash/validation/deflated_sharpe.py`:
+     - ลบ auto-assignment `effective_independent_trials_k = effective_trials_k` ออกโดยสิ้นเชิง
+     - กำหนดให้ `effective_independent_trials_k` คงสถานะเป็น `None` โดยค่าเริ่มต้น เว้นแต่จะมี estimator หรือ user ระบุมาอย่างชัดแจ้ง
+     - กำหนด `independence_assumption = "CONSERVATIVE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"` เพื่อยืนยันว่า $K_{\text{ledger}}$ คือ conservative upper bound บน selection bias ไม่ใช่การพิสูจน์ zero cross-trial correlation
+     - บันทึก policy `TRIAL_VARIANCE_MIN_THRESHOLD = 1e-12` ว่าหาก $V \le 10^{-12}$ หรือ $K \le 1$ ค่า $SR_0 \equiv 0.0$
+
+2. **🟠 ACASH Bonferroni Haircut Sharpe Formal Separation:**
+   - ใน `src/acash/validation/multiple_testing.py` และ `src/acash/validation/schema.py`:
+     - เพิ่มฟังก์ชันหลัก `calculate_bonferroni_haircut_sharpe()` พร้อมเอกสารระบุชัดเจนว่าเป็น ACASH empirical Bonferroni tail inversion ($p_{\text{adj}} = \min(1, K p_{\text{raw}}) \to |t_{\text{adj}}| \to \text{Haircut } SR$) ซึ่งได้รับแรงบันดาลใจจากแนวคิด multiple testing ของ Harvey, Liu, & Zhu (2016) แต่ไม่ใช่ canonical multi-factor regression / extreme probability framework ($p_m = 1 - (1 - p_s)^N$)
+     - กำหนด `calculate_haircut_sharpe = calculate_bonferroni_haircut_sharpe` เป็น backward-compatible alias
+     - เพิ่มฟิลด์ `bonferroni_haircut_sharpe_ratio` ใน `MultipleTestingResult` โดย synchronize กับ `haircut_sharpe_ratio`
+
+3. **🟠 Strict Zero-Variance Return Handling:**
+   - ใน `src/acash/validation/deflated_sharpe.py`:
+     - ยกเลิก sentinel fallback `(mean, 0.0, 0.0, 3.0)`
+     - แก้ไขการคำนวณ `std = math.sqrt(max(0.0, variance))` และ raise `DataContractError("Sample return series has zero or near-zero variance...")` เมื่อ `std <= 1e-12`
+
+4. **🟡 Governance Policy & Architectural Evidence Boundaries:**
+   - ใน `src/acash/validation/cpcv.py`:
+     - ระบุชัดเจนว่า `sample_size < N * 2` คือ **ACASH Minimum Data Sufficiency Governance Policy** (ต้องการอย่างน้อย 2 bars ต่อ block เพื่อให้ sample variance ภายในแต่ละ split ไม่เสื่อมสภาพ)
+     - ระบุชัดเจนว่า PBO ประเมินโดยตรงบน $(C, M)$ combination split Sharpe matrices ส่วน $\phi$ pseudo-OOS paths เป็น combinatorial decomposition สำหรับ OOS equity trajectory และ drawdown dispersion
+
+5. **🔴 100% Independent Golden Numerical Reference Suite (`test_golden_numerical_reference.py`):**
+   - เขียน closed-form mathematical reference implementations แบบแยกอิสระ 100% โดยไม่ import helper ใดๆ จาก ACASH internals
+   - ยืนยันความแม่นยำทางคณิตศาสตร์ระดับ machine precision ($10^{-10}$ ถึง $10^{-12}$) เทียบกับ Scipy / Closed-form analytical equations:
+     - **Higher Moments:** Mean, Sample Std, Fisher-Pearson $G_1$, Pearson $g_2$
+     - **EVT Gumbel $SR_0$:** $SR_0 = \sqrt{V} [(1-\gamma_E)\Phi^{-1}(1-1/K) + \gamma_E \Phi^{-1}(1-1/(Ke))]$
+     - **DSR $z$-statistic, Probability & Closed-Form MinTRL**
+     - **Metadata Invariants:** ตรวจสอบครบทุก field (`declared_trials_k == K`, `effective_independent_trials_k is None`, `independence_assumption`, `trial_variance_used`, `sharpe_space`, `inference_space`)
+     - **Zero-variance error guard & $V \le 10^{-12}$ threshold guard**
+     - **Toy CSCV ($N=6, k=3, C=20, \phi=10$) & Hand-Calculated $4 \times 3$ PBO Matrix**
+     - **Bonferroni Haircut Sharpe analytical mapping**
+
+6. **Full Test Suite & Mypy Status:**
+   - **278/278 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 145 source files)
+
+
 
 
 

@@ -9,94 +9,168 @@ References:
    Review of Financial Studies, 29(1), 5–68.
 """
 
+from decimal import Decimal
 import math
 import numpy as np
 import pytest
 from scipy.stats import norm  # type: ignore[import-untyped]
 
+from acash.core.domain.exceptions import DataContractError
 from acash.validation.cpcv import CombinatorialPurgedCrossValidation
 from acash.validation.deflated_sharpe import DeflatedSharpeEngine
 from acash.validation.multiple_testing import MultipleTestingEngine
 from acash.validation.overfitting import OverfittingEngine
-from acash.validation.schema import ValidationConfig
+from acash.validation.schema import SharpeSpace, ValidationConfig
 
+
+# ======================================================================================
+# INDEPENDENT MATHEMATICAL REFERENCE DERIVATIONS (Zero ACASH Internal Dependencies)
+# ======================================================================================
+
+def _independent_higher_moments(returns: list[float]) -> tuple[float, float, float, float]:
+    """Compute sample mean, standard deviation (ddof=1), Fisher-Pearson G_1, and Pearson g_2."""
+    n = len(returns)
+    mean = sum(returns) / n
+    variance = sum((x - mean) ** 2 for x in returns) / (n - 1)
+    std = math.sqrt(variance)
+
+    # Standardized deviations
+    z = [(x - mean) / std for x in returns]
+    # Unbiased Fisher-Pearson sample skewness G_1
+    skew = (n / ((n - 1) * (n - 2))) * sum(zi ** 3 for zi in z)
+    # Pearson standardized fourth moment kurtosis g_2
+    kurt = sum(zi ** 4 for zi in z) / n
+    return mean, std, skew, kurt
+
+
+def _independent_evt_gumbel_sr0(k_trials: int, variance: float) -> float:
+    """Compute expected max Sharpe SR_0 via independent EVT Gumbel closed form."""
+    if k_trials <= 1 or variance <= 1e-12:
+        return 0.0
+    gamma_e = 0.57721566490153286060651209
+    p1 = 1.0 - (1.0 / k_trials)
+    p2 = 1.0 - (1.0 / (k_trials * math.e))
+    z1 = float(norm.ppf(p1))
+    z2 = float(norm.ppf(p2))
+    return float(math.sqrt(variance) * ((1.0 - gamma_e) * z1 + gamma_e * z2))
+
+
+def _independent_dsr_z_stat(
+    mean: float,
+    std: float,
+    skew: float,
+    kurt: float,
+    sr0_period: float,
+    t_obs: int,
+) -> float:
+    """Compute asymptotic DSR z-statistic in period space."""
+    sr_hat = mean / std
+    d_term = 1.0 - (skew * sr_hat) + (((kurt - 1.0) / 4.0) * (sr_hat ** 2))
+    return float((sr_hat - sr0_period) * math.sqrt(t_obs - 1) / math.sqrt(d_term))
+
+
+def _independent_min_trl(
+    mean: float,
+    std: float,
+    skew: float,
+    kurt: float,
+    sr0_period: float,
+    alpha: float,
+) -> int:
+    """Compute Minimum Track Record Length (MinTRL) in bars."""
+    sr_hat = mean / std
+    if (sr_hat - sr0_period) <= 1e-12:
+        return int(1e9)
+    d_term = 1.0 - (skew * sr_hat) + (((kurt - 1.0) / 4.0) * (sr_hat ** 2))
+    z_alpha = float(norm.ppf(1.0 - alpha))
+    return int(math.ceil(1.0 + d_term * ((z_alpha / (sr_hat - sr0_period)) ** 2)))
+
+
+def _independent_bonferroni_haircut_sharpe(sr: float, k_trials: int, t_obs: int, raw_p: float | None = None) -> float:
+    """Compute Bonferroni Haircut Sharpe Ratio via closed-form inverse normal mapping."""
+    if k_trials <= 1 or sr <= 1e-12:
+        return sr
+    t_raw = sr * math.sqrt(t_obs)
+    p_raw = raw_p if raw_p is not None else float(math.erfc(t_raw / math.sqrt(2.0)))
+    p_adj = min(1.0, p_raw * k_trials)
+    if p_adj >= 1.0 - 1e-15:
+        return 0.0
+    t_adj = float(norm.ppf(1.0 - (p_adj / 2.0)))
+    return float(max(0.0, t_adj / math.sqrt(t_obs)))
+
+
+# ======================================================================================
+# GOLDEN TESTS
+# ======================================================================================
 
 def test_golden_reference_higher_moments_and_dsr_analytical_precision() -> None:
-    """Compare ACASH higher moments and DSR calculations against independent analytical reference derivations."""
+    """Compare ACASH higher moments and DSR calculations against independent closed-form reference implementations."""
     # Deterministic test return sequence of length T = 10
     returns = [0.010, -0.020, 0.015, 0.030, -0.010, 0.005, 0.025, -0.015, 0.020, 0.005]
     T = len(returns)
-
-    # 1. Independent Analytical Higher Moments
-    r_arr = np.array(returns, dtype=np.float64)
-    ref_mean = float(np.mean(r_arr))
-    # Sample standard deviation (ddof=1)
-    ref_std = float(np.std(r_arr, ddof=1))
-
-    # Analytical Fisher-Pearson sample skewness G_1 (bias=False):
-    # G_1 = (n / ((n - 1) * (n - 2))) * sum( ((x_i - mean) / std)^3 )
-    norm_diff = (r_arr - ref_mean) / ref_std
-    ref_skew = (T / ((T - 1) * (T - 2))) * float(np.sum(norm_diff ** 3))
-
-    # Analytical Pearson fourth moment kurtosis:
-    # g_2 = (1 / n) * sum( ((x_i - mean) / std)^4 )
-    ref_kurt = float(np.mean(norm_diff ** 4))
-
-    # ACASH Higher Moments
-    acash_mean, acash_std, acash_skew, acash_kurt = DeflatedSharpeEngine.calculate_higher_moments(returns)
-
-    assert math.isclose(acash_mean, ref_mean, abs_tol=1e-12)
-    assert math.isclose(acash_std, ref_std, abs_tol=1e-12)
-    assert math.isclose(acash_skew, ref_skew, abs_tol=1e-12)
-    assert math.isclose(acash_kurt, ref_kurt, abs_tol=1e-12)
-
-
-    # 2. Independent Analytical SR0 Derivation (Bailey & López de Prado 2014 EVT Gumbel Approximation)
     K = 100
-    V_period = 0.0004  # Variance in period space
-    euler_mascheroni = 0.57721566490153286060651209
+    V_period = 0.0004
+    P = 252.0
+    alpha = 0.05
 
-    p1 = 1.0 - (1.0 / K)
-    p2 = 1.0 - (1.0 / (K * math.e))
-    z1 = float(norm.ppf(p1))
-    z2 = float(norm.ppf(p2))
+    # 1. Independent Reference Calculations
+    ref_mean, ref_std, ref_skew, ref_kurt = _independent_higher_moments(returns)
+    ref_sr_period = ref_mean / ref_std
+    ref_sr_annual = ref_sr_period * math.sqrt(P)
+    ref_sr0_period = _independent_evt_gumbel_sr0(K, V_period)
+    ref_sr0_annual = ref_sr0_period * math.sqrt(P)
+    ref_z = _independent_dsr_z_stat(ref_mean, ref_std, ref_skew, ref_kurt, ref_sr0_period, T)
+    ref_prob = float(norm.cdf(ref_z))
+    ref_trl = _independent_min_trl(ref_mean, ref_std, ref_skew, ref_kurt, ref_sr0_period, alpha)
 
-    ref_sr0_period = math.sqrt(V_period) * ((1.0 - euler_mascheroni) * z1 + euler_mascheroni * z2)
-
-    acash_sr0_period = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(
-        effective_trials_k=K,
-        variance_of_trials=V_period,
-    )
-    assert math.isclose(acash_sr0_period, ref_sr0_period, abs_tol=1e-10)
-
-    # 3. Independent Analytical DSR Test Statistic & p-Value
-    sr_hat_period = ref_mean / ref_std
-    denominator_term = 1.0 - (ref_skew * sr_hat_period) + (((ref_kurt - 1.0) / 4.0) * (sr_hat_period ** 2))
-    ref_z_stat = (sr_hat_period - ref_sr0_period) * math.sqrt(T - 1) / math.sqrt(denominator_term)
-    ref_dsr_prob = float(norm.cdf(ref_z_stat))
-
-    # Analytical MinTRL at alpha = 0.05
-    z_alpha = float(norm.ppf(0.95))
-    if (sr_hat_period - ref_sr0_period) > 1e-12:
-        ref_min_trl = int(math.ceil(1.0 + denominator_term * ((z_alpha / (sr_hat_period - ref_sr0_period)) ** 2)))
-    else:
-        ref_min_trl = int(1e9)
-
-    # ACASH Full DSR Evaluation
+    # 2. ACASH Evaluation
+    acash_mean, acash_std, acash_skew, acash_kurt = DeflatedSharpeEngine.calculate_higher_moments(returns)
+    acash_sr0_period = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(effective_trials_k=K, variance_of_trials=V_period)
     dsr_result = DeflatedSharpeEngine.evaluate_dsr(
         returns=returns,
         effective_trials_k=K,
         variance_of_trials=V_period,
-        confidence_level_alpha=0.05,
-        periods_per_year=252.0,
+        confidence_level_alpha=alpha,
+        periods_per_year=P,
     )
 
-    assert math.isclose(float(dsr_result.dsr_statistic), ref_z_stat, abs_tol=1e-6)
-    assert math.isclose(float(dsr_result.dsr_p_value), ref_dsr_prob, abs_tol=1e-6)
-    assert dsr_result.min_track_record_length_bars == ref_min_trl
+    # 3. Exact Precision Assertions
+    assert math.isclose(acash_mean, ref_mean, abs_tol=1e-12)
+    assert math.isclose(acash_std, ref_std, abs_tol=1e-12)
+    assert math.isclose(acash_skew, ref_skew, abs_tol=1e-12)
+    assert math.isclose(acash_kurt, ref_kurt, abs_tol=1e-12)
+    assert math.isclose(acash_sr0_period, ref_sr0_period, abs_tol=1e-10)
+
+    # Full DSRResult verification
+    assert math.isclose(float(dsr_result.estimated_sharpe), ref_sr_annual, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.expected_max_sharpe_sr0), ref_sr0_annual, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_statistic), ref_z, abs_tol=1e-6)
+    assert math.isclose(float(dsr_result.dsr_p_value), ref_prob, abs_tol=1e-6)
+    assert dsr_result.min_track_record_length_bars == ref_trl
+    assert dsr_result.sample_size_t == T
+    assert math.isclose(float(dsr_result.trial_variance_used), V_period, abs_tol=1e-12)
+    assert dsr_result.sharpe_space == SharpeSpace.ANNUAL
+    assert dsr_result.inference_space == SharpeSpace.PERIOD
+
+    # Independence Semantics Assertions (Strict Contract)
     assert dsr_result.declared_trials_k == K
-    assert dsr_result.effective_independent_trials_k == K
-    assert dsr_result.independence_assumption == "CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+    assert dsr_result.effective_independent_trials_k is None  # Must remain None unless explicitly estimated!
+    assert dsr_result.independence_assumption == "CONSERVATIVE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+
+
+def test_golden_reference_zero_variance_and_threshold_guards() -> None:
+    """Verify that constant returns raise DataContractError and V <= 1e-12 collapses SR0 to 0.0."""
+    # 1. Constant return series -> standard deviation = 0 -> mathematically undefined
+    constant_returns = [0.01, 0.01, 0.01, 0.01, 0.01]
+    with pytest.raises(DataContractError, match="zero or near-zero variance"):
+        DeflatedSharpeEngine.calculate_higher_moments(constant_returns)
+
+    # 2. Trial variance V <= 1e-12 numerical policy
+    sr0_tiny_v = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(effective_trials_k=100, variance_of_trials=1e-13)
+    assert sr0_tiny_v == 0.0
+
+    sr0_k1 = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(effective_trials_k=1, variance_of_trials=0.04)
+    assert sr0_k1 == 0.0
 
 
 def test_golden_reference_cscv_pbo_exact_toy_case() -> None:
@@ -173,33 +247,26 @@ def test_golden_reference_cscv_pbo_exact_toy_case() -> None:
     assert math.isclose(acash_logits_std, ref_logits_std, abs_tol=1e-6)
 
 
-def test_golden_reference_haircut_sharpe_analytical_derivation() -> None:
-    """Verify ACASH Multiple-Testing Haircut Sharpe against analytical Harvey-Liu-Zhu Bonferroni derivation."""
+def test_golden_reference_bonferroni_haircut_sharpe() -> None:
+    """Verify ACASH Multiple-Testing Bonferroni Haircut Sharpe against independent derivation."""
     # Scenario: estimated_sharpe = 0.30, sample_size_t = 100, effective_trials_k = 10
     SR = 0.30
     T = 100
     K = 10
 
-    # 1. Raw t-statistic
-    t_raw = SR * math.sqrt(T)  # 3.0
+    ref_haircut = _independent_bonferroni_haircut_sharpe(SR, K, T)
 
-    # 2. Two-sided raw p-value
-    p_raw = math.erfc(t_raw / math.sqrt(2.0))  # ~0.002699796063
-
-    # 3. Bonferroni adjusted p-value
-    p_adj = min(1.0, p_raw * float(K))  # ~0.02699796063
-
-    # 4. Adjusted t-statistic
-    prob = 1.0 - (p_adj / 2.0)
-    t_adj = float(norm.ppf(prob))  # ~2.21183359
-
-    # 5. Non-linear Haircut Sharpe
-    ref_haircut_sr = max(0.0, t_adj / math.sqrt(T))  # ~0.221183359
-
-    acash_haircut = MultipleTestingEngine.calculate_haircut_sharpe(
+    acash_haircut_primary = MultipleTestingEngine.calculate_bonferroni_haircut_sharpe(
+        estimated_sharpe=SR,
+        effective_trials_k=K,
+        sample_size_t=T,
+    )
+    acash_haircut_alias = MultipleTestingEngine.calculate_haircut_sharpe(
         estimated_sharpe=SR,
         effective_trials_k=K,
         sample_size_t=T,
     )
 
-    assert math.isclose(float(acash_haircut), ref_haircut_sr, abs_tol=1e-6)
+    assert math.isclose(float(acash_haircut_primary), ref_haircut, abs_tol=1e-6)
+    assert math.isclose(float(acash_haircut_alias), ref_haircut, abs_tol=1e-6)
+

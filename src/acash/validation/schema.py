@@ -536,10 +536,7 @@ class DSRResult(BaseModel):
         if isinstance(data, dict):
             if "declared_trials_k" not in data and "effective_trials_k" in data:
                 data["declared_trials_k"] = data["effective_trials_k"]
-            if "effective_independent_trials_k" not in data:
-                data["effective_independent_trials_k"] = data.get("effective_trials_k", data.get("declared_trials_k", 1))
         return data
-
 
 
 class MultipleTestingResult(BaseModel):
@@ -551,8 +548,26 @@ class MultipleTestingResult(BaseModel):
     raw_p_values: List[Decimal] = Field(description="Ascending sorted empirical p-values from trial ledger.")
     holm_bonferroni_p_values: List[Decimal] = Field(description="Family-Wise Error Rate (FWER) adjusted p-values.")
     benjamini_hochberg_q_values: List[Decimal] = Field(description="False Discovery Rate (FDR) adjusted q-values.")
-    haircut_sharpe_ratio: Decimal = Field(description="Harvey-Liu-Zhu (2016) multiple-testing adjusted Haircut Sharpe Ratio.")
+    bonferroni_haircut_sharpe_ratio: Decimal = Field(
+        default=Decimal("0.0"),
+        description="ACASH Bonferroni-adjusted multiple-testing Haircut Sharpe Ratio.",
+    )
+    haircut_sharpe_ratio: Decimal = Field(
+        default=Decimal("0.0"),
+        description="Backward-compatible alias for bonferroni_haircut_sharpe_ratio.",
+    )
     is_fwer_significant: bool = Field(description="True if primary hypothesis satisfies Holm-Bonferroni step-down.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def synchronize_haircut_ratio(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "bonferroni_haircut_sharpe_ratio" in data and "haircut_sharpe_ratio" not in data:
+                data["haircut_sharpe_ratio"] = data["bonferroni_haircut_sharpe_ratio"]
+            elif "haircut_sharpe_ratio" in data and "bonferroni_haircut_sharpe_ratio" not in data:
+                data["bonferroni_haircut_sharpe_ratio"] = data["haircut_sharpe_ratio"]
+        return data
+
 
 
 

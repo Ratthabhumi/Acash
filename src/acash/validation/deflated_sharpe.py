@@ -100,6 +100,9 @@ class DeflatedSharpeEngine:
     resides exclusively in StatisticalValidationGate.
     """
 
+    TRIAL_VARIANCE_MIN_THRESHOLD: float = 1e-12
+    """Explicit numerical threshold below which trial variance is deemed zero (SR_0 = 0.0)."""
+
     @staticmethod
     def calculate_higher_moments(returns: Sequence[Union[Decimal, float]]) -> Tuple[float, float, float, float]:
         """Compute sample mean, standard deviation, Fisher-Pearson skewness g_1, and Pearson kurtosis g_2.
@@ -107,7 +110,7 @@ class DeflatedSharpeEngine:
         Formulation:
         - Mean: bar(X) = (1/n) sum X_i
         - Sample Variance: s^2 = (1/(n-1)) sum (X_i - bar(X))^2
-        - Fisher-Pearson Skewness: g_1 = (n / ((n-1)(n-2))) * sum( ((X_i - bar(X)) / s)^3 )
+        - Fisher-Pearson Skewness: G_1 = (n / ((n-1)(n-2))) * sum( ((X_i - bar(X)) / s)^3 )
         - Pearson Kurtosis: g_2 = (1/n) * sum( ((X_i - bar(X)) / s)^4 ) (normal distribution = 3.0, lower bound = 1.0)
 
         Returns:
@@ -143,12 +146,16 @@ class DeflatedSharpeEngine:
         mean = float(np.mean(arr))
         diff = arr - mean
         variance = float(np.sum(diff ** 2) / (n - 1))
-        std = math.sqrt(max(1e-18, variance))
+        std = math.sqrt(max(0.0, variance))
 
         if std <= 1e-12:
-            return mean, 0.0, 0.0, 3.0
+            raise DataContractError(
+                f"Sample return series has zero or near-zero variance (std={std:.2e} <= 1e-12); "
+                f"higher statistical moments and Sharpe ratio are mathematically undefined for constant returns."
+            )
 
-        # Fisher-Pearson adjusted sample skewness g_1
+
+        # Fisher-Pearson adjusted sample skewness G_1
         norm_diff = diff / std
         m3_term = float(np.sum(norm_diff ** 3))
         skewness = (n / ((n - 1) * (n - 2))) * m3_term
@@ -159,8 +166,9 @@ class DeflatedSharpeEngine:
 
         return mean, std, float(skewness), float(kurtosis)
 
-    @staticmethod
+    @classmethod
     def compute_expected_max_sharpe_sr0(
+        cls,
         effective_trials_k: int,
         variance_of_trials: float = 0.0,
     ) -> float:
@@ -177,14 +185,13 @@ class DeflatedSharpeEngine:
         - V is the empirical sample variance of the trial distribution in the evaluated frequency space.
         - K is the total declared search trial count (SearchTrialLedger trials).
 
-        SEARCH SPACE CENSUS & DEPENDENCE CONTRACT:
-        K represents the authoritative upper bound on declared selection opportunities across the entire
-        research session. Because explored strategies in quantitative research may exhibit mutual correlation,
-        the effective number of statistically independent trials satisfies K_eff <= K. Using the exhaustive
-        search trial count K provides a rigorous, conservative upper bound on multiple-testing selection bias.
+        NUMERICAL TOLERANCE & CENSUS POLICY:
+        - If V <= TRIAL_VARIANCE_MIN_THRESHOLD (1e-12) or K <= 1, SR_0 is identically 0.0 by explicit numerical policy.
+        - K represents the declared exploration opportunities from the ledger, acting as a conservative
+          upper bound on independent selection attempts.
         """
         K = max(1, effective_trials_k)
-        if K <= 1 or variance_of_trials <= 1e-12:
+        if K <= 1 or variance_of_trials <= cls.TRIAL_VARIANCE_MIN_THRESHOLD:
             return 0.0
 
         gamma_e = EULER_MASCHERONI_CONSTANT
@@ -207,24 +214,29 @@ class DeflatedSharpeEngine:
         confidence_level_alpha: float = 0.05,
         periods_per_year: float = 252.0,
         trial_ledger: Optional[SearchTrialLedger] = None,
+        declared_trials_k: Optional[int] = None,
+        effective_independent_trials_k: Optional[int] = None,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
         FREQUENCY-SPACE INFERENCE INVARIANCE CONTRACT:
         All statistical hypothesis testing (z-statistic, DSR probability, MinTRL) is evaluated strictly
         in raw per-period return space (T observations, SR_period, SR0_period).
-        Skewness g_1 and Kurtosis g_2 are dimensionless invariants of the discrete return series.
+        Skewness G_1 and Kurtosis g_2 are dimensionless invariants of the discrete return series.
         Computing the non-normal asymptotic variance factor in per-period space guarantees that higher-moment
-        interaction terms (g_1 * SR, (g_2 - 1)/4 * SR^2) remain scale-invariant without introducing
+        interaction terms (G_1 * SR, (g_2 - 1)/4 * SR^2) remain scale-invariant without introducing
         spurious multi-period cross-product scaling artifacts.
-        For financial readability, the resulting Sharpe ratios are also presented in annualized form via
-        SR_annual = SR_period * sqrt(periods_per_year), with inference_space=PERIOD and sharpe_space=ANNUAL.
-        """
 
+        ANNUALIZATION & SERIAL INDEPENDENCE NOTE:
+        Sharpe ratio annualization via sqrt(periods_per_year) is a standard scale identity under i.i.d. assumptions.
+        It does NOT correct for serial autocorrelation or overlapping forward label horizons.
+        Reported values include inference_space=PERIOD and sharpe_space=ANNUAL.
+        """
         annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
 
         if trial_ledger is not None:
-            effective_trials_k = trial_ledger.total_trials
+            declared_k = trial_ledger.total_trials
+            effective_trials_k = declared_k
             if effective_trials_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
@@ -237,6 +249,8 @@ class DeflatedSharpeEngine:
                     raise DataContractError(f"Unsupported SharpeSpace '{trial_ledger.sharpe_space}' in trial_ledger.")
             else:
                 variance_of_trials = 0.0
+        else:
+            declared_k = declared_trials_k if declared_trials_k is not None else effective_trials_k
 
         mode = SelectionCorrectionMode.SINGLE_TRIAL if effective_trials_k <= 1 else SelectionCorrectionMode.MULTIPLE_TRIAL
 
@@ -277,9 +291,9 @@ class DeflatedSharpeEngine:
             sample_skewness=to_decimal18(Decimal(f"{skew:.12f}")) or Decimal("0.0"),
             sample_kurtosis=to_decimal18(Decimal(f"{kurt:.12f}")) or Decimal("3.0"),
             effective_trials_k=effective_trials_k,
-            declared_trials_k=effective_trials_k,
-            effective_independent_trials_k=effective_trials_k,
-            independence_assumption="CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND",
+            declared_trials_k=declared_k,
+            effective_independent_trials_k=effective_independent_trials_k,
+            independence_assumption="CONSERVATIVE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
             selection_correction_mode=mode,
             sr0_estimator="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1",
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
@@ -293,5 +307,6 @@ class DeflatedSharpeEngine:
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+
 
 

@@ -107,26 +107,29 @@ class MultipleTestingEngine:
         return [to_decimal18(Decimal(f"{q_val:.12f}")) or Decimal("1.0") for q_val in q_original]
 
     @staticmethod
-    def calculate_haircut_sharpe(
+    def calculate_bonferroni_haircut_sharpe(
         estimated_sharpe: float,
         effective_trials_k: int,
         sample_size_t: int,
         raw_p_value: Optional[float] = None,
     ) -> Decimal:
-        """Calculate ACASH Multiple-Testing Haircut Sharpe (Bonferroni-Adjusted Empirical p-Value Mapping).
+        """Calculate ACASH Bonferroni Haircut Sharpe Ratio.
 
-        Methodological Formulation (Inspired by Harvey, Liu, & Zhu 2016 Multiple-Testing Philosophy):
-        1. Compute raw t-statistic from estimated Sharpe ratio and sample length T:
-           t_raw = estimated_sharpe * sqrt(T)
-        2. Compute two-sided single-test unadjusted p-value:
-           p_raw = 2 * (1 - Phi(|t_raw|)) = erfc(|t_raw| / sqrt(2)) (or use provided raw_p_value)
-        3. Compute multiple-testing adjusted p-value across K trials via Bonferroni hurdle:
-           p_adj = min(1.0, p_raw * K)
-        4. Derive adjusted t-statistic corresponding to p_adj:
-           |t_adj| = Phi^-1(1 - p_adj / 2) if p_adj < 1.0 else 0.0
-        5. Calculate non-linear Haircut Sharpe Ratio:
-           Haircut_SR = max(0.0, estimated_sharpe * (t_adj / max(1e-6, abs(t_raw))))
-           (which equals max(0.0, t_adj / sqrt(T)))
+        Methodological Specification & Provenance:
+        - Inspired by the multiple-testing threshold philosophy of Harvey, Liu, & Zhu (2016).
+        - IMPORTANT METHODOLOGICAL DISTINCTION: This implementation uses a direct Bonferroni-adjusted
+          two-sided normal tail probability inverse mapping:
+            p_adj = min(1.0, K * p_raw) -> |t_adj| = Phi^-1(1 - p_adj / 2) -> Haircut_SR = |t_adj| / sqrt(T)
+        - This is NOT the multi-factor cross-sectional regression framework or aggregate extreme probability
+          model (p_m = 1 - (1 - p_s)^N) of Harvey, Liu, & Zhu (2016). It is an ACASH multiple-testing
+          empirical Bonferroni hurdle mapping.
+
+        Mathematical Steps:
+        1. Compute raw t-statistic: t_raw = estimated_sharpe * sqrt(T)
+        2. Compute two-sided single-test p-value: p_raw = erfc(|t_raw| / sqrt(2)) (or provided raw_p_value)
+        3. Bonferroni adjustment across K declared trials: p_adj = min(1.0, p_raw * K)
+        4. Invert adjusted p-value to find penalized t-statistic: |t_adj| = Phi^-1(1 - p_adj / 2)
+        5. Compute non-linear Haircut Sharpe: Haircut_SR = max(0.0, |t_adj| / sqrt(T))
         """
         K = max(1, effective_trials_k)
         T = max(2, sample_size_t)
@@ -167,6 +170,8 @@ class MultipleTestingEngine:
 
         return to_decimal18(Decimal(f"{haircut_sr:.12f}")) or Decimal("0.0")
 
+    # Backward-compatible alias
+    calculate_haircut_sharpe = calculate_bonferroni_haircut_sharpe
 
     @classmethod
     def evaluate_multiple_testing(
@@ -178,34 +183,43 @@ class MultipleTestingEngine:
         confidence_level_alpha: float = 0.05,
     ) -> MultipleTestingResult:
         """Evaluate full multiple testing battery across K trials with authoritative K verification."""
-        k_count = len(p_values)
-        if effective_trials_k is not None and k_count != effective_trials_k:
+        K = len(p_values)
+        if effective_trials_k is not None and effective_trials_k != K:
             raise DataContractError(
-                f"MultipleTestingEngine K mismatch: len(p_values)={k_count} != authoritative effective_trials_k={effective_trials_k}"
+                f"MultipleTestingEngine K mismatch: p_values vector contains {K} trials, but declared effective_trials_k={effective_trials_k}."
             )
-        authoritative_k = effective_trials_k or k_count
 
-        raw_dec = [to_decimal18(Decimal(f"{float(p):.12f}")) or Decimal("1.0") for p in p_values]
-        holm_p = cls.holm_bonferroni_correction(p_values)
+        if K == 0:
+            raise DataContractError("Cannot evaluate multiple testing on empty p_values collection.")
+
+        # 1. Holm-Bonferroni FWER step-down correction
+        holm_adj = cls.holm_bonferroni_correction(p_values)
+
+        # 2. Benjamini-Hochberg FDR q-values
         bh_q = cls.benjamini_hochberg_fdr(p_values)
-        min_p = min((float(p) for p in p_values), default=None)
-        haircut_sr = cls.calculate_haircut_sharpe(
+
+        # 3. Non-linear ACASH Bonferroni Haircut Sharpe Ratio (primary hypothesis index 0)
+        primary_p = float(p_values[0])
+        haircut_sr = cls.calculate_bonferroni_haircut_sharpe(
             estimated_sharpe=estimated_sharpe,
-            effective_trials_k=authoritative_k,
+            effective_trials_k=K,
             sample_size_t=sample_size_t,
-            raw_p_value=min_p,
+            raw_p_value=primary_p,
         )
 
-        min_holm = min((float(p) for p in holm_p), default=1.0)
+        min_holm = min((float(p) for p in holm_adj), default=1.0)
         is_significant = min_holm <= confidence_level_alpha
+        raw_dec = [to_decimal18(Decimal(f"{float(p):.12f}")) or Decimal("1.0") for p in p_values]
 
         return MultipleTestingResult(
-            effective_trials_k=authoritative_k,
+            effective_trials_k=K,
             raw_p_values=raw_dec,
-            holm_bonferroni_p_values=holm_p,
+            holm_bonferroni_p_values=holm_adj,
             benjamini_hochberg_q_values=bh_q,
+            bonferroni_haircut_sharpe_ratio=haircut_sr,
             haircut_sharpe_ratio=haircut_sr,
             is_fwer_significant=is_significant,
         )
+
 
 

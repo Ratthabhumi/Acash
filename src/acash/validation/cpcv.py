@@ -61,8 +61,12 @@ class CombinatorialPurgedCrossValidation:
                 )
 
         if sample_size < N * 2:
+            # ACASH Minimum Data Sufficiency Governance Policy:
+            # Enforces a minimum of 2 observations per partition block (T >= 2N) to guarantee
+            # well-defined, non-degenerate sample variance calculations within individual splits.
             raise DataContractError(
-                f"Sample size {sample_size} is too small for {N} CPCV groups. Minimum required: {N * 2} bars."
+                f"Sample size {sample_size} is too small for {N} CPCV groups. "
+                f"ACASH governance policy requires at least 2 bars per block (minimum: {N * 2} bars)."
             )
         if k >= N or k < 1:
             raise DataContractError(f"Invalid test groups k={k} for total groups N={N}. Must satisfy 1 <= k < N.")
@@ -99,35 +103,24 @@ class CombinatorialPurgedCrossValidation:
 
             test_indices = sorted(list(test_indices_set))
 
-            # Determine Purged and Embargoed indices from remaining candidate training samples
+            # 3. Purging: remove training samples whose forward label window overlaps with ANY test window
             candidate_train_set = all_indices - test_indices_set
             purged_set: Set[int] = set()
-            embargoed_set: Set[int] = set()
 
             for t in candidate_train_set:
-                # Forward label interval for observation t is [t + 1, t + label_horizon] (inclusive)
-                label_start = t + 1
                 label_end = t + label_horizon
-
-                is_purged = False
-                is_embargoed = False
-
-                for test_start, test_end in test_intervals:
-                    # Purge condition: Training sample's label interval overlaps with test interval [test_start, test_end)
-                    # Overlap occurs when (label_start < test_end) and (label_end >= test_start)
-                    if (label_start < test_end) and (label_end >= test_start):
-                        is_purged = True
+                for t_start, t_end in test_intervals:
+                    if t < t_end and label_end >= t_start:
+                        purged_set.add(t)
                         break
 
-                    # Embargo condition: Training sample falls within post-test window [test_end, test_end + embargo)
-                    if embargo > 0 and (test_end <= t < test_end + embargo):
-                        is_embargoed = True
-                        break
-
-                if is_purged:
-                    purged_set.add(t)
-                elif is_embargoed:
-                    embargoed_set.add(t)
+            # 4. Embargoing: remove training samples within embargo window immediately after ANY test window
+            embargoed_set: Set[int] = set()
+            if embargo > 0:
+                for _, t_end in test_intervals:
+                    for t in range(t_end, min(sample_size, t_end + embargo)):
+                        if t in candidate_train_set and t not in purged_set:
+                            embargoed_set.add(t)
 
             # Final clean training set
             train_indices = sorted(list(candidate_train_set - purged_set - embargoed_set))
@@ -153,6 +146,14 @@ class CombinatorialPurgedCrossValidation:
         sample_size: int,
     ) -> List[List[Tuple[int, int]]]:
         """Reconstruct exactly phi = (k / N) * (N choose k) continuous, non-overlapping pseudo-OOS paths.
+
+        ARCHITECTURAL SPECIFICATION & EVIDENCE BOUNDARY:
+        - The pseudo-OOS path reconstruction (phi paths) is a structural mechanism for generating full-length,
+          continuous chronological return trajectories over [0, T) for downstream equity curve dispersion,
+          drawdown distribution, and tail-risk analysis.
+        - The Probability of Backtest Overfitting (PBO) calculation in `OverfittingEngine.calculate_pbo()`
+          directly consumes the discrete (C, M) In-Sample and Out-of-Sample Sharpe matrices over all C
+          combinations produced by `evaluate_cscv_sharpe_matrices()`.
 
         Combinatorial Decomposition & Bijective Coverage Proof:
         1. Universe of OOS slices: Across all C = (N choose k) combinations, exactly C * k testing slices are generated.
