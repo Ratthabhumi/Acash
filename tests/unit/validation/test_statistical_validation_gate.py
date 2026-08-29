@@ -2345,5 +2345,102 @@ def test_governance_sharpe_consistency_tolerance_binding() -> None:
     assert report_tight.validation_id != report_loose.validation_id
 
 
+def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer() -> None:
+    """Verify that Gate rejects with REJECT_MULTIPLE_TESTING_FWER when primary candidate p-value fails Holm step-down even if exploratory trial is significant."""
+    config = ValidationConfig(
+        num_groups_n=4,
+        num_test_groups_k=2,
+        enforce_fwer_significance=True,
+        confidence_level_alpha=Decimal("0.05"),
+        min_haircut_sharpe=Decimal("0.0"),
+    )
+    gate = StatisticalValidationGate(config=config)
+
+    np.random.seed(42)
+    # Primary candidate returns (strong Sharpe ~ 1.5, passes DSR easily)
+    is_returns = list(np.random.normal(0.0030, 0.0050, 500))
+    oos_returns = list(np.random.normal(0.0025, 0.0050, 250))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    trial_matrix = np.zeros((500, 2), dtype=np.float64)
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns])
+    trial_matrix[:, 1] = np.random.normal(0.0035, 0.0050, 500)  # Exploratory return
+
+    col0 = trial_matrix[:, 0]
+    col1 = trial_matrix[:, 1]
+    sr0 = float(np.mean(col0) / np.std(col0, ddof=1))
+    sr1 = float(np.mean(col1) / np.std(col1, ddof=1))
+
+    # Trial 0 (primary): p = 0.08 (fails alpha=0.05 threshold under Holm)
+    # Trial 1 (exploratory): p = 0.0001 (highly significant)
+    trials = [
+        SearchTrialRecord.create(
+            trial_id="t_0",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+            parameters={"p": 0},
+            in_sample_sharpe=Decimal(f"{sr0:.6f}"),
+            p_value=Decimal("0.080"),  # Primary fails Holm: adj p = 0.080 > 0.05
+            execution_manifest_id="MAN_0",
+            in_sample_returns=is_returns,
+        ),
+        SearchTrialRecord.create(
+            trial_id="t_1",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f"],
+
+
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal(f"{sr1:.6f}"),
+            p_value=Decimal("0.0001"),  # Exploratory is significant!
+            execution_manifest_id="MAN_1",
+            in_sample_returns=list(trial_matrix[:, 1]),
+        ),
+    ]
+    for t in trials:
+        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
+            manifest_id=t.execution_manifest_id,
+            hypothesis_id="HYP_01",
+            strategy_config_hash=t.config_sha256,
+            sharpe=t.in_sample_sharpe,
+        )
+
+
+
+    ledger = SearchTrialLedger(
+        ledger_id="L_FWER_TEST",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        trials=tuple(trials),
+    ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
+    rep = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        hypothesis_spec=spec,
+        in_sample_returns=is_returns,
+        trial_matrix_column_trial_ids=["t_0", "t_1"],
+        manifest_store=manifest_store,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        perturbation_grid=grid,
+    )
+
+    # Primary candidate must be rejected because its Holm-adjusted p-value > 0.05!
+    assert rep.verdict == ValidationGateVerdict.REJECT_MULTIPLE_TESTING_FWER
+    assert rep.is_tradeable_alpha is False
+    assert rep.multiple_testing_result is not None
+    assert rep.multiple_testing_result.is_fwer_significant is False
+
+
+
+
+
 
 

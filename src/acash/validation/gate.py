@@ -491,13 +491,16 @@ class StatisticalValidationGate:
         )
 
         # 7. Multiple Testing FWER & Haircut Sharpe (Authoritative K from ledger)
+        # Note: Index 0 is the pre-registered primary candidate (bound to in_sample_returns)
         mult_result = MultipleTestingEngine.evaluate_multiple_testing(
             p_values=trial_ledger.p_values,
             estimated_sharpe=float(dsr_result.estimated_sharpe),
             sample_size_t=n_is,
             effective_trials_k=effective_k,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
+            primary_candidate_index=0,
         )
+
 
         # 8. Sovereign CPCV / CSCV Execution with Real Label Horizon & Embargo Buffers
         for pt in perturbation_grid.points:

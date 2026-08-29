@@ -172,6 +172,17 @@ def test_golden_reference_zero_variance_and_threshold_guards() -> None:
     sr0_k1 = DeflatedSharpeEngine.compute_expected_max_sharpe_sr0(effective_trials_k=1, variance_of_trials=0.04)
     assert sr0_k1 == 0.0
 
+    # 3. Exact unclamped Pearson standardized fourth moment on finite bimodal sample (g_2 = 0.5625 < 1.0)
+    bimodal_returns = [-0.01, -0.01, 0.01, 0.01]
+    _, _, bimodal_skew, bimodal_kurt = DeflatedSharpeEngine.calculate_higher_moments(bimodal_returns)
+    assert math.isclose(bimodal_skew, 0.0, abs_tol=1e-12)
+    # Exact calculation: n=4, mean=0, s^2 = 4*0.01^2 / 3 = 4e-4/3 -> s = 0.02 / sqrt(3)
+    # z_i = +- sqrt(3)/2 -> z_i^4 = 9/16 = 0.5625
+    # g_2 = (1/4) * (4 * 0.5625) = 0.5625
+    assert math.isclose(bimodal_kurt, 0.5625, abs_tol=1e-12)
+    assert bimodal_kurt < 1.0  # Confirms no artificial max(1.0, ...) clamping occurs
+
+
 
 def test_golden_reference_cscv_pbo_exact_toy_case() -> None:
     """Verify CSCV combinatorial structure and exact PBO against hand-calculated reference.

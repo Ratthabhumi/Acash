@@ -185,3 +185,44 @@ def test_multiple_testing_rejects_invalid_p_values() -> None:
     with pytest.raises(DataContractError, match="must be finite and within"):
         MultipleTestingEngine.calculate_haircut_sharpe(0.5, 10, 100, raw_p_value=-0.05)
 
+
+def test_multiple_testing_evaluates_primary_candidate_fwer_not_min_p() -> None:
+    """Verify that FWER significance and Haircut Sharpe strictly target the pre-registered primary candidate (index 0)."""
+    # Scenario A:
+    # Primary candidate (index 0): weak p = 0.20, SR = 0.20
+    # Exploratory trial (index 1): highly significant p = 0.0001
+    # Exploratory trial (index 2): weak p = 0.40
+    p_vals_a = [Decimal("0.20"), Decimal("0.0001"), Decimal("0.40")]
+    res_a = MultipleTestingEngine.evaluate_multiple_testing(
+        p_values=p_vals_a,
+        estimated_sharpe=0.20,
+        sample_size_t=100,
+        effective_trials_k=3,
+        confidence_level_alpha=0.05,
+        primary_candidate_index=0,
+    )
+    # Primary candidate (p=0.20) adjusted by Holm:
+    # Sorted order: [0.0001, 0.20, 0.40] -> rank 2 -> multiplier = (3 - 1) = 2 -> adj p = 0.40 > 0.05
+    assert res_a.is_fwer_significant is False
+    # Haircut Sharpe must use primary candidate p=0.20 (NOT min_p=0.0001)
+    # With p_raw=0.20, K=3 -> p_adj = 0.60 -> t_adj ~ 0.5244 -> Haircut SR ~ 0.05244 (severe haircut)
+    assert float(res_a.bonferroni_haircut_sharpe_ratio) < 0.10
+
+    # Scenario B:
+    # Primary candidate (index 0): highly significant p = 0.0001, SR = 0.60
+    # Exploratory trials (indices 1, 2): weak p = 0.20, 0.40
+    p_vals_b = [Decimal("0.0001"), Decimal("0.20"), Decimal("0.40")]
+    res_b = MultipleTestingEngine.evaluate_multiple_testing(
+        p_values=p_vals_b,
+        estimated_sharpe=0.60,
+        sample_size_t=100,
+        effective_trials_k=3,
+        confidence_level_alpha=0.05,
+        primary_candidate_index=0,
+    )
+    # Primary candidate (p=0.0001) adjusted by Holm: 0.0001 * 3 = 0.0003 <= 0.05 -> SIGNIFICANT!
+    assert res_b.is_fwer_significant is True
+    # Haircut Sharpe uses primary candidate p=0.0001, K=3 -> p_adj = 0.0003 -> t_adj ~ 3.615 -> Haircut SR ~ 0.3615
+    assert float(res_b.bonferroni_haircut_sharpe_ratio) > 0.35
+
+

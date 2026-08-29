@@ -181,8 +181,9 @@ class MultipleTestingEngine:
         sample_size_t: int,
         effective_trials_k: Optional[int] = None,
         confidence_level_alpha: float = 0.05,
+        primary_candidate_index: int = 0,
     ) -> MultipleTestingResult:
-        """Evaluate full multiple testing battery across K trials with authoritative K verification."""
+        """Evaluate full multiple testing battery across K trials targeting the pre-registered primary candidate."""
         K = len(p_values)
         if effective_trials_k is not None and effective_trials_k != K:
             raise DataContractError(
@@ -192,14 +193,20 @@ class MultipleTestingEngine:
         if K == 0:
             raise DataContractError("Cannot evaluate multiple testing on empty p_values collection.")
 
+        if primary_candidate_index < 0 or primary_candidate_index >= K:
+            raise DataContractError(
+                f"primary_candidate_index {primary_candidate_index} out of range for ledger with {K} trials."
+            )
+
         # 1. Holm-Bonferroni FWER step-down correction
         holm_adj = cls.holm_bonferroni_correction(p_values)
 
         # 2. Benjamini-Hochberg FDR q-values
         bh_q = cls.benjamini_hochberg_fdr(p_values)
 
-        # 3. Non-linear ACASH Bonferroni Haircut Sharpe Ratio (primary hypothesis index 0)
-        primary_p = float(p_values[0])
+        # 3. Non-linear ACASH Bonferroni Haircut Sharpe Ratio for the PRIMARY candidate
+        # Strict pairing invariant: estimated_sharpe and raw_p_value are both from the primary candidate
+        primary_p = float(p_values[primary_candidate_index])
         haircut_sr = cls.calculate_bonferroni_haircut_sharpe(
             estimated_sharpe=estimated_sharpe,
             effective_trials_k=K,
@@ -207,8 +214,9 @@ class MultipleTestingEngine:
             raw_p_value=primary_p,
         )
 
-        min_holm = min((float(p) for p in holm_adj), default=1.0)
-        is_significant = min_holm <= confidence_level_alpha
+        # Primary candidate FWER significance: check adjusted p-value of primary candidate against alpha hurdle
+        primary_holm_p = float(holm_adj[primary_candidate_index])
+        is_significant = primary_holm_p <= confidence_level_alpha
         raw_dec = [to_decimal18(Decimal(f"{float(p):.12f}")) or Decimal("1.0") for p in p_values]
 
         return MultipleTestingResult(
@@ -220,6 +228,7 @@ class MultipleTestingEngine:
             haircut_sharpe_ratio=haircut_sr,
             is_fwer_significant=is_significant,
         )
+
 
 
 

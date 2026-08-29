@@ -160,11 +160,14 @@ class DeflatedSharpeEngine:
         m3_term = float(np.sum(norm_diff ** 3))
         skewness = (n / ((n - 1) * (n - 2))) * m3_term
 
-        # Pearson standardized fourth moment kurtosis g_2 (bounded below by 1.0)
+        # Pearson standardized fourth moment kurtosis g_2:
+        # g_2 = (1 / n) * sum( ((x_i - mean) / std)^4 )
+        # Note: Bounded below by ((n - 1) / n)^2 for finite samples with ddof=1 sample standard deviation.
         m4_term = float(np.sum(norm_diff ** 4))
-        kurtosis = max(1.0, (1.0 / n) * m4_term)
+        kurtosis = (1.0 / n) * m4_term
 
         return mean, std, float(skewness), float(kurtosis)
+
 
     @classmethod
     def compute_expected_max_sharpe_sr0(
