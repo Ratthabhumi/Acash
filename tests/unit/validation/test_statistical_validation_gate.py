@@ -2182,6 +2182,19 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
     assert h_e_int != h_e_dec
     assert h_e_str != h_e_dec
 
+    # IntEnum subclass preservation: IntEnum != int
+    from enum import IntEnum
+
+    class SideIntEnum(IntEnum):
+        BUY = 1
+
+    h_int_enum = CanonicalConfigSerializer.compute_sha256({"side": SideIntEnum.BUY})
+    h_plain_int = CanonicalConfigSerializer.compute_sha256({"side": 1})
+
+    assert h_int_enum != h_plain_int
+    assert CanonicalConfigSerializer.serialize_value(SideIntEnum.BUY)["__type__"] == "enum"
+
+
 
     # 10. Quantized 18-decimal identity: CanonicalIdentity(x) = Q_18(x) with ROUND_HALF_EVEN
     # Numbers differing beyond 18th decimal place collapse to the same canonical representation

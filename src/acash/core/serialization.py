@@ -99,6 +99,16 @@ class CanonicalConfigSerializer:
         """Recursively normalize values into canonical primitive types with strict type preservation."""
         if val is None:
             return None
+        if isinstance(val, Enum):
+            enum_cls = type(val)
+            module_name = getattr(enum_cls, "__module__", "") or ""
+            qual_name = getattr(enum_cls, "__qualname__", enum_cls.__name__)
+            full_class_name = f"{module_name}.{qual_name}" if module_name else qual_name
+            return {
+                "__type__": "enum",
+                "class": full_class_name,
+                "value": cls.serialize_value(val.value),
+            }
         if isinstance(val, bool):
             return {"__type__": "bool", "value": val}
         if isinstance(val, (int, np.integer)):
@@ -122,16 +132,7 @@ class CanonicalConfigSerializer:
             except decimal.DecimalException as e:
                 raise DataContractError(f"Decimal quantization failed for '{val}': {e}") from e
             return {"__type__": "decimal", "value": f"{quantized_dec:.18f}"}
-        if isinstance(val, Enum):
-            enum_cls = type(val)
-            module_name = getattr(enum_cls, "__module__", "") or ""
-            qual_name = getattr(enum_cls, "__qualname__", enum_cls.__name__)
-            full_class_name = f"{module_name}.{qual_name}" if module_name else qual_name
-            return {
-                "__type__": "enum",
-                "class": full_class_name,
-                "value": cls.serialize_value(val.value),
-            }
+
 
         if isinstance(val, str):
             return val
