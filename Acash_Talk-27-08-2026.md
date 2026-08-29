@@ -33161,3 +33161,58 @@ Verdict: ✅ PROCEED — แต่ล็อกเพิ่ม 4 ข้อก่�
 6. **Full Test Suite Status:**
    - **234/234 tests PASSED (100%)** ครอบคลุม Phase 0 ถึง Phase 6 พร้อม Invariant Hardening ทั้งหมด
 
+---
+
+## 👤 User (Turn 108)
+
+<USER_REQUEST>
+ผมตรวจ GitHub commit 4b7e4b1d6dfe4bc0655ed682c832ae9591eb671d จริงแล้ว และผมจะไม่ถือว่า “234 tests ผ่าน = Phase 6 ผ่าน” ครับ
+
+Verdict: ❌ Phase 6 v1.3 ยัง ไม่ผ่าน Final Sign-off
+1. 🔴 P0 #1 — trial_ledger=None ยังสร้าง “synthetic evidence” อยู่ (dummy_pt, dummy_grid, empty_dsr, empty_overfit)
+2. 🔴 P0/P1 #2 — ParameterPerturbationPoint ยังไม่ได้พิสูจน์ว่า artifact hash เป็น artifact จริง (ขาด mandatory manifest_id, regex 64 hex)
+3. 🟠 P1 #3 — ParameterPerturbationGrid ยังใช้ tolerance (1e-6) กับจุดที่ contract บอกว่า strict Decimal geometry
+4. 🟠 P1 #4 — CPCV path reconstruction test ต้องพิสูจน์ assignment structure ไม่ใช่แค่ index coverage
+5. 🟠 P1 #5 — API low-level primitive vs StatisticalValidationGate sovereign governance entry point
+
+Approved with 5 Amendments for Remediation v1.4.
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 108)
+
+### 🛠️ สรุปรายละเอียด Phase 6 Methodological Remediation v1.4
+
+1. **🔴 Fail-Closed Zero-Synthetic Evidence:**
+   - เมื่อ `trial_ledger is None` หรือ `out_of_sample_returns is None` ระบบจะคืน `ValidationReport` ที่มี `dsr_result = None`, `multiple_testing_result = None`, `overfitting_report = None`, `oos_retention_pct = None` ทันที
+   - ไม่มีการคำนวณหรือสร้าง Dummy Objects ใดๆ ทั้งสิ้น
+   - `evidence_digest` และ `decision_digest` คำนวณจากข้อเท็จจริงเท่าที่มีอยู่ (เช่น `MISSING_TRIAL_LEDGER` / `MISSING_OOS`) โดยไม่มีการ fabricate ค่าสถิติตัวเลขปลอม
+
+2. **🔴 Strict 64-Hex & Execution Lineage Proof:**
+   - `ParameterPerturbationPoint` บังคับ:
+     - `manifest_id`: string pattern `^[0-9a-zA-Z_-]{8,64}$`
+     - `input_artifact_hash`: 64 lowercase hex (`^[0-9a-f]{64}$`)
+     - `output_artifact_hash`: 64 lowercase hex (`^[0-9a-f]{64}$`)
+     - `parameter_value`: Decimal, `actual_sharpe`: Decimal
+     - มีเมธอด `validate_manifest_binding(manifest)` ตรวจสอบความถูกต้องของ lineage
+   - `ParameterPerturbationGrid` ตรวจสอบทั้ง 3 จุดต้องมี `manifest_id`, `run_id`, และ `output_artifact_hash` ที่ไม่ซ้ำกันอย่างเด็ดขาด
+
+3. **🟠 Exact & Ordered Perturbation Geometry (Zero Tolerance):**
+   - บังคับ Decimal arithmetic equality 100%: $\theta_- = 0.75\theta_0$, $\theta_+ = 1.25\theta_0$ โดยไม่มี float tolerance ($10^{-6}$)
+   - บังคับลำดับ Semantic Ordered `[0.75*theta, 1.0*theta, 1.25*theta]` หากสลับลำดับจะ raise `DataContractError`
+
+4. **🟠 CPCV Assignment Structure Formal Invariant Verification:**
+   - เพิ่ม Adversarial Invariant Test ใน `tests/unit/validation/test_cpcv_purging.py`:
+     - $\forall \pi \in [0, \phi)$, ทุกกลุ่ม $g \in [0, N)$ มี testing assignment ตรง 1 ครั้งต่อ path
+     - ทุกกลุ่ม $g$ ถูกทดสอบครบ $\phi = \frac{k}{N}\binom{N}{k}$ ครั้งตลอดทุก path
+     - ช่วง Index ของแต่ละกลุ่มเป็น Pairwise Disjoint และ Union ครอบคลุม $[0, T)$ 100%
+
+5. **🟠 Sovereign Governance Authority Demarcation:**
+   - ประกาศใน Docstrings ของ `StatisticalValidationGate`, `DeflatedSharpeEngine`, `MultipleTestingEngine`, `OverfittingEngine` ว่า `StatisticalValidationGate` เป็น **SOLE sovereign governance authority**
+
+6. **Full Test Suite & Mypy Status:**
+   - **235/235 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+

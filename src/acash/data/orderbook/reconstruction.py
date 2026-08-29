@@ -34,9 +34,10 @@ from acash.data.orderbook.schema import (
     BookDeltaType,
     BookSide,
     CrossedStateCategory,
-    SnapshotShapePolicy,
+    SnapshotShapePolicy as SnapshotShapePolicy,
     SourceOrderingPolicy,
 )
+
 from acash.data.schema import IntegrityViolationError
 
 # ---------------------------------------------------------------------------

@@ -91,7 +91,14 @@ def _standard_normal_ppf(p: float) -> float:
 
 
 class DeflatedSharpeEngine:
-    """Calculates non-normal Deflated Sharpe Ratio, expected maximum null Sharpe, and MinTRL."""
+    """Calculates non-normal Deflated Sharpe Ratio, expected maximum null Sharpe, and MinTRL.
+
+    MATHEMATICAL PRIMITIVE NOTICE:
+    This engine is a low-level mathematical calculator. Direct primitive invocation
+    does NOT constitute a Gate 6 validation decision. Sovereign governance authority
+    resides exclusively in StatisticalValidationGate.
+    """
+
 
     @staticmethod
     def calculate_higher_moments(returns: Sequence[Union[Decimal, float]]) -> Tuple[float, float, float, float]:

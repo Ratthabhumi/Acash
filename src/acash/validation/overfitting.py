@@ -17,7 +17,14 @@ from acash.validation.schema import FrictionStressParameters, OverfittingReport,
 
 
 class OverfittingEngine:
-    """Evaluates backtest overfitting probability, parameter stability, and analytical friction stress."""
+    """Evaluates backtest overfitting probability, parameter stability, and analytical friction stress.
+
+    MATHEMATICAL PRIMITIVE NOTICE:
+    This engine is a low-level mathematical calculator. Direct primitive invocation
+    does NOT constitute a Gate 6 validation decision. Sovereign governance authority
+    resides exclusively in StatisticalValidationGate.
+    """
+
 
     @staticmethod
     def calculate_pbo(

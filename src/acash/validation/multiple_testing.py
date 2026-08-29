@@ -14,7 +14,8 @@ Strictly enforces:
 
 from decimal import Decimal
 import math
-from typing import List, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
+
 import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
@@ -23,7 +24,14 @@ from acash.validation.schema import MultipleTestingResult
 
 
 class MultipleTestingEngine:
-    """Controls multiple testing inflation across exploratory search paths and trials."""
+    """Controls multiple testing inflation across exploratory search paths and trials.
+
+    MATHEMATICAL PRIMITIVE NOTICE:
+    This engine is a low-level mathematical calculator. Direct primitive invocation
+    does NOT constitute a Gate 6 validation decision. Sovereign governance authority
+    resides exclusively in StatisticalValidationGate.
+    """
+
 
     @staticmethod
     def holm_bonferroni_correction(p_values: Sequence[Union[Decimal, float]]) -> List[Decimal]:
@@ -137,9 +145,11 @@ class MultipleTestingEngine:
         is_significant = min_holm <= confidence_level_alpha
 
         return MultipleTestingResult(
+            effective_trials_k=authoritative_k,
             raw_p_values=raw_dec,
             holm_bonferroni_p_values=holm_p,
             benjamini_hochberg_q_values=bh_q,
             haircut_sharpe_ratio=haircut_sr,
             is_fwer_significant=is_significant,
         )
+

@@ -71,3 +71,64 @@ def test_cpcv_pseudo_oos_paths_reconstruction_complete_coverage() -> None:
         # Check that test indices strictly form [0, 1, ..., 119]
         actual_indices = [idx for _, idx in path]
         assert actual_indices == expected_full_series
+
+
+def test_cpcv_combinatorial_assignment_structure_invariants() -> None:
+    """Adversarially verify the exact combinatorial assignment structure of pseudo-OOS paths.
+
+    Invariants checked:
+    1. For every path pi in [0, phi), every group g in [0, N) is assigned to testing exactly once.
+    2. Across all phi paths, every group g is tested exactly phi times.
+    3. Distinct group ranges [g_start, g_end) are strictly pairwise disjoint and their union is [0, T).
+    """
+    N = 6
+    k = 2
+    T = 180
+    config = ValidationConfig(num_groups_n=N, num_test_groups_k=k, embargo_bars=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+
+    partitions = cpcv.generate_partitions(sample_size=T, label_horizon=4)
+    paths = cpcv.reconstruct_pseudo_oos_paths(partitions, sample_size=T)
+
+    phi = (k * len(partitions)) // N  # (2 * 15) // 6 = 5
+    assert len(paths) == phi
+
+    group_size = T // N  # 30
+    group_bounds = {g: (g * group_size, (g + 1) * group_size) for g in range(N)}
+
+    # 1. Verify pairwise disjointness and exact union of group bounds
+    covered_indices = set()
+    for g1 in range(N):
+        g1_start, g1_end = group_bounds[g1]
+        g1_set = set(range(g1_start, g1_end))
+        covered_indices.update(g1_set)
+        for g2 in range(g1 + 1, N):
+            g2_start, g2_end = group_bounds[g2]
+            g2_set = set(range(g2_start, g2_end))
+            assert g1_set.isdisjoint(g2_set), f"Group {g1} and {g2} overlap!"
+
+    assert covered_indices == set(range(T))
+
+    # 2. Verify each path has exactly one test assignment per group
+    group_test_counts_across_paths = {g: 0 for g in range(N)}
+
+    for path_idx, path in enumerate(paths):
+        # Group membership of indices in this path
+        group_counts_in_path = {g: 0 for g in range(N)}
+        for combo_id, sample_idx in path:
+            # Map sample_idx to its group
+            g_of_idx = sample_idx // group_size
+            group_counts_in_path[g_of_idx] += 1
+
+        for g in range(N):
+            assert group_counts_in_path[g] == group_size, (
+                f"Path {path_idx} does not contain exactly group {g}'s {group_size} bars (got {group_counts_in_path[g]})."
+            )
+            group_test_counts_across_paths[g] += 1
+
+    # 3. Across all phi paths, every group was tested exactly phi times
+    for g in range(N):
+        assert group_test_counts_across_paths[g] == phi, (
+            f"Group {g} tested {group_test_counts_across_paths[g]} times across paths, expected {phi}."
+        )
+

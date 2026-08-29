@@ -29,9 +29,11 @@ from acash.data.provenance import (
 from acash.data.schema import (
     BatchCollisionError,
     CANONICAL_ARROW_SCHEMA,
+    DataContractError,
     IntegrityViolationError,
     OrphanPartError,
 )
+
 
 
 

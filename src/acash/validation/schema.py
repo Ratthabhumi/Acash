@@ -126,14 +126,32 @@ class ParameterPerturbationPoint(BaseModel):
 
     parameter_value: Decimal = Field(gt=Decimal("0.0"), description="Perturbed parameter value.")
     run_id: str = Field(min_length=3, description="Unique backtest/experiment run ID.")
-    input_artifact_hash: str = Field(min_length=16, description="SHA-256 digest of input configuration & data.")
-    output_artifact_hash: str = Field(min_length=16, description="SHA-256 digest of backtest execution artifacts.")
+    manifest_id: str = Field(
+        pattern=r"^[0-9a-zA-Z_-]{8,64}$",
+        description="Mandatory BacktestManifest identifier binding.",
+    )
+    input_artifact_hash: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="SHA-256 digest of input configuration & data (64 lowercase hex).",
+    )
+    output_artifact_hash: str = Field(
+        pattern=r"^[0-9a-f]{64}$",
+        description="SHA-256 digest of backtest execution artifacts (64 lowercase hex).",
+    )
     actual_sharpe: Decimal = Field(description="Measured Sharpe ratio from this independent execution run.")
-    manifest_id: Optional[str] = Field(default=None, description="Optional BacktestManifest identifier linkage.")
+
+    def validate_manifest_binding(self, manifest: Any) -> bool:
+        """Verify semantic binding against a real BacktestManifest object."""
+        man_id = getattr(manifest, "manifest_id", None)
+        if man_id != self.manifest_id:
+            raise DataContractError(
+                f"Manifest ID mismatch: point has '{self.manifest_id}', manifest has '{man_id}'."
+            )
+        return True
 
 
 class ParameterPerturbationGrid(BaseModel):
-    """Strict parameter perturbation grid enforcing +/- 25% boundary invariants and execution lineage."""
+    """Strict parameter perturbation grid enforcing exact +/- 25% boundary invariants and execution lineage."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -141,7 +159,7 @@ class ParameterPerturbationGrid(BaseModel):
     base_parameter_value: Decimal = Field(gt=Decimal("0.0"), description="Base parameter theta_0 > 0.")
     points: List[ParameterPerturbationPoint] = Field(
         min_length=3, max_length=3,
-        description="Strict 3-point execution list [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0]."
+        description="Strict 3-point execution list [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0] in exact semantic order.",
     )
 
     @property
@@ -156,30 +174,45 @@ class ParameterPerturbationGrid(BaseModel):
 
     @model_validator(mode="after")
     def validate_grid_geometry_and_lineage(self) -> "ParameterPerturbationGrid":
-        """Enforce strict [0.75, 1.0, 1.25] geometric perturbation invariants and distinct execution lineage."""
+        """Enforce exact [0.75, 1.0, 1.25] geometric perturbation invariants and distinct execution lineage."""
         if len(self.points) != 3:
             raise DataContractError("Parameter perturbation grid must have exactly 3 points [0.75*theta, 1.0*theta, 1.25*theta].")
 
-        # 1. Check distinct execution runs
+        # 1. Check distinct execution runs, manifests, and output artifacts
         run_ids = {p.run_id for p in self.points}
         if len(run_ids) != 3:
             raise DataContractError(
-                f"Parameter perturbation requires 3 distinct execution run_ids, got {len(run_ids)}: {run_ids}"
+                f"Parameter perturbation requires 3 distinct execution run_ids, got {len(run_ids)}: {run_ids}."
+            )
+        manifest_ids = {p.manifest_id for p in self.points}
+        if len(manifest_ids) != 3:
+            raise DataContractError(
+                f"Parameter perturbation requires 3 distinct manifest_ids, got {len(manifest_ids)}: {manifest_ids}."
+            )
+        output_hashes = {p.output_artifact_hash for p in self.points}
+        if len(output_hashes) != 3:
+            raise DataContractError(
+                f"Parameter perturbation requires 3 distinct output_artifact_hashes, got {len(output_hashes)}: {output_hashes}."
             )
 
-        # 2. Check geometry
+        # 2. Check exact ordered geometry without tolerance
         theta = self.base_parameter_value
         expected_left = theta * Decimal("0.75")
         expected_mid = theta
         expected_right = theta * Decimal("1.25")
 
-        tol = Decimal("1e-6")
-        if abs(self.points[0].parameter_value - expected_left) > tol:
-            raise DataContractError(f"Grid left point {self.points[0].parameter_value} does not equal 0.75 * {theta} = {expected_left}")
-        if abs(self.points[1].parameter_value - expected_mid) > tol:
-            raise DataContractError(f"Grid mid point {self.points[1].parameter_value} does not equal 1.0 * {theta} = {expected_mid}")
-        if abs(self.points[2].parameter_value - expected_right) > tol:
-            raise DataContractError(f"Grid right point {self.points[2].parameter_value} does not equal 1.25 * {theta} = {expected_right}")
+        if self.points[0].parameter_value != expected_left:
+            raise DataContractError(
+                f"Grid left point parameter_value '{self.points[0].parameter_value}' does not exactly equal 0.75 * {theta} = '{expected_left}'."
+            )
+        if self.points[1].parameter_value != expected_mid:
+            raise DataContractError(
+                f"Grid mid point parameter_value '{self.points[1].parameter_value}' does not exactly equal 1.0 * {theta} = '{expected_mid}'."
+            )
+        if self.points[2].parameter_value != expected_right:
+            raise DataContractError(
+                f"Grid right point parameter_value '{self.points[2].parameter_value}' does not exactly equal 1.25 * {theta} = '{expected_right}'."
+            )
 
         return self
 
@@ -218,45 +251,58 @@ class DSRResult(BaseModel):
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
     expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials.")
     sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
-    sample_kurtosis: Decimal = Field(ge=Decimal("1.0"), description="Pearson sample fourth moment kurtosis g_2 of returns (normal = 3.0).")
-    effective_trials_k: int = Field(ge=1, description="Total number of exploratory trials K.")
-    selection_correction_mode: SelectionCorrectionMode = Field(description="Mode of selection bias adjustment (SINGLE_TRIAL or MULTIPLE_TRIAL).")
-    sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Formal specification of the SR0 expectation model.")
-    variance_estimator: str = Field(default="EMPIRICAL_SAMPLE_VARIANCE_DDOF1", description="Variance estimation method for trial Sharpes.")
-    sharpe_space: str = Field(default="PERIOD", description="Frequency space evaluated ('PERIOD' or 'ANNUAL').")
-    trial_variance_used: Decimal = Field(description="Empirical variance of trials V used in SR0 calculation.")
-    sample_size_t: int = Field(description="Number of observations / return periods.")
-    dsr_statistic: Decimal = Field(description="Standardized asymptotic DSR test statistic z.")
-    dsr_p_value: Decimal = Field(description="P-value of null hypothesis rejection (DSR probability).")
-    min_track_record_length_bars: int = Field(description="Minimum observation bars required for statistical significance at target alpha.")
-    is_statistically_significant: bool = Field(description="True if DSR p-value >= 0.95 (alpha <= 0.05).")
+    sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, lower bound 1.0).")
+    sample_size_t: int = Field(description="Sample length in return periods T.")
+    effective_trials_k: int = Field(description="Effective trial count K derived from SearchTrialLedger.")
+    trial_variance_used: Decimal = Field(description="Trial Sharpe variance V used in Gumbel maximum calculation.")
+    dsr_statistic: Decimal = Field(description="Calculated DSR standard normal test statistic.")
+    dsr_p_value: Decimal = Field(description="Deflated Sharpe Ratio p-value (probability that true SR > SR_0).")
+    is_statistically_significant: bool = Field(description="True if dsr_p_value >= min_dsr_probability (e.g. 0.95).")
+    min_track_record_length_bars: int = Field(description="Minimum Track Record Length (MinTRL) in bars required for statistical significance.")
     has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars.")
+    sharpe_space: str = Field(default="ANNUALIZED", description="Frequency space of the Sharpe ratios ('ANNUALIZED' or 'PER_PERIOD').")
+    selection_correction_mode: SelectionCorrectionMode = Field(default=SelectionCorrectionMode.MULTIPLE_TRIAL, description="Selection correction mode.")
+    sr0_estimator: str = Field(default="EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1", description="Identifier of the SR_0 calculation method.")
+    variance_estimator: str = Field(default="EMPIRICAL_SAMPLE_VARIANCE_DDOF1", description="Identifier of the trial variance estimation method.")
 
 
 class MultipleTestingResult(BaseModel):
-    """Results of Family-Wise Error Rate (FWER) and False Discovery Rate (FDR) corrections across K trials."""
+    """Multiple-testing correction outputs over SearchTrialLedger exploratory trials."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    raw_p_values: List[Decimal]
-    holm_bonferroni_p_values: List[Decimal] = Field(description="Step-down FWER adjusted p-values.")
-    benjamini_hochberg_q_values: List[Decimal] = Field(description="FDR adjusted q-values.")
-    haircut_sharpe_ratio: Decimal = Field(description="Haircut Sharpe ratio adjusting for K orthogonal trials (Harvey, Liu, Zhu 2016).")
-    is_fwer_significant: bool = Field(description="True if top strategy passes Holm-Bonferroni at alpha <= 0.05.")
+    effective_trials_k: int = Field(description="Total evaluated trials K from ledger.")
+    raw_p_values: List[Decimal] = Field(description="Ascending sorted empirical p-values from trial ledger.")
+    holm_bonferroni_p_values: List[Decimal] = Field(description="Family-Wise Error Rate (FWER) adjusted p-values.")
+    benjamini_hochberg_q_values: List[Decimal] = Field(description="False Discovery Rate (FDR) adjusted q-values.")
+    haircut_sharpe_ratio: Decimal = Field(description="Harvey-Liu-Zhu (2016) multiple-testing adjusted Haircut Sharpe Ratio.")
+    is_fwer_significant: bool = Field(description="True if primary hypothesis satisfies Holm-Bonferroni step-down.")
+
 
 
 class OverfittingReport(BaseModel):
-    """Diagnostics on Probability of Backtest Overfitting (PBO) and parameter sensitivity curvature."""
+    """Composite diagnostics on backtest overfitting, parameter surface fragility, and friction monotonicity."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    pbo_estimate: Decimal = Field(description="Empirical probability of backtest overfitting with mid-rank tie handling.")
-    logits_distribution_mean: Decimal = Field(description="Mean of relative rank log-odds distribution.")
-    logits_distribution_std: Decimal = Field(description="Standard deviation of relative rank log-odds distribution.")
-    parameter_fragility_max_curvature: Decimal = Field(description="Second-order discrete curvature across +/- 25% perturbation.")
-    is_pbo_acceptable: bool = Field(description="True if PBO < 0.25.")
-    is_parameter_stable: bool = Field(description="True if degradation across +/- 25% perturbation <= 30%.")
-    analytical_friction_monotonicity_passed: bool = Field(description="True if returns decay monotonically under component-wise analytical friction stress curve.")
+    pbo_estimate: Decimal = Field(description="Probability of Backtest Overfitting (PBO) via mid-rank log-odds.")
+    logits_distribution_mean: Decimal = Field(description="Mean of the empirical log-odds lambda distribution.")
+    logits_distribution_std: Decimal = Field(description="Standard deviation of the empirical log-odds lambda distribution.")
+    is_pbo_acceptable: bool = Field(description="True if PBO < max_acceptable_pbo (e.g. 0.25).")
+    parameter_fragility_max_curvature: Decimal = Field(description="Maximum second-order discrete curvature across parameter perturbations.")
+    is_parameter_stable: bool = Field(description="True if parameter surface is flat (curvature below tolerance and degradation <= 30%).")
+    analytical_friction_monotonicity_passed: bool = Field(description="True if simulated return degrades monotonically under increasing friction stress multipliers.")
+
+
+class ValidationPolicyConfig(BaseModel):
+    """Governance policy thresholds for the Statistical Validation Gate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    confidence_level_alpha: Decimal = Field(default=Decimal("0.05"), gt=Decimal("0.0"), lt=Decimal("1.0"))
+    min_dsr_probability: Decimal = Field(default=Decimal("0.95"), ge=Decimal("0.50"), le=Decimal("1.0"))
+    max_acceptable_pbo: Decimal = Field(default=Decimal("0.25"), gt=Decimal("0.0"), lt=Decimal("1.0"))
+    min_oos_sharpe_retention_pct: Decimal = Field(default=Decimal("50.0"), ge=Decimal("0.0"), description="Minimum OOS Sharpe retention vs In-Sample (%).")
 
 
 class ValidationConfig(BaseModel):
@@ -285,9 +331,9 @@ class ValidationReport(BaseModel):
     hypothesis_id: str
     verdict: ValidationGateVerdict
     is_tradeable_alpha: bool
-    dsr_result: DSRResult
-    multiple_testing_result: MultipleTestingResult
-    overfitting_report: OverfittingReport
+    dsr_result: Optional[DSRResult] = Field(default=None, description="DSR inference output, None if validation failed closed prior to computation.")
+    multiple_testing_result: Optional[MultipleTestingResult] = Field(default=None, description="Multiple testing output, None if validation failed closed prior to computation.")
+    overfitting_report: Optional[OverfittingReport] = Field(default=None, description="Overfitting output, None if validation failed closed prior to computation.")
     in_sample_sharpe: Decimal
     out_of_sample_sharpe: Optional[Decimal] = None
     oos_retention_pct: Optional[Decimal] = None
@@ -317,7 +363,7 @@ class ValidationReport(BaseModel):
                 "sr0_estimator": self.dsr_result.sr0_estimator,
                 "trial_variance_used": str(self.dsr_result.trial_variance_used),
                 "variance_estimator": self.dsr_result.variance_estimator,
-            },
+            } if self.dsr_result is not None else None,
             "evidence_digest": self.evidence_digest,
             "hypothesis_id": self.hypothesis_id,
             "in_sample_sharpe": str(self.in_sample_sharpe),
@@ -325,7 +371,7 @@ class ValidationReport(BaseModel):
                 "haircut_sharpe_ratio": str(self.multiple_testing_result.haircut_sharpe_ratio),
                 "is_fwer_significant": self.multiple_testing_result.is_fwer_significant,
                 "raw_p_values": [str(p) for p in self.multiple_testing_result.raw_p_values],
-            },
+            } if self.multiple_testing_result is not None else None,
             "oos_retention_pct": str(self.oos_retention_pct) if self.oos_retention_pct is not None else None,
             "out_of_sample_sharpe": str(self.out_of_sample_sharpe) if self.out_of_sample_sharpe is not None else None,
             "overfitting_report": {
@@ -336,7 +382,7 @@ class ValidationReport(BaseModel):
                 "logits_distribution_std": str(self.overfitting_report.logits_distribution_std),
                 "parameter_fragility_max_curvature": str(self.overfitting_report.parameter_fragility_max_curvature),
                 "pbo_estimate": str(self.overfitting_report.pbo_estimate),
-            },
+            } if self.overfitting_report is not None else None,
             "strategy_id": self.strategy_id,
         }
         return json.dumps(data, sort_keys=True, separators=(",", ":"))

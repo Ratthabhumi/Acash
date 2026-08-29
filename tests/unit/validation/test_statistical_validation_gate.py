@@ -24,12 +24,13 @@ def _make_valid_perturbation_grid(
     sr: Decimal = Decimal("1.5"),
     strat_id: str = "STRAT_01",
 ) -> ParameterPerturbationGrid:
-    """Helper to construct a valid 3-point perturbation grid with distinct execution runs."""
+    """Helper to construct a valid 3-point perturbation grid with distinct execution runs and manifests."""
     base_hash = hashlib.sha256(f"{strat_id}:test_grid:{base_val}".encode("utf-8")).hexdigest()
     points = [
         ParameterPerturbationPoint(
             parameter_value=base_val * Decimal("0.75"),
             run_id=f"run_{strat_id}_left_p75",
+            manifest_id=f"MANIFEST_{strat_id}_LEFT",
             input_artifact_hash=hashlib.sha256(f"{base_hash}:left:in".encode("utf-8")).hexdigest(),
             output_artifact_hash=hashlib.sha256(f"{base_hash}:left:out".encode("utf-8")).hexdigest(),
             actual_sharpe=sr,
@@ -37,6 +38,7 @@ def _make_valid_perturbation_grid(
         ParameterPerturbationPoint(
             parameter_value=base_val,
             run_id=f"run_{strat_id}_base_100",
+            manifest_id=f"MANIFEST_{strat_id}_BASE",
             input_artifact_hash=hashlib.sha256(f"{base_hash}:base:in".encode("utf-8")).hexdigest(),
             output_artifact_hash=hashlib.sha256(f"{base_hash}:base:out".encode("utf-8")).hexdigest(),
             actual_sharpe=sr,
@@ -44,6 +46,7 @@ def _make_valid_perturbation_grid(
         ParameterPerturbationPoint(
             parameter_value=base_val * Decimal("1.25"),
             run_id=f"run_{strat_id}_right_p125",
+            manifest_id=f"MANIFEST_{strat_id}_RIGHT",
             input_artifact_hash=hashlib.sha256(f"{base_hash}:right:in".encode("utf-8")).hexdigest(),
             output_artifact_hash=hashlib.sha256(f"{base_hash}:right:out".encode("utf-8")).hexdigest(),
             actual_sharpe=sr,
@@ -96,11 +99,14 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
 
     assert report.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
     assert report.is_tradeable_alpha is True
+    assert report.dsr_result is not None
     assert report.dsr_result.effective_trials_k == 5
     assert report.dsr_result.selection_correction_mode == SelectionCorrectionMode.MULTIPLE_TRIAL
     assert report.dsr_result.sr0_estimator == "EMPIRICAL_TRIAL_VARIANCE_GUMBEL_V1"
+    assert report.multiple_testing_result is not None
     assert len(report.multiple_testing_result.raw_p_values) == 5  # Strictly coupled K
     assert report.dsr_result.is_statistically_significant is True
+    assert report.overfitting_report is not None
     assert report.overfitting_report.is_pbo_acceptable is True
     assert report.overfitting_report.analytical_friction_monotonicity_passed is True
     assert report.oos_retention_pct is not None
@@ -108,7 +114,7 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
 
 
 def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
-    """Verify that omitting trial_ledger strictly fails closed with REJECT_MISSING_TRIAL_LEDGER."""
+    """Verify that omitting trial_ledger strictly fails closed with REJECT_MISSING_TRIAL_LEDGER and ZERO dummy evidence."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -125,6 +131,17 @@ def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
 
     assert report.verdict == ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
     assert report.is_tradeable_alpha is False
+    # Strict zero-synthetic evidence invariant:
+    assert report.dsr_result is None
+    assert report.multiple_testing_result is None
+    assert report.overfitting_report is None
+    assert report.out_of_sample_sharpe is None
+    assert report.oos_retention_pct is None
+
+    # Canonical serialization must succeed cleanly without fabricated objects
+    ev_json = report.to_canonical_evidence_json()
+    assert "MISSING_TRIAL_LEDGER" in report.evidence_digest or len(report.evidence_digest) == 64
+    assert json.loads(ev_json)["dsr_result"] is None
 
 
 def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
@@ -160,6 +177,8 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
     )
     assert report_none.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
     assert report_none.is_tradeable_alpha is False
+    assert report_none.out_of_sample_sharpe is None
+    assert report_none.oos_retention_pct is None
 
     # 2. Too short OOS returns (< 4 bars)
     report_short = gate.evaluate_strategy(
@@ -171,6 +190,7 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
     )
     assert report_short.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
     assert report_short.is_tradeable_alpha is False
+    assert report_short.out_of_sample_sharpe is None
 
 
 def test_ledger_duplicate_trial_id_rejection() -> None:
@@ -203,41 +223,134 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
         )
 
 
-def test_parameter_perturbation_grid_duplicate_run_id_rejection() -> None:
-    """Verify that ParameterPerturbationGrid strictly rejects non-distinct run_ids."""
+def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> None:
+    """Verify that ParameterPerturbationGrid enforces distinct runs, manifests, hashes, and exact geometry."""
     theta = Decimal("10.0")
-    dummy_hash = "a" * 32
+    h1 = "a" * 64
+    h2 = "b" * 64
+    h3 = "c" * 64
 
-    points_dup = [
+    # 1. Duplicate run_ids rejected
+    points_dup_run = [
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.5"),
-            run_id="same_run_id",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            run_id="same_run",
+            manifest_id="MANIFEST_01",
+            input_artifact_hash=h1,
+            output_artifact_hash=h1,
             actual_sharpe=Decimal("1.5"),
         ),
         ParameterPerturbationPoint(
             parameter_value=Decimal("10.0"),
-            run_id="same_run_id",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            run_id="same_run",
+            manifest_id="MANIFEST_02",
+            input_artifact_hash=h2,
+            output_artifact_hash=h2,
             actual_sharpe=Decimal("1.5"),
         ),
         ParameterPerturbationPoint(
             parameter_value=Decimal("12.5"),
-            run_id="different_run_id",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            run_id="diff_run",
+            manifest_id="MANIFEST_03",
+            input_artifact_hash=h3,
+            output_artifact_hash=h3,
             actual_sharpe=Decimal("1.5"),
         ),
     ]
-
     with pytest.raises(DataContractError, match="3 distinct execution run_ids"):
-        ParameterPerturbationGrid(
-            base_parameter_name="lookback",
-            base_parameter_value=theta,
-            points=points_dup,
-        )
+        ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_dup_run)
+
+    # 2. Duplicate manifest_ids rejected
+    points_dup_man = [
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("7.5"),
+            run_id="run_1",
+            manifest_id="MANIFEST_SAME",
+            input_artifact_hash=h1,
+            output_artifact_hash=h1,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("10.0"),
+            run_id="run_2",
+            manifest_id="MANIFEST_SAME",
+            input_artifact_hash=h2,
+            output_artifact_hash=h2,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("12.5"),
+            run_id="run_3",
+            manifest_id="MANIFEST_03",
+            input_artifact_hash=h3,
+            output_artifact_hash=h3,
+            actual_sharpe=Decimal("1.5"),
+        ),
+    ]
+    with pytest.raises(DataContractError, match="3 distinct manifest_ids"):
+        ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_dup_man)
+
+    # 3. Non-exact geometry rejected (e.g. 0.750001 != 0.75)
+    points_inexact = [
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("7.500001"),
+            run_id="run_1",
+            manifest_id="MANIFEST_01",
+            input_artifact_hash=h1,
+            output_artifact_hash=h1,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("10.0"),
+            run_id="run_2",
+            manifest_id="MANIFEST_02",
+            input_artifact_hash=h2,
+            output_artifact_hash=h2,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("12.5"),
+            run_id="run_3",
+            manifest_id="MANIFEST_03",
+            input_artifact_hash=h3,
+            output_artifact_hash=h3,
+            actual_sharpe=Decimal("1.5"),
+        ),
+    ]
+    with pytest.raises(DataContractError, match="does not exactly equal 0.75"):
+        ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_inexact)
+
+    # 4. Out-of-order points rejected
+    points_unordered = [
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("10.0"),  # Mid in pos 0
+            run_id="run_1",
+            manifest_id="MANIFEST_01",
+            input_artifact_hash=h1,
+            output_artifact_hash=h1,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("7.5"),
+            run_id="run_2",
+            manifest_id="MANIFEST_02",
+            input_artifact_hash=h2,
+            output_artifact_hash=h2,
+            actual_sharpe=Decimal("1.5"),
+        ),
+        ParameterPerturbationPoint(
+            parameter_value=Decimal("12.5"),
+            run_id="run_3",
+            manifest_id="MANIFEST_03",
+            input_artifact_hash=h3,
+            output_artifact_hash=h3,
+            actual_sharpe=Decimal("1.5"),
+        ),
+    ]
+    with pytest.raises(DataContractError, match="does not exactly equal 0.75"):
+        ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_unordered)
+
+
 
 
 def test_deterministic_validation_report_id_and_digests() -> None:

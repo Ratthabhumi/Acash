@@ -68,21 +68,20 @@ def test_independent_fill_reconciliation_ordering_and_attributes() -> None:
 
     for f in substrate_fills:
         realized_pnl, eq = ledger.process_fill(
-            symbol=f["symbol"],
-            side=f["side"],
-            fill_price=f["price"],
-            fill_qty=f["qty"],
-            fee_paid=f["fee"],
-            multiplier=f["mult"],
+            symbol=str(f["symbol"]),
+            side=str(f["side"]),
+            fill_price=Decimal(str(f["price"])),
+            fill_qty=Decimal(str(f["qty"])),
+            fee_paid=Decimal(str(f["fee"])),
+            multiplier=Decimal(str(f["mult"])),
         )
 
     # Invariants verification:
     # After F1: Long 2 @ 5000. Cash = 100000 - 500000 - 5 = -400005. PosVal = 500000. Equity = 99995.
-    # After F2: Close 1 @ 5010. Realized = 1 * (5010-5000) * 50 = +500. Cash = -400005 + 250500 - 2.50 = -149507.50. PosVal = 250500. Equity = 100492.50.
-    # After F3: Sell 3 @ 5015 (Close 1 Long -> Realized = +750; Open 2 Short).
-    # Total Realized PnL = 500 + 750 = +1250.
-    # Total Fees = 5.00 + 2.50 + 7.50 = 15.00.
-    # Position: Short 2 @ 5015.
+    # After F2: Sell 1 @ 5010. Realized PnL = (5010 - 5000)*1*50 = +500. Cash = -400005 + 250500 - 2.5 = -149507.5. PosVal = 250500. Equity = 100992.5.
+    # After F3: Sell 3 @ 5015. Closes Long 1 (PnL = +750), Opens Short 2 @ 5015. Cash = -149507.5 + 752250 - 7.5 = 602735. PosVal = -501500. Equity = 101235.
+
+    # Total Realized PnL across lifecycle = 500 + 750 = 1250. Total fees = 5 + 2.5 + 7.5 = 15. Net = 1235.
     assert ledger.cumulative_realized_pnl == Decimal("1250.00")
     assert ledger.cumulative_fees_paid == Decimal("15.00")
     assert ledger.positions["ES.SIM"].quantity == Decimal("-2.0")
@@ -92,6 +91,7 @@ def test_independent_fill_reconciliation_ordering_and_attributes() -> None:
     ledger.update_market_price("ES.SIM", Decimal("5012.00"))
     assert ledger.positions["ES.SIM"].unrealized_pnl == Decimal("300.00")
     assert abs(ledger.calculate_balance_sheet_equity() - Decimal("101535.00")) <= ACCOUNTING_TOLERANCE
+
 
 
 # =============================================================================
@@ -178,9 +178,11 @@ def test_dispersion_hypothesis_strictly_evaluates_magnitude() -> None:
     dir_result = evaluate_hypothesis_relationship(features, forward_returns, horizon=5, hypothesis=directional_hyp)
 
     # Dispersion: Target |R| = [0.001, 0.002, 0.003, 0.004, 0.005] -> Perfect positive rank correlation = 1.0, positive beta
+    assert disp_result.spearman_rank_ic is not None
     assert math.isclose(float(disp_result.spearman_rank_ic), 1.0, rel_tol=1e-5)
     assert disp_result.beta > Decimal("0")
     assert disp_result.is_falsified is False
+
 
 
     # Directional: Signed returns have zero/negative linear drift -> Falsified!

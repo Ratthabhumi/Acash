@@ -47,30 +47,37 @@ def test_haircut_sharpe_ratio_derivation() -> None:
 def test_parameter_curvature_evaluation_with_lineage() -> None:
     """Verify parameter curvature calculation across +/- 25% perturbation points."""
     theta = Decimal("10.0")
-    dummy_hash = "f" * 32
+    h1 = "f" * 64
+    h2 = "e" * 64
+    h3 = "d" * 64
     points = [
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.5"),
             run_id="run_p75",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            manifest_id="MANIFEST_P75",
+            input_artifact_hash=h1,
+            output_artifact_hash=h1,
             actual_sharpe=Decimal("1.4"),
         ),
         ParameterPerturbationPoint(
             parameter_value=Decimal("10.0"),
             run_id="run_p100",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            manifest_id="MANIFEST_P100",
+            input_artifact_hash=h2,
+            output_artifact_hash=h2,
             actual_sharpe=Decimal("1.5"),
         ),
         ParameterPerturbationPoint(
             parameter_value=Decimal("12.5"),
             run_id="run_p125",
-            input_artifact_hash=dummy_hash,
-            output_artifact_hash=dummy_hash,
+            manifest_id="MANIFEST_P125",
+            input_artifact_hash=h3,
+            output_artifact_hash=h3,
             actual_sharpe=Decimal("1.35"),
         ),
+
     ]
+
     grid = ParameterPerturbationGrid(
         base_parameter_name="lookback",
         base_parameter_value=theta,

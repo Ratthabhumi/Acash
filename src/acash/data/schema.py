@@ -12,7 +12,11 @@ from typing import Final, Sequence
 import pyarrow as pa
 
 
-from acash.core.domain.exceptions import DataContractError, DomainValidationError
+from acash.core.domain.exceptions import (
+    DataContractError as DataContractError,
+    DomainValidationError as DomainValidationError,
+)
+
 
 
 class BatchCollisionError(DataContractError):

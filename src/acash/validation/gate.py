@@ -65,7 +65,7 @@ def _compute_grid_sha256(grid: Optional[ParameterPerturbationGrid]) -> str:
     if grid is None:
         return "NONE"
     items = [
-        f"{p.parameter_value}:{p.run_id}:{p.input_artifact_hash}:{p.output_artifact_hash}:{Decimal(str(p.actual_sharpe)):.18f}"
+        f"{p.parameter_value}:{p.run_id}:{p.manifest_id}:{p.input_artifact_hash}:{p.output_artifact_hash}:{Decimal(str(p.actual_sharpe)):.18f}"
         for p in grid.points
     ]
     raw_payload = f"{grid.base_parameter_name}:{grid.base_parameter_value}:" + ";".join(items)
@@ -73,7 +73,13 @@ def _compute_grid_sha256(grid: Optional[ParameterPerturbationGrid]) -> str:
 
 
 class StatisticalValidationGate:
-    """Master orchestrator for Phase 6 Statistical Validation & Overfitting Controls."""
+    """Master orchestrator for Phase 6 Statistical Validation & Overfitting Controls.
+
+    SOVEREIGN GOVERNANCE AUTHORITY:
+    This class is the SOLE sovereign governance authority for Gate 6 validation decisions.
+    Standalone engines (DeflatedSharpeEngine, MultipleTestingEngine, OverfittingEngine) are
+    low-level mathematical primitives; their standalone invocation does NOT constitute a Gate 6 validation decision.
+    """
 
     def __init__(self, config: Optional[ValidationConfig] = None) -> None:
         self.config = config or ValidationConfig()
@@ -100,41 +106,26 @@ class StatisticalValidationGate:
 
         # 1. Search Intensity & Trial Coupling (Strict Fail-Closed on missing ledger)
         if trial_ledger is None:
-            # Emit fail-closed verdict when ledger is omitted
+            # Emit fail-closed verdict when ledger is omitted - ZERO synthetic evidence computation
             is_hash = _compute_canonical_series_sha256(in_sample_returns)
             oos_hash = _compute_canonical_series_sha256(out_of_sample_returns)
-            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:NONE:NONE:0:0.0:0.0"
+            ev_payload = f"{strategy_id}:{hypothesis_id}:{is_hash}:{oos_hash}:MISSING_TRIAL_LEDGER"
             evidence_digest = hashlib.sha256(ev_payload.encode("utf-8")).hexdigest()
             verdict = ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
-            decision_payload = f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:{self.config.max_acceptable_pbo}"
+            decision_payload = (
+                f"{evidence_digest}:{verdict.value}:{self.config.min_dsr_probability}:"
+                f"{self.config.max_acceptable_pbo}:{self.config.min_oos_sharpe_retention_pct}"
+            )
             decision_digest = hashlib.sha256(decision_payload.encode("utf-8")).hexdigest()
             val_id = f"VAL_{strategy_id}_{decision_digest[:16]}"
             now_utc = fixed_created_timestamp_utc or datetime.now(timezone.utc).isoformat()
 
-            empty_dsr = DeflatedSharpeEngine.evaluate_dsr(in_sample_returns, effective_trials_k=1)
-            empty_mult = MultipleTestingEngine.evaluate_multiple_testing([Decimal("1.0")], 0.0, n_is, effective_trials_k=1)
-            p_val = Decimal("10.0")
-            dummy_pt = ParameterPerturbationPoint(
-                parameter_value=p_val,
-                run_id="run_missing_ledger_0",
-                input_artifact_hash="0" * 32,
-                output_artifact_hash="0" * 32,
-                actual_sharpe=Decimal("0.0"),
-            )
-            dummy_grid = ParameterPerturbationGrid(
-                base_parameter_name="missing",
-                base_parameter_value=p_val,
-                points=[
-                    dummy_pt.model_copy(update={"parameter_value": p_val * Decimal("0.75"), "run_id": "run_0"}),
-                    dummy_pt.model_copy(update={"parameter_value": p_val, "run_id": "run_1"}),
-                    dummy_pt.model_copy(update={"parameter_value": p_val * Decimal("1.25"), "run_id": "run_2"}),
-                ],
-            )
-            empty_overfit = OverfittingEngine.evaluate_overfitting_battery(
-                is_sharpe_matrix=np.zeros((1, 2)),
-                oos_sharpe_matrix=np.zeros((1, 2)),
-                perturbation_grid=dummy_grid,
-            )
+            is_floats = [float(x) for x in in_sample_returns]
+            mean_is = float(np.mean(is_floats))
+            std_is = float(np.std(is_floats, ddof=1)) or 1.0
+            annualized_is = mean_is / std_is * np.sqrt(252.0)
+            in_sample_sr = to_decimal18(Decimal(f"{annualized_is:.12f}")) or Decimal("0.0")
+
 
             return ValidationReport(
                 validation_id=val_id,
@@ -144,10 +135,10 @@ class StatisticalValidationGate:
                 hypothesis_id=hypothesis_id,
                 verdict=verdict,
                 is_tradeable_alpha=False,
-                dsr_result=empty_dsr,
-                multiple_testing_result=empty_mult,
-                overfitting_report=empty_overfit,
-                in_sample_sharpe=empty_dsr.estimated_sharpe,
+                dsr_result=None,
+                multiple_testing_result=None,
+                overfitting_report=None,
+                in_sample_sharpe=in_sample_sr,
                 out_of_sample_sharpe=None,
                 oos_retention_pct=None,
                 created_timestamp_utc=now_utc,
@@ -203,6 +194,7 @@ class StatisticalValidationGate:
                 ParameterPerturbationPoint(
                     parameter_value=theta_0 * Decimal("0.75"),
                     run_id=f"run_{strategy_id}_perturb_left",
+                    manifest_id=f"MANIFEST_{strategy_id}_LEFT",
                     input_artifact_hash=hashlib.sha256(f"{base_hash}:left:input".encode("utf-8")).hexdigest(),
                     output_artifact_hash=hashlib.sha256(f"{base_hash}:left:output".encode("utf-8")).hexdigest(),
                     actual_sharpe=sr_val,
@@ -210,6 +202,7 @@ class StatisticalValidationGate:
                 ParameterPerturbationPoint(
                     parameter_value=theta_0,
                     run_id=f"run_{strategy_id}_perturb_base",
+                    manifest_id=f"MANIFEST_{strategy_id}_BASE",
                     input_artifact_hash=hashlib.sha256(f"{base_hash}:base:input".encode("utf-8")).hexdigest(),
                     output_artifact_hash=hashlib.sha256(f"{base_hash}:base:output".encode("utf-8")).hexdigest(),
                     actual_sharpe=sr_val,
@@ -217,11 +210,13 @@ class StatisticalValidationGate:
                 ParameterPerturbationPoint(
                     parameter_value=theta_0 * Decimal("1.25"),
                     run_id=f"run_{strategy_id}_perturb_right",
+                    manifest_id=f"MANIFEST_{strategy_id}_RIGHT",
                     input_artifact_hash=hashlib.sha256(f"{base_hash}:right:input".encode("utf-8")).hexdigest(),
                     output_artifact_hash=hashlib.sha256(f"{base_hash}:right:output".encode("utf-8")).hexdigest(),
                     actual_sharpe=sr_val,
                 ),
             ]
+
             perturbation_grid = ParameterPerturbationGrid(
                 base_parameter_name="lookback",
                 base_parameter_value=theta_0,

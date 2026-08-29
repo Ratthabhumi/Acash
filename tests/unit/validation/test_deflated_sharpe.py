@@ -13,7 +13,7 @@ from acash.validation.schema import SearchTrialLedger, SearchTrialRecord, Select
 def test_higher_moments_estimation() -> None:
     """Verify sample skewness and kurtosis on standard normal vs skewed synthetic distributions."""
     np.random.seed(42)
-    normal_data = np.random.normal(0.0, 1.0, 5000)
+    normal_data = list(np.random.normal(0.0, 1.0, 5000))
     mean, std, skew, kurt = DeflatedSharpeEngine.calculate_higher_moments(normal_data)
 
     assert math.isclose(mean, 0.0, abs_tol=0.05)
@@ -37,7 +37,7 @@ def test_expected_max_sharpe_sr0_monotonicity() -> None:
 def test_dsr_single_trial_mode() -> None:
     """Verify that K=1 explicitly triggers SelectionCorrectionMode.SINGLE_TRIAL with SR0 = 0."""
     np.random.seed(42)
-    returns = np.random.normal(0.0010, 0.0050, 500)
+    returns = list(np.random.normal(0.0010, 0.0050, 500))
 
     trial = SearchTrialRecord(
         trial_id="trial_1",
@@ -66,7 +66,7 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
     """Verify DSR calculation when coupled directly with a SearchTrialLedger under MULTIPLE_TRIAL mode."""
     np.random.seed(42)
     # Very strong returns (Sharpe ~ 1.2 > SR0 ~ 0.47)
-    strong_returns = np.random.normal(0.0060, 0.0050, 1000)
+    strong_returns = list(np.random.normal(0.0060, 0.0050, 1000))
 
     # Create a SearchTrialLedger recording 10 exploratory trials
     trials = [
@@ -103,7 +103,7 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
     """Verify that a strategy with Sharpe lower than expected null max SR0 is strictly rejected."""
     np.random.seed(42)
     # Weak returns (Sharpe ~ 0.20 < SR0 ~ 0.47)
-    weak_returns = np.random.normal(0.0010, 0.0050, 1000)
+    weak_returns = list(np.random.normal(0.0010, 0.0050, 1000))
 
     trials = [
         SearchTrialRecord(
@@ -131,3 +131,4 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
     assert res.effective_trials_k == 10
     assert res.is_statistically_significant is False
     assert res.has_sufficient_track_record is False
+
