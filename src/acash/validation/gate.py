@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
+
 import numpy as np
 
 from acash.core.domain.exceptions import DataContractError
@@ -95,10 +96,12 @@ class StatisticalValidationGate:
         is_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         oos_cpcv_sharpe_matrix: Optional[np.ndarray] = None,
         perturbation_grid: Optional[ParameterPerturbationGrid] = None,
+        manifest_store: Optional[Dict[str, Any]] = None,
         raw_predictive_edge_bps: float = 15.0,
         friction_params: Optional[FrictionStressParameters] = None,
         fixed_created_timestamp_utc: Optional[str] = None,
     ) -> ValidationReport:
+
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
 
         # 1. Search Intensity & Trial Coupling (Strict Pre-Flight Fail-Closed on missing ledger)
@@ -238,12 +241,21 @@ class StatisticalValidationGate:
         )
 
         # 6. Overfitting & Parameter Fragility
+        if manifest_store is not None:
+            for pt in perturbation_grid.points:
+                if pt.manifest_id not in manifest_store:
+                    raise DataContractError(
+                        f"Perturbation point manifest '{pt.manifest_id}' missing from manifest_store repository."
+                    )
+                pt.validate_manifest_binding(manifest_store[pt.manifest_id])
+
         if is_cpcv_sharpe_matrix is not None and oos_cpcv_sharpe_matrix is not None:
             is_mat = is_cpcv_sharpe_matrix
             oos_mat = oos_cpcv_sharpe_matrix
         else:
             is_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
             oos_mat = np.array([[float(dsr_result.estimated_sharpe), 0.0]])
+
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
             is_sharpe_matrix=is_mat,

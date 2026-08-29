@@ -414,8 +414,13 @@ class BacktestManifest(BaseModel):
         }
         return json.dumps(data, sort_keys=True, separators=(",", ":"))
 
+    def compute_sha256(self) -> str:
+        """Compute deterministic SHA-256 fingerprint of the canonical manifest JSON."""
+        return hashlib.sha256(self.to_canonical_json().encode("utf-8")).hexdigest()
+
 
 def calculate_backtest_manifest_id(
+
     hypothesis_spec_sha256: str,
     canonical_data_hashes: List[str],
     engine_config_hash: str,

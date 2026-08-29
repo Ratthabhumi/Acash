@@ -709,3 +709,129 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
     assert rep_grid.verdict == ValidationGateVerdict.REJECT_MISSING_PERTURBATION_GRID
 
 
+def test_statistical_validation_gate_verifies_manifest_store_repository() -> None:
+    """Verify that StatisticalValidationGate strictly verifies all 3 perturbation points against manifest_store."""
+    from acash.backtest.schema import (
+        BacktestExecutionSummary,
+        BacktestManifest,
+        RealityGapSummary,
+    )
+
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
+
+    trial = SearchTrialRecord(
+        trial_id="trial_1",
+        strategy_id="STRAT_STORE_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f1"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.001"),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="LEDGER_01",
+        strategy_id="STRAT_STORE_01",
+        hypothesis_id="HYP_01",
+        trials=[trial],
+    )
+
+    hyp_hash = "1" * 64
+    eng_hash = "2" * 64
+    strat_hash = "3" * 64
+    pyp_hash = "4" * 64
+    git_hash = "5" * 40
+    data_hash = "6" * 64
+    expected_in = hashlib.sha256(f"{hyp_hash}:{strat_hash}".encode("utf-8")).hexdigest()
+
+    manifest_store = {}
+    points = []
+    base_val = Decimal("10.0")
+    multipliers = [("left", Decimal("0.75")), ("base", Decimal("1.0")), ("right", Decimal("1.25"))]
+
+    for label, mult in multipliers:
+        p_val = base_val * mult
+        man_id = f"MANIFEST_RUN_{label.upper()}"
+        sr = Decimal("1.500000000000000000")
+
+        exec_summary = BacktestExecutionSummary(
+            total_orders=10,
+            total_fills=10,
+            total_volume_traded=Decimal("10000.0"),
+            total_fees_paid=Decimal("10.0"),
+            realized_pnl=Decimal("1000.0"),
+            unrealized_pnl=Decimal("0.0"),
+            ending_equity=Decimal("101000.0"),
+            net_return_pct=Decimal("1.0"),
+            sharpe_ratio=sr,
+            max_drawdown_pct=Decimal("0.5"),
+            win_rate_pct=Decimal("60.0"),
+        )
+        reality_gap = RealityGapSummary(
+            phase4_analytical_edge_bps=Decimal("10.0"),
+            phase5_simulated_realized_bps=Decimal("8.0"),
+            reality_gap_bps=Decimal("2.0"),
+        )
+        manifest = BacktestManifest(
+            manifest_id=man_id,
+            hypothesis_id="HYP_01",
+            hypothesis_spec_sha256=hyp_hash,
+            canonical_data_hashes=[data_hash],
+            engine_config_hash=eng_hash,
+            strategy_config_hash=strat_hash,
+            prng_seed=42,
+            pyproject_toml_sha256=pyp_hash,
+            git_commit_hash=git_hash,
+            execution_summary=exec_summary,
+            reality_gap=reality_gap,
+            computed_at_utc="2026-08-28T10:00:00Z",
+            wall_clock_duration_ms=1000,
+        )
+        manifest_store[man_id] = manifest
+
+        pt = ParameterPerturbationPoint(
+            parameter_value=p_val,
+            run_id=f"run_{label}",
+            manifest_id=man_id,
+            input_artifact_hash=expected_in,
+            output_artifact_hash=manifest.compute_sha256(),
+            actual_sharpe=sr,
+        )
+        points.append(pt)
+
+    grid = ParameterPerturbationGrid(
+        base_parameter_name="lookback",
+        base_parameter_value=base_val,
+        points=points,
+    )
+
+    # 1. Successful verification against manifest_store
+    report = gate.evaluate_strategy(
+        strategy_id="STRAT_STORE_01",
+        hypothesis_id="HYP_01",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        perturbation_grid=grid,
+        manifest_store=manifest_store,
+    )
+    assert report.verdict == ValidationGateVerdict.PASS_TRADEABLE_ALPHA
+
+    # 2. Rejection when a manifest is missing from manifest_store
+    incomplete_store = {k: v for k, v in manifest_store.items() if k != "MANIFEST_RUN_RIGHT"}
+    with pytest.raises(DataContractError, match="missing from manifest_store repository"):
+        gate.evaluate_strategy(
+            strategy_id="STRAT_STORE_01",
+            hypothesis_id="HYP_01",
+            in_sample_returns=is_returns,
+            out_of_sample_returns=oos_returns,
+            trial_ledger=ledger,
+            perturbation_grid=grid,
+            manifest_store=incomplete_store,
+        )
+
+
+

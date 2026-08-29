@@ -33294,6 +33294,42 @@ Verdict: ยังไม่ควรประกาศ Phase 6 v1.4 “Fully Cle
    - **238/238 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 111)
+
+<USER_REQUEST>
+ผมตรวจ commit 6d3f6b81e370539a5fd1504377c2edcd10bea637 บน GitHub จริง แล้ว โดยดูทั้ง diff, gate.py, validation/schema.py และ regression tests ไม่ได้อิงแค่ข้อความสรุป
+
+Verdict: 3 จุดที่ผมทักก่อนหน้านี้: ปิดครบแล้ว
+ผมให้สถานะ commit นี้ PASS สำหรับ Contract Semantics v1.4
+
+จุดที่ควรจับตาเพิ่มเติม:
+🟠 A. output_artifact_hash validation: กำจัด fallback duck typing ให้เรียก compute_sha256() ตรง
+🟠 B. ParameterPerturbationPoint verification-path ใน Gate: เชื่อมโยง manifest_store verification เข้ากับ evaluate_strategy()
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 111)
+
+### 🛠️ สรุปรายละเอียด Verification Path Hardening & Math Substantive Readiness
+
+1. **🟠 Zero Duck-Typing Fallback in `validate_manifest_binding` (Hygiene P2):**
+   - เพิ่ม `BacktestManifest.compute_sha256()` method ลงบนโมเดล BacktestManifest ตรง
+   - ใน `ParameterPerturbationPoint.validate_manifest_binding()`: บังคับเรียก `manifest.compute_sha256()` โดยตรง 100% ปราศจาก fallback duck-typing `hasattr(manifest, "to_canonical_json")`
+
+2. **🟠 Sovereign Gate Manifest Store Verification Path Binding (P1):**
+   - ใน `StatisticalValidationGate.evaluate_strategy()`:
+     - รองรับพารามิเตอร์ `manifest_store: Optional[Dict[str, Any]] = None`
+     - หากส่ง `manifest_store` เข้ามา Gate จะทำการ iterate ตรวจสอบ cryptographic 4-way binding ของทั้ง 3 จุดใน `perturbation_grid` กับ object `BacktestManifest` ตัวจริงทันทีก่อนเข้าสู่ Overfitting Battery
+     - หาก manifest ใดสูญหายหรือ mismatch จะถูก raise `DataContractError`
+
+3. **Full Test Suite & Mypy Status:**
+   - **239/239 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

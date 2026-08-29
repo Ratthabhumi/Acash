@@ -167,18 +167,15 @@ class ParameterPerturbationPoint(BaseModel):
             )
 
         # Output artifact hash validation: must strictly equal manifest.compute_sha256()
-        if hasattr(manifest, "compute_sha256"):
-            manifest_out_hash = manifest.compute_sha256()
-        elif hasattr(manifest, "to_canonical_json"):
-            import hashlib
-            manifest_out_hash = hashlib.sha256(manifest.to_canonical_json().encode("utf-8")).hexdigest()
-        else:
-            raise DataContractError(f"Manifest '{man_id}' does not provide compute_sha256() or to_canonical_json().")
+        if not hasattr(manifest, "compute_sha256"):
+            raise DataContractError(f"Manifest '{man_id}' does not provide compute_sha256().")
 
+        manifest_out_hash = manifest.compute_sha256()
         if self.output_artifact_hash != manifest_out_hash:
             raise DataContractError(
                 f"Output artifact hash mismatch: point has '{self.output_artifact_hash}', manifest produced '{manifest_out_hash}'."
             )
+
 
         # Input artifact hash validation: must strictly equal SHA256(hypothesis_spec_sha256:strategy_config_hash)
         strat_cfg_hash = getattr(manifest, "strategy_config_hash", None)
