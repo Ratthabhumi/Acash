@@ -13,6 +13,7 @@ from acash.research.schema import ExpectedDirection, HypothesisSpecification, In
 from acash.validation.deflated_sharpe import DeflatedSharpeEngine
 from acash.validation.gate import StatisticalValidationGate, _compute_canonical_series_sha256
 from acash.validation.schema import (
+    CanonicalConfigSerializer,
     ParameterPerturbationGrid,
     ParameterPerturbationPoint,
     SearchTrialLedger,
@@ -21,7 +22,9 @@ from acash.validation.schema import (
     SharpeSpace,
     ValidationConfig,
     ValidationGateVerdict,
+    deep_freeze_value,
 )
+
 
 
 
@@ -1869,18 +1872,19 @@ def test_statistical_inputs_reject_nan_and_inf() -> None:
     grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
 
     # 1. _compute_canonical_series_sha256 rejects NaN and Inf
-    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+    with pytest.raises(DataContractError, match="Non-finite .* encountered"):
         _compute_canonical_series_sha256([0.01, float("nan"), 0.02])
 
-    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+    with pytest.raises(DataContractError, match="Non-finite .* encountered"):
         _compute_canonical_series_sha256([0.01, float("inf"), 0.02])
 
-    with pytest.raises(DataContractError, match="Non-finite value .* encountered"):
+    with pytest.raises(DataContractError, match="Non-finite .* encountered"):
         _compute_canonical_series_sha256([0.01, float("-inf"), 0.02])
 
     # 2. DeflatedSharpeEngine.calculate_higher_moments rejects NaN and Inf
-    with pytest.raises(DataContractError, match="Non-finite value .* encountered in return series"):
+    with pytest.raises(DataContractError, match="Non-finite .* encountered in return series"):
         DeflatedSharpeEngine.calculate_higher_moments([0.01, float("nan"), 0.02, 0.03])
+
 
     # 3. Gate rejects non-finite in_sample_returns
     with pytest.raises(DataContractError, match="in_sample_returns"):
@@ -2059,7 +2063,7 @@ def test_statistical_validation_gate_rejects_divergent_ledger_sharpe() -> None:
         sharpe=Decimal("5.000000"),
     )
 
-    with pytest.raises(DataContractError, match="deviates from actual return series empirical Sharpe"):
+    with pytest.raises(DataContractError, match="exceeds methodological tolerance bound"):
         gate.evaluate_strategy(
             strategy_id="STRAT_DIVERGE",
             hypothesis_id="HYP_01",
@@ -2072,5 +2076,94 @@ def test_statistical_validation_gate_rejects_divergent_ledger_sharpe() -> None:
             trial_return_matrix=trial_matrix,
             perturbation_grid=grid,
         )
+
+
+def test_canonical_config_serializer_type_preservation_and_differentiation() -> None:
+    """Verify that CanonicalConfigSerializer strictly differentiates primitive types and rejects non-finite values."""
+    # 1. bool vs int differentiation: True != 1
+    h_bool = CanonicalConfigSerializer.compute_sha256({"flag": True})
+    h_int = CanonicalConfigSerializer.compute_sha256({"flag": 1})
+    assert h_bool != h_int
+
+    # 2. Decimal vs float differentiation: Decimal("1.0") != 1.0
+    h_dec = CanonicalConfigSerializer.compute_sha256({"val": Decimal("1.0")})
+    h_float = CanonicalConfigSerializer.compute_sha256({"val": 1.0})
+    assert h_dec != h_float
+
+    # 3. str vs bytes differentiation: "abc" != b"abc"
+    h_str = CanonicalConfigSerializer.compute_sha256({"data": "abc"})
+    h_bytes = CanonicalConfigSerializer.compute_sha256({"data": b"abc"})
+    assert h_str != h_bytes
+
+    # 4. Non-finite float rejection
+    with pytest.raises(DataContractError, match="Non-finite float value"):
+        CanonicalConfigSerializer.to_canonical_json({"val": float("nan")})
+
+    with pytest.raises(DataContractError, match="Non-finite float value"):
+        CanonicalConfigSerializer.to_canonical_json({"val": float("inf")})
+
+    # 5. Non-finite Decimal rejection
+    with pytest.raises(DataContractError, match="Non-finite Decimal value"):
+        CanonicalConfigSerializer.to_canonical_json({"val": Decimal("NaN")})
+
+
+def test_search_trial_record_deep_immutable_parameters() -> None:
+    """Verify that SearchTrialRecord recursively freezes parameters and prevents runtime mutation."""
+    h = "a" * 64
+    raw_params = {
+        "lookback": 20,
+        "nested": {"threshold": 1.5, "tags": ["a", "b"]},
+    }
+    record = SearchTrialRecord.create(
+        trial_id="t_freeze",
+        strategy_id="S1",
+        hypothesis_id="H1",
+        feature_names=["f1"],
+        parameters=raw_params,
+        in_sample_sharpe=Decimal("1.2"),
+        p_value=Decimal("0.02"),
+        execution_manifest_id="MAN_01",
+        in_sample_returns=[0.01, 0.02, 0.03, 0.04],
+    )
+
+    # 1. Top-level parameter mutation raises TypeError
+    with pytest.raises(TypeError):
+        record.parameters["lookback"] = 999  # type: ignore[index]
+
+    with pytest.raises(TypeError):
+        record.parameters["new_key"] = "hacked"  # type: ignore[index]
+
+    # 2. Nested dictionary mutation raises TypeError
+    with pytest.raises(TypeError):
+        nested_dict = record.parameters["nested"]
+        nested_dict["threshold"] = 99.9
+
+
+    # 3. Nested list converted to tuple -> raises AttributeError on append
+    nested_tags = record.parameters["nested"]["tags"]
+    assert isinstance(nested_tags, tuple)
+    assert not hasattr(nested_tags, "append")
+
+
+def test_decimal_is_finite_guards_on_extreme_values() -> None:
+    """Verify that Decimal is_finite guards properly validate extreme Decimal values without overflow."""
+    # Extremely large decimal (hundreds of digits) does not crash with OverflowError
+    large_dec = Decimal("1" * 100 + ".5")
+    assert large_dec.is_finite() is True
+
+    from acash.validation.gate import _verify_finite_numeric
+    checked = _verify_finite_numeric(large_dec, context="test_large")
+    assert checked == large_dec
+
+    # Non-finite Decimals fail closed
+    with pytest.raises(DataContractError, match="Non-finite Decimal"):
+        _verify_finite_numeric(Decimal("NaN"), context="nan_test")
+
+    with pytest.raises(DataContractError, match="Non-finite Decimal"):
+        _verify_finite_numeric(Decimal("Infinity"), context="inf_test")
+
+    with pytest.raises(DataContractError, match="Non-finite Decimal"):
+        _verify_finite_numeric(Decimal("-Infinity"), context="neg_inf_test")
+
 
 

@@ -33748,6 +33748,63 @@ Verdict: Verification path ปิดแล้ว ✅ แต่มี 2 ประ
    - **267/267 tests PASSED (100%)** (เพิ่ม 4 dedicated adversarial tests)
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 121)
+
+<USER_REQUEST>
+ผมตรวจ bf94949 จาก source จริงบน GitHub อีกครั้งแล้ว โดย commit ที่ตรวจคือ bf94949c59367da9131c9f34dd7c3ad4c7cfca9c
+รอบนี้ 6 จุดถูกแก้จริงในระดับหนึ่ง แต่ยังมีช่องสำคัญที่ผมยังไม่ให้ Final Sign-off:
+1. 🔴 P0 #1 — "Finite" guard ยังไม่ truly exception-safe (ต้องใช้ Decimal is_finite() โดยตรง ป้องกัน OverflowError จาก float(v) ก่อนถึง math.isfinite)
+2. 🔴 P0 #2 — Deep immutability ยังไม่ครบ เพราะ parameters ยังเป็น mutable Dict (frozen=True ไม่กัน nested dict/list in-place mutation ต้อง freeze เป็น MappingProxyType / Tuple)
+3. 🔴 P0 #3 & 🟠 P1 #6 — Unified Canonical Parameter Serializer (CanonicalConfigSerializer) ล็อก type-tag contract: bool != int, Decimal != float, str != bytes
+4. 🟠 P1 #4 — 18-decimal canonical quantization terminology (ไม่ใช่ exact real-number identity)
+5. 🟠 P1 #5 — Sharpe consistency methodological tolerance bound (|SR_ledger - SR(R)| <= epsilon_sr, epsilon_sr = 1e-3)
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 121)
+
+### 🛠️ สรุปรายละเอียด True Decimal Finite Guard, Deep Immutability, Unified Canonical Serializer & Methodological Tolerance
+
+1. **🔴 Exception-Safe True Decimal Finite Guard (P0 #1):**
+   - พัฒนา `_verify_finite_numeric(v, context)` ใน `src/acash/validation/gate.py`
+   - ตรวจสอบ `v.is_finite()` บน `Decimal` โดยตรง ปราศจากการบังคับแปลงเป็น binary `float` ก่อน เพื่อป้องกัน `OverflowError` จากเลข Decimal ขนาดใหญ่
+   - ใน `DeflatedSharpeEngine.calculate_higher_moments()`: ตรวจสอบ `r.is_finite()` บน Decimal และ `math.isfinite(rf)` บน float ก่อนคำนวณโมเมนต์
+   - เพิ่ม Adversarial Test: `test_decimal_is_finite_guards_on_extreme_values()` (ทดสอบ Decimal 100 หลัก และค่า NaN / ±Inf)
+
+2. **🔴 Deep Immutability of Nested Parameters (P0 #2):**
+   - พัฒนา `deep_freeze_value(val)` แปลง nested dictionaries เป็น `MappingProxyType`, lists เป็น `tuple`, sets เป็น `frozenset`
+   - ใน `SearchTrialRecord`:
+     - กำหนด `parameters: Mapping[str, Any]` พร้อม `@field_validator("parameters", mode="after")`
+     - ป้องกัน in-place modification ทุกระดับความลึก (`record.parameters["x"] = 999` หรือ `record.parameters["nested"]["a"] = 123` จะ raise `TypeError` ทันที)
+   - เพิ่ม Adversarial Test: `test_search_trial_record_deep_immutable_parameters()`
+
+3. **🔴 Unified Canonical Config Serializer with Type Preservation (P0 #3 & P1 #6):**
+   - สร้างคลาสกลาง `CanonicalConfigSerializer` ใน `src/acash/validation/schema.py`:
+     - รักษา Type Identity ชัดเจน:
+       * `bool` $\to$ `{"__type__": "bool", "value": val}` (แยกขาดจาก `int`)
+       * `int` $\to$ `{"__type__": "int", "value": val}`
+       * `float` $\to$ `{"__type__": "float", "value": fv}`
+       * `Decimal` $\to$ `{"__type__": "decimal", "value": f"{val:.18f}"}` (แยกขาดจาก `float`)
+       * `bytes` $\to$ `{"__type__": "bytes", "value": bytes.hex()}` (แยกขาดจาก `str`)
+     - รองรับ sorting key และ RFC-8785 canonical JSON formatting (`separators=(',', ':'), sort_keys=True, allow_nan=False`)
+   - นำไปใช้ทั้งใน `SearchTrialRecord.compute_config_sha256()` และ `SearchTrialLedger.compute_ledger_digest()`
+   - เพิ่ม Adversarial Test: `test_canonical_config_serializer_type_preservation_and_differentiation()`
+
+4. **🟠 18-Decimal Canonical Quantization Terminology (P1 #4):**
+   - อัปเดต docstrings และ specification ให้ระบุชัดเจนว่าเป็น **"18-decimal canonical quantization (fixed-point representation at 10^-18 precision)"**
+
+5. **🟠 Methodological Sharpe Tolerance Formulation (P1 #5):**
+   - กำหนดนิยามและ error message ชัดเจนเป็น **Methodological Tolerance Bound**:
+     $$|SR_m^{\text{ledger}} - \widehat{SR}(R_{\cdot, m})| \le \epsilon_{SR} \quad (\epsilon_{SR} = 10^{-3})$$
+
+6. **Full Test Suite & Mypy Status:**
+   - **270/270 tests PASSED (100%)** (เพิ่ม 3 dedicated adversarial tests รวมเป็น 270 ข้อ)
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 
 
 

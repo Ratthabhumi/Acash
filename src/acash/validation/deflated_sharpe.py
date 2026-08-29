@@ -113,9 +113,14 @@ class DeflatedSharpeEngine:
             Tuple[mean, std, skewness_g1, kurtosis_g2]
         """
         for r in returns:
-            rf = float(r)
-            if not math.isfinite(rf):
-                raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in return series.")
+            if isinstance(r, Decimal):
+                if not r.is_finite():
+                    raise DataContractError(f"Non-finite Decimal value '{r}' (NaN or Inf) encountered in return series.")
+            else:
+                rf = float(r)
+                if not math.isfinite(rf):
+                    raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in return series.")
+
 
         arr = np.array([float(r) for r in returns], dtype=np.float64)
         n = len(arr)

@@ -11,7 +11,7 @@ Implements the master validation gate enforcing:
 """
 
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import math
@@ -46,20 +46,47 @@ from acash.validation.schema import (
 )
 
 
+def _verify_finite_numeric(v: Any, context: str = "value") -> Decimal:
+    """Strict exception-safe finite check validating Decimal and numeric inputs directly."""
+    if isinstance(v, Decimal):
+        if not v.is_finite():
+            raise DataContractError(f"Non-finite Decimal {context} '{v}' (NaN or Inf) encountered.")
+        return v
+    if isinstance(v, (int, np.integer)):
+        return Decimal(str(int(v)))
+    if isinstance(v, (float, np.floating)):
+        fv = float(v)
+        if not math.isfinite(fv):
+            raise DataContractError(f"Non-finite float {context} '{v}' (NaN or Inf) encountered.")
+        try:
+            dec = Decimal(str(fv))
+            if not dec.is_finite():
+                raise DataContractError(f"Non-finite converted Decimal {context} '{v}' encountered.")
+            return dec
+        except (InvalidOperation, OverflowError) as e:
+            raise DataContractError(f"Invalid numeric {context} '{v}' failed Decimal conversion.") from e
+    try:
+        dec = Decimal(str(v))
+        if not dec.is_finite():
+            raise DataContractError(f"Non-finite string/numeric {context} '{v}' encountered.")
+        return dec
+    except (InvalidOperation, OverflowError) as e:
+        raise DataContractError(f"Invalid numeric representation for {context} '{v}'.") from e
+
+
 def _compute_canonical_series_sha256(series: Optional[Union[Sequence[Union[Decimal, float]], np.ndarray]]) -> str:
-    """Compute deterministic SHA-256 hash using exact canonical Decimal strings (no float rounding)."""
+    """Compute deterministic SHA-256 hash using 18-decimal canonical quantization (fixed-point at 10^-18)."""
     if series is None or len(series) == 0:
         return "NONE"
 
     dec_strings: List[str] = []
-    for v in series:
-        vf = float(v)
-        if not math.isfinite(vf):
-            raise DataContractError(f"Non-finite value '{v}' (NaN or Inf) encountered in return series before hashing.")
-        dec_strings.append(f"{Decimal(str(v)):.18f}")
+    for idx, v in enumerate(series):
+        dec = _verify_finite_numeric(v, context=f"return observation at index {idx}")
+        dec_strings.append(f"{dec:.18f}")
 
     raw_payload = ",".join(dec_strings)
     return hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+
 
 
 def _compute_ledger_sha256(ledger: Optional[SearchTrialLedger]) -> str:
@@ -113,14 +140,12 @@ class StatisticalValidationGate:
     ) -> ValidationReport:
         """Run complete statistical validation battery and emit definitive, cryptographically-sealed verdict."""
 
-        # Strict Finite Numerical Data Guards
-        for r in in_sample_returns:
-            if not math.isfinite(float(r)):
-                raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in in_sample_returns.")
+        # Strict Finite Numerical Data Contract Guards (with true Decimal is_finite validation)
+        for idx, r in enumerate(in_sample_returns):
+            _verify_finite_numeric(r, context=f"in_sample_returns[{idx}]")
         if out_of_sample_returns is not None:
-            for r in out_of_sample_returns:
-                if not math.isfinite(float(r)):
-                    raise DataContractError(f"Non-finite value '{r}' (NaN or Inf) encountered in out_of_sample_returns.")
+            for idx, r in enumerate(out_of_sample_returns):
+                _verify_finite_numeric(r, context=f"out_of_sample_returns[{idx}]")
         if trial_return_matrix is not None:
             if not np.all(np.isfinite(trial_return_matrix)):
                 raise DataContractError("trial_return_matrix contains non-finite values (NaN or Inf).")
@@ -368,6 +393,7 @@ class StatisticalValidationGate:
                 )
 
             # 3. Methodological Sharpe Consistency: Verify recorded ledger Sharpe matches empirical Sharpe of column m
+            # within methodological tolerance bound epsilon_sr = 1e-3
             mean_m = float(np.mean(trial_return_matrix[:, m]))
             std_m = float(np.std(trial_return_matrix[:, m], ddof=1)) if n_is > 1 else 1.0
             sr_m_period = (mean_m / std_m) if std_m > 1e-12 else 0.0
@@ -377,11 +403,15 @@ class StatisticalValidationGate:
             else:
                 computed_sr_m = sr_m_period
 
-            if abs(float(trial_rec.in_sample_sharpe) - computed_sr_m) > 1e-3:
+            epsilon_sr = 1e-3
+            diff_sr = abs(float(trial_rec.in_sample_sharpe) - computed_sr_m)
+            if diff_sr > epsilon_sr:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' registered in_sample_sharpe ({trial_rec.in_sample_sharpe}) "
-                    f"deviates from actual return series empirical Sharpe ({computed_sr_m:.6f})."
+                    f"exceeds methodological tolerance bound (|SR_ledger - SR_computed| = {diff_sr:.6f} > {epsilon_sr}) "
+                    f"against empirical Sharpe ({computed_sr_m:.6f})."
                 )
+
 
             # 4. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:

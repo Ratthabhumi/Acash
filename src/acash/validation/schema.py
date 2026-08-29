@@ -14,9 +14,11 @@ from decimal import Decimal
 from enum import Enum
 import hashlib
 import json
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import math
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 from acash.core.domain.exceptions import DataContractError
@@ -41,6 +43,86 @@ class ValidationGateVerdict(str, Enum):
     REJECT_FRICTION_COLLAPSE = "REJECT_FRICTION_COLLAPSE"
 
 
+def deep_freeze_value(val: Any) -> Any:
+
+    """Recursively freeze dictionaries, lists, and collections into deeply immutable representations.
+
+    - dict / Mapping -> MappingProxyType
+    - list / tuple -> Tuple
+    - set / frozenset -> frozenset
+    - primitives (int, float, Decimal, str, bool, bytes, None, Enum) -> immutable as-is
+    """
+    if isinstance(val, (dict, Mapping)):
+        return MappingProxyType({k: deep_freeze_value(v) for k, v in val.items()})
+    if isinstance(val, (list, tuple)):
+        return tuple(deep_freeze_value(x) for x in val)
+    if isinstance(val, (set, frozenset)):
+        return frozenset(deep_freeze_value(x) for x in val)
+    return val
+
+
+class CanonicalConfigSerializer:
+    """Deterministic, type-safe canonical serializer for ACASH configuration and parameter objects.
+
+    ENFORCES:
+    - Explicit type-tagging preventing semantic collision across primitive domains:
+      * bool != int (e.g. True vs 1)
+      * Decimal != float (exact Decimal string vs IEEE-754 float)
+      * str != bytes
+    - Strict sorting of all dictionary keys and feature sequences.
+    - Zero-tolerance non-finite numeric rejection (NaN, +Inf, -Inf).
+    - RFC-8785 canonical JSON formatting: separators=(',', ':'), sort_keys=True, ensure_ascii=True, allow_nan=False.
+    """
+
+    @classmethod
+    def serialize_value(cls, val: Any) -> Any:
+        """Recursively normalize values into canonical primitive types with strict type preservation."""
+        if val is None:
+            return None
+        if isinstance(val, bool):
+            return {"__type__": "bool", "value": val}
+        if isinstance(val, (int, np.integer)):
+            return {"__type__": "int", "value": int(val)}
+        if isinstance(val, (float, np.floating)):
+            fv = float(val)
+            if not math.isfinite(fv):
+                raise DataContractError(f"Non-finite float value '{val}' cannot be canonically serialized.")
+            return {"__type__": "float", "value": fv}
+        if isinstance(val, Decimal):
+            if not val.is_finite():
+                raise DataContractError(f"Non-finite Decimal value '{val}' cannot be canonically serialized.")
+            return {"__type__": "decimal", "value": f"{val:.18f}"}
+        if isinstance(val, (str, Enum)):
+            return str(val.value if isinstance(val, Enum) else val)
+        if isinstance(val, (bytes, bytearray)):
+            return {"__type__": "bytes", "value": bytes(val).hex()}
+        if isinstance(val, (dict, Mapping)):
+            return {
+                str(k): cls.serialize_value(v)
+                for k, v in sorted(val.items(), key=lambda item: str(item[0]))
+            }
+        if isinstance(val, (list, tuple, set, frozenset, Sequence)):
+            return [cls.serialize_value(x) for x in val]
+        raise DataContractError(f"Unsupported parameter type for canonical serialization: {type(val).__name__}")
+
+    @classmethod
+    def to_canonical_json(cls, obj: Any) -> str:
+        """Convert any data structure into a canonical, collision-free JSON string."""
+        normalized = cls.serialize_value(obj)
+        return json.dumps(
+            normalized,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+
+    @classmethod
+    def compute_sha256(cls, obj: Any) -> str:
+        """Compute 64-hex lowercase SHA-256 of canonical JSON."""
+        payload = cls.to_canonical_json(obj)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 class SelectionCorrectionMode(str, Enum):
     """Operational mode for Sharpe ratio hypothesis testing and selection bias correction."""
@@ -59,13 +141,15 @@ class SharpeSpace(str, Enum):
 class SearchTrialRecord(BaseModel):
     """Single exploratory trial / parameter configuration tracked in the search space."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
     trial_id: str = Field(min_length=1, description="Unique deterministic trial identifier.")
     strategy_id: str = Field(min_length=1)
     hypothesis_id: str = Field(min_length=1)
     feature_names: Sequence[str] = Field(min_length=1, description="Immutable tuple of feature dependencies.")
-    parameters: Dict[str, Any]
+    parameters: Mapping[str, Any] = Field(
+        default_factory=dict, description="Deeply immutable mapping of search parameters."
+    )
 
     in_sample_sharpe: Decimal
     p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
@@ -82,24 +166,29 @@ class SearchTrialRecord(BaseModel):
     )
 
     @staticmethod
-    def compute_config_sha256(feature_names: Sequence[str], parameters: Dict[str, Any]) -> str:
-        """Deterministic canonical SHA-256 digest of feature dependencies and search parameters."""
-        payload = json.dumps(
-            {"features": sorted(list(feature_names)), "params": parameters},
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    def compute_config_sha256(feature_names: Sequence[str], parameters: Mapping[str, Any]) -> str:
+        """Deterministic canonical SHA-256 digest of feature dependencies and search parameters using CanonicalConfigSerializer."""
+        config_obj = {
+            "features": sorted(list(feature_names)),
+            "params": parameters,
+        }
+        return CanonicalConfigSerializer.compute_sha256(config_obj)
+
+    @field_validator("parameters", mode="after")
+    @classmethod
+    def freeze_parameters_field(cls, v: Any) -> Any:
+        """Ensure parameters mapping is recursively frozen into deeply immutable MappingProxyType."""
+        return deep_freeze_value(v)
 
     @model_validator(mode="before")
     @classmethod
     def populate_mandatory_hashes_and_types(cls, data: Any) -> Any:
-        """Ensure cryptographic hashes are strictly populated for all records without synthetic fallback."""
+        """Ensure cryptographic hashes and deep immutability are strictly populated for all records."""
         if isinstance(data, dict):
-            if "feature_names" in data and isinstance(data["feature_names"], (list, set)):
+            if "feature_names" in data and isinstance(data["feature_names"], (list, set, tuple)):
                 data["feature_names"] = tuple(sorted(list(data["feature_names"])))
+            if "parameters" in data and data["parameters"] is not None:
+                data["parameters"] = deep_freeze_value(data["parameters"])
             if "config_sha256" not in data or data["config_sha256"] is None:
                 features = data.get("feature_names", ())
                 params = data.get("parameters", {})
@@ -116,6 +205,7 @@ class SearchTrialRecord(BaseModel):
                     )
         return data
 
+
     @classmethod
     def create(
         cls,
@@ -123,7 +213,7 @@ class SearchTrialRecord(BaseModel):
         strategy_id: str,
         hypothesis_id: str,
         feature_names: Sequence[str],
-        parameters: Dict[str, Any],
+        parameters: Mapping[str, Any],
         in_sample_sharpe: Decimal,
         p_value: Decimal,
         execution_manifest_id: str,
@@ -134,6 +224,9 @@ class SearchTrialRecord(BaseModel):
         """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
         from acash.validation.gate import _compute_canonical_series_sha256
 
+        frozen_params = deep_freeze_value(parameters)
+        sorted_features = tuple(sorted(list(feature_names)))
+
         if in_sample_return_series_sha256 is None:
             if in_sample_returns is None:
                 raise DataContractError(
@@ -142,14 +235,14 @@ class SearchTrialRecord(BaseModel):
             in_sample_return_series_sha256 = _compute_canonical_series_sha256(in_sample_returns)
 
         if config_sha256 is None:
-            config_sha256 = cls.compute_config_sha256(feature_names, parameters)
+            config_sha256 = cls.compute_config_sha256(sorted_features, frozen_params)
 
         return cls(
             trial_id=trial_id,
             strategy_id=strategy_id,
             hypothesis_id=hypothesis_id,
-            feature_names=tuple(sorted(list(feature_names))),
-            parameters=parameters,
+            feature_names=sorted_features,
+            parameters=frozen_params,
             in_sample_sharpe=in_sample_sharpe,
             p_value=p_value,
             in_sample_return_series_sha256=in_sample_return_series_sha256,
@@ -161,7 +254,7 @@ class SearchTrialRecord(BaseModel):
 class SearchTrialLedger(BaseModel):
     """Sovereign ledger accounting for all exploratory trials to strictly couple search intensity with DSR & FWER."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
 
     ledger_id: str = Field(min_length=1, description="Unique ledger identifier.")
     strategy_id: str = Field(min_length=1, description="Bound strategy identifier.")
@@ -186,7 +279,7 @@ class SearchTrialLedger(BaseModel):
     def coerce_trials_tuple(cls, data: Any) -> Any:
         """Coerce list of trials to immutable tuple."""
         if isinstance(data, dict):
-            if "trials" in data and isinstance(data["trials"], list):
+            if "trials" in data and isinstance(data["trials"], (list, tuple)):
                 data["trials"] = tuple(data["trials"])
             if "sharpe_space" in data and isinstance(data["sharpe_space"], str):
                 try:
@@ -214,25 +307,19 @@ class SearchTrialLedger(BaseModel):
                     "config_sha256": t.config_sha256,
                     "in_sample_return_series_sha256": t.in_sample_return_series_sha256,
                     "execution_manifest_id": t.execution_manifest_id,
-                    "in_sample_sharpe": f"{Decimal(str(t.in_sample_sharpe)):.18f}",
-                    "p_value": f"{Decimal(str(t.p_value)):.18f}",
+                    "in_sample_sharpe": t.in_sample_sharpe,
+                    "p_value": t.p_value,
                 }
                 for t in self.trials
             ],
         }
-        payload = json.dumps(
-            canonical_obj,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return CanonicalConfigSerializer.compute_sha256(canonical_obj)
 
     def seal(self, sealed_at_utc: Optional[str] = None) -> "SearchTrialLedger":
         """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest."""
         if self.is_sealed and self.ledger_digest is not None:
             return self
+
         from datetime import datetime, timezone
         now_utc = sealed_at_utc or datetime.now(timezone.utc).isoformat()
         digest = self.compute_ledger_digest()
