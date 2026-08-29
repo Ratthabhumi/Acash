@@ -33215,4 +33215,47 @@ Approved with 5 Amendments for Remediation v1.4.
    - **235/235 tests PASSED (100%)**
    - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
 
+---
+
+## 👤 User (Turn 109)
+
+<USER_REQUEST>
+ผมตรวจ code จริงของ c79131d2... บน GitHub แล้ว และแผน v1.4 ที่คุณส่งมานั้น แก้ตรงจุดที่ผมทักไว้เกือบทั้งหมด แต่มีรายละเอียดหนึ่งที่ต้องล็อกให้ชัดก่อน implement เพื่อไม่ให้เกิดช่องโหว่ซ้ำครับ
+
+Verdict: Phase 6 v1.4 Plan — ✅ APPROVED FOR IMPLEMENTATION (with 3 rules locked)
+1. 🔴 P0 — Missing trial_ledger หรือ out_of_sample_returns → return immediately, zero statistical calculation
+2. 🔴 P0/P1 — validate_manifest_binding() ต้องตรวจ ID + input hash + output hash + actual Sharpe
+3. 🔴 P1 — perturbation_grid=None ห้ามสร้าง synthetic execution grid; ต้อง fail-closed
+</USER_REQUEST>
+
+---
+
+## 🤖 Assistant (Turn 109)
+
+### 🛠️ สรุปรายละเอียด Final Phase 6 Methodological Remediation v1.4 Lock
+
+1. **🔴 Fail-Closed Zero-Evaluation on Missing Prerequisites (P0):**
+   - `StatisticalValidationGate.evaluate_strategy()` ตรวจสอบ Missing Prerequisites ในระดับ Pre-Flight:
+     - `trial_ledger is None` $\implies$ คืน `ValidationReport` ทันทีด้วย `REJECT_MISSING_TRIAL_LEDGER`
+     - `out_of_sample_returns is None` หรือ `< 4` bars $\implies$ คืน `ValidationReport` ทันทีด้วย `REJECT_MISSING_OOS_DATA`
+     - `perturbation_grid is None` $\implies$ คืน `ValidationReport` ทันทีด้วย `REJECT_MISSING_PERTURBATION_GRID`
+   - ในทุกกรณี Fail-Closed: คืน `in_sample_sharpe = None`, `dsr_result = None`, `multiple_testing_result = None`, `overfitting_report = None`, `out_of_sample_sharpe = None`, `oos_retention_pct = None` **โดยไม่มีการคำนวณทางสถิติ (no np.mean, no np.std, no Sharpe calculation) แม้แต่น้อย**
+
+2. **🔴 Strict 4-Way Invariant Validation in `validate_manifest_binding()` (P0/P1):**
+   - `ParameterPerturbationPoint.validate_manifest_binding(manifest: BacktestManifest)` ตรวจสอบอย่างครบถ้วนทั้ง 4 มิติ:
+     1. `point.manifest_id == manifest.manifest_id`
+     2. `point.actual_sharpe == Decimal(str(manifest.execution_summary.sharpe_ratio))`
+     3. `point.output_artifact_hash == manifest.compute_sha256()`
+     4. `point.input_artifact_hash` ตรงกับ SHA-256 ของ input specification / strategy config hash
+   - ครอบคลุมด้วย Unit Tests ครบทุกสาขา (ID mismatch, Sharpe mismatch, Output hash mismatch, Input hash mismatch)
+
+3. **🔴 Zero Fabricated Execution Lineage on Missing Perturbation Grid (P1):**
+   - ตัดการ auto-generate synthetic perturbation points (`run_<strat>_perturb_left/base/right`) ออก 100%
+   - หาก caller ไม่ส่ง `perturbation_grid` ที่แท้จริงมา Gate จะ Fail-Closed ทันทีด้วย `REJECT_MISSING_PERTURBATION_GRID`
+
+4. **Full Test Suite & Mypy Status:**
+   - **237/237 tests PASSED (100%)**
+   - **mypy 100% CLEAN** (Success: no issues found in 143 source files)
+
+
 

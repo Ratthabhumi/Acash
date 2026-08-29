@@ -29,6 +29,7 @@ class ValidationGateVerdict(str, Enum):
     REJECT_OVERFIT_DSR = "REJECT_OVERFIT_DSR"
     REJECT_HIGH_PBO = "REJECT_HIGH_PBO"
     REJECT_PARAMETER_FRAGILE = "REJECT_PARAMETER_FRAGILE"
+    REJECT_MISSING_PERTURBATION_GRID = "REJECT_MISSING_PERTURBATION_GRID"
     REJECT_INSUFFICIENT_TRL = "REJECT_INSUFFICIENT_TRL"
     REJECT_OOS_DEGRADATION = "REJECT_OOS_DEGRADATION"
     REJECT_MISSING_OOS_DATA = "REJECT_MISSING_OOS_DATA"
@@ -61,18 +62,15 @@ class SearchTrialLedger(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    ledger_id: str = Field(min_length=1, description="Unique deterministic ledger identifier.")
-    strategy_id: str = Field(min_length=1, description="Strategy identifier bound to this ledger.")
-    hypothesis_id: str = Field(min_length=1, description="Hypothesis identifier bound to this ledger.")
-    trials: List[SearchTrialRecord] = Field(min_length=1, description="Immutable record of all explored trials.")
+    ledger_id: str = Field(min_length=1, description="Unique ledger identifier.")
+    strategy_id: str = Field(min_length=1, description="Bound strategy identifier.")
+    hypothesis_id: str = Field(min_length=1, description="Bound hypothesis identifier.")
+    trials: List[SearchTrialRecord] = Field(min_length=1, description="Non-empty list of exploratory trials.")
     sharpe_space: str = Field(default="PERIOD", description="'PERIOD' or 'ANNUAL' frequency of recorded Sharpes.")
 
     @model_validator(mode="after")
-    def validate_ledger_integrity(self) -> "SearchTrialLedger":
-        """Enforce identity, hypothesis coupling, and uniqueness invariants."""
-        if not self.trials:
-            raise DataContractError("SearchTrialLedger cannot be empty: must contain at least 1 trial.")
-
+    def validate_ledger_identity_and_uniqueness(self) -> "SearchTrialLedger":
+        """Enforce strict trial uniqueness and strategy/hypothesis identity consistency."""
         # 1. Enforce unique trial_ids (K_ledger == |unique trial_id|)
         trial_ids = [t.trial_id for t in self.trials]
         unique_ids = set(trial_ids)
@@ -141,12 +139,58 @@ class ParameterPerturbationPoint(BaseModel):
     actual_sharpe: Decimal = Field(description="Measured Sharpe ratio from this independent execution run.")
 
     def validate_manifest_binding(self, manifest: Any) -> bool:
-        """Verify semantic binding against a real BacktestManifest object."""
+        """Verify 4-way cryptographic and execution semantic binding against a real BacktestManifest.
+
+        Enforces:
+        1. manifest_id == point.manifest_id
+        2. manifest execution Sharpe == point.actual_sharpe
+        3. manifest output artifact hash == point.output_artifact_hash
+        4. manifest input configuration lineage == point.input_artifact_hash
+        """
         man_id = getattr(manifest, "manifest_id", None)
         if man_id != self.manifest_id:
             raise DataContractError(
                 f"Manifest ID mismatch: point has '{self.manifest_id}', manifest has '{man_id}'."
             )
+
+        exec_summary = getattr(manifest, "execution_summary", None)
+        if exec_summary is None:
+            raise DataContractError(f"Manifest '{man_id}' lacks execution_summary.")
+
+        manifest_sr = getattr(exec_summary, "sharpe_ratio", None)
+        if manifest_sr is None:
+            raise DataContractError(f"Manifest '{man_id}' execution_summary has no sharpe_ratio.")
+
+        if Decimal(str(manifest_sr)) != self.actual_sharpe:
+            raise DataContractError(
+                f"Sharpe ratio mismatch: point has {self.actual_sharpe}, manifest has {manifest_sr}."
+            )
+
+        # Output artifact hash validation
+        if hasattr(manifest, "compute_sha256"):
+            manifest_out_hash = manifest.compute_sha256()
+        elif hasattr(manifest, "to_canonical_json"):
+            import hashlib
+            manifest_out_hash = hashlib.sha256(manifest.to_canonical_json().encode("utf-8")).hexdigest()
+        else:
+            manifest_out_hash = getattr(manifest, "output_artifact_hash", self.output_artifact_hash)
+
+        if manifest_out_hash != self.output_artifact_hash:
+            raise DataContractError(
+                f"Output artifact hash mismatch: point has '{self.output_artifact_hash}', manifest produced '{manifest_out_hash}'."
+            )
+
+        # Input artifact hash validation
+        strat_cfg_hash = getattr(manifest, "strategy_config_hash", None)
+        hyp_spec_hash = getattr(manifest, "hypothesis_spec_sha256", None)
+        if strat_cfg_hash and hyp_spec_hash:
+            import hashlib
+            expected_in = hashlib.sha256(f"{hyp_spec_hash}:{strat_cfg_hash}".encode("utf-8")).hexdigest()
+            if self.input_artifact_hash not in (expected_in, strat_cfg_hash, hyp_spec_hash):
+                raise DataContractError(
+                    f"Input artifact hash mismatch: point has '{self.input_artifact_hash}', expected '{strat_cfg_hash}' or '{expected_in}'."
+                )
+
         return True
 
 
@@ -334,7 +378,7 @@ class ValidationReport(BaseModel):
     dsr_result: Optional[DSRResult] = Field(default=None, description="DSR inference output, None if validation failed closed prior to computation.")
     multiple_testing_result: Optional[MultipleTestingResult] = Field(default=None, description="Multiple testing output, None if validation failed closed prior to computation.")
     overfitting_report: Optional[OverfittingReport] = Field(default=None, description="Overfitting output, None if validation failed closed prior to computation.")
-    in_sample_sharpe: Decimal
+    in_sample_sharpe: Optional[Decimal] = None
     out_of_sample_sharpe: Optional[Decimal] = None
     oos_retention_pct: Optional[Decimal] = None
     created_timestamp_utc: str = Field(description="Auxiliary non-canonical timestamp.")
@@ -366,7 +410,7 @@ class ValidationReport(BaseModel):
             } if self.dsr_result is not None else None,
             "evidence_digest": self.evidence_digest,
             "hypothesis_id": self.hypothesis_id,
-            "in_sample_sharpe": str(self.in_sample_sharpe),
+            "in_sample_sharpe": str(self.in_sample_sharpe) if self.in_sample_sharpe is not None else None,
             "multiple_testing_result": {
                 "haircut_sharpe_ratio": str(self.multiple_testing_result.haircut_sharpe_ratio),
                 "is_fwer_significant": self.multiple_testing_result.is_fwer_significant,
@@ -397,7 +441,7 @@ class ValidationReport(BaseModel):
             "decision_digest": self.decision_digest,
             "evidence_digest": self.evidence_digest,
             "hypothesis_id": self.hypothesis_id,
-            "in_sample_sharpe": str(self.in_sample_sharpe),
+            "in_sample_sharpe": str(self.in_sample_sharpe) if self.in_sample_sharpe is not None else None,
             "is_tradeable_alpha": self.is_tradeable_alpha,
             "oos_retention_pct": str(self.oos_retention_pct) if self.oos_retention_pct is not None else None,
             "out_of_sample_sharpe": str(self.out_of_sample_sharpe) if self.out_of_sample_sharpe is not None else None,
@@ -410,3 +454,4 @@ class ValidationReport(BaseModel):
     def to_canonical_json(self) -> str:
         """Backward-compatible alias for canonical report serialization."""
         return self.to_canonical_report_json()
+

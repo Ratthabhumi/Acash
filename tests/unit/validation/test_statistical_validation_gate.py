@@ -114,7 +114,7 @@ def test_statistical_validation_gate_pass_tradeable_alpha() -> None:
 
 
 def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
-    """Verify that omitting trial_ledger strictly fails closed with REJECT_MISSING_TRIAL_LEDGER and ZERO dummy evidence."""
+    """Verify that omitting trial_ledger strictly fails closed with REJECT_MISSING_TRIAL_LEDGER and ZERO statistical evaluation."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -131,7 +131,8 @@ def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
 
     assert report.verdict == ValidationGateVerdict.REJECT_MISSING_TRIAL_LEDGER
     assert report.is_tradeable_alpha is False
-    # Strict zero-synthetic evidence invariant:
+    # Strict zero-evaluation & zero-synthetic evidence invariant:
+    assert report.in_sample_sharpe is None
     assert report.dsr_result is None
     assert report.multiple_testing_result is None
     assert report.overfitting_report is None
@@ -142,10 +143,11 @@ def test_statistical_validation_gate_fail_closed_on_missing_ledger() -> None:
     ev_json = report.to_canonical_evidence_json()
     assert "MISSING_TRIAL_LEDGER" in report.evidence_digest or len(report.evidence_digest) == 64
     assert json.loads(ev_json)["dsr_result"] is None
+    assert json.loads(ev_json)["in_sample_sharpe"] is None
 
 
 def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
-    """Verify that missing or insufficient OOS returns strictly fail closed with REJECT_MISSING_OOS_DATA."""
+    """Verify that missing or insufficient OOS returns strictly fail closed with REJECT_MISSING_OOS_DATA and zero evaluation."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -177,6 +179,10 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
     )
     assert report_none.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
     assert report_none.is_tradeable_alpha is False
+    assert report_none.in_sample_sharpe is None
+    assert report_none.dsr_result is None
+    assert report_none.multiple_testing_result is None
+    assert report_none.overfitting_report is None
     assert report_none.out_of_sample_sharpe is None
     assert report_none.oos_retention_pct is None
 
@@ -190,7 +196,57 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
     )
     assert report_short.verdict == ValidationGateVerdict.REJECT_MISSING_OOS_DATA
     assert report_short.is_tradeable_alpha is False
+    assert report_short.in_sample_sharpe is None
     assert report_short.out_of_sample_sharpe is None
+
+
+def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() -> None:
+    """Verify that omitting perturbation_grid strictly fails closed with REJECT_MISSING_PERTURBATION_GRID and zero synthetic grid."""
+    gate = StatisticalValidationGate()
+
+    np.random.seed(42)
+    is_returns = list(np.random.normal(0.0015, 0.0040, 1000))
+    oos_returns = list(np.random.normal(0.0012, 0.0040, 500))
+
+    trial = SearchTrialRecord(
+        trial_id="trial_1",
+        strategy_id="STRAT_MOM_001",
+        hypothesis_id="HYP_TSMOM_001",
+        feature_names=["mom"],
+        parameters={},
+        in_sample_sharpe=Decimal("1.5"),
+        p_value=Decimal("0.01"),
+    )
+    ledger = SearchTrialLedger(
+        ledger_id="LEDGER_001",
+        strategy_id="STRAT_MOM_001",
+        hypothesis_id="HYP_TSMOM_001",
+        trials=[trial],
+    )
+
+    report = gate.evaluate_strategy(
+        strategy_id="STRAT_MOM_001",
+        hypothesis_id="HYP_TSMOM_001",
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        perturbation_grid=None,  # Missing perturbation grid
+    )
+
+    assert report.verdict == ValidationGateVerdict.REJECT_MISSING_PERTURBATION_GRID
+    assert report.is_tradeable_alpha is False
+    assert report.in_sample_sharpe is None
+    assert report.dsr_result is None
+    assert report.multiple_testing_result is None
+    assert report.overfitting_report is None
+    assert report.out_of_sample_sharpe is None
+    assert report.oos_retention_pct is None
+
+    # Canonical serialization verification
+    ev_json = report.to_canonical_evidence_json()
+    assert json.loads(ev_json)["in_sample_sharpe"] is None
+    assert json.loads(ev_json)["overfitting_report"] is None
+
 
 
 def test_ledger_duplicate_trial_id_rejection() -> None:
@@ -453,3 +509,123 @@ def test_canonical_json_serialization_separation() -> None:
     assert "evidence_digest" in rep_data
     assert "verdict" in rep_data
     assert "created_timestamp_utc" not in rep_data
+
+
+def test_parameter_perturbation_point_manifest_binding_invariants() -> None:
+    """Verify 4-way manifest binding invariants: manifest_id, execution_sharpe, input hash, output hash."""
+    from acash.backtest.schema import (
+        BacktestExecutionSummary,
+        BacktestManifest,
+        FeeModelConfig,
+        RealityGapSummary,
+        SimulationLatencyConfig,
+        SlippageModelConfig,
+    )
+
+    hyp_hash = "1" * 64
+    eng_hash = "2" * 64
+    strat_hash = "3" * 64
+    pyp_hash = "4" * 64
+    git_hash = "5" * 40
+    data_hash = "6" * 64
+    expected_in_hash = hashlib.sha256(f"{hyp_hash}:{strat_hash}".encode("utf-8")).hexdigest()
+
+    exec_summary = BacktestExecutionSummary(
+        total_orders=10,
+        total_fills=10,
+        total_volume_traded=Decimal("100000.0"),
+        total_fees_paid=Decimal("20.0"),
+        realized_pnl=Decimal("1500.0"),
+        unrealized_pnl=Decimal("0.0"),
+        ending_equity=Decimal("101480.0"),
+        net_return_pct=Decimal("1.48"),
+        sharpe_ratio=Decimal("1.650000000000000000"),
+        sortino_ratio=Decimal("2.1"),
+        max_drawdown_pct=Decimal("0.5"),
+        win_rate_pct=Decimal("60.0"),
+        profit_factor=Decimal("1.8"),
+    )
+
+    reality_gap = RealityGapSummary(
+        phase4_analytical_edge_bps=Decimal("10.0"),
+        phase5_simulated_realized_bps=Decimal("8.0"),
+        reality_gap_bps=Decimal("2.0"),
+    )
+
+    manifest = BacktestManifest(
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        hypothesis_id="HYP_01",
+        hypothesis_spec_sha256=hyp_hash,
+        canonical_data_hashes=[data_hash],
+        engine_config_hash=eng_hash,
+        strategy_config_hash=strat_hash,
+        prng_seed=42,
+        pyproject_toml_sha256=pyp_hash,
+        git_commit_hash=git_hash,
+        execution_summary=exec_summary,
+        reality_gap=reality_gap,
+        computed_at_utc="2026-08-28T10:00:00Z",
+        wall_clock_duration_ms=1200,
+    )
+
+    manifest_output_hash = hashlib.sha256(manifest.to_canonical_json().encode("utf-8")).hexdigest()
+
+    # 1. Perfectly matched point
+    point_valid = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash=expected_in_hash,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    assert point_valid.validate_manifest_binding(manifest) is True
+
+    # 2. Manifest ID mismatch
+    point_bad_id = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_DIFFERENT_ID",
+        input_artifact_hash=expected_in_hash,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Manifest ID mismatch"):
+        point_bad_id.validate_manifest_binding(manifest)
+
+    # 3. Sharpe ratio mismatch
+    point_bad_sr = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash=expected_in_hash,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.800000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Sharpe ratio mismatch"):
+        point_bad_sr.validate_manifest_binding(manifest)
+
+    # 4. Output artifact hash mismatch
+    point_bad_out = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash=expected_in_hash,
+        output_artifact_hash="f" * 64,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Output artifact hash mismatch"):
+        point_bad_out.validate_manifest_binding(manifest)
+
+    # 5. Input artifact hash mismatch
+    point_bad_in = ParameterPerturbationPoint(
+        parameter_value=Decimal("7.5"),
+        run_id="run_p75",
+        manifest_id="MANIFEST_MOM_P75_TEST",
+        input_artifact_hash="e" * 64,
+        output_artifact_hash=manifest_output_hash,
+        actual_sharpe=Decimal("1.650000000000000000"),
+    )
+    with pytest.raises(DataContractError, match="Input artifact hash mismatch"):
+        point_bad_in.validate_manifest_binding(manifest)
+
