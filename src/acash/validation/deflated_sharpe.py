@@ -222,6 +222,19 @@ class DeflatedSharpeEngine:
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
+        METHODOLOGICAL SPECIFICATION & TERMINOLOGY (ACASH DSR Governance Variant):
+        - Canonical DSR (Bailey & López de Prado, 2014) defines K as the effective number of independent
+          trials (or estimates K_eff <= K from cross-trial correlation).
+        - In the ACASH sovereign governance framework, the total declared search opportunities K_declared
+          from the authoritative SearchTrialLedger is utilized as a conservative upper bound:
+            K_DSR = K_declared >= K_effective_independent
+          Since the expected maximum Sharpe SR_0 monotonically increases with K, using K_declared establishes
+          a strictly more conservative hurdle for alpha admission.
+        - DSR Probability: Phi(z_DSR) computes the probability that the true strategy Sharpe exceeds the
+          expected maximum Sharpe under selection bias and non-normal (skewness g_1, kurtosis g_2) returns.
+          This is a non-normal, selection-corrected composite probability, NOT the single-test asymptotic
+          normal p-value stored in the SearchTrialRecord.
+
         FREQUENCY-SPACE INFERENCE INVARIANCE CONTRACT:
         All statistical hypothesis testing (z-statistic, DSR probability, MinTRL) is evaluated strictly
         in raw per-period return space (T observations, SR_period, SR0_period).
@@ -235,6 +248,7 @@ class DeflatedSharpeEngine:
         It does NOT correct for serial autocorrelation or overlapping forward label horizons.
         Reported values include inference_space=PERIOD and sharpe_space=ANNUAL.
         """
+
         annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
 
         if trial_ledger is not None:

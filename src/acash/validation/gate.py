@@ -134,10 +134,30 @@ class StatisticalValidationGate:
     This class is the SOLE sovereign governance authority for Gate 6 validation decisions.
     Standalone engines (DeflatedSharpeEngine, MultipleTestingEngine, OverfittingEngine) are
     low-level mathematical primitives; their standalone invocation does NOT constitute a Gate 6 validation decision.
+
+    STACKED INDEPENDENT GOVERNANCE ARCHITECTURE (Defense-in-Depth Contract):
+    StatisticalValidationGate enforces 4 stacked independent, non-redundant conservative layers:
+    1. Layer 1: Selection Bias & Higher-Moments Hurdle (DSR)
+       - Evaluates whether the primary candidate Sharpe ratio exceeds the expected maximum Sharpe ratio SR_0
+         under declared search opportunities K and non-normal (skewness g_1, kurtosis g_2) returns:
+         DSR_prob >= min_dsr_probability (e.g. 0.95).
+    2. Layer 2: Family-Wise Error Rate Control (Holm-Bonferroni Step-Down)
+       - Controls the probability of at least one false discovery across all K declared exploratory search
+         hypotheses targeting the primary candidate: p_Holm(primary) <= alpha (e.g. 0.05).
+    3. Layer 3: Non-Linear Economic Hurdle (Bonferroni Haircut Sharpe Ratio)
+       - Computes a non-linear penalization of the primary candidate's Sharpe ratio based on multiple testing
+         tail probability inversion: Haircut_SR >= min_haircut_sharpe.
+    4. Layer 4: Combinatorial Backtest Overfitting (CPCV / CSCV with Embargo)
+       - Evaluates the probability of backtest overfitting across all combinatorial train/test splits under purged
+         and embargoed paths: PBO <= max_acceptable_pbo (e.g. 0.25).
+
+    These layers operate as stacked conservative defense-in-depth controls rather than equivalent or
+    substitutable implementations of a single statistical concept.
     """
 
     def __init__(self, config: Optional[ValidationConfig] = None) -> None:
         self.config = config or ValidationConfig()
+
         self.cpcv_engine = CombinatorialPurgedCrossValidation(self.config)
 
     def evaluate_strategy(

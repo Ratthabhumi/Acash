@@ -2543,8 +2543,9 @@ def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> No
             parameters={},
             in_sample_sharpe=Decimal(f"{sr0:.6f}"),
             p_value=p0,
-            p_value_method="ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+            p_value_method="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
             p_value_input_hash="deadbeef" * 8,  # Tampered hash!
+
             in_sample_return_series_sha256=_compute_canonical_series_sha256(is_returns),
             config_sha256=SearchTrialRecord.compute_config_sha256(("f",), {}),
             execution_manifest_id="MAN_0",

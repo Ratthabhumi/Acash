@@ -73,10 +73,18 @@ class SearchTrialRecord(BaseModel):
     )
 
     in_sample_sharpe: Decimal
-    p_value: Decimal = Field(ge=Decimal("0.0"), le=Decimal("1.0"), description="Valid empirical p-value in [0.0, 1.0].")
+    p_value: Decimal = Field(
+        ge=Decimal("0.0"),
+        le=Decimal("1.0"),
+        description=(
+            "Raw unadjusted two-sided asymptotic p-value for H_0: SR_m = 0 under standard normal error "
+            "approximation. Consumed by multiple testing corrections (Holm-Bonferroni FWER, Benjamini-Hochberg FDR, "
+            "and Bonferroni Haircut Sharpe). NOT to be confused with Deflated Sharpe Ratio (DSR) selection probability."
+        ),
+    )
     p_value_method: str = Field(
-        default="ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
-        description="Statistical hypothesis test method used to derive p_value.",
+        default="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+        description="Authoritative hypothesis test method deriving p_value (H_0: SR=0 under asymptotic normality).",
     )
     p_value_input_hash: str = Field(
         default="",
@@ -106,8 +114,16 @@ class SearchTrialRecord(BaseModel):
 
     @staticmethod
     def compute_canonical_p_value(in_sample_returns: Union[Sequence[Union[Decimal, float]], np.ndarray]) -> Decimal:
+        """Compute canonical raw two-sided asymptotic p-value for H_0: SR = 0 from empirical return series.
 
-        """Compute canonical two-sided asymptotic t-test p-value from empirical return series."""
+        Statistical Specification:
+        - Computes the two-sided asymptotic t-test p-value against zero Sharpe under standard normal error approximation:
+            t = (mean / std) * sqrt(T)
+            p = 2 * (1 - Phi(|t|)) = erfc(|t| / sqrt(2))
+        - This p-value represents the single-hypothesis unadjusted significance of the trial's raw Sharpe ratio.
+        - It is strictly distinct from the Deflated Sharpe Ratio (DSR) probability, which incorporates higher moments
+          and expected maximum Sharpe under multiple testing.
+        """
         arr = np.array([float(x) for x in in_sample_returns], dtype=np.float64)
         n = len(arr)
         if n < 2:
@@ -121,13 +137,12 @@ class SearchTrialRecord(BaseModel):
         dec = to_decimal18(Decimal(f"{p_val:.12f}"))
         return dec if dec is not None else Decimal("1.0")
 
-
     @staticmethod
     def compute_p_value_input_hash(
         return_series_sha256: str,
         config_sha256: str,
         p_value: Union[Decimal, str, float],
-        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
     ) -> str:
         """Deterministic canonical SHA-256 binding p-value to return series, config, and derivation method."""
         val_str = f"{float(p_value):.12f}" if isinstance(p_value, (Decimal, float)) else str(p_value)
@@ -166,7 +181,7 @@ class SearchTrialRecord(BaseModel):
             if "p_value" not in data and "in_sample_returns" in data and data["in_sample_returns"] is not None:
                 data["p_value"] = cls.compute_canonical_p_value(data["in_sample_returns"])
             if ("p_value_input_hash" not in data or not data["p_value_input_hash"]) and "p_value" in data:
-                method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_T_TEST_V1")
+                method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1")
                 data["p_value_input_hash"] = cls.compute_p_value_input_hash(
                     return_series_sha256=data["in_sample_return_series_sha256"],
                     config_sha256=data["config_sha256"],
@@ -190,7 +205,7 @@ class SearchTrialRecord(BaseModel):
         in_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         in_sample_return_series_sha256: Optional[str] = None,
         config_sha256: Optional[str] = None,
-        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_T_TEST_V1",
+        p_value_method: str = "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
         p_value_input_hash: Optional[str] = None,
     ) -> "SearchTrialRecord":
         """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
@@ -231,6 +246,7 @@ class SearchTrialRecord(BaseModel):
             config_sha256=config_sha256,
             execution_manifest_id=execution_manifest_id,
         )
+
 
 
 class SearchTrialLedger(BaseModel):
@@ -559,7 +575,17 @@ class CPCVPartition(BaseModel):
 
 
 class DSRResult(BaseModel):
-    """Statistical output from the Deflated Sharpe Ratio (Bailey & López de Prado 2014) inference engine."""
+    """Statistical output from the Deflated Sharpe Ratio (Bailey & López de Prado 2014) inference engine.
+
+    ACASH DSR GOVERNANCE VARIANCE NOTICE:
+    - Canonical DSR theory uses K as the effective number of independent trials (K_eff).
+    - ACASH operates under the declared search opportunities upper-bound variant:
+        K_DSR = K_declared >= K_effective_independent
+      Because SR_0 monotonically increases with K, using K_declared establishes a strictly more
+      conservative hurdle for alpha admission.
+    - dsr_p_value is the non-normal selection-adjusted probability Phi(z_DSR) that true Sharpe > SR_0.
+      It is strictly distinct from the single-hypothesis asymptotic normal p-values in SearchTrialRecord.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -567,13 +593,13 @@ class DSRResult(BaseModel):
     benchmark_sharpe: Decimal = Field(description="Target hurdle benchmark Sharpe (default 0.0).")
     expected_max_sharpe_sr0: Decimal = Field(description="Expected maximum Sharpe ratio under the null hypothesis given K trials.")
     sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
-    sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, lower bound 1.0).")
+    sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, unconstrained finite sample lower bound).")
     sample_size_t: int = Field(description="Sample length in return periods T.")
     effective_trials_k: int = Field(description="Effective trial count K derived from SearchTrialLedger.")
     declared_trials_k: int = Field(default=1, description="Authoritative declared search opportunities count recorded in ledger.")
     effective_independent_trials_k: Optional[int] = Field(
         default=None,
-        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K as upper bound.",
+        description="Estimated number of statistically independent trials (K_eff <= K). Defaults to K as upper bound in ACASH governance variant.",
     )
     independence_assumption: str = Field(
         default="CONSERVATIVE_SEARCH_OPPORTUNITIES_UPPER_BOUND",
@@ -581,7 +607,7 @@ class DSRResult(BaseModel):
     )
     trial_variance_used: Decimal = Field(description="Trial Sharpe variance V used in Gumbel maximum calculation.")
     dsr_statistic: Decimal = Field(description="Calculated DSR standard normal test statistic.")
-    dsr_p_value: Decimal = Field(description="Deflated Sharpe Ratio p-value (probability that true SR > SR_0).")
+    dsr_p_value: Decimal = Field(description="Deflated Sharpe Ratio p-value (probability Phi(z_DSR) that true SR > SR_0 under higher moments).")
     is_statistically_significant: bool = Field(description="True if dsr_p_value >= min_dsr_probability (e.g. 0.95).")
     min_track_record_length_bars: int = Field(description="Minimum Track Record Length (MinTRL) in bars required for statistical significance.")
     has_sufficient_track_record: bool = Field(description="True if sample_size_t >= min_track_record_length_bars.")
@@ -608,7 +634,7 @@ class MultipleTestingResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     effective_trials_k: int = Field(description="Total evaluated trials K from ledger.")
-    raw_p_values: List[Decimal] = Field(description="Ascending sorted empirical p-values from trial ledger.")
+    raw_p_values: List[Decimal] = Field(description="Ascending sorted raw asymptotic zero-Sharpe p-values (H_0: SR=0 under asymptotic normality) from trial ledger.")
     holm_bonferroni_p_values: List[Decimal] = Field(description="Family-Wise Error Rate (FWER) adjusted p-values.")
     benjamini_hochberg_q_values: List[Decimal] = Field(description="False Discovery Rate (FDR) adjusted q-values.")
     bonferroni_haircut_sharpe_ratio: Decimal = Field(
@@ -642,7 +668,6 @@ class MultipleTestingResult(BaseModel):
             elif "haircut_sharpe_ratio" in data and "bonferroni_haircut_sharpe_ratio" not in data:
                 data["bonferroni_haircut_sharpe_ratio"] = data["haircut_sharpe_ratio"]
         return data
-
 
 
 
@@ -707,7 +732,27 @@ class ValidationConfig(BaseModel):
 
 
 class ValidationReport(BaseModel):
-    """Immutable, sovereign validation certificate emitted by the Statistical Validation Gate."""
+    """Immutable, sovereign validation certificate emitted by the Statistical Validation Gate.
+
+    STACKED INDEPENDENT GOVERNANCE CONTROLS (Defense-in-Depth Contract):
+    The Statistical Validation Gate enforces 4 independent, non-redundant conservative statistical layers:
+    1. Layer 1: Selection Bias & Non-Normality Hurdle (DSR)
+       - Evaluates whether the primary strategy's Sharpe ratio exceeds the expected maximum Sharpe ratio SR_0
+         given declared exploratory search opportunities K and higher moments (skewness g_1, kurtosis g_2):
+         DSR_prob >= min_dsr_probability (e.g. 0.95).
+    2. Layer 2: Family-Wise Error Rate Control (Holm-Bonferroni Step-Down)
+       - Controls the probability of at least one false discovery across all K declared exploratory search
+         hypotheses targeting the primary candidate: p_Holm(primary) <= alpha (e.g. 0.05).
+    3. Layer 3: Non-Linear Economic Hurdle (Bonferroni Haircut Sharpe Ratio)
+       - Computes a non-linear penalization of the primary candidate's Sharpe ratio based on multiple testing
+         tail probability inversion: Haircut_SR >= min_haircut_sharpe.
+    4. Layer 4: Combinatorial Backtest Overfitting (CPCV / CSCV with Embargo)
+       - Evaluates the probability of backtest overfitting across all combinatorial train/test splits under purged
+         and embargoed paths: PBO <= max_acceptable_pbo (e.g. 0.25).
+
+    These layers operate as stacked independent conservative hurdles, guaranteeing institutional-grade defense
+    against data snooping, selection bias, and overfitting.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -725,6 +770,7 @@ class ValidationReport(BaseModel):
     out_of_sample_sharpe: Optional[Decimal] = None
     oos_retention_pct: Optional[Decimal] = None
     created_timestamp_utc: str = Field(description="Auxiliary non-canonical timestamp.")
+
 
     def to_canonical_evidence_json(self) -> str:
         """Emit deterministic, sorted JSON representation of the underlying mathematical evidence.

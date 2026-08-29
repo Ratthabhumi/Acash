@@ -205,7 +205,19 @@ class MultipleTestingEngine:
         sharpe_space: SharpeSpace = SharpeSpace.ANNUAL,
         periods_per_year: float = 252.0,
     ) -> MultipleTestingResult:
-        """Evaluate full multiple testing battery across K trials targeting the pre-registered primary candidate."""
+        """Evaluate full multiple testing battery across K trials targeting the pre-registered primary candidate.
+
+        INPUT CONTRACT & STATISTICAL SPECIFICATION:
+        - `p_values`: Sequence of unadjusted, raw two-sided asymptotic zero-Sharpe normal test p-values
+          (H_0: SR_m = 0) recorded in the candidate SearchTrialLedger.
+        - These are NOT Deflated Sharpe Ratio (DSR) probabilities (which account for higher moments and
+          expected maximum Sharpe).
+        - MultipleTestingEngine performs:
+          1. Holm-Bonferroni step-down Family-Wise Error Rate (FWER) control targeting primary_candidate_index.
+          2. Benjamini-Hochberg False Discovery Rate (FDR) q-value adjustments.
+          3. Harvey-Liu-Zhu Bonferroni Haircut Sharpe penalization strictly evaluated in PERIOD inference space.
+        """
+
         K = len(p_values)
         if effective_trials_k is not None and effective_trials_k != K:
             raise DataContractError(
