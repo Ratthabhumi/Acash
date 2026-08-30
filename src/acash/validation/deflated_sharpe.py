@@ -95,10 +95,11 @@ def _standard_normal_ppf(p: float) -> float:
                 ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
 
 
-def _to_dec(val: Union[float, Decimal, str], default: str = "0.0") -> Decimal:
+def _to_dec(val: Union[int, float, Decimal, str], default: str = "0.0") -> Decimal:
     """Safe, explicit Decimal conversion that avoids ambiguous 'or Decimal(...)' fallback idiom."""
     dec_val = to_decimal18(Decimal(f"{val:.12f}") if isinstance(val, (float, int)) else Decimal(str(val)))
     return dec_val if dec_val is not None else Decimal(default)
+
 
 
 class DeflatedSharpeEngine:

@@ -87,9 +87,8 @@ class SearchTrialRecord(BaseModel):
         description="Authoritative hypothesis test method deriving p_value (H_0: SR=0 under asymptotic normality).",
     )
     p_value_input_hash: str = Field(
-        default="",
-        pattern=r"^([0-9a-f]{64})?$",
-        description="Canonical SHA-256 hash binding p_value to return series, config, and test method.",
+        pattern=r"^[0-9a-f]{64}$",
+        description="Mandatory 64-hex SHA-256 hash binding p_value to return series, config, and test method.",
     )
     in_sample_return_series_sha256: str = Field(
         pattern=r"^[0-9a-f]{64}$",
@@ -124,7 +123,24 @@ class SearchTrialRecord(BaseModel):
         - It is strictly distinct from the Deflated Sharpe Ratio (DSR) probability, which incorporates higher moments
           and expected maximum Sharpe under multiple testing.
         """
-        arr = np.array([float(x) for x in in_sample_returns], dtype=np.float64)
+        float_vals: List[float] = []
+        for idx, r in enumerate(in_sample_returns):
+            if isinstance(r, Decimal):
+                if not r.is_finite():
+                    raise DataContractError(f"Non-finite Decimal value '{r}' at index {idx} in trial return series.")
+                try:
+                    rf = float(r)
+                    if not math.isfinite(rf):
+                        raise DataContractError(f"Decimal observation '{r}' at index {idx} exceeds float64 boundary.")
+                except (OverflowError, ValueError) as e:
+                    raise DataContractError(f"Decimal observation '{r}' at index {idx} exceeds float64 boundary.") from e
+            else:
+                rf = float(r)
+                if not math.isfinite(rf):
+                    raise DataContractError(f"Non-finite float value '{r}' at index {idx} in trial return series.")
+            float_vals.append(rf)
+
+        arr = np.array(float_vals, dtype=np.float64)
         n = len(arr)
         if n < 2:
             return Decimal("1.0")
@@ -158,8 +174,9 @@ class SearchTrialRecord(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def populate_mandatory_hashes_and_types(cls, data: Any) -> Any:
-        """Ensure cryptographic hashes and deep immutability are strictly populated for all records."""
+        """Ensure cryptographic hashes, derived p-values, and deep immutability are strictly populated for all records."""
         if isinstance(data, dict):
+            trial_id = data.get("trial_id", "unknown")
             if "feature_names" in data and isinstance(data["feature_names"], (list, set, tuple)):
                 data["feature_names"] = tuple(sorted(list(data["feature_names"])))
             if "parameters" in data and data["parameters"] is not None:
@@ -173,23 +190,45 @@ class SearchTrialRecord(BaseModel):
                     from acash.validation.gate import _compute_canonical_series_sha256
                     data["in_sample_return_series_sha256"] = _compute_canonical_series_sha256(data["in_sample_returns"])
                 else:
-                    trial_id = data.get("trial_id", "unknown")
                     raise DataContractError(
                         f"in_sample_return_series_sha256 requires actual in_sample_returns "
                         f"or an explicitly supplied verified artifact hash for trial '{trial_id}'."
                     )
-            if "p_value" not in data and "in_sample_returns" in data and data["in_sample_returns"] is not None:
-                data["p_value"] = cls.compute_canonical_p_value(data["in_sample_returns"])
-            if ("p_value_input_hash" not in data or not data["p_value_input_hash"]) and "p_value" in data:
-                method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1")
-                data["p_value_input_hash"] = cls.compute_p_value_input_hash(
-                    return_series_sha256=data["in_sample_return_series_sha256"],
-                    config_sha256=data["config_sha256"],
-                    p_value=data["p_value"],
-                    p_value_method=method,
-                )
-        return data
 
+            # Strict construction-time evidence derivation and verification:
+            # If in_sample_returns is present, canonical p-value is computed directly.
+            method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1")
+            if "in_sample_returns" in data and data["in_sample_returns"] is not None:
+                derived_p = cls.compute_canonical_p_value(data["in_sample_returns"])
+                if "p_value" in data and data["p_value"] is not None:
+                    p_dec = to_decimal18(Decimal(str(data["p_value"])))
+                    if p_dec is not None and abs(p_dec - derived_p) > Decimal("1e-6"):
+                        raise DataContractError(
+                            f"Trial '{trial_id}' supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) from in_sample_returns."
+                        )
+                data["p_value"] = derived_p
+            elif "p_value" not in data or data["p_value"] is None:
+                raise DataContractError(
+                    f"Must supply either in_sample_returns or an explicit verified p_value for trial '{trial_id}'."
+                )
+
+            # Compute and verify mandatory cryptographic p_value_input_hash:
+            expected_p_hash = cls.compute_p_value_input_hash(
+                return_series_sha256=data["in_sample_return_series_sha256"],
+                config_sha256=data["config_sha256"],
+                p_value=data["p_value"],
+                p_value_method=method,
+            )
+            if "p_value_input_hash" in data and data["p_value_input_hash"] is not None:
+                if data["p_value_input_hash"] != expected_p_hash:
+                    raise DataContractError(
+                        f"Trial '{trial_id}' supplied p_value_input_hash '{data['p_value_input_hash']}' does not match expected '{expected_p_hash}'."
+                    )
+            else:
+                data["p_value_input_hash"] = expected_p_hash
+
+
+        return data
 
     @classmethod
     def create(
@@ -200,15 +239,15 @@ class SearchTrialRecord(BaseModel):
         feature_names: Sequence[str],
         parameters: Mapping[str, Any],
         in_sample_sharpe: Decimal,
-        p_value: Decimal,
         execution_manifest_id: str,
+        p_value: Optional[Decimal] = None,
         in_sample_returns: Optional[Sequence[Union[Decimal, float]]] = None,
         in_sample_return_series_sha256: Optional[str] = None,
         config_sha256: Optional[str] = None,
         p_value_method: str = "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
         p_value_input_hash: Optional[str] = None,
     ) -> "SearchTrialRecord":
-        """Factory helper creating validated SearchTrialRecord with automatic SHA-256 digest derivation."""
+        """Factory helper creating validated SearchTrialRecord with derived canonical p-values and cryptographic hashes."""
         from acash.validation.gate import _compute_canonical_series_sha256
 
         frozen_params = deep_freeze_value(parameters)
@@ -224,12 +263,34 @@ class SearchTrialRecord(BaseModel):
         if config_sha256 is None:
             config_sha256 = cls.compute_config_sha256(sorted_features, frozen_params)
 
-        if p_value_input_hash is None:
-            p_value_input_hash = cls.compute_p_value_input_hash(
-                return_series_sha256=in_sample_return_series_sha256,
-                config_sha256=config_sha256,
-                p_value=p_value,
-                p_value_method=p_value_method,
+        if in_sample_returns is not None:
+            derived_p = cls.compute_canonical_p_value(in_sample_returns)
+            if p_value is not None:
+                p_dec = to_decimal18(p_value) if isinstance(p_value, Decimal) else to_decimal18(Decimal(str(p_value)))
+                if p_dec is not None and abs(p_dec - derived_p) > Decimal("1e-6"):
+                    raise DataContractError(
+                        f"Trial '{trial_id}' create() supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) from in_sample_returns."
+                    )
+                final_p = p_dec if p_dec is not None else derived_p
+            else:
+                final_p = derived_p
+        else:
+            if p_value is None:
+                raise DataContractError(
+                    f"Must provide either in_sample_returns or an explicit p_value for trial '{trial_id}'."
+                )
+            final_p = p_value
+
+        expected_p_hash = cls.compute_p_value_input_hash(
+            return_series_sha256=in_sample_return_series_sha256,
+            config_sha256=config_sha256,
+            p_value=final_p,
+            p_value_method=p_value_method,
+        )
+
+        if p_value_input_hash is not None and p_value_input_hash != expected_p_hash:
+            raise DataContractError(
+                f"Trial '{trial_id}' supplied p_value_input_hash '{p_value_input_hash}' does not match expected '{expected_p_hash}'."
             )
 
         return cls(
@@ -239,13 +300,14 @@ class SearchTrialRecord(BaseModel):
             feature_names=sorted_features,
             parameters=frozen_params,
             in_sample_sharpe=in_sample_sharpe,
-            p_value=p_value,
+            p_value=final_p,
             p_value_method=p_value_method,
-            p_value_input_hash=p_value_input_hash,
+            p_value_input_hash=expected_p_hash,
             in_sample_return_series_sha256=in_sample_return_series_sha256,
             config_sha256=config_sha256,
             execution_manifest_id=execution_manifest_id,
         )
+
 
 
 

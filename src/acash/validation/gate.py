@@ -463,17 +463,18 @@ class StatisticalValidationGate:
                     f"against empirical return series two-sided p-value ({computed_p_m:.6f})."
                 )
 
-            if trial_rec.p_value_input_hash:
-                expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(
-                    return_series_sha256=col_m_hash,
-                    config_sha256=trial_rec.config_sha256,
-                    p_value=trial_rec.p_value,
-                    p_value_method=trial_rec.p_value_method,
+            # 4. Mandatory Cryptographic Lineage Proof for p-value Input Hash (No Conditional Bypass!)
+            expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(
+                return_series_sha256=col_m_hash,
+                config_sha256=trial_rec.config_sha256,
+                p_value=trial_rec.p_value,
+                p_value_method=trial_rec.p_value_method,
+            )
+            if trial_rec.p_value_input_hash != expected_p_hash:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' p_value_input_hash mismatch: stored '{trial_rec.p_value_input_hash}' != computed '{expected_p_hash}'."
                 )
-                if trial_rec.p_value_input_hash != expected_p_hash:
-                    raise DataContractError(
-                        f"Trial '{trial_rec.trial_id}' p_value_input_hash mismatch: stored '{trial_rec.p_value_input_hash}' != computed '{expected_p_hash}'."
-                    )
+
 
             # 5. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
             if trial_rec.execution_manifest_id not in manifest_store:

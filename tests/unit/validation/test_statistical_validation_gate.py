@@ -152,7 +152,6 @@ def _make_valid_trial_ledger(
         mean_m = float(np.mean(col_m))
         std_m = float(np.std(col_m, ddof=1)) if len(col_m) > 1 else 1.0
         sr_m_period = (mean_m / std_m) if std_m > 0 else 0.0
-        p_val_m = p_value if p_value is not None else SearchTrialRecord.compute_canonical_p_value(col_m)
         features = ["mom"]
         params = {"period": 10 + m}
         cfg_hash = SearchTrialRecord.compute_config_sha256(features, params)
@@ -164,10 +163,11 @@ def _make_valid_trial_ledger(
             feature_names=features,
             parameters=params,
             in_sample_sharpe=Decimal(f"{sr_m_period:.6f}"),
-            p_value=p_val_m,
+            p_value=p_value,
             execution_manifest_id=man_id,
             in_sample_returns=list(col_m),
         )
+
 
         trials.append(trial)
         if manifest_store is not None:
@@ -301,7 +301,6 @@ def test_statistical_validation_gate_fail_closed_on_missing_oos() -> None:
         feature_names=["mom"],
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.01"),
         execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
@@ -365,10 +364,10 @@ def test_statistical_validation_gate_fail_closed_on_missing_perturbation_grid() 
         feature_names=["mom"],
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.01"),
         execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
+
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_001",
         strategy_id="STRAT_MOM_001",
@@ -407,14 +406,17 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
     """Verify that SearchTrialLedger strictly rejects duplicate trial IDs."""
     h = "a" * 64
     cfg_h = "b" * 64
+    p_hash_1 = SearchTrialRecord.compute_p_value_input_hash(return_series_sha256=h, config_sha256=cfg_h, p_value=Decimal("0.05"))
+    p_hash_2 = SearchTrialRecord.compute_p_value_input_hash(return_series_sha256=h, config_sha256=cfg_h, p_value=Decimal("0.03"))
     record_1 = SearchTrialRecord(
         trial_id="duplicate_id",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        feature_names=["f1"],
+        feature_names=("f1",),
         parameters={},
         in_sample_sharpe=Decimal("1.0"),
         p_value=Decimal("0.05"),
+        p_value_input_hash=p_hash_1,
         in_sample_return_series_sha256=h,
         config_sha256=cfg_h,
         execution_manifest_id="MAN_01",
@@ -423,10 +425,11 @@ def test_ledger_duplicate_trial_id_rejection() -> None:
         trial_id="duplicate_id",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
-        feature_names=["f2"],
+        feature_names=("f2",),
         parameters={},
         in_sample_sharpe=Decimal("1.2"),
         p_value=Decimal("0.03"),
+        p_value_input_hash=p_hash_2,
         in_sample_return_series_sha256=h,
         config_sha256=cfg_h,
         execution_manifest_id="MAN_02",
@@ -816,7 +819,6 @@ def test_statistical_validation_gate_fail_closed_precedes_sample_size_check() ->
         feature_names=["f"],
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.01"),
         execution_manifest_id="MANIFEST_01",
         in_sample_returns=short_is,
     )
@@ -924,7 +926,6 @@ def test_statistical_validation_gate_fail_closed_on_missing_cpcv_evidence() -> N
         feature_names=["f"],
         parameters={},
         in_sample_sharpe=Decimal("1.5"),
-        p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_01",
         in_sample_returns=is_returns,
     )
@@ -1002,8 +1003,9 @@ def test_statistical_validation_gate_multiple_testing_fwer_gating() -> None:
 def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
     """Verify that Haircut Sharpe falling below min_haircut_sharpe threshold triggers REJECT_HAIRCUT_SHARPE."""
     # Configure high minimum haircut Sharpe requirement
-    cfg = ValidationConfig(min_haircut_sharpe=Decimal("2.50"))
+    cfg = ValidationConfig(min_haircut_sharpe=Decimal("15.00"))
     gate = StatisticalValidationGate(config=cfg)
+
 
     np.random.seed(42)
     is_returns = list(np.random.normal(0.0015, 0.0040, 500))
@@ -1021,7 +1023,6 @@ def test_statistical_validation_gate_haircut_sharpe_gating() -> None:
         strategy_id="STRAT_HC",
         hypothesis_id="HYP_01",
         ledger_id="L_HC",
-        p_value=Decimal("0.001"),
         manifest_store=manifest_store,
     )
 
@@ -1060,12 +1061,12 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
             feature_names=["f"],
             parameters={"p": i},
             in_sample_sharpe=Decimal("1.5"),
-            p_value=Decimal("0.001"),
             execution_manifest_id=f"MAN_{i}",
             in_sample_returns=is_returns,
         )
         for i in range(3)
     ]
+
     for t in trials:
         manifest_store[t.execution_manifest_id] = _make_mock_manifest(
             manifest_id=t.execution_manifest_id,
@@ -1289,13 +1290,13 @@ def test_statistical_validation_gate_binds_hypothesis_specification_horizon() ->
 
 
 def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -> None:
-    """Verify that Gate strictly checks cryptographic return series SHA-256 for all ledger trials."""
+    """Verify that Gate strictly checks trial in_sample_return_series_sha256 against actual return matrix columns."""
     gate = StatisticalValidationGate()
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
     np.random.seed(42)
     is_returns = list(np.random.normal(0.0020, 0.0040, 1000))
     oos_returns = list(np.random.normal(0.0015, 0.0040, 500))
-    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
 
     trial_matrix = np.zeros((1000, 2), dtype=np.float64)
     trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
@@ -1328,7 +1329,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
     # 2. Rejection when a trial's return series hash is tampered/mismatched
     trials_tampered = [
         ledger_valid.trials[0],
-        SearchTrialRecord(
+        SearchTrialRecord.create(
             trial_id="trial_1",
             strategy_id="STRAT_SHA",
             hypothesis_id="HYP_01",
@@ -1348,7 +1349,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
         trials=tuple(trials_tampered),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
-    with pytest.raises(DataContractError, match="in_sample_return_series_sha256 .* does not match"):
+    with pytest.raises(DataContractError, match="does not match actual matrix column"):
         gate.evaluate_strategy(
             strategy_id="STRAT_SHA",
             hypothesis_id="HYP_01",
@@ -1474,7 +1475,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
 
     trials_tampered = [
         ledger_valid.trials[0],
-        SearchTrialRecord(
+        SearchTrialRecord.create(
             trial_id="trial_1",
             strategy_id="STRAT_01",
             hypothesis_id="HYP_01",
@@ -1486,6 +1487,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
             config_sha256="deadbeef" * 8,  # Tampered config hash
             execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,
         ),
+
     ]
     ledger_tampered = SearchTrialLedger(
         ledger_id="L_CFG_TAMPERED",
@@ -1493,6 +1495,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
         hypothesis_id="HYP_01",
         trials=tuple(trials_tampered),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
+
 
     with pytest.raises(DataContractError, match="registered config_sha256 .* does not match"):
         gate.evaluate_strategy(
@@ -1510,7 +1513,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
 
 
 def test_statistical_validation_gate_rejects_missing_candidate_execution_manifest() -> None:
-    """Verify that Gate strictly rejects when trial execution_manifest_id is not in manifest_store."""
+    """Verify that Gate strictly rejects when a candidate trial's execution manifest is missing from manifest_store."""
     gate = StatisticalValidationGate()
 
     np.random.seed(42)
@@ -1533,7 +1536,6 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             feature_names=["mom"],
             parameters={"period": 10},
             in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
-            p_value=Decimal("0.001"),
             execution_manifest_id="MANIFEST_NON_EXISTENT",
             in_sample_returns=list(trial_matrix[:, 0]),
         ),
@@ -1544,11 +1546,11 @@ def test_statistical_validation_gate_rejects_missing_candidate_execution_manifes
             feature_names=["mom"],
             parameters={"period": 11},
             in_sample_sharpe=Decimal(f"{sr_1:.6f}"),
-            p_value=Decimal("0.001"),
             execution_manifest_id="MANIFEST_TRIAL_1",
             in_sample_returns=list(trial_matrix[:, 1]),
         ),
     ]
+
     ledger = SearchTrialLedger(
         ledger_id="L_MAN",
         strategy_id="STRAT_01",
@@ -1602,6 +1604,7 @@ def test_search_trial_record_rejects_missing_returns_and_hash() -> None:
             execution_manifest_id="MANIFEST_01",
             in_sample_returns=None,
             in_sample_return_series_sha256=None,
+
         )
 
 
@@ -1610,7 +1613,7 @@ def test_search_trial_ledger_sealing_lifecycle() -> None:
     """Verify SearchTrialLedger OPEN -> SEAL -> SEALED lifecycle and tamper detection."""
     h = "a" * 64
     cfg_h = "b" * 64
-    record = SearchTrialRecord(
+    record = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
@@ -1622,6 +1625,7 @@ def test_search_trial_ledger_sealing_lifecycle() -> None:
         config_sha256=cfg_h,
         execution_manifest_id="MAN_01",
     )
+
 
     # 1. Unsealed initial state
     ledger_open = SearchTrialLedger(
@@ -1676,7 +1680,6 @@ def test_statistical_validation_gate_rejects_manifest_mismatch() -> None:
         feature_names=["mom"],
         parameters={"period": 10},
         in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
-        p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_MISMATCH_HYP",
         in_sample_returns=list(trial_matrix[:, 0]),
     )
@@ -1729,10 +1732,11 @@ def test_sha256_strict_lowercase_64hex_pattern_rejections() -> None:
                 trial_id="t1",
                 strategy_id="S1",
                 hypothesis_id="H1",
-                feature_names=["f"],
+                feature_names=("f",),
                 parameters={},
                 in_sample_sharpe=Decimal("1.0"),
                 p_value=Decimal("0.05"),
+                p_value_input_hash=valid_hex,
                 in_sample_return_series_sha256=bad_hash,
                 config_sha256=valid_hex,
                 execution_manifest_id="MAN_01",
@@ -1744,14 +1748,17 @@ def test_sha256_strict_lowercase_64hex_pattern_rejections() -> None:
                 trial_id="t1",
                 strategy_id="S1",
                 hypothesis_id="H1",
-                feature_names=["f"],
+                feature_names=("f",),
                 parameters={},
                 in_sample_sharpe=Decimal("1.0"),
                 p_value=Decimal("0.05"),
+                p_value_input_hash=valid_hex,
                 in_sample_return_series_sha256=valid_hex,
                 config_sha256=bad_hash,
                 execution_manifest_id="MAN_01",
             )
+
+
 
         # 3. ParameterPerturbationPoint output_artifact_hash
         with pytest.raises((ValidationError, DataContractError)):
@@ -1788,7 +1795,6 @@ def test_statistical_validation_gate_rejects_fake_duck_typed_manifest() -> None:
         feature_names=["mom"],
         parameters={"period": 10},
         in_sample_sharpe=Decimal(f"{sr_0:.6f}"),
-        p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_TRIAL_DUCK",
         in_sample_returns=list(trial_matrix[:, 0]),
     )
@@ -1820,17 +1826,17 @@ def test_statistical_validation_gate_rejects_fake_duck_typed_manifest() -> None:
 def test_search_trial_ledger_rejects_sealed_without_digest() -> None:
     """Verify that SearchTrialLedger strictly rejects is_sealed=True when ledger_digest is None."""
     valid_hex = "a" * 64
-    record = SearchTrialRecord(
+    record = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="S1",
         hypothesis_id="H1",
         feature_names=["f"],
         parameters={},
         in_sample_sharpe=Decimal("1.0"),
-        p_value=Decimal("0.05"),
         in_sample_return_series_sha256=valid_hex,
         config_sha256=valid_hex,
         execution_manifest_id="MAN_01",
+        in_sample_returns=[0.01, 0.02, 0.03, 0.04],
     )
 
     with pytest.raises(DataContractError, match="marked is_sealed=True but ledger_digest is None"):
@@ -1847,7 +1853,7 @@ def test_search_trial_ledger_rejects_sealed_without_digest() -> None:
 def test_search_trial_ledger_tuple_deep_immutability() -> None:
     """Verify that SearchTrialLedger.trials is an immutable Tuple preventing in-place mutations."""
     valid_hex = "a" * 64
-    record = SearchTrialRecord(
+    record = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="S1",
         hypothesis_id="H1",
@@ -1859,6 +1865,7 @@ def test_search_trial_ledger_tuple_deep_immutability() -> None:
         config_sha256=valid_hex,
         execution_manifest_id="MAN_01",
     )
+
 
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_IMMUTABLE",
@@ -1919,7 +1926,7 @@ def test_statistical_inputs_reject_nan_and_inf() -> None:
     # 5. Gate rejects non-finite trial_return_matrix
     mat_nan = np.array([[0.01], [np.nan], [0.03], [0.04]])
     h = "a" * 64
-    trial = SearchTrialRecord(
+    trial = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
@@ -1956,7 +1963,7 @@ def test_statistical_inputs_reject_nan_and_inf() -> None:
 def test_sharpe_space_closed_enum_rejection() -> None:
     """Verify that SearchTrialLedger strictly rejects arbitrary string values for sharpe_space."""
     h = "a" * 64
-    record = SearchTrialRecord(
+    record = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="S1",
         hypothesis_id="H1",
@@ -2011,7 +2018,7 @@ def test_sharpe_space_closed_enum_rejection() -> None:
 def test_search_trial_record_feature_names_tuple_immutability() -> None:
     """Verify that SearchTrialRecord feature_names is stored as an immutable tuple."""
     h = "a" * 64
-    record = SearchTrialRecord(
+    record = SearchTrialRecord.create(
         trial_id="t1",
         strategy_id="S1",
         hypothesis_id="H1",
@@ -2023,6 +2030,7 @@ def test_search_trial_record_feature_names_tuple_immutability() -> None:
         config_sha256=h,
         execution_manifest_id="MAN_01",
     )
+
     assert isinstance(record.feature_names, tuple)
     assert record.feature_names == ("alpha", "mom", "vol")  # Sorted canonical order
 
@@ -2050,9 +2058,10 @@ def test_statistical_validation_gate_rejects_divergent_ledger_sharpe() -> None:
         feature_names=["mom"],
         parameters={"period": 10},
         in_sample_sharpe=Decimal("5.000000"),  # Fabricated divergent Sharpe!
-        p_value=Decimal("0.001"),
         execution_manifest_id="MANIFEST_TRIAL_DIVERGE",
-        in_sample_returns=list(trial_matrix[:, 0]),
+        in_sample_return_series_sha256=_compute_canonical_series_sha256(list(trial_matrix[:, 0])),
+        config_sha256=SearchTrialRecord.compute_config_sha256(["mom"], {"period": 10}),
+        p_value=SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 0]),
     )
     ledger = SearchTrialLedger(
         ledger_id="L_DIVERGE",
@@ -2147,6 +2156,7 @@ def test_canonical_config_serializer_type_preservation_and_differentiation() -> 
         CanonicalConfigSerializer.to_canonical_json({"data": bytearray(b"ABC")})
 
     # 9. Enum type differentiation: Enum != str, EnumA != EnumB, and module_a.Side != module_b.Side
+
     from enum import Enum as PyEnum
 
     class SideEnumA(PyEnum):
@@ -2262,10 +2272,10 @@ def test_search_trial_record_deep_immutable_parameters() -> None:
         feature_names=["f1"],
         parameters=raw_params,
         in_sample_sharpe=Decimal("1.2"),
-        p_value=Decimal("0.02"),
         execution_manifest_id="MAN_01",
         in_sample_returns=[0.01, 0.02, 0.03, 0.04],
     )
+
 
     # 1. Top-level parameter mutation raises TypeError
     with pytest.raises(TypeError):
@@ -2472,7 +2482,8 @@ def test_statistical_validation_gate_rejects_divergent_ledger_p_value() -> None:
             in_sample_sharpe=Decimal(f"{sr0:.6f}"),
             p_value=Decimal("0.500000"),  # Fabricated p-value!
             execution_manifest_id="MAN_0",
-            in_sample_returns=is_returns,
+            in_sample_return_series_sha256=_compute_canonical_series_sha256(is_returns),
+            config_sha256=SearchTrialRecord.compute_config_sha256(["f"], {"p": 0}),
         ),
         SearchTrialRecord.create(
             trial_id="t_1",
@@ -2537,22 +2548,21 @@ def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> No
     p0 = SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 0])
     p1 = SearchTrialRecord.compute_canonical_p_value(trial_matrix[:, 1])
 
-    trials = [
-        SearchTrialRecord(
-            trial_id="t_0",
-            strategy_id="STRAT_01",
-            hypothesis_id="HYP_01",
-            feature_names=("f",),
-            parameters={},
-            in_sample_sharpe=Decimal(f"{sr0:.6f}"),
-            p_value=p0,
-            p_value_method="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
-            p_value_input_hash="deadbeef" * 8,  # Tampered hash!
+    t_0_valid = SearchTrialRecord.create(
+        trial_id="t_0",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f"],
+        parameters={},
+        in_sample_sharpe=Decimal(f"{sr0:.6f}"),
+        p_value=p0,
+        execution_manifest_id="MAN_0",
+        in_sample_returns=is_returns,
+    )
+    t_0_tampered = t_0_valid.model_copy(update={"p_value_input_hash": "deadbeef" * 8})
 
-            in_sample_return_series_sha256=_compute_canonical_series_sha256(is_returns),
-            config_sha256=SearchTrialRecord.compute_config_sha256(("f",), {}),
-            execution_manifest_id="MAN_0",
-        ),
+    trials = [
+        t_0_tampered,
         SearchTrialRecord.create(
             trial_id="t_1",
             strategy_id="STRAT_01",
@@ -2580,6 +2590,7 @@ def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> No
         trials=tuple(trials),
     ).seal(sealed_at_utc="2026-08-28T00:00:00Z")
 
+
     with pytest.raises(DataContractError, match="p_value_input_hash mismatch"):
         gate.evaluate_strategy(
             strategy_id="STRAT_01",
@@ -2593,6 +2604,62 @@ def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> No
             trial_return_matrix=trial_matrix,
             perturbation_grid=grid,
         )
+
+
+def test_search_trial_record_rejects_empty_or_invalid_p_value_input_hash() -> None:
+    """Verify that SearchTrialRecord strictly rejects empty string or malformed p_value_input_hash."""
+    from pydantic import ValidationError
+
+    # 1. Empty string rejected by regex ^[0-9a-f]{64}$
+    with pytest.raises((ValidationError, DataContractError)):
+        SearchTrialRecord(
+            trial_id="t_0",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=("f1",),
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal("1.5"),
+            p_value=Decimal("0.05"),
+            p_value_input_hash="",  # Empty string rejected!
+            in_sample_return_series_sha256="a" * 64,
+            config_sha256="b" * 64,
+            execution_manifest_id="m_0",
+        )
+
+
+def test_search_trial_record_rejects_contradictory_caller_p_value() -> None:
+    """Verify that SearchTrialRecord factory and validator reject caller-supplied p_value contradicting returns."""
+    returns = [0.05, 0.06, 0.04, 0.05, 0.07] * 20  # Highly positive returns -> small p-value
+
+    # Caller tries to pass an arbitrary/fake contradictory p-value of 0.95
+    with pytest.raises(DataContractError, match="contradicts canonical derived p_value"):
+        SearchTrialRecord.create(
+            trial_id="t_0",
+            strategy_id="STRAT_01",
+            hypothesis_id="HYP_01",
+            feature_names=["f1"],
+            parameters={"p": 1},
+            in_sample_sharpe=Decimal("2.0"),
+            execution_manifest_id="m_0",
+            p_value=Decimal("0.95"),  # Contradictory!
+            in_sample_returns=returns,
+        )
+
+
+def test_compute_canonical_p_value_rejects_non_finite_inputs() -> None:
+    """Verify that compute_canonical_p_value raises DataContractError on non-finite observations."""
+    # 1. Float NaN
+    with pytest.raises(DataContractError, match="Non-finite float value"):
+        SearchTrialRecord.compute_canonical_p_value([0.01, float("nan"), 0.02])
+
+    # 2. Float Inf
+    with pytest.raises(DataContractError, match="Non-finite float value"):
+        SearchTrialRecord.compute_canonical_p_value([0.01, float("inf"), 0.02])
+
+    # 3. Decimal NaN / Infinity
+    with pytest.raises(DataContractError, match="Non-finite Decimal value"):
+        SearchTrialRecord.compute_canonical_p_value([Decimal("0.01"), Decimal("NaN"), Decimal("0.02")])
+
 
 
 

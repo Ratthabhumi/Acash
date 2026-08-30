@@ -16,10 +16,11 @@ from acash.data.features.engine import to_decimal18
 from acash.validation.schema import FrictionStressParameters, OverfittingReport, ParameterPerturbationGrid
 
 
-def _to_dec(val: Union[float, Decimal, str], default: str = "0.0") -> Decimal:
+def _to_dec(val: Union[int, float, Decimal, str], default: str = "0.0") -> Decimal:
     """Safe, explicit Decimal conversion that avoids ambiguous 'or Decimal(...)' fallback idiom."""
     dec_val = to_decimal18(Decimal(f"{val:.12f}") if isinstance(val, (float, int)) else Decimal(str(val)))
     return dec_val if dec_val is not None else Decimal(default)
+
 
 
 class OverfittingEngine:

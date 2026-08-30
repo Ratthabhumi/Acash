@@ -47,7 +47,6 @@ def test_dsr_single_trial_mode() -> None:
         feature_names=["f1"],
         parameters={},
         in_sample_sharpe=Decimal("1.2"),
-        p_value=Decimal("0.01"),
         execution_manifest_id="MANIFEST_01",
         in_sample_returns=returns,
     )
@@ -81,7 +80,6 @@ def test_dsr_evaluation_with_search_trial_ledger_significance() -> None:
             feature_names=["f1"],
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
-            p_value=Decimal("0.01"),
             execution_manifest_id=f"MANIFEST_{i}",
             in_sample_returns=strong_returns,
         )
@@ -119,7 +117,6 @@ def test_dsr_rejection_when_sharpe_below_sr0() -> None:
             feature_names=["f1"],
             parameters={"lookback": 10 + i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.1:.4f}"),
-            p_value=Decimal("0.01"),
             execution_manifest_id=f"MANIFEST_{i}",
             in_sample_returns=weak_returns,
         )
@@ -166,7 +163,6 @@ def test_dsr_variance_monotonicity_and_identical_trials() -> None:
             feature_names=["f1"],
             parameters={"p": i},
             in_sample_sharpe=Decimal("1.500000000000000000"),
-            p_value=Decimal("0.001"),
             execution_manifest_id=f"MANIFEST_IDENTICAL_{i}",
             in_sample_returns=dummy_returns,
         )
@@ -199,12 +195,12 @@ def test_dsr_location_provenance_zero_location_vs_empirical_mean() -> None:
             feature_names=["f1"],
             parameters={"p": i},
             in_sample_sharpe=Decimal(f"{1.0 + i * 0.2:.6f}"),
-            p_value=Decimal("0.001"),
             execution_manifest_id=f"MANIFEST_{i}",
             in_sample_returns=dummy_returns,
         )
         for i in range(10)
     ]
+
     ledger = SearchTrialLedger(
         ledger_id="LEDGER_01",
         strategy_id="STRAT_01",
