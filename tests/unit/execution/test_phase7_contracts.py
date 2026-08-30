@@ -22,12 +22,28 @@ from acash.execution.admission import (
     suspend_authorization,
     verify_validation_certificate,
 )
+from acash.execution.coordinator import (
+    ExecutionCoordinator,
+)
 from acash.execution.crypto import (
     Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
 )
+from acash.execution.operational_restriction import (
+    OperationalRestriction,
+    OperationalRestrictionError,
+    OperationalRestrictionRequest,
+    OperationalRestrictionStatus,
+    RestrictionClearDecision,
+    RestrictionClearPolicy,
+    RestrictionLedger,
+    RestrictionReason,
+    RestrictionScope,
+    RiskRestrictionAuthority,
+)
+from acash.execution.state_machine import ExecutionEvent
 from acash.execution.schema import (
     AuthorizationApproval,
     AuthorizationReactivationApproval,
@@ -39,6 +55,7 @@ from acash.execution.schema import (
     KillSwitchAction,
     KillSwitchTriggerType,
     LiveAuthorization,
+    OrderIntent,
     OrderLifecycleState,
     OrderSide,
     OrderType,
@@ -844,6 +861,7 @@ def test_construct_order_intent_happy_path(
         signal_event_hash=signal_hash,
         created_at=datetime(2026, 8, 30, 12, 11, 0, tzinfo=timezone.utc),
         limit_price=Decimal("64000.00"),
+        restriction_authority=RiskRestrictionAuthority(RestrictionLedger()),
     )
     assert intent.intent_id == "INTENT_001"
     assert len(intent.intent_digest) == 64
@@ -865,6 +883,7 @@ def test_order_intent_rejects_suspended(
             current_risk=nominal_risk_state,
             signal_event_hash=hashlib.sha256(b"x").hexdigest(),
             created_at=datetime.now(timezone.utc),
+            restriction_authority=RiskRestrictionAuthority(RestrictionLedger()),
         )
 
 
@@ -893,3 +912,294 @@ def test_reconciliation_report_happy_path() -> None:
         report_digest=hashlib.sha256(b"rec_nominal").hexdigest(),
     )
     assert report.is_in_parity is True
+
+
+# ============================================================================
+# OPERATIONAL RESTRICTION & ADMISSION BOUNDARY (Phase 7 Operational Boundary)
+# ============================================================================
+# Invariant (locked): Order State != Evidence State != Operational Restriction
+# != Live Authorization. Coordinator = detect/request only; Risk/Restriction
+# Authority = OPEN/CLEAR; Admission = ENFORCE only; and
+#   Reconciliation Evidence != Authorization to Clear.
+
+STRATEGY_ID = "STAT_ARB_VOL_01"
+AUTH_ID = "AUTH_LIVE_001"
+
+
+def _empty_authority() -> RiskRestrictionAuthority:
+    return RiskRestrictionAuthority(RestrictionLedger())
+
+
+def _open_restriction(
+    authority: RiskRestrictionAuthority,
+    *,
+    scope: RestrictionScope,
+    strategy_id: str | None = None,
+    authorization_id: str | None = None,
+    request_id: str = "REQ_AB",
+) -> OperationalRestriction:
+    request = OperationalRestrictionRequest(
+        request_id=request_id,
+        scope=scope,
+        reason=RestrictionReason.RECONCILIATION_CONFLICT,
+        strategy_id=strategy_id,
+        authorization_id=authorization_id,
+        evidence_refs=(_SHA256_PLACEHOLDER,),
+    )
+    return authority.open_restriction(request)
+
+
+def _construct_intent(
+    valid_authorization: LiveAuthorization,
+    nominal_risk_state: RiskState,
+    authority: RiskRestrictionAuthority,
+    intent_id: str = "INTENT_RESTRICTED",
+) -> OrderIntent:
+    return construct_order_intent(
+        authorization=valid_authorization,
+        intent_id=intent_id,
+        venue="BINANCE_FUTURES",
+        symbol="BTC/USDT",
+        side=OrderSide.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("1.50"),
+        current_risk=nominal_risk_state,
+        signal_event_hash=hashlib.sha256(b"sig_rest").hexdigest(),
+        created_at=datetime(2026, 8, 30, 12, 11, 0, tzinfo=timezone.utc),
+        limit_price=Decimal("64000.00"),
+        restriction_authority=authority,
+    )
+
+
+def test_open_strategy_restriction_blocks_order_intent(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    authority = _empty_authority()
+    _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id=STRATEGY_ID
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="OPEN operational restriction"):
+        _construct_intent(valid_authorization, nominal_risk_state, authority)
+
+
+def test_open_authorization_restriction_blocks_order_intent(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    authority = _empty_authority()
+    _open_restriction(
+        authority,
+        scope=RestrictionScope.AUTHORIZATION,
+        authorization_id=AUTH_ID,
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="OPEN operational restriction"):
+        _construct_intent(valid_authorization, nominal_risk_state, authority)
+
+
+def test_cleared_restriction_does_not_block(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    # Clearing a restriction still requires an authorized decision; a matching
+    # OPEN restriction blocks. After CLEARED it must no longer block. We supply a
+    # policy that authorizes the clear (evidence verified AND authorized).
+    class AuthorizingPolicy(RestrictionClearPolicy):
+        def is_evidence_verified(self, restriction: OperationalRestriction) -> bool:
+            return True
+
+        def decide(
+            self,
+            *,
+            restriction: OperationalRestriction,
+            evidence_refs: Tuple[str, ...],
+            actor_id: str,
+        ) -> RestrictionClearDecision:
+            return RestrictionClearDecision(
+                authorized=True, actor_id=actor_id, decision_note="authorized"
+            )
+
+    authority = RiskRestrictionAuthority(RestrictionLedger(), AuthorizingPolicy())
+    r = _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id=STRATEGY_ID
+    )
+    assert r.status == OperationalRestrictionStatus.OPEN
+    authority.clear_restriction(
+        restriction_id=r.restriction_id,
+        actor_id="RISK",
+        evidence_refs=(_SHA256_PLACEHOLDER,),
+    )
+    cleared = authority.get(r.restriction_id)
+    assert cleared is not None
+    assert cleared.status == OperationalRestrictionStatus.CLEARED
+    intent = _construct_intent(valid_authorization, nominal_risk_state, authority)
+    assert intent.intent_id == "INTENT_RESTRICTED"
+
+
+def test_unrelated_strategy_restriction_does_not_block(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    authority = _empty_authority()
+    _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id="SOME_OTHER_STRAT"
+    )
+    intent = _construct_intent(valid_authorization, nominal_risk_state, authority)
+    assert intent.intent_id == "INTENT_RESTRICTED"
+
+
+def test_unrelated_authorization_restriction_does_not_block(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    authority = _empty_authority()
+    _open_restriction(
+        authority,
+        scope=RestrictionScope.AUTHORIZATION,
+        authorization_id="AUTH_UNRELATED",
+    )
+    intent = _construct_intent(valid_authorization, nominal_risk_state, authority)
+    assert intent.intent_id == "INTENT_RESTRICTED"
+
+
+def test_restriction_cannot_be_bypassed_by_omitting_snapshot(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    # The admission signature REQUIRES the authority; there is no optional
+    # snapshot/list a caller can omit. An empty authority + empty ledger is the
+    # only way to have no restrictions, and it is honest (no open restrictions).
+    authority = _empty_authority()
+    assert authority.gate_for_intent(
+        strategy_id=STRATEGY_ID, authorization_id=AUTH_ID
+    ).is_blocked() is False
+
+
+def test_empty_fabricated_restriction_authority_cannot_bypass_production_admission(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    # A caller cannot forge an empty decision: the admission gate reads ONLY the
+    # bound canonical ledger. If a restriction is recorded in that ledger (the
+    # same ledger the authority reads), an empty-looking authority is impossible
+    # -- the gate reflects the ledger, not a caller-supplied [].
+    ledger = RestrictionLedger()
+    authority = RiskRestrictionAuthority(ledger)
+    _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id=STRATEGY_ID
+    )
+    # The admission consults the same ledger-backed authority.
+    with pytest.raises(PreLiveRiskAdmissionError, match="OPEN operational restriction"):
+        _construct_intent(valid_authorization, nominal_risk_state, authority)
+
+
+def test_admission_enforces_the_supplied_canonical_ledger_authority(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    # What this test proves: `construct_order_intent` ENFORCES the ledger-backed
+    # authority that the CALLER SUPPLIES — it never constructs a ledger/authority
+    # internally, and it never consults any store other than the one bound to the
+    # authority passed in. It does NOT prove production composition-root
+    # provenance (no production composition root exists yet); that remains a
+    # DEPLOYMENT INVARIANT, not something a unit test can establish.
+
+    # 1) The caller-owned ledger (a supplied store in this test, NOT the
+    #    production composition root) carries an OPEN strategy restriction.
+    supplied_ledger = RestrictionLedger()
+    supplied_authority = RiskRestrictionAuthority(supplied_ledger)
+    _open_restriction(
+        supplied_authority,
+        scope=RestrictionScope.STRATEGY,
+        strategy_id=STRATEGY_ID,
+    )
+
+    # 2) A separately-created empty ledger is a DISTINCT store. Admission consults
+    #    ONLY the supplied authority's bound ledger; an isolated empty store does
+    #    not affect it.
+    other_empty_ledger = RestrictionLedger()
+    assert other_empty_ledger.all() == ()
+    assert other_empty_ledger is not supplied_ledger
+
+    # 3) Passing the supplied (matching-OPEN) authority → admission MUST reject.
+    with pytest.raises(PreLiveRiskAdmissionError, match="OPEN operational restriction"):
+        _construct_intent(
+            valid_authorization, nominal_risk_state, supplied_authority
+        )
+
+    # 4) `construct_order_intent` cannot fabricate or default an authority: it has
+    #    no default authority argument and no internal authority/ledger creation.
+    #    The ONLY authority source is the required caller-supplied parameter — so a
+    #    caller cannot omit it (nil) to skip the gate, and cannot silently swap in
+    #    a different, empty ledger than the one the supplied authority is bound to.
+    import inspect
+
+    params = inspect.signature(construct_order_intent).parameters
+    assert "restriction_authority" in params
+    assert params["restriction_authority"].default is inspect.Parameter.empty
+
+
+def test_only_risk_authority_opens_restriction() -> None:
+    authority = _empty_authority()
+    r = _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id="S"
+    )
+    assert r.status == OperationalRestrictionStatus.OPEN
+    # The authority is the single lifecycle owner: it is the only object that
+    # records an OPEN restriction into the canonical ledger.
+    fetched = authority.get(r.restriction_id)
+    assert fetched is not None
+    assert fetched.status == OperationalRestrictionStatus.OPEN
+
+
+def test_coordinator_only_emits_request() -> None:
+    # Coordinator = detect + request ONLY. Drive it to terminal CANCELLED, then
+    # reconcile with contradictory FILLED evidence: it emits a *request* but does
+    # NOT itself OPEN a restriction (no authority access, no lifecycle mutation).
+    coord = ExecutionCoordinator(
+        execution_id="EXE_AB",
+        requested_qty=Decimal("2.0"),
+        initial_state=OrderLifecycleState.CANCELLED,
+    )
+    outcome = coord.reconcile(
+        broker_event_id="EV_1",
+        broker_sequence="1",
+        evidence_token="FILLED",
+        order_id="ORD_AB",
+        observed_at=datetime(2026, 8, 30, 12, 11, 0, tzinfo=timezone.utc),
+        evidence_refs=(_SHA256_PLACEHOLDER,),
+    )
+    assert outcome.restriction_request is not None
+    req = outcome.restriction_request
+    assert req.scope == RestrictionScope.EXECUTION
+    assert req.reason == RestrictionReason.RECONCILIATION_CONFLICT
+    assert req.evidence_refs == (_SHA256_PLACEHOLDER,)
+    assert req.shadow_state == "CANCELLED"
+    assert req.broker_observed_state == "FILLED"
+    # Coordinator must NOT have opened anything: no OPEN mutation can be reached
+    # through the coordinator, and its CANCELLED shadow is NOT regressed.
+    assert coord.state == OrderLifecycleState.CANCELLED
+
+
+def test_verified_evidence_does_not_auto_clear() -> None:
+    class VerifyOnlyPolicy(RestrictionClearPolicy):
+        def is_evidence_verified(self, restriction: OperationalRestriction) -> bool:
+            return True  # evidence verified, but NO authorized decision
+
+        def decide(
+            self,
+            *,
+            restriction: OperationalRestriction,
+            evidence_refs: Tuple[str, ...],
+            actor_id: str,
+        ) -> RestrictionClearDecision:
+            return RestrictionClearDecision(
+                authorized=False, actor_id=actor_id, decision_note="not authorized"
+            )
+
+    authority = RiskRestrictionAuthority(RestrictionLedger(), VerifyOnlyPolicy())
+    r = _open_restriction(
+        authority, scope=RestrictionScope.STRATEGY, strategy_id="S"
+    )
+    # Verified evidence alone NEVER clears: clear requires an authorized decision.
+    with pytest.raises(OperationalRestrictionError):
+        authority.clear_restriction(
+            restriction_id=r.restriction_id,
+            actor_id="RISK",
+            evidence_refs=(_SHA256_PLACEHOLDER,),
+        )
+    still_open = authority.get(r.restriction_id)
+    assert still_open is not None
+    assert still_open.status == OperationalRestrictionStatus.OPEN

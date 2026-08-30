@@ -15,6 +15,7 @@ from typing import Optional, Sequence, Tuple
 from acash.core.domain.exceptions import DomainValidationError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.execution.crypto import Ed25519TrustStore
+from acash.execution.operational_restriction import RiskRestrictionAuthority
 from acash.execution.schema import (
     AuthorizationApproval,
     AuthorizationReactivationApproval,
@@ -632,15 +633,34 @@ def construct_order_intent(
     current_risk: RiskState,
     signal_event_hash: str,
     created_at: datetime,
+    restriction_authority: RiskRestrictionAuthority,
     limit_price: Optional[Decimal] = None,
     stop_price: Optional[Decimal] = None,
     time_in_force: TimeInForce = TimeInForce.GTC,
 ) -> OrderIntent:
-    """Validate operational limits and emit an immutable OrderIntent."""
+    """Validate operational limits and emit an immutable OrderIntent.
+
+    ``restriction_authority`` is REQUIRED. The admission gate PULLS the
+    authoritative OPEN-restriction snapshot from it for this intent's scope
+    (strategy + authorization) and ENFORCES it. This is deliberately
+    non-optional: a caller cannot "forget" to supply restrictions and thereby
+    bypass the restriction boundary (no fail-open). Admission only ENFORCES; it
+    never opens/clears a restriction or mutates restriction lifecycle.
+    """
     if authorization.status != AuthorizationStatus.ACTIVE:
         raise PreLiveRiskAdmissionError(
             f"Cannot create OrderIntent: LiveAuthorization {authorization.authorization_id} "
             f"is {authorization.status}, must be ACTIVE."
+        )
+
+    gate = restriction_authority.gate_for_intent(
+        strategy_id=authorization.strategy_id,
+        authorization_id=authorization.authorization_id,
+    )
+    block_reason = gate.block_reason()
+    if block_reason is not None:
+        raise PreLiveRiskAdmissionError(
+            f"Cannot create OrderIntent: {block_reason}"
         )
 
     now_tz = _ensure_utc(created_at)

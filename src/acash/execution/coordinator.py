@@ -37,10 +37,16 @@ The coordinator contains no I/O and no clock; it is a pure orchestration seam.
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
+from acash.execution.operational_restriction import (
+    OperationalRestrictionRequest,
+    RestrictionReason,
+    RestrictionScope,
+)
 from acash.execution.schema import OrderLifecycleState
 from acash.execution.state_machine import (
     ExecutionEvent,
@@ -62,14 +68,25 @@ class CoordinatorIncidentKind(str, Enum):
 
 @dataclass(frozen=True)
 class CoordinatorIncident:
-    """Immutable forensic record of a detected operational anomaly."""
+    """Immutable forensic record of a detected operational anomaly.
+
+    Structured lineage fields (contract: no free-form boolean/string as
+    authority): order_id, shadow_state, broker_observed_state, evidence_refs,
+    observed_at. ``observed_at`` MUST be supplied by the caller/evidence (the
+    coordinator has no clock).
+    """
 
     incident_id: str
     kind: CoordinatorIncidentKind
     execution_id: str
     broker_event_id: Optional[str]
     broker_sequence: Optional[str]
-    detail: str
+    order_id: Optional[str] = None
+    shadow_state: Optional[str] = None
+    broker_observed_state: Optional[str] = None
+    evidence_refs: Tuple[str, ...] = ()
+    observed_at: Optional[datetime] = None
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,6 +103,9 @@ class CoordinatorEvent:
     canonical_event: ExecutionEvent
     evidence: Optional[str] = None
     fill_qty: Optional[Decimal] = None
+    order_id: Optional[str] = None
+    observed_at: Optional[datetime] = None
+    evidence_refs: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,6 +118,7 @@ class CoordinatorOutcome:
     rejected: bool
     transition: Optional[ExecutionTransition]
     incidents: Tuple[CoordinatorIncident, ...] = ()
+    restriction_request: Optional[OperationalRestrictionRequest] = None
 
 
 class ExecutionCoordinator:
@@ -218,6 +239,9 @@ class ExecutionCoordinator:
         broker_event_id: str,
         broker_sequence: str,
         evidence_token: str,
+        order_id: Optional[str] = None,
+        observed_at: Optional[datetime] = None,
+        evidence_refs: Tuple[str, ...] = (),
     ) -> CoordinatorOutcome:
         """Reconcile an UNKNOWN (or terminal-conflicted) order toward a verified outcome.
 
@@ -228,19 +252,28 @@ class ExecutionCoordinator:
 
         If the shadow is already terminal and the evidence contradicts it, the
         coordinator must NOT regress the state machine (terminal-absorbing, §2.5);
-        it records a RECONCILIATION_CONFLICT incident and marks the execution
-        disputed so no further live action proceeds on it.
+        it records a RECONCILIATION_CONFLICT incident, marks the execution
+        disputed so no further live action proceeds on it, and emits an
+        ``OperationalRestrictionRequest`` (a REQUEST only — the Risk/Restriction
+        Authority owns OPEN/CLEAR).
+
+        ``observed_at`` / ``evidence_refs`` MUST be supplied by the caller or
+        evidence lineage; the coordinator has no clock.
         """
+        event = CoordinatorEvent(
+            broker_event_id=broker_event_id,
+            broker_sequence=broker_sequence,
+            canonical_event=ExecutionEvent.RECONCILE,
+            evidence=evidence_token,
+            order_id=order_id,
+            observed_at=observed_at,
+            evidence_refs=evidence_refs,
+        )
         key = (broker_event_id, broker_sequence)
         if key in self._seen:
             incident = self._new_incident(
                 CoordinatorIncidentKind.DUPLICATE_EVENT,
-                CoordinatorEvent(
-                    broker_event_id=broker_event_id,
-                    broker_sequence=broker_sequence,
-                    canonical_event=ExecutionEvent.RECONCILE,
-                    evidence=evidence_token,
-                ),
+                event,
                 "Duplicate reconcile event identity redelivered.",
             )
             return CoordinatorOutcome(
@@ -259,17 +292,17 @@ class ExecutionCoordinator:
             if evidence_token.strip().upper() != terminal_token:
                 incident = self._new_incident(
                     CoordinatorIncidentKind.RECONCILIATION_CONFLICT,
-                    CoordinatorEvent(
-                        broker_event_id=broker_event_id,
-                        broker_sequence=broker_sequence,
-                        canonical_event=ExecutionEvent.RECONCILE,
-                        evidence=evidence_token,
-                    ),
+                    event,
                     f"Reconciliation conflict: shadow={terminal_token} but "
                     f"broker evidence={evidence_token}. No self-selection; "
                     "execution marked disputed/restricted.",
                 )
                 self._disputed = True
+                request = self._build_restriction_request(
+                    event=event,
+                    reason=RestrictionReason.RECONCILIATION_CONFLICT,
+                    broker_observed_state=evidence_token.strip().upper(),
+                )
                 return CoordinatorOutcome(
                     state=self.shadow_state,
                     filled_qty=self.filled_qty,
@@ -277,6 +310,7 @@ class ExecutionCoordinator:
                     rejected=False,
                     transition=None,
                     incidents=(incident,),
+                    restriction_request=request,
                 )
             # Matching terminal evidence: no transition needed, stays terminal.
             return CoordinatorOutcome(
@@ -297,12 +331,7 @@ class ExecutionCoordinator:
         except ExecutionStateError as exc:
             incident = self._new_incident(
                 CoordinatorIncidentKind.UNKNOWN_RECONCILIATION,
-                CoordinatorEvent(
-                    broker_event_id=broker_event_id,
-                    broker_sequence=broker_sequence,
-                    canonical_event=ExecutionEvent.RECONCILE,
-                    evidence=evidence_token,
-                ),
+                event,
                 f"Insufficient/contradictory evidence; rejected by authority: {exc}",
             )
             self._disputed = True
@@ -341,7 +370,40 @@ class ExecutionCoordinator:
             execution_id=self.execution_id,
             broker_event_id=event.broker_event_id,
             broker_sequence=event.broker_sequence,
+            order_id=event.order_id,
+            shadow_state=self.shadow_state.value if self.shadow_state else None,
+            broker_observed_state=event.evidence,
+            evidence_refs=event.evidence_refs,
+            observed_at=event.observed_at,
             detail=detail,
         )
         self._incidents.append(incident)
         return incident
+
+    def _build_restriction_request(
+        self,
+        *,
+        event: CoordinatorEvent,
+        reason: RestrictionReason,
+        broker_observed_state: str,
+    ) -> OperationalRestrictionRequest:
+        """Emit a RESTRICTION *request* (never OPEN/CLEAR) on an anomaly.
+
+        The coordinator only DETECTS and REQUESTS; the Risk/Restriction Authority
+        owns the OPEN/CLEAR lifecycle (contract §1, §5). Each request carries the
+        observed_at threaded from caller/evidence (no clock in the coordinator).
+        """
+        return OperationalRestrictionRequest(
+            request_id=f"{self.execution_id}:{event.broker_event_id}:{event.broker_sequence}",
+            scope=RestrictionScope.EXECUTION,
+            reason=reason,
+            execution_id=self.execution_id,
+            order_id=event.order_id,
+            evidence_refs=event.evidence_refs,
+            shadow_state=self.shadow_state.value if self.shadow_state else None,
+            broker_observed_state=broker_observed_state,
+            source="EXECUTION_COORDINATOR",
+            observed_at=event.observed_at,
+            created_by="coordinator",
+            detail="Reconciliation conflict: shadow and broker evidence diverge.",
+        )
