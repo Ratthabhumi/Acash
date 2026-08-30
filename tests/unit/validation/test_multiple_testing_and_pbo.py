@@ -83,7 +83,7 @@ def test_parameter_curvature_evaluation_with_lineage() -> None:
     h1 = "f" * 64
     h2 = "e" * 64
     h3 = "d" * 64
-    points = [
+    points = (
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.5"),
             run_id="run_p75",
@@ -108,8 +108,7 @@ def test_parameter_curvature_evaluation_with_lineage() -> None:
             output_artifact_hash=h3,
             actual_sharpe=Decimal("1.35"),
         ),
-
-    ]
+    )
 
     grid = ParameterPerturbationGrid(
         base_parameter_name="lookback",

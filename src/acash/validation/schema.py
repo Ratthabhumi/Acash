@@ -561,20 +561,27 @@ class ParameterPerturbationGrid(BaseModel):
 
     base_parameter_name: str
     base_parameter_value: Decimal = Field(gt=Decimal("0.0"), description="Base parameter theta_0 > 0.")
-    points: List[ParameterPerturbationPoint] = Field(
-        min_length=3, max_length=3,
-        description="Strict 3-point execution list [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0] in exact semantic order.",
+    points: Tuple[ParameterPerturbationPoint, ParameterPerturbationPoint, ParameterPerturbationPoint] = Field(
+        description="Strict 3-point execution tuple [0.75 * theta_0, 1.0 * theta_0, 1.25 * theta_0] in exact semantic order.",
     )
 
     @property
-    def grid_values(self) -> List[Decimal]:
+    def grid_values(self) -> Tuple[Decimal, ...]:
         """Extracted parameter values at each point."""
-        return [p.parameter_value for p in self.points]
+        return tuple(p.parameter_value for p in self.points)
 
     @property
-    def sharpe_profile(self) -> List[Decimal]:
+    def sharpe_profile(self) -> Tuple[Decimal, ...]:
         """Extracted measured Sharpe ratios across execution points."""
-        return [p.actual_sharpe for p in self.points]
+        return tuple(p.actual_sharpe for p in self.points)
+
+    @model_validator(mode="before")
+    @classmethod
+    def enforce_tuple_points(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "points" in data:
+            if isinstance(data["points"], (list, tuple)):
+                data["points"] = tuple(data["points"])
+        return data
 
     @model_validator(mode="after")
     def validate_grid_geometry_and_lineage(self) -> "ParameterPerturbationGrid":
@@ -617,6 +624,7 @@ class ParameterPerturbationGrid(BaseModel):
             raise DataContractError(
                 f"Grid right point parameter_value '{self.points[2].parameter_value}' does not exactly equal 1.25 * {theta} = '{expected_right}'."
             )
+
 
         return self
 
@@ -773,7 +781,8 @@ class MultipleTestingResult(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    effective_trials_k: int = Field(description="Total evaluated trials K from ledger.")
+    dsr_trials_k: int = Field(default=1, description="Authoritative trial count K utilized for multiple testing adjustments.")
+    effective_trials_k: int = Field(default=1, description="Legacy alias for dsr_trials_k (total evaluated trials K from ledger).")
     raw_p_values: List[Decimal] = Field(description="Ascending sorted raw asymptotic zero-Sharpe p-values (H_0: SR=0 under asymptotic normality) from trial ledger.")
     holm_bonferroni_p_values: List[Decimal] = Field(description="Family-Wise Error Rate (FWER) adjusted p-values.")
     benjamini_hochberg_q_values: List[Decimal] = Field(description="False Discovery Rate (FDR) adjusted q-values.")
@@ -801,12 +810,23 @@ class MultipleTestingResult(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def synchronize_haircut_ratio(cls, data: Any) -> Any:
+    def synchronize_aliases(cls, data: Any) -> Any:
         if isinstance(data, dict):
             if "bonferroni_haircut_sharpe_ratio" in data and "haircut_sharpe_ratio" not in data:
                 data["haircut_sharpe_ratio"] = data["bonferroni_haircut_sharpe_ratio"]
             elif "haircut_sharpe_ratio" in data and "bonferroni_haircut_sharpe_ratio" not in data:
                 data["bonferroni_haircut_sharpe_ratio"] = data["haircut_sharpe_ratio"]
+
+            if "dsr_trials_k" in data and "effective_trials_k" not in data:
+                data["effective_trials_k"] = data["dsr_trials_k"]
+            elif "effective_trials_k" in data and "dsr_trials_k" not in data:
+                data["dsr_trials_k"] = data["effective_trials_k"]
+            elif "dsr_trials_k" in data and "effective_trials_k" in data:
+                if data["dsr_trials_k"] != data["effective_trials_k"]:
+                    raise DataContractError(
+                        f"Contradictory multiple testing trial counts supplied: "
+                        f"dsr_trials_k={data['dsr_trials_k']} != effective_trials_k={data['effective_trials_k']}."
+                    )
         return data
 
 
@@ -849,12 +869,22 @@ class ValidationPolicyConfig(BaseModel):
 
 
 class ValidationConfig(BaseModel):
-    """Master configuration for the Statistical Validation Gate."""
+    """Master configuration for the Statistical Validation Gate.
+
+    SEPARATION OF CPCV AND CSCV UNIVERSES:
+    - CPCV (Combinatorial Purged Cross-Validation): Evaluates general model performance across
+      C = (cpcv_num_groups_n choose cpcv_num_test_groups_k) combinations (default: N=10, k=2 -> C=45).
+    - CSCV (Combinatorially Symmetric Cross-Validation): Strictly balanced half/half partition
+      C = (cscv_num_groups_n choose cscv_num_test_groups_k) where cscv_num_test_groups_k = cscv_num_groups_n / 2
+      specifically dedicated to Probability of Backtest Overfitting (PBO) estimation (default: N=10, k=5 -> C=252).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    num_groups_n: int = Field(default=10, ge=3, description="Number of contiguous groups for CPCV.")
-    num_test_groups_k: int = Field(default=2, ge=1, description="Number of test groups per combinatorial split.")
+    cpcv_num_groups_n: int = Field(default=10, ge=3, description="Number of contiguous groups N for general CPCV.")
+    cpcv_num_test_groups_k: int = Field(default=2, ge=1, description="Number of test groups k per combinatorial split for general CPCV.")
+    cscv_num_groups_n: int = Field(default=10, ge=4, description="Number of contiguous groups N for balanced CSCV / PBO evaluation (must be an even integer).")
+    cscv_num_test_groups_k: int = Field(default=5, ge=2, description="Number of test groups k for balanced CSCV / PBO evaluation (strictly k = cscv_num_groups_n // 2).")
     embargo_bars: int = Field(default=5, ge=0, description="Number of bars embargoed after each test window.")
     confidence_level_alpha: Decimal = Field(default=Decimal("0.05"), gt=Decimal("0.0"), lt=Decimal("1.0"))
     min_dsr_probability: Decimal = Field(default=Decimal("0.95"), ge=Decimal("0.50"), le=Decimal("1.0"))
@@ -876,6 +906,63 @@ class ValidationConfig(BaseModel):
             "If True, derives mu_trials empirically from the SearchTrialLedger mean Sharpe ratio."
         ),
     )
+
+    @property
+    def num_groups_n(self) -> int:
+        """Legacy compatibility alias returning cpcv_num_groups_n."""
+        return self.cpcv_num_groups_n
+
+    @property
+    def num_test_groups_k(self) -> int:
+        """Legacy compatibility alias returning cpcv_num_test_groups_k."""
+        return self.cpcv_num_test_groups_k
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_aliases_and_cscv(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # 1. Compatibility handling for legacy num_groups_n / num_test_groups_k
+            if "num_groups_n" in data:
+                if "cpcv_num_groups_n" not in data:
+                    data["cpcv_num_groups_n"] = data["num_groups_n"]
+                elif data["num_groups_n"] != data["cpcv_num_groups_n"]:
+                    raise DataContractError(
+                        f"Contradictory configuration supplied: num_groups_n={data['num_groups_n']} != cpcv_num_groups_n={data['cpcv_num_groups_n']}."
+                    )
+
+            if "num_test_groups_k" in data:
+                if "cpcv_num_test_groups_k" not in data:
+                    data["cpcv_num_test_groups_k"] = data["num_test_groups_k"]
+                elif data["num_test_groups_k"] != data["cpcv_num_test_groups_k"]:
+                    raise DataContractError(
+                        f"Contradictory configuration supplied: num_test_groups_k={data['num_test_groups_k']} != cpcv_num_test_groups_k={data['cpcv_num_test_groups_k']}."
+                    )
+
+            # 2. Derive cscv_num_test_groups_k automatically if only cscv_num_groups_n is provided
+            if "cscv_num_groups_n" in data and "cscv_num_test_groups_k" not in data:
+                n_val = int(data["cscv_num_groups_n"])
+                data["cscv_num_test_groups_k"] = n_val // 2
+
+        return data
+
+    @model_validator(mode="after")
+    def validate_cross_validation_invariants(self) -> "ValidationConfig":
+        if self.cscv_num_groups_n % 2 != 0:
+            raise DataContractError(
+                f"cscv_num_groups_n must be an even integer for balanced CSCV, got {self.cscv_num_groups_n}."
+            )
+        if self.cscv_num_test_groups_k != self.cscv_num_groups_n // 2:
+            raise DataContractError(
+                f"cscv_num_test_groups_k ({self.cscv_num_test_groups_k}) must strictly equal "
+                f"cscv_num_groups_n // 2 ({self.cscv_num_groups_n // 2}) for balanced CSCV."
+            )
+        if self.cpcv_num_test_groups_k >= self.cpcv_num_groups_n:
+            raise DataContractError(
+                f"cpcv_num_test_groups_k ({self.cpcv_num_test_groups_k}) must be strictly less than "
+                f"cpcv_num_groups_n ({self.cpcv_num_groups_n})."
+            )
+        return self
+
 
 
 

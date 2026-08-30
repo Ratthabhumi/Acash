@@ -217,7 +217,7 @@ def test_golden_reference_cscv_pbo_exact_toy_case() -> None:
     N = 6
     k = 3
     T = 60
-    config = ValidationConfig(num_groups_n=N, num_test_groups_k=k)
+    config = ValidationConfig(cscv_num_groups_n=N, cscv_num_test_groups_k=k)
     cpcv = CombinatorialPurgedCrossValidation(config)
 
     partitions = cpcv.generate_partitions(sample_size=T, label_horizon=1, enforce_cscv_balanced=True)

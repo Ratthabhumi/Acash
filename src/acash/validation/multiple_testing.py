@@ -116,11 +116,12 @@ class MultipleTestingEngine:
     @staticmethod
     def calculate_bonferroni_haircut_sharpe(
         estimated_sharpe: float,
-        effective_trials_k: int,
-        sample_size_t: int,
+        dsr_trials_k: Optional[int] = None,
+        sample_size_t: int = 2,
         raw_p_value: Optional[float] = None,
         sharpe_space: SharpeSpace = SharpeSpace.ANNUAL,
         periods_per_year: float = 252.0,
+        effective_trials_k: Optional[int] = None,
     ) -> Decimal:
         """Calculate ACASH Bonferroni Haircut Sharpe Ratio in the requested SharpeSpace.
 
@@ -136,7 +137,12 @@ class MultipleTestingEngine:
             Haircut_SR_period = max(0.0, |t_adj| / sqrt(T))
             Haircut_SR_annual = Haircut_SR_period * sqrt(periods_per_year)
         """
-        K = max(1, effective_trials_k)
+        if dsr_trials_k is not None and effective_trials_k is not None and dsr_trials_k != effective_trials_k:
+            raise DataContractError(
+                f"Contradictory multiple testing trial counts: dsr_trials_k={dsr_trials_k} != effective_trials_k={effective_trials_k}."
+            )
+        resolved_k = dsr_trials_k if dsr_trials_k is not None else (effective_trials_k if effective_trials_k is not None else 1)
+        K = max(1, resolved_k)
         T = max(2, sample_size_t)
         sr = max(0.0, estimated_sharpe)
 
@@ -199,11 +205,12 @@ class MultipleTestingEngine:
         p_values: Sequence[Union[Decimal, float]],
         estimated_sharpe: float,
         sample_size_t: int,
-        effective_trials_k: Optional[int] = None,
+        dsr_trials_k: Optional[int] = None,
         confidence_level_alpha: float = 0.05,
         primary_candidate_index: int = 0,
         sharpe_space: SharpeSpace = SharpeSpace.ANNUAL,
         periods_per_year: float = 252.0,
+        effective_trials_k: Optional[int] = None,
     ) -> MultipleTestingResult:
         """Evaluate full multiple testing battery across K trials targeting the pre-registered primary candidate.
 
@@ -217,11 +224,16 @@ class MultipleTestingEngine:
           2. Benjamini-Hochberg False Discovery Rate (FDR) q-value adjustments.
           3. Harvey-Liu-Zhu Bonferroni Haircut Sharpe penalization strictly evaluated in PERIOD inference space.
         """
+        declared_k = dsr_trials_k if dsr_trials_k is not None else effective_trials_k
+        if effective_trials_k is not None and dsr_trials_k is not None and effective_trials_k != dsr_trials_k:
+            raise DataContractError(
+                f"Contradictory multiple testing trial counts: dsr_trials_k={dsr_trials_k} != effective_trials_k={effective_trials_k}."
+            )
 
         K = len(p_values)
-        if effective_trials_k is not None and effective_trials_k != K:
+        if declared_k is not None and declared_k != K:
             raise DataContractError(
-                f"MultipleTestingEngine K mismatch: p_values vector contains {K} trials, but declared effective_trials_k={effective_trials_k}."
+                f"MultipleTestingEngine K mismatch: p_values vector contains {K} trials, but declared dsr_trials_k={declared_k}."
             )
 
         if K == 0:
@@ -245,7 +257,7 @@ class MultipleTestingEngine:
         # Compute Haircut Sharpe in reported space (default ANNUAL)
         haircut_sr = cls.calculate_bonferroni_haircut_sharpe(
             estimated_sharpe=estimated_sharpe,
-            effective_trials_k=K,
+            dsr_trials_k=K,
             sample_size_t=sample_size_t,
             raw_p_value=primary_p,
             sharpe_space=sharpe_space,
@@ -255,7 +267,7 @@ class MultipleTestingEngine:
         # Compute Haircut Sharpe strictly in PERIOD space
         haircut_sr_period = cls.calculate_bonferroni_haircut_sharpe(
             estimated_sharpe=estimated_sharpe,
-            effective_trials_k=K,
+            dsr_trials_k=K,
             sample_size_t=sample_size_t,
             raw_p_value=primary_p,
             sharpe_space=SharpeSpace.PERIOD,
@@ -271,6 +283,7 @@ class MultipleTestingEngine:
         ]
 
         return MultipleTestingResult(
+            dsr_trials_k=K,
             effective_trials_k=K,
             raw_p_values=raw_dec,
             holm_bonferroni_p_values=holm_adj,
@@ -282,6 +295,7 @@ class MultipleTestingEngine:
             inference_space=SharpeSpace.PERIOD,
             is_fwer_significant=is_significant,
         )
+
 
 
 

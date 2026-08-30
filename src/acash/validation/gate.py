@@ -527,7 +527,7 @@ class StatisticalValidationGate:
         # 6. Deflated Sharpe Ratio & MinTRL (Authoritative K from ledger with Unified Frequency Scale)
         dsr_result = DeflatedSharpeEngine.evaluate_dsr(
             returns=in_sample_returns,
-            effective_trials_k=effective_k,
+            dsr_trials_k=effective_k,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
             periods_per_year=float(self.config.periods_per_year),
             trial_ledger=trial_ledger,
@@ -541,7 +541,7 @@ class StatisticalValidationGate:
             p_values=trial_ledger.p_values,
             estimated_sharpe=float(dsr_result.estimated_sharpe),
             sample_size_t=n_is,
-            effective_trials_k=effective_k,
+            dsr_trials_k=effective_k,
             confidence_level_alpha=float(self.config.confidence_level_alpha),
             primary_candidate_index=0,
             sharpe_space=dsr_result.sharpe_space,
@@ -563,12 +563,13 @@ class StatisticalValidationGate:
                 )
             pt.validate_manifest_binding(man)
 
-        is_mat, oos_mat = self.cpcv_engine.evaluate_cscv_sharpe_matrices(
+        is_mat, oos_mat = self.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices(
             trial_return_matrix,
             label_horizon=label_horizon,
             embargo_bars=embargo_bars,
             periods_per_year=float(self.config.periods_per_year),
         )
+
 
         overfit_report = OverfittingEngine.evaluate_overfitting_battery(
             is_sharpe_matrix=is_mat,

@@ -184,9 +184,10 @@ class DeflatedSharpeEngine:
     @classmethod
     def compute_expected_max_sharpe_sr0(
         cls,
-        effective_trials_k: int,
+        dsr_trials_k: Optional[int] = None,
         variance_of_trials: float = 0.0,
         mean_of_trials: float = 0.0,
+        effective_trials_k: Optional[int] = None,
     ) -> float:
         """Compute expected maximum Sharpe ratio under the null hypothesis (SR0) across K trials.
 
@@ -209,7 +210,13 @@ class DeflatedSharpeEngine:
         - Numerical Boundary: If V <= TRIAL_VARIANCE_MIN_THRESHOLD (1e-12) or K <= 1, the EVT dispersion penalty is 0.0,
           yielding SR_0 = mu_trials (0.0 under default zero-location policy).
         """
-        K = max(1, effective_trials_k)
+        if dsr_trials_k is not None and effective_trials_k is not None and dsr_trials_k != effective_trials_k:
+            raise DataContractError(
+                f"Contradictory DSR trial counts: dsr_trials_k={dsr_trials_k} != effective_trials_k={effective_trials_k}."
+            )
+        K = dsr_trials_k if dsr_trials_k is not None else (effective_trials_k if effective_trials_k is not None else 1)
+        if K < 1:
+            raise DataContractError(f"dsr_trials_k must be >= 1, got {K}")
         if K <= 1 or variance_of_trials <= cls.TRIAL_VARIANCE_MIN_THRESHOLD:
             return float(mean_of_trials)
 
@@ -217,8 +224,13 @@ class DeflatedSharpeEngine:
         p1 = 1.0 - (1.0 / K)
         p2 = 1.0 - (1.0 / (K * math.e))
 
-        z1 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p1)))
-        z2 = _standard_normal_ppf(max(1e-12, min(1.0 - 1e-12, p2)))
+        if p1 <= 0.0 or p1 >= 1.0:
+            raise DataContractError(f"p1 probability {p1} out of bounds (0, 1) for K={K}")
+        if p2 <= 0.0 or p2 >= 1.0:
+            raise DataContractError(f"p2 probability {p2} out of bounds (0, 1) for K={K}")
+
+        z1 = _standard_normal_ppf(p1)
+        z2 = _standard_normal_ppf(p2)
 
         dispersion_term = math.sqrt(variance_of_trials) * ((1.0 - gamma_e) * z1 + gamma_e * z2)
         sr0 = float(mean_of_trials) + dispersion_term
@@ -228,7 +240,7 @@ class DeflatedSharpeEngine:
     def evaluate_dsr(
         cls,
         returns: Sequence[Union[Decimal, float]],
-        effective_trials_k: int = 1,
+        dsr_trials_k: Optional[int] = None,
         variance_of_trials: float = 0.0,
         mean_of_trials: float = 0.0,
         benchmark_sharpe: float = 0.0,
@@ -238,6 +250,7 @@ class DeflatedSharpeEngine:
         declared_trials_k: Optional[int] = None,
         effective_independent_trials_k: Optional[int] = None,
         use_empirical_trial_mean: bool = False,
+        effective_trials_k: Optional[int] = None,
     ) -> DSRResult:
         """Evaluate complete Deflated Sharpe Ratio and Minimum Track Record Length.
 
@@ -271,12 +284,18 @@ class DeflatedSharpeEngine:
         It does NOT correct for serial autocorrelation or overlapping forward label horizons.
         Reported values include inference_space=PERIOD and sharpe_space=ANNUAL.
         """
+        if dsr_trials_k is not None and effective_trials_k is not None and dsr_trials_k != effective_trials_k:
+            raise DataContractError(
+                f"Contradictory DSR trial counts: dsr_trials_k={dsr_trials_k} != effective_trials_k={effective_trials_k}."
+            )
+        resolved_k = dsr_trials_k if dsr_trials_k is not None else (effective_trials_k if effective_trials_k is not None else 1)
+
 
         annual_mult = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
 
         if trial_ledger is not None:
             declared_k = trial_ledger.total_trials
-            effective_trials_k = declared_k
+            k_for_dsr = declared_k
             if use_empirical_trial_mean:
                 raw_mean = trial_ledger.get_empirical_sharpe_mean()
                 if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
@@ -290,7 +309,7 @@ class DeflatedSharpeEngine:
             else:
                 mean_of_trials = 0.0  # ACASH Zero-Location Sovereign Policy (strictly enforced)
 
-            if effective_trials_k >= 2:
+            if declared_k >= 2:
                 raw_var = trial_ledger.get_empirical_sharpe_variance()
                 if trial_ledger.sharpe_space == SharpeSpace.ANNUAL:
                     if periods_per_year <= 0:
@@ -303,9 +322,10 @@ class DeflatedSharpeEngine:
             else:
                 variance_of_trials = 0.0
         else:
-            declared_k = declared_trials_k if declared_trials_k is not None else effective_trials_k
+            declared_k = declared_trials_k if declared_trials_k is not None else resolved_k
+            k_for_dsr = declared_k
 
-        mode = SelectionCorrectionMode.SINGLE_TRIAL if effective_trials_k <= 1 else SelectionCorrectionMode.MULTIPLE_TRIAL
+        mode = SelectionCorrectionMode.SINGLE_TRIAL if k_for_dsr <= 1 else SelectionCorrectionMode.MULTIPLE_TRIAL
 
         n = len(returns)
         mean, std, skew, kurt = cls.calculate_higher_moments(returns)
@@ -316,11 +336,12 @@ class DeflatedSharpeEngine:
 
         # 2. Expected maximum Sharpe under null (per-period and annualized)
         sr0_period = cls.compute_expected_max_sharpe_sr0(
-            effective_trials_k=effective_trials_k,
+            dsr_trials_k=k_for_dsr,
             variance_of_trials=variance_of_trials,
             mean_of_trials=mean_of_trials,
         )
         sr0_annual = sr0_period * annual_mult
+
 
         # 3. Non-normal asymptotic variance factor:
         # sigma_SR = sqrt( (1 - g_1 * SR + (g_2 - 1)/4 * SR^2) / (T - 1) )

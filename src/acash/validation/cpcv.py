@@ -54,11 +54,18 @@ class CombinatorialPurgedCrossValidation:
         embargo = embargo_bars if embargo_bars is not None else self.config.embargo_bars
 
         if enforce_cscv_balanced:
+            N = self.config.cscv_num_groups_n
+            k = self.config.cscv_num_test_groups_k
             if N % 2 != 0 or k != N // 2:
                 raise DataContractError(
                     f"CSCV (PBO mode) requires an even number of blocks N and balanced half-splits k = N / 2. "
                     f"Got N={N}, k={k}."
                 )
+        else:
+            N = self.config.cpcv_num_groups_n
+            k = self.config.cpcv_num_test_groups_k
+
+        embargo = embargo_bars if embargo_bars is not None else self.config.embargo_bars
 
         if sample_size < N * 2:
             # ACASH Minimum Data Sufficiency Governance Policy:
@@ -170,8 +177,16 @@ class CombinatorialPurgedCrossValidation:
         Returns:
             List of phi paths, where each path is a list of (combination_id, test_sample_index) pairings covering [0, sample_size).
         """
-        N = self.config.num_groups_n
-        k = self.config.num_test_groups_k
+        if not partitions:
+            raise DataContractError("Cannot reconstruct pseudo-OOS paths from empty partitions.")
+
+        # Determine N and k dynamically from the supplied partition structure
+        all_groups_set: Set[int] = set()
+        for p in partitions:
+            all_groups_set.update(p.test_group_indices)
+        N = len(all_groups_set)
+        k = len(partitions[0].test_group_indices)
+
         total_combos = len(partitions)
         expected_paths = (k * total_combos) // N
 
@@ -233,6 +248,12 @@ class CombinatorialPurgedCrossValidation:
         Implements Combinatorial Purged Cross-Validation (CPCV / López de Prado 2018) and Combinatorially Symmetric
         Cross-Validation (CSCV / Bailey et al. 2016) with strict interval purging and post-test embargo buffers.
 
+        FAIL-CLOSED NUMERICAL INTEGRITY:
+        Every split is verified to have sufficient observations (len > 1), strictly positive sample variance
+        (std > 1e-12 across all candidate models), and finite Sharpe values. Zero or near-zero variance splits
+        immediately raise DataContractError rather than fabricating artificial 0.0 Sharpe ratios that distort
+        downstream rank statistics and PBO estimation.
+
         Args:
             return_matrix: 2D numpy array of shape (T observations, M candidate strategies/models).
             label_horizon: Forward-looking label evaluation window H (bars).
@@ -266,23 +287,54 @@ class CombinatorialPurgedCrossValidation:
         for c, p in enumerate(partitions):
             # In-Sample evaluation (purged and embargoed indices excluded)
             train_idx = p.train_indices
-            if len(train_idx) > 1:
-                is_slice = return_matrix[train_idx, :]
-                is_mean = np.mean(is_slice, axis=0)
-                is_std = np.std(is_slice, axis=0, ddof=1)
-                is_sr = np.where(is_std > 1e-12, (is_mean / is_std) * sqrt_ann, 0.0)
-                is_sharpe_mat[c, :] = is_sr
+            if len(train_idx) <= 1:
+                raise DataContractError(
+                    f"Insufficient in-sample observations in partition split {c}: {len(train_idx)} <= 1."
+                )
+            is_slice = return_matrix[train_idx, :]
+            is_mean = np.mean(is_slice, axis=0)
+            is_std = np.std(is_slice, axis=0, ddof=1)
+
+            if np.any(is_std <= 1e-12):
+                min_std = float(np.min(is_std))
+                raise DataContractError(
+                    f"Zero or near-zero In-Sample return variance (min std={min_std:.2e} <= 1e-12) encountered in partition split {c}. "
+                    f"Sharpe ratio is mathematically undefined."
+                )
+
+            is_sr = (is_mean / is_std) * sqrt_ann
+            if not np.all(np.isfinite(is_sr)):
+                raise DataContractError(
+                    f"Non-finite In-Sample Sharpe ratio encountered in partition split {c}."
+                )
+            is_sharpe_mat[c, :] = is_sr
 
             # Out-of-Sample evaluation (pure testing window)
             test_idx = p.test_indices
-            if len(test_idx) > 1:
-                oos_slice = return_matrix[test_idx, :]
-                oos_mean = np.mean(oos_slice, axis=0)
-                oos_std = np.std(oos_slice, axis=0, ddof=1)
-                oos_sr = np.where(oos_std > 1e-12, (oos_mean / oos_std) * sqrt_ann, 0.0)
-                oos_sharpe_mat[c, :] = oos_sr
+            if len(test_idx) <= 1:
+                raise DataContractError(
+                    f"Insufficient out-of-sample observations in partition split {c}: {len(test_idx)} <= 1."
+                )
+            oos_slice = return_matrix[test_idx, :]
+            oos_mean = np.mean(oos_slice, axis=0)
+            oos_std = np.std(oos_slice, axis=0, ddof=1)
+
+            if np.any(oos_std <= 1e-12):
+                min_std = float(np.min(oos_std))
+                raise DataContractError(
+                    f"Zero or near-zero Out-of-Sample return variance (min std={min_std:.2e} <= 1e-12) encountered in partition split {c}. "
+                    f"Sharpe ratio is mathematically undefined."
+                )
+
+            oos_sr = (oos_mean / oos_std) * sqrt_ann
+            if not np.all(np.isfinite(oos_sr)):
+                raise DataContractError(
+                    f"Non-finite Out-of-Sample Sharpe ratio encountered in partition split {c}."
+                )
+            oos_sharpe_mat[c, :] = oos_sr
 
         return is_sharpe_mat, oos_sharpe_mat
+
 
     def evaluate_balanced_cscv_sharpe_matrices(
         self,

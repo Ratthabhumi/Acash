@@ -39,27 +39,33 @@ class OverfittingEngine:
         oos_sharpe_matrix: np.ndarray,
     ) -> Tuple[float, float, float]:
 
-        """Calculate empirical Probability of Backtest Overfitting (PBO) with exact mid-rank tie handling.
+        """Calculate empirical Probability of Backtest Overfitting (PBO) under the Tie-Symmetric ACASH PBO Policy.
 
         Reference:
         Bailey, D. H., Borwein, J. M., López de Prado, M., & Zhu, Q. J. (2016).
         "The Probability of Backtest Overfitting." Journal of Computational Finance, 20(4), 39–69.
 
-        Mathematical Formulation & Relative Rank Convention:
-        1. For each combination split c in {1, ..., C}:
-           - Identify optimal in-sample model: m* = argmax_{m=1..M} IS_Sharpe[c, m]
-           - Determine exact mid-rank of m* in OOS slice:
-             mid_rank = sum(I(OOS < OOS[m*])) + 1.0 + 0.5 * (sum(I(OOS == OOS[m*])) - 1.0)
-           - Relative rank convention:
-             omega = mid_rank / (M + 1.0)
-             Rationale: Using (M + 1) maps rank in {1, ..., M} strictly into (0, 1), guaranteeing
-             finite log-odds logits while ensuring that the exact median mid_rank = (M + 1)/2 yields
-             omega = 0.5 and log-odds lambda = ln(0.5 / 0.5) = 0.0.
-           - Log-odds: lambda = ln(omega / (1.0 - omega))
-           - Count overfit if lambda < 0.0 (i.e. omega < 0.5, strictly below median OOS performance).
-        2. PBO is the empirical proportion of CSCV splits where the IS-optimal model underperforms median OOS:
+        TIE-SYMMETRIC ACASH PBO POLICY (Mathematical Specification):
+        1. In canonical PBO (Bailey et al. 2016), an optimal In-Sample candidate model is identified, and its
+           relative rank in the Out-of-Sample evaluation is determined.
+        2. When exact or numerical ties occur among multiple optimal In-Sample candidates, ACASH enforces the
+           explicit **Tie-Symmetric ACASH PBO Policy**:
+           - Let M_c^* = { m in {1..M} : SR_{IS, c, m} = max_{j=1..M} SR_{IS, c, j} } be the set of optimal IS models on split c.
+           - For each tied winner m in M_c^*, compute its mid-rank among all M OOS models:
+               mid_rank_{c, m} = sum_{j=1}^M I(OOS_{c, j} < OOS_{c, m}) + 1.0 + 0.5 * (sum_{j=1}^M I(OOS_{c, j} == OOS_{c, m}) - 1.0)
+               omega_{c, m} = mid_rank_{c, m} / (M + 1.0)
+           - Compute the unweighted mean relative rank across all tied winners:
+               bar{omega}_c = (1 / |M_c^*|) * sum_{m in M_c^*} omega_{c, m}
+           - Log-odds logit:
+               lambda_c = ln( bar{omega}_c / (1.0 - bar{omega}_c) )
+           - Overfit Indicator: Split c is overfit if lambda_c < 0.0 (bar{omega}_c < 0.5).
+        3. Master PBO Estimator:
            PBO = (1 / C) * sum_{c=1}^C I(lambda_c < 0.0)
-           where C is the total number of CSCV splits (C = (N choose N/2) in balanced CSCV).
+           where C is the total number of balanced CSCV splits: C = (N choose N/2).
+
+        GOVERNANCE EQUIVALENCE CLASS QUANTIZATION:
+        Prior to ranking, Sharpe ratios are rounded to 10 decimal places (1e-10 equivalence class) to ensure
+        cross-platform deterministic equality and prevent spurious numerical noise from breaking true ties.
 
         Args:
             is_sharpe_matrix: 2D array of shape (C combinations, M models) for In-Sample Sharpe.

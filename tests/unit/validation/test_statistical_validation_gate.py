@@ -3,7 +3,8 @@
 from decimal import Decimal
 import hashlib
 import json
-from typing import Any, Dict, List, Optional, Sequence, Union
+import math
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pytest
 
@@ -106,10 +107,17 @@ def _make_valid_perturbation_grid(
         )
         points.append(pt)
 
+    assert len(points) == 3
+    points_tuple: Tuple[ParameterPerturbationPoint, ParameterPerturbationPoint, ParameterPerturbationPoint] = (
+        points[0],
+        points[1],
+        points[2],
+    )
+
     return ParameterPerturbationGrid(
         base_parameter_name="lookback",
         base_parameter_value=base_val,
-        points=points,
+        points=points_tuple,
     )
 
 
@@ -452,7 +460,7 @@ def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> No
     h3 = "c" * 64
 
     # 1. Duplicate run_ids rejected
-    points_dup_run = [
+    points_dup_run = (
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.5"),
             run_id="same_run",
@@ -477,12 +485,12 @@ def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> No
             output_artifact_hash=h3,
             actual_sharpe=Decimal("1.5"),
         ),
-    ]
+    )
     with pytest.raises(DataContractError, match="3 distinct execution run_ids"):
         ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_dup_run)
 
     # 2. Duplicate manifest_ids rejected
-    points_dup_man = [
+    points_dup_man = (
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.5"),
             run_id="run_1",
@@ -507,12 +515,12 @@ def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> No
             output_artifact_hash=h3,
             actual_sharpe=Decimal("1.5"),
         ),
-    ]
+    )
     with pytest.raises(DataContractError, match="3 distinct manifest_ids"):
         ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_dup_man)
 
     # 3. Non-exact geometry rejected (e.g. 0.750001 != 0.75)
-    points_inexact = [
+    points_inexact = (
         ParameterPerturbationPoint(
             parameter_value=Decimal("7.500001"),
             run_id="run_1",
@@ -537,12 +545,12 @@ def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> No
             output_artifact_hash=h3,
             actual_sharpe=Decimal("1.5"),
         ),
-    ]
+    )
     with pytest.raises(DataContractError, match="does not exactly equal 0.75"):
         ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_inexact)
 
     # 4. Out-of-order points rejected
-    points_unordered = [
+    points_unordered = (
         ParameterPerturbationPoint(
             parameter_value=Decimal("10.0"),  # Mid in pos 0
             run_id="run_1",
@@ -567,7 +575,7 @@ def test_parameter_perturbation_grid_distinct_lineage_and_exact_geometry() -> No
             output_artifact_hash=h3,
             actual_sharpe=Decimal("1.5"),
         ),
-    ]
+    )
     with pytest.raises(DataContractError, match="does not exactly equal 0.75"):
         ParameterPerturbationGrid(base_parameter_name="lookback", base_parameter_value=theta, points=points_unordered)
 
@@ -2364,8 +2372,8 @@ def test_governance_sharpe_consistency_tolerance_binding() -> None:
 def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer() -> None:
     """Verify that Gate rejects with REJECT_MULTIPLE_TESTING_FWER when primary candidate p-value fails Holm step-down even if exploratory trial is significant."""
     config = ValidationConfig(
-        num_groups_n=4,
-        num_test_groups_k=2,
+        cscv_num_groups_n=4,
+        cscv_num_test_groups_k=2,
         enforce_fwer_significance=True,
         confidence_level_alpha=Decimal("0.05"),
         min_haircut_sharpe=Decimal("0.0"),
@@ -2705,6 +2713,71 @@ def test_search_trial_record_single_canonical_p_value_authority() -> None:
         config_sha256="b" * 64,
     )
     assert rec_explicit.p_value == explicit_p
+
+
+def test_statistical_validation_gate_balanced_cscv_252_splits_integration() -> None:
+    """Integration invariant test: Gate uses balanced CSCV N=10, k=5 producing exactly C = (10 choose 5) = 252 splits."""
+    gate = StatisticalValidationGate()  # Default config: cscv_num_groups_n=10, cscv_num_test_groups_k=5
+
+    assert gate.config.cscv_num_groups_n == 10
+    assert gate.config.cscv_num_test_groups_k == 5
+    assert gate.config.cpcv_num_groups_n == 10
+    assert gate.config.cpcv_num_test_groups_k == 2
+
+    # Verify partition count invariant
+    partitions = gate.cpcv_engine.generate_partitions(sample_size=500, label_horizon=1, enforce_cscv_balanced=True)
+    expected_c = math.comb(10, 5)  # 252
+    assert len(partitions) == expected_c
+    assert expected_c == 252
+
+    np.random.seed(42)
+    T = 600
+    M = 4
+    is_returns = list(np.random.normal(0.0020, 0.0080, T))
+    oos_returns = list(np.random.normal(0.0018, 0.0080, 300))
+    spec = _make_valid_hypothesis_spec(hypothesis_id="HYP_01")
+
+    manifest_store: Dict[str, Any] = {}
+    grid = _make_valid_perturbation_grid(strat_id="STRAT_01", manifest_store=manifest_store)
+
+    trial_matrix = np.random.normal(0.0015, 0.0080, (T, M))
+    trial_matrix[:, 0] = np.array([float(x) for x in is_returns], dtype=np.float64)
+
+    ledger = _make_valid_trial_ledger(
+        trial_return_matrix=trial_matrix,
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        manifest_store=manifest_store,
+    )
+
+    report = gate.evaluate_strategy(
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        hypothesis_spec=spec,
+        in_sample_returns=is_returns,
+        out_of_sample_returns=oos_returns,
+        trial_ledger=ledger,
+        trial_return_matrix=trial_matrix,
+        trial_matrix_column_trial_ids=[f"trial_{i}" for i in range(M)],
+        perturbation_grid=grid,
+        raw_predictive_edge_bps=25.0,
+        manifest_store=manifest_store,
+    )
+
+    assert report.overfitting_report is not None
+    assert 0.0 <= float(report.overfitting_report.pbo_estimate) <= 1.0
+
+    # Direct verification that the gate's balanced CSCV Sharpe matrix engine produces (C=252, M) splits
+    is_mat, oos_mat = gate.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices(
+        trial_matrix,
+        label_horizon=1,
+        embargo_bars=gate.config.embargo_bars,
+        periods_per_year=float(gate.config.periods_per_year),
+    )
+    assert is_mat.shape == (252, M)
+    assert oos_mat.shape == (252, M)
+
+
 
 
 
