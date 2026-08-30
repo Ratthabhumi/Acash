@@ -20,6 +20,13 @@ from acash.execution.broker_events import (
     ReconciliationEvidence,
     normalize_broker_event,
 )
+from acash.execution.coordinator import (
+    CoordinatorEvent,
+    CoordinatorIncident,
+    CoordinatorIncidentKind,
+    CoordinatorOutcome,
+    ExecutionCoordinator,
+)
 from acash.execution.crypto import (
     Ed25519Signer,
     Ed25519TrustStore,
@@ -76,6 +83,10 @@ __all__ = [
     "BrokerRawEvent",
     "CalculationStatus",
     "CertificateRevocationEvent",
+    "CoordinatorEvent",
+    "CoordinatorIncident",
+    "CoordinatorIncidentKind",
+    "CoordinatorOutcome",
     "Ed25519Signer",
     "Ed25519TrustStore",
     "Ed25519TrustStoreEntry",
@@ -83,6 +94,7 @@ __all__ = [
     "ExecutionManifest",
     "ExecutionStateError",
     "ExecutionTransition",
+    "ExecutionCoordinator",
     "KillSwitchAction",
     "KillSwitchEvent",
     "KillSwitchTriggerType",
