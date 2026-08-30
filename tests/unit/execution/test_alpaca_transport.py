@@ -41,6 +41,7 @@ from acash.execution.alpaca import (
     AlpacaTradeEvent,
     AlpacaTradeEventType,
     AlpacaTransport,
+    AlpacaVenue,
     EnvAlpacaCredentialProvider,
 )
 
@@ -266,11 +267,19 @@ def test_paper_vs_live_endpoint_hosts_are_distinct() -> None:
     assert PAPER_API_HOST != LIVE_API_HOST
 
 
-def test_endpoint_dataclass_marks_paper_flag() -> None:
-    paper = AlpacaEndpoint(base_url=f"https://{PAPER_API_HOST}/v2", is_paper=True)
-    live = AlpacaEndpoint(base_url=f"https://{LIVE_API_HOST}/v2", is_paper=False)
+def test_endpoint_dataclass_is_typed_venue_not_free_url() -> None:
+    # AlpacaEndpoint is bound to a typed AlpacaVenue; base_url is DERIVED, not a
+    # caller-injected free URL string (so paper/live can never be misconfigured).
+    paper = AlpacaEndpoint(venue=AlpacaVenue.PAPER)
+    live = AlpacaEndpoint(venue=AlpacaVenue.LIVE)
     assert paper.is_paper
     assert not live.is_paper
+    assert paper.base_url == f"https://{PAPER_API_HOST}/v2"
+    assert live.base_url == f"https://{LIVE_API_HOST}/v2"
+    assert not hasattr(paper, "base_url") or "base_url" not in AlpacaEndpoint.__dataclass_fields__
+    # A caller cannot inject an arbitrary URL into a typed endpoint.
+    with pytest.raises(TypeError):
+        AlpacaEndpoint(base_url="https://evil.example/v2")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +310,7 @@ AUTHORITY_MODULES = {
 # layer (MissionStep 8F). These are NOT state authorities.
 ALLOWED_MODULES = {
     "acash.execution.alpaca.credentials",
+    "acash.execution.alpaca.venue",
     "acash.execution.broker_adapter",
 }
 
