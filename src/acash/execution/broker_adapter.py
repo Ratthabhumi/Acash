@@ -32,7 +32,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Callable, Iterable, List, Optional, Protocol, Sequence, Tuple, TypeVar
 
 from acash.core.domain.exceptions import DomainValidationError
 from acash.execution.broker_events import (
@@ -112,6 +112,37 @@ class AdapterHealth:
     detail: str = ""
 
 
+class BrokerOrderReality(Protocol):
+    """Structural read-model of broker-side order reality.
+
+    Shared by every concrete broker adapter's ``query_order`` return value. The
+    abstract ``BrokerAdapter.query_order`` is typed to this protocol (not a
+    concrete mock type) so that a real broker adapter (e.g. ``AlpacaPaperAdapter``
+    returning ``AlpacaOrder``) can satisfy it without breaking Liskov
+    substitutability. Read-only getters so both mutable (``MockBrokerOrder``) and
+    frozen (``AlpacaOrder``) projections conform. This is a read-only projection;
+    it carries NO lifecycle state and NO state-transition authority.
+    """
+
+    @property
+    def broker_order_id(self) -> str: ...
+
+    @property
+    def client_order_id(self) -> str: ...
+
+    @property
+    def symbol(self) -> str: ...
+
+    @property
+    def requested_qty(self) -> Decimal: ...
+
+    @property
+    def filled_qty(self) -> Decimal: ...
+
+    @property
+    def status(self) -> object: ...
+
+
 class BrokerAdapter(ABC):
     """Abstract broker adapter interface (the Step 8F SDK/API abstraction).
 
@@ -149,7 +180,7 @@ class BrokerAdapter(ABC):
         """
 
     @abstractmethod
-    def query_order(self, broker_order_id: str) -> MockBrokerOrder:
+    def query_order(self, broker_order_id: str) -> BrokerOrderReality:
         """Return broker-side order reality (broker state, not lifecycle state)."""
 
     @abstractmethod

@@ -1,13 +1,15 @@
 """Alpaca broker transport (Phase 7 Step 8F: 8F-2 Concrete Paper Transport).
 
 This package provides the Alpaca credential seam, the typed venue
-configuration, and the transport abstraction plus its concrete paper HTTP/SSE
-implementation. It contains NO state authority and NO live credentials.
+configuration, the transport abstraction plus its concrete paper HTTP/SSE
+implementation, and the 8F-3 concrete ``AlpacaPaperAdapter`` that maps raw
+Alpaca shapes onto the canonical ``BrokerRawEvent`` vocabulary. It contains NO
+state authority and NO live credentials.
 
 Authority separation (locked, contract §1 N-1/N-3): nothing here computes or
 returns an ``OrderLifecycleState`` and nothing performs canonical normalization;
-the adapter maps raw Alpaca shapes onto ``BrokerRawEvent`` and the engine pump
-runs ``normalize_broker_event()`` (Step 8C).
+the 8F-3 adapter maps raw Alpaca shapes onto ``BrokerRawEvent`` and the engine
+pump runs ``normalize_broker_event()`` (Step 8C).
 
 Concrete transport invariants (8F-2):
 - HTTP success != execution state transition (``SubmitReceipt``/cancel-request
@@ -16,8 +18,19 @@ Concrete transport invariants (8F-2):
   (derived base URL, not a free URL string) + paper transport hard-rejects
   non-paper at construction and re-asserts at ``connect()``.
 - Fail-closed on timeout/network/auth (timeout -> ambiguity, not a terminal guess).
+
+Adapter invariants (8F-3, locked): the adapter is a command sink + observation
+source ONLY — no lifecycle state, no ``transition_order()``, no normalizer
+authority. ``event_id`` -> ``broker_sequence`` verbatim (BMAP-03); POST ACK !=
+FILLED; DELETE 204 != CANCELLED; timeout -> CONNECTION_LOST -> UNKNOWN;
+canceled-without-provenance / overfill / non-terminal-in-flight -> fail-closed
+``AlpacaAdapterMappingError`` (BMAP-01/06/07).
 """
 
+from acash.execution.alpaca.adapter import (
+    AlpacaAdapterMappingError,
+    AlpacaPaperAdapter,
+)
 from acash.execution.alpaca.credentials import (
     ENV_ALPACA_API_KEY_ID,
     ENV_ALPACA_API_SECRET,
@@ -53,6 +66,7 @@ from acash.execution.alpaca.venue import (
 )
 
 __all__ = [
+    "AlpacaAdapterMappingError",
     "AlpacaCancelReason",
     "AlpacaCredentialError",
     "AlpacaCredentialProvider",
@@ -62,6 +76,7 @@ __all__ = [
     "AlpacaNonCancellableError",
     "AlpacaOrder",
     "AlpacaOrderStatus",
+    "AlpacaPaperAdapter",
     "AlpacaTradeEvent",
     "AlpacaTradeEventType",
     "AlpacaTransport",
