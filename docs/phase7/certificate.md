@@ -10,6 +10,8 @@ $$\boxed{\text{Content Integrity (SHA-256 Hashes)} \neq \text{Issuer Authenticit
 
 Phase 7 **NEVER** mutates, weakens, or recreates Phase 6 `ValidationReport` instances.
 
+All signature verification in Phase 7 uses **real Ed25519** (RFC 8032) via a mandatory `Ed25519TrustStore`. There is no optional bypass path and no SHA256(message + secret) emulation.
+
 ---
 
 ## 2. Validation Certificate Schema
@@ -19,59 +21,85 @@ class ValidationCertificate(BaseModel):
     """Immutable certificate ingested from Phase 6 Statistical Validation Gate."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    certificate_id: str = Field(description="Unique deterministic certificate identifier.")
-    validation_id: str = Field(description="Phase 6 validation report identifier.")
-    strategy_id: str = Field(description="Target strategy identifier.")
-    hypothesis_id: str = Field(description="Registered hypothesis specification identifier.")
-    verdict: ValidationVerdict = Field(description="Must be PASS_TRADEABLE_ALPHA.")
-    
-    # Cryptographic Lineage Digests
-    decision_digest: str = Field(pattern=r"^[a-f0-9]{64}$", description="Phase 6 decision digest.")
-    evidence_digest: str = Field(pattern=r"^[a-f0-9]{64}$", description="Phase 6 evidence digest.")
-    source_report_hash: str = Field(pattern=r"^[a-f0-9]{64}$", description="SHA-256 hash of the complete Phase 6 JSON report.")
-    
-    # Issuer Trust Root & Digital Signature
-    issuer_id: str = Field(description="Authorized issuing authority identifier (e.g. 'ACASH_GOVERNANCE_GATE_6').")
-    issuer_public_key_id: str = Field(description="Key ID of the issuing authority.")
-    signature_algorithm: str = Field(default="ED25519_SHA512", description="Cryptographic signature algorithm.")
-    certificate_signature: str = Field(description="Digital signature over (certificate_id + decision_digest + evidence_digest).")
-    
-    methodology_version: str = Field(description="Phase 6 governance methodology version (e.g. 'v1.0.0').")
-    created_at: datetime = Field(description="UTC timestamp when certificate was issued.")
-    expires_at: Optional[datetime] = Field(default=None, description="Expiration timestamp for certificate validity.")
+    certificate_id: str
+    validation_id: str
+    strategy_id: str
+    hypothesis_id: str
+    verdict: ValidationGateVerdict  # Must be PASS_TRADEABLE_ALPHA
+
+    decision_digest: str            # SHA-256
+    evidence_digest: str            # SHA-256
+    source_report_hash: str         # SHA-256
+
+    issuer_id: str
+    issuer_public_key_id: str       # Must resolve in Ed25519TrustStore
+    signature_algorithm: Literal["Ed25519"] = "Ed25519"
+    certificate_signature: str      # Base64 Ed25519 over canonical payload
+
+    methodology_version: str
+    created_at: datetime
+    expires_at: Optional[datetime] = None  # None = no expiry
 ```
+
+Canonical signing bytes are produced by `ValidationCertificate.compute_canonical_payload_bytes()`.
 
 ---
 
-## 3. Append-Only Certificate Revocation Model
+## 3. Ed25519TrustStore Key Validity
+
+```python
+class Ed25519TrustStoreEntry(BaseModel):
+    key_id: str
+    issuer_id: str
+    public_key_b64: str             # Raw 32-byte Ed25519 public key, base64
+    valid_from: datetime
+    valid_until: Optional[datetime] = None  # None = key does not expire
+    status: TrustStoreEntryStatus   # ACTIVE | ROTATED | REVOKED
+```
+
+Policy:
+- `valid_until=None` means the key does not expire.
+- Verification evaluates key validity at the relevant signing/verification time (`at_time`), not only current status.
+- `REVOKED` keys fail closed for all verification attempts.
+- `ROTATED` keys remain verifiable for historical signatures when `at_time` falls within `valid_from..valid_until`.
+
+---
+
+## 4. Append-Only Certificate Revocation Model
 
 Certificates are **immutable** and are never modified in place. Revocations are emitted as append-only, signed `CertificateRevocationEvent` records:
 
 ```python
 class CertificateRevocationEvent(BaseModel):
-    """Immutable forensic event declaring a ValidationCertificate revoked."""
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    revocation_id: str = Field(description="Unique deterministic revocation event ID.")
-    certificate_id: str = Field(description="Target ValidationCertificate ID being revoked.")
-    strategy_id: str = Field(description="Target strategy identifier.")
-    revoked_at: datetime = Field(description="UTC timestamp of revocation.")
-    
-    reason: str = Field(description="Forensic reason for revocation (e.g. 'DATA_LEAK_DISCOVERED', 'REGIME_BREAK').")
-    actor: str = Field(description="Entity issuing revocation (e.g. 'RISK_COMMITTEE_CHAIR', 'AUTO_HEALTH_AUDITOR').")
-    actor_public_key_id: str = Field(description="Public key ID of the revoking authority.")
-    revocation_signature: str = Field(description="Digital signature of the revoking actor.")
-    
-    revocation_digest: str = Field(pattern=r"^[a-f0-9]{64}$", description="SHA-256 hash of canonical revocation record.")
+    revocation_id: str
+    certificate_id: str
+    strategy_id: str                # Must match target certificate.strategy_id
+    revoked_at: datetime
+    reason: str
+    actor: str
+    actor_public_key_id: str        # Must resolve in Ed25519TrustStore
+    revocation_signature: str       # Base64 Ed25519 over canonical payload
+    revocation_digest: str          # SHA-256 of canonical payload
 ```
+
+Revocation verification is **not** reduced to `certificate_id` matching alone. The admission service verifies:
+1. `revocation.certificate_id == certificate.certificate_id`
+2. `revocation.strategy_id == certificate.strategy_id`
+3. `revocation_digest` matches canonical payload
+4. Ed25519 signature via TrustStore at `revoked_at`
+5. `revoked_at` is not in the future relative to verification time
 
 ---
 
-## 4. Ingestion Validation Invariants
-To be admitted into Phase 7, a certificate must satisfy all 6 admission criteria:
-1. `verdict == ValidationVerdict.PASS_TRADEABLE_ALPHA`.
-2. `decision_digest` and `evidence_digest` match the computed hashes of the Phase 6 payload.
-3. `certificate_signature` verifies successfully against the `issuer_public_key_id`.
-4. `methodology_version` is actively supported by the execution runtime.
-5. `expires_at` is either `None` or `utc_now() <= expires_at`.
-6. No matching `CertificateRevocationEvent` exists in the append-only revocation ledger.
+## 5. Ingestion Validation Invariants
+
+To be admitted into Phase 7, a certificate must satisfy all criteria:
+1. `verdict == PASS_TRADEABLE_ALPHA`.
+2. Certificate not expired at verification time.
+3. No valid, fully verified matching revocation event in the append-only ledger.
+4. `signature_algorithm == "Ed25519"`.
+5. `issuer_public_key_id` resolves in `Ed25519TrustStore` at `certificate.created_at`.
+6. `certificate.issuer_id` matches TrustStore entry `issuer_id`.
+7. `certificate_signature` verifies via `trust_store.verify(...)`.
+
+There is no fallback verification path when TrustStore verification fails.

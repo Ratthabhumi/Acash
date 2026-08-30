@@ -78,7 +78,7 @@ class OrderIntent(BaseModel):
 [ SUBMITTED ] ──► (Broker Rejects) ──► [ REJECTED ] (Terminal)
     │
     ▼
-[ ACKNOWLEDGED ] ──► (User Cancels) ──► [ CANCELLED ] (Terminal)
+[ ACKNOWLEDGED ] ──► (User Cancels) ──► [ CANCEL_REQUESTED ] ──► [ CANCELLED ] (Terminal)
     │
     ├──► (Partial Fill) ──► [ PARTIALLY_FILLED ]
     │                              │

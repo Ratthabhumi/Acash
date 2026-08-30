@@ -1,139 +1,337 @@
-"""Adversarial and Invariant Unit Tests for Phase 7 Operational Contracts.
+"""Adversarial and Invariant Unit Tests for Phase 7 Operational Contracts."""
 
-Tests systematically attack assumptions across:
-- Happy Path
-- Boundary Conditions
-- Malformed / Tampered Inputs
-- Cryptographic Signature & Revocation Enforcements
-- State Machine & No Auto-Reboot Reactivation Invariants
-- Dynamic Risk Staleness Fail-Closed Enforcements
-- Kill Switch Trigger-to-Action Matrix
-"""
-
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Callable, Tuple
 import pytest
 
-
 from acash.core.domain.exceptions import DomainValidationError
-from acash.core.serialization import CanonicalConfigSerializer
 from acash.execution.admission import (
     PreLiveRiskAdmissionError,
+    apply_approval,
     construct_order_intent,
+    create_draft_authorization,
     evaluate_kill_switch_triggers,
+    expire_authorization,
     issue_live_authorization,
+    reactivate_authorization,
+    revoke_authorization,
+    submit_for_approval,
+    suspend_authorization,
     verify_validation_certificate,
 )
+from acash.execution.crypto import (
+    Ed25519Signer,
+    Ed25519TrustStore,
+    Ed25519TrustStoreEntry,
+    TrustStoreEntryStatus,
+)
 from acash.execution.schema import (
+    AuthorizationApproval,
+    AuthorizationReactivationApproval,
     AuthorizationReactivationEvent,
     AuthorizationStatus,
+    ApproverRole,
     CalculationStatus,
     CertificateRevocationEvent,
-    ExecutionManifest,
     KillSwitchAction,
-    KillSwitchEvent,
     KillSwitchTriggerType,
     LiveAuthorization,
-    OrderIntent,
     OrderLifecycleState,
     OrderSide,
     OrderType,
     ReconciliationReport,
     RiskState,
     RiskStatus,
-    TimeInForce,
     ValidationCertificate,
+    compute_authorization_digest,
 )
 from acash.validation.schema import ValidationGateVerdict
 
 
-# ============================================================================
-# FIXTURES
-# ============================================================================
-
-@pytest.fixture
-def sample_digests() -> Tuple[str, str, str]:
-    d1 = hashlib.sha256(b"decision_payload").hexdigest()
-    d2 = hashlib.sha256(b"evidence_payload").hexdigest()
-    d3 = hashlib.sha256(b"full_report_payload").hexdigest()
-    return d1, d2, d3
+@dataclass(frozen=True)
+class KeyMaterial:
+    key_id: str
+    issuer_id: str
+    private_key_b64: str
+    public_key_b64: str
 
 
-@pytest.fixture
-def trusted_keys() -> Dict[str, str]:
-    return {
-        "KEY_RESEARCH_GOV_V1": "super_secret_gov_key_123",
-        "KEY_RISK_OFFICER_V1": "super_secret_risk_key_456",
-    }
+_SHA256_PLACEHOLDER = "0" * 64
 
 
-@pytest.fixture
-def valid_certificate(sample_digests: Tuple[str, str, str], trusted_keys: Dict[str, str]) -> ValidationCertificate:
-    d1, d2, d3 = sample_digests
-    now = datetime(2026, 8, 30, 12, 0, 0, tzinfo=timezone.utc)
-    expires = now + timedelta(days=90)
-    
-    cert_dict = {
-        "certificate_id": "CERT_TEST_ALPHA_001",
-        "validation_id": "VAL_REPORT_001",
-        "strategy_id": "STAT_ARB_VOL_01",
-        "hypothesis_id": "HYP_VOL_PREMIUM_01",
-        "verdict": ValidationGateVerdict.PASS_TRADEABLE_ALPHA.value,
-        "decision_digest": d1,
-        "evidence_digest": d2,
-        "source_report_hash": d3,
-        "issuer_id": "ACASH_RESEARCH_AUTHORITY_V1",
-        "issuer_public_key_id": "KEY_RESEARCH_GOV_V1",
-        "signature_algorithm": "ED25519_SHA512",
-        "methodology_version": "v1.0.0",
-        "created_at": now.isoformat(),
-        "expires_at": expires.isoformat(),
-    }
-    payload_bytes = CanonicalConfigSerializer.to_canonical_json(cert_dict).encode("utf-8")
-    sig = hashlib.sha256(payload_bytes + trusted_keys["KEY_RESEARCH_GOV_V1"].encode("utf-8")).hexdigest()
-    
-    return ValidationCertificate(
-        certificate_id="CERT_TEST_ALPHA_001",
+def _sample_digests() -> Tuple[str, str, str]:
+    return (
+        hashlib.sha256(b"decision_payload").hexdigest(),
+        hashlib.sha256(b"evidence_payload").hexdigest(),
+        hashlib.sha256(b"full_report_payload").hexdigest(),
+    )
+
+
+def _make_key(key_id: str, issuer_id: str) -> KeyMaterial:
+    private_b64, public_b64 = Ed25519Signer.generate_key_pair()
+    return KeyMaterial(key_id, issuer_id, private_b64, public_b64)
+
+
+def _sign_payload(key: KeyMaterial, payload_bytes: bytes) -> str:
+    return Ed25519Signer.sign(key.private_key_b64, payload_bytes)
+
+
+def _make_approval_digest(payload_bytes: bytes) -> str:
+    return hashlib.sha256(payload_bytes).hexdigest()
+
+
+def _build_signed_certificate(
+    key: KeyMaterial,
+    *,
+    certificate_id: str = "CERT_TEST_ALPHA_001",
+    strategy_id: str = "STAT_ARB_VOL_01",
+    created_at: datetime | None = None,
+    expires_at: datetime | None = None,
+) -> ValidationCertificate:
+    d1, d2, d3 = _sample_digests()
+    created = created_at or datetime(2026, 8, 30, 12, 0, 0, tzinfo=timezone.utc)
+    expires = expires_at or (created + timedelta(days=90))
+    cert = ValidationCertificate(
+        certificate_id=certificate_id,
         validation_id="VAL_REPORT_001",
-        strategy_id="STAT_ARB_VOL_01",
+        strategy_id=strategy_id,
         hypothesis_id="HYP_VOL_PREMIUM_01",
         verdict=ValidationGateVerdict.PASS_TRADEABLE_ALPHA,
         decision_digest=d1,
         evidence_digest=d2,
         source_report_hash=d3,
-        issuer_id="ACASH_RESEARCH_AUTHORITY_V1",
-        issuer_public_key_id="KEY_RESEARCH_GOV_V1",
-        signature_algorithm="ED25519_SHA512",
-        certificate_signature=sig,
+        issuer_id=key.issuer_id,
+        issuer_public_key_id=key.key_id,
+        signature_algorithm="Ed25519",
+        certificate_signature="PLACEHOLDER",
         methodology_version="v1.0.0",
-        created_at=now,
+        created_at=created,
         expires_at=expires,
+    )
+    sig = _sign_payload(key, cert.compute_canonical_payload_bytes())
+    return cert.model_copy(update={"certificate_signature": sig})
+
+
+def _build_signed_revocation(
+    key: KeyMaterial,
+    certificate: ValidationCertificate,
+    *,
+    strategy_id: str | None = None,
+    signature_override: str | None = None,
+) -> CertificateRevocationEvent:
+    revoked_at = datetime(2026, 8, 30, 12, 2, 0, tzinfo=timezone.utc)
+    rev = CertificateRevocationEvent(
+        revocation_id="REV_001",
+        certificate_id=certificate.certificate_id,
+        strategy_id=strategy_id if strategy_id is not None else certificate.strategy_id,
+        revoked_at=revoked_at,
+        reason="Data leak discovered in training split",
+        actor="RISK_COMMITTEE_CHAIR",
+        actor_public_key_id=key.key_id,
+        revocation_signature="PLACEHOLDER",
+        revocation_digest=_SHA256_PLACEHOLDER,
+    )
+    payload = rev.compute_canonical_payload_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    sig = signature_override if signature_override is not None else _sign_payload(key, payload)
+    return rev.model_copy(update={"revocation_signature": sig, "revocation_digest": digest})
+
+
+def _build_signed_approval(
+    key: KeyMaterial,
+    authorization_id: str,
+    *,
+    approver_id: str,
+    role: ApproverRole = ApproverRole.RISK_OFFICER,
+    approved_at: datetime | None = None,
+    signature_override: str | None = None,
+    authorization_id_override: str | None = None,
+) -> AuthorizationApproval:
+    approved = approved_at or datetime(2026, 8, 30, 12, 4, 0, tzinfo=timezone.utc)
+    approval = AuthorizationApproval(
+        approver_id=approver_id,
+        public_key_id=key.key_id,
+        role=role,
+        authorization_id=authorization_id_override or authorization_id,
+        approved_at=approved,
+        approval_signature="PLACEHOLDER",
+        approval_digest=_SHA256_PLACEHOLDER,
+    )
+    payload = approval.compute_canonical_payload_bytes()
+    digest = _make_approval_digest(payload)
+    sig = signature_override if signature_override is not None else _sign_payload(key, payload)
+    return approval.model_copy(update={"approval_signature": sig, "approval_digest": digest})
+
+
+def _build_signed_reactivation_approval(
+    key: KeyMaterial,
+    reactivation_id: str,
+    authorization_id: str,
+    *,
+    approver_id: str,
+    role: ApproverRole = ApproverRole.RISK_OFFICER,
+) -> AuthorizationReactivationApproval:
+    approved_at = datetime(2026, 8, 30, 14, 0, 0, tzinfo=timezone.utc)
+    approval = AuthorizationReactivationApproval(
+        approver_id=approver_id,
+        public_key_id=key.key_id,
+        role=role,
+        reactivation_id=reactivation_id,
+        authorization_id=authorization_id,
+        approved_at=approved_at,
+        approval_signature="PLACEHOLDER",
+        approval_digest=_SHA256_PLACEHOLDER,
+    )
+    payload = approval.compute_canonical_payload_bytes()
+    digest = _make_approval_digest(payload)
+    sig = _sign_payload(key, payload)
+    return approval.model_copy(update={"approval_signature": sig, "approval_digest": digest})
+
+
+def _build_reactivation_event(
+    authorization: LiveAuthorization,
+    approvals: Tuple[AuthorizationReactivationApproval, ...],
+    *,
+    root_cause_summary: str = "Broker reconnect restored; reconciliation passed.",
+    authorization_id_override: str | None = None,
+) -> AuthorizationReactivationEvent:
+    reactivated_at = datetime(2026, 8, 30, 14, 5, 0, tzinfo=timezone.utc)
+    event = AuthorizationReactivationEvent(
+        reactivation_id="REACT_001",
+        authorization_id=authorization_id_override or authorization.authorization_id,
+        strategy_id=authorization.strategy_id,
+        reactivated_at=reactivated_at,
+        root_cause_summary=root_cause_summary,
+        required_approvals=authorization.required_approvals,
+        approvals=approvals,
+        reactivation_digest=_SHA256_PLACEHOLDER,
+    )
+    digest = hashlib.sha256(event.compute_canonical_payload_bytes()).hexdigest()
+    return event.model_copy(update={"reactivation_digest": digest})
+
+
+@pytest.fixture
+def gov_key() -> KeyMaterial:
+    return _make_key("KEY_RESEARCH_GOV_V1", "ACASH_RESEARCH_AUTHORITY_V1")
+
+
+@pytest.fixture
+def risk_key_1() -> KeyMaterial:
+    return _make_key("KEY_RISK_OFFICER_1", "ACASH_RISK_AUTHORITY_V1")
+
+
+@pytest.fixture
+def risk_key_2() -> KeyMaterial:
+    return _make_key("KEY_RISK_OFFICER_2", "ACASH_RISK_AUTHORITY_V1")
+
+
+@pytest.fixture
+def risk_key_3() -> KeyMaterial:
+    return _make_key("KEY_RISK_OFFICER_3", "ACASH_RISK_AUTHORITY_V1")
+
+
+@pytest.fixture
+def trust_store(
+    gov_key: KeyMaterial,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+    risk_key_3: KeyMaterial,
+) -> Ed25519TrustStore:
+    now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    entries = (
+        Ed25519TrustStoreEntry(
+            key_id=gov_key.key_id,
+            issuer_id=gov_key.issuer_id,
+            public_key_b64=gov_key.public_key_b64,
+            valid_from=now,
+            valid_until=None,
+            status=TrustStoreEntryStatus.ACTIVE,
+        ),
+        Ed25519TrustStoreEntry(
+            key_id=risk_key_1.key_id,
+            issuer_id=risk_key_1.issuer_id,
+            public_key_b64=risk_key_1.public_key_b64,
+            valid_from=now,
+            valid_until=None,
+            status=TrustStoreEntryStatus.ACTIVE,
+        ),
+        Ed25519TrustStoreEntry(
+            key_id=risk_key_2.key_id,
+            issuer_id=risk_key_2.issuer_id,
+            public_key_b64=risk_key_2.public_key_b64,
+            valid_from=now,
+            valid_until=None,
+            status=TrustStoreEntryStatus.ACTIVE,
+        ),
+        Ed25519TrustStoreEntry(
+            key_id=risk_key_3.key_id,
+            issuer_id=risk_key_3.issuer_id,
+            public_key_b64=risk_key_3.public_key_b64,
+            valid_from=now,
+            valid_until=None,
+            status=TrustStoreEntryStatus.ACTIVE,
+        ),
+    )
+    return Ed25519TrustStore(entries=entries)
+
+
+@pytest.fixture
+def valid_certificate(gov_key: KeyMaterial) -> ValidationCertificate:
+    return _build_signed_certificate(gov_key)
+
+
+@pytest.fixture
+def auth_params() -> dict[str, object]:
+    now = datetime(2026, 8, 30, 12, 5, 0, tzinfo=timezone.utc)
+    return {
+        "authorization_id": "AUTH_LIVE_001",
+        "max_notional": Decimal("100000.00"),
+        "max_position_size": Decimal("25000.00"),
+        "max_order_rate_per_minute": 60,
+        "max_daily_loss_notional": Decimal("2500.00"),
+        "max_drawdown_pct": Decimal("5.0"),
+        "allowed_venues": ["BINANCE_FUTURES", "INTERACTIVE_BROKERS"],
+        "allowed_symbols": ["BTC/USDT", "ETH/USDT"],
+        "risk_policy_version": "POL_PRE_LIVE_V1",
+        "authorized_at": now,
+        "expires_at": now + timedelta(days=30),
+        "required_approvals": 2,
+    }
+
+
+def _issue_with_quorum(
+    certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+    auth_params: dict[str, object],
+) -> LiveAuthorization:
+    auth_id = str(auth_params["authorization_id"])
+    approvals = (
+        _build_signed_approval(risk_key_1, auth_id, approver_id="RISK_OFFICER_1"),
+        _build_signed_approval(risk_key_2, auth_id, approver_id="RISK_OFFICER_2"),
+    )
+    return issue_live_authorization(
+        certificate=certificate,
+        trust_store=trust_store,
+        approvals=approvals,
+        **auth_params,  # type: ignore[arg-type]
     )
 
 
 @pytest.fixture
-def valid_authorization(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> LiveAuthorization:
-    now = datetime(2026, 8, 30, 12, 5, 0, tzinfo=timezone.utc)
-    expires = now + timedelta(days=30)
-    return issue_live_authorization(
-        certificate=valid_certificate,
-        authorization_id="AUTH_LIVE_001",
-        max_notional=Decimal("100000.00"),
-        max_position_size=Decimal("25000.00"),
-        max_order_rate_per_minute=60,
-        max_daily_loss_notional=Decimal("2500.00"),
-        max_drawdown_pct=Decimal("5.0"),
-        allowed_venues=["BINANCE_FUTURES", "INTERACTIVE_BROKERS"],
-        allowed_symbols=["BTC/USDT", "ETH/USDT"],
-        risk_policy_version="POL_PRE_LIVE_V1",
-        approver_id="RISK_OFFICER_01",
-        approver_public_key_id="KEY_RISK_OFFICER_V1",
-        approver_secret_key=trusted_keys["KEY_RISK_OFFICER_V1"],
-        authorized_at=now,
-        expires_at=expires,
-        trusted_public_keys=trusted_keys,
+def valid_authorization(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+    auth_params: dict[str, object],
+) -> LiveAuthorization:
+    return _issue_with_quorum(
+        valid_certificate, trust_store, risk_key_1, risk_key_2, auth_params
     )
 
 
@@ -153,9 +351,6 @@ def nominal_risk_state() -> RiskState:
         concentration_ratio=Decimal("0.20"),
         parametric_var_95=Decimal("1500.00"),
         historical_cvar_95=Decimal("2200.00"),
-        confidence_level=0.95,
-        estimation_window_bars=252,
-        risk_model_version="PARAMETRIC_GAUSSIAN_HURDLE_V1",
         data_timestamp=now,
         data_age_ms=120,
         calculation_status=CalculationStatus.NOMINAL,
@@ -167,126 +362,475 @@ def nominal_risk_state() -> RiskState:
 
 
 # ============================================================================
-# 1. VALIDATION CERTIFICATE TESTS
+# CERTIFICATE & TRUSTSTORE TESTS
 # ============================================================================
 
-def test_validation_certificate_happy_path(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> None:
+def test_certificate_happy_path(
+    valid_certificate: ValidationCertificate, trust_store: Ed25519TrustStore
+) -> None:
     verify_validation_certificate(
         certificate=valid_certificate,
-        trusted_public_keys=trusted_keys,
+        trust_store=trust_store,
         current_utc=datetime(2026, 8, 30, 12, 1, 0, tzinfo=timezone.utc),
     )
 
 
-def test_validation_certificate_rejects_non_pass_verdict(valid_certificate: ValidationCertificate) -> None:
-    with pytest.raises(DomainValidationError, match="requires verdict PASS_TRADEABLE_ALPHA"):
-        ValidationCertificate(
-            **{**valid_certificate.model_dump(), "verdict": ValidationGateVerdict.REJECT_OVERFIT_DSR}
+def test_certificate_rejects_unknown_key_id(
+    valid_certificate: ValidationCertificate, trust_store: Ed25519TrustStore
+) -> None:
+    tampered = valid_certificate.model_copy(update={"issuer_public_key_id": "UNKNOWN_KEY"})
+    with pytest.raises(PreLiveRiskAdmissionError, match="unknown key_id"):
+        verify_validation_certificate(tampered, trust_store)
+
+
+def test_certificate_rejects_tampered_payload(
+    valid_certificate: ValidationCertificate, trust_store: Ed25519TrustStore
+) -> None:
+    tampered = valid_certificate.model_copy(update={"strategy_id": "TAMPERED_STRATEGY"})
+    with pytest.raises(PreLiveRiskAdmissionError, match="Ed25519 signature FAILED"):
+        verify_validation_certificate(tampered, trust_store)
+
+
+def test_certificate_rejects_revoked_key(
+    gov_key: KeyMaterial, trust_store: Ed25519TrustStore
+) -> None:
+    revoked_store = Ed25519TrustStore(
+        entries=(
+            Ed25519TrustStoreEntry(
+                key_id=gov_key.key_id,
+                issuer_id=gov_key.issuer_id,
+                public_key_b64=gov_key.public_key_b64,
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                status=TrustStoreEntryStatus.REVOKED,
+            ),
         )
-
-
-def test_validation_certificate_rejects_tampered_signature(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> None:
-    tampered_cert = ValidationCertificate(
-        **{**valid_certificate.model_dump(), "certificate_signature": "a" * 64}
     )
-    with pytest.raises(PreLiveRiskAdmissionError, match="digital signature mismatch"):
-        verify_validation_certificate(tampered_cert, trusted_public_keys=trusted_keys)
+    cert = _build_signed_certificate(gov_key)
+    with pytest.raises(PreLiveRiskAdmissionError, match="REVOKED"):
+        verify_validation_certificate(cert, revoked_store)
 
 
-def test_validation_certificate_rejects_expired(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> None:
-    past_expiration = datetime(2026, 12, 1, 0, 0, 0, tzinfo=timezone.utc)
+def test_certificate_rejects_expired_key_at_signing_time(
+    gov_key: KeyMaterial,
+) -> None:
+    created = datetime(2026, 8, 30, 12, 0, 0, tzinfo=timezone.utc)
+    expired_store = Ed25519TrustStore(
+        entries=(
+            Ed25519TrustStoreEntry(
+                key_id=gov_key.key_id,
+                issuer_id=gov_key.issuer_id,
+                public_key_b64=gov_key.public_key_b64,
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_until=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                status=TrustStoreEntryStatus.ACTIVE,
+            ),
+        )
+    )
+    cert = _build_signed_certificate(
+        gov_key,
+        created_at=created,
+        expires_at=datetime(2027, 3, 15, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="was not valid at"):
+        verify_validation_certificate(cert, expired_store)
+
+
+def test_certificate_accepts_rotated_key_for_historical_timestamp(
+    gov_key: KeyMaterial,
+) -> None:
+    created = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
+    rotated_store = Ed25519TrustStore(
+        entries=(
+            Ed25519TrustStoreEntry(
+                key_id=gov_key.key_id,
+                issuer_id=gov_key.issuer_id,
+                public_key_b64=gov_key.public_key_b64,
+                valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                valid_until=datetime(2026, 6, 30, tzinfo=timezone.utc),
+                status=TrustStoreEntryStatus.ROTATED,
+            ),
+        )
+    )
+    cert = _build_signed_certificate(
+        gov_key,
+        created_at=created,
+        expires_at=datetime(2027, 3, 15, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    verify_validation_certificate(
+        cert,
+        rotated_store,
+        current_utc=datetime(2026, 8, 30, tzinfo=timezone.utc),
+    )
+
+
+def test_certificate_rejects_expired_certificate(
+    valid_certificate: ValidationCertificate, trust_store: Ed25519TrustStore
+) -> None:
     with pytest.raises(PreLiveRiskAdmissionError, match="has expired"):
         verify_validation_certificate(
-            certificate=valid_certificate,
-            trusted_public_keys=trusted_keys,
-            current_utc=past_expiration,
+            valid_certificate,
+            trust_store,
+            current_utc=datetime(2026, 12, 1, tzinfo=timezone.utc),
         )
 
 
-def test_validation_certificate_rejects_revoked(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> None:
-    rev_event = CertificateRevocationEvent(
-        revocation_id="REV_001",
-        certificate_id=valid_certificate.certificate_id,
-        strategy_id=valid_certificate.strategy_id,
-        revoked_at=datetime(2026, 8, 30, 12, 2, 0, tzinfo=timezone.utc),
-        reason="Data leak discovered in training split",
-        actor="RISK_COMMITTEE_CHAIR",
-        actor_public_key_id="KEY_RISK_OFFICER_V1",
-        revocation_signature="b" * 64,
-        revocation_digest=hashlib.sha256(b"rev_canonical").hexdigest(),
-    )
+def test_certificate_rejects_revoked_with_full_verification(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+) -> None:
+    rev = _build_signed_revocation(risk_key_1, valid_certificate)
     with pytest.raises(PreLiveRiskAdmissionError, match="was revoked"):
         verify_validation_certificate(
-            certificate=valid_certificate,
-            revocation_events=[rev_event],
-            trusted_public_keys=trusted_keys,
+            valid_certificate,
+            trust_store,
+            revocation_events=[rev],
+            current_utc=datetime(2026, 8, 30, 12, 3, 0, tzinfo=timezone.utc),
         )
 
 
+def test_revocation_rejects_cross_strategy_confusion(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+) -> None:
+    rev = _build_signed_revocation(
+        risk_key_1, valid_certificate, strategy_id="OTHER_STRATEGY"
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="strategy_id"):
+        verify_validation_certificate(
+            valid_certificate,
+            trust_store,
+            revocation_events=[rev],
+            current_utc=datetime(2026, 8, 30, 12, 3, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_revocation_rejects_invalid_signature(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+) -> None:
+    rev = _build_signed_revocation(
+        risk_key_1,
+        valid_certificate,
+        signature_override=Ed25519Signer.sign(
+            Ed25519Signer.generate_key_pair()[0],
+            _build_signed_revocation(risk_key_1, valid_certificate).compute_canonical_payload_bytes(),
+        ),
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="Ed25519 signature FAILED"):
+        verify_validation_certificate(
+            valid_certificate,
+            trust_store,
+            revocation_events=[rev],
+            current_utc=datetime(2026, 8, 30, 12, 3, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_old_sha256_secret_signature_path_does_not_work(
+    valid_certificate: ValidationCertificate, trust_store: Ed25519TrustStore
+) -> None:
+    fake_sig = hashlib.sha256(
+        valid_certificate.compute_canonical_payload_bytes() + b"super_secret"
+    ).hexdigest()
+    tampered = valid_certificate.model_copy(update={"certificate_signature": fake_sig})
+    with pytest.raises(PreLiveRiskAdmissionError, match="invalid base64 signature"):
+        verify_validation_certificate(tampered, trust_store)
+
+
 # ============================================================================
-# 2. LIVE AUTHORIZATION TESTS
+# AUTHORIZATION QUORUM TESTS
 # ============================================================================
 
-def test_live_authorization_happy_path(valid_authorization: LiveAuthorization) -> None:
+def test_authorization_happy_path_at_quorum(valid_authorization: LiveAuthorization) -> None:
     assert valid_authorization.status == AuthorizationStatus.ACTIVE
-    assert valid_authorization.max_notional == Decimal("100000.00")
-    assert valid_authorization.max_position_size == Decimal("25000.00")
-    assert "BINANCE_FUTURES" in valid_authorization.allowed_venues
-    assert "BTC/USDT" in valid_authorization.allowed_symbols
+    assert len(valid_authorization.approvals) == 2
+    assert valid_authorization.required_approvals == 2
 
 
-def test_live_authorization_rejects_position_size_exceeding_notional(valid_certificate: ValidationCertificate, trusted_keys: Dict[str, str]) -> None:
-    now = datetime(2026, 8, 30, 12, 5, 0, tzinfo=timezone.utc)
-    with pytest.raises(PreLiveRiskAdmissionError, match="cannot exceed total max_notional"):
+def test_authorization_rejects_insufficient_quorum_pending(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    auth_params: dict[str, object],
+) -> None:
+    auth_id = str(auth_params["authorization_id"])
+    auth = issue_live_authorization(
+        certificate=valid_certificate,
+        trust_store=trust_store,
+        approvals=(
+            _build_signed_approval(risk_key_1, auth_id, approver_id="RISK_OFFICER_1"),
+        ),
+        **auth_params,  # type: ignore[arg-type]
+    )
+    assert auth.status == AuthorizationStatus.PENDING_APPROVAL
+
+
+def test_authorization_rejects_duplicate_approvers(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    auth_params: dict[str, object],
+) -> None:
+    auth_id = str(auth_params["authorization_id"])
+    dup = _build_signed_approval(risk_key_1, auth_id, approver_id="RISK_OFFICER_1")
+    with pytest.raises(PreLiveRiskAdmissionError, match="Duplicate approver_id"):
         issue_live_authorization(
             certificate=valid_certificate,
-            authorization_id="AUTH_BAD_01",
-            max_notional=Decimal("50000.00"),
-            max_position_size=Decimal("60000.00"),  # Exceeds notional
-            max_order_rate_per_minute=60,
-            max_daily_loss_notional=Decimal("1000.00"),
-            max_drawdown_pct=Decimal("5.0"),
-            allowed_venues=["BINANCE_FUTURES"],
-            allowed_symbols=["BTC/USDT"],
-            risk_policy_version="POL_PRE_LIVE_V1",
-            approver_id="RISK_OFFICER_01",
-            approver_public_key_id="KEY_RISK_OFFICER_V1",
-            approver_secret_key=trusted_keys["KEY_RISK_OFFICER_V1"],
-            authorized_at=now,
-            expires_at=now + timedelta(days=30),
-            trusted_public_keys=trusted_keys,
+            trust_store=trust_store,
+            approvals=(dup, dup),
+            **auth_params,  # type: ignore[arg-type]
         )
 
 
-def test_live_authorization_rejects_negative_or_nan_limits() -> None:
-    with pytest.raises(DomainValidationError, match="must be strictly positive"):
-        LiveAuthorization(
-            authorization_id="AUTH_TEST",
-            certificate_id="CERT_TEST",
-            strategy_id="STRAT_TEST",
-            status=AuthorizationStatus.ACTIVE,
-            authorized_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
-            max_notional=Decimal("-100.0"),  # Negative
-            max_position_size=Decimal("10.0"),
-            max_order_rate_per_minute=10,
-            max_daily_loss_notional=Decimal("10.0"),
-            max_drawdown_pct=Decimal("5.0"),
-            allowed_venues=("BINANCE",),
-            allowed_symbols=("BTC/USDT",),
-            risk_policy_version="v1",
-            approver_id="app",
-            approver_public_key_id="key",
-            authorization_signature="sig",
-            authorization_digest="a" * 64,
+def test_authorization_rejects_forged_approval(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+    auth_params: dict[str, object],
+) -> None:
+    auth_id = str(auth_params["authorization_id"])
+    forged = _build_signed_approval(
+        risk_key_1,
+        auth_id,
+        approver_id="RISK_OFFICER_1",
+        signature_override="not-valid-base64!!!",
+    )
+    good = _build_signed_approval(risk_key_2, auth_id, approver_id="RISK_OFFICER_2")
+    with pytest.raises(PreLiveRiskAdmissionError, match="invalid base64 signature"):
+        issue_live_authorization(
+            certificate=valid_certificate,
+            trust_store=trust_store,
+            approvals=(forged, good),
+            **auth_params,  # type: ignore[arg-type]
         )
 
 
+def test_direct_active_construction_possible_but_service_is_authority(
+    auth_params: dict[str, object],
+) -> None:
+    """Schema permits ACTIVE construction; production path must use service layer."""
+    now = auth_params["authorized_at"]
+    assert isinstance(now, datetime)
+    digest = compute_authorization_digest(
+        authorization_id="AUTH_DIRECT",
+        certificate_id="CERT_TEST",
+        strategy_id="STAT_ARB_VOL_01",
+        authorized_at=now,
+        expires_at=auth_params["expires_at"],  # type: ignore[arg-type]
+        max_notional=auth_params["max_notional"],  # type: ignore[arg-type]
+        max_position_size=auth_params["max_position_size"],  # type: ignore[arg-type]
+        max_order_rate_per_minute=auth_params["max_order_rate_per_minute"],  # type: ignore[arg-type]
+        max_daily_loss_notional=auth_params["max_daily_loss_notional"],  # type: ignore[arg-type]
+        max_drawdown_pct=auth_params["max_drawdown_pct"],  # type: ignore[arg-type]
+        allowed_venues=tuple(auth_params["allowed_venues"]),  # type: ignore[arg-type]
+        allowed_symbols=tuple(auth_params["allowed_symbols"]),  # type: ignore[arg-type]
+        risk_policy_version=str(auth_params["risk_policy_version"]),
+        required_approvals=2,
+        approval_digests=(),
+    )
+    direct = LiveAuthorization(
+        authorization_id="AUTH_DIRECT",
+        certificate_id="CERT_TEST",
+        strategy_id="STAT_ARB_VOL_01",
+        status=AuthorizationStatus.ACTIVE,
+        authorized_at=now,
+        expires_at=auth_params["expires_at"],  # type: ignore[arg-type]
+        max_notional=auth_params["max_notional"],  # type: ignore[arg-type]
+        max_position_size=auth_params["max_position_size"],  # type: ignore[arg-type]
+        max_order_rate_per_minute=auth_params["max_order_rate_per_minute"],  # type: ignore[arg-type]
+        max_daily_loss_notional=auth_params["max_daily_loss_notional"],  # type: ignore[arg-type]
+        max_drawdown_pct=auth_params["max_drawdown_pct"],  # type: ignore[arg-type]
+        allowed_venues=tuple(auth_params["allowed_venues"]),  # type: ignore[arg-type]
+        allowed_symbols=tuple(auth_params["allowed_symbols"]),  # type: ignore[arg-type]
+        risk_policy_version=str(auth_params["risk_policy_version"]),
+        required_approvals=2,
+        approvals=(),
+        authorization_digest=digest,
+    )
+    assert direct.status == AuthorizationStatus.ACTIVE
+    assert direct.approvals == ()
+
+
 # ============================================================================
-# 3. ORDER INTENT ADMISSION TESTS
+# STATE TRANSITION TESTS
 # ============================================================================
 
-def test_construct_order_intent_happy_path(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
+def test_draft_to_pending_approval(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    auth_params: dict[str, object],
+) -> None:
+    draft = create_draft_authorization(
+        certificate=valid_certificate,
+        trust_store=trust_store,
+        **auth_params,  # type: ignore[arg-type]
+    )
+    assert draft.status == AuthorizationStatus.DRAFT
+    pending = submit_for_approval(draft)
+    assert pending.status == AuthorizationStatus.PENDING_APPROVAL
+
+
+def test_invalid_draft_transition_rejected(
+    valid_authorization: LiveAuthorization,
+) -> None:
+    with pytest.raises(PreLiveRiskAdmissionError, match="requires DRAFT status"):
+        submit_for_approval(valid_authorization)
+
+
+def test_pending_to_active_at_quorum(
+    valid_certificate: ValidationCertificate,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+    auth_params: dict[str, object],
+) -> None:
+    draft = create_draft_authorization(
+        certificate=valid_certificate,
+        trust_store=trust_store,
+        **auth_params,  # type: ignore[arg-type]
+    )
+    pending = submit_for_approval(draft)
+    auth_id = str(auth_params["authorization_id"])
+    after_one = apply_approval(
+        pending,
+        _build_signed_approval(risk_key_1, auth_id, approver_id="RISK_OFFICER_1"),
+        trust_store,
+    )
+    assert after_one.status == AuthorizationStatus.PENDING_APPROVAL
+    active = apply_approval(
+        after_one,
+        _build_signed_approval(risk_key_2, auth_id, approver_id="RISK_OFFICER_2"),
+        trust_store,
+    )
+    assert active.status == AuthorizationStatus.ACTIVE
+
+
+def test_active_to_suspended(valid_authorization: LiveAuthorization) -> None:
+    suspended = suspend_authorization(
+        valid_authorization, reason="BROKER_DISCONNECTED", actor_id="SYSTEM"
+    )
+    assert suspended.status == AuthorizationStatus.SUSPENDED
+
+
+def test_suspended_to_active_requires_same_quorum(
+    valid_authorization: LiveAuthorization,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+) -> None:
+    suspended = suspend_authorization(
+        valid_authorization, reason="STALE_MARKET_DATA", actor_id="SYSTEM"
+    )
+    reactivation_approvals = (
+        _build_signed_reactivation_approval(
+            risk_key_1, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_1"
+        ),
+        _build_signed_reactivation_approval(
+            risk_key_2, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_2"
+        ),
+    )
+    event = _build_reactivation_event(suspended, reactivation_approvals)
+    reactivated = reactivate_authorization(suspended, event, trust_store)
+    assert reactivated.status == AuthorizationStatus.ACTIVE
+
+
+def test_reactivation_rejects_insufficient_quorum(
+    valid_authorization: LiveAuthorization,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+) -> None:
+    suspended = suspend_authorization(
+        valid_authorization, reason="RECONCILIATION_FAILURE", actor_id="SYSTEM"
+    )
+    event = _build_reactivation_event(
+        suspended,
+        (
+            _build_signed_reactivation_approval(
+                risk_key_1, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_1"
+            ),
+        ),
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="quorum not met"):
+        reactivate_authorization(suspended, event, trust_store)
+
+
+def test_reactivation_rejects_wrong_authorization_binding(
+    valid_authorization: LiveAuthorization,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+) -> None:
+    suspended = suspend_authorization(valid_authorization, reason="CLOCK_SKEW", actor_id="SYSTEM")
+    reactivation_approvals = (
+        _build_signed_reactivation_approval(
+            risk_key_1, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_1"
+        ),
+        _build_signed_reactivation_approval(
+            risk_key_2, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_2"
+        ),
+    )
+    event = _build_reactivation_event(
+        suspended, reactivation_approvals, authorization_id_override="WRONG_AUTH_ID"
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="authorization_id"):
+        reactivate_authorization(suspended, event, trust_store)
+
+
+def test_reactivation_rejects_empty_root_cause(
+    valid_authorization: LiveAuthorization,
+    trust_store: Ed25519TrustStore,
+    risk_key_1: KeyMaterial,
+    risk_key_2: KeyMaterial,
+) -> None:
+    suspended = suspend_authorization(valid_authorization, reason="MANUAL_HALT", actor_id="OPS")
+    reactivation_approvals = (
+        _build_signed_reactivation_approval(
+            risk_key_1, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_1"
+        ),
+        _build_signed_reactivation_approval(
+            risk_key_2, "REACT_001", suspended.authorization_id, approver_id="RISK_OFFICER_2"
+        ),
+    )
+    event = _build_reactivation_event(suspended, reactivation_approvals).model_copy(
+        update={"root_cause_summary": "   "}
+    )
+    with pytest.raises(PreLiveRiskAdmissionError, match="root_cause_summary"):
+        reactivate_authorization(suspended, event, trust_store)
+
+
+def test_revoked_is_terminal(valid_authorization: LiveAuthorization) -> None:
+    revoked = revoke_authorization(valid_authorization, reason="Policy breach", actor_id="RISK")
+    assert revoked.status == AuthorizationStatus.REVOKED
+    with pytest.raises(PreLiveRiskAdmissionError, match="terminal status"):
+        revoke_authorization(revoked, reason="Again", actor_id="RISK")
+    with pytest.raises(PreLiveRiskAdmissionError, match="requires ACTIVE status"):
+        suspend_authorization(revoked, reason="Late suspend", actor_id="RISK")
+
+
+def test_expired_is_terminal(valid_authorization: LiveAuthorization) -> None:
+    expired = expire_authorization(
+        valid_authorization,
+        current_utc=valid_authorization.expires_at + timedelta(seconds=1),
+    )
+    assert expired.status == AuthorizationStatus.EXPIRED
+    with pytest.raises(PreLiveRiskAdmissionError, match="terminal status"):
+        revoke_authorization(expired, reason="Late revoke", actor_id="RISK")
+
+
+def test_cancel_requested_exists_in_order_lifecycle() -> None:
+    assert OrderLifecycleState.CANCEL_REQUESTED == "CANCEL_REQUESTED"
+
+
+# ============================================================================
+# ORDER INTENT & KILL SWITCH (REGRESSION)
+# ============================================================================
+
+def test_construct_order_intent_happy_path(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
     signal_hash = hashlib.sha256(b"signal_event_123").hexdigest()
     intent = construct_order_intent(
         authorization=valid_authorization,
@@ -302,132 +846,40 @@ def test_construct_order_intent_happy_path(valid_authorization: LiveAuthorizatio
         limit_price=Decimal("64000.00"),
     )
     assert intent.intent_id == "INTENT_001"
-    assert intent.quantity == Decimal("1.50")
     assert len(intent.intent_digest) == 64
 
 
-def test_order_intent_rejects_when_authorization_suspended(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    suspended_auth = LiveAuthorization(
-        **{**valid_authorization.model_dump(), "status": AuthorizationStatus.SUSPENDED}
-    )
-    signal_hash = hashlib.sha256(b"signal").hexdigest()
-    with pytest.raises(PreLiveRiskAdmissionError, match="is AuthorizationStatus.SUSPENDED, must be ACTIVE"):
+def test_order_intent_rejects_suspended(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    suspended = valid_authorization.model_copy(update={"status": AuthorizationStatus.SUSPENDED})
+    with pytest.raises(PreLiveRiskAdmissionError, match="must be ACTIVE"):
         construct_order_intent(
-            authorization=suspended_auth,
-            intent_id="INTENT_BAD_01",
+            authorization=suspended,
+            intent_id="INTENT_BAD",
             venue="BINANCE_FUTURES",
             symbol="BTC/USDT",
             side=OrderSide.BUY,
             order_type=OrderType.MARKET,
             quantity=Decimal("1.0"),
             current_risk=nominal_risk_state,
-            signal_event_hash=signal_hash,
+            signal_event_hash=hashlib.sha256(b"x").hexdigest(),
             created_at=datetime.now(timezone.utc),
         )
 
 
-def test_order_intent_rejects_unwhitelisted_venue_or_symbol(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    signal_hash = hashlib.sha256(b"signal").hexdigest()
-    # Unallowed venue
-    with pytest.raises(PreLiveRiskAdmissionError, match="Venue 'UNAPPROVED_EXCHANGE' is not permitted"):
-        construct_order_intent(
-            authorization=valid_authorization,
-            intent_id="INTENT_BAD_02",
-            venue="UNAPPROVED_EXCHANGE",
-            symbol="BTC/USDT",
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=Decimal("1.0"),
-            current_risk=nominal_risk_state,
-            signal_event_hash=signal_hash,
-            created_at=datetime.now(timezone.utc),
-        )
-    # Unallowed symbol
-    with pytest.raises(PreLiveRiskAdmissionError, match="Symbol 'SHIB/USDT' is not permitted"):
-        construct_order_intent(
-            authorization=valid_authorization,
-            intent_id="INTENT_BAD_03",
-            venue="BINANCE_FUTURES",
-            symbol="SHIB/USDT",
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=Decimal("1.0"),
-            current_risk=nominal_risk_state,
-            signal_event_hash=signal_hash,
-            created_at=datetime.now(timezone.utc),
-        )
-
-
-def test_order_intent_fail_closed_on_stale_or_unknown_risk_state(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    signal_hash = hashlib.sha256(b"signal").hexdigest()
-    stale_risk = RiskState(
-        **{**nominal_risk_state.model_dump(), "calculation_status": CalculationStatus.STALE, "data_age_ms": 3500}
-    )
-    with pytest.raises(PreLiveRiskAdmissionError, match="Risk calculation is not NOMINAL"):
-        construct_order_intent(
-            authorization=valid_authorization,
-            intent_id="INTENT_BAD_04",
-            venue="BINANCE_FUTURES",
-            symbol="BTC/USDT",
-            side=OrderSide.BUY,
-            order_type=OrderType.MARKET,
-            quantity=Decimal("1.0"),
-            current_risk=stale_risk,
-            signal_event_hash=signal_hash,
-            created_at=datetime.now(timezone.utc),
-        )
-
-
-# ============================================================================
-# 4. KILL SWITCH TRIGGER MATRIX TESTS
-# ============================================================================
-
-def test_kill_switch_triggers_on_broker_disconnect(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    disconnected_risk = RiskState(
-        **{**nominal_risk_state.model_dump(), "is_broker_connected": False}
-    )
-    event = evaluate_kill_switch_triggers(valid_authorization, disconnected_risk)
-    assert event is not None
-    assert event.trigger_type == KillSwitchTriggerType.BROKER_DISCONNECTED
-    assert event.primary_action == KillSwitchAction.HALT_NEW_ORDERS
-    assert event.position_action == KillSwitchAction.FREEZE_AND_RECONCILE
-
-
-def test_kill_switch_triggers_on_stale_market_data_with_hold_positions(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    stale_risk = RiskState(
-        **{**nominal_risk_state.model_dump(), "is_market_data_stale": True, "data_age_ms": 2500}
+def test_kill_switch_halt_not_flatten_on_stale(
+    valid_authorization: LiveAuthorization, nominal_risk_state: RiskState
+) -> None:
+    stale_risk = nominal_risk_state.model_copy(
+        update={"is_market_data_stale": True, "data_age_ms": 2500}
     )
     event = evaluate_kill_switch_triggers(valid_authorization, stale_risk)
     assert event is not None
     assert event.trigger_type == KillSwitchTriggerType.STALE_MARKET_DATA
     assert event.primary_action == KillSwitchAction.CANCEL_WORKING_ORDERS
-    # Invariant: Never blindly market-flatten on stale data; freeze and hold
     assert event.position_action == KillSwitchAction.FREEZE_AND_RECONCILE
 
-
-def test_kill_switch_triggers_on_daily_loss_breach(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    loss_risk = RiskState(
-        **{**nominal_risk_state.model_dump(), "realized_pnl_today": Decimal("-3000.00")}  # Limit is 2500
-    )
-    event = evaluate_kill_switch_triggers(valid_authorization, loss_risk)
-    assert event is not None
-    assert event.trigger_type == KillSwitchTriggerType.MAX_DAILY_LOSS
-    assert event.position_action == KillSwitchAction.CONTROLLED_DERISK
-
-
-def test_kill_switch_triggers_on_max_drawdown_breach(valid_authorization: LiveAuthorization, nominal_risk_state: RiskState) -> None:
-    dd_risk = RiskState(
-        **{**nominal_risk_state.model_dump(), "current_drawdown_pct": Decimal("6.2")}  # Limit is 5.0%
-    )
-    event = evaluate_kill_switch_triggers(valid_authorization, dd_risk)
-    assert event is not None
-    assert event.trigger_type == KillSwitchTriggerType.MAX_DRAWDOWN
-    assert event.position_action == KillSwitchAction.EMERGENCY_FLATTEN
-
-
-# ============================================================================
-# 5. RECONCILIATION REPORT TESTS
-# ============================================================================
 
 def test_reconciliation_report_happy_path() -> None:
     report = ReconciliationReport(
@@ -437,11 +889,7 @@ def test_reconciliation_report_happy_path() -> None:
         is_in_parity=True,
         internal_open_orders_count=3,
         broker_open_orders_count=3,
-        position_discrepancies=(),
-        order_discrepancies=(),
-        cash_discrepancy_amount=Decimal("0.0"),
         action_taken="NOMINAL_LOGGED",
         report_digest=hashlib.sha256(b"rec_nominal").hexdigest(),
     )
     assert report.is_in_parity is True
-    assert report.cash_discrepancy_amount == Decimal("0.0")

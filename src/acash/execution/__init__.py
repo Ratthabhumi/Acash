@@ -2,15 +2,31 @@
 
 from acash.execution.admission import (
     PreLiveRiskAdmissionError,
+    apply_approval,
     construct_order_intent,
+    create_draft_authorization,
     evaluate_kill_switch_triggers,
+    expire_authorization,
     issue_live_authorization,
+    reactivate_authorization,
+    revoke_authorization,
+    submit_for_approval,
+    suspend_authorization,
     verify_validation_certificate,
+)
+from acash.execution.crypto import (
+    Ed25519Signer,
+    Ed25519TrustStore,
+    Ed25519TrustStoreEntry,
+    TrustStoreEntryStatus,
 )
 from acash.execution.mock import MockExecutionEngine
 from acash.execution.schema import (
+    AuthorizationApproval,
+    AuthorizationReactivationApproval,
     AuthorizationReactivationEvent,
     AuthorizationStatus,
+    ApproverRole,
     CalculationStatus,
     CertificateRevocationEvent,
     ExecutionManifest,
@@ -27,13 +43,20 @@ from acash.execution.schema import (
     RiskStatus,
     TimeInForce,
     ValidationCertificate,
+    compute_authorization_digest,
 )
 
 __all__ = [
+    "ApproverRole",
+    "AuthorizationApproval",
+    "AuthorizationReactivationApproval",
     "AuthorizationReactivationEvent",
     "AuthorizationStatus",
     "CalculationStatus",
     "CertificateRevocationEvent",
+    "Ed25519Signer",
+    "Ed25519TrustStore",
+    "Ed25519TrustStoreEntry",
     "ExecutionManifest",
     "KillSwitchAction",
     "KillSwitchEvent",
@@ -49,9 +72,18 @@ __all__ = [
     "RiskState",
     "RiskStatus",
     "TimeInForce",
+    "TrustStoreEntryStatus",
     "ValidationCertificate",
+    "apply_approval",
+    "compute_authorization_digest",
     "construct_order_intent",
+    "create_draft_authorization",
     "evaluate_kill_switch_triggers",
+    "expire_authorization",
     "issue_live_authorization",
+    "reactivate_authorization",
+    "revoke_authorization",
+    "submit_for_approval",
+    "suspend_authorization",
     "verify_validation_certificate",
 ]
