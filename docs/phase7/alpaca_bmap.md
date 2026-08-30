@@ -144,7 +144,7 @@ as evidence fields.
 | `event_kind` | yes | mapped from Alpaca `event` (see §1) | fail-closed (never guessed) |
 | `observed_at` | yes | `timestamp` on the trade event; else `order.updated_at` (contract S-2 broker report time) | labelled receipt time |
 | `source` | yes | `"ALPACA"` | — |
-| `broker_sequence` | yes | `event_ulid` (ULID) on SSE; see §3 | declared fallback (REST path, §4) |
+| `broker_sequence` | yes | `event_id` (ULID, v2) on SSE; see §3 | declared fallback (REST path, §4) |
 | `cancel_was_requested` | conditional | `order.cancel_requested_at != null` (broker-side knowledge, NOT internal shadow state) | fail-closed ambiguity (§7) |
 
 ### Layer B — persisted `ReconciliationEvidence` schema (FIXED by Step 8C, not expanded)
@@ -158,7 +158,7 @@ modified to fit this BMAP** (canonical authority). Only these fields exist:
 | `observed_status` | mapped `BrokerEventKind` (§1) | canonical, never vendor enum |
 | `observed_at` | broker report `timestamp` | UTC |
 | `source` | `"ALPACA"` | venue |
-| `broker_sequence` | `event_ulid` | broker sequence / replay id |
+| `broker_sequence` | `event_id` | broker sequence / replay id |
 | `evidence_digest` | computed by normalizer | SHA-256 over canonical serialization |
 
 The BMAP adds NO fields to this schema. Per-vendor extra identifiers
@@ -170,7 +170,7 @@ feed Layer A / Layer C instead.
 | CoordinatorEvent field | Alpaca source / derivation | Notes |
 | :--- | :--- | :--- |
 | `broker_event_id` | `execution_id` (fill/partial) else `order.id:event` | dedup key (contract I-1) |
-| `broker_sequence` | `event_ulid` | ordering reference (S-5) |
+| `broker_sequence` | `event_id` | ordering reference (S-5) |
 | `canonical_event` | normalizer output `ExecutionEvent` | |
 | `fill_qty` | per-fill event `qty` (fill/partial only) | accumulated ONLY by coordinator (I-4) |
 | `order_id` | local identity (ACASH) | optional |
@@ -187,21 +187,42 @@ the pump from Layer A/B + identity.
 
 ## 3. Item 3 — `broker_sequence` semantics
 
-- **REQUIRED (verbatim)**: The Trade Events SSE supplies a **trustworthy
-  broker-issued sequence**: the `event_ulid` (ULID) on every event, which is
+**Terminology (v2, current docs):** the SSE `broker_sequence` source is the **v2
+`event_id` (ULID)**, NOT the legacy v1 `event_ulid`. Current Alpaca docs (Activity
+SSE + Trade Events SSE v2) define `event_id` as a ULID: "lexicographically
+sortable, monotonically increasing event identifier... The time part encodes the
+timestamp when event-streaming emitted the event (publication time). Use for
+cursor-based replay." The legacy integer/`event_ulid` naming applies only to
+deprecated `/v1`/legacy endpoints. This BMAP targets the v2 endpoint and uses
+`event_id`.
+
+- **REQUIRED (verbatim)**: The Trade Events SSE (v2) supplies a **trustworthy
+  broker-issued sequence**: `event_id` (ULID) on every event, which is
   **lexicographically sortable and deterministic-replayable** (`since_id`).
-  The adapter MUST populate `broker_sequence = event_ulid` verbatim (contract §5
-  S-3 REQUIRED; framework §3.3 SM-6).
+  The adapter MUST populate `broker_sequence = event_id` **verbatim** (contract
+  §5 S-3 REQUIRED; framework §3.3 SM-6), and MUST **NOT** derive it from any
+  timestamp, wall clock, or `at` field — Alpaca defines `event_id` as the
+  publication-issued sequence and requires it as the replay cursor.
+- **Boxed invariant (publication ≠ business):**
+  $$\boxed{\text{publication sequence} \neq \text{business timestamp}}$$
+  `event_id` (publication time order) is independent of `at`/`timestamp`
+  (business/execution timing). Backfill can publish a business-old event later
+  (e.g. a `trade_correct` with `at` hours before its delivery), so
+  lexicographic/sequence order MUST NOT be assumed equal to business-time order.
+  This propagates into §9. See §8 for how these two axes are used distinctly:
+  `event_id` for ordering/replay/dedup, `at`/`timestamp` for observed business
+  timing only.
 - Identity: `(broker_event_id, broker_sequence)` = `(execution_id or
-  order.id:event, event_ulid)` — see §8.
-- Semantics statement: ULID encodes time + stochastic component, monotonic per
-  source, unique per event — satisfies I-1 (no reuse within an order's stream).
+  order.id:event, event_id)` — see §8.
+- Semantics statement: ULID encodes publication time + stochastic component,
+  monotonic per source, unique per event — satisfies I-1 (no reuse within an
+  order's stream).
 
 ---
 
 ## 4. Item 4 — Fallback ordering when sequence unavailable
 
-- The SSE path needs NO fallback (`event_ulid` REQUIRED, §3).
+- The SSE path needs NO fallback (`event_id` REQUIRED, §3).
 - **Declared fallback (REST-snapshot only)**: when state is reconstructed from REST
   `GET /v2/orders` (no SSE cursor), Alpaca provides `order.updated_at` but no
   monotonic per-event id on that snapshot path. The adapter MUST then use its own
@@ -269,11 +290,16 @@ Alpaca `canceled` is **not** proof of a user cancel.
 ## 8. Item 8 — Duplicate / out-of-order handling
 
 - **Identity**: fill/partial_fill dedup uses `execution_id`; cross-event ordering
-  and replay use `event_ulid` (ULID, sortable). `(execution_id, event_ulid)` is the
+  and replay use `event_id` (ULID, sortable, v2). `(execution_id, event_id)` is the
   idempotency key the coordinator consumes.
-- **Replay/no-miss**: SSE `since_id` (ULID) gives deterministic replay — reconnect
-  resumes from cursor; no missed events (this is a first-party guarantee, unlike
-  aggregated CCXT `watch_orders` where missing updates are a known issue).
+- **Replay/reconnect**: SSE `since_id` (ULID, v2) supports deterministic replay —
+  reconnect resumes from the last processed `event_id` cursor using `since_id`.
+  Re-delivered identity is re-applied idempotently. This recovery mechanism is
+  **NOT** a claim that the network layer never fails or that no event is ever
+  missed; it is a well-defined recovery path. Per Current Alpaca guidance, a
+  connection may be closed by client/network error, so the adapter reconnects with
+  `since_id = last_processed_event_id` and then lets the coordinator deduplicate
+  (`ref_id`/`execution_id`) any re-delivered events.
 - **Duplicates**: re-delivered identity is skipped by `ExecutionCoordinator.apply`
   without re-accumulation (contract §4 I-2).
 - **Out-of-order / late**: after a terminal state, a late event is a LATE_EVENT
@@ -290,11 +316,20 @@ Alpaca `canceled` is **not** proof of a user cancel.
 - All timestamps UTC-aware (contract §5 S-1). `observed_at` = broker report time =
   the SSE `timestamp` (or `order.updated_at` for snapshots); never the adapter's
   local receipt unless broker provides none (S-2, labelled).
+- **Boxed invariant (ordering identity ≠ event time — from §3):**
+  $$\boxed{\text{Ordering Identity} \neq \text{Event Time}}$$
+  The `event_id` (ULID) gives **publication-order** sequencing; `at`/`timestamp`/
+  `executed_at` give **business/execution** timing. A backfill can publish a
+  business-old event later, so the two axes differ. The adapter MUST use `event_id`
+  for ordering/dedup/replay and `at`/`timestamp` only for business-timing evidence;
+  it MUST NOT reorder or sequence by timestamps, and MUST NOT derive a sequence
+  from a timestamp.
 - **Clock-skew** (S-4): adapter MUST NOT assume wall-clock equality. On the
   admission `CLOCK_SKEW_DETECTED` trigger, stop new submissions and route working
   orders through disconnect/reconciliation. A broker timestamp far from local UTC
-  MUST NOT be trusted for sequencing when it matters (the ULID also embeds time —
-  cross-check against broker `timestamp`).
+  MUST NOT be trusted for sequencing when it matters (the ULID also embeds
+  publication time — cross-check against broker `timestamp`, but never use it as
+  the sequence).
 
 ---
 
@@ -316,7 +351,7 @@ Alpaca `canceled` is **not** proof of a user cancel.
 - `ReconciliationEvidence` is sourced from authoritative Alpaca fields:
   `order.id`, `client_order_id`, `order.status`, `order.filled_qty`,
   `order.filled_avg_price`, `timestamp`, `source="ALPACA"`,
-  `broker_sequence=event_ulid`, `cancel_requested_at`. `evidence_digest` is
+  `broker_sequence=event_id`, `cancel_requested_at`. `evidence_digest` is
   computed by Step 8C normalizer over these canonical fields.
 - The adapter MUST NOT tamper with or fabricate digest-relevant fields. Any digest
   mismatch / tamper MUST fail closed (incident/reject), never silently accepted
@@ -353,6 +388,43 @@ nothing executed yet this checkpoint). Cases MUST include, per AGENTS.md §14
 14. REST snapshot (no SSE cursor) → declared `fallback` sequence, labelled, no
     look-alike genuine sequence
 15. Tampered evidence digest → fail-closed reject
+
+---
+
+## 12.5. Evidence Re-verification Log (D / E / P)
+
+Three-level evidence scheme (established for this audit):
+- **D** = documented / design-conformant (what the freeze at `ddc7a73` locked)
+- **E** = independently verified against **current** Alpaca API/docs (source direct)
+- **P** = empirically exercised in a paper environment (not yet — no paper run)
+
+$$\boxed{D \rightarrow E \neq E \rightarrow P}$$
+
+This log records documentation/API verification only. **No item is P** (nothing has
+run against an account). The Conformance Matrix (§A) stays **D** everywhere; E/P
+here are the re-verification evidence record, not an override of the admission
+matrix. Flipping §A cells D→E/P is a separate, later admission step with its own
+gate.
+
+| BMAP | Status | Evidence (current Alpaca source) |
+| :-- | :--: | :-- |
+| 01 | E | Trade Events SSE v2 event list (`accepted/new/partial_fill/fill/canceled/...`) |
+| 02 | E | TradeUpdateEventV2 + `Order` schema (`client_order_id`, `filled_qty`, `status`, `timestamp` semantics) |
+| 03 | **🟡 FIX** | Activity SSE + Trade Events v2: `event_id` = ULID publication sequence (NOT legacy `event_ulid`); `at` = business time; verbatim cursor |
+| 04 | E | `since_id`/`until_id` ULID cursor rules (SSE); REST fallback declared |
+| 05 | E | `POST` timeout guidance + REST `GET /v2/orders` reconcile |
+| 06 | E | `fill`/`partial_fill` with `qty` per fill + `order.filled_qty` cumulative; paper random partials (not live-liquidity evidence) |
+| 07 | E | `canceled`/`pending_cancel`/`order_cancel_rejected` events; `reason` (`CORPORATE_ACTION`, `TOO_LATE_TO_CANCEL`); DELETE 204/422 |
+| 08 | E | SSE reconnect with `since_id`; recovery path, NOT "no network failure" claim |
+| 09 | E | `event_id` (publication) ≠ `at`/`timestamp`/`executed_at` (business); backfill example |
+| 10 | E | paper key pair + `paper-api.alpaca.markets` boundary |
+| 11 | D→E re-check | authoritative fields (`order.id`, `filled_qty`, `event_id`, ...) documented; digest binding canonical |
+| 12 | D | Conformance checklist not yet executed (no paper run) |
+
+> Note (07): 03 is shown as **🟡 FIX** per this review — the terminology correction
+> (`event_ulid` → `event_id` ULID v2) landed in this checkpoint. Items 01/02/04/11
+> are E from the current-docs fetch; remaining items whose full evidence (concrete
+> error/idempotency semantics) is still pending stay D until independently closed.
 
 ---
 
