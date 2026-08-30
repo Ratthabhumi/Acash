@@ -63,6 +63,12 @@ class OverfittingEngine:
            PBO = (1 / C) * sum_{c=1}^C I(lambda_c < 0.0)
            where C is the total number of balanced CSCV splits: C = (N choose N/2).
 
+        BALANCED ALLOCATION & DISCRETE POLICY RESOLUTION:
+        - Balanced half/half partition (k = N / 2) guarantees a balanced combinatorial allocation of blocks (|IS| approx |OOS|).
+          It does NOT imply statistical symmetry or identical distributions between IS and OOS return series.
+        - For default N=10, k=5 (C=252 splits), the estimator possesses a discrete policy step resolution of 1/252 (~0.397%).
+          This reflects a deterministic governance threshold step, not an estimation standard error or sampling uncertainty bound.
+
         GOVERNANCE EQUIVALENCE CLASS QUANTIZATION:
         Prior to ranking, Sharpe ratios are rounded to 10 decimal places (1e-10 equivalence class) to ensure
         cross-platform deterministic equality and prevent spurious numerical noise from breaking true ties.

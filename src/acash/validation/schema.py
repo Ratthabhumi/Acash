@@ -27,7 +27,15 @@ from acash.data.features.engine import to_decimal18
 
 
 class ValidationGateVerdict(str, Enum):
-    """Formal decision emitted by the Statistical Validation Gate."""
+    """Formal decision emitted by the Statistical Validation Gate.
+
+    EPISTEMOLOGICAL BOUNDARY SPECIFICATION:
+    - PASS_TRADEABLE_ALPHA certifies that the candidate strategy and its sealed SearchTrialLedger
+      have satisfied all pre-registered statistical, multiple-testing, and economic admission criteria
+      under ACASH sovereign governance policy.
+    - It is an admission verdict under pre-registered governance thresholds, NOT mathematical proof or
+      guarantee of future out-of-sample profitability, non-zero alpha, or time-series stationarity.
+    """
 
     PASS_TRADEABLE_ALPHA = "PASS_TRADEABLE_ALPHA"
     REJECT_MISSING_TRIAL_LEDGER = "REJECT_MISSING_TRIAL_LEDGER"
@@ -47,44 +55,39 @@ class ValidationGateVerdict(str, Enum):
 class SelectionCorrectionMode(str, Enum):
     """Operational mode for Sharpe ratio hypothesis testing and selection bias correction."""
 
-    SINGLE_TRIAL = "SINGLE_TRIAL"  # K = 1: Asymptotic Mertens/Opdyke test against hurdle without selection deflation (SR0 = 0)
+    SINGLE_TRIAL = "SINGLE_TRIAL"  # K = 1: Asymptotic test against hurdle without selection deflation (SR0 = 0)
     MULTIPLE_TRIAL = "MULTIPLE_TRIAL"  # K >= 2: Bailey-López de Prado Gumbel EVT selection deflation using empirical trial variance
 
 
 
 class SharpeSpace(str, Enum):
-    """Explicit frequency space for Sharpe ratios in trial ledgers and statistical validation reports."""
+    """Frequency space of Sharpe ratios and performance metrics."""
 
-    PERIOD = "PERIOD"
-    ANNUAL = "ANNUAL"
+    ANNUAL = "ANNUAL"  # Annualized Sharpe ratio (sqrt(periods_per_year) scaling)
+    PERIOD = "PERIOD"  # Raw single-period Sharpe ratio (unscaled per-bar basis)
 
 
 class SearchTrialRecord(BaseModel):
-    """Single exploratory trial / parameter configuration tracked in the search space."""
+    """Immutable audit record of a single strategy trial within an exploratory search ledger."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    trial_id: str = Field(min_length=1, description="Unique deterministic trial identifier.")
-    strategy_id: str = Field(min_length=1)
-    hypothesis_id: str = Field(min_length=1)
-    feature_names: Sequence[str] = Field(min_length=1, description="Immutable tuple of feature dependencies.")
-    parameters: Mapping[str, Any] = Field(
-        default_factory=dict, description="Deeply immutable mapping of search parameters."
-    )
-
-    in_sample_sharpe: Decimal
+    trial_id: str = Field(min_length=1, description="Unique trial identifier within ledger.")
+    strategy_id: str = Field(min_length=1, description="Target strategy identifier.")
+    hypothesis_id: str = Field(min_length=1, description="Bound research hypothesis ID.")
+    feature_names: Tuple[str, ...] = Field(description="Immutable tuple of feature names used by this trial.")
+    parameters: Mapping[str, Any] = Field(description="Immutable dictionary of parameter values explored in this trial.")
+    in_sample_sharpe: Decimal = Field(description="Annualized in-sample Sharpe ratio achieved by this trial.")
     p_value: Decimal = Field(
-        ge=Decimal("0.0"),
-        le=Decimal("1.0"),
         description=(
             "Raw unadjusted two-sided asymptotic p-value for H_0: SR_m = 0 under standard normal error "
-            "approximation. Consumed by multiple testing corrections (Holm-Bonferroni FWER, Benjamini-Hochberg FDR, "
-            "and Bonferroni Haircut Sharpe). NOT to be confused with Deflated Sharpe Ratio (DSR) selection probability."
+            "approximation. Serves strictly as a preliminary screening and multiple-testing input. "
+            "NOT to be confused with Deflated Sharpe Ratio (DSR) selection probability."
         ),
     )
     p_value_method: str = Field(
         default="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
-        description="Authoritative hypothesis test method deriving p_value (H_0: SR=0 under asymptotic normality).",
+        description="Hypothesis test method deriving p_value (H_0: SR=0 under asymptotic normality approximation).",
     )
     p_value_input_hash: str = Field(
         pattern=r"^[0-9a-f]{64}$",
@@ -115,13 +118,15 @@ class SearchTrialRecord(BaseModel):
     def compute_canonical_p_value(in_sample_returns: Union[Sequence[Union[Decimal, float]], np.ndarray]) -> Decimal:
         """Compute canonical raw two-sided asymptotic p-value for H_0: SR = 0 from empirical return series.
 
-        Statistical Specification:
-        - Computes the two-sided asymptotic t-test p-value against zero Sharpe under standard normal error approximation:
+        Statistical Specification & Methodological Role:
+        - Evaluates the two-sided asymptotic normal approximation p-value against zero mean/Sharpe:
             t = (mean / std) * sqrt(T)
             p = 2 * (1 - Phi(|t|)) = erfc(|t| / sqrt(2))
-        - This p-value represents the single-hypothesis unadjusted significance of the trial's raw Sharpe ratio.
-        - It is strictly distinct from the Deflated Sharpe Ratio (DSR) probability, which incorporates higher moments
-          and expected maximum Sharpe under multiple testing.
+        - METHODOLOGICAL ROLE: This raw p-value serves strictly as a preliminary screening and multiple-testing
+          input (e.g. for Holm-Bonferroni FWER step-down and Bonferroni Haircut Sharpe adjustments) under an asymptotic
+          zero-Sharpe normal approximation. It is NOT a fat-tail-robust or dependence-aware final inferential probability.
+        - Non-normality (skewness, kurtosis) and multiple-testing selection bias are explicitly accounted for downstream
+          in the Deflated Sharpe Ratio (DSR) and PBO evaluations, which operate as complementary, specialized estimands.
         """
         float_vals: List[float] = []
         for idx, r in enumerate(in_sample_returns):
