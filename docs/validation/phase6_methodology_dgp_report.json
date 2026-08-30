@@ -1,0 +1,306 @@
+{
+  "suite_name": "ACASH_PHASE6_DGP_BENCHMARK_SUITE",
+  "executed_at_utc": "2026-08-30T10:00:00Z",
+  "experiment_a_null_dgp": {
+    "experiment_name": "Experiment A: Zero-Alpha Null DGP",
+    "num_simulations": 100,
+    "sample_size_T": 500,
+    "exploratory_models_M": 10,
+    "random_seed": 42,
+    "pass_count": 0,
+    "observed_false_positive_rate": 0.0,
+    "wilson_95_ci": [
+      3.341099972357286e-18,
+      0.03699349820698568
+    ],
+    "verdict_distribution": {
+      "REJECT_OVERFIT_DSR": 100
+    }
+  },
+  "experiment_b_correlated_search": {
+    "experiment_name": "Experiment B: Correlated Search DGP",
+    "sample_size_T": 500,
+    "declared_trials_K": 50,
+    "random_seed": 42,
+    "results": [
+      {
+        "correlation_rho": 0.0,
+        "sharpe_mean": 0.04424788775171338,
+        "empirical_sharpe_variance_V": 0.5794111664173024,
+        "expected_max_sharpe_sr0_annual": 1.732700572976672,
+        "primary_sharpe": 1.7284025200286834,
+        "dsr_probability": 0.49757135846,
+        "pbo_estimate": 0.38095238095238093,
+        "pbo_rejects": true
+      },
+      {
+        "correlation_rho": 0.5,
+        "sharpe_mean": 0.8447128620021153,
+        "empirical_sharpe_variance_V": 0.547123105947053,
+        "expected_max_sharpe_sr0_annual": 1.6837306463304809,
+        "primary_sharpe": 1.7284025200286834,
+        "dsr_probability": 0.525225443193,
+        "pbo_estimate": 0.3968253968253968,
+        "pbo_rejects": true
+      },
+      {
+        "correlation_rho": 0.85,
+        "sharpe_mean": 1.5023653589015418,
+        "empirical_sharpe_variance_V": 0.128759186951932,
+        "expected_max_sharpe_sr0_annual": 0.8168065308059356,
+        "primary_sharpe": 1.7284025200286834,
+        "dsr_probability": 0.901679308916,
+        "pbo_estimate": 0.49206349206349204,
+        "pbo_rejects": true
+      },
+      {
+        "correlation_rho": 0.95,
+        "sharpe_mean": 1.6436643732524536,
+        "empirical_sharpe_variance_V": 0.05655160839073422,
+        "expected_max_sharpe_sr0_annual": 0.5413181255571102,
+        "primary_sharpe": 1.7284025200286834,
+        "dsr_probability": 0.953655433469,
+        "pbo_estimate": 0.4642857142857143,
+        "pbo_rejects": true
+      },
+      {
+        "correlation_rho": 0.99,
+        "sharpe_mean": 1.7169464347863488,
+        "empirical_sharpe_variance_V": 0.007758053179816918,
+        "expected_max_sharpe_sr0_annual": 0.20049634724496598,
+        "primary_sharpe": 1.7284025200286834,
+        "dsr_probability": 0.984772357112,
+        "pbo_estimate": 0.44841269841269843,
+        "pbo_rejects": true
+      }
+    ]
+  },
+  "experiment_c_serial_dependence": {
+    "experiment_name": "Experiment C: Serial Dependence & HAC Robust Inference",
+    "sample_size_T": 1000,
+    "num_simulations": 300,
+    "random_seed": 42,
+    "results": [
+      {
+        "scenario": "IID_Noise",
+        "asymptotic_normal_fpr_5pct": 0.043333333333333335,
+        "asymptotic_normal_wilson_95_ci": [
+          0.025496448084407243,
+          0.07271746563401146
+        ],
+        "asymptotic_inflation_ratio": 0.8666666666666667,
+        "hac_newey_west_fpr_5pct": 0.04,
+        "hac_newey_west_wilson_95_ci": [
+          0.023027321487942308,
+          0.06860421203864003
+        ]
+      },
+      {
+        "scenario": "AR1_phi_0.20",
+        "asymptotic_normal_fpr_5pct": 0.10666666666666667,
+        "asymptotic_normal_wilson_95_ci": [
+          0.07657584904594215,
+          0.1467032883173674
+        ],
+        "asymptotic_inflation_ratio": 2.1333333333333333,
+        "hac_newey_west_fpr_5pct": 0.06333333333333334,
+        "hac_newey_west_wilson_95_ci": [
+          0.04091688238391527,
+          0.09679131248552161
+        ]
+      },
+      {
+        "scenario": "AR1_phi_0.40",
+        "asymptotic_normal_fpr_5pct": 0.24666666666666667,
+        "asymptotic_normal_wilson_95_ci": [
+          0.20129380271657715,
+          0.29844530270385955
+        ],
+        "asymptotic_inflation_ratio": 4.933333333333334,
+        "hac_newey_west_fpr_5pct": 0.09,
+        "hac_newey_west_wilson_95_ci": [
+          0.06259022560547937,
+          0.12777701079864834
+        ]
+      },
+      {
+        "scenario": "Overlapping_H5",
+        "asymptotic_normal_fpr_5pct": 0.41333333333333333,
+        "asymptotic_normal_wilson_95_ci": [
+          0.3590487301690917,
+          0.4698093848431628
+        ],
+        "asymptotic_inflation_ratio": 8.266666666666666,
+        "hac_newey_west_fpr_5pct": 0.10666666666666667,
+        "hac_newey_west_wilson_95_ci": [
+          0.07657584904594215,
+          0.1467032883173674
+        ]
+      },
+      {
+        "scenario": "Overlapping_H10",
+        "asymptotic_normal_fpr_5pct": 0.5166666666666667,
+        "asymptotic_normal_wilson_95_ci": [
+          0.4602663137927717,
+          0.5726455871664102
+        ],
+        "asymptotic_inflation_ratio": 10.333333333333334,
+        "hac_newey_west_fpr_5pct": 0.08666666666666667,
+        "hac_newey_west_wilson_95_ci": [
+          0.0598288975180431,
+          0.12395595869424826
+        ]
+      }
+    ]
+  },
+  "experiment_d_statistical_power": {
+    "experiment_name": "Experiment D: Statistical Power Analysis",
+    "sample_size_T": 500,
+    "exploratory_models_M": 10,
+    "random_seed": 42,
+    "power_curve_diverse_noise_universe": [
+      {
+        "true_annualized_sharpe": 0.0,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 0.5,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 1.0,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 1.5,
+        "simulations": 50,
+        "pass_count": 2,
+        "power_p_pass": 0.04,
+        "wilson_95_ci": [
+          0.011038884327619809,
+          0.1346009068750702
+        ]
+      },
+      {
+        "true_annualized_sharpe": 2.0,
+        "simulations": 50,
+        "pass_count": 6,
+        "power_p_pass": 0.12,
+        "wilson_95_ci": [
+          0.056176001509322754,
+          0.23804817383202992
+        ]
+      },
+      {
+        "true_annualized_sharpe": 2.5,
+        "simulations": 50,
+        "pass_count": 10,
+        "power_p_pass": 0.2,
+        "wilson_95_ci": [
+          0.11243750015776112,
+          0.3303710593222542
+        ]
+      },
+      {
+        "true_annualized_sharpe": 3.0,
+        "simulations": 50,
+        "pass_count": 22,
+        "power_p_pass": 0.44,
+        "wilson_95_ci": [
+          0.3116219921125717,
+          0.5769397197834315
+        ]
+      }
+    ],
+    "power_curve_collinear_sweep_universe": [
+      {
+        "true_annualized_sharpe": 0.0,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 0.5,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 1.0,
+        "simulations": 50,
+        "pass_count": 0,
+        "power_p_pass": 0.0,
+        "wilson_95_ci": [
+          6.4438204832223495e-18,
+          0.07134759913335872
+        ]
+      },
+      {
+        "true_annualized_sharpe": 1.5,
+        "simulations": 50,
+        "pass_count": 3,
+        "power_p_pass": 0.06,
+        "wilson_95_ci": [
+          0.02061497034897396,
+          0.1621709168883817
+        ]
+      },
+      {
+        "true_annualized_sharpe": 2.0,
+        "simulations": 50,
+        "pass_count": 2,
+        "power_p_pass": 0.04,
+        "wilson_95_ci": [
+          0.011038884327619809,
+          0.1346009068750702
+        ]
+      },
+      {
+        "true_annualized_sharpe": 2.5,
+        "simulations": 50,
+        "pass_count": 4,
+        "power_p_pass": 0.08,
+        "wilson_95_ci": [
+          0.03154951408859299,
+          0.18838246918342838
+        ]
+      },
+      {
+        "true_annualized_sharpe": 3.0,
+        "simulations": 50,
+        "pass_count": 9,
+        "power_p_pass": 0.18,
+        "wilson_95_ci": [
+          0.09770192670234178,
+          0.30796053674300783
+        ]
+      }
+    ]
+  }
+}

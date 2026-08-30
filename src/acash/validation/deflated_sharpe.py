@@ -101,6 +101,85 @@ def _to_dec(val: Union[int, float, Decimal, str], default: str = "0.0") -> Decim
     return dec_val if dec_val is not None else Decimal(default)
 
 
+def compute_hac_newey_west_variance(
+    returns: Union[Sequence[Union[float, Decimal]], np.ndarray],
+    max_lags: Optional[int] = None,
+) -> float:
+    """Compute Newey-West (1987) Heteroskedasticity and Autocorrelation Consistent (HAC) long-run variance.
+
+    Mathematical formulation:
+    gamma_0 = (1/T) * sum_{t=1}^T (r_t - mu)^2
+    gamma_l = (1/T) * sum_{t=l+1}^T (r_t - mu)(r_{t-l} - mu)
+    sigma_LR^2 = gamma_0 + 2 * sum_{l=1}^L w_l * gamma_l
+    where w_l = 1 - l / (L + 1) (Bartlett kernel).
+
+    Lag truncation bandwidth L defaults to Newey-West (1994) plug-in rule:
+    L = floor(4 * (T / 100)^(2/9)).
+    """
+    if isinstance(returns, np.ndarray):
+        arr = returns.astype(np.float64)
+    else:
+        arr = np.array([float(x) for x in returns], dtype=np.float64)
+
+    n = len(arr)
+    if n < 2:
+        return 0.0
+
+    if not np.all(np.isfinite(arr)):
+        raise DataContractError("Returns series contains non-finite values (NaN or Inf).")
+
+    mu = float(np.mean(arr))
+    demeaned = arr - mu
+    gamma_0 = float(np.dot(demeaned, demeaned) / n)
+
+    if max_lags is None:
+        lags = max(1, int(math.floor(4.0 * ((n / 100.0) ** (2.0 / 9.0)))))
+    else:
+        lags = max(0, min(max_lags, n - 1))
+
+    if lags == 0:
+        return gamma_0
+
+    lr_var = gamma_0
+    for l in range(1, lags + 1):
+        weight = 1.0 - (l / (lags + 1.0))
+        gamma_l = float(np.dot(demeaned[l:], demeaned[:-l]) / n)
+        lr_var += 2.0 * weight * gamma_l
+
+    return max(1e-12, lr_var)
+
+
+def compute_hac_p_value(
+    returns: Union[Sequence[Union[float, Decimal]], np.ndarray],
+    max_lags: Optional[int] = None,
+) -> Decimal:
+    """Compute two-sided hypothesis test p-value against H_0: mu = 0 using Newey-West HAC standard error.
+
+    t_HAC = mean(r) / sqrt(sigma_LR^2 / T)
+    p_HAC = 2 * (1 - Phi(|t_HAC|)) = erfc(|t_HAC| / sqrt(2))
+    """
+    if isinstance(returns, np.ndarray):
+        arr = returns.astype(np.float64)
+    else:
+        arr = np.array([float(x) for x in returns], dtype=np.float64)
+
+    n = len(arr)
+    if n < 2:
+        return Decimal("1.0")
+
+    mu = float(np.mean(arr))
+    lr_var = compute_hac_newey_west_variance(arr, max_lags=max_lags)
+    se_hac = math.sqrt(lr_var / n)
+    if se_hac <= 1e-12:
+        return Decimal("1.0")
+
+    t_hac = mu / se_hac
+    p_val = math.erfc(abs(t_hac) / math.sqrt(2.0))
+    dec = to_decimal18(Decimal(f"{p_val:.12f}"))
+    return dec if dec is not None else Decimal("1.0")
+
+
+
 
 class DeflatedSharpeEngine:
 

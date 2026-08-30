@@ -453,15 +453,20 @@ class StatisticalValidationGate:
                 )
 
             # 4. Methodological p-value Mathematical and Cryptographic Derivation Verification
-            t_stat_m = sr_m_period * math.sqrt(n_is)
-            computed_p_m = math.erfc(abs(t_stat_m) / math.sqrt(2.0))
+            if trial_rec.p_value_method == "HAC_NEWEY_WEST_ZERO_SHARPE_TEST_V1":
+                from acash.validation.deflated_sharpe import compute_hac_p_value
+                computed_p_m = float(compute_hac_p_value(trial_return_matrix[:, m]))
+            else:
+                t_stat_m = sr_m_period * math.sqrt(n_is)
+                computed_p_m = math.erfc(abs(t_stat_m) / math.sqrt(2.0))
             diff_p = abs(float(trial_rec.p_value) - computed_p_m)
             if diff_p > epsilon_sr:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' registered p_value ({trial_rec.p_value}) "
                     f"exceeds methodological tolerance bound (|p_ledger - p_computed| = {diff_p:.6f} > {epsilon_sr}) "
-                    f"against empirical return series two-sided p-value ({computed_p_m:.6f})."
+                    f"against empirical return series two-sided p-value ({computed_p_m:.6f}) under method '{trial_rec.p_value_method}'."
                 )
+
 
             # 4. Mandatory Cryptographic Lineage Proof for p-value Input Hash (No Conditional Bypass!)
             expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(

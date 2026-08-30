@@ -115,18 +115,23 @@ class SearchTrialRecord(BaseModel):
         return CanonicalConfigSerializer.compute_sha256(config_obj)
 
     @staticmethod
-    def compute_canonical_p_value(in_sample_returns: Union[Sequence[Union[Decimal, float]], np.ndarray]) -> Decimal:
-        """Compute canonical raw two-sided asymptotic p-value for H_0: SR = 0 from empirical return series.
+    def compute_canonical_p_value(
+        in_sample_returns: Union[Sequence[Union[Decimal, float]], np.ndarray],
+        method: str = "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+        max_lags: Optional[int] = None,
+    ) -> Decimal:
+        """Compute canonical raw two-sided p-value for H_0: mu = 0 from empirical return series.
 
         Statistical Specification & Methodological Role:
-        - Evaluates the two-sided asymptotic normal approximation p-value against zero mean/Sharpe:
-            t = (mean / std) * sqrt(T)
-            p = 2 * (1 - Phi(|t|)) = erfc(|t| / sqrt(2))
         - METHODOLOGICAL ROLE: This raw p-value serves strictly as a preliminary screening and multiple-testing
-          input (e.g. for Holm-Bonferroni FWER step-down and Bonferroni Haircut Sharpe adjustments) under an asymptotic
-          zero-Sharpe normal approximation. It is NOT a fat-tail-robust or dependence-aware final inferential probability.
-        - Non-normality (skewness, kurtosis) and multiple-testing selection bias are explicitly accounted for downstream
-          in the Deflated Sharpe Ratio (DSR) and PBO evaluations, which operate as complementary, specialized estimands.
+          input (e.g. for Holm-Bonferroni FWER step-down and Bonferroni Haircut Sharpe adjustments).
+        - Supported Test Methods:
+          1. ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1 (default screening mode):
+             Standard asymptotic normal approximation: t = (mean / std) * sqrt(T), p = 2 * (1 - Phi(|t|)) = erfc(|t| / sqrt(2)).
+          2. HAC_NEWEY_WEST_ZERO_SHARPE_TEST_V1 (dependence-aware robust inference mode):
+             Newey-West (1987) Heteroskedasticity and Autocorrelation Consistent long-run variance:
+             t_HAC = mean / sqrt(sigma_LR^2 / T), p = 2 * (1 - Phi(|t_HAC|)) = erfc(|t_HAC| / sqrt(2)).
+             Lag bandwidth defaults to Newey-West (1994) plug-in rule: L = floor(4 * (T / 100)^(2/9)).
         """
         float_vals: List[float] = []
         for idx, r in enumerate(in_sample_returns):
@@ -149,6 +154,11 @@ class SearchTrialRecord(BaseModel):
         n = len(arr)
         if n < 2:
             return Decimal("1.0")
+
+        if method == "HAC_NEWEY_WEST_ZERO_SHARPE_TEST_V1":
+            from acash.validation.deflated_sharpe import compute_hac_p_value
+            return compute_hac_p_value(arr, max_lags=max_lags)
+
         mean = float(np.mean(arr))
         std = float(np.std(arr, ddof=1))
         if std <= 1e-12:
@@ -204,14 +214,16 @@ class SearchTrialRecord(BaseModel):
             # If in_sample_returns is present, canonical p-value is derived directly (single authority).
             method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1")
             if "in_sample_returns" in data and data["in_sample_returns"] is not None:
-                derived_p = cls.compute_canonical_p_value(data["in_sample_returns"])
+                derived_p = cls.compute_canonical_p_value(data["in_sample_returns"], method=method)
                 if "p_value" in data and data["p_value"] is not None:
                     p_dec = to_decimal18(Decimal(str(data["p_value"])))
                     if p_dec is not None and abs(p_dec - derived_p) > Decimal("1e-6"):
                         raise DataContractError(
-                            f"Trial '{trial_id}' supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) from in_sample_returns."
+                            f"Trial '{trial_id}' supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) "
+                            f"from in_sample_returns under method '{method}'."
                         )
                 data["p_value"] = derived_p
+
             elif "p_value" not in data or data["p_value"] is None:
                 raise DataContractError(
                     f"Must supply either in_sample_returns or an explicit verified p_value for trial '{trial_id}'."
@@ -272,14 +284,16 @@ class SearchTrialRecord(BaseModel):
             config_sha256 = cls.compute_config_sha256(sorted_features, frozen_params)
 
         if in_sample_returns is not None:
-            derived_p = cls.compute_canonical_p_value(in_sample_returns)
+            derived_p = cls.compute_canonical_p_value(in_sample_returns, method=p_value_method)
             if p_value is not None:
                 p_dec = to_decimal18(p_value) if isinstance(p_value, Decimal) else to_decimal18(Decimal(str(p_value)))
                 if p_dec is not None and abs(p_dec - derived_p) > Decimal("1e-6"):
                     raise DataContractError(
-                        f"Trial '{trial_id}' create() supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) from in_sample_returns."
+                        f"Trial '{trial_id}' create() supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) "
+                        f"from in_sample_returns under method '{p_value_method}'."
                     )
             final_p = derived_p
+
         else:
             if p_value is None:
                 raise DataContractError(
