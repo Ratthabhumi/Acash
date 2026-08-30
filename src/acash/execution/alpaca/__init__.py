@@ -44,6 +44,14 @@ from acash.execution.alpaca.credentials import (
     assert_paper_venue,
     paper_credential_provider,
 )
+from acash.execution.alpaca.paper_exercise import (
+    PaperExerciseError,
+    PaperReadOnlyEvidence,
+    PositionProbe,
+    build_read_only_transport,
+    run_read_only_probes,
+    run_read_only_verification,
+)
 from acash.execution.alpaca.transport import (
     AlpacaCancelReason,
     AlpacaEventStream,
@@ -96,9 +104,15 @@ __all__ = [
     "LIVE_API_HOST",
     "PAPER_API_HOST",
     "PaperCredentialGuardError",
+    "PaperExerciseError",
     "PaperHttpAlpacaTransport",
+    "PaperReadOnlyEvidence",
+    "PositionProbe",
     "assert_paper_venue",
+    "build_read_only_transport",
     "live_endpoint",
     "paper_credential_provider",
     "paper_endpoint",
+    "run_read_only_probes",
+    "run_read_only_verification",
 ]

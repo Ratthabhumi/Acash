@@ -21,9 +21,10 @@ This module contains NO secret material and NO network I/O. It only defines the
 provider contract and the redacted handle that flows into the transport.
 """
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from acash.execution.broker_adapter import BrokerAdapterError
 
@@ -100,7 +101,7 @@ class EnvAlpacaCredentialProvider(AlpacaCredentialProvider):
     """
 
     _venue: str
-    _environ: dict[str, str]
+    _environ: Mapping[str, str]
     _explicit_key_id: Optional[str]
     _explicit_secret: Optional[str]
 
@@ -110,10 +111,14 @@ class EnvAlpacaCredentialProvider(AlpacaCredentialProvider):
         venue: str = "ALPACA_PAPER",
         api_key_id: Optional[str] = None,
         api_secret: Optional[str] = None,
-        environ: Optional[dict[str, str]] = None,
+        environ: Optional[Mapping[str, str]] = None,
     ) -> None:
         self._venue = venue
-        self._environ = environ if environ is not None else {}
+        # Default provider reads the REAL process environment (so an operator
+        # exporting ACASH_ALPACA_API_KEY_ID / ACASH_ALPACA_API_SECRET in the
+        # session is honored). An injected mapping (tests, stores) replaces the
+        # real environment wholesale; re-read on every load() supports rotation.
+        self._environ = environ if environ is not None else os.environ
         # Explicit constructor args take precedence; otherwise read live from env.
         self._explicit_key_id = api_key_id
         self._explicit_secret = api_secret
