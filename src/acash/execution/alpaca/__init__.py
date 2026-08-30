@@ -44,6 +44,15 @@ from acash.execution.alpaca.credentials import (
     assert_paper_venue,
     paper_credential_provider,
 )
+from acash.execution.alpaca.order_exercise import (
+    LifecycleEvidence,
+    OrderExerciseError,
+    OrderExerciseHarness,
+    build_execution_manifest,
+    build_nominal_intent,
+    build_reconciliation_report,
+    run_order_exercise_verification,
+)
 from acash.execution.alpaca.paper_exercise import (
     PaperExerciseError,
     PaperReadOnlyEvidence,
@@ -102,6 +111,9 @@ __all__ = [
     "EnvAlpacaCredentialProvider",
     "HttpAlpacaTransport",
     "LIVE_API_HOST",
+    "LifecycleEvidence",
+    "OrderExerciseError",
+    "OrderExerciseHarness",
     "PAPER_API_HOST",
     "PaperCredentialGuardError",
     "PaperExerciseError",
@@ -109,10 +121,14 @@ __all__ = [
     "PaperReadOnlyEvidence",
     "PositionProbe",
     "assert_paper_venue",
+    "build_execution_manifest",
+    "build_nominal_intent",
     "build_read_only_transport",
+    "build_reconciliation_report",
     "live_endpoint",
     "paper_credential_provider",
     "paper_endpoint",
+    "run_order_exercise_verification",
     "run_read_only_probes",
     "run_read_only_verification",
 ]
