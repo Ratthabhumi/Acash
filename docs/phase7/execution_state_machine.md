@@ -1,10 +1,17 @@
 # Phase 7 Step 8: Execution State Machine Contract
 
-> **Status: DESIGN FOR APPROVAL — no implementation yet.**
-> This document formalizes the order execution state machine contract that the
-> Execution State Machine engine MUST implement. It is the single authoritative
-> transition authority for a submitted `OrderIntent`. Approval of this contract is
-> a prerequisite before any `mock`/`real` broker adapter is implemented.
+> **Status: LOCKED + AMENDED (rv2).**
+> This is the **single authoritative normative contract** for order execution
+> state transitions. All normative requirements use MUST / MUST NOT / ONLY /
+> REQUIRED / INVALID. The Execution State Machine engine MUST implement this
+> contract exactly; it is the sole transition authority for a submitted
+> `OrderIntent`. No `mock`/`real` broker adapter SHALL be implemented before the
+> engine and its tests conform to this contract.
+>
+> Amendment history:
+> - rv1 (`953246d`): base contract.
+> - rv2: lock `UNKNOWN` reconciliation-only exit, cancel-sent != cancelled
+>   semantics, and terminal-absorbing formal invariant as normative rules.
 
 ---
 
@@ -27,33 +34,89 @@ single canonical transition authority.
 
 ---
 
-## 2. Core Design Invariants (Non-Negotiable)
+## 2. Core Normative Invariants (Non-Negotiable)
 
-1. **State-only mutation**: The only way a `OrderLifecycleState` changes is through
-   the transition authority (the Execution State Machine engine). No path mutates
-   an order's lifecycle state in-place outside the authority.
-2. **First-class `UNKNOWN`**: `UNKNOWN` is a fully populated lifecycle state, NOT an
-   error or an on-the-fly fallback. Any connectivity loss or verification timeout
-   transitions the order to `UNKNOWN` — it is NEVER silently coerced to `CANCELLED`,
-   `FILLED`, or any other state on ambiguous network conditions.
-3. **`CANCEL_REQUESTED → UNKNOWN` on connectivity loss**:
-   - `CANCEL_REQUESTED + BrokerConfirmation` → `CANCELLED` (legitimate).
-   - `CANCEL_REQUESTED + ConnectionLost/Timeout` → `UNKNOWN` (fail-closed).
-   - There is **NO** acceptable `CANCEL_REQUESTED → CANCELLED` shortcut that bypasses
-     an authoritative broker confirmation.
-4. **`UNKNOWN` blocks all further action until reconciliation**:
-   - From `UNKNOWN`, the ONLY legal transitions are:
-     - `UNKNOWN + ReconciliationVerify` → **symmetric reconciliation to the verified
-       terminal state** (`FILLED`, `CANCELLED`, `REJECTED`, `EXPIRED`), OR
-     - `UNKNOWN + ReconciliationDispute` → stays `UNKNOWN` + raises incident (loop).
-   - While `UNKNOWN`, the strategy shadow-mode is `RESTRICTED`; no new order intents
-     are admitted (per `risk_state` NORMAL/RESTRICTED invariant).
-5. **Terminal states are absorbing**: `FILLED`, `CANCELLED`, `REJECTED`, `EXPIRED`
-   are terminal. No event may transition OUT of a terminal state. This is enforced
-   fail-closed (raise `PreLiveRiskAdmissionError` / a dedicated `ExecutionStateError`).
-6. **Single canonical source of truth**: Every state in this machine is derived from
-   a single authoritative transition table (Section 4). There is ONE transition
-   function; no dual/parallel state machines may drift.
+Normative keywords — MUST / MUST NOT / ONLY / REQUIRED / INVALID — are used
+per RFC 2119. Every invariant below SHALL be enforced by the transition authority
+and SHALL have a corresponding executable test (see Section 9).
+
+### 2.1 State-Only Mutation (Single Authority)
+- The order's `OrderLifecycleState` MUST be mutated ONLY through the transition
+  authority function.
+- No path MAY mutate the lifecycle state in-place outside the authority.
+
+### 2.2 First-Class `UNKNOWN`
+- `UNKNOWN` is a fully populated lifecycle state, NOT an error value and NOT an
+  ad-hoc fallback.
+- An order MUST enter `UNKNOWN` on any ambiguous connectivity/verification
+  condition. It MUST NOT be silently coerced to `CANCELLED`, `FILLED`, or any
+  other state under ambiguous conditions.
+
+### 2.3 `UNKNOWN` Reconciliation Gate (Formal Invariant)
+An order in `UNKNOWN` SHALL have no new orders admitted and SHALL be subject to
+mandatory reconciliation:
+
+$$\boxed{ UNKNOWN \Rightarrow \text{NO\_NEW\_ORDERS} \land \text{RECONCILIATION\_REQUIRED} }$$
+
+An order MAY exit `UNKNOWN` ONLY via a `RECONCILE` event carrying authoritative
+broker/reconciliation evidence:
+
+$$\boxed{ UNKNOWN \xrightarrow{\text{RECONCILE}} \{\text{FILLED},\text{CANCELLED},\text{REJECTED},\text{EXPIRED},\text{UNKNOWN}\} }$$
+
+- The `UNKNOWN → {FILLED,CANCELLED,REJECTED,EXPIRED}` transitions REQUIRE
+  authoritative broker/reconciliation evidence.
+- `UNKNOWN → UNKNOWN` is the reconciliation-dispute loop: no verified outcome;
+  an incident SHALL be raised and the order MUST remain `UNKNOWN`.
+- The engine MUST NOT transition `UNKNOWN → ACKNOWLEDGED`.
+- The engine MUST NOT transition `UNKNOWN → CANCELLED` or `UNKNOWN → FILLED`
+  without broker evidence.
+- Guidance vs. normative: it is NEVER a decision made by "guessing" the outcome.
+
+### 2.4 `CANCEL_REQUESTED` Semantics (Formal Invariant)
+A cancel request is NOT a cancel confirmation:
+
+$$\boxed{\text{CancelRequested} \neq \text{Cancelled}}$$
+
+The complete `CANCEL_REQUESTED` fan-out is fixed as follows:
+
+```
+CANCEL_REQUESTED
+ ├─ CANCEL_ACK      → CANCELLED
+ ├─ CANCEL_REJECT   → ACKNOWLEDGED
+ ├─ FILL            → FILLED
+ └─ CONNECTION_LOST → UNKNOWN
+```
+
+- `CANCEL_ACK → CANCELLED` REQUIRES broker confirmation that the order was
+  removed from the book.
+- `CANCEL_REJECT → ACKNOWLEDGED` SHALL mean the broker confirmed the
+  cancellation request was **rejected** and the underlying order **remains
+  live/working**. It MUST NOT be interpreted locally as a generic cancellation
+  failure that the engine re-specifies.
+- `FILL → FILLED` handles the fill-vs-cancel race: a fill REQUESTED while a
+  cancel is pending is authoritative — the order is filled.
+- `CONNECTION_LOST → UNKNOWN` is REQUIRED whenever cancel confirmation cannot be
+  established; `CANCEL_REQUESTED` MUST NOT shortcut to `CANCELLED` without an
+  authoritative `CANCEL_ACK` or reconciliation evidence.
+
+### 2.5 Terminal Absorbing States (Formal Invariant)
+The terminal states `FILLED, CANCELLED, REJECTED, EXPIRED` are absorbing:
+
+$$\boxed{ s \in \{\text{FILLED},\text{CANCELLED},\text{REJECTED},\text{EXPIRED}\} \Rightarrow \forall e,\; \delta(s,e)=\text{INVALID} }$$
+
+- Any event delivered to a terminal state MUST be classified `INVALID`
+  (fail-closed raise), NEVER a no-op permitting later mutation and NEVER a
+  backward mutation of historical state.
+- Late broker events arriving after a terminal state MUST NOT mutate the
+  historical order state; they SHALL be routed to the reconciliation/incident
+  path.
+- Examples that MUST be `INVALID`: `FILLED → CANCELLED`, `FILLED → UNKNOWN`,
+  `CANCELLED → FILLED`, `REJECTED → ACTIVE`, `EXPIRED → FILLED`.
+
+### 2.6 Single Canonical Source of Truth
+- Every state in this machine is derived from the single authoritative transition
+  table (Section 4) through ONE transition function.
+- There SHALL NOT be dual/parallel state machines that can drift.
 
 ---
 
@@ -71,14 +134,18 @@ aligned to broker adapter semantics and reconciliation.
 | `FILL` | Broker reported complete fill (cumulative = requested). |
 | `CANCEL_REQUEST` | Local operator/strategy requests cancellation. |
 | `CANCEL_ACK` | Broker confirms order removed from book (authoritative cancel). |
-| `CANCEL_REJECT` | Broker declined the cancel request. |
+| `CANCEL_REJECT` | Broker confirmed the cancellation request was rejected AND the underlying order remains live/working. |
 | `EXPIRY` | Order expired per broker/`TimeInForce`. |
 | `CONNECTION_LOST` | Gateway/transport connectivity lost or response timeout. |
-| `RECONCILE` | Reconciliation engine has an authoritative broker status report. |
+| `RECONCILE` | Reconciliation engine delivers an authoritative broker status report (evidence-gated). |
 
 Note: `CONNECTION_LOST` is a **pseudo-event** — it does not originate from the broker;
 it originates from connectivity monitoring, and it is the sole path that places an
 order into `UNKNOWN`.
+
+Note: `RECONCILE` MUST NOT be treated as a blind assertion. Transitions `UNKNOWN →`
+any terminal state under `RECONCILE` REQUIRE the reconciliation engine to produce
+authoritative broker evidence for that exact outcome.
 
 ---
 
@@ -131,14 +198,16 @@ MUST fail:
 - `EXPIRED` + anything (terminal — absorbing)
 
 ### 5.2 Terminal Absorbing Rule
-Once a state in `{FILLED, CANCELLED, REJECTED, EXPIRED}` is reached, NO event can
-change the state. The transition authority raises fail-closed rather than mutate.
+Formalized in §2.5. Once a state in `{FILLED, CANCELLED, REJECTED, EXPIRED}` is
+reached, $\forall e,\ \delta(s,e)=\text{INVALID}$. The transition authority MUST
+raise fail-closed (e.g. a dedicated `ExecutionStateError`) rather than mutate.
 
 ### 5.3 The `UNKNOWN` No-Shortcut Rule
-From `CANCEL_REQUESTED`, the order MAY NOT be marked `CANCELLED` unless the broker
-confirms (`CANCEL_ACK`) or reconciliation authoritatively verifies the cancel
-(`RECONCILE` → `CANCELLED`). On `CONNECTION_LOST`, the order MUST go to `UNKNOWN`.
-This prevents unfilled-position accounting drift and phantom cancel confirmation.
+Formalized in §2.4. From `CANCEL_REQUESTED`, the order MUST NOT be marked
+`CANCELLED` unless the broker confirms (`CANCEL_ACK`) or reconciliation
+authoritatively verifies the cancel (`RECONCILE` → `CANCELLED`, §2.3 evidence
+rule). On `CONNECTION_LOST`, the order MUST go to `UNKNOWN`. This prevents
+unfilled-position accounting drift and phantom cancel confirmation.
 
 ---
 
@@ -176,3 +245,31 @@ are explicit, configurable constants — never silent magic floors.
 The mock broker adapter MAY be implemented against this contract next; the REAL
 broker adapter MUST NOT begin until this contract + state machine engine + mock
 adapter are verified.
+
+---
+
+## 9. Executable Interpretation (Test-Case Mapping)
+
+The following test cases are the mandatory executable interpretation of this
+contract. Each maps 1:1 to a normative invariant above and MUST be present in the
+Step 8B verification suite before the implementation may be considered conformant.
+
+| Normative Invariant | Mandatory Test Case | Expected |
+| :--- | :--- | :--- |
+| §2.3 (UNKNOWN requires reconciliation) | `test_unknown_requires_reconciliation()` | `UNKNOWN` cannot be left except via `RECONCILE`; non-`RECONCILE` events are `INVALID` |
+| §2.3 (no direct UNKNOWN→CANCELLED) | `test_unknown_cannot_transition_to_cancelled_directly()` | `UNKNOWN` + `CANCEL_ACK` is `INVALID` (no broker evidence path) |
+| §2.3 (no UNKNOWN→ACKNOWLEDGED) | `test_unknown_cannot_transition_to_acknowledged()` | `INVALID` |
+| §2.3 (UNKNOWN→UNKNOWN dispute loop) | `test_unknown_reconcile_dispute_remains_unknown()` | stays `UNKNOWN` + incident raised |
+| §2.3 (evidence-gated recovery) | `test_unknown_reconcile_to_verified_terminal()` | `RECONCILE` → each of `FILLED/CANCELLED/REJECTED/EXPIRED` with evidence |
+| §2.4 (CancelRequested ≠ Cancelled) | `test_cancel_requested_is_not_cancelled()` | `CANCEL_REQUESTED` status distinct from `CANCELLED`; no implicit coercion |
+| §2.4 (CANCEL_ACK validation) | `test_cancel_ack_transitions_to_cancelled()` | only with authoritative `CANCEL_ACK` |
+| §2.4 (CANCEL_REJECT semantics) | `test_cancel_reject_returns_to_acknowledged_live()` | `CANCEL_REJECT` → `ACKNOWLEDGED`, underlying order live |
+| §2.4 (fill-vs-cancel race) | `test_late_fill_after_cancel_requested_becomes_filled()` | `CANCEL_REQUESTED` + `FILL` → `FILLED` |
+| §2.4 (connection loss during cancel) | `test_connection_loss_during_cancel_becomes_unknown()` | `CANCEL_REQUESTED` + `CONNECTION_LOST` → `UNKNOWN` |
+| §2.5 (terminal absorbing) | `test_terminal_states_are_absorbing()` | $\forall e,\ \delta(s,e)=\text{INVALID}$ for each terminal state |
+| §2.5 (late event after terminal) | `test_late_event_after_terminal_raises_invalid_not_mutation()` | late event raises fail-closed; historical state unchanged |
+
+FAIL-CLOSED rule: a test asserting a transition is `INVALID` MUST assert the
+transition authority raised a fail-closed error (the engine MUST NOT silently
+return the prior state as if nothing happened — that is an implicit coercion and
+is itself a contract violation).
