@@ -115,6 +115,12 @@ def compute_hac_newey_west_variance(
 
     Lag truncation bandwidth L defaults to Newey-West (1994) plug-in rule:
     L = floor(4 * (T / 100)^(2/9)).
+
+    FAIL-CLOSED GOVERNANCE SPECIFICATION:
+    - Requires sample size T >= 2.
+    - Requires valid max_lags in [0, T - 1].
+    - Strictly fails closed with DataContractError on non-finite observations, zero sample variance, or non-positive long-run variance.
+    - Never applies silent artificial numerical floors or silent fallback constants.
     """
     if isinstance(returns, np.ndarray):
         arr = returns.astype(np.float64)
@@ -123,19 +129,30 @@ def compute_hac_newey_west_variance(
 
     n = len(arr)
     if n < 2:
-        return 0.0
+        raise DataContractError(f"Cannot compute HAC long-run variance for sample size n={n} < 2.")
 
     if not np.all(np.isfinite(arr)):
         raise DataContractError("Returns series contains non-finite values (NaN or Inf).")
+
+    if max_lags is not None:
+        if not isinstance(max_lags, int) or max_lags < 0 or max_lags >= n:
+            raise DataContractError(
+                f"Invalid max_lags={max_lags} for sample size n={n}. "
+                f"Must be a non-negative integer satisfying 0 <= max_lags < {n}."
+            )
+        lags = max_lags
+    else:
+        lags = max(1, int(math.floor(4.0 * ((n / 100.0) ** (2.0 / 9.0)))))
 
     mu = float(np.mean(arr))
     demeaned = arr - mu
     gamma_0 = float(np.dot(demeaned, demeaned) / n)
 
-    if max_lags is None:
-        lags = max(1, int(math.floor(4.0 * ((n / 100.0) ** (2.0 / 9.0)))))
-    else:
-        lags = max(0, min(max_lags, n - 1))
+    if gamma_0 <= 1e-12 or not math.isfinite(gamma_0):
+        raise DataContractError(
+            f"Zero or near-zero variance (gamma_0={gamma_0:.6e} <= 1e-12) detected in return series; "
+            f"HAC long-run variance is undefined."
+        )
 
     if lags == 0:
         return gamma_0
@@ -146,7 +163,13 @@ def compute_hac_newey_west_variance(
         gamma_l = float(np.dot(demeaned[l:], demeaned[:-l]) / n)
         lr_var += 2.0 * weight * gamma_l
 
-    return max(1e-12, lr_var)
+    if lr_var <= 1e-12 or not math.isfinite(lr_var):
+        raise DataContractError(
+            f"Non-positive or near-zero HAC long-run variance (sigma_LR^2={lr_var:.6e} <= 1e-12) detected; "
+            f"HAC inference fails closed."
+        )
+
+    return lr_var
 
 
 def compute_hac_p_value(
@@ -157,6 +180,10 @@ def compute_hac_p_value(
 
     t_HAC = mean(r) / sqrt(sigma_LR^2 / T)
     p_HAC = 2 * (1 - Phi(|t_HAC|)) = erfc(|t_HAC| / sqrt(2))
+
+    FAIL-CLOSED GOVERNANCE SPECIFICATION:
+    - Strictly fails closed with DataContractError on non-finite observations, zero variance, or undefined SE.
+    - Never fabricates p=1.0 on invalid mathematical states.
     """
     if isinstance(returns, np.ndarray):
         arr = returns.astype(np.float64)
@@ -165,18 +192,23 @@ def compute_hac_p_value(
 
     n = len(arr)
     if n < 2:
-        return Decimal("1.0")
+        raise DataContractError(f"Cannot compute HAC p-value for sample size n={n} < 2.")
 
     mu = float(np.mean(arr))
     lr_var = compute_hac_newey_west_variance(arr, max_lags=max_lags)
     se_hac = math.sqrt(lr_var / n)
-    if se_hac <= 1e-12:
-        return Decimal("1.0")
+    if se_hac <= 1e-12 or not math.isfinite(se_hac):
+        raise DataContractError(
+            f"Zero or near-zero HAC standard error (se_hac={se_hac:.6e} <= 1e-12) detected; p-value is undefined."
+        )
 
     t_hac = mu / se_hac
     p_val = math.erfc(abs(t_hac) / math.sqrt(2.0))
     dec = to_decimal18(Decimal(f"{p_val:.12f}"))
-    return dec if dec is not None else Decimal("1.0")
+    if dec is None:
+        raise DataContractError(f"Failed to serialize HAC p-value ({p_val}) to 18-decimal precision.")
+    return dec
+
 
 
 

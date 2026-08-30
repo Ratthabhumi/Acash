@@ -10,7 +10,7 @@
     "pass_count": 0,
     "observed_false_positive_rate": 0.0,
     "wilson_95_ci": [
-      3.341099972357286e-18,
+      0.0,
       0.03699349820698568
     ],
     "verdict_distribution": {
@@ -153,153 +153,266 @@
       }
     ]
   },
-  "experiment_d_statistical_power": {
-    "experiment_name": "Experiment D: Statistical Power Analysis",
+  "experiment_d_governance_admission": {
+    "experiment_name": "Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
     "sample_size_T": 500,
     "exploratory_models_M": 10,
+    "simulations_per_point": 200,
     "random_seed": 42,
-    "power_curve_diverse_noise_universe": [
+    "admission_curve_diverse_noise_universe": [
       {
         "true_annualized_sharpe": 0.0,
-        "simulations": 50,
+        "simulations": 200,
         "pass_count": 0,
-        "power_p_pass": 0.0,
+        "joint_admission_probability": 0.0,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0,
+          0.018845326377266575
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.0,
+          "holm": 0.01,
+          "haircut": 0.01,
+          "pbo": 0.135,
+          "oos": 0.13,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 0.5,
-        "simulations": 50,
+        "simulations": 200,
         "pass_count": 0,
-        "power_p_pass": 0.0,
+        "joint_admission_probability": 0.0,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0,
+          0.018845326377266575
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.0,
+          "holm": 0.01,
+          "haircut": 0.055,
+          "pbo": 0.185,
+          "oos": 0.345,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 1.0,
-        "simulations": 50,
-        "pass_count": 0,
-        "power_p_pass": 0.0,
+        "simulations": 200,
+        "pass_count": 1,
+        "joint_admission_probability": 0.005,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0008831687156009805,
+          0.02777370439789293
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.005,
+          "holm": 0.095,
+          "haircut": 0.165,
+          "pbo": 0.29,
+          "oos": 0.585,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 1.5,
-        "simulations": 50,
-        "pass_count": 2,
-        "power_p_pass": 0.04,
+        "simulations": 200,
+        "pass_count": 5,
+        "joint_admission_probability": 0.025,
         "wilson_95_ci": [
-          0.011038884327619809,
-          0.1346009068750702
-        ]
+          0.010724719651761264,
+          0.05717834040664198
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.035,
+          "holm": 0.22,
+          "haircut": 0.365,
+          "pbo": 0.41,
+          "oos": 0.715,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 2.0,
-        "simulations": 50,
-        "pass_count": 6,
-        "power_p_pass": 0.12,
+        "simulations": 200,
+        "pass_count": 13,
+        "joint_admission_probability": 0.065,
         "wilson_95_ci": [
-          0.056176001509322754,
-          0.23804817383202992
-        ]
+          0.03837635464915298,
+          0.10801907929906894
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.085,
+          "holm": 0.5,
+          "haircut": 0.64,
+          "pbo": 0.605,
+          "oos": 0.845,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 2.5,
-        "simulations": 50,
-        "pass_count": 10,
-        "power_p_pass": 0.2,
+        "simulations": 200,
+        "pass_count": 35,
+        "joint_admission_probability": 0.175,
         "wilson_95_ci": [
-          0.11243750015776112,
-          0.3303710593222542
-        ]
+          0.1286051506627333,
+          0.23364431148248993
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.215,
+          "holm": 0.715,
+          "haircut": 0.815,
+          "pbo": 0.77,
+          "oos": 0.9,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 3.0,
-        "simulations": 50,
-        "pass_count": 22,
-        "power_p_pass": 0.44,
+        "simulations": 200,
+        "pass_count": 67,
+        "joint_admission_probability": 0.335,
         "wilson_95_ci": [
-          0.3116219921125717,
-          0.5769397197834315
-        ]
+          0.2732408697841632,
+          0.40297808792033485
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.395,
+          "holm": 0.925,
+          "haircut": 0.97,
+          "pbo": 0.96,
+          "oos": 0.92,
+          "perturbation": 1.0
+        }
       }
     ],
-    "power_curve_collinear_sweep_universe": [
+    "admission_curve_collinear_sweep_universe": [
       {
         "true_annualized_sharpe": 0.0,
-        "simulations": 50,
+        "simulations": 200,
         "pass_count": 0,
-        "power_p_pass": 0.0,
+        "joint_admission_probability": 0.0,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0,
+          0.018845326377266575
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.01,
+          "holm": 0.01,
+          "haircut": 0.01,
+          "pbo": 0.145,
+          "oos": 0.13,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 0.5,
-        "simulations": 50,
+        "simulations": 200,
         "pass_count": 0,
-        "power_p_pass": 0.0,
+        "joint_admission_probability": 0.0,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0,
+          0.018845326377266575
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.055,
+          "holm": 0.02,
+          "haircut": 0.055,
+          "pbo": 0.12,
+          "oos": 0.345,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 1.0,
-        "simulations": 50,
-        "pass_count": 0,
-        "power_p_pass": 0.0,
+        "simulations": 200,
+        "pass_count": 1,
+        "joint_admission_probability": 0.005,
         "wilson_95_ci": [
-          6.4438204832223495e-18,
-          0.07134759913335872
-        ]
+          0.0008831687156009805,
+          0.02777370439789293
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.175,
+          "holm": 0.105,
+          "haircut": 0.165,
+          "pbo": 0.09,
+          "oos": 0.585,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 1.5,
-        "simulations": 50,
-        "pass_count": 3,
-        "power_p_pass": 0.06,
+        "simulations": 200,
+        "pass_count": 8,
+        "joint_admission_probability": 0.04,
         "wilson_95_ci": [
-          0.02061497034897396,
-          0.1621709168883817
-        ]
+          0.020405632066152306,
+          0.07693206820093293
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.37,
+          "holm": 0.255,
+          "haircut": 0.365,
+          "pbo": 0.195,
+          "oos": 0.715,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 2.0,
-        "simulations": 50,
-        "pass_count": 2,
-        "power_p_pass": 0.04,
+        "simulations": 200,
+        "pass_count": 10,
+        "joint_admission_probability": 0.05,
         "wilson_95_ci": [
-          0.011038884327619809,
-          0.1346009068750702
-        ]
+          0.027382645600763932,
+          0.08957814813877599
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.645,
+          "holm": 0.535,
+          "haircut": 0.64,
+          "pbo": 0.16,
+          "oos": 0.845,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 2.5,
-        "simulations": 50,
-        "pass_count": 4,
-        "power_p_pass": 0.08,
+        "simulations": 200,
+        "pass_count": 16,
+        "joint_admission_probability": 0.08,
         "wilson_95_ci": [
-          0.03154951408859299,
-          0.18838246918342838
-        ]
+          0.049840585889759974,
+          0.12598948826714396
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.805,
+          "holm": 0.745,
+          "haircut": 0.815,
+          "pbo": 0.145,
+          "oos": 0.9,
+          "perturbation": 1.0
+        }
       },
       {
         "true_annualized_sharpe": 3.0,
-        "simulations": 50,
-        "pass_count": 9,
-        "power_p_pass": 0.18,
+        "simulations": 200,
+        "pass_count": 23,
+        "joint_admission_probability": 0.115,
         "wilson_95_ci": [
-          0.09770192670234178,
-          0.30796053674300783
-        ]
+          0.07786373232561955,
+          0.16664716898487572
+        ],
+        "layer_pass_rates": {
+          "dsr": 0.96,
+          "holm": 0.93,
+          "haircut": 0.97,
+          "pbo": 0.135,
+          "oos": 0.92,
+          "perturbation": 1.0
+        }
       }
     ]
   }

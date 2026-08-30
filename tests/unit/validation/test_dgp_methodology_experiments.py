@@ -48,14 +48,34 @@ def test_compute_hac_newey_west_variance_iid_vs_autocorrelated() -> None:
 
 
 def test_compute_hac_p_value_rejections() -> None:
-    """Verify that compute_hac_p_value rejects NaN, Inf, and handles small samples."""
+    """Verify that compute_hac_p_value strictly fails closed on non-finite, small sample, and zero variance."""
     with pytest.raises(DataContractError, match="non-finite values"):
         compute_hac_p_value(np.array([1.0, np.nan, 2.0]))
 
     with pytest.raises(DataContractError, match="non-finite values"):
         compute_hac_p_value(np.array([1.0, np.inf, 2.0]))
 
-    assert compute_hac_p_value([0.01]) == Decimal("1.0")
+    with pytest.raises(DataContractError, match="Cannot compute HAC p-value for sample size n=1 < 2"):
+        compute_hac_p_value([0.01])
+
+    with pytest.raises(DataContractError, match="Zero or near-zero variance"):
+        compute_hac_p_value([0.01, 0.01, 0.01, 0.01])
+
+    with pytest.raises(DataContractError, match="Invalid max_lags"):
+        compute_hac_newey_west_variance([0.01, 0.02, 0.03], max_lags=-1)
+
+    with pytest.raises(DataContractError, match="Invalid max_lags"):
+        compute_hac_newey_west_variance([0.01, 0.02, 0.03], max_lags=5)
+
+
+def test_canonical_p_value_fails_closed_on_zero_variance() -> None:
+    """Verify that SearchTrialRecord.compute_canonical_p_value strictly fails closed on zero variance and n < 2."""
+    with pytest.raises(DataContractError, match="Cannot compute canonical p-value for sample size n=1 < 2"):
+        SearchTrialRecord.compute_canonical_p_value([0.01])
+
+    with pytest.raises(DataContractError, match="Zero or near-zero sample variance"):
+        SearchTrialRecord.compute_canonical_p_value([0.01, 0.01, 0.01, 0.01])
+
 
 
 def test_search_trial_record_hac_p_value_derivation() -> None:

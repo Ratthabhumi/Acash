@@ -153,7 +153,7 @@ class SearchTrialRecord(BaseModel):
         arr = np.array(float_vals, dtype=np.float64)
         n = len(arr)
         if n < 2:
-            return Decimal("1.0")
+            raise DataContractError(f"Cannot compute canonical p-value for sample size n={n} < 2.")
 
         if method == "HAC_NEWEY_WEST_ZERO_SHARPE_TEST_V1":
             from acash.validation.deflated_sharpe import compute_hac_p_value
@@ -161,12 +161,18 @@ class SearchTrialRecord(BaseModel):
 
         mean = float(np.mean(arr))
         std = float(np.std(arr, ddof=1))
-        if std <= 1e-12:
-            return Decimal("1.0")
+        if std <= 1e-12 or not math.isfinite(std):
+            raise DataContractError(
+                f"Zero or near-zero sample variance (std={std:.6e} <= 1e-12) detected in trial return series; "
+                f"two-sided p-value is undefined."
+            )
         t_stat = (mean / std) * math.sqrt(n)
         p_val = math.erfc(abs(t_stat) / math.sqrt(2.0))
         dec = to_decimal18(Decimal(f"{p_val:.12f}"))
-        return dec if dec is not None else Decimal("1.0")
+        if dec is None:
+            raise DataContractError(f"Failed to serialize p-value ({p_val}) to 18-decimal precision.")
+        return dec
+
 
     @staticmethod
     def compute_p_value_input_hash(

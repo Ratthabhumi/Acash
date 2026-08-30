@@ -405,21 +405,21 @@ def run_serial_dependence_experiment(
 
 
 # =========================================================================
-# EXPERIMENT D: Statistical Power Analysis (Alternative DGPs)
+# EXPERIMENT D: End-to-End Governance Admission Probability & Layer Decomposition
 # =========================================================================
-def run_statistical_power_experiment(
+def run_governance_admission_experiment(
     true_sharpe_ratios: Sequence[float] = (0.0, 0.50, 1.00, 1.50, 2.00, 2.50, 3.00),
-    num_simulations: int = 50,
+    num_simulations: int = 200,
     T: int = 500,
     M: int = 10,
     random_seed: int = 42,
 ) -> Dict[str, Any]:
-    """Experiment D: Characterize detection power P(PASS) across true non-zero alpha Sharpe levels."""
+    """Experiment D: Characterize end-to-end governance admission probability and decompose per-layer pass rates."""
     gate = StatisticalValidationGate()
     spec = HypothesisSpecification(
         hypothesis_id="HYP_BENCHMARK",
         hypothesis_version="v1.0",
-        economic_rationale="Statistical Power Benchmark",
+        economic_rationale="Governance Admission Benchmark",
         target_symbol="BTCUSDT",
         feature_dependencies=["mom"],
         parameter_config_json="{}",
@@ -431,15 +431,22 @@ def run_statistical_power_experiment(
         author="Auditor",
     )
 
-    power_curve_diverse = []
-    power_curve_collinear = []
+    admission_curve_diverse = []
+    admission_curve_collinear = []
     ann_factor = math.sqrt(252.0)
     sigma_daily = 0.010
 
     for true_sr in true_sharpe_ratios:
         mu_daily = (true_sr / ann_factor) * sigma_daily
-        pass_diverse = 0
-        pass_collinear = 0
+        
+        # Layer pass trackers for diverse universe
+        div_counts = {
+            "dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0
+        }
+        # Layer pass trackers for collinear universe
+        col_counts = {
+            "dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0
+        }
 
         for seed_idx in range(num_simulations):
             np.random.seed(random_seed + int(true_sr * 1000) + seed_idx)
@@ -453,7 +460,7 @@ def run_statistical_power_experiment(
                 trial_matrix_div[:, m] = np.random.normal(0.0, sigma_daily, T)
 
             store_div: Dict[str, Any] = {}
-            strat_id_div = f"STRAT_PWR_DIV_SR{int(true_sr*100)}_{seed_idx}"
+            strat_id_div = f"STRAT_ADM_DIV_SR{int(true_sr*100)}_{seed_idx}"
             ledger_div = _create_trial_ledger(trial_return_matrix=trial_matrix_div, strategy_id=strat_id_div, manifest_store=store_div)
             grid_div = _create_perturbation_grid(strat_id=strat_id_div, manifest_store=store_div, base_sharpe=ledger_div.trials[0].in_sample_sharpe)
 
@@ -470,8 +477,20 @@ def run_statistical_power_experiment(
                 raw_predictive_edge_bps=25.0,
                 manifest_store=store_div,
             )
+            if rep_div.dsr_result and rep_div.dsr_result.is_statistically_significant and rep_div.dsr_result.has_sufficient_track_record:
+                div_counts["dsr"] += 1
+            if rep_div.multiple_testing_result and rep_div.multiple_testing_result.is_fwer_significant:
+                div_counts["holm"] += 1
+            if rep_div.multiple_testing_result and rep_div.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"):
+                div_counts["haircut"] += 1
+            if rep_div.overfitting_report and rep_div.overfitting_report.is_pbo_acceptable:
+                div_counts["pbo"] += 1
+            if rep_div.out_of_sample_sharpe is not None and rep_div.out_of_sample_sharpe >= Decimal("0.5") and rep_div.oos_retention_pct is not None and rep_div.oos_retention_pct >= Decimal("50.0"):
+                div_counts["oos"] += 1
+            if rep_div.overfitting_report and rep_div.overfitting_report.is_parameter_stable:
+                div_counts["perturbation"] += 1
             if rep_div.is_tradeable_alpha:
-                pass_diverse += 1
+                div_counts["joint_pass"] += 1
 
             # Topology 2: Collinear Search Universe (1 primary + (M-1) correlated signal perturbations)
             trial_matrix_col = np.zeros((T, M))
@@ -481,7 +500,7 @@ def run_statistical_power_experiment(
                 trial_matrix_col[:, m] = 0.85 * primary_is + math.sqrt(1.0 - 0.85**2) * noise
 
             store_col: Dict[str, Any] = {}
-            strat_id_col = f"STRAT_PWR_COL_SR{int(true_sr*100)}_{seed_idx}"
+            strat_id_col = f"STRAT_ADM_COL_SR{int(true_sr*100)}_{seed_idx}"
             ledger_col = _create_trial_ledger(trial_return_matrix=trial_matrix_col, strategy_id=strat_id_col, manifest_store=store_col)
             grid_col = _create_perturbation_grid(strat_id=strat_id_col, manifest_store=store_col, base_sharpe=ledger_col.trials[0].in_sample_sharpe)
 
@@ -498,35 +517,55 @@ def run_statistical_power_experiment(
                 raw_predictive_edge_bps=25.0,
                 manifest_store=store_col,
             )
+            if rep_col.dsr_result and rep_col.dsr_result.is_statistically_significant and rep_col.dsr_result.has_sufficient_track_record:
+                col_counts["dsr"] += 1
+            if rep_col.multiple_testing_result and rep_col.multiple_testing_result.is_fwer_significant:
+                col_counts["holm"] += 1
+            if rep_col.multiple_testing_result and rep_col.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"):
+                col_counts["haircut"] += 1
+            if rep_col.overfitting_report and rep_col.overfitting_report.is_pbo_acceptable:
+                col_counts["pbo"] += 1
+            if rep_col.out_of_sample_sharpe is not None and rep_col.out_of_sample_sharpe >= Decimal("0.5") and rep_col.oos_retention_pct is not None and rep_col.oos_retention_pct >= Decimal("50.0"):
+                col_counts["oos"] += 1
+            if rep_col.overfitting_report and rep_col.overfitting_report.is_parameter_stable:
+                col_counts["perturbation"] += 1
             if rep_col.is_tradeable_alpha:
-                pass_collinear += 1
+                col_counts["joint_pass"] += 1
 
-        p_div, div_l, div_u = compute_wilson_confidence_interval(pass_diverse, num_simulations)
-        p_col, col_l, col_u = compute_wilson_confidence_interval(pass_collinear, num_simulations)
 
-        power_curve_diverse.append({
+        p_div, div_l, div_u = compute_wilson_confidence_interval(div_counts["joint_pass"], num_simulations)
+        p_col, col_l, col_u = compute_wilson_confidence_interval(col_counts["joint_pass"], num_simulations)
+
+        admission_curve_diverse.append({
             "true_annualized_sharpe": true_sr,
             "simulations": num_simulations,
-            "pass_count": pass_diverse,
-            "power_p_pass": p_div,
+            "pass_count": div_counts["joint_pass"],
+            "joint_admission_probability": p_div,
             "wilson_95_ci": [div_l, div_u],
+            "layer_pass_rates": {k: v / num_simulations for k, v in div_counts.items() if k != "joint_pass"},
         })
-        power_curve_collinear.append({
+        admission_curve_collinear.append({
             "true_annualized_sharpe": true_sr,
             "simulations": num_simulations,
-            "pass_count": pass_collinear,
-            "power_p_pass": p_col,
+            "pass_count": col_counts["joint_pass"],
+            "joint_admission_probability": p_col,
             "wilson_95_ci": [col_l, col_u],
+            "layer_pass_rates": {k: v / num_simulations for k, v in col_counts.items() if k != "joint_pass"},
         })
 
     return {
-        "experiment_name": "Experiment D: Statistical Power Analysis",
+        "experiment_name": "Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
         "sample_size_T": T,
         "exploratory_models_M": M,
+        "simulations_per_point": num_simulations,
         "random_seed": random_seed,
-        "power_curve_diverse_noise_universe": power_curve_diverse,
-        "power_curve_collinear_sweep_universe": power_curve_collinear,
+        "admission_curve_diverse_noise_universe": admission_curve_diverse,
+        "admission_curve_collinear_sweep_universe": admission_curve_collinear,
     }
+
+
+run_statistical_power_experiment = run_governance_admission_experiment
+
 
 
 
@@ -539,7 +578,7 @@ def run_full_dgp_benchmark_suite(
     exp_a = run_null_dgp_experiment(num_simulations=100, T=500, M=10, random_seed=42)
     exp_b = run_correlated_search_experiment(T=500, K=50, random_seed=42)
     exp_c = run_serial_dependence_experiment(T=1000, num_sims=300, random_seed=42)
-    exp_d = run_statistical_power_experiment(num_simulations=50, T=500, M=10, random_seed=42)
+    exp_d = run_governance_admission_experiment(num_simulations=200, T=500, M=10, random_seed=42)
 
     benchmark_bundle = {
         "suite_name": "ACASH_PHASE6_DGP_BENCHMARK_SUITE",
@@ -547,7 +586,7 @@ def run_full_dgp_benchmark_suite(
         "experiment_a_null_dgp": exp_a,
         "experiment_b_correlated_search": exp_b,
         "experiment_c_serial_dependence": exp_c,
-        "experiment_d_statistical_power": exp_d,
+        "experiment_d_governance_admission": exp_d,
     }
 
     if output_json_path is not None:
@@ -569,7 +608,8 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
     exp_a = data["experiment_a_null_dgp"]
     exp_b = data["experiment_b_correlated_search"]
     exp_c = data["experiment_c_serial_dependence"]
-    exp_d = data["experiment_d_statistical_power"]
+    exp_d = data.get("experiment_d_governance_admission", data.get("experiment_d_statistical_power"))
+
 
     lines = [
         "# ACASH Phase 6 Empirical DGP Benchmark Report",
@@ -607,34 +647,38 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
 
     lines.extend([
         "",
-        "## 4. Experiment D: Statistical Power Analysis (Detection Rate across True $SR$)",
+        "## 4. Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
         "",
         "### Topology 1: Diverse Search Universe (1 True Alpha + 9 Exploratory Noise Models)",
-        "| True Annualized Sharpe | Simulations | Pass Count | Statistical Power $P(\\text{PASS})$ | Wilson 95% CI |",
-        "| :---: | :---: | :---: | :---: | :---: |",
+        "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
-
-    for row in exp_d["power_curve_diverse_noise_universe"]:
+    for row in exp_d["admission_curve_diverse_noise_universe"]:
+        l = row["layer_pass_rates"]
         lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {row['simulations']} | "
-            f"{row['pass_count']} | {row['power_p_pass'] * 100:.2f}% | "
-            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] |"
+            f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
+            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
+            f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
+            f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
         )
 
     lines.extend([
         "",
         "### Topology 2: Collinear Sweep Universe (1 Primary + 9 Correlated Perturbations $\\rho=0.85$)",
-        "| True Annualized Sharpe | Simulations | Pass Count | Statistical Power $P(\\text{PASS})$ | Wilson 95% CI |",
-        "| :---: | :---: | :---: | :---: | :---: |",
+        "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
-    for row in exp_d["power_curve_collinear_sweep_universe"]:
+    for row in exp_d["admission_curve_collinear_sweep_universe"]:
+        l = row["layer_pass_rates"]
         lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {row['simulations']} | "
-            f"{row['pass_count']} | {row['power_p_pass'] * 100:.2f}% | "
-            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] |"
+            f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
+            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
+            f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
+            f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
         )
 
     return "\n".join(lines)
+
 
 
 
