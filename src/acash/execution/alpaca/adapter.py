@@ -27,17 +27,28 @@ The mapping (BMAP-01):
 - ``rejected``                                   -> REJECT
 - ``expired``                                    -> EXPIRED
 - ``order_cancel_rejected``                      -> CANCEL_REJECTED
-- ``canceled``                                   -> ORDER_CANCELLED (ONLY with
-                                                   user-cancel provenance)
+- ``canceled``                                   -> ALWAYS fail-closed raise
+                                                   (BMAP-07 strictest, E-verified)
 - non-terminal in-flight set + incidents (done_for_day, held, stopped,
   suspended, calculated, pending_cancel, pending_replace, replaced,
   order_replace_rejected, trade_bust, trade_correct) -> fail-closed raise
   (BMAP-01: in-flight MUST NOT be terminal; never guessed).
 
-Fail-closed (user-approved): overfill, unexpected cancellation, and non-terminal
-in-flight events RAISE ``AlpacaAdapterMappingError`` (a subclass of
-``BrokerAdapterError``). The engine pump catches this and routes to
-reconciliation/incident. The adapter never fabricates a terminal canonical state.
+BMAP-07 strictest policy (E-verified, user-locked): the adapter NEVER emits
+``ORDER_CANCELLED`` from the live SSE ``canceled`` path. Current Alpaca docs
+(TradeUpdateEventV2 ``reason``) provide NO documented positive "user cancel"
+discriminator, and ``cancel_requested_at`` proves only that a cancel was
+*requested*, not that the resulting ``canceled`` was user-initiated vs
+Alpaca-side (``CORPORATE_ACTION``) or upstream-venue free-form. Therefore
+``canceled`` ALWAYS raises ``AlpacaAdapterMappingError``; ``CANCELLED`` is
+resolved only by the reconciliation layer via REST snapshot evidence
+(``ingest_order_snapshot(..., ORDER_CANCELLED)`` with ``cancel_was_requested``).
+
+Fail-closed (user-approved): overfill, unexpected cancellation, non-terminal
+in-flight events, and every SSE ``canceled`` RAISE ``AlpacaAdapterMappingError``
+(a subclass of ``BrokerAdapterError``). The engine pump catches this and routes
+to reconciliation/incident. The adapter never fabricates a terminal canonical
+state.
 
 Credential boundary (BMAP-10 / C-1..C-5): this adapter holds no secrets itself;
 it delegates all authed I/O to its ``AlpacaTransport``. It never writes
@@ -328,22 +339,22 @@ class AlpacaPaperAdapter(BrokerAdapter):
         )
 
     def _map_canceled(self, event: AlpacaTradeEvent) -> BrokerRawEvent:
-        # BMAP-07: 'canceled' is NOT proof of a user cancel. Only emit
-        # ORDER_CANCELLED when a cancel request is in flight (user provenance).
-        if not self._cancel_requested(event):
-            raise AlpacaAdapterMappingError(
-                f"ingest_trade_event: Alpaca reported 'canceled' for "
-                f"{event.broker_order_id} but no user cancel was requested "
-                "(cancel_requested_at is None). Unexpected cancellation cannot be "
-                "guessed; BMAP-07 fail-closed, route to reconciliation."
-            )
-        return BrokerRawEvent(
-            broker_order_id=event.broker_order_id,
-            event_kind=BrokerEventKind.ORDER_CANCELLED,
-            observed_at=self._observation_time(event),
-            source=_SOURCE,
-            broker_sequence=self._event_sequence(event),
-            cancel_was_requested=True,
+        # BMAP-07 strictest policy (E-verified, user-locked): the SSE 'canceled'
+        # path can NEVER be proven user-cancel against current Alpaca docs. There
+        # is no documented positive 'user cancel' reason code; `cancel_requested_at`
+        # proves only a cancel was REQUESTED, not that the resulting `canceled` was
+        # user-initiated vs Alpaca-side (CORPORATE_ACTION) or upstream-venue
+        # free-form reason. Even with `cancel_requested_at` set, reason does not
+        # disambiguate. Therefore ALWAYS fail-closed; never emit ORDER_CANCELLED.
+        # CANCELLED is resolved only via REST reconciliation snapshot evidence.
+        raise AlpacaAdapterMappingError(
+            f"ingest_trade_event: Alpaca reported 'canceled' for "
+            f"{event.broker_order_id}. Current Alpaca docs provide no verified "
+            "user-cancel discriminator (reason=None is NOT documented as a routine "
+            "user cancel; reason may be CORPORATE_ACTION or upstream-venue "
+            "free-form). Unexpected/ambiguous cancellation cannot be guessed; "
+            "BMAP-07 strict fail-closed. Route to reconciliation; resolve CANCELLED "
+            "via REST snapshot evidence only."
         )
 
     def _order_to_raw(

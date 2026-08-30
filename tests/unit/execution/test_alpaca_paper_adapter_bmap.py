@@ -420,7 +420,9 @@ def test_bmap06_fill_without_embedded_order_fails_closed() -> None:
 
 
 # ===========================================================================
-# BMAP-07 — cancel provenance: 'canceled' is NOT proof of a user cancel
+# BMAP-07 — cancel provenance (STRICTEST): the SSE 'canceled' path can NEVER be
+# proven user-cancel against current Alpaca docs (E-verified), so it ALWAYS
+# fails closed. CANCELLED is resolved ONLY via REST reconciliation snapshot.
 # ===========================================================================
 
 
@@ -435,17 +437,117 @@ def test_bmap07_canceled_without_provenance_fails_closed() -> None:
         a.ingest_trade_event(ev)
 
 
-def test_bmap07_canceled_with_user_provenance_maps_to_order_cancelled() -> None:
+def test_bmap07_canceled_even_with_cancel_requested_at_fails_closed() -> None:
+    # cancel_requested_at proves a cancel was REQUESTED, not that the resulting
+    # 'canceled' was user-initiated. Per E-verified policy, NEVER emit ORDER_CANCELLED.
     a = _adapter()
     ev = _event(
         event_id="07H2",
         etype=AlpacaTradeEventType.CANCELED,
         order=_order(cancel_requested_at="2026-01-01T00:03:00Z"),
     )
-    raw = a.ingest_trade_event(ev)
+    with pytest.raises(AlpacaAdapterMappingError):
+        a.ingest_trade_event(ev)
+    assert a.subscribe_events("alpaca-order-0001") == ()
+
+
+def test_bmap07_canceled_alpaca_initiated_corporate_action_fails_closed() -> None:
+    # E-verified: CORPORATE_ACTION = Alpaca-side cancel, definitely NOT user.
+    a = _adapter()
+    ev = AlpacaTradeEvent(
+        event_id="07H3",
+        event=AlpacaTradeEventType.CANCELED,
+        at=_utc("2026-01-01T00:03:00Z"),
+        executed_at=None,
+        broker_order_id="alpaca-order-0001",
+        execution_id=None,
+        qty=None,
+        price=None,
+        reason="CORPORATE_ACTION",
+        order=_order(cancel_requested_at="2026-01-01T00:02:00Z"),
+    )
+    with pytest.raises(AlpacaAdapterMappingError):
+        a.ingest_trade_event(ev)
+
+
+def test_bmap07_canceled_too_late_to_cancel_fails_closed() -> None:
+    a = _adapter()
+    ev = AlpacaTradeEvent(
+        event_id="07H4",
+        event=AlpacaTradeEventType.CANCELED,
+        at=_utc("2026-01-01T00:03:00Z"),
+        executed_at=None,
+        broker_order_id="alpaca-order-0001",
+        execution_id=None,
+        qty=None,
+        price=None,
+        reason="TOO_LATE_TO_CANCEL",
+        order=_order(cancel_requested_at="2026-01-01T00:02:00Z"),
+    )
+    with pytest.raises(AlpacaAdapterMappingError):
+        a.ingest_trade_event(ev)
+
+
+def test_bmap07_canceled_free_form_venue_reason_fails_closed() -> None:
+    # E-verified: upstream-venue cancels may carry the venue's own free-form text.
+    a = _adapter()
+    ev = AlpacaTradeEvent(
+        event_id="07H5",
+        event=AlpacaTradeEventType.CANCELED,
+        at=_utc("2026-01-01T00:03:00Z"),
+        executed_at=None,
+        broker_order_id="alpaca-order-0001",
+        execution_id=None,
+        qty=None,
+        price=None,
+        reason="VARIOUS_VENUE_REPORTED_TEXT",
+        order=_order(cancel_requested_at="2026-01-01T00:02:00Z"),
+    )
+    with pytest.raises(AlpacaAdapterMappingError):
+        a.ingest_trade_event(ev)
+
+
+def test_bmap07_adapter_never_emits_order_cancelled_from_any_canceled() -> None:
+    a = _adapter()
+    for reason, cancel_req in (
+        (None, None),
+        (None, "2026-01-01T00:03:00Z"),
+        ("CORPORATE_ACTION", None),
+        ("CORPORATE_ACTION", "2026-01-01T00:03:00Z"),
+        ("TOO_LATE_TO_CANCEL", "2026-01-01T00:03:00Z"),
+    ):
+        ev = AlpacaTradeEvent(
+            event_id=f"07P-{reason or 'none'}-{cancel_req or 'none'}",
+            event=AlpacaTradeEventType.CANCELED,
+            at=_utc("2026-01-01T00:03:00Z"),
+            executed_at=None,
+            broker_order_id="alpaca-order-0001",
+            execution_id=None,
+            qty=None,
+            price=None,
+            reason=reason,
+            order=_order(cancel_requested_at=cancel_req),
+        )
+        with pytest.raises(AlpacaAdapterMappingError):
+            a.ingest_trade_event(ev)
+
+
+def test_bmap07_cancelled_reachable_only_via_rest_reconciliation_snapshot() -> None:
+    # CANCELLED must STILL be reachable end-to-end, but only through the
+    # reconciliation layer (ingest_order_snapshot with ORDER_CANCELLED +
+    # cancel_was_requested=True), never from the SSE 'canceled' path.
+    a = _adapter()
+    raw = a.ingest_order_snapshot(
+        _order(
+            broker_id="alpaca-order-0001",
+            status=AlpacaOrderStatus.CANCELED,
+            cancel_requested_at="2026-01-01T00:03:00Z",
+        ),
+        BrokerEventKind.ORDER_CANCELLED,
+    )
     assert raw.event_kind is BrokerEventKind.ORDER_CANCELLED
     assert raw.cancel_was_requested is True
-    # Pipeline: with the provenance hint, the normalizer resolves to CANCEL_ACK.
+    # Required-field evidence path -> canonical event resolves to CANCEL_ACK.
     event, _ = normalize_broker_event(
         broker_order_id=raw.broker_order_id,
         event_kind=raw.event_kind,
@@ -455,6 +557,8 @@ def test_bmap07_canceled_with_user_provenance_maps_to_order_cancelled() -> None:
         cancel_was_requested=raw.cancel_was_requested,
     )
     assert event.value == "CANCEL_ACK"
+    # Reconciliation snapshots are LOCAL-FB-* fallback (BMAP-04), not Alpaca seq.
+    assert raw.broker_sequence.startswith("LOCAL-FB-")
 
 
 # ===========================================================================
