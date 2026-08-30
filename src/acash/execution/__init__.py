@@ -45,6 +45,13 @@ from acash.execution.schema import (
     ValidationCertificate,
     compute_authorization_digest,
 )
+from acash.execution.state_machine import (
+    ExecutionEvent,
+    ExecutionStateError,
+    ExecutionTransition,
+    is_terminal,
+    transition_order,
+)
 
 __all__ = [
     "ApproverRole",
@@ -57,7 +64,10 @@ __all__ = [
     "Ed25519Signer",
     "Ed25519TrustStore",
     "Ed25519TrustStoreEntry",
+    "ExecutionEvent",
     "ExecutionManifest",
+    "ExecutionStateError",
+    "ExecutionTransition",
     "KillSwitchAction",
     "KillSwitchEvent",
     "KillSwitchTriggerType",
@@ -80,10 +90,12 @@ __all__ = [
     "create_draft_authorization",
     "evaluate_kill_switch_triggers",
     "expire_authorization",
+    "is_terminal",
     "issue_live_authorization",
     "reactivate_authorization",
     "revoke_authorization",
     "submit_for_approval",
     "suspend_authorization",
+    "transition_order",
     "verify_validation_certificate",
 ]
