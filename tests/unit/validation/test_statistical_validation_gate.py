@@ -2661,6 +2661,53 @@ def test_compute_canonical_p_value_rejects_non_finite_inputs() -> None:
         SearchTrialRecord.compute_canonical_p_value([Decimal("0.01"), Decimal("NaN"), Decimal("0.02")])
 
 
+def test_search_trial_record_single_canonical_p_value_authority() -> None:
+    """Verify that SearchTrialRecord.create() and validator strictly enforce derived_p as single authority."""
+    returns = [0.01, 0.02, 0.015, 0.025, 0.03] * 10
+    derived_p = SearchTrialRecord.compute_canonical_p_value(returns)
+
+    # 1. Caller passes p_value within tolerance (e.g. derived_p + 1e-7)
+    # The record's p_value MUST be strictly derived_p, NOT the caller's slightly offset value.
+    offset_p = derived_p + Decimal("0.0000001")
+    rec = SearchTrialRecord.create(
+        trial_id="t_authority",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f1"],
+        parameters={"p": 1},
+        in_sample_sharpe=Decimal("2.0"),
+        execution_manifest_id="m_0",
+        p_value=offset_p,
+        in_sample_returns=returns,
+    )
+    assert rec.p_value == derived_p
+    assert rec.p_value != offset_p
+    expected_hash = SearchTrialRecord.compute_p_value_input_hash(
+        return_series_sha256=rec.in_sample_return_series_sha256,
+        config_sha256=rec.config_sha256,
+        p_value=derived_p,
+        p_value_method="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+    )
+    assert rec.p_value_input_hash == expected_hash
+
+    # 2. When in_sample_returns is omitted, explicit p_value is used and normalized
+    explicit_p = Decimal("0.045000000000000000")
+    rec_explicit = SearchTrialRecord.create(
+        trial_id="t_explicit",
+        strategy_id="STRAT_01",
+        hypothesis_id="HYP_01",
+        feature_names=["f1"],
+        parameters={"p": 1},
+        in_sample_sharpe=Decimal("2.0"),
+        execution_manifest_id="m_0",
+        p_value=explicit_p,
+        in_sample_return_series_sha256="a" * 64,
+        config_sha256="b" * 64,
+    )
+    assert rec_explicit.p_value == explicit_p
+
+
+
 
 
 

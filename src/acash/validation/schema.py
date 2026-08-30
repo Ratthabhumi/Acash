@@ -196,7 +196,7 @@ class SearchTrialRecord(BaseModel):
                     )
 
             # Strict construction-time evidence derivation and verification:
-            # If in_sample_returns is present, canonical p-value is computed directly.
+            # If in_sample_returns is present, canonical p-value is derived directly (single authority).
             method = data.get("p_value_method", "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1")
             if "in_sample_returns" in data and data["in_sample_returns"] is not None:
                 derived_p = cls.compute_canonical_p_value(data["in_sample_returns"])
@@ -211,6 +211,10 @@ class SearchTrialRecord(BaseModel):
                 raise DataContractError(
                     f"Must supply either in_sample_returns or an explicit verified p_value for trial '{trial_id}'."
                 )
+            else:
+                p_dec = to_decimal18(Decimal(str(data["p_value"])))
+                if p_dec is not None:
+                    data["p_value"] = p_dec
 
             # Compute and verify mandatory cryptographic p_value_input_hash:
             expected_p_hash = cls.compute_p_value_input_hash(
@@ -226,7 +230,6 @@ class SearchTrialRecord(BaseModel):
                     )
             else:
                 data["p_value_input_hash"] = expected_p_hash
-
 
         return data
 
@@ -271,15 +274,14 @@ class SearchTrialRecord(BaseModel):
                     raise DataContractError(
                         f"Trial '{trial_id}' create() supplied p_value ({p_dec}) contradicts canonical derived p_value ({derived_p}) from in_sample_returns."
                     )
-                final_p = p_dec if p_dec is not None else derived_p
-            else:
-                final_p = derived_p
+            final_p = derived_p
         else:
             if p_value is None:
                 raise DataContractError(
                     f"Must provide either in_sample_returns or an explicit p_value for trial '{trial_id}'."
                 )
-            final_p = p_value
+            p_dec = to_decimal18(p_value) if isinstance(p_value, Decimal) else to_decimal18(Decimal(str(p_value)))
+            final_p = p_dec if p_dec is not None else p_value
 
         expected_p_hash = cls.compute_p_value_input_hash(
             return_series_sha256=in_sample_return_series_sha256,
@@ -292,6 +294,7 @@ class SearchTrialRecord(BaseModel):
             raise DataContractError(
                 f"Trial '{trial_id}' supplied p_value_input_hash '{p_value_input_hash}' does not match expected '{expected_p_hash}'."
             )
+
 
         return cls(
             trial_id=trial_id,
