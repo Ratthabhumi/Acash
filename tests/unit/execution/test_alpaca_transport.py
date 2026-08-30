@@ -42,7 +42,12 @@ from acash.execution.alpaca import (
     AlpacaTradeEventType,
     AlpacaTransport,
     AlpacaVenue,
+    AlpacaVenueMismatchError,
     EnvAlpacaCredentialProvider,
+    PaperCredentialGuardError,
+    PaperHttpAlpacaTransport,
+    assert_paper_venue,
+    paper_credential_provider,
 )
 
 
@@ -105,6 +110,82 @@ def test_rotation_reloads_live_env_without_code_change() -> None:
     # Redaction holds for the rotated handle too.
     assert "AK-NEW" not in str(second)
     assert "newsec" not in repr(second)
+
+
+# ---------------------------------------------------------------------------
+# Paper-only credential guard (PAPER-ONLY path, defense-in-depth on BMAP-10)
+# ---------------------------------------------------------------------------
+
+
+def test_assert_paper_venue_accepts_paper() -> None:
+    assert_paper_venue("ALPACA_PAPER")  # must not raise
+
+
+def test_assert_paper_venue_rejects_live() -> None:
+    with pytest.raises(PaperCredentialGuardError):
+        assert_paper_venue("ALPACA_LIVE")
+
+
+def test_assert_paper_venue_rejects_arbitrary_venue() -> None:
+    with pytest.raises(PaperCredentialGuardError):
+        assert_paper_venue("SOME_OTHER_VENUE")
+
+
+def test_paper_credential_provider_is_hard_pinned_to_paper() -> None:
+    p = paper_credential_provider()
+    assert p.venue() == "ALPACA_PAPER"
+    assert_paper_venue(p.venue())  # guard is satisfied by the factory by construction
+
+
+def test_paper_credential_provider_fails_closed_when_key_absent() -> None:
+    p = paper_credential_provider(environ={"ACASH_ALPACA_API_KEY_ID": ""})
+    with pytest.raises(AlpacaCredentialError):
+        p.load()
+
+
+def test_paper_credential_provider_resolves_redacted_paper_handle() -> None:
+    p = paper_credential_provider(
+        environ={
+            "ACASH_ALPACA_API_KEY_ID": "AK-PAPER-SECRET",
+            "ACASH_ALPACA_API_SECRET": "paper-secret",
+        }
+    )
+    creds = p.load()
+    assert creds.resolved
+    assert "AK-PAPER-SECRET" not in str(creds)
+    assert "paper-secret" not in repr(creds)
+
+
+def test_paper_transport_refuses_live_scoped_credential_provider() -> None:
+    # Defense-in-depth: the paper transport must reject a credential provider
+    # whose venue is NOT paper, even if the endpoint itself is paper, so a live
+    # credential can never be silently wired into a paper transport.
+    provider = EnvAlpacaCredentialProvider(
+        venue="ALPACA_LIVE",
+        api_key_id="AK-LIVE",
+        api_secret="live-secret",
+    )
+    endpoint = AlpacaEndpoint(venue=AlpacaVenue.PAPER)
+    with pytest.raises(PaperCredentialGuardError):
+        PaperHttpAlpacaTransport(provider=provider, endpoint=endpoint)
+
+
+def test_paper_transport_accepts_paper_credential_provider() -> None:
+    provider = paper_credential_provider(
+        api_key_id="AK-PAPER", api_secret="paper-secret"
+    )
+    endpoint = AlpacaEndpoint(venue=AlpacaVenue.PAPER)
+    t = PaperHttpAlpacaTransport(provider=provider, endpoint=endpoint)
+    assert t.endpoint.is_paper
+
+
+def test_paper_transport_refuses_live_endpoint() -> None:
+    provider = paper_credential_provider(
+        api_key_id="AK-PAPER", api_secret="paper-secret"
+    )
+    endpoint = AlpacaEndpoint(venue=AlpacaVenue.LIVE)
+    with pytest.raises(AlpacaVenueMismatchError):
+        PaperHttpAlpacaTransport(provider=provider, endpoint=endpoint)
 
 
 # ---------------------------------------------------------------------------

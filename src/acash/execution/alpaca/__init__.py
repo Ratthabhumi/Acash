@@ -40,6 +40,9 @@ from acash.execution.alpaca.credentials import (
     AlpacaCredentialProvider,
     AlpacaCredentials,
     EnvAlpacaCredentialProvider,
+    PaperCredentialGuardError,
+    assert_paper_venue,
+    paper_credential_provider,
 )
 from acash.execution.alpaca.transport import (
     AlpacaCancelReason,
@@ -92,7 +95,10 @@ __all__ = [
     "HttpAlpacaTransport",
     "LIVE_API_HOST",
     "PAPER_API_HOST",
+    "PaperCredentialGuardError",
     "PaperHttpAlpacaTransport",
+    "assert_paper_venue",
     "live_endpoint",
+    "paper_credential_provider",
     "paper_endpoint",
 ]

@@ -148,3 +148,54 @@ class AlpacaCredentialError(BrokerAdapterError):
 
     Message contains NO secret material (contract §6 C-2/C-4).
     """
+
+
+class PaperCredentialGuardError(AlpacaCredentialError):
+    """Fail-closed guard raised when the paper path is asked to construct or
+    resolve a credential that is NOT paper-scoped.
+
+    The Paper Exercise (P-evidence path) MAY ONLY ever hold an ``ALPACA_PAPER``
+    credential. A live credential or any non-paper venue on this path is refused
+    before any transport/order can be constructed (BMAP-10 cross-venue guard,
+    defense-in-depth on top of ``AlpacaVenueMismatchError``). Message contains NO
+    secret material.
+    """
+
+
+def paper_credential_provider(
+    *,
+    api_key_id: Optional[str] = None,
+    api_secret: Optional[str] = None,
+    environ: Optional[dict[str, str]] = None,
+) -> EnvAlpacaCredentialProvider:
+    """Single-authority paper-scoped credential provider factory.
+
+    Constructs an ``EnvAlpacaCredentialProvider`` that is HARD-PINNED to the
+    paper venue (``ALPACA_PAPER``). The paper exercise path must get its
+    credentials ONLY from this factory, so a live credential or any non-paper
+    venue can never be silently wired into a paper transport. Fails closed.
+
+    No secret material is accepted, stored, or returned beyond the redacted
+    ``AlpacaCredentials`` handle (credential contract §6 C-1/C-2).
+    """
+    return EnvAlpacaCredentialProvider(
+        venue="ALPACA_PAPER",
+        api_key_id=api_key_id,
+        api_secret=api_secret,
+        environ=environ,
+    )
+
+
+def assert_paper_venue(venue: str) -> None:
+    """Fail-closed paper-only venue guard (single authority for the paper path).
+
+    Raises ``PaperCredentialGuardError`` when ``venue`` is anything other than
+    ``ALPACA_PAPER``. Call this as the authoritative gate before any paper
+    transport/order construction so a live/other venue is rejected up front,
+    not discovered late.
+    """
+    if venue != "ALPACA_PAPER":
+        raise PaperCredentialGuardError(
+            f"Paper credential guard refuses non-paper venue {venue!r}; "
+            "the Paper Exercise path is PAPER-ONLY (BMAP-10, defense-in-depth)."
+        )

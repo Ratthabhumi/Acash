@@ -53,6 +53,7 @@ from acash.execution.broker_adapter import (
 from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
     AlpacaCredentialProvider,
+    assert_paper_venue,
 )
 from acash.execution.alpaca.venue import AlpacaEndpoint, AlpacaVenue
 
@@ -501,8 +502,12 @@ class PaperHttpAlpacaTransport(HttpAlpacaTransport):
     """Paper-only concrete transport.
 
     Level 1 (constructor-time typed gate): a non-paper venue is a hard
-    ``AlpacaVenueMismatchError`` regardless of anything else. Level 2 (runtime,
-    inherited): ``connect()`` also asserts credential<->endpoint venue match.
+    ``AlpacaVenueMismatchError`` regardless of anything else. Level 1b (paper
+    credential guard): the credential provider's venue must itself be paper —
+    a live/other-scope provider is rejected up front via ``assert_paper_venue``,
+    so no paper transport can ever be wired to a live credential silently. Level
+    2 (runtime, inherited): ``connect()`` also asserts credential<->endpoint
+    venue match.
     """
 
     def __init__(
@@ -517,6 +522,7 @@ class PaperHttpAlpacaTransport(HttpAlpacaTransport):
             raise AlpacaVenueMismatchError(
                 f"PaperAlpacaTransport refuses non-paper venue: {endpoint.venue.value}."
             )
+        assert_paper_venue(provider.venue())
         super().__init__(
             provider,
             endpoint,
