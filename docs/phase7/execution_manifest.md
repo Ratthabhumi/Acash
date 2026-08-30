@@ -10,10 +10,10 @@ ValidationReport (Phase 6)
 LiveAuthorization
        │
        ▼
-OrderIntent
+OrderIntent (intent_digest)
        │
        ▼
-ExecutionManifest (Immutable forensic record)
+ExecutionManifest (Binds intent_digest → execution_digest)
        │
        ▼
 FillEvents & Shadow Ledger Entries
@@ -31,6 +31,9 @@ class ExecutionManifest(BaseModel):
     execution_id: str = Field(description="Unique deterministic execution identifier.")
     authorization_id: str = Field(description="Linked LiveAuthorization identifier.")
     strategy_id: str = Field(description="Target strategy identifier.")
+    intent_id: str = Field(description="Linked OrderIntent identifier.")
+    intent_digest: str = Field(pattern=r"^[a-f0-9]{64}$", description="SHA-256 hash of originating OrderIntent.")
+    
     client_order_id: str = Field(description="Client order identifier.")
     broker_order_id: Optional[str] = Field(default=None, description="Assigned broker order ID.")
     
@@ -50,7 +53,7 @@ class ExecutionManifest(BaseModel):
     exchange_queue_latency_ms: Optional[float] = Field(default=None, description="Queue latency on exchange.")
     
     # Fill Economics & Slippage Attribution
-    requested_qty: Decimal = Field(gt=0, description="Requested volume.")
+    requested_qty: Decimal = Field(gt=0, description="Requested volume from OrderIntent.")
     filled_qty: Decimal = Field(ge=0, description="Cumulative filled volume.")
     benchmark_mid_price: Decimal = Field(gt=0, description="Mid price at moment of OrderIntent creation.")
     average_fill_price: Optional[Decimal] = Field(default=None, description="Volume-weighted average fill price.")

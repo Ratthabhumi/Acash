@@ -1,18 +1,70 @@
-# Phase 7: Live Authorization Specification
+# Phase 7: Live Authorization Specification & State Machine
 
 ## 1. Overview & Separation of Concerns
-While a `ValidationCertificate` certifies statistical quality, a `LiveAuthorization` grants permission to allocate capital under explicit, dynamic operational constraints.
+A `LiveAuthorization` is a dynamic, state-managed token granting permission to allocate capital under bounded operational constraints.
 
 ```text
-ValidationCertificate = "This strategy meets research standards."
+ValidationCertificate = "This strategy meets historical research standards."
 LiveAuthorization     = "This strategy may trade up to $50,000 notional on Venue X with 2.5% max daily loss."
 ```
 
 ---
 
-## 2. Live Authorization Schema
+## 2. Authorization Lifecycle State Machine
+
+```text
+       ┌──────────┐
+       │  DRAFT   │ (Created with proposed parameters)
+       └────┬─────┘
+            │
+            ▼
+┌───────────────────────┐
+│   PENDING_APPROVAL    │ (Awaiting multi-sig risk officer approval)
+└───────────┬───────────┘
+            │
+            ▼ (Approved & Signed)
+┌───────────────────────┐
+│        ACTIVE         │ (Strategy authorized to submit live orders)
+└─────┬───────────┬─────┘
+      │           │
+      │ (Kill)    │ (Revoked)
+      ▼           ▼
+┌───────────┐ ┌───────────┐
+│ SUSPENDED │ │  REVOKED  │ (Terminal)
+└─────┬─────┘ └───────────┘
+      │
+      ▼ (Timeout reached)
+┌───────────┐
+│  EXPIRED  │ (Terminal)
+└───────────┘
+```
+
+### State Definitions & Transition Rules
+1. `DRAFT`: Proposed operational limits created by portfolio manager. No orders permitted.
+2. `PENDING_APPROVAL`: Submitted to risk committee / automated risk gateway. No orders permitted.
+3. `ACTIVE`: Cryptographically signed authorization token active. Orders permitted strictly within bounds.
+4. `SUSPENDED`: Temporarily halted by a `KillSwitchEvent` or risk officer. No new orders permitted.
+5. `REVOKED`: Permanently invalidated due to policy breach or model retirement (Terminal).
+6. `EXPIRED`: Timestamp `utc_now() > expires_at` (Terminal).
+
+### The "No Auto-Reactivation on Reboot" Invariant
+> **"Process restarts, container reboots, or server crashes must NEVER automatically transition a `SUSPENDED` authorization back to `ACTIVE`."**
+> 
+> Reactivating a suspended strategy requires an explicit `AuthorizationReactivationEvent` signed by an authorized risk officer after root cause remediation.
+
+---
+
+## 3. Live Authorization Schema
 
 ```python
+class AuthorizationStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    ACTIVE = "ACTIVE"
+    SUSPENDED = "SUSPENDED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+
 class LiveAuthorization(BaseModel):
     """Authoritative token granting capital allocation and operational boundaries."""
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -20,6 +72,8 @@ class LiveAuthorization(BaseModel):
     authorization_id: str = Field(description="Unique deterministic authorization identifier.")
     certificate_id: str = Field(description="Linked ValidationCertificate identifier.")
     strategy_id: str = Field(description="Target strategy identifier.")
+    status: AuthorizationStatus = Field(default=AuthorizationStatus.DRAFT, description="Current lifecycle state.")
+    
     authorized_at: datetime = Field(description="UTC timestamp when authorization was granted.")
     expires_at: datetime = Field(description="Mandatory expiration timestamp for authorization validity.")
     
@@ -37,13 +91,9 @@ class LiveAuthorization(BaseModel):
     allowed_symbols: Tuple[str, ...] = Field(min_length=1, description="Whitelisted tradeable instrument symbols.")
     risk_policy_version: str = Field(description="Active pre-live risk policy version.")
     
+    # Approver & Authority Signatures
+    approver_id: str = Field(description="Risk officer or automated gateway ID.")
+    approver_public_key_id: str = Field(description="Public key ID of approver.")
+    authorization_signature: str = Field(description="Digital signature of approver over canonical parameters.")
     authorization_digest: str = Field(pattern=r"^[a-f0-9]{64}$", description="SHA-256 hash of canonical authorization parameters.")
 ```
-
----
-
-## 3. Pre-Live Risk Admission Checks
-Before generating a `LiveAuthorization`, the Pre-Live Risk Engine evaluates:
-1. **Total Firm Sizing Capacity**: Adding `max_notional` does not breach global firm risk limits.
-2. **Correlation & Overlap**: Strategy is not collinear with an already active live strategy sharing liquidity.
-3. **Connectivity & Latency**: Target venue latency and heartbeat health are nominal.
