@@ -14,6 +14,12 @@ from acash.execution.admission import (
     suspend_authorization,
     verify_validation_certificate,
 )
+from acash.execution.broker_events import (
+    BrokerEventKind,
+    BrokerEventNormalizationError,
+    ReconciliationEvidence,
+    normalize_broker_event,
+)
 from acash.execution.crypto import (
     Ed25519Signer,
     Ed25519TrustStore,
@@ -59,6 +65,8 @@ __all__ = [
     "AuthorizationReactivationApproval",
     "AuthorizationReactivationEvent",
     "AuthorizationStatus",
+    "BrokerEventKind",
+    "BrokerEventNormalizationError",
     "CalculationStatus",
     "CertificateRevocationEvent",
     "Ed25519Signer",
@@ -78,6 +86,7 @@ __all__ = [
     "OrderSide",
     "OrderType",
     "PreLiveRiskAdmissionError",
+    "ReconciliationEvidence",
     "ReconciliationReport",
     "RiskState",
     "RiskStatus",
@@ -92,6 +101,7 @@ __all__ = [
     "expire_authorization",
     "is_terminal",
     "issue_live_authorization",
+    "normalize_broker_event",
     "reactivate_authorization",
     "revoke_authorization",
     "submit_for_approval",
