@@ -15,7 +15,7 @@ ACASH is a scientific, research-first, evidence-driven capital allocation and po
 
 > *"Given the current market, available opportunities, portfolio state, uncertainty, liquidity, and risk constraints, where should capital be allocated?"* (including the valid decision: **NOWHERE**).
 
-Phase 0 discovery and architecture evaluation is complete. All architectural foundations, open-source technology evaluations, storage tiers, decoupled execution boundaries, and correctness-driven testing criteria have been defined canonically in [`docs/`](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs).
+Phase 0 discovery and architecture evaluation is complete. All architectural foundations, open-source technology evaluations, storage tiers, decoupled execution boundaries, and correctness-driven testing criteria have been defined canonically in [`docs/`](./README.md).
 
 ---
 
@@ -42,16 +42,17 @@ Phase 0 discovery and architecture evaluation is complete. All architectural fou
 
 ## 4. Phase 0 Deliverables Complete in `docs/`
 
-1. [x] [docs/TECHNOLOGY_EVALUATION.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/TECHNOLOGY_EVALUATION.md)
-2. [x] [docs/ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ARCHITECTURE.md)
-3. [x] [docs/DATA_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DATA_ARCHITECTURE.md)
-4. [x] [docs/EXECUTION_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/EXECUTION_ARCHITECTURE.md)
-5. [x] [docs/PORTFOLIO_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PORTFOLIO_ARCHITECTURE.md)
-6. [x] [docs/RESEARCH_ARCHITECTURE.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RESEARCH_ARCHITECTURE.md)
-7. [x] [docs/DECISIONS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/DECISIONS.md) (ADR-001 through ADR-015)
-8. [x] [docs/RISKS.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/RISKS.md)
-9. [x] [docs/ROADMAP.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/ROADMAP.md)
-10. [x] [docs/PHASE_1_PLAN.md](file:///c:/Users/Ratthabhumi/Desktop/CO-OP_Project/Acash/docs/PHASE_1_PLAN.md)
+1. [x] [docs/TECHNOLOGY_EVALUATION.md](./TECHNOLOGY_EVALUATION.md)
+2. [x] [docs/ARCHITECTURE.md](./ARCHITECTURE.md)
+3. [x] [docs/DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md)
+4. [x] [docs/EXECUTION_ARCHITECTURE.md](./EXECUTION_ARCHITECTURE.md)
+5. [x] [docs/PORTFOLIO_ARCHITECTURE.md](./PORTFOLIO_ARCHITECTURE.md)
+6. [x] [docs/RESEARCH_ARCHITECTURE.md](./RESEARCH_ARCHITECTURE.md)
+7. [x] [docs/DECISIONS.md](./DECISIONS.md) (ADR-001 through ADR-015)
+8. [x] [docs/RISKS.md](./RISKS.md)
+9. [x] [docs/ROADMAP.md](./ROADMAP.md)
+10. [x] [docs/PHASE_1_PLAN.md](./PHASE_1_PLAN.md)
+
 
 ---
 

@@ -51,7 +51,8 @@ ACASH enforces a strict architectural separation between **Analytical Research D
 
 ## 4. Bi-Temporal Schema & Canonical Types
 
-Datasets in the Parquet analytical layer adhere strictly to the **[docs/DATA_CONTRACT.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/DATA_CONTRACT.md)** specification:
+Datasets in the Parquet analytical layer adhere strictly to the **[`docs/DATA_CONTRACT.md`](./DATA_CONTRACT.md)** specification:
+
 
 | Column Name | Physical Parquet Type | Description |
 | :--- | :--- | :--- |
