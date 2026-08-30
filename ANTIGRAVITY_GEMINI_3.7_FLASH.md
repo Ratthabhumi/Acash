@@ -46,3 +46,81 @@ This document records institutional memory, model-specific behavioral guardrails
    - `SELF-REPORTED`: Executed in current session but unconfirmed by independent CI pipeline.
    - `NOT RUN`: Deferred or awaiting external execution.
 3. **Never Fabricate Test Output**: Report the exact pytest summary line, warning counts, execution wall-clock time, and MyPy result.
+
+---
+
+## 4. CRITICAL DIRECTION — EVENT-DRIVEN VISUALIZATION CORE
+
+This is a non-negotiable architectural direction for Atlas.
+
+Do NOT begin by optimizing for visual beauty, 3D effects, or decorative animation.
+
+The implementation priority is:
+```text
+Atlas event → Graph state → Event particle → Node reaction
+```
+
+The particle is a semantic representation of a real Atlas event.
+
+A particle MUST NOT move merely because animation makes the graph look alive.
+
+Every particle movement must correspond to an actual event or state transition received by Atlas.
+
+### Conceptual Pipeline
+1. Atlas receives event $X$.
+2. Event $X$ is normalized into the event model.
+3. Graph state is updated.
+4. Event $X$ creates an event-particle.
+5. The particle propagates from source entity $A \to$ target entity $B$.
+6. When it reaches $B$, entity $B$ reacts.
+7. If the event contains a propagation path, the particle may continue $A \to B \to C$.
+
+### Semantic Invariant
+> **"Particle movement represents information propagation, not decoration."**
+
+### Example Execution
+```text
+Atlas receives:
+    Event X at t = now - 300ms
+
+Graph:
+    A --MENTIONS--> B
+
+Visualization:
+    Particle X travels A → B
+    B briefly reacts when X arrives
+```
+
+### Architectural Guardrails
+
+#### DO:
+- Model events explicitly.
+- Keep event identity and timestamps immutable.
+- Derive particles strictly from real events.
+- Derive node reactions from event arrival.
+- Keep graph state strictly independent from rendering layer.
+- Preserve the event model if rendering technology changes.
+
+#### DO NOT:
+- Create random or decorative particles.
+- Use `setInterval()` to invent synthetic activity.
+- Animate edges without an underlying verified event.
+- Fabricate graph updates just to make the scene look alive.
+- Couple business/event logic directly to Three.js / WebGL components.
+
+### Architectural Decoupling Goal
+The event/data architecture must remain completely valid even if the renderer changes later:
+```text
+react-force-graph → custom Three.js → WebGPU → another visualization engine
+```
+* The renderer is replaceable.
+* The semantic event pipeline is **NOT**.
+
+### Implementation Hierarchy
+1. **Priority 1**: Correct event $\to$ graph-state propagation
+2. **Priority 2**: Correct particle/event identity
+3. **Priority 3**: Correct node/edge reaction semantics
+4. **Priority 4**: Real-time update behavior
+5. **Priority 5**: Performance
+6. **Priority 6**: Visual polish
+
