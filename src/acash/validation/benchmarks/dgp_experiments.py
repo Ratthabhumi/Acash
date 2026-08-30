@@ -439,14 +439,13 @@ def run_governance_admission_experiment(
     for true_sr in true_sharpe_ratios:
         mu_daily = (true_sr / ann_factor) * sigma_daily
         
-        # Layer pass trackers for diverse universe
-        div_counts = {
-            "dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0
-        }
-        # Layer pass trackers for collinear universe
-        col_counts = {
-            "dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0
-        }
+        # Sequential layer trackers for diverse universe
+        div_marginal = {"dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0}
+        div_seq_surv = {"s1_dsr": 0, "s2_holm": 0, "s3_haircut": 0, "s4_pbo": 0, "s5_oos": 0, "s6_joint": 0}
+
+        # Sequential layer trackers for collinear universe
+        col_marginal = {"dsr": 0, "holm": 0, "haircut": 0, "pbo": 0, "oos": 0, "perturbation": 0, "joint_pass": 0}
+        col_seq_surv = {"s1_dsr": 0, "s2_holm": 0, "s3_haircut": 0, "s4_pbo": 0, "s5_oos": 0, "s6_joint": 0}
 
         for seed_idx in range(num_simulations):
             np.random.seed(random_seed + int(true_sr * 1000) + seed_idx)
@@ -477,20 +476,34 @@ def run_governance_admission_experiment(
                 raw_predictive_edge_bps=25.0,
                 manifest_store=store_div,
             )
-            if rep_div.dsr_result and rep_div.dsr_result.is_statistically_significant and rep_div.dsr_result.has_sufficient_track_record:
-                div_counts["dsr"] += 1
-            if rep_div.multiple_testing_result and rep_div.multiple_testing_result.is_fwer_significant:
-                div_counts["holm"] += 1
-            if rep_div.multiple_testing_result and rep_div.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"):
-                div_counts["haircut"] += 1
-            if rep_div.overfitting_report and rep_div.overfitting_report.is_pbo_acceptable:
-                div_counts["pbo"] += 1
-            if rep_div.out_of_sample_sharpe is not None and rep_div.out_of_sample_sharpe >= Decimal("0.5") and rep_div.oos_retention_pct is not None and rep_div.oos_retention_pct >= Decimal("50.0"):
-                div_counts["oos"] += 1
-            if rep_div.overfitting_report and rep_div.overfitting_report.is_parameter_stable:
-                div_counts["perturbation"] += 1
-            if rep_div.is_tradeable_alpha:
-                div_counts["joint_pass"] += 1
+            l1_div = bool(rep_div.dsr_result and rep_div.dsr_result.is_statistically_significant and rep_div.dsr_result.has_sufficient_track_record)
+            l2_div = bool(rep_div.multiple_testing_result and rep_div.multiple_testing_result.is_fwer_significant)
+            l3_div = bool(rep_div.multiple_testing_result and rep_div.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"))
+            l4_div = bool(rep_div.overfitting_report and rep_div.overfitting_report.is_pbo_acceptable)
+            l5_div = bool(rep_div.out_of_sample_sharpe is not None and rep_div.out_of_sample_sharpe >= Decimal("0.5") and rep_div.oos_retention_pct is not None and rep_div.oos_retention_pct >= Decimal("50.0"))
+            l6_div = bool(rep_div.overfitting_report and rep_div.overfitting_report.is_parameter_stable)
+            lj_div = bool(rep_div.is_tradeable_alpha)
+
+            if l1_div: div_marginal["dsr"] += 1
+            if l2_div: div_marginal["holm"] += 1
+            if l3_div: div_marginal["haircut"] += 1
+            if l4_div: div_marginal["pbo"] += 1
+            if l5_div: div_marginal["oos"] += 1
+            if l6_div: div_marginal["perturbation"] += 1
+            if lj_div: div_marginal["joint_pass"] += 1
+
+            if l1_div:
+                div_seq_surv["s1_dsr"] += 1
+                if l2_div:
+                    div_seq_surv["s2_holm"] += 1
+                    if l3_div:
+                        div_seq_surv["s3_haircut"] += 1
+                        if l4_div:
+                            div_seq_surv["s4_pbo"] += 1
+                            if l5_div:
+                                div_seq_surv["s5_oos"] += 1
+                                if l6_div and lj_div:
+                                    div_seq_surv["s6_joint"] += 1
 
             # Topology 2: Collinear Search Universe (1 primary + (M-1) correlated signal perturbations)
             trial_matrix_col = np.zeros((T, M))
@@ -517,40 +530,72 @@ def run_governance_admission_experiment(
                 raw_predictive_edge_bps=25.0,
                 manifest_store=store_col,
             )
-            if rep_col.dsr_result and rep_col.dsr_result.is_statistically_significant and rep_col.dsr_result.has_sufficient_track_record:
-                col_counts["dsr"] += 1
-            if rep_col.multiple_testing_result and rep_col.multiple_testing_result.is_fwer_significant:
-                col_counts["holm"] += 1
-            if rep_col.multiple_testing_result and rep_col.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"):
-                col_counts["haircut"] += 1
-            if rep_col.overfitting_report and rep_col.overfitting_report.is_pbo_acceptable:
-                col_counts["pbo"] += 1
-            if rep_col.out_of_sample_sharpe is not None and rep_col.out_of_sample_sharpe >= Decimal("0.5") and rep_col.oos_retention_pct is not None and rep_col.oos_retention_pct >= Decimal("50.0"):
-                col_counts["oos"] += 1
-            if rep_col.overfitting_report and rep_col.overfitting_report.is_parameter_stable:
-                col_counts["perturbation"] += 1
-            if rep_col.is_tradeable_alpha:
-                col_counts["joint_pass"] += 1
+            l1_col = bool(rep_col.dsr_result and rep_col.dsr_result.is_statistically_significant and rep_col.dsr_result.has_sufficient_track_record)
+            l2_col = bool(rep_col.multiple_testing_result and rep_col.multiple_testing_result.is_fwer_significant)
+            l3_col = bool(rep_col.multiple_testing_result and rep_col.multiple_testing_result.haircut_sharpe_ratio >= Decimal("1.0"))
+            l4_col = bool(rep_col.overfitting_report and rep_col.overfitting_report.is_pbo_acceptable)
+            l5_col = bool(rep_col.out_of_sample_sharpe is not None and rep_col.out_of_sample_sharpe >= Decimal("0.5") and rep_col.oos_retention_pct is not None and rep_col.oos_retention_pct >= Decimal("50.0"))
+            l6_col = bool(rep_col.overfitting_report and rep_col.overfitting_report.is_parameter_stable)
+            lj_col = bool(rep_col.is_tradeable_alpha)
 
+            if l1_col: col_marginal["dsr"] += 1
+            if l2_col: col_marginal["holm"] += 1
+            if l3_col: col_marginal["haircut"] += 1
+            if l4_col: col_marginal["pbo"] += 1
+            if l5_col: col_marginal["oos"] += 1
+            if l6_col: col_marginal["perturbation"] += 1
+            if lj_col: col_marginal["joint_pass"] += 1
 
-        p_div, div_l, div_u = compute_wilson_confidence_interval(div_counts["joint_pass"], num_simulations)
-        p_col, col_l, col_u = compute_wilson_confidence_interval(col_counts["joint_pass"], num_simulations)
+            if l1_col:
+                col_seq_surv["s1_dsr"] += 1
+                if l2_col:
+                    col_seq_surv["s2_holm"] += 1
+                    if l3_col:
+                        col_seq_surv["s3_haircut"] += 1
+                        if l4_col:
+                            col_seq_surv["s4_pbo"] += 1
+                            if l5_col:
+                                col_seq_surv["s5_oos"] += 1
+                                if l6_col and lj_col:
+                                    col_seq_surv["s6_joint"] += 1
+
+        p_div, div_l, div_u = compute_wilson_confidence_interval(div_marginal["joint_pass"], num_simulations)
+        p_col, col_l, col_u = compute_wilson_confidence_interval(col_marginal["joint_pass"], num_simulations)
+
+        # Compute sequential transition probabilities P(L_j | S_{j-1})
+        def _calc_transitions(surv: Dict[str, int]) -> Dict[str, float]:
+            s1, s2, s3, s4, s5, s6 = (
+                surv["s1_dsr"], surv["s2_holm"], surv["s3_haircut"],
+                surv["s4_pbo"], surv["s5_oos"], surv["s6_joint"]
+            )
+            return {
+                "p_dsr": s1 / num_simulations,
+                "p_holm_given_dsr": (s2 / s1) if s1 > 0 else 0.0,
+                "p_haircut_given_s2": (s3 / s2) if s2 > 0 else 0.0,
+                "p_pbo_given_s3": (s4 / s3) if s3 > 0 else 0.0,
+                "p_oos_given_s4": (s5 / s4) if s4 > 0 else 0.0,
+                "p_joint_given_s5": (s6 / s5) if s5 > 0 else 0.0,
+            }
 
         admission_curve_diverse.append({
             "true_annualized_sharpe": true_sr,
             "simulations": num_simulations,
-            "pass_count": div_counts["joint_pass"],
+            "pass_count": div_marginal["joint_pass"],
             "joint_admission_probability": p_div,
             "wilson_95_ci": [div_l, div_u],
-            "layer_pass_rates": {k: v / num_simulations for k, v in div_counts.items() if k != "joint_pass"},
+            "marginal_layer_pass_rates": {k: v / num_simulations for k, v in div_marginal.items() if k != "joint_pass"},
+            "sequential_survival_counts": div_seq_surv,
+            "conditional_transition_probabilities": _calc_transitions(div_seq_surv),
         })
         admission_curve_collinear.append({
             "true_annualized_sharpe": true_sr,
             "simulations": num_simulations,
-            "pass_count": col_counts["joint_pass"],
+            "pass_count": col_marginal["joint_pass"],
             "joint_admission_probability": p_col,
             "wilson_95_ci": [col_l, col_u],
-            "layer_pass_rates": {k: v / num_simulations for k, v in col_counts.items() if k != "joint_pass"},
+            "marginal_layer_pass_rates": {k: v / num_simulations for k, v in col_marginal.items() if k != "joint_pass"},
+            "sequential_survival_counts": col_seq_surv,
+            "conditional_transition_probabilities": _calc_transitions(col_seq_surv),
         })
 
     return {
@@ -562,6 +607,7 @@ def run_governance_admission_experiment(
         "admission_curve_diverse_noise_universe": admission_curve_diverse,
         "admission_curve_collinear_sweep_universe": admission_curve_collinear,
     }
+
 
 
 run_statistical_power_experiment = run_governance_admission_experiment
@@ -650,11 +696,12 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
         "## 4. Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
         "",
         "### Topology 1: Diverse Search Universe (1 True Alpha + 9 Exploratory Noise Models)",
+        "#### A. Marginal Layer Admission Rates",
         "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
         "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
     for row in exp_d["admission_curve_diverse_noise_universe"]:
-        l = row["layer_pass_rates"]
+        l = row["marginal_layer_pass_rates"]
         lines.append(
             f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
             f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
@@ -664,12 +711,28 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
 
     lines.extend([
         "",
+        "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
+        "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+    ])
+    for row in exp_d["admission_curve_diverse_noise_universe"]:
+        c = row["conditional_transition_probabilities"]
+        lines.append(
+            f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
+            f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
+            f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
+            f"{c['p_joint_given_s5']*100:.1f}% |"
+        )
+
+    lines.extend([
+        "",
         "### Topology 2: Collinear Sweep Universe (1 Primary + 9 Correlated Perturbations $\\rho=0.85$)",
+        "#### A. Marginal Layer Admission Rates",
         "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
         "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
     ])
     for row in exp_d["admission_curve_collinear_sweep_universe"]:
-        l = row["layer_pass_rates"]
+        l = row["marginal_layer_pass_rates"]
         lines.append(
             f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
             f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
@@ -677,7 +740,23 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
             f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
         )
 
+    lines.extend([
+        "",
+        "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
+        "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+    ])
+    for row in exp_d["admission_curve_collinear_sweep_universe"]:
+        c = row["conditional_transition_probabilities"]
+        lines.append(
+            f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
+            f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
+            f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
+            f"{c['p_joint_given_s5']*100:.1f}% |"
+        )
+
     return "\n".join(lines)
+
 
 
 

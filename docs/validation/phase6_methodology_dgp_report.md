@@ -27,6 +27,7 @@
 ## 4. Experiment D: End-to-End Governance Admission Probability & Layer Decomposition
 
 ### Topology 1: Diverse Search Universe (1 True Alpha + 9 Exploratory Noise Models)
+#### A. Marginal Layer Admission Rates
 | True $SR$ | Joint $P(\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0.00 | 0.00% | [0.00%, 1.88%] | 0.0% | 1.0% | 1.0% | 13.5% | 13.0% | 100.0% |
@@ -37,7 +38,19 @@
 | 2.50 | 17.50% | [12.86%, 23.36%] | 21.5% | 71.5% | 81.5% | 77.0% | 90.0% | 100.0% |
 | 3.00 | 33.50% | [27.32%, 40.30%] | 39.5% | 92.5% | 97.0% | 96.0% | 92.0% | 100.0% |
 
+#### B. Sequential Conditional Admission Funnel $P(L_j \mid \bigcap_{i<j} L_i)$
+| True $SR$ | $P(\text{DSR})$ | $P(\text{Holm} \mid \text{DSR})$ | $P(\text{Haircut} \mid \text{S2})$ | $P(\text{PBO} \mid \text{S3})$ | $P(\text{OOS} \mid \text{S4})$ | $P(\text{Joint} \mid \text{S5})$ |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 0.00 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| 0.50 | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| 1.00 | 0.5% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| 1.50 | 3.5% | 100.0% | 100.0% | 100.0% | 71.4% | 100.0% |
+| 2.00 | 8.5% | 100.0% | 100.0% | 100.0% | 76.5% | 100.0% |
+| 2.50 | 21.5% | 100.0% | 100.0% | 100.0% | 81.4% | 100.0% |
+| 3.00 | 39.5% | 100.0% | 100.0% | 100.0% | 84.8% | 100.0% |
+
 ### Topology 2: Collinear Sweep Universe (1 Primary + 9 Correlated Perturbations $\rho=0.85$)
+#### A. Marginal Layer Admission Rates
 | True $SR$ | Joint $P(\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0.00 | 0.00% | [0.00%, 1.88%] | 1.0% | 1.0% | 1.0% | 14.5% | 13.0% | 100.0% |
@@ -47,3 +60,14 @@
 | 2.00 | 5.00% | [2.74%, 8.96%] | 64.5% | 53.5% | 64.0% | 16.0% | 84.5% | 100.0% |
 | 2.50 | 8.00% | [4.98%, 12.60%] | 80.5% | 74.5% | 81.5% | 14.5% | 90.0% | 100.0% |
 | 3.00 | 11.50% | [7.79%, 16.66%] | 96.0% | 93.0% | 97.0% | 13.5% | 92.0% | 100.0% |
+
+#### B. Sequential Conditional Admission Funnel $P(L_j \mid \bigcap_{i<j} L_i)$
+| True $SR$ | $P(\text{DSR})$ | $P(\text{Holm} \mid \text{DSR})$ | $P(\text{Haircut} \mid \text{S2})$ | $P(\text{PBO} \mid \text{S3})$ | $P(\text{OOS} \mid \text{S4})$ | $P(\text{Joint} \mid \text{S5})$ |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 0.00 | 1.0% | 50.0% | 100.0% | 0.0% | 0.0% | 0.0% |
+| 0.50 | 5.5% | 36.4% | 100.0% | 0.0% | 0.0% | 0.0% |
+| 1.00 | 17.5% | 60.0% | 100.0% | 14.3% | 33.3% | 100.0% |
+| 1.50 | 37.0% | 66.2% | 100.0% | 24.5% | 66.7% | 100.0% |
+| 2.00 | 64.5% | 82.2% | 100.0% | 16.0% | 58.8% | 100.0% |
+| 2.50 | 80.5% | 91.9% | 100.0% | 12.2% | 88.9% | 100.0% |
+| 3.00 | 96.0% | 96.9% | 100.0% | 13.4% | 92.0% | 100.0% |

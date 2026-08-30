@@ -113,8 +113,11 @@ def compute_hac_newey_west_variance(
     sigma_LR^2 = gamma_0 + 2 * sum_{l=1}^L w_l * gamma_l
     where w_l = 1 - l / (L + 1) (Bartlett kernel).
 
-    Lag truncation bandwidth L defaults to Newey-West (1994) plug-in rule:
-    L = floor(4 * (T / 100)^(2/9)).
+    Bandwidth Selection Specification:
+    - When max_lags is None, ACASH uses a fixed T^(2/9)-type heuristic lag truncation rule:
+      L = floor(4 * (T / 100)^(2/9)).
+    - Note on Literature Boundaries: This is a fixed asymptotic rate heuristic inspired by Newey & West (1994),
+      not the full data-dependent automatic plug-in bandwidth selection algorithm.
 
     FAIL-CLOSED GOVERNANCE SPECIFICATION:
     - Requires sample size T >= 2.
@@ -122,6 +125,7 @@ def compute_hac_newey_west_variance(
     - Strictly fails closed with DataContractError on non-finite observations, zero sample variance, or non-positive long-run variance.
     - Never applies silent artificial numerical floors or silent fallback constants.
     """
+
     if isinstance(returns, np.ndarray):
         arr = returns.astype(np.float64)
     else:

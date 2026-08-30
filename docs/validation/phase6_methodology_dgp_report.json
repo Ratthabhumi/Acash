@@ -169,13 +169,29 @@
           0.0,
           0.018845326377266575
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.0,
           "holm": 0.01,
           "haircut": 0.01,
           "pbo": 0.135,
           "oos": 0.13,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 0,
+          "s2_holm": 0,
+          "s3_haircut": 0,
+          "s4_pbo": 0,
+          "s5_oos": 0,
+          "s6_joint": 0
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.0,
+          "p_holm_given_dsr": 0.0,
+          "p_haircut_given_s2": 0.0,
+          "p_pbo_given_s3": 0.0,
+          "p_oos_given_s4": 0.0,
+          "p_joint_given_s5": 0.0
         }
       },
       {
@@ -187,13 +203,29 @@
           0.0,
           0.018845326377266575
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.0,
           "holm": 0.01,
           "haircut": 0.055,
           "pbo": 0.185,
           "oos": 0.345,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 0,
+          "s2_holm": 0,
+          "s3_haircut": 0,
+          "s4_pbo": 0,
+          "s5_oos": 0,
+          "s6_joint": 0
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.0,
+          "p_holm_given_dsr": 0.0,
+          "p_haircut_given_s2": 0.0,
+          "p_pbo_given_s3": 0.0,
+          "p_oos_given_s4": 0.0,
+          "p_joint_given_s5": 0.0
         }
       },
       {
@@ -205,13 +237,29 @@
           0.0008831687156009805,
           0.02777370439789293
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.005,
           "holm": 0.095,
           "haircut": 0.165,
           "pbo": 0.29,
           "oos": 0.585,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 1,
+          "s2_holm": 1,
+          "s3_haircut": 1,
+          "s4_pbo": 1,
+          "s5_oos": 1,
+          "s6_joint": 1
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.005,
+          "p_holm_given_dsr": 1.0,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 1.0,
+          "p_oos_given_s4": 1.0,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -223,13 +271,29 @@
           0.010724719651761264,
           0.05717834040664198
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.035,
           "holm": 0.22,
           "haircut": 0.365,
           "pbo": 0.41,
           "oos": 0.715,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 7,
+          "s2_holm": 7,
+          "s3_haircut": 7,
+          "s4_pbo": 7,
+          "s5_oos": 5,
+          "s6_joint": 5
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.035,
+          "p_holm_given_dsr": 1.0,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 1.0,
+          "p_oos_given_s4": 0.7142857142857143,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -241,13 +305,29 @@
           0.03837635464915298,
           0.10801907929906894
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.085,
           "holm": 0.5,
           "haircut": 0.64,
           "pbo": 0.605,
           "oos": 0.845,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 17,
+          "s2_holm": 17,
+          "s3_haircut": 17,
+          "s4_pbo": 17,
+          "s5_oos": 13,
+          "s6_joint": 13
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.085,
+          "p_holm_given_dsr": 1.0,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 1.0,
+          "p_oos_given_s4": 0.7647058823529411,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -259,13 +339,29 @@
           0.1286051506627333,
           0.23364431148248993
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.215,
           "holm": 0.715,
           "haircut": 0.815,
           "pbo": 0.77,
           "oos": 0.9,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 43,
+          "s2_holm": 43,
+          "s3_haircut": 43,
+          "s4_pbo": 43,
+          "s5_oos": 35,
+          "s6_joint": 35
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.215,
+          "p_holm_given_dsr": 1.0,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 1.0,
+          "p_oos_given_s4": 0.813953488372093,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -277,13 +373,29 @@
           0.2732408697841632,
           0.40297808792033485
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.395,
           "holm": 0.925,
           "haircut": 0.97,
           "pbo": 0.96,
           "oos": 0.92,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 79,
+          "s2_holm": 79,
+          "s3_haircut": 79,
+          "s4_pbo": 79,
+          "s5_oos": 67,
+          "s6_joint": 67
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.395,
+          "p_holm_given_dsr": 1.0,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 1.0,
+          "p_oos_given_s4": 0.8481012658227848,
+          "p_joint_given_s5": 1.0
         }
       }
     ],
@@ -297,13 +409,29 @@
           0.0,
           0.018845326377266575
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.01,
           "holm": 0.01,
           "haircut": 0.01,
           "pbo": 0.145,
           "oos": 0.13,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 2,
+          "s2_holm": 1,
+          "s3_haircut": 1,
+          "s4_pbo": 0,
+          "s5_oos": 0,
+          "s6_joint": 0
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.01,
+          "p_holm_given_dsr": 0.5,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.0,
+          "p_oos_given_s4": 0.0,
+          "p_joint_given_s5": 0.0
         }
       },
       {
@@ -315,13 +443,29 @@
           0.0,
           0.018845326377266575
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.055,
           "holm": 0.02,
           "haircut": 0.055,
           "pbo": 0.12,
           "oos": 0.345,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 11,
+          "s2_holm": 4,
+          "s3_haircut": 4,
+          "s4_pbo": 0,
+          "s5_oos": 0,
+          "s6_joint": 0
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.055,
+          "p_holm_given_dsr": 0.36363636363636365,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.0,
+          "p_oos_given_s4": 0.0,
+          "p_joint_given_s5": 0.0
         }
       },
       {
@@ -333,13 +477,29 @@
           0.0008831687156009805,
           0.02777370439789293
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.175,
           "holm": 0.105,
           "haircut": 0.165,
           "pbo": 0.09,
           "oos": 0.585,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 35,
+          "s2_holm": 21,
+          "s3_haircut": 21,
+          "s4_pbo": 3,
+          "s5_oos": 1,
+          "s6_joint": 1
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.175,
+          "p_holm_given_dsr": 0.6,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.14285714285714285,
+          "p_oos_given_s4": 0.3333333333333333,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -351,13 +511,29 @@
           0.020405632066152306,
           0.07693206820093293
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.37,
           "holm": 0.255,
           "haircut": 0.365,
           "pbo": 0.195,
           "oos": 0.715,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 74,
+          "s2_holm": 49,
+          "s3_haircut": 49,
+          "s4_pbo": 12,
+          "s5_oos": 8,
+          "s6_joint": 8
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.37,
+          "p_holm_given_dsr": 0.6621621621621622,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.24489795918367346,
+          "p_oos_given_s4": 0.6666666666666666,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -369,13 +545,29 @@
           0.027382645600763932,
           0.08957814813877599
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.645,
           "holm": 0.535,
           "haircut": 0.64,
           "pbo": 0.16,
           "oos": 0.845,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 129,
+          "s2_holm": 106,
+          "s3_haircut": 106,
+          "s4_pbo": 17,
+          "s5_oos": 10,
+          "s6_joint": 10
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.645,
+          "p_holm_given_dsr": 0.8217054263565892,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.16037735849056603,
+          "p_oos_given_s4": 0.5882352941176471,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -387,13 +579,29 @@
           0.049840585889759974,
           0.12598948826714396
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.805,
           "holm": 0.745,
           "haircut": 0.815,
           "pbo": 0.145,
           "oos": 0.9,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 161,
+          "s2_holm": 148,
+          "s3_haircut": 148,
+          "s4_pbo": 18,
+          "s5_oos": 16,
+          "s6_joint": 16
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.805,
+          "p_holm_given_dsr": 0.9192546583850931,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.12162162162162163,
+          "p_oos_given_s4": 0.8888888888888888,
+          "p_joint_given_s5": 1.0
         }
       },
       {
@@ -405,13 +613,29 @@
           0.07786373232561955,
           0.16664716898487572
         ],
-        "layer_pass_rates": {
+        "marginal_layer_pass_rates": {
           "dsr": 0.96,
           "holm": 0.93,
           "haircut": 0.97,
           "pbo": 0.135,
           "oos": 0.92,
           "perturbation": 1.0
+        },
+        "sequential_survival_counts": {
+          "s1_dsr": 192,
+          "s2_holm": 186,
+          "s3_haircut": 186,
+          "s4_pbo": 25,
+          "s5_oos": 23,
+          "s6_joint": 23
+        },
+        "conditional_transition_probabilities": {
+          "p_dsr": 0.96,
+          "p_holm_given_dsr": 0.96875,
+          "p_haircut_given_s2": 1.0,
+          "p_pbo_given_s3": 0.13440860215053763,
+          "p_oos_given_s4": 0.92,
+          "p_joint_given_s5": 1.0
         }
       }
     ]

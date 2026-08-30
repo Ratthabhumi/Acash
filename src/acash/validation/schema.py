@@ -131,8 +131,9 @@ class SearchTrialRecord(BaseModel):
           2. HAC_NEWEY_WEST_ZERO_SHARPE_TEST_V1 (dependence-aware robust inference mode):
              Newey-West (1987) Heteroskedasticity and Autocorrelation Consistent long-run variance:
              t_HAC = mean / sqrt(sigma_LR^2 / T), p = 2 * (1 - Phi(|t_HAC|)) = erfc(|t_HAC| / sqrt(2)).
-             Lag bandwidth defaults to Newey-West (1994) plug-in rule: L = floor(4 * (T / 100)^(2/9)).
+             Lag bandwidth defaults to fixed T^(2/9) heuristic rule: L = floor(4 * (T / 100)^(2/9)).
         """
+
         float_vals: List[float] = []
         for idx, r in enumerate(in_sample_returns):
             if isinstance(r, Decimal):
