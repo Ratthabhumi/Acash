@@ -229,4 +229,117 @@ Market Context → Volume Profile → Footprint → DOM/Liquidity → Order Flow
 > *Never collapse those three levels into one.*
 > *A visually impressive graph is secondary. Semantic correctness is primary.*
 
+---
+
+## 6. ARCHITECTURAL INSPIRATION — HARNESS & CONTEXT ENGINEERING (QUANTMIND PATTERNS)
+
+This section documents architectural design patterns inspired by external research harnesses (such as QuantMind) to guide how Atlas structures agent context, durable state, and forensic graph execution.
+
+```text
+                                 ATLAS ARCHITECTURE
+
+                             ┌────────────────────────┐
+                             │      Raw Sources       │
+                             └───────────┬────────────┘
+                                         │
+                                         ▼
+                             ┌────────────────────────┐
+                             │    Canonical Events    │ (Durable & Immutable)
+                             └───────────┬────────────┘
+                                         │
+                                         ▼
+                             ┌────────────────────────┐
+                             │      Graph State       │ (Durable State)
+                             └───────────┬────────────┘
+                                         │
+                                         ▼
+                             ┌────────────────────────┐
+                             │     Event Semantics    │ (Particle Propagation)
+                             └───────────┬────────────┘
+                                         │
+                                         ▼
+                             ┌────────────────────────┐
+                             │      AI Reasoning      │ (Epistemic Graphs)
+                             └───────────┬────────────┘
+                                         │
+                                         ▼
+                             ┌────────────────────────┐
+                             │ Visualization Engine   │ (Rebuildable Projection)
+                             └────────────────────────┘
+```
+
+---
+
+### Key Architectural Patterns
+
+#### 1. Progressive Disclosure of Context (`ATLAS_CONTEXT_MAP.md`)
+Never overload an agent's context window by dumping all sub-systems at once. Use structured progressive disclosure:
+```text
+AGENTS.md → ATLAS_CONTEXT_MAP.md → Identify Affected Subsystem → Load Only Relevant Context
+```
+* **Subsystems**:
+  - `graph architecture`: Core node/edge schemas and invariant state managers.
+  - `event pipeline`: Event normalization, ingestion, and dispatchers.
+  - `visualization`: Projections, force-layout renderers, and WebGL bindings.
+  - `market microstructure`: Order-flow event taxonomies and level interactions.
+  - `AI reasoning`: Epistemic inferences, causal chains, and evidence verification.
+  - `infrastructure`: Storage, IPC, and event streams.
+
+#### 2. Canonical Data vs. Rebuildable Projections
+Maintain strict separation between **Durable Truth** and **Disposable Projections**:
+```text
+Canonical Event + Canonical Graph State + Canonical Evidence
+                  │
+                  ├──► 3D rendering projection (Three.js / Force-Graph)
+                  ├──► Search index / Full-text search
+                  ├──► Vector embeddings
+                  ├──► AI visualization metadata
+                  └──► Cached layout coordinates
+```
+* **Core Rule**: If the 3D renderer crashes, the embedding model changes, or the force-graph layout breaks, **everything can be deterministically rebuilt from Canonical Events without data loss**.
+
+#### 3. Forensic Traceability & Evidence Lineage
+Every node transition or higher-order inference must carry an immutable evidence envelope:
+```json
+{
+  "event_id": "evt_10492",
+  "timestamp": "2026-08-30T12:00:00.124Z",
+  "source": "orderbook_l2_feed",
+  "observed": { "bid_size": 250, "ask_size": 10, "last_trade_qty": 250 },
+  "derived": { "delta": -250, "imbalance_ratio": 25.0 },
+  "inference": { "candidate": "ABSORPTION", "target_node": "LEVEL_4250.25" },
+  "confidence": 0.87,
+  "evidence_refs": ["sha256_feed_tick_84920"]
+}
+```
+* **Forensic Auditability**: Atlas must be able to trace backwards from any visual reaction:
+  $$\text{Node Reaction} \to \text{Inference} \to \text{Event} \to \text{Raw Observation} \to \text{Source + Timestamp}$$
+
+#### 4. Harness Engineering for AI Agents
+The repository itself serves as an execution harness that transforms general-purpose coding agents into disciplined quantitative systems:
+```text
+Read AGENTS.md
+  ↓
+Read ATLAS_CONTEXT_MAP.md
+  ↓
+Identify affected subsystem
+  ↓
+Read only relevant context
+  ↓
+Inspect source & existing tests
+  ↓
+Implement fail-closed logic
+  ↓
+Adversarial & golden verification
+  ↓
+Full test verification
+```
+
+#### 5. Anti-Hype Epistemic Discipline
+Maintain a strict distinction between implementation states:
+$$\boxed{\text{IMPLEMENTED} \neq \text{VALIDATED} \neq \text{PRODUCTION-PROVEN}}$$
+* Detecting an event candidate in code does NOT mean the phenomenon is unconditionally proven in live markets.
+* Preserve epistemic modesty: always distinguish `OBSERVED` $\to$ `DERIVED` $\to$ `INFERRED` $\to$ `CONFIRMED`.
+
+
 
