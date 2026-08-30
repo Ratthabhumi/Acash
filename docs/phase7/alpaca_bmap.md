@@ -183,6 +183,25 @@ A missing REQUIRED field in **Layer A** -> the adapter MUST NOT emit the event; 
 MUST fail closed. Layer B is produced by the normalizer; Layer C is assembled by
 the pump from Layer A/B + identity.
 
+### Timestamp framing (current Alpaca semantics)
+
+Do NOT treat any single timestamp as a universal canonical event time. Current
+Alpaca docs distinguish four clock/identity notions:
+
+```text
+event_id      = ordering / replay identity (publication sequence; ULID, v2)
+at            = business event time (when the activity occurred in the source system)
+executed_at   = execution time where applicable (supersedes the legacy field for fills)
+timestamp     = LEGACY / event-dependent field; do NOT treat as universal canonical time
+```
+
+- `timestamp` "has various different meanings depending on the value of `event`"
+  (TradeUpdateEventV2 schema). In the Activity SSE it is renamed/superseded by
+  `executed_at`. The adapter MUST NOT assume a single meaning for `timestamp`.
+- Per-event mapping: `at` → business event time; `executed_at` (fill/partial) →
+  execution time; `event_id` → ordering/replay identity (see §3, §8, §9).
+- Any use of `timestamp` must be event-keyed and flagged as legacy/event-dependent.
+
 ---
 
 ## 3. Item 3 — `broker_sequence` semantics
@@ -313,9 +332,12 @@ Alpaca `canceled` is **not** proof of a user cancel.
 
 ## 9. Item 9 — Timestamp / clock-skew
 
-- All timestamps UTC-aware (contract §5 S-1). `observed_at` = broker report time =
-  the SSE `timestamp` (or `order.updated_at` for snapshots); never the adapter's
-  local receipt unless broker provides none (S-2, labelled).
+- All timestamps UTC-aware (contract §5 S-1). Per §2 timestamp framing,
+  `observed_at` (broker report time) is captured from the *event-keyed* field: the
+  SSE `executed_at` / business `at` for fill-family events, or `order.updated_at`
+  for snapshots — NOT a blanket `timestamp` (which is legacy/event-dependent).
+  Never the adapter's local receipt unless the broker provides none (S-2,
+  labelled).
 - **Boxed invariant (ordering identity ≠ event time — from §3):**
   $$\boxed{\text{Ordering Identity} \neq \text{Event Time}}$$
   The `event_id` (ULID) gives **publication-order** sequencing; `at`/`timestamp`/
@@ -378,8 +400,8 @@ nothing executed yet this checkpoint). Cases MUST include, per AGENTS.md §14
 7. `canceled` with `reason=CORPORATE_ACTION` → not treated as user cancel
 8. `order_cancel_rejected` / `reason=TOO_LATE_TO_CANCEL` → `CANCEL_REJECTED`, order
    live
-9. Reconnect SSE with `since_id` → no missed events; re-delivered identity → dedup,
-   no re-accumulation
+9. Reconnect SSE with `since_id` → recovery of events from cursor; **possible
+   re-delivery** (back-dated cursor) → dedup REQUIRED, no re-accumulation
 10. Out-of-order late event after terminal → LATE_EVENT, absorbing; not last-wins
 11. Overfill scenario `filled_qty > qty` (simulated/injected) → anomaly, NOT silent
     `FILLED`/clamp
@@ -401,30 +423,42 @@ Three-level evidence scheme (established for this audit):
 $$\boxed{D \rightarrow E \neq E \rightarrow P}$$
 
 This log records documentation/API verification only. **No item is P** (nothing has
-run against an account). The Conformance Matrix (§A) stays **D** everywhere; E/P
-here are the re-verification evidence record, not an override of the admission
-matrix. Flipping §A cells D→E/P is a separate, later admission step with its own
-gate.
+run against an account). The Conformance Matrix (§A) stays **D** everywhere; E
+here is the API/docs re-verification evidence record, not an override of the
+admission matrix. Flipping §A cells D→E/P is a separate, later admission step with
+its own gate.
+
+Status recap: **BMAP-01..10 = E**, **BMAP-11 = E\*** (see note), **BMAP-12 = D**.
+**P = 0** — the Alpaca adapter is NOT yet "verified", because no paper environment
+has been exercised.
+
+**Meaning of E for 01–11 (semantic precision):** E here means the Alpaca
+**documented capability / semantic contract** is verified against current Alpaca
+API/docs. It does **NOT** mean the ACASH mapping behavior is empirically proven or
+that the adapter satisfies it — only that the broker's documented semantics match
+the claim. `P` (paper-exercised) is the only status that proves runtime behavior;
+**P = 0 here.**
+
+**BMAP-11 = E\*** (asterisk): the source fields/identities used for evidence
+lineage are verified against Alpaca docs (**E** part), but the **canonical digest
+behavior is an ACASH-owned implementation responsibility** — it is NOT Alpaca
+behavior and is NOT covered by this evidence; hence the `*`. The digest is enforced
+by the ACASH normalizer, not by Alpaca.
 
 | BMAP | Status | Evidence (current Alpaca source) |
 | :-- | :--: | :-- |
-| 01 | E | Trade Events SSE v2 event list (`accepted/new/partial_fill/fill/canceled/...`) |
-| 02 | E | TradeUpdateEventV2 + `Order` schema (`client_order_id`, `filled_qty`, `status`, `timestamp` semantics) |
-| 03 | **🟡 FIX** | Activity SSE + Trade Events v2: `event_id` = ULID publication sequence (NOT legacy `event_ulid`); `at` = business time; verbatim cursor |
-| 04 | E | `since_id`/`until_id` ULID cursor rules (SSE); REST fallback declared |
-| 05 | E | `POST` timeout guidance + REST `GET /v2/orders` reconcile |
-| 06 | E | `fill`/`partial_fill` with `qty` per fill + `order.filled_qty` cumulative; paper random partials (not live-liquidity evidence) |
-| 07 | E | `canceled`/`pending_cancel`/`order_cancel_rejected` events; `reason` (`CORPORATE_ACTION`, `TOO_LATE_TO_CANCEL`); DELETE 204/422 |
-| 08 | E | SSE reconnect with `since_id`; recovery path, NOT "no network failure" claim |
-| 09 | E | `event_id` (publication) ≠ `at`/`timestamp`/`executed_at` (business); backfill example |
-| 10 | E | paper key pair + `paper-api.alpaca.markets` boundary |
-| 11 | D→E re-check | authoritative fields (`order.id`, `filled_qty`, `event_id`, ...) documented; digest binding canonical |
-| 12 | D | Conformance checklist not yet executed (no paper run) |
-
-> Note (07): 03 is shown as **🟡 FIX** per this review — the terminology correction
-> (`event_ulid` → `event_id` ULID v2) landed in this checkpoint. Items 01/02/04/11
-> are E from the current-docs fetch; remaining items whose full evidence (concrete
-> error/idempotency semantics) is still pending stay D until independently closed.
+| 01 | E | **documented event vocabulary**: Trade Events SSE v2 lifecycle list (`accepted/new/pending_new/fill/partial_fill/canceled/expired/replaced/rejected/done_for_day/held/stopped/suspended/pending_cancel/pending_replace/calculated/order_replace_rejected/order_cancel_rejected/trade_bust/trade_correct`) |
+| 02 | E | **current field/schema verified**: TradeUpdateEventV2 + `Order` (`event_id` ulid, `event`, `at`, `execution_id` uuid, `qty`/`price` per fill, `previous_execution_id`; `order.id`, `client_order_id`, `filled_qty` cumulative, `cancel_requested_at`). `timestamp` is event-dependent legacy, superseded by `executed_at` (see §2 framing) |
+| 03 | E | **`event_id` ULID semantics verified**: v2 `event_id` = ULID publication sequence (vs v1 integer + `event_ulid`); `at` = business event time; keep verbatim; NOT derive from timestamp |
+| 04 | E | **cursor/replay capability verified**: `/v2/events/trades` `since`/`until` RFC3339, `since_id`/`until_id` ULID, `since`⊕`since_id`; no cursor → no historic; recon recom. back-date + expect **redelivery** → recovery capability, NOT exactly-once |
+| 05 | E | **reconciliation endpoints verified** (order lookup, client-order-id lookup, position query via REST); NOTE: E means the endpoint capability is verified — the ACASH reconciliation *algorithm* is NOT covered by this evidence |
+| 06 | E | **fill/partial semantics verified**: per-fill `qty` + `order.filled_qty` cumulative; paper random partials (NOT live-liquidity evidence) |
+| 07 | E | **cancel lifecycle/API semantics verified**: `pending_cancel`/`canceled`/`order_cancel_rejected`; `reason` (`CORPORATE_ACTION`, `TOO_LATE_TO_CANCEL`); DELETE 204 = **request accepted ≠ confirmed CANCELLED**, 422 = non-cancellable |
+| 08 | E | **reconnect + redelivery/idempotency semantics verified**: SSE reconnect with `since_id`; possible redelivery (back-dated recon cursor) → **idempotent replay REQUIRED**; NOT "exactly-once"/"no missed/no duplicate" |
+| 09 | E | **time-field separation verified**: `event_id` (publication/ordering) ≠ `at` (business event time) ≠ `executed_at` (execution time); legacy `timestamp` superseded by `executed_at` in Activity SSE; backfill example proves the axes diverge |
+| 10 | E | **credential/paper-live separation verified**: paper & live use distinct domains + keys; trading API uses key/secret auth |
+| 11 | E\* | **source fields/identities verified** (`order.id`, `client_order_id`, `filled_qty`, `status`, `event_id`, `execution_id`, `cancel_requested_at`) → Layer B lineage; **canonical digest remains ACASH-owned** (E\* — see note above) |
+| 12 | D | Conformance checklist not yet executed (no paper run → not P) |
 
 ---
 
