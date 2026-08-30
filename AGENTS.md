@@ -36,6 +36,8 @@ This document establishes the project-wide, non-negotiable engineering, verifica
 14. **Tests Must Attack Assumptions, Not Only Happy Paths**: Prioritize tests in the following order:
     $$\text{Happy Path} \to \text{Boundary} \to \text{Malformed} \to \text{Contradictory} \to \text{Adversarial} \to \text{Permutation} \to \text{Numerical Stability} \to \text{Golden Reference}$$
 15. **Do Not Optimize for Green CI**: A passing test suite is an output, not the objective. The objective is the unyielding preservation of the mathematical, architectural, and governance contract.
+16. **Warnings Are Evidence, Not Noise**: Every test, compiler, or runtime warning must be explicitly inspected and classified as actionable defect, dependency compatibility debt, expected behavior, or accepted risk. Never silently suppress or ignore warnings simply to produce cosmetically clean test logs.
+
 
 
 ---
