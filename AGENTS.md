@@ -37,6 +37,8 @@ This document establishes the project-wide, non-negotiable engineering, verifica
     $$\text{Happy Path} \to \text{Boundary} \to \text{Malformed} \to \text{Contradictory} \to \text{Adversarial} \to \text{Permutation} \to \text{Numerical Stability} \to \text{Golden Reference}$$
 15. **Do Not Optimize for Green CI**: A passing test suite is an output, not the objective. The objective is the unyielding preservation of the mathematical, architectural, and governance contract.
 16. **Warnings Are Evidence, Not Noise**: Every test, compiler, or runtime warning must be explicitly inspected and classified as actionable defect, dependency compatibility debt, expected behavior, or accepted risk. Never silently suppress or ignore warnings simply to produce cosmetically clean test logs.
+17. **Repository Documentation Must Be Portable**: All repository-internal references must use repository-relative paths (`./path/to/file.md` or `path/to/file.md`). Never commit machine-specific `file:///` paths, absolute local filesystem paths, IDE-specific URLs, or workstation-specific references into canonical documentation.
+
 
 
 

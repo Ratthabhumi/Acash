@@ -53,7 +53,8 @@ This document records institutional memory, model-specific behavioral guardrails
 
 ## 4. Progressive Context Navigation Protocol
 
-To prevent cognitive overload and context fragmentation, agents must follow the **Progressive Disclosure Protocol** via [`ATLAS_CONTEXT_MAP.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/ATLAS_CONTEXT_MAP.md):
+To prevent cognitive overload and context fragmentation, agents must follow the **Progressive Disclosure Protocol** via [`ATLAS_CONTEXT_MAP.md`](ATLAS_CONTEXT_MAP.md):
+
 
 ```text
 AGENTS.md
