@@ -93,21 +93,95 @@ Normative:
 
 ## 2. Item 2 — Required / optional fields (`field_map`)
 
-Alpaca order/event → canonical `ReconciliationEvidence` + identity fields.
+Alpaca order/event → canonical boundary. **The canonical models are fixed by
+Step 8C/8E; this BMAP adapts TO them, never the reverse**
+($\boxed{\text{Canonical Code} > \text{Vendor Mapping}}$). Three distinct layers
+carry an Alpaca field to exactly one destination:
 
-| Canonical field | Required | Alpaca source (verbatim) | If Alpaca absent |
+```text
+Alpaca raw field
+      ↓
+┌──────────────────────────────┐
+│ A. Normalizer input          │   normalize_broker_event(...) params
+│     cancel_requested_at →    │
+│     cancel_was_requested     │
+│     event_kind               │
+│     broker_order_id          │
+│     observed_at              │
+│     broker_sequence          │
+└──────────────┬───────────────┘
+               ↓
+┌──────────────────────────────┐
+│ B. ReconciliationEvidence    │   persisted evidence schema
+│     broker_order_id          │
+│     observed_status          │
+│     observed_at              │
+│     source                   │
+│     broker_sequence          │
+│     evidence_digest          │
+└──────────────┬───────────────┘
+               ↓
+┌──────────────────────────────┐
+│ C. CoordinatorEvent          │   event identity + application
+│     broker_event_id          │
+│     broker_sequence          │
+│     canonical_event          │
+│     fill_qty                 │
+│     order_id                 │
+│     observed_at              │
+│     evidence_refs            │
+└──────────────────────────────┘
+```
+
+### Layer A — inputs to `normalize_broker_event()` (broker-client-sourced hints)
+
+These are the **parameters** to Step 8C. They are transport hints, NOT persisted
+as evidence fields.
+
+| Normalizer input | Required | Alpaca source (verbatim) | If Alpaca absent |
 | :--- | :--- | :--- | :--- |
 | `broker_order_id` | yes | `order.id` (UUID) | — |
-| `client_order_id` | yes | `order.client_order_id` | generated per intent |
+| `event_kind` | yes | mapped from Alpaca `event` (see §1) | fail-closed (never guessed) |
 | `observed_at` | yes | `timestamp` on the trade event; else `order.updated_at` (contract S-2 broker report time) | labelled receipt time |
 | `source` | yes | `"ALPACA"` | — |
 | `broker_sequence` | yes | `event_ulid` (ULID) on SSE; see §3 | declared fallback (REST path, §4) |
-| `cancel_was_requested` | yes | `order.cancel_requested_at != null` (broker-side knowledge) | fail-closed (§7) |
-| `fill_qty` (fill events) | conditional | per-fill event `qty`; cumulative `order.filled_qty` | fail-closed (M-2a) |
-| `event_id` (dedup) | yes | `execution_id` (fill/partial) + `event_ulid` (all) | fail-closed |
+| `cancel_was_requested` | conditional | `order.cancel_requested_at != null` (broker-side knowledge, NOT internal shadow state) | fail-closed ambiguity (§7) |
 
-Required-lattice rule (framework §3.2): a missing REQUIRED field -> the adapter
-MUST NOT emit the event; it MUST fail closed.
+### Layer B — persisted `ReconciliationEvidence` schema (FIXED by Step 8C, not expanded)
+
+The evidence schema is the canonical one in `broker_events.py` and is **NOT
+modified to fit this BMAP** (canonical authority). Only these fields exist:
+
+| Evidence field | Alpaca source | Notes |
+| :--- | :--- | :--- |
+| `broker_order_id` | `order.id` | authoritative broker order identifier |
+| `observed_status` | mapped `BrokerEventKind` (§1) | canonical, never vendor enum |
+| `observed_at` | broker report `timestamp` | UTC |
+| `source` | `"ALPACA"` | venue |
+| `broker_sequence` | `event_ulid` | broker sequence / replay id |
+| `evidence_digest` | computed by normalizer | SHA-256 over canonical serialization |
+
+The BMAP adds NO fields to this schema. Per-vendor extra identifiers
+(`execution_id`, `client_order_id`, `cancel_requested_at`) do NOT live here — they
+feed Layer A / Layer C instead.
+
+### Layer C — `CoordinatorEvent` (identity + application)
+
+| CoordinatorEvent field | Alpaca source / derivation | Notes |
+| :--- | :--- | :--- |
+| `broker_event_id` | `execution_id` (fill/partial) else `order.id:event` | dedup key (contract I-1) |
+| `broker_sequence` | `event_ulid` | ordering reference (S-5) |
+| `canonical_event` | normalizer output `ExecutionEvent` | |
+| `fill_qty` | per-fill event `qty` (fill/partial only) | accumulated ONLY by coordinator (I-4) |
+| `order_id` | local identity (ACASH) | optional |
+| `observed_at` | broker report `timestamp` | UTC |
+| `evidence_refs` | digested evidence lineage | tamper-evident |
+
+### Required-lattice rule (framework §3.2)
+
+A missing REQUIRED field in **Layer A** -> the adapter MUST NOT emit the event; it
+MUST fail closed. Layer B is produced by the normalizer; Layer C is assembled by
+the pump from Layer A/B + identity.
 
 ---
 
