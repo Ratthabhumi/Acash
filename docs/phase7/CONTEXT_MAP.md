@@ -29,6 +29,7 @@ This navigation document implements **Progressive Disclosure of Context** for AI
 | 📈 **Dynamic Risk State** | Real-time exposure, VaR/CVaR, connectivity status, state machine (NORMAL $\to$ HALTED) | [`./risk_state.md`](./risk_state.md) |
 | 🔄 **Order & Position Lifecycle**| State machine (INTENT $\to$ FILLED / UNKNOWN), timeout handling, position tracking | [`./order_lifecycle.md`](./order_lifecycle.md) |
 | 📦 **Execution Manifest** | Immutable manifest per execution, slippage/latency attribution, fill provenance | [`./execution_manifest.md`](./execution_manifest.md) |
+| 🔀 **Execution State Machine** | Step 8 contract: authoritative transition table, `UNKNOWN` no-shortcut, terminal absorbing states | [`./execution_state_machine.md`](./execution_state_machine.md) |
 | 🚨 **Kill Switch Engine** | First-class KillSwitchEvent, automated triggers (Stale data, Loss, Clock skew, Disconnect) | [`./kill_switch.md`](./kill_switch.md) |
 | ⚖️ **Reconciliation Engine** | Internal vs. Broker state reconciliation, discrepancy detection, automated halt triggers | [`./reconciliation.md`](./reconciliation.md) |
 
