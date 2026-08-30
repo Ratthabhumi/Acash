@@ -1,5 +1,57 @@
-"""Execution engine adapters for ACASH."""
+"""Execution engine adapters and Phase 7 operational contracts for ACASH."""
 
+from acash.execution.admission import (
+    PreLiveRiskAdmissionError,
+    construct_order_intent,
+    evaluate_kill_switch_triggers,
+    issue_live_authorization,
+    verify_validation_certificate,
+)
 from acash.execution.mock import MockExecutionEngine
+from acash.execution.schema import (
+    AuthorizationReactivationEvent,
+    AuthorizationStatus,
+    CalculationStatus,
+    CertificateRevocationEvent,
+    ExecutionManifest,
+    KillSwitchAction,
+    KillSwitchEvent,
+    KillSwitchTriggerType,
+    LiveAuthorization,
+    OrderIntent,
+    OrderLifecycleState,
+    OrderSide,
+    OrderType,
+    ReconciliationReport,
+    RiskState,
+    RiskStatus,
+    TimeInForce,
+    ValidationCertificate,
+)
 
-__all__ = ["MockExecutionEngine"]
+__all__ = [
+    "AuthorizationReactivationEvent",
+    "AuthorizationStatus",
+    "CalculationStatus",
+    "CertificateRevocationEvent",
+    "ExecutionManifest",
+    "KillSwitchAction",
+    "KillSwitchEvent",
+    "KillSwitchTriggerType",
+    "LiveAuthorization",
+    "MockExecutionEngine",
+    "OrderIntent",
+    "OrderLifecycleState",
+    "OrderSide",
+    "OrderType",
+    "PreLiveRiskAdmissionError",
+    "ReconciliationReport",
+    "RiskState",
+    "RiskStatus",
+    "TimeInForce",
+    "ValidationCertificate",
+    "construct_order_intent",
+    "evaluate_kill_switch_triggers",
+    "issue_live_authorization",
+    "verify_validation_certificate",
+]
