@@ -1016,10 +1016,11 @@ class ValidationReport(BaseModel):
 
     NOTE ON STATISTICAL DEPENDENCE & GOVERNANCE COMPLEMENTARITY:
     These 4 layers are statistically dependent (sharing the underlying return series, observation count, and candidate
-    search universe), but provide complementary defense-in-depth governance by evaluating orthogonal rejection criteria:
+    search universe), but provide complementary defense-in-depth governance by evaluating distinct, complementary rejection criteria:
     selection-adjusted tail probability (Layer 1), family-wise significance (Layer 2), economic hurdle deduction (Layer 3),
     and cross-validation distribution stability (Layer 4).
     """
+
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
