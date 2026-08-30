@@ -581,7 +581,11 @@ class StatisticalValidationGate:
         # 9. Out-of-Sample Performance Evaluation
         mean_oos, std_oos, _, _ = DeflatedSharpeEngine.calculate_higher_moments(out_of_sample_returns)
         raw_oos_sr = (mean_oos / std_oos if std_oos > 0 else 0.0) * math.sqrt(float(self.config.periods_per_year))
-        oos_sr = to_decimal18(Decimal(f"{raw_oos_sr:.12f}")) or Decimal("0.0")
+        dec_oos_sr = to_decimal18(Decimal(f"{raw_oos_sr:.12f}"))
+        oos_sr = dec_oos_sr if dec_oos_sr is not None else Decimal("0.0")
+
+
+
 
         retention_pct: Optional[Decimal] = None
         if dsr_result.estimated_sharpe > Decimal("0.0"):

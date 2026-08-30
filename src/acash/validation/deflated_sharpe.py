@@ -95,7 +95,14 @@ def _standard_normal_ppf(p: float) -> float:
                 ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
 
 
+def _to_dec(val: Union[float, Decimal, str], default: str = "0.0") -> Decimal:
+    """Safe, explicit Decimal conversion that avoids ambiguous 'or Decimal(...)' fallback idiom."""
+    dec_val = to_decimal18(Decimal(f"{val:.12f}") if isinstance(val, (float, int)) else Decimal(str(val)))
+    return dec_val if dec_val is not None else Decimal(default)
+
+
 class DeflatedSharpeEngine:
+
     """Calculates non-normal Deflated Sharpe Ratio, expected maximum null Sharpe, and MinTRL.
 
     MATHEMATICAL PRIMITIVE NOTICE:
@@ -350,15 +357,16 @@ class DeflatedSharpeEngine:
             else "EMPIRICAL_LOCATION_SCALE_GUMBEL_V1"
         )
 
-        dsr_dec = to_decimal18(Decimal(f"{dsr_prob:.12f}")) or Decimal("0.0")
+        dsr_dec = _to_dec(dsr_prob, default="0.0")
 
         return DSRResult(
-            estimated_sharpe=to_decimal18(Decimal(f"{sr_hat_annual:.12f}")) or Decimal("0.0"),
-            benchmark_sharpe=to_decimal18(Decimal(f"{benchmark_sharpe:.12f}")) or Decimal("0.0"),
-            expected_max_sharpe_sr0=to_decimal18(Decimal(f"{sr0_annual:.12f}")) or Decimal("0.0"),
-            sample_skewness=to_decimal18(Decimal(f"{skew:.12f}")) or Decimal("0.0"),
-            sample_kurtosis=to_decimal18(Decimal(f"{kurt:.12f}")) or Decimal("3.0"),
-            effective_trials_k=effective_trials_k,
+            estimated_sharpe=_to_dec(sr_hat_annual, default="0.0"),
+            benchmark_sharpe=_to_dec(benchmark_sharpe, default="0.0"),
+            expected_max_sharpe_sr0=_to_dec(sr0_annual, default="0.0"),
+            sample_skewness=_to_dec(skew, default="0.0"),
+            sample_kurtosis=_to_dec(kurt, default="3.0"),
+            dsr_trials_k=declared_k,
+            effective_trials_k=declared_k,
             declared_trials_k=declared_k,
             effective_independent_trials_k=effective_independent_trials_k,
             independence_assumption="FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND",
@@ -367,10 +375,10 @@ class DeflatedSharpeEngine:
             variance_estimator="EMPIRICAL_SAMPLE_VARIANCE_DDOF1",
             sharpe_space=SharpeSpace.ANNUAL,
             inference_space=SharpeSpace.PERIOD,
-            trial_mean_used=to_decimal18(Decimal(f"{mean_of_trials:.12f}")) or Decimal("0.0"),
-            trial_variance_used=to_decimal18(Decimal(f"{variance_of_trials:.12f}")) or Decimal("0.0"),
+            trial_mean_used=_to_dec(mean_of_trials, default="0.0"),
+            trial_variance_used=_to_dec(variance_of_trials, default="0.0"),
             sample_size_t=n,
-            dsr_statistic=to_decimal18(Decimal(f"{z_stat:.12f}")) or Decimal("0.0"),
+            dsr_statistic=_to_dec(z_stat, default="0.0"),
             dsr_probability=dsr_dec,
             dsr_p_value=dsr_dec,
             min_track_record_length_bars=min_trl_bars,
@@ -378,6 +386,7 @@ class DeflatedSharpeEngine:
             is_statistically_significant=is_significant,
             has_sufficient_track_record=has_sufficient_trl,
         )
+
 
 
 

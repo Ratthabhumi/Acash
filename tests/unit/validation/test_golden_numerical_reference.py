@@ -168,9 +168,12 @@ def test_golden_reference_higher_moments_and_dsr_analytical_precision() -> None:
     assert dsr_result.inference_space == SharpeSpace.PERIOD
 
     # Independence Semantics Assertions (Strict Contract)
+    assert dsr_result.dsr_trials_k == K
+    assert dsr_result.effective_trials_k == K
     assert dsr_result.declared_trials_k == K
     assert dsr_result.effective_independent_trials_k is None
     assert dsr_result.independence_assumption == "FIXED_VARIANCE_DECLARED_SEARCH_OPPORTUNITIES_UPPER_BOUND"
+
 
 
 

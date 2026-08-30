@@ -16,6 +16,12 @@ from acash.data.features.engine import to_decimal18
 from acash.validation.schema import FrictionStressParameters, OverfittingReport, ParameterPerturbationGrid
 
 
+def _to_dec(val: Union[float, Decimal, str], default: str = "0.0") -> Decimal:
+    """Safe, explicit Decimal conversion that avoids ambiguous 'or Decimal(...)' fallback idiom."""
+    dec_val = to_decimal18(Decimal(f"{val:.12f}") if isinstance(val, (float, int)) else Decimal(str(val)))
+    return dec_val if dec_val is not None else Decimal(default)
+
+
 class OverfittingEngine:
     """Evaluates backtest overfitting probability, parameter stability, and analytical friction stress.
 
@@ -31,6 +37,7 @@ class OverfittingEngine:
         is_sharpe_matrix: np.ndarray,
         oos_sharpe_matrix: np.ndarray,
     ) -> Tuple[float, float, float]:
+
         """Calculate empirical Probability of Backtest Overfitting (PBO) with exact mid-rank tie handling.
 
         Reference:
@@ -213,11 +220,12 @@ class OverfittingEngine:
         is_pbo_ok = pbo < max_acceptable_pbo
 
         return OverfittingReport(
-            pbo_estimate=to_decimal18(Decimal(f"{pbo:.12f}")) or Decimal("0.0"),
-            logits_distribution_mean=to_decimal18(Decimal(f"{log_mean:.12f}")) or Decimal("0.0"),
-            logits_distribution_std=to_decimal18(Decimal(f"{log_std:.12f}")) or Decimal("0.0"),
-            parameter_fragility_max_curvature=to_decimal18(Decimal(f"{curvature:.12f}")) or Decimal("0.0"),
+            pbo_estimate=_to_dec(pbo, default="0.0"),
+            logits_distribution_mean=_to_dec(log_mean, default="0.0"),
+            logits_distribution_std=_to_dec(log_std, default="0.0"),
+            parameter_fragility_max_curvature=_to_dec(curvature, default="0.0"),
             is_pbo_acceptable=is_pbo_ok,
             is_parameter_stable=is_param_stable,
             analytical_friction_monotonicity_passed=is_monotonic,
         )
+

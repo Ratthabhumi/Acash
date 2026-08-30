@@ -247,6 +247,80 @@ def test_dsr_rejects_non_positive_denominator_term() -> None:
             DeflatedSharpeEngine.evaluate_dsr(returns=returns)
 
 
+def test_dsr_result_rejects_contradictory_probability_and_p_value() -> None:
+    """Verify that DSRResult raises DataContractError when dsr_probability != dsr_p_value."""
+    from acash.validation.schema import DSRResult
+
+    # 1. Contradictory probabilities
+    with pytest.raises(DataContractError, match="Contradictory DSR probability"):
+        DSRResult(
+            estimated_sharpe=Decimal("1.5"),
+            benchmark_sharpe=Decimal("0.0"),
+            expected_max_sharpe_sr0=Decimal("0.5"),
+            sample_skewness=Decimal("0.0"),
+            sample_kurtosis=Decimal("3.0"),
+            sample_size_t=250,
+            dsr_trials_k=10,
+            effective_trials_k=10,
+            trial_variance_used=Decimal("0.01"),
+            dsr_statistic=Decimal("2.5"),
+            dsr_probability=Decimal("0.97"),
+            dsr_p_value=Decimal("0.20"),  # Contradictory!
+            is_statistically_significant=True,
+            has_sufficient_track_record=True,
+        )
+
+
+def test_dsr_result_rejects_contradictory_trial_counts() -> None:
+    """Verify that DSRResult raises DataContractError when dsr_trials_k != effective_trials_k."""
+    from acash.validation.schema import DSRResult
+
+    with pytest.raises(DataContractError, match="Contradictory DSR trial counts"):
+        DSRResult(
+            estimated_sharpe=Decimal("1.5"),
+            benchmark_sharpe=Decimal("0.0"),
+            expected_max_sharpe_sr0=Decimal("0.5"),
+            sample_skewness=Decimal("0.0"),
+            sample_kurtosis=Decimal("3.0"),
+            sample_size_t=250,
+            dsr_trials_k=10,
+            effective_trials_k=5,  # Contradictory!
+            trial_variance_used=Decimal("0.01"),
+            dsr_statistic=Decimal("2.5"),
+            dsr_probability=Decimal("0.95"),
+            dsr_p_value=Decimal("0.95"),
+            is_statistically_significant=True,
+            has_sufficient_track_record=True,
+        )
+
+
+def test_dsr_result_auto_syncs_aliases() -> None:
+    """Verify that DSRResult auto-syncs dsr_trials_k / effective_trials_k and dsr_probability / dsr_p_value."""
+    from acash.validation.schema import DSRResult
+
+    # Pass only dsr_probability and dsr_trials_k
+    res = DSRResult(
+        estimated_sharpe=Decimal("1.5"),
+        benchmark_sharpe=Decimal("0.0"),
+        expected_max_sharpe_sr0=Decimal("0.5"),
+        sample_skewness=Decimal("0.0"),
+        sample_kurtosis=Decimal("3.0"),
+        sample_size_t=250,
+        dsr_trials_k=20,
+        trial_variance_used=Decimal("0.01"),
+        dsr_statistic=Decimal("2.5"),
+        dsr_probability=Decimal("0.98"),
+        is_statistically_significant=True,
+        has_sufficient_track_record=True,
+    )
+    assert res.effective_trials_k == 20
+    assert res.declared_trials_k == 20
+    assert res.dsr_trials_k == 20
+    assert res.dsr_p_value == Decimal("0.98")
+    assert res.dsr_probability == Decimal("0.98")
+
+
+
 
 
 

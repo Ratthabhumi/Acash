@@ -606,7 +606,8 @@ class DSRResult(BaseModel):
     sample_skewness: Decimal = Field(description="Fisher-Pearson sample skewness g_1 of returns.")
     sample_kurtosis: Decimal = Field(description="Pearson sample kurtosis g_2 of returns (normal distribution = 3.0, finite sample lower bound ((n-1)/n)^2).")
     sample_size_t: int = Field(description="Sample length in return periods T.")
-    effective_trials_k: int = Field(description="Effective trial count K_DSR := K_declared derived from SearchTrialLedger by sovereign policy.")
+    dsr_trials_k: int = Field(default=1, description="Authoritative trial count K_DSR := K_declared utilized for DSR selection deflation.")
+    effective_trials_k: int = Field(default=1, description="Legacy alias for dsr_trials_k (K_DSR := K_declared derived from SearchTrialLedger).")
     declared_trials_k: int = Field(default=1, description="Authoritative declared search opportunities count recorded in ledger.")
     effective_independent_trials_k: Optional[int] = Field(
         default=None,
@@ -651,15 +652,54 @@ class DSRResult(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def populate_declared_trials(cls, data: Any) -> Any:
+    def populate_and_validate_aliases(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if "declared_trials_k" not in data and "effective_trials_k" in data:
-                data["declared_trials_k"] = data["effective_trials_k"]
+            # 1. Synchronize trial count aliases
+            if "declared_trials_k" in data and "dsr_trials_k" not in data:
+                data["dsr_trials_k"] = data["declared_trials_k"]
+            elif "dsr_trials_k" in data and "declared_trials_k" not in data:
+                data["declared_trials_k"] = data["dsr_trials_k"]
+
+            if "dsr_trials_k" in data and "effective_trials_k" not in data:
+                data["effective_trials_k"] = data["dsr_trials_k"]
+            elif "effective_trials_k" in data and "dsr_trials_k" not in data:
+                data["dsr_trials_k"] = data["effective_trials_k"]
+
+            if "dsr_trials_k" in data and "effective_trials_k" in data:
+                if data["dsr_trials_k"] != data["effective_trials_k"]:
+                    raise DataContractError(
+                        f"Contradictory DSR trial counts supplied: "
+                        f"dsr_trials_k={data['dsr_trials_k']} != effective_trials_k={data['effective_trials_k']}."
+                    )
+
+            # 2. Synchronize and strictly validate DSR probability vs legacy alias
             if "dsr_probability" not in data and "dsr_p_value" in data:
                 data["dsr_probability"] = data["dsr_p_value"]
             elif "dsr_p_value" not in data and "dsr_probability" in data:
                 data["dsr_p_value"] = data["dsr_probability"]
+            elif "dsr_probability" in data and "dsr_p_value" in data:
+                p_prob = Decimal(str(data["dsr_probability"]))
+                p_val = Decimal(str(data["dsr_p_value"]))
+                if abs(p_prob - p_val) > Decimal("1e-10"):
+                    raise DataContractError(
+                        f"Contradictory DSR probability and legacy p-value supplied: "
+                        f"dsr_probability={data['dsr_probability']} != dsr_p_value={data['dsr_p_value']}."
+                    )
         return data
+
+    @model_validator(mode="after")
+    def verify_dsr_invariants(self) -> "DSRResult":
+        if abs(self.dsr_probability - self.dsr_p_value) > Decimal("1e-10"):
+            raise DataContractError(
+                f"Contradictory DSR probability and legacy p-value: "
+                f"dsr_probability={self.dsr_probability} != dsr_p_value={self.dsr_p_value}."
+            )
+        if self.dsr_trials_k != self.effective_trials_k:
+            raise DataContractError(
+                f"Contradictory trial counts: dsr_trials_k={self.dsr_trials_k} != effective_trials_k={self.effective_trials_k}."
+            )
+        return self
+
 
 
 
@@ -831,7 +871,9 @@ class ValidationReport(BaseModel):
                 "dsr_p_value": str(self.dsr_result.dsr_p_value),
                 "dsr_probability": str(self.dsr_result.dsr_probability),
                 "dsr_statistic": str(self.dsr_result.dsr_statistic),
+                "dsr_trials_k": self.dsr_result.dsr_trials_k,
                 "effective_trials_k": self.dsr_result.effective_trials_k,
+
                 "estimated_sharpe": str(self.dsr_result.estimated_sharpe),
                 "expected_max_sharpe_sr0": str(self.dsr_result.expected_max_sharpe_sr0),
                 "has_sufficient_track_record": self.dsr_result.has_sufficient_track_record,
