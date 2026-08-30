@@ -1,4 +1,4 @@
-# Phase 7 Progressive Context Map (PHASE7_CONTEXT_MAP.md)
+# Phase 7 Progressive Context Map (`docs/phase7/CONTEXT_MAP.md`)
 
 This navigation document implements **Progressive Disclosure of Context** for AI agents, developers, and automated systems working on **Phase 7: Live Execution, Pre-Live Risk Admission & Operational Governance**.
 
@@ -8,7 +8,7 @@ This navigation document implements **Progressive Disclosure of Context** for AI
 
 ```text
 1. Read AGENTS.md (Non-negotiable project-wide engineering principles)
-2. Read PHASE7_CONTEXT_MAP.md (This navigation map)
+2. Read docs/phase7/CONTEXT_MAP.md (This navigation map)
 3. Identify Affected Subsystem from the matrix below
 4. Load ONLY the specific specification document(s) required for the active task
 5. Read ANTIGRAVITY_GEMINI_3.7_FLASH.md ONLY if the task touches model-risk patterns
@@ -23,14 +23,14 @@ This navigation document implements **Progressive Disclosure of Context** for AI
 
 | Subsystem | Scope & Responsibilities | Canonical Specification |
 | :--- | :--- | :--- |
-| 🏛️ **Phase 7 Architecture** | End-to-end execution dataflow, one-way boundary from Phase 6, fail-closed policy | [`docs/phase7/architecture.md`](docs/phase7/architecture.md) |
-| 📜 **Validation Certificate** | Read-only imported certificate from Phase 6, cryptographic verification, revocation | [`docs/phase7/certificate.md`](docs/phase7/certificate.md) |
-| 🛡️ **Live Authorization** | Bridge from statistical validity to live capital, operational limits (notional, drawdown) | [`docs/phase7/live_authorization.md`](docs/phase7/live_authorization.md) |
-| 📈 **Dynamic Risk State** | Real-time exposure, VaR/CVaR, connectivity status, state machine (NORMAL $\to$ HALTED) | [`docs/phase7/risk_state.md`](docs/phase7/risk_state.md) |
-| 🔄 **Order & Position Lifecycle**| State machine (INTENT $\to$ FILLED / UNKNOWN), timeout handling, position tracking | [`docs/phase7/order_lifecycle.md`](docs/phase7/order_lifecycle.md) |
-| 📦 **Execution Manifest** | Immutable manifest per execution, slippage/latency attribution, fill provenance | [`docs/phase7/execution_manifest.md`](docs/phase7/execution_manifest.md) |
-| 🚨 **Kill Switch Engine** | First-class KillSwitchEvent, automated triggers (Stale data, Loss, Clock skew, Disconnect) | [`docs/phase7/kill_switch.md`](docs/phase7/kill_switch.md) |
-| ⚖️ **Reconciliation Engine** | Internal vs. Broker state reconciliation, discrepancy detection, automated halt triggers | [`docs/phase7/reconciliation.md`](docs/phase7/reconciliation.md) |
+| 🏛️ **Phase 7 Architecture** | End-to-end execution dataflow, one-way boundary from Phase 6, fail-closed policy | [`./architecture.md`](./architecture.md) |
+| 📜 **Validation Certificate** | Read-only imported certificate from Phase 6, cryptographic verification, revocation | [`./certificate.md`](./certificate.md) |
+| 🛡️ **Live Authorization** | Bridge from statistical validity to live capital, operational limits (notional, drawdown) | [`./live_authorization.md`](./live_authorization.md) |
+| 📈 **Dynamic Risk State** | Real-time exposure, VaR/CVaR, connectivity status, state machine (NORMAL $\to$ HALTED) | [`./risk_state.md`](./risk_state.md) |
+| 🔄 **Order & Position Lifecycle**| State machine (INTENT $\to$ FILLED / UNKNOWN), timeout handling, position tracking | [`./order_lifecycle.md`](./order_lifecycle.md) |
+| 📦 **Execution Manifest** | Immutable manifest per execution, slippage/latency attribution, fill provenance | [`./execution_manifest.md`](./execution_manifest.md) |
+| 🚨 **Kill Switch Engine** | First-class KillSwitchEvent, automated triggers (Stale data, Loss, Clock skew, Disconnect) | [`./kill_switch.md`](./kill_switch.md) |
+| ⚖️ **Reconciliation Engine** | Internal vs. Broker state reconciliation, discrepancy detection, automated halt triggers | [`./reconciliation.md`](./reconciliation.md) |
 
 ---
 

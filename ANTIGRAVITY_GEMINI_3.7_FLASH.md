@@ -53,22 +53,18 @@ This document records institutional memory, model-specific behavioral guardrails
 
 ## 4. Progressive Context Navigation Protocol
 
-To prevent cognitive overload and context fragmentation, agents must follow the **Progressive Disclosure Protocol** via [`ATLAS_CONTEXT_MAP.md`](ATLAS_CONTEXT_MAP.md):
-
+To prevent cognitive overload and context fragmentation, agents must follow the **Progressive Disclosure Protocol** via [`docs/README.md`](docs/README.md):
 
 ```text
 AGENTS.md
    │
    ▼
-ATLAS_CONTEXT_MAP.md
+docs/README.md (Master Hub)
    │
-   ├──► docs/atlas/graph/architecture.md             (Graph State & Node/Edge Contracts)
-   ├──► docs/atlas/events/event_model.md             (Canonical Event Lifecycle & Ingestion)
-   ├──► docs/atlas/visualization/event_driven_rendering.md (Particle Propagation Invariants)
-   ├──► docs/atlas/market/microstructure.md          (Order-Flow Taxonomies & Rule Provenance)
-   ├──► docs/atlas/reasoning/epistemic_model.md      (Epistemic Levels & Evidence Envelopes)
-   └──► docs/atlas/infrastructure/runtime.md         (High-Throughput IPC & Storage)
+   ├──► docs/phase7/CONTEXT_MAP.md (Phase 7: Live Execution & Operational Risk)
+   └──► docs/atlas/CONTEXT_MAP.md  (Atlas: Knowledge Graph & Market Microstructure)
 ```
+
 
 ### Non-Negotiable Domain Invariants:
 1. **The Particle Invariant**: *"Particle movement represents real information propagation, not decoration."*
