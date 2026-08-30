@@ -124,3 +124,109 @@ react-force-graph → custom Three.js → WebGPU → another visualization engin
 5. **Priority 5**: Performance
 6. **Priority 6**: Visual polish
 
+---
+
+## 5. FUTURE DOMAIN DIRECTION — MARKET MICROSTRUCTURE & ORDER-FLOW THINKING
+
+Atlas may eventually operate on market microstructure data and should learn to represent market behavior as semantic events rather than raw visual signals.
+
+Useful concepts observed from professional order-flow workflows include:
+- Footprint
+- Delta
+- Bid / Ask interaction
+- DOM / L2
+- Liquidity
+- Volume Profile
+- Absorption
+- Liquidity pull / replenishment
+- Sweeps
+- Failed breakouts
+- Support / resistance interaction
+- Previous-day high / low interactions
+- Aggressive buyer / seller activity
+
+### The Epistemic Separation Principle
+$$\text{Raw Observation} \neq \text{Interpretation} \neq \text{Causal Conclusion}$$
+
+**Example:**
+- *"258 contracts sold"* is an **Observation**.
+- *"Price failed to move lower despite aggressive selling"* is an **Interpreted Event Candidate**.
+- *"Possible absorption"* is a **Higher-Level Inference**.
+- *"Strong defensive buying caused the reversal"* is a much stronger **Causal Claim** and must NOT be inferred automatically without sufficient evidence.
+
+### Strict Epistemic Levels
+Atlas should preserve explicit epistemic levels across its knowledge graph:
+1. `OBSERVED`: What the raw data directly shows.
+2. `DERIVED`: Deterministic transformation of observed data.
+3. `INFERRED`: Interpretation produced from multiple observations.
+4. `CONFIRMED`: Independently validated interpretation.
+5. `UNCERTAIN`: Plausible interpretation lacking sufficient evidence.
+
+---
+
+### Order-Flow Event Examples
+
+#### Example 1: Absorption Candidate
+$$\text{Aggressive selling} + \text{Little / no downward price response} \implies \texttt{ABSORPTION\_CANDIDATE}$$
+
+#### Example 2: Liquidity Pulled
+$$\text{Large resting liquidity appears} + \text{Price approaches} + \text{Liquidity disappears before execution} \implies \texttt{LIQUIDITY\_PULLED}$$
+*(This may be a spoofing-related signal, but Atlas MUST NOT automatically label it as "spoofing" without stronger evidence).*
+
+#### Example 3: Level Interaction & Rejection
+$$\text{Price reaches historically important level} + \text{Large volume interaction} + \text{Subsequent price rejection} \implies \texttt{LEVEL\_INTERACTION + REJECTION}$$
+
+Every generated event must retain:
+- Timestamp
+- Source entity
+- Target entity
+- Observed quantities
+- Price level
+- Market context
+- Confidence score
+- Evidence references
+- Inference status
+
+---
+
+### Why This Matters for Atlas
+Professional trading interfaces often display enormous amounts of microstructure information simultaneously. Atlas should not attempt to reproduce every trading terminal visually.
+
+Instead, Atlas asks: **"What meaningful event happened in the market?"** and represents that event inside the knowledge graph:
+```text
+Market
+  ↓
+Price Level
+  ↓
+Aggressive Selling
+  ↓
+Absorption
+  ↓
+Price Rejection
+  ↓
+Liquidity Repricing
+  ↓
+Possible Market Regime Change
+```
+* The **Graph** represents the semantic chain.
+* The **Renderer** merely makes that chain visible.
+
+---
+
+### Learning Reference — Professional Order-Flow Workflows
+Order-flow trading concepts (such as ChartFanatics / ATAS-style analytical workflows) provide valuable domain inspiration for how experienced practitioners combine:
+```text
+Market Context → Volume Profile → Footprint → DOM/Liquidity → Order Flow → Price Response → Decision
+```
+* **Purpose**: The purpose is NOT to copy a trader's discretionary strategy, but to understand what information experienced practitioners consider important and convert those observations into a structured event ontology that Atlas can reason about.
+* **Architectural Rule**: DO NOT encode any trader's discretionary trading method as implicit ground truth. Treat external trading methodologies strictly as **Domain Knowledge + Hypotheses + Possible Event Taxonomy**, not verified truth.
+
+---
+
+### Core Atlas Principle
+> **"Atlas should represent what happened, what it may mean, and how confident we are that it means that."**
+> 
+> *Never collapse those three levels into one.*
+> *A visually impressive graph is secondary. Semantic correctness is primary.*
+
+
