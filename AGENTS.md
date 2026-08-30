@@ -24,6 +24,19 @@ This document establishes the project-wide, non-negotiable engineering, verifica
 8. **Statistical Dependence Awareness**: Treat candidate models, multi-gate layers, and sequential tests that share underlying data as **statistically dependent**. Never label dependent controls as "orthogonal" or "independent".
 9. **Marginal vs. Conditional Distinction**: Distinguish individual layer marginal pass rates $P(L_j)$ from sequential conditional admission probabilities $P(L_j \mid \bigcap_{i<j} L_i)$.
 10. **Permutation & Tie Invariance**: All ranking algorithms, median splits, and IS/OOS comparisons must have deterministic, tie-symmetric policies.
+11. **Never Broaden Scope Without Authorization**: Fix only the audited finding. Do not opportunistically redesign adjacent components unless the change is strictly required to preserve the stated invariant.
+12. **Search Before Inventing a Helper**: Before creating new conversion routines, serializers, hash utilities, or statistical functions, search the existing codebase to prevent duplicate, divergent, or fragmented canonicalization logic.
+13. **Every Derived Field Needs Exactly One Single Authority**: Every mathematical or cryptographic field must have a single authoritative calculation point:
+    - $p\text{-value} \to$ derived canonically from empirical return series
+    - $\text{Trial count } K \to$ sealed ledger
+    - $\text{Manifest hash} \to$ execution manifest
+    - $\text{DSR probability} \to$ Deflated Sharpe engine
+    - $\text{PBO} \to$ CSCV Sharpe matrices
+    - Never implement dual functions that calculate the same quantity with slight variations.
+14. **Tests Must Attack Assumptions, Not Only Happy Paths**: Prioritize tests in the following order:
+    $$\text{Happy Path} \to \text{Boundary} \to \text{Malformed} \to \text{Contradictory} \to \text{Adversarial} \to \text{Permutation} \to \text{Numerical Stability} \to \text{Golden Reference}$$
+15. **Do Not Optimize for Green CI**: A passing test suite is an output, not the objective. The objective is the unyielding preservation of the mathematical, architectural, and governance contract.
+
 
 ---
 
