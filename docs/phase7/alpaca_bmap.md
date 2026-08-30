@@ -1,0 +1,342 @@
+# Phase 7 Step 8F: Concrete Broker Mapping Specification (BMAP) — Alpaca
+
+> **Status: PROPOSED — DOCS-ONLY, AUDIT-PENDING CHECKPOINT.**
+> This is the **concrete Broker-specific Mapping specification (BMAP) for Alpaca**,
+> an instance of the vendor-agnostic framework in
+> [`./broker_semantic_mapping.md`](./broker_semantic_mapping.md) (rv `7779111`),
+> which in turn extends the Broker Adapter Contract
+> ([`./broker_adapter_contract.md`](./broker_adapter_contract.md), rv `6fd4a78`).
+>
+> It is **PROPOSED**: it converts the vendor-agnostic 12 items into concrete
+> Alpaca mappings based on Alpaca's documented API surface (Trade Events SSE
+> `trade_updates`, Activity SSE, and REST `/v2/orders`). It is **audit-pending**: the
+> Conformance Matrix (§A) marks each item DESIGN-CONFORMANT (D) but **no cell is
+> EXECUTED (E/PASS) yet** — nothing has been run against a live or paper account.
+>
+> It does NOT implement an adapter, does NOT touch execution code, does NOT select
+> live credentials, and does NOT authorize live orders. A broker-specific
+> sandbox/paper adapter for Alpaca is NOT to be written until this BMAP is audited
+> and locked, matching the framework gate (§2.1 SM-0).
+
+---
+
+## 0. Scope & Source of Truth
+
+- **Vendor / protocol**: Alpaca Trading API (version noted in Conformance Matrix;
+  endpoints subject to change — pin SDK version per best practice).
+- **Source authority** (what is the source of truth for order state):
+  - **Realtime**: Trade Events SSE stream `trade_updates` (`/v2/events/trades`) for
+    order lifecycle events (`accepted`, `new`, `partial_fill`, `fill`, `canceled`,
+    `expired`, `rejected`, `order_cancel_rejected`, `replaced`, …).
+  - **Replay / recovery**: the same SSE supports replay via `since_id` (ULID
+    cursor) and `since_ulid`/`until_ulid`; the broker is explicit that a consumer
+    "can always re-open and request data after a particular event using
+    `since_id`" to avoid missed events.
+  - **Authoritative reconciliation snapshot**: REST `GET /v2/orders/{order_id}`,
+    `GET /v2/orders` with `by_client_order_id`, `position_qty`, and account/positions
+    queries. Used to exit `UNKNOWN` (reconciliation evidence) and to validate the
+    SSE-derived state.
+- **Paper environment**: first-class, separate base URL `paper-api.alpaca.markets`,
+  distinct key pair, mirrors the live API surface. Paper intentionally injects
+  random partial fills to exercise client fill handling — safely testable without
+  live capital.
+
+Pipeline (unchanged canonical boundary):
+
+```text
+Alpaca SSE trade_updates / REST /v2/orders
+        ↓
+[Alpaca Adapter]                  <- this BMAP: translation only
+        ↓
+Scan. BrokerEventKind + ReconciliationEvidence fields
+        ↓
+normalize_broker_event()          (Step 8C, deterministic)
+        ↓
+Canonical ExecutionEvent
+        ↓
+transition_order()                (Step 8B — SOLE state authority)
+```
+
+Central invariant restated:
+$$\boxed{ \text{Alpaca-specific semantics} \longrightarrow \text{ACASH canonical semantics} }$$
+
+---
+
+## 1. Item 1 — Raw broker event → `BrokerEventKind` mapping
+
+Alpaca `TradeUpdateEventType` → canonical. Vendor enum MUST NOT cross the boundary
+(framework §3.1 SM-1).
+
+| Alpaca `event` | Canonical `BrokerEventKind` | Notes / trigger | Frozen-rule conflict |
+| :--- | :--- | :--- | :--- |
+| `accepted` | `ACK` | received by Alpaca, not yet routed | no |
+| `new` | `ACK` | received **and routed** to venue | no |
+| `pending_new` | `ACK` | routed, not yet accepted for execution | no |
+| `partial_fill` | `PARTIAL_FILL` | `order.filled_qty < qty` (residual working) | no (M-2) |
+| `fill` | `FILLED` | `order.filled_qty = qty` | no (M-2) |
+| `rejected` | `REJECT` | authoritative terminal reject | no |
+| `canceled` | `ORDER_CANCELLED` | **ambiguous** — see §7 for `reason`/`cancel_requested_at` triage | only if hint resolves (M-3) |
+| `expired` | `EXPIRED` | reached end of lifespan per TIF | no |
+| `replaced` / `order_replace_rejected` | incident / reconciliation | not a local canonical terminal; treat as state-changing observation | requires explicit handling |
+| `order_cancel_rejected` | `CANCEL_REJECTED` | cancel refused; confirmed live | no |
+| `done_for_day`, `held`, `stopped`, `suspended`, `calculated`, `pending_cancel`, `pending_replace` | in-flight / non-terminal | MUST NOT be treated as terminal | fail-closed on misuse (M-4) |
+| `trade_bust` / `trade_correct` | incident / reconciliation | correction of a prior fill; MUST NOT be silently merged | fail-closed (I-5/overfill lineage) |
+| *unknown / unmatched transient status* | — | MUST raise (fail-closed) | — (M-4) |
+
+Normative:
+- **A-1** Only the mapped `BrokerEventKind` crosses the boundary; the Alpaca enum
+  and `order.status` string never do.
+- **A-2** `partial_fill`/`fill` classification MUST verify cumulative `filled_qty`
+  against requested `qty` (M-2 triage), never trust the label alone.
+
+---
+
+## 2. Item 2 — Required / optional fields (`field_map`)
+
+Alpaca order/event → canonical `ReconciliationEvidence` + identity fields.
+
+| Canonical field | Required | Alpaca source (verbatim) | If Alpaca absent |
+| :--- | :--- | :--- | :--- |
+| `broker_order_id` | yes | `order.id` (UUID) | — |
+| `client_order_id` | yes | `order.client_order_id` | generated per intent |
+| `observed_at` | yes | `timestamp` on the trade event; else `order.updated_at` (contract S-2 broker report time) | labelled receipt time |
+| `source` | yes | `"ALPACA"` | — |
+| `broker_sequence` | yes | `event_ulid` (ULID) on SSE; see §3 | declared fallback (REST path, §4) |
+| `cancel_was_requested` | yes | `order.cancel_requested_at != null` (broker-side knowledge) | fail-closed (§7) |
+| `fill_qty` (fill events) | conditional | per-fill event `qty`; cumulative `order.filled_qty` | fail-closed (M-2a) |
+| `event_id` (dedup) | yes | `execution_id` (fill/partial) + `event_ulid` (all) | fail-closed |
+
+Required-lattice rule (framework §3.2): a missing REQUIRED field -> the adapter
+MUST NOT emit the event; it MUST fail closed.
+
+---
+
+## 3. Item 3 — `broker_sequence` semantics
+
+- **REQUIRED (verbatim)**: The Trade Events SSE supplies a **trustworthy
+  broker-issued sequence**: the `event_ulid` (ULID) on every event, which is
+  **lexicographically sortable and deterministic-replayable** (`since_id`).
+  The adapter MUST populate `broker_sequence = event_ulid` verbatim (contract §5
+  S-3 REQUIRED; framework §3.3 SM-6).
+- Identity: `(broker_event_id, broker_sequence)` = `(execution_id or
+  order.id:event, event_ulid)` — see §8.
+- Semantics statement: ULID encodes time + stochastic component, monotonic per
+  source, unique per event — satisfies I-1 (no reuse within an order's stream).
+
+---
+
+## 4. Item 4 — Fallback ordering when sequence unavailable
+
+- The SSE path needs NO fallback (`event_ulid` REQUIRED, §3).
+- **Declared fallback (REST-snapshot only)**: when state is reconstructed from REST
+  `GET /v2/orders` (no SSE cursor), Alpaca provides `order.updated_at` but no
+  monotonic per-event id on that snapshot path. The adapter MUST then use its own
+  **strictly-increasing local receipt counter** as `broker_sequence`, declared as
+  `fallback` semantics (framework §3.4 SM-6b): definition (per-connection receipt
+  counter), scope (per order stream), monotonic (true), and MUST be labelled
+  `fallback` — never presented as a genuine Alpaca sequence. This fallback applies
+  ONLY to reconciliation snapshots, never to the live SSE path.
+
+---
+
+## 5. Item 5 — Timeout / ambiguous → `UNKNOWN`
+
+- Re-affirms frozen contract §3 T-1/T-2/T-5 and framework §3.5.
+- **Ack/submit timeout**: Alpaca guidance — if an order `POST` times out it "may
+  have been sent to the market for execution"; the client MUST NOT resend or mark
+  the order canceled on speculation. The adapter MUST emit `CONNECTION_LOST` →
+  `UNKNOWN` and rely on reconciliation to establish reality.
+- **Pending-cancel confirmation timeout**: a cancel `DELETE` returning 204/422 does
+  not itself prove final state; confirmation arrives as a later `canceled`/event.
+  Until confirmed, `CancelRequested ≠ Cancelled`; on timeout the adapter MUST emit
+  `CONNECTION_LOST` → `UNKNOWN`, not `CANCELLED` (T-2).
+- **Ambiguous `canceled`**: see §7 — must route fail-closed / `UNKNOWN` when the
+  cancel origin is unclear.
+
+---
+
+## 6. Item 6 — Partial / full / overfill semantics
+
+- **Triage (M-2, framework §3.6 SM-2)**: using cumulative `order.filled_qty` and
+  requested `order.qty`:
+  - `filled_qty < qty` → `partial_fill` → `PARTIAL_FILL`
+  - `filled_qty = qty` → `fill` → `FILLED`
+  - `filled_qty > qty` → **OVERFILL anomaly** → MUST NOT be silently
+    `FILLED`/clamped; raise + route to reconciliation/incident (M-2/M-2a).
+- Per-fill `qty` and `price` are carried by the adapter; cumulative accumulation is
+  done ONLY by the coordinator (contract §4 I-4).
+- Alpaca paper injects random partial fills — the natural, safe harness for testing
+  this triage without live capital.
+
+---
+
+## 7. Item 7 — Cancel request / ack / reject semantics (CRITICAL NUANCE)
+
+Alpaca `canceled` is **not** proof of a user cancel.
+
+- The `canceled` event can be user-submitted **or** Alpaca-side (corporate-action
+  sweeps, aged-GTC expiry, overnight lifecycle) **or** upstream-venue-initiated.
+  A machine-readable cause is exposed via the top-level `reason` field on
+  `canceled`/`order_cancel_rejected` (e.g. `CORPORATE_ACTION`,
+  `TOO_LATE_TO_CANCEL`).
+- **Adapter rule (A-3, fail-closed per framework §3.7 SM-8c / contract M-3):**
+  - If `cancel_requested_at != null` (broker-side cancel in flight) AND
+    `reason` indicates a user cancel → map to `ORDER_CANCELLED` →
+    `CANCEL_ACK` (canonical), authority reconciles to `CANCELLED`.
+  - If `canceled` arrives with `cancel_requested_at == null` or an unexpected
+    `reason` → **unexpected cancellation** → MUST NOT guess a state; route to
+    `UNKNOWN` / reconciliation (fail-closed), per contract M-3.
+  - `order_cancel_rejected` → `CANCEL_REJECTED` → order remains live
+    (`CANCEL_REQUESTED` stays until facts say otherwise).
+  - Never treat a cancel `DELETE` 204 alone as cancelled (T-2).
+
+---
+
+## 8. Item 8 — Duplicate / out-of-order handling
+
+- **Identity**: fill/partial_fill dedup uses `execution_id`; cross-event ordering
+  and replay use `event_ulid` (ULID, sortable). `(execution_id, event_ulid)` is the
+  idempotency key the coordinator consumes.
+- **Replay/no-miss**: SSE `since_id` (ULID) gives deterministic replay — reconnect
+  resumes from cursor; no missed events (this is a first-party guarantee, unlike
+  aggregated CCXT `watch_orders` where missing updates are a known issue).
+- **Duplicates**: re-delivered identity is skipped by `ExecutionCoordinator.apply`
+  without re-accumulation (contract §4 I-2).
+- **Out-of-order / late**: after a terminal state, a late event is a LATE_EVENT
+  incident, terminal-absorbing, never silently dropped (contract §4 I-3/I-5). The
+  adapter forwards arrival order; it does NOT reorder/suppress (I-3).
+- **Trade corrections/busts**: `trade_correct` / `trade_bust` adjust a prior fill;
+  they MUST be surfaced as incidents/reconciliation input, never silently merged
+  into cumulative totals by the adapter (framework §8-trace I-5, overfill lineage).
+
+---
+
+## 9. Item 9 — Timestamp / clock-skew
+
+- All timestamps UTC-aware (contract §5 S-1). `observed_at` = broker report time =
+  the SSE `timestamp` (or `order.updated_at` for snapshots); never the adapter's
+  local receipt unless broker provides none (S-2, labelled).
+- **Clock-skew** (S-4): adapter MUST NOT assume wall-clock equality. On the
+  admission `CLOCK_SKEW_DETECTED` trigger, stop new submissions and route working
+  orders through disconnect/reconciliation. A broker timestamp far from local UTC
+  MUST NOT be trusted for sequencing when it matters (the ULID also embeds time —
+  cross-check against broker `timestamp`).
+
+---
+
+## 10. Item 10 — Credential & secret boundary
+
+- Re-affirms contract §6 C-1..C-5 / framework §3.10.
+- Alpaca key pair (API key id + secret) injected at runtime via secret store /
+  env, never in code, logs, events, evidence, manifests, or incidents.
+- Paper uses **distinct keys + `paper-api.alpaca.markets`** base URL — sandbox/paper
+  phase binds to the paper key set only; live keys never session-scoped to the
+  paper adapter.
+- Fail-closed on any credential/authorization failure (expired/revoked/denied):
+  stop new submissions, surface incident, live rotation without code change.
+
+---
+
+## 11. Item 11 — Evidence provenance / digest
+
+- `ReconciliationEvidence` is sourced from authoritative Alpaca fields:
+  `order.id`, `client_order_id`, `order.status`, `order.filled_qty`,
+  `order.filled_avg_price`, `timestamp`, `source="ALPACA"`,
+  `broker_sequence=event_ulid`, `cancel_requested_at`. `evidence_digest` is
+  computed by Step 8C normalizer over these canonical fields.
+- The adapter MUST NOT tamper with or fabricate digest-relevant fields. Any digest
+  mismatch / tamper MUST fail closed (incident/reject), never silently accepted
+  (framework §3.11 SM-10).
+
+---
+
+## 12. Item 12 — Conformance test checklist (adversarial)
+
+Pre-implementation designed cases (run in paper during the sandbox-adapter step;
+nothing executed yet this checkpoint). Cases MUST include, per AGENTS.md §14
+(assumption-attack, not just happy path):
+
+1. submit → `accepted`/`new` → `ACK` → `ACKNOWLEDGED`
+2. `partial_fill` then `fill` → `PARTIALLY_FILLED` → `FILLED`, cumulative correct
+3. **Paper random partials**: submit market order in paper, verify `partial_fill`
+   triage + fill accumulation survives across multiple partials (no double-accumulate)
+4. Submit `POST` timeout (simulated) → `CONNECTION_LOST` → `UNKNOWN`, never
+   `CANCELLED`/`REJECTED`; reconcile via REST to exit
+5. Cancel `DELETE` 204 → no immediate state change; `canceled` user-triggered →
+   `CANCELLED`
+6. **Ambiguous `canceled`** (no `cancel_requested_at`, unexpected `reason`) →
+   fail-closed → `UNKNOWN`/reconciliation, never guessed
+7. `canceled` with `reason=CORPORATE_ACTION` → not treated as user cancel
+8. `order_cancel_rejected` / `reason=TOO_LATE_TO_CANCEL` → `CANCEL_REJECTED`, order
+   live
+9. Reconnect SSE with `since_id` → no missed events; re-delivered identity → dedup,
+   no re-accumulation
+10. Out-of-order late event after terminal → LATE_EVENT, absorbing; not last-wins
+11. Overfill scenario `filled_qty > qty` (simulated/injected) → anomaly, NOT silent
+    `FILLED`/clamp
+12. `trade_correct`/`trade_bust` → incident/reconciliation, not silent merge
+13. Credential material absent from every event/evidence/error/log; no secret leak
+14. REST snapshot (no SSE cursor) → declared `fallback` sequence, labelled, no
+    look-alike genuine sequence
+15. Tampered evidence digest → fail-closed reject
+
+---
+
+## A. Adapter Conformance Matrix — Alpaca (PROPOSED, audit-pending)
+
+> Cells are design-conformant (**D**) based on documented Alpaca semantics. **No
+> cell is EXECUTED (E/PASS) — nothing has run against an account.** Cells flip to
+> PASS only after the sandbox-adapter conformance suite (§12) executes in Alpaca
+> paper. A single unchecked/`FAIL` cell blocks implementation.
+
+| # | Requirement (normative item) | Alpaca (status) |
+| :--- | :--- | :---: |
+| 1 | Raw broker event → `BrokerEventKind` mapping | D |
+| 2 | Required / optional fields (`field_map`) | D |
+| 3 | `broker_sequence` semantics documented (ULID, verbatim) | D |
+| 4 | Fallback ordering declared (no look-alike, REST path only) | D |
+| 5 | Timeout / ambiguous → `UNKNOWN` (never CANCELLED/REJECTED) | D |
+| 6 | Partial / full / overfill (overfill fail-closed) | D |
+| 7 | Cancel request / ack / reject (`CancelRequested ≠ Cancelled`; ambiguous `canceled` → fail-closed) | D |
+| 8 | Duplicate / out-of-order (coordinator-adjudicated; SSE `since_id` replay) | D |
+| 9 | Timestamp / clock-skew (UTC, broker report time) | D |
+| 10 | Credential & secret boundary (paper keys, no leak) | D |
+| 11 | Evidence provenance / digest (fail-closed on tamper) | D |
+| 12 | Conformance test checklist (adversarial, §14) | D |
+
+Admission rule (framework §2.1 SM-0): this BMAP is PROPOSED; it is locked (the
+matrix row 12/D becomes enforced) only after audit + paper execution.
+
+---
+
+## B. Safety Boundary Re-affirmed
+
+- **Live orders / Live credentials**: ❌ NOT authorized by this checkpoint.
+- **Broker-specific sandbox/paper adapter**: ❌ NOT implemented yet — gated behind
+  audit of this BMAP + framework admission rule.
+- **Real broker (live) integration**: ❌ remains OUT of scope until the full
+  road-map is traversed.
+
+Road-map position:
+
+```text
+7779111 (semantic framework)  -> THIS BMAP (PROPOSED) -> Freeze -> Sandbox/Paper Adapter -> Conformance -> Live Readiness
+```
+
+---
+
+## C. Verification Ledger (this checkpoint)
+
+- Implementation Status: **DOCS-ONLY** (no `src/` change; no adapter code; no live or paper account touched)
+- Contract Enforcement: **NORMATIVE** (MUST / MUST NOT / REQUIRED per RFC-2119) — PROPOSED, audit-pending
+- Authority: **CANONICAL REFERENCE** to `broker_semantic_mapping.md` (rv `7779111`)
+  + `broker_adapter_contract.md` (rv `6fd4a78`) + Step 8B/8C/8D/8E + `5cee91d`
+- Local Test Suite: **N/A** (no code change); full repo previously **446 passed**
+- Type Checker: **N/A** for this checkpoint; execution MyPy **0 errors**
+- Methodological Caveats: PROPOSED BMAP grounded in Alpaca documentation (SSE
+  `trade_updates`, Activity SSE, REST `/v2/orders`, paper env). It is NOT yet
+  empirically validated against a live/paper account; the Conformance Matrix is
+  DESIGN (D), not EXECUTED (E). Alpaca API behavior (rate limits, event schema,
+  deprecation) can change and MUST be re-verified at implementation time. The 5
+  pre-existing `dgp_experiments.py` MyPy errors remain **out-of-scope debt**,
+  intentionally untouched.

@@ -34,6 +34,7 @@ This navigation document implements **Progressive Disclosure of Context** for AI
 | ⚖️ **Reconciliation Engine** | Internal vs. Broker state reconciliation, discrepancy detection, automated halt triggers | [`./reconciliation.md`](./reconciliation.md) |
 | 🔌 **Broker Adapter Contract** | Step 8F pre-implementation: broker raw state/error → canonical event mapping, timeout/`UNKNOWN` semantics, idempotency/duplicate/out-of-order, sequence/timestamp/clock-skew, credential boundary | [`./broker_adapter_contract.md`](./broker_adapter_contract.md) |
 | 🧩 **Broker Semantic Mapping** | Step 8F vendor-agnostic framework: per-broker BMAP (status/error/field → canonical), fill triage, sequence/timestamp/ordering policy, conformance checklist; no vendor selected, live path OFF | [`./broker_semantic_mapping.md`](./broker_semantic_mapping.md) |
+| 🦅 **Alpaca BMAP** | Step 8F concrete Broker Mapping spec for Alpaca target: 12-item mapping (ULID `event_ulid` sequence, cancel `reason`/`cancel_requested_at` triage, partial/overfill, SSE `since_id` replay), design-conformant matrix; PROPOSED/audit-pending, live path OFF | [`./alpaca_bmap.md`](./alpaca_bmap.md) |
 
 ---
 
