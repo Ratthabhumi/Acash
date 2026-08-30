@@ -174,23 +174,84 @@ class CombinatorialPurgedCrossValidation:
            - Since groups partition [0, sample_size) contiguously, each path p covers [0, sample_size) completely with zero overlap.
            - Across all phi paths, exactly phi * N = k * C slices are used, establishing an exact bijection with the OOS slice universe.
 
+        STRICT STRUCTURAL PARTITION VALIDATION:
+        Before reconstruction, the supplied partition battery is unconditionally validated against all
+        combinatorial structure axioms:
+        1. Uniform k: For all p in P, |TestGroups(p)| == k.
+        2. Uniqueness: For all p_i != p_j, TestGroups(p_i) != TestGroups(p_j) (no duplicate combinations).
+        3. Complete Contiguous Universe: Union_p TestGroups(p) == {0, 1, ..., N - 1} with no gaps or negative indices.
+        4. Total Combinatorial Count: |P| == (N choose k).
+        5. Valid Bounds: 1 <= k < N and sample_size >= 2 * N.
+
         Returns:
             List of phi paths, where each path is a list of (combination_id, test_sample_index) pairings covering [0, sample_size).
         """
         if not partitions:
             raise DataContractError("Cannot reconstruct pseudo-OOS paths from empty partitions.")
 
-        # Determine N and k dynamically from the supplied partition structure
-        all_groups_set: Set[int] = set()
-        for p in partitions:
-            all_groups_set.update(p.test_group_indices)
-        N = len(all_groups_set)
+        # 1. Structural Validation: Uniform test group size k and uniqueness of combinations
         k = len(partitions[0].test_group_indices)
+        if k < 1:
+            raise DataContractError(f"Invalid test group size k={k}. Must have at least 1 test group per partition.")
 
-        total_combos = len(partitions)
-        expected_paths = (k * total_combos) // N
+        seen_combinations: Set[Tuple[int, ...]] = set()
+        all_groups_set: Set[int] = set()
 
-        # 1. Compute contiguous group boundaries [g_start, g_end)
+        for p_idx, p in enumerate(partitions):
+            p_test_groups = p.test_group_indices
+            if len(p_test_groups) != k:
+                raise DataContractError(
+                    f"Partition {p_idx} (combination_id={p.combination_id}) has test group size {len(p_test_groups)} "
+                    f"which does not match expected uniform test group size k={k}."
+                )
+            if len(set(p_test_groups)) != k:
+                raise DataContractError(
+                    f"Partition {p_idx} (combination_id={p.combination_id}) contains internal duplicate test groups: {p_test_groups}."
+                )
+
+            combo_key = tuple(sorted(p_test_groups))
+            if combo_key in seen_combinations:
+                raise DataContractError(
+                    f"Duplicate test group combination {combo_key} detected at partition {p_idx} (combination_id={p.combination_id}). "
+                    f"All combinatorial partitions must be strictly unique."
+                )
+            seen_combinations.add(combo_key)
+            all_groups_set.update(p_test_groups)
+
+        N = len(all_groups_set)
+        if k >= N or N < 2:
+            raise DataContractError(
+                f"Invalid combinatorial partition universe: N={N}, k={k}. Must satisfy 1 <= k < N with N >= 2."
+            )
+
+        # 2. Structural Validation: Union of test groups must form exact contiguous set {0, 1, ..., N - 1}
+        expected_universe = set(range(N))
+        if all_groups_set != expected_universe:
+            missing_groups = sorted(list(expected_universe - all_groups_set))
+            invalid_groups = sorted(list(all_groups_set - expected_universe))
+            raise DataContractError(
+                f"Partition group indices do not form a complete contiguous universe {{0, ..., {N-1}}}. "
+                f"Missing groups: {missing_groups}, Invalid groups: {invalid_groups}."
+            )
+
+        # 3. Structural Validation: Total partition count must strictly equal (N choose k)
+        expected_total_combos = math.comb(N, k)
+        if len(partitions) != expected_total_combos:
+            raise DataContractError(
+                f"Partition count mismatch: received {len(partitions)} partitions, "
+                f"expected exactly ({N} choose {k}) = {expected_total_combos} combinations."
+            )
+
+        # 4. Data Sufficiency Governance Policy
+        if sample_size < N * 2:
+            raise DataContractError(
+                f"Sample size {sample_size} is too small for {N} CPCV groups. "
+                f"ACASH governance policy requires at least 2 bars per block (minimum: {N * 2} bars)."
+            )
+
+        expected_paths = (k * expected_total_combos) // N
+
+        # 5. Compute contiguous group boundaries [g_start, g_end)
         group_bounds: List[Tuple[int, int]] = []
         base_size = sample_size // N
         remainder = sample_size % N
@@ -202,8 +263,7 @@ class CombinatorialPurgedCrossValidation:
             group_bounds.append((start, end))
             start = end
 
-        # 2. For each group g, identify all combinations where g was one of the k test groups
-        # By combinatorial identity, each group is tested in exactly (N-1 choose k-1) = phi combinations
+        # 6. For each group g, identify all combinations where g was one of the k test groups
         group_to_testing_combos: Dict[int, List[int]] = {g: [] for g in range(N)}
         for p in partitions:
             for g in p.test_group_indices:
@@ -216,7 +276,7 @@ class CombinatorialPurgedCrossValidation:
                     f"Group {g} has {len(group_to_testing_combos[g])} testing combinations, expected {expected_paths}"
                 )
 
-        # 3. Construct the phi distinct pseudo-OOS paths
+        # 7. Construct the phi distinct pseudo-OOS paths
         paths: List[List[Tuple[int, int]]] = []
         for path_idx in range(expected_paths):
             path_pairs: List[Tuple[int, int]] = []
@@ -234,6 +294,7 @@ class CombinatorialPurgedCrossValidation:
             paths.append(path_pairs)
 
         return paths
+
 
     def evaluate_cscv_sharpe_matrices(
         self,

@@ -2750,6 +2750,28 @@ def test_statistical_validation_gate_balanced_cscv_252_splits_integration() -> N
         manifest_store=manifest_store,
     )
 
+    # Spy on gate.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices to verify runtime execution path
+    real_evaluate_balanced = gate.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices
+    spy_calls: List[Tuple[Tuple[int, ...], Tuple[int, ...]]] = []
+
+    def spy_evaluate_balanced(
+        return_matrix: np.ndarray,
+        label_horizon: int = 1,
+        embargo_bars: Optional[int] = None,
+        periods_per_year: float = 252.0,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        is_m, oos_m = real_evaluate_balanced(
+            return_matrix,
+            label_horizon=label_horizon,
+            embargo_bars=embargo_bars,
+            periods_per_year=periods_per_year,
+        )
+        spy_calls.append((is_m.shape, oos_m.shape))
+        return is_m, oos_m
+
+    gate.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices = spy_evaluate_balanced  # type: ignore[method-assign]
+
+
     report = gate.evaluate_strategy(
         strategy_id="STRAT_01",
         hypothesis_id="HYP_01",
@@ -2764,18 +2786,13 @@ def test_statistical_validation_gate_balanced_cscv_252_splits_integration() -> N
         manifest_store=manifest_store,
     )
 
+    # Verify that Gate actively invoked evaluate_balanced_cscv_sharpe_matrices during evaluation
+    assert len(spy_calls) == 1
+    assert spy_calls[0] == ((252, M), (252, M))
+
     assert report.overfitting_report is not None
     assert 0.0 <= float(report.overfitting_report.pbo_estimate) <= 1.0
 
-    # Direct verification that the gate's balanced CSCV Sharpe matrix engine produces (C=252, M) splits
-    is_mat, oos_mat = gate.cpcv_engine.evaluate_balanced_cscv_sharpe_matrices(
-        trial_matrix,
-        label_horizon=1,
-        embargo_bars=gate.config.embargo_bars,
-        periods_per_year=float(gate.config.periods_per_year),
-    )
-    assert is_mat.shape == (252, M)
-    assert oos_mat.shape == (252, M)
 
 
 

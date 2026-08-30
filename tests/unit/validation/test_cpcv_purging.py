@@ -213,5 +213,75 @@ def test_cpcv_matrix_fails_closed_on_zero_variance_split() -> None:
         cpcv.evaluate_cscv_sharpe_matrices(mat_zero_var)
 
 
+def test_reconstruct_pseudo_oos_paths_rejects_empty_partitions() -> None:
+    """Verify that reconstruct_pseudo_oos_paths rejects empty partitions list."""
+    cpcv = CombinatorialPurgedCrossValidation()
+    with pytest.raises(DataContractError, match="Cannot reconstruct pseudo-OOS paths from empty partitions"):
+        cpcv.reconstruct_pseudo_oos_paths([], sample_size=100)
+
+
+def test_reconstruct_pseudo_oos_paths_rejects_non_uniform_k() -> None:
+    """Verify that reconstruct_pseudo_oos_paths rejects partitions with non-uniform test group sizes k."""
+    config = ValidationConfig(cpcv_num_groups_n=4, cpcv_num_test_groups_k=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+    partitions = cpcv.generate_partitions(sample_size=100, label_horizon=1)
+
+    # Corrupt partition 1 to have k=1 instead of uniform k=2
+    corrupted_partitions = list(partitions)
+    corrupted_partitions[1] = corrupted_partitions[1].model_copy(update={"test_group_indices": [0]})
+
+    with pytest.raises(DataContractError, match="does not match expected uniform test group size k=2"):
+        cpcv.reconstruct_pseudo_oos_paths(corrupted_partitions, sample_size=100)
+
+
+
+def test_reconstruct_pseudo_oos_paths_rejects_duplicate_combinations() -> None:
+    """Verify that reconstruct_pseudo_oos_paths rejects duplicated partition combinations."""
+    config = ValidationConfig(cpcv_num_groups_n=4, cpcv_num_test_groups_k=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+    partitions = cpcv.generate_partitions(sample_size=100, label_horizon=1)
+
+    # Corrupt by replacing partition 1 with partition 0's test groups
+    corrupted_partitions = list(partitions)
+    corrupted_partitions[1] = corrupted_partitions[1].model_copy(
+        update={"test_group_indices": list(partitions[0].test_group_indices)}
+    )
+
+    with pytest.raises(DataContractError, match="Duplicate test group combination"):
+        cpcv.reconstruct_pseudo_oos_paths(corrupted_partitions, sample_size=100)
+
+
+def test_reconstruct_pseudo_oos_paths_rejects_incomplete_universe() -> None:
+    """Verify that reconstruct_pseudo_oos_paths rejects partitions with missing group indices in the universe."""
+    config = ValidationConfig(cpcv_num_groups_n=4, cpcv_num_test_groups_k=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+    partitions = cpcv.generate_partitions(sample_size=100, label_horizon=1)
+
+    # Corrupt all partitions where group 3 appears, replacing with group 0
+    corrupted_partitions = []
+    for p in partitions:
+        new_groups = [0 if g == 3 else g for g in p.test_group_indices]
+        # Ensure distinct per partition
+        if len(set(new_groups)) < len(new_groups):
+            new_groups = [1, 2]
+        corrupted_partitions.append(p.model_copy(update={"test_group_indices": new_groups}))
+
+    with pytest.raises(DataContractError):
+        cpcv.reconstruct_pseudo_oos_paths(corrupted_partitions, sample_size=100)
+
+
+def test_reconstruct_pseudo_oos_paths_rejects_partition_count_mismatch() -> None:
+    """Verify that reconstruct_pseudo_oos_paths rejects when partition count != (N choose k)."""
+    config = ValidationConfig(cpcv_num_groups_n=4, cpcv_num_test_groups_k=2)
+    cpcv = CombinatorialPurgedCrossValidation(config)
+    partitions = cpcv.generate_partitions(sample_size=100, label_horizon=1)
+
+    # Remove the last partition: C = 5 instead of 6
+    truncated_partitions = partitions[:-1]
+    with pytest.raises(DataContractError, match="Partition count mismatch: received 5 partitions, expected exactly"):
+        cpcv.reconstruct_pseudo_oos_paths(truncated_partitions, sample_size=100)
+
+
+
 
 
