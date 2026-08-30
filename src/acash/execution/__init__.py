@@ -27,6 +27,12 @@ from acash.execution.crypto import (
     TrustStoreEntryStatus,
 )
 from acash.execution.mock import MockExecutionEngine
+from acash.execution.mock_broker import (
+    BrokerRawEvent,
+    MockBroker,
+    MockBrokerOrder,
+    MockBrokerStatus,
+)
 from acash.execution.schema import (
     AuthorizationApproval,
     AuthorizationReactivationApproval,
@@ -67,6 +73,7 @@ __all__ = [
     "AuthorizationStatus",
     "BrokerEventKind",
     "BrokerEventNormalizationError",
+    "BrokerRawEvent",
     "CalculationStatus",
     "CertificateRevocationEvent",
     "Ed25519Signer",
@@ -80,6 +87,9 @@ __all__ = [
     "KillSwitchEvent",
     "KillSwitchTriggerType",
     "LiveAuthorization",
+    "MockBroker",
+    "MockBrokerOrder",
+    "MockBrokerStatus",
     "MockExecutionEngine",
     "OrderIntent",
     "OrderLifecycleState",
