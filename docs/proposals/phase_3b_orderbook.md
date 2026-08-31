@@ -1,6 +1,6 @@
 # ACASH — Phase 3B: Canonical Order Book Subsystem Design Proposal & Data Contract
 
-**Document:** `docs/PHASE_3B_DESIGN_PROPOSAL.md`  
+**Document:** `docs/proposals/phase_3b_orderbook.md`  
 **Version:** 1.8.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — FINAL ARCHITECTURAL LOCK (Awaiting Formal Sign-off)**  

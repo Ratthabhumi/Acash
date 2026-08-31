@@ -1,6 +1,6 @@
 # ACASH — Phase 3C: Microstructure Feature Engine Design Proposal & Reproducibility Contract
 
-**Document:** `docs/PHASE_3C_DESIGN_PROPOSAL.md`  
+**Document:** `docs/proposals/phase_3c_feature_engine.md`  
 **Version:** 1.1.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — FINAL HARDENING (Awaiting Formal Sign-off)**  

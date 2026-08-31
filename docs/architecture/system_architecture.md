@@ -1,6 +1,6 @@
-# ACASH — System Architecture Specification (Phase 0)
+# ACASH — System Architecture Specification
 
-**Document:** `docs/ARCHITECTURE.md`  
+**Document:** `docs/architecture/system_architecture.md`  
 **Version:** 3.4.0 (Immutable State Transitions & Normalized Value Applied)  
 **Date:** 2026-08-27  
 

@@ -1,6 +1,6 @@
-# ACASH — Portfolio Architecture & Optimization Specification (Phase 0)
+# ACASH — Portfolio Architecture & Optimization Specification
 
-**Document:** `docs/PORTFOLIO_ARCHITECTURE.md`  
+**Document:** `docs/architecture/portfolio_architecture.md`  
 **Version:** 3.1.0 (Terminology Corrections Applied)  
 **Date:** 2026-08-27  
 

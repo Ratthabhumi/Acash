@@ -1,6 +1,6 @@
-# ACASH — Comprehensive Technology & Open-Source Evaluation (Phase 0 Final)
+# ACASH — Comprehensive Technology & Open-Source Evaluation
 
-**Document:** `docs/TECHNOLOGY_EVALUATION.md`  
+**Document:** `docs/architecture/technology_evaluation.md`  
 **Version:** 3.1.0 (Cleanup & Precision Applied)  
 **Date:** 2026-08-27  
 **Evaluation Standard:** Master Engineering Prompt & Phase 0 Final Review  

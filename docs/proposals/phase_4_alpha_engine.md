@@ -1,6 +1,6 @@
 # ACASH — Phase 4: Alpha Research Engine & Hypothesis Contract Design Proposal
 
-**Document:** `docs/PHASE_4_DESIGN_PROPOSAL.md`  
+**Document:** `docs/proposals/phase_4_alpha_engine.md`  
 **Version:** 1.2.0  
 **Date:** 2026-08-28  
 **Status:** **PROPOSED — FINAL METHODOLOGICAL LOCK (Awaiting Formal Sign-Off)**  

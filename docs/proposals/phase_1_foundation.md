@@ -1,6 +1,6 @@
 # ACASH — Phase 1 Foundation & Domain Core Plan (Final Semantic Lock)
 
-**Document:** `docs/PHASE_1_PLAN.md`  
+**Document:** `docs/proposals/phase_1_foundation.md`  
 **Version:** 3.10.0 (Accounting & Semantic Lock Applied)  
 **Date:** 2026-08-27  
 **Objective:** Build the sovereign foundation, domain types, abstract interfaces, configuration loader, structured logger, and correctness test harness.

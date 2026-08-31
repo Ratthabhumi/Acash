@@ -1,6 +1,6 @@
 # ACASH — Phase 3: Market Microstructure & Point-in-Time Feature Subsystem Plan
 
-**Document:** `docs/PHASE_3_PLAN.md`  
+**Document:** `docs/proposals/phase_3_microstructure.md`  
 **Version:** 1.3.0  
 **Date:** 2026-08-27  
 **Status:** **PROPOSED — AWAITING FINAL ARCHITECTURAL SIGN-OFF**  

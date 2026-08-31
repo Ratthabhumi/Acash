@@ -1,6 +1,6 @@
-# ACASH — Data & Storage Architecture Specification (Phase 0)
+# ACASH — Data & Storage Architecture Specification
 
-**Document:** `docs/DATA_ARCHITECTURE.md`  
+**Document:** `docs/architecture/data_architecture.md`  
 **Version:** 3.2.0 (Micro-Corrections & Storage Semantics Finalized)  
 **Date:** 2026-08-27  
 

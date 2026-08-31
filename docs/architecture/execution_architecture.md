@@ -1,6 +1,6 @@
-# ACASH — Execution Architecture & Adapters Specification (Phase 0)
+# ACASH — Execution Architecture & Adapters Specification
 
-**Document:** `docs/EXECUTION_ARCHITECTURE.md`  
+**Document:** `docs/architecture/execution_architecture.md`  
 **Version:** 3.1.0 (Micro-Corrections Applied)  
 **Date:** 2026-08-27  
 

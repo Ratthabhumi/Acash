@@ -1,6 +1,6 @@
 # ACASH — Phase 6 Design Proposal: Statistical Validation & Overfitting Controls (OOS Hard Gate)
 
-**Document:** `docs/PHASE_6_DESIGN_PROPOSAL.md`  
+**Document:** `docs/proposals/phase_6_validation.md`  
 **Version:** 1.0.0  
 **Date:** 2026-08-28  
 **Status:** **PENDING HUMAN REVIEW & APPROVAL**  

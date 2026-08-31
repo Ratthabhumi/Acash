@@ -1,6 +1,6 @@
-# ACASH — Quantitative Research Architecture & Alpha Engine (Phase 0)
+# ACASH — Quantitative Research Architecture & Alpha Engine
 
-**Document:** `docs/RESEARCH_ARCHITECTURE.md`  
+**Document:** `docs/architecture/research_architecture.md`  
 **Version:** 2.0.0 (Final Addendum Updated)  
 **Date:** 2026-08-27  
 

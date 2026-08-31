@@ -1,6 +1,6 @@
 # ACASH — Phase 5 Design Proposal: Event-Driven Backtesting Substrate & NautilusTrader PoC Integration
 
-**Document:** `docs/PHASE_5_DESIGN_PROPOSAL.md`  
+**Document:** `docs/proposals/phase_5_simulation.md`  
 **Version:** 1.3.0  
 **Date:** 2026-08-28  
 **Status:** **COMPLETED & PASSED — 181/181 TESTS (Commit `7f7befc`)**  

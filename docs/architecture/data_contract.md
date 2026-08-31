@@ -1,6 +1,6 @@
 # ACASH Data Contract Specification
 
-**Document:** `docs/DATA_CONTRACT.md`  
+**Document:** `docs/architecture/data_contract.md`  
 **Version:** 1.16.0 (Durable Manifest Commit States & Provenance Append Idempotency Locked)  
 **Status:** Canonical Source of Truth for ACASH Market Datasets  
 **Phase:** Phase 2 Data Ingestion & Integrity Engine  
