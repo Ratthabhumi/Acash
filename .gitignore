@@ -39,3 +39,6 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Local agent / IDE sessions
+.omc/
+
