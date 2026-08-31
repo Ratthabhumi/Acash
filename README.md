@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 7 In Progress](https://img.shields.io/badge/status-Phase%207%20In%20Progress%20(581%20tests)%20-%20P%3D0-orange.svg)](docs/ROADMAP.md)
+[![Status: Phase 7 In Progress](https://img.shields.io/badge/status-Phase%207%20In%20Progress%20(598%20tests)%20-%20P%3D0-orange.svg)](docs/ROADMAP.md)
 
 
 
@@ -266,69 +266,43 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ---
 
-## 5.5 CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
+## 5.5 CURRENT STATUS / NEXT STEP — Phase 7 / R1-REAL Broker-Observed Execution
 
-> **As of HEAD `61233ad` (pushed to `origin/main`).** This is the authoritative resume point
+> **As of HEAD `4faa81a` (pushed to `origin/main`).** This is the authoritative resume point
 > for the current session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
 > [`Cheatsheet.md`](Cheatsheet.md) for the identical status block.
 
 ### Where the project is
 - Phases 0–6 complete & hardened (Gates 1–6 passed).
-- **Phase 7 (Live Execution & Broker Mapping): IN PROGRESS.** All design/contract
-  layers LOCKED; Alpaca BMAP E-reviewed; paper transport + adapter + credential
-  boundary + R0/R1 harnesses + local vault launcher complete; 588 unit tests passing.
-- **Key Phase 7 Commits Trail:** `22b6a28` (R1 harness) · `f1ac319` (R1 prep docs) ·
-  `4a92348` (connect-before-submit fix) · `8e92188` (paper-only injection guard) ·
-  `f9c10bc` (runbook tracking) · `794d9e9`/`537643f` (docs restructure) ·
-  `61233ad` (Phase 7 proposal).
-- Untracked / Protected: `.omc/` (internal IDE state, never track/stage/commit).
-  `docs/phase7/r1_paper_run_runbook.md` is tracked as **DRAFT / NOT AUTHORIZED** runbook.
+- **Phase 7 (Live Execution & Broker Mapping): IN PROGRESS.**
+  - Real Broker Observation Driver `R1RealOrderExerciseDriver` implemented and provenance-hardened (`4faa81a`).
+  - Strict BMAP-07 cancellation reconciliation, dual-channel observation (SSE Primary + REST Polling Recovery), and fail-closed timeout to `UNKNOWN`.
+  - **598 unit and invariant tests passing** (100% clean offline).
+  - DPAPI Local User Vault & Secure Launcher operational.
+- **Key Phase 7 Commits Trail:** `22b6a28` (R1 harness) · `4a92348` (connect-before-submit fix) · `8e92188` (paper-only injection guard) · `61233ad` (Phase 7 proposal) · `3dd9f25` (Paper incident checkpoint) · `353ac8c` (R1-REAL spec) · `4faa81a` (R1-REAL provenance hardening).
 
 ### Tri-Partite Evidence & Verification Architecture
 | Dimension | Meaning | Current Phase 7 Status |
 | :--- | :--- | :--- |
-| **Local Unit Tests** | Automated code regression & invariant verification | **588/588 tests passing** (100% clean) |
+| **Local Unit Tests** | Automated code regression & invariant verification | **598/598 tests passing** (100% clean) |
 | **E (Broker Semantic Review)** | Specification verified against official broker API documentation | **BMAP 01–10 = E, BMAP 11 = E\*, BMAP 12 = D** |
-| **P (Paper Runtime Observation)** | Actual Paper runtime execution with complete cryptographic lineage | **P = 0** (No real Paper order executed) |
+| **P (Paper Runtime Observation)** | Actual Paper runtime execution with complete cryptographic lineage | **P = 0** (Paper orders submitted & audited, zero unverified fills) |
 
-$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+$$\boxed{\text{598 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
 
 A successful HTTP response, a unit test pass, or a `FILLED` state alone is **not** P.
 Only a real Paper order whose evidence satisfies the full conjunctive rule produces valid P evidence.
 
 ### What has and has NOT been proven
-- **Proven (Implementation & E-Review):** Broker-mapping semantics, state machine, coordination,
-  reconciliation, paper transport guards, R1 harness wiring, fail-closed
-  cancellation & venue/credential boundaries.
-- **NOT proven (P & Live):** Actual broker runtime behavior, a real Paper order lifecycle,
-  P evidence of any kind, Live readiness. **Live trading is NOT ready.**
-  P evidence of any kind, Live readiness. **Live trading is NOT ready.**
+- **Proven (Implementation, E-Review, & Real Wire POST):** Real HTTP order submission to Alpaca Paper, REST snapshot recovery, BMAP-07 reconciliation, fail-closed timeout to `UNKNOWN`, zero synthetic event injections, DPAPI credential protection.
+- **NOT proven (P & Live):** Executed fill under real market conditions ($P = 0$), Live readiness. **Live trading is HARD-LOCKED.**
 
-### Current blocker
-First Paper-run attempt failed pre-wire (`transport is not connected`) because
-`run_order_exercise_verification()` omitted `transport.connect()` — fixed in
-`4a92348`; `8e92188` gates the injection seam to Paper-only transports. The
-remaining blocker is environmental: the operator-exported paper credentials are
-not visible to the Antigravity execution environment (relaunch opencode from a
-session where `ACASH_ALPACA_API_KEY_ID` / `ACASH_ALPACA_API_SECRET` are set).
-
-### Approved Paper-run parameters (single order)
-`symbol=SPY`, `quantity=1`, `client_order_id=acash-r1-paper-20260831-001`.
+### Paper Order Forensic History
+- **Order 001 (`acash-r1-paper-20260831-001`):** Real Paper POST succeeded $\to$ rested in `accepted` $\to$ confirmed `CANCELED` via REST ($P = 0$).
+- **Order 002 (`acash-r1-paper-20260831-002`):** Real Paper POST succeeded $\to$ resting in `new` with `filled_qty = 0` ($P = 0$).
 
 ### P acceptance rule (conjunctive — ALL must hold)
 $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
-
-### Local Windows Credential Vault & Launcher
-To eliminate manual credential re-entry while preserving the strict repository security boundary:
-- **Setup:** Run `.\scripts\setup_paper_credentials.ps1` once interactively. Encrypts and stores credentials in the local Windows User Vault (`$env:USERPROFILE\.acash\paper_credentials.dpapi` / `SecretStore`) outside Git.
-- **Preflight:** Run `.\scripts\run_paper.ps1 -PreflightOnly` to verify credentials presence and Paper-only venue without printing secrets.
-- **Execution:** Run commands via `.\scripts\run_paper.ps1 <command>` to inject credentials into the temporary child process scope only.
-
-### Next checkpoint (exact)
-1. Human operator runs `.\scripts\setup_paper_credentials.ps1` once locally.
-2. Final preflight green: `.\scripts\run_paper.ps1 -PreflightOnly` confirms `ALPACA_PAPER` and `https://paper-api.alpaca.markets/v2`.
-3. Operator GO → run the **one** approved order (`SPY`/`1`/`acash-r1-paper-20260831-001`) via launcher.
-4. **P** recorded only on the conjunctive rule above. Live remains disabled.
 
 ---
 

@@ -267,33 +267,35 @@ $$\boxed{\text{P is valid ONLY when: } \text{TerminalVerified} \land \text{Evide
 - **Zero Leakage:** **Never** read, print, echo, log, or commit credential values.
 - **Venue Pinning:** `paper_credential_provider()` binds strictly to venue `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`). Any configuration pointing to live production endpoints is rejected fail-closed.
 
-### 8.6 Current Blocker & Go/No-Go Gate
-- **Historical First Attempt:** The first Paper-run attempt failed **before HTTP** (`transport is not connected`) because `transport.connect()` was missing. Fixed in `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
-- **Current Active Blocker:** The operator-exported paper credentials are set in PowerShell but were not inherited by the execution environment process tree (`CREDENTIALS_LOADED = False`).
-- **Go / No-Go Gate:** Strictly **NO-GO** until final preflight confirms:
-  1. `CREDENTIAL_PROVIDER_VENUE = ALPACA_PAPER`
-  2. `CREDENTIALS_LOADED = True`
-  3. `PAPER_ENDPOINT = https://paper-api.alpaca.markets/v2`
-  4. Explicit human operator GO authorization.
+### 8.6 Phase 7 Milestone Progress & Forensic Findings
+- **Historical Milestones:**
+  1. R0 Read-Only Harness & R1 Lifecycle Harness (`22b6a28`, `4a92348`, `8e92188`).
+  2. Local Windows DPAPI User Vault & Secure Launcher (`scripts/setup_paper_credentials.ps1`, `scripts/run_paper.ps1`).
+  3. **R1 Paper Incident Discovery (`3dd9f25`):** Discovered that legacy harness simulated synthetic ACK/FILL lifecycle transitions locally rather than observing real broker responses ($\text{Real Submission} \ne \text{Real Fill} \ne \text{Synthetic Event}$).
+  4. **R1-REAL Driver Architecture (`4faa81a`):** Created sovereign `R1RealOrderExerciseDriver` with dual-channel broker observation (SSE Primary + REST Polling Recovery), fail-closed timeout to `UNKNOWN`, strict BMAP-07 cancellation reconciliation, and zero synthetic event injections.
+  5. **Provenance Hardening:** Eliminated artificial benchmark price fallbacks, enforced broker terminal timestamps for `closed_at`, classified reconciliation identities (`LOCAL-REC-*`), and verified canonical schema commission defaults (`Decimal("0.0")`).
+- **Paper Order Exercise Reality:**
+  - Order 001 (`acash-r1-paper-20260831-001`): Submitted to Alpaca Paper, rested in `accepted`, and was verified `CANCELED` via REST ($P = 0$).
+  - Order 002 (`acash-r1-paper-20260831-002`): Submitted to Alpaca Paper, resting in `new` with `filled_qty = 0` ($P = 0$).
+  - Stream Exception Hardening finding: `_HttpEventStream` requires wrapping `httpx.TimeoutException` to `AlpacaTransportTimeoutError` for seamless fallback to REST polling.
 
-### 8.7 Approved Paper-Run Parameters (Single Isolated Order)
-| Parameter | Approved Value |
+### 8.7 Approved Paper-Run Parameters & Idempotency Rules
+| Parameter | Current Specification |
 | :--- | :--- |
 | **Symbol** | `SPY` |
 | **Quantity** | `1` share (Market Order / Day) |
-| **Client Order ID** | `acash-r1-paper-20260831-001` |
+| **Client Order ID** | `acash-r1-paper-20260831-002` (Verified Fresh & Unique on Alpaca REST) |
+| **Benchmark Mid Price** | `769.295` (Derived directly from real-time market quote) |
 | **Target Venue** | `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`) |
-| **Runbook Authority** | [`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md) |
+| **Driver Authority** | `R1RealOrderExerciseDriver` ([`src/acash/execution/alpaca/real_driver.py`](src/acash/execution/alpaca/real_driver.py)) |
 
 ### 8.8 Local Windows Credential Vault & Launcher Workflow
-To eliminate manual credential re-entry while preserving the strict repository security boundary:
-
 1. **One-Time Interactive Registration (Local Windows User Vault):**
    ```powershell
    .\scripts\setup_paper_credentials.ps1
    ```
    - Interactively prompts for **Paper API Key ID** and **Paper API Secret Key**.
-   - Encrypted with **Windows DPAPI** (`CurrentUser` scope) and saved strictly outside the repository at `$env:USERPROFILE\.acash\paper_credentials.dpapi` (and registered in `Microsoft.PowerShell.SecretStore` if module is available).
+   - Encrypted with **Windows DPAPI** (`CurrentUser` scope) and saved strictly outside the repository at `$env:USERPROFILE\.acash\paper_credentials.dpapi`.
    - Zero secrets stored in Git, `.env`, or plaintext files.
 
 2. **Safe Preflight Verification (Zero Secret Exposure):**
@@ -306,7 +308,7 @@ To eliminate manual credential re-entry while preserving the strict repository s
 
 3. **Running ACASH Commands with Paper Credentials:**
    ```powershell
-   .\scripts\run_paper.ps1 uv run pytest tests/unit/execution/test_paper_launcher.py
+   .\scripts\run_paper.ps1 uv run pytest tests/unit/execution/test_alpaca_real_driver.py
    ```
 
 ### 8.9 Safe Operator Commands
@@ -314,23 +316,19 @@ To eliminate manual credential re-entry while preserving the strict repository s
 # 1. Safe Preflight Check via Launcher
 .\scripts\run_paper.ps1 -PreflightOnly
 
-# 2. Run Full E-Level Unit Test Suite (588 tests collected)
+# 2. Run Full Offline Test Suite (598 tests collected)
 uv run pytest -q
 
-# 3. Verify Clean Git Status (.omc must remain untracked)
-git status --short
+# 3. Run Targeted Driver & Exercise Test Suite (37 tests)
+uv run pytest -q tests/unit/execution/test_alpaca_real_driver.py tests/unit/execution/test_alpaca_order_exercise.py
 
-# 4. View Recent Phase 7 Checkpoints
-git log --oneline -10
+# 4. Verify Clean Git Status
+git status --short
 ```
 
-### 8.10 What MUST NOT Be Executed (Until Explicit Operator GO)
-- `run_order_exercise_verification()` — the live Paper execution entry point.
-- Any order submission or cancellation against Paper or Live endpoints.
-- Any command touching Live trading.
-
-### 8.11 Exact Next Actions
-1. Human operator runs `.\scripts\setup_paper_credentials.ps1` once locally.
-2. Verify safe preflight: `.\scripts\run_paper.ps1 -PreflightOnly` returns green.
-3. Upon green preflight and operator authorization $\to$ trigger single approved order (`SPY`/`1`/`acash-r1-paper-20260831-001`) via launcher.
-4. Record **`P`** evidence if and only if the full conjunctive rule is satisfied.
+### 8.10 Current Phase 7 Invariants
+- $\boxed{\text{No synthetic lifecycle event in R1-REAL runtime path}}$
+- $\boxed{\text{REST aggregate evidence} \neq \text{SSE per-fill evidence}}$
+- $\boxed{\text{Timeout / Ambiguity} \longrightarrow \text{CONNECTION\_LOST} \longrightarrow \text{UNKNOWN} \longrightarrow \text{Reconciliation Required}}$
+- $\boxed{\text{Real Paper Submission} \neq \text{Real Broker Fill} \implies P = 0}$
+- $\boxed{\text{Live Trading} \equiv \text{HARD-LOCKED}}$

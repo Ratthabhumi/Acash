@@ -74,9 +74,9 @@
 
 ---
 
-## CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
+## CURRENT STATUS / NEXT STEP — Phase 7 / R1-REAL Broker-Observed Execution
 
-> **As of HEAD `61233ad` (pushed to `origin/main`).** Resume point for the current
+> **As of HEAD `4faa81a` (pushed to `origin/main`).** Resume point for the current
 > session. Identical status block lives in `Cheatsheet.md` §8 and `README.md` §5.5.
 
 ### Completed milestones
@@ -86,29 +86,23 @@
   framework LOCKED.
 - ✅ Alpaca concrete BMAP: E-reviewed (`01–10 E`, `11 E*`, `12 D`).
 - ✅ Concrete Alpaca Paper Transport, Paper Credential Boundary (`ALPACA_PAPER`),
-  `AlpacaPaperAdapter`, R0 read-only harness, R1 lifecycle harness.
-- ✅ R1 entry-point defect fixes: `4a92348` (connect-before-submit),
-  `8e92188` (paper-only injection guard).
-- ✅ Phase 7 high-level proposal & evolution spec: `61233ad` (`docs/phase7/phase_7_proposal.md`).
-- ✅ Local Windows User Vault & Launcher: `scripts/setup_paper_credentials.ps1` (DPAPI/SecretStore) and `scripts/run_paper.ps1` (Paper-only child process injection).
+  `AlpacaPaperAdapter`, DPAPI User Vault & Secure Launcher.
+- ✅ R1 Paper Incident Checkpoint (`3dd9f25`): Discovered and eradicated local synthetic ACK/FILL pump.
+- ✅ R1-REAL Broker Observation Driver (`4faa81a`): Dual-channel observation (SSE Primary + REST Polling Recovery), strict BMAP-07 cancellation reconciliation, fail-closed timeout to `UNKNOWN`, and strict provenance hardening.
 
 ### Current milestone
-**Final Paper preflight via `run_paper.ps1 -PreflightOnly` → authorized single Paper run → first P evidence.**
-
-### Blockers & Resolution
-1. Interactive local credential entry via `.\scripts\setup_paper_credentials.ps1` into Windows User Vault (DPAPI / SecretStore) outside Git.
-2. Safe preflight check via `.\scripts\run_paper.ps1 -PreflightOnly` (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`, `paper-api.alpaca.markets/v2` endpoint).
-3. Real Paper run is **NO-GO** until operator green-lights after a passing final preflight.
+**R1-REAL broker-observed Paper execution & stream exception hardening → P evidence audit.**
 
 ### Tri-Partite Evidence Architecture ($\text{Unit Tests} \neq E \neq P$)
-- **Local Unit Tests:** 588/588 tests passing (100% clean implementation verification).
+- **Local Unit Tests:** 598/598 tests passing (100% clean implementation & invariant verification).
 - **E (Broker Semantic Evidence):** Independently verified against Alpaca API/documentation (`01–10 E`, `11 E*`, `12 D`).
-- **P (Paper Runtime Observation):** **P = 0.** No real Paper order executed, no runtime telemetry collected.
+- **P (Paper Runtime Observation):** **P = 0.** Real Paper orders submitted & audited, zero unverified fills.
 
-$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+$$\boxed{\text{598 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
 
-### Approved order (single)
-`SPY` / `quantity=1` / `client_order_id=acash-r1-paper-20260831-001`
+### Paper Order Forensic History
+- `acash-r1-paper-20260831-001`: Real Paper POST succeeded $\to$ rested in `accepted` $\to$ verified `CANCELED` via REST ($P = 0$).
+- `acash-r1-paper-20260831-002`: Real Paper POST succeeded $\to$ resting in `new` with `filled_qty = 0` ($P = 0$).
 
 ### P acceptance rule (conjunctive)
 $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
