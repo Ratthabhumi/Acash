@@ -680,19 +680,27 @@ def run_order_exercise_verification(
 
     ``transport`` is a test seam (unit tests inject a fake transport / mock HTTP
     to assert connect-before-submit and connect-failure isolation); the PRODUCTION
-    call omits it and uses the operator-environment paper transport.
+    call omits it and uses the operator-environment paper transport. The seam is
+    **strictly Paper-only**: an injected transport that is not a
+    ``PaperHttpAlpacaTransport`` is rejected fail-closed BEFORE ``connect()``, so
+    a live/other venue can never be smuggled into the production R1 gate.
 
     Intentionally NO generic script dispatcher: the sequence is stated explicitly
     so this entry cannot become a mini workflow engine. All state flows only
     through ``ExecutionCoordinator``.
     """
-    if transport is None:
-        from acash.execution.alpaca.credentials import paper_credential_provider
-        from acash.execution.alpaca.transport import PaperHttpAlpacaTransport
+    from acash.execution.alpaca.credentials import paper_credential_provider
+    from acash.execution.alpaca.transport import PaperHttpAlpacaTransport
 
+    if transport is None:
         transport = PaperHttpAlpacaTransport(
             provider=paper_credential_provider(),
             endpoint=paper_endpoint(),
+        )
+    elif not isinstance(transport, PaperHttpAlpacaTransport):
+        raise OrderExerciseError(
+            "run_order_exercise_verification accepts only a Paper transport; "
+            "refusing a non-paper transport injection (paper-only gate)."
         )
     transport.connect()
     adapter = AlpacaPaperAdapter(transport)

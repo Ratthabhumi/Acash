@@ -38,6 +38,7 @@ from acash.execution.alpaca import (
     AlpacaTransportAuthError,
     AlpacaTransportError,
     EnvAlpacaCredentialProvider,
+    HttpAlpacaTransport,
     LifecycleEvidence,
     OrderExerciseError,
     OrderExerciseHarness,
@@ -45,7 +46,7 @@ from acash.execution.alpaca import (
     build_nominal_intent,
 )
 from acash.execution.alpaca import run_order_exercise_verification
-from acash.execution.alpaca.venue import AlpacaEndpoint, paper_endpoint
+from acash.execution.alpaca.venue import AlpacaEndpoint, live_endpoint, paper_endpoint
 from acash.execution.broker_adapter import BrokerPosition, SubmissionReceipt, to_coordinator_event
 from acash.execution.broker_events import BrokerEventKind
 from acash.execution.coordinator import (
@@ -773,3 +774,40 @@ def test_run_order_exercise_verification_connect_failure_blocks_submit() -> None
 
     # A connect failure must block submit + any HTTP request (fail-closed).
     assert t.calls == ["connect"]
+
+
+def test_run_order_exercise_verification_rejects_non_paper_transport() -> None:
+    """A non-Paper transport (e.g. live) must never reach the R1 gate.
+
+    The ``transport`` seam is Paper-only by construction: injection of a
+    non-``PaperHttpAlpacaTransport`` raises fail-closed BEFORE ``connect()`` and
+    before any HTTP request, so a live/other venue can never be smuggled into the
+    production R1 gate under disguise.
+    """
+    fired: List[str] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        fired.append("http")
+        return httpx.Response(200, json={"id": "should-never-fire"})
+
+    live_provider = EnvAlpacaCredentialProvider(
+        venue="ALPACA_LIVE",
+        api_key_id="AK-LIVE-TEST",
+        api_secret="live-secret-test",
+    )
+    live = HttpAlpacaTransport(
+        provider=live_provider,
+        endpoint=live_endpoint(),
+        transport=httpx.MockTransport(_handler),
+    )
+
+    with pytest.raises(OrderExerciseError):
+        run_order_exercise_verification(
+            client_order_id="acash-r1-paper-20260831-001",
+            symbol="SPY",
+            quantity=Decimal("1"),
+            transport=live,
+        )
+
+    # Paper-only gate fired BEFORE connect/submit: no HTTP request occurred.
+    assert fired == []
