@@ -5,6 +5,12 @@
 **Date:** 2026-08-28  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
+> **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
+> was "Regime Engine (Trend/Vol Classifiers)". The **actual** Phase 7 work being
+> executed in this repository is **Live Execution & Broker Mapping** (Admission →
+> Step 8 Contracts → Broker Semantic Mapping → Alpaca Paper exercise). The
+> Regime-Engine content is deferred; Phase 7 below reflects the real scope.
+
 ---
 
 ## Roadmap Overview
@@ -44,7 +50,7 @@
    │
    ▼
 
-⏳ Phase 7: Regime Engine (Prove or Remove) ──► Gate 7 [UPCOMING]
+⏳ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [IN PROGRESS — E-verified code path, P = 0]
    │
    ▼
 ⏳ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
@@ -74,6 +80,54 @@
    ▼
 ⏳ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
 ```
+
+---
+
+## CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
+
+> **As of HEAD `8e92188` (pushed to `origin/main`).** Resume point for the next
+> session. Identical status block lives in `Cheatsheet.md` §8 and `README.md` §5.5.
+
+### Completed milestones
+- ✅ Phases 0–6: Gates 1–6 passed (validated statistical governance FROZEN).
+- ✅ Phase 7 design/contract layer: Admission LOCKED; Step 8 / 8B / 8C / 8D / 8E
+  LOCKED; Operational Restriction LOCKED; Real Broker Contract LOCKED; BMAP
+  framework LOCKED.
+- ✅ Alpaca concrete BMAP: E-reviewed (`01–10 E`, `11 E*`, `12 D`).
+- ✅ Concrete Alpaca Paper Transport, Paper Credential Boundary (`ALPACA_PAPER`),
+  `AlpacaPaperAdapter`, R0 read-only harness, R1 lifecycle harness.
+- ✅ R1 entry-point defect fixes: `4a92348` (connect-before-submit),
+  `8e92188` (paper-only injection guard).
+
+### Current milestone
+**Final Paper preflight → authorized single Paper run → first P evidence.**
+
+### Blockers
+1. Credentials not visible to the Antigravity execution environment (must
+   relaunch opencode from a session exporting `ACASH_ALPACA_API_KEY_ID` and
+   `ACASH_ALPACA_API_SECRET`). Do NOT log/echo the values.
+2. Real Paper run is **NO-GO** until operator green-lights after a passing final
+   preflight.
+
+### E vs P (explicit)
+- **E** (API/documentation/unit verification): 581 tests passing — covers the
+  entire Phase 7 code path.
+- **P** (Paper runtime observation): **P = 0.** No real Paper order executed, no
+  broker behavior empirically validated. E ≠ P. HTTP-success ≠ P. FILLED ≠ P.
+
+### Approved order (single)
+`SPY` / `quantity=1` / `client_order_id=acash-r1-paper-20260831-001`
+
+### P acceptance rule (conjunctive)
+$$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+
+### Next milestones
+- ⏳ Gate 7 completion = first verified P evidence for the Alpaca Paper order lifecycle.
+- ⏳ Phase 8: Portfolio Engine (skfolio vs transparent baselines) ── Gate 8.
+- ⏳ Phases 9–16: Risk/Kill Switch, friction, Paper subsystem, MT5 adapters, Live
+  (MANDATORY HUMAN APPROVAL), AI research layer, strategy lifecycle, flywheel.
+- ❌ **Live readiness is NOT implied anywhere in this phase.** Phase 13 gate
+  requires explicit human approval.
 
 ---
 
@@ -177,13 +231,40 @@
 
 ---
 
-### ⏳ Phase 7: Regime Engine [UPCOMING]
-- **Objective:** Detect market regimes (volatility, trend, liquidity) and verify their utility.
-- **Deliverables:**
-  - Volatility regime detector (Realized Volatility percentile / GARCH filter).
-  - Trend regime classifier (ADX / moving average slope).
-  - Controlled ablation study: Strategy performance with regime filter vs without.
-- **Gate 7 Criteria:** Regime filter must prove statistically significant improvement in risk-adjusted return net of turnover; otherwise, dropped.
+### 🟡 Phase 7: Live Execution & Broker Mapping [IN PROGRESS]
+- **Objective:** Build the sovereign execution stack from authorization/admission
+  through broker-neutral semantic mapping to a concrete Alpaca Paper integration,
+  and exercise a real (Paper) order lifecycle.
+- **Completed (LOCKED / E-reviewed):**
+  - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State
+    Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E
+    Execution Coordinator & Reconciliation Boundary, Operational Restriction,
+    Real Broker Contract.
+  - Vendor-Agnostic Broker Semantic Mapping Framework + Alpaca Concrete BMAP:
+    `BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`.
+  - Concrete Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper
+    Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`.
+  - R0 read-only Paper Exercise harness; R1 order-lifecycle exercise harness
+    (`run_order_exercise_verification`); R1 contract frozen.
+  - R1 entry-point fixes: `4a92348` connect-before-submit; `8e92188` paper-only
+    transport injection guard.
+- **Current milestone (in progress):** final Paper preflight → authorized single
+  Paper run → first **P** evidence.
+- **Blockers:**
+  1. Operator-exported paper credentials are not visible to the Antigravity
+     execution environment (relaunch opencode from a session where they are set).
+  2. Operator authorization for the real Paper run is gated on a green final
+     preflight (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`,
+     `paper-api.alpaca.markets/v2` endpoint).
+- **Approved run parameters (single order):** `SPY` / `quantity=1` /
+  `client_order_id=acash-r1-paper-20260831-001`.
+- **P acceptance (conjunctive):** TerminalVerified ∧ EvidenceLineageComplete ∧
+  ReconciliationVerified ∧ NoDispute. E ≠ P; HTTP-success ≠ P; FILLED ≠ P.
+- **Gate 7 Criteria (design intent):** verified real Paper order-lifecycle
+  evidence (P) through the canonical authority pipeline (`AlpacaPaperAdapter` →
+  `normalize_broker_event()` → `to_coordinator_event()` →
+  `ExecutionCoordinator.apply()/reconcile()` → `transition_order()`).
+  (Original Regime-Engine content deferred to a later phase.)
 
 ---
 

@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 6 Hardened](https://img.shields.io/badge/status-Phase%206%20Gate%20Passed%20(252%2F252%20Tests)-success.svg)](#)
+[![Status: Phase 7 In Progress](https://img.shields.io/badge/status-Phase%207%20In%20Progress%20(581%20tests)%20-%20P%3D0-orange.svg)](docs/ROADMAP.md)
 
 
 
@@ -151,7 +151,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 200/200 Tests, mypy clean]
 ✅ Phase 6: Statistical Validation & Overfitting Controls ──► [GATE 6 PASSED — CPCV, DSR, MinTRL, PBO, Search Ledger, OOS Hard Gate]
-⏳ Phase 7: Regime Engine (Trend/Vol Classifiers) ──► Gate 7
+⏳ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [IN PROGRESS — E-verified code path, P = 0]
 ⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
 ⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
 ⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
@@ -210,6 +210,13 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Multiple Testing Corrections (`multiple_testing.py`): Holm-Bonferroni (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
    - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]$ grids, and component-wise friction stress decay monotonicity.
    - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
+10. **Phase 7 — Live Execution & Broker Mapping (IN PROGRESS, E ≠ P):**
+    - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E Execution Coordinator & Reconciliation Boundary, Operational Restriction, Real Broker Contract, and Vendor-Agnostic Broker Semantic Mapping Framework: **LOCKED**.
+    - Vendor-Agnostic Broker Semantic Mapping Framework + Alpaca Concrete BMAP: E-reviewed (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
+    - Concrete Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`: **complete (E-verified)**.
+    - R0 read-only Paper Exercise harness and R1 order-lifecycle exercise harness (`run_order_exercise_verification`): **complete (E-verified)**.
+    - Two Phase 7 defect-fixes to the R1 entry point: `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
+    - **P = 0.** No real Paper order has been successfully executed; no broker behavior empirically validated; Live trading NOT ready.
 
 ---
 
@@ -227,12 +234,71 @@ The complete canonical documentation suite is organized in [`docs/`](docs/):
 - **[`docs/PHASE_5_DESIGN_PROPOSAL.md`](docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
 - **[`docs/PHASE_6_DESIGN_PROPOSAL.md`](docs/PHASE_6_DESIGN_PROPOSAL.md)**: Statistical Validation & Overfitting Controls Engine (Gate 6 Passed).
 
+- **[`docs/phase7/CONTEXT_MAP.md`](docs/phase7/CONTEXT_MAP.md)**: Phase 7 context map (Execution & Broker Mapping) — navigation matrix and core invariants.
+- **[`docs/phase7/alpaca_bmap.md`](docs/phase7/alpaca_bmap.md)**: Alpaca concrete Broker Semantic Mapping (BMAP) — E-review status; `P` pending real Paper exercise.
+- **[`docs/phase7/paper_exercise_r1.md`](docs/phase7/paper_exercise_r1.md)**: R1 order-lifecycle contract & P evidence checklist (frozen).
+- **[`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md)**: R1 Paper-run runbook — **DRAFT / NOT AUTHORIZED** (untracked, never commit).
+
 - **[`docs/TECHNOLOGY_EVALUATION.md`](docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
 - **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
 - **[`docs/PORTFOLIO_ARCHITECTURE.md`](docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
 - **[`docs/EXECUTION_ARCHITECTURE.md`](docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus substrate).
 - **[`docs/RESEARCH_ARCHITECTURE.md`](docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
 - **[`docs/RISKS.md`](docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
+
+---
+
+## 5.5 CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
+
+> **As of HEAD `8e92188` (pushed to `origin/main`).** This is the resume point
+> for the next session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
+> [`Cheatsheet.md`](Cheatsheet.md) for the identical status block.
+
+### Where the project is
+- Phases 0–6 complete & hardened (Gates 1–6 passed).
+- **Phase 7 (Live Execution & Broker Mapping): IN PROGRESS.** All design/contract
+  layers LOCKED; Alpaca BMAP E-reviewed; paper transport + adapter + credential
+  boundary + R0/R1 harnesses complete and E-verified.
+- Latest commits: `...  `f1ac319` R1 prep docs · `4a92348` connect-before-submit
+  fix · `8e92188` paper-only injection guard (HEAD, pushed).
+- Untracked (never commit): `.omc/`, `docs/phase7/r1_paper_run_runbook.md`.
+
+### E vs P distinction
+| | Meaning | Phase 7 status |
+| :--- | :--- | :--- |
+| **E** | API / documentation / unit verification | 581 tests passing; entire code path E-verified |
+| **P** | Actual Paper runtime observation | **P = 0** — no real Paper order executed |
+
+A successful HTTP response, or a `FILLED` state, is **not** P. Only a real Paper
+order whose evidence passes the full conjunctive rule is P.
+
+### What has and has NOT been proven
+- **Proven (E):** broker-mapping semantics, state machine, coordination,
+  reconciliation, paper transport guards, R1 harness wiring, fail-closed
+  cancellation & venue/credential boundaries.
+- **NOT proven:** actual broker runtime behavior, a real Paper order lifecycle,
+  P evidence of any kind, Live readiness. **Live trading is NOT ready.**
+
+### Current blocker
+First Paper-run attempt failed pre-wire (`transport is not connected`) because
+`run_order_exercise_verification()` omitted `transport.connect()` — fixed in
+`4a92348`; `8e92188` gates the injection seam to Paper-only transports. The
+remaining blocker is environmental: the operator-exported paper credentials are
+not visible to the Antigravity execution environment (relaunch opencode from a
+session where `ACASH_ALPACA_API_KEY_ID` / `ACASH_ALPACA_API_SECRET` are set).
+
+### Approved Paper-run parameters (single order)
+`symbol=SPY`, `quantity=1`, `client_order_id=acash-r1-paper-20260831-001`.
+
+### P acceptance rule (conjunctive — ALL must hold)
+$$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+
+### Next checkpoint (exact)
+1. Relaunch execution env with credentials exported.
+2. Final preflight green: `CREDENTIAL_PROVIDER_VENUE=ALPACA_PAPER`,
+   `CREDENTIALS_LOADED=True`, `PAPER_ENDPOINT=https://paper-api.alpaca.markets/v2`.
+3. GO → run the **one** approved order via `run_order_exercise_verification()`.
+4. **P** recorded only on the conjunctive rule above. Live remains disabled.
 
 ---
 
