@@ -663,25 +663,38 @@ def run_order_exercise_verification(
     client_order_id: str,
     symbol: str,
     quantity: Decimal,
+    transport: Optional[AlpacaTransport] = None,
 ) -> LifecycleEvidence:
     """Production R1 gate: one REAL paper order through the explicit nominal flow.
 
     Builds the paper transport from operator-exported credentials
-    (``ACASH_ALPACA_API_KEY_ID`` / ``ACASH_ALPACA_API_SECRET``) and drives the
-    nominal lifecycle (submit -> acknowledge -> full fill) through explicit harness
-    methods. NOT executed by the unit suite; no fake transport ever counts as P.
+    (``ACASH_ALPACA_API_KEY_ID`` / ``ACASH_ALPACA_API_SECRET``), CONNECTS it, and
+    drives the nominal lifecycle (submit -> acknowledge -> full fill) through
+    explicit harness methods. NOT executed by the unit suite; no fake transport
+    ever counts as P.
+
+    ``connect()`` MUST complete before ``submit()``: it loads credentials, asserts
+    the paper/credential/venue guards, and only then builds the HTTP client. If
+    ``connect()`` fails it raises fail-closed BEFORE any submit / HTTP request, so
+    no partially-connected order can ever reach the wire.
+
+    ``transport`` is a test seam (unit tests inject a fake transport / mock HTTP
+    to assert connect-before-submit and connect-failure isolation); the PRODUCTION
+    call omits it and uses the operator-environment paper transport.
 
     Intentionally NO generic script dispatcher: the sequence is stated explicitly
     so this entry cannot become a mini workflow engine. All state flows only
     through ``ExecutionCoordinator``.
     """
-    from acash.execution.alpaca.credentials import paper_credential_provider
-    from acash.execution.alpaca.transport import PaperHttpAlpacaTransport
+    if transport is None:
+        from acash.execution.alpaca.credentials import paper_credential_provider
+        from acash.execution.alpaca.transport import PaperHttpAlpacaTransport
 
-    transport: AlpacaTransport = PaperHttpAlpacaTransport(
-        provider=paper_credential_provider(),
-        endpoint=paper_endpoint(),
-    )
+        transport = PaperHttpAlpacaTransport(
+            provider=paper_credential_provider(),
+            endpoint=paper_endpoint(),
+        )
+    transport.connect()
     adapter = AlpacaPaperAdapter(transport)
     harness = OrderExerciseHarness(
         adapter,

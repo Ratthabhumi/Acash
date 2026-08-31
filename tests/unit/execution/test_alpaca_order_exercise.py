@@ -22,8 +22,9 @@ import ast
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Iterator, Optional
+from typing import Callable, Iterator, List, Optional
 
+import httpx
 import pytest
 
 from acash.execution.alpaca import (
@@ -34,12 +35,17 @@ from acash.execution.alpaca import (
     AlpacaTradeEvent,
     AlpacaTradeEventType,
     AlpacaTransport,
+    AlpacaTransportAuthError,
     AlpacaTransportError,
+    EnvAlpacaCredentialProvider,
     LifecycleEvidence,
     OrderExerciseError,
     OrderExerciseHarness,
+    PaperHttpAlpacaTransport,
     build_nominal_intent,
 )
+from acash.execution.alpaca import run_order_exercise_verification
+from acash.execution.alpaca.venue import AlpacaEndpoint, paper_endpoint
 from acash.execution.broker_adapter import BrokerPosition, SubmissionReceipt, to_coordinator_event
 from acash.execution.broker_events import BrokerEventKind
 from acash.execution.coordinator import (
@@ -620,3 +626,150 @@ def test_no_util_placeholder_types() -> None:
     assert "scenario" in fnames
     assert "broker_order_id" in fnames
     assert "manifest" in fnames
+
+
+# ---------------------------------------------------------------------------
+# Production entry point `run_order_exercise_verification` — connect-before-submit
+# ---------------------------------------------------------------------------
+
+
+class _RecordingPaperTransport(PaperHttpAlpacaTransport):
+    """Paper transport recording call order; NO real network (mock HTTP)."""
+
+    def __init__(
+        self,
+        provider: EnvAlpacaCredentialProvider,
+        endpoint: AlpacaEndpoint,
+        handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        super().__init__(
+            provider=provider,
+            endpoint=endpoint,
+            transport=httpx.MockTransport(handler),
+        )
+        self.calls: List[str] = []
+        self.submit_count: int = 0
+
+    def connect(self) -> None:
+        self.calls.append("connect")
+        super().connect()
+
+    def submit_order(
+        self,
+        client_order_id: str,
+        symbol: str,
+        quantity: Decimal,
+    ) -> SubmissionReceipt:
+        self.calls.append("submit")
+        self.submit_count += 1
+        return super().submit_order(
+            client_order_id=client_order_id,
+            symbol=symbol,
+            quantity=quantity,
+        )
+
+
+class _ConnectFailingPaperTransport(PaperHttpAlpacaTransport):
+    """Paper transport whose connect() raises fail-closed; NO real network."""
+
+    def __init__(
+        self,
+        provider: EnvAlpacaCredentialProvider,
+        endpoint: AlpacaEndpoint,
+        handler: Callable[[httpx.Request], httpx.Response],
+    ) -> None:
+        super().__init__(
+            provider=provider,
+            endpoint=endpoint,
+            transport=httpx.MockTransport(handler),
+        )
+        self.calls: List[str] = []
+
+    def connect(self) -> None:
+        self.calls.append("connect")
+        raise AlpacaTransportAuthError("refusing to connect (fail-closed)")
+
+    def submit_order(
+        self,
+        client_order_id: str,
+        symbol: str,
+        quantity: Decimal,
+    ) -> SubmissionReceipt:
+        self.calls.append("submit")
+        raise AssertionError("submit_order called when it must not be")
+
+
+def _paper_paper_transport(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> _RecordingPaperTransport:
+    """Build a recording Paper transport over an injected mock HTTP handler.
+
+    connect() is wired through httpx.MockTransport so NO real network I/O occurs.
+    The nominal harness flow after submit() is local (ack/fill via ingest_trade_event),
+    so only the POST /orders submit needs a mock HTTP response.
+    """
+    provider = EnvAlpacaCredentialProvider(
+        venue="ALPACA_PAPER",
+        api_key_id="AK-PAPER-TEST",
+        api_secret="paper-secret-test",
+    )
+    return _RecordingPaperTransport(
+        provider=provider,
+        endpoint=paper_endpoint(),
+        handler=handler,
+    )
+
+
+def test_run_order_exercise_verification_connects_before_submit() -> None:
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "brk-verify-0001",
+                "client_order_id": request.url.params.get("client_order_id")
+                or "acash-r1-paper-20260831-001",
+                "status": "accepted",
+            },
+        )
+
+    t = _paper_paper_transport(_handler)
+    ev = run_order_exercise_verification(
+        client_order_id="acash-r1-paper-20260831-001",
+        symbol="SPY",
+        quantity=Decimal("1"),
+        transport=t,
+    )
+
+    # connect MUST precede submit; and connect actually happened before the wire.
+    assert t.calls == ["connect", "submit"]
+    assert ev.broker_order_id == "brk-verify-0001"
+    assert ev.final_state == "FILLED"
+    assert ev.final_terminal is True
+    assert ev.filled_qty == Decimal("1")
+    assert ev.disputed is False
+    assert ev.manifest is not None and ev.manifest.closed_at is not None
+    assert ev.reconciliation_report is not None and ev.reconciliation_report.is_in_parity
+
+
+def test_run_order_exercise_verification_connect_failure_blocks_submit() -> None:
+    provider = EnvAlpacaCredentialProvider(
+        venue="ALPACA_PAPER",
+        api_key_id="AK-PAPER-TEST",
+        api_secret="paper-secret-test",
+    )
+    t = _ConnectFailingPaperTransport(
+        provider=provider,
+        endpoint=paper_endpoint(),
+        handler=lambda request: httpx.Response(200, json={"id": "should-never-fire"}),
+    )
+
+    with pytest.raises(AlpacaTransportAuthError):
+        run_order_exercise_verification(
+            client_order_id="acash-r1-paper-20260831-001",
+            symbol="SPY",
+            quantity=Decimal("1"),
+            transport=t,
+        )
+
+    # A connect failure must block submit + any HTTP request (fail-closed).
+    assert t.calls == ["connect"]
