@@ -210,13 +210,13 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Multiple Testing Corrections (`multiple_testing.py`): Holm-Bonferroni (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
    - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]$ grids, and component-wise friction stress decay monotonicity.
    - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
-10. **Phase 7 — Live Execution & Broker Mapping (IN PROGRESS, E ≠ P):**
+10. **Phase 7 — Live Execution & Broker Mapping (IN PROGRESS — 588 Unit Tests Passed, BMAP E-Reviewed, P = 0):**
     - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E Execution Coordinator & Reconciliation Boundary, Operational Restriction, Real Broker Contract, and Vendor-Agnostic Broker Semantic Mapping Framework: **LOCKED**.
-    - Vendor-Agnostic Broker Semantic Mapping Framework + Alpaca Concrete BMAP: E-reviewed (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
-    - Concrete Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`: **complete (E-verified)**.
-    - R0 read-only Paper Exercise harness and R1 order-lifecycle exercise harness (`run_order_exercise_verification`): **complete (E-verified)**.
-    - Two Phase 7 defect-fixes to the R1 entry point: `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
-    - **P = 0.** No real Paper order has been successfully executed; no broker behavior empirically validated; Live trading NOT ready.
+    - **Implementation & Local Test Verification:** Complete (588/588 unit tests passing across entire repository).
+    - **Broker Semantic Evidence (BMAP):** E-reviewed against official broker API documentation (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
+    - **Concrete Components:** Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`, R0 read-only harness, R1 lifecycle harness, and local Windows DPAPI vault launcher.
+    - **Defect Fixes Committed:** `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
+    - **Paper Runtime Evidence:** **P = 0.** No real Paper order has been executed; no live/paper telemetry collected; Live trading NOT ready.
 
 ---
 
@@ -268,33 +268,40 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ## 5.5 CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
 
-> **As of HEAD `8e92188` (pushed to `origin/main`).** This is the resume point
-> for the next session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
+> **As of HEAD `61233ad` (pushed to `origin/main`).** This is the authoritative resume point
+> for the current session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
 > [`Cheatsheet.md`](Cheatsheet.md) for the identical status block.
 
 ### Where the project is
 - Phases 0–6 complete & hardened (Gates 1–6 passed).
 - **Phase 7 (Live Execution & Broker Mapping): IN PROGRESS.** All design/contract
   layers LOCKED; Alpaca BMAP E-reviewed; paper transport + adapter + credential
-  boundary + R0/R1 harnesses complete and E-verified.
-- Latest commits: `...  `f1ac319` R1 prep docs · `4a92348` connect-before-submit
-  fix · `8e92188` paper-only injection guard (HEAD, pushed).
-- Untracked (never commit): `.omc/`, `docs/phase7/r1_paper_run_runbook.md`.
+  boundary + R0/R1 harnesses + local vault launcher complete; 588 unit tests passing.
+- **Key Phase 7 Commits Trail:** `22b6a28` (R1 harness) · `f1ac319` (R1 prep docs) ·
+  `4a92348` (connect-before-submit fix) · `8e92188` (paper-only injection guard) ·
+  `f9c10bc` (runbook tracking) · `794d9e9`/`537643f` (docs restructure) ·
+  `61233ad` (Phase 7 proposal).
+- Untracked / Protected: `.omc/` (internal IDE state, never track/stage/commit).
+  `docs/phase7/r1_paper_run_runbook.md` is tracked as **DRAFT / NOT AUTHORIZED** runbook.
 
-### E vs P distinction
-| | Meaning | Phase 7 status |
+### Tri-Partite Evidence & Verification Architecture
+| Dimension | Meaning | Current Phase 7 Status |
 | :--- | :--- | :--- |
-| **E** | API / documentation / unit verification | 581 tests passing; entire code path E-verified |
-| **P** | Actual Paper runtime observation | **P = 0** — no real Paper order executed |
+| **Local Unit Tests** | Automated code regression & invariant verification | **588/588 tests passing** (100% clean) |
+| **E (Broker Semantic Review)** | Specification verified against official broker API documentation | **BMAP 01–10 = E, BMAP 11 = E\*, BMAP 12 = D** |
+| **P (Paper Runtime Observation)** | Actual Paper runtime execution with complete cryptographic lineage | **P = 0** (No real Paper order executed) |
 
-A successful HTTP response, or a `FILLED` state, is **not** P. Only a real Paper
-order whose evidence passes the full conjunctive rule is P.
+$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+
+A successful HTTP response, a unit test pass, or a `FILLED` state alone is **not** P.
+Only a real Paper order whose evidence satisfies the full conjunctive rule produces valid P evidence.
 
 ### What has and has NOT been proven
-- **Proven (E):** broker-mapping semantics, state machine, coordination,
+- **Proven (Implementation & E-Review):** Broker-mapping semantics, state machine, coordination,
   reconciliation, paper transport guards, R1 harness wiring, fail-closed
   cancellation & venue/credential boundaries.
-- **NOT proven:** actual broker runtime behavior, a real Paper order lifecycle,
+- **NOT proven (P & Live):** Actual broker runtime behavior, a real Paper order lifecycle,
+  P evidence of any kind, Live readiness. **Live trading is NOT ready.**
   P evidence of any kind, Live readiness. **Live trading is NOT ready.**
 
 ### Current blocker
@@ -311,11 +318,16 @@ session where `ACASH_ALPACA_API_KEY_ID` / `ACASH_ALPACA_API_SECRET` are set).
 ### P acceptance rule (conjunctive — ALL must hold)
 $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
 
+### Local Windows Credential Vault & Launcher
+To eliminate manual credential re-entry while preserving the strict repository security boundary:
+- **Setup:** Run `.\scripts\setup_paper_credentials.ps1` once interactively. Encrypts and stores credentials in the local Windows User Vault (`$env:USERPROFILE\.acash\paper_credentials.dpapi` / `SecretStore`) outside Git.
+- **Preflight:** Run `.\scripts\run_paper.ps1 -PreflightOnly` to verify credentials presence and Paper-only venue without printing secrets.
+- **Execution:** Run commands via `.\scripts\run_paper.ps1 <command>` to inject credentials into the temporary child process scope only.
+
 ### Next checkpoint (exact)
-1. Relaunch execution env with credentials exported.
-2. Final preflight green: `CREDENTIAL_PROVIDER_VENUE=ALPACA_PAPER`,
-   `CREDENTIALS_LOADED=True`, `PAPER_ENDPOINT=https://paper-api.alpaca.markets/v2`.
-3. GO → run the **one** approved order via `run_order_exercise_verification()`.
+1. Human operator runs `.\scripts\setup_paper_credentials.ps1` once locally.
+2. Final preflight green: `.\scripts\run_paper.ps1 -PreflightOnly` confirms `ALPACA_PAPER` and `https://paper-api.alpaca.markets/v2`.
+3. Operator GO → run the **one** approved order (`SPY`/`1`/`acash-r1-paper-20260831-001`) via launcher.
 4. **P** recorded only on the conjunctive rule above. Live remains disabled.
 
 ---

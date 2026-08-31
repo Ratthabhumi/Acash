@@ -38,15 +38,6 @@
    │
    ▼
 ✅ Phase 6: Statistical Validation & Overfitting Controls ──► Gate 6 [COMPLETED - PASSED — 252/252 Tests]
-
-
-
-
-
-
-
-
-
    │
    ▼
 
@@ -85,7 +76,7 @@
 
 ## CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
 
-> **As of HEAD `8e92188` (pushed to `origin/main`).** Resume point for the next
+> **As of HEAD `61233ad` (pushed to `origin/main`).** Resume point for the current
 > session. Identical status block lives in `Cheatsheet.md` §8 and `README.md` §5.5.
 
 ### Completed milestones
@@ -98,22 +89,23 @@
   `AlpacaPaperAdapter`, R0 read-only harness, R1 lifecycle harness.
 - ✅ R1 entry-point defect fixes: `4a92348` (connect-before-submit),
   `8e92188` (paper-only injection guard).
+- ✅ Phase 7 high-level proposal & evolution spec: `61233ad` (`docs/phase7/phase_7_proposal.md`).
+- ✅ Local Windows User Vault & Launcher: `scripts/setup_paper_credentials.ps1` (DPAPI/SecretStore) and `scripts/run_paper.ps1` (Paper-only child process injection).
 
 ### Current milestone
-**Final Paper preflight → authorized single Paper run → first P evidence.**
+**Final Paper preflight via `run_paper.ps1 -PreflightOnly` → authorized single Paper run → first P evidence.**
 
-### Blockers
-1. Credentials not visible to the Antigravity execution environment (must
-   relaunch opencode from a session exporting `ACASH_ALPACA_API_KEY_ID` and
-   `ACASH_ALPACA_API_SECRET`). Do NOT log/echo the values.
-2. Real Paper run is **NO-GO** until operator green-lights after a passing final
-   preflight.
+### Blockers & Resolution
+1. Interactive local credential entry via `.\scripts\setup_paper_credentials.ps1` into Windows User Vault (DPAPI / SecretStore) outside Git.
+2. Safe preflight check via `.\scripts\run_paper.ps1 -PreflightOnly` (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`, `paper-api.alpaca.markets/v2` endpoint).
+3. Real Paper run is **NO-GO** until operator green-lights after a passing final preflight.
 
-### E vs P (explicit)
-- **E** (API/documentation/unit verification): 581 tests passing — covers the
-  entire Phase 7 code path.
-- **P** (Paper runtime observation): **P = 0.** No real Paper order executed, no
-  broker behavior empirically validated. E ≠ P. HTTP-success ≠ P. FILLED ≠ P.
+### Tri-Partite Evidence Architecture ($\text{Unit Tests} \neq E \neq P$)
+- **Local Unit Tests:** 588/588 tests passing (100% clean implementation verification).
+- **E (Broker Semantic Evidence):** Independently verified against Alpaca API/documentation (`01–10 E`, `11 E*`, `12 D`).
+- **P (Paper Runtime Observation):** **P = 0.** No real Paper order executed, no runtime telemetry collected.
+
+$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
 
 ### Approved order (single)
 `SPY` / `quantity=1` / `client_order_id=acash-r1-paper-20260831-001`
@@ -236,7 +228,9 @@ $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land 
 - **Objective:** Build the sovereign execution stack from authorization/admission
   through broker-neutral semantic mapping to a concrete Alpaca Paper integration,
   and exercise a real (Paper) order lifecycle.
-- **Completed (LOCKED / E-reviewed):**
+- **Explicit Paper-before-Live Execution Sequence:**
+  $$\text{Phase 7 Implementation} \to \text{R0 (Read-Only)} \to \text{R1 (Lifecycle Harness)} \to \text{Security Preflight} \to \text{Paper Exercise} \to \text{P Evidence} \to \text{Readiness Review} \to \text{Live Authorization (Phase 13)}$$
+- **Completed (LOCKED / E-reviewed — 588 tests passing):**
   - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State
     Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E
     Execution Coordinator & Reconciliation Boundary, Operational Restriction,
@@ -245,22 +239,28 @@ $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land 
     `BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`.
   - Concrete Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper
     Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`.
+  - Local Windows User Vault & Launcher: `scripts/setup_paper_credentials.ps1` (DPAPI/SecretStore) and `scripts/run_paper.ps1` (Paper-only child process injection).
   - R0 read-only Paper Exercise harness; R1 order-lifecycle exercise harness
     (`run_order_exercise_verification`); R1 contract frozen.
   - R1 entry-point fixes: `4a92348` connect-before-submit; `8e92188` paper-only
     transport injection guard.
-- **Current milestone (in progress):** final Paper preflight → authorized single
-  Paper run → first **P** evidence.
-- **Blockers:**
-  1. Operator-exported paper credentials are not visible to the Antigravity
-     execution environment (relaunch opencode from a session where they are set).
-  2. Operator authorization for the real Paper run is gated on a green final
-     preflight (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`,
-     `paper-api.alpaca.markets/v2` endpoint).
+- **Evidence Model ($\text{Unit Tests} \neq E \neq P$):**
+  - **Local Unit Tests:** 588/588 unit tests passing (automated regression & invariant protection).
+  - **`D` (Design-Conformant):** Specification and schema match the canonical domain contracts.
+  - **`E` (Broker Semantic Review):** Broker semantic mapping verified against official vendor documentation (`01–10 E`, `11 E*`, `12 D`).
+  - **`E*` (Partially Bounded):** Bounded behavior with known vendor API caveats (e.g. BMAP-11 SSE replay gaps).
+  - **`P` (Empirically Proven):** Real execution observed against live Paper venue satisfying full cryptographic lineage ($P = 0$).
+  - $$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+- **Current milestone (in progress):** final Paper preflight via `run_paper.ps1 -PreflightOnly` → authorized single Paper run → first **P** evidence.
+- **Blockers & Resolution Workflow:**
+  1. Interactive local credential entry via `.\scripts\setup_paper_credentials.ps1` into Windows User Vault (DPAPI / SecretStore) outside Git.
+  2. Safe preflight check via `.\scripts\run_paper.ps1 -PreflightOnly` (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`, `paper-api.alpaca.markets/v2` endpoint).
+  3. Real Paper run is **NO-GO** until operator green-lights after a passing final preflight.
 - **Approved run parameters (single order):** `SPY` / `quantity=1` /
   `client_order_id=acash-r1-paper-20260831-001`.
-- **P acceptance (conjunctive):** TerminalVerified ∧ EvidenceLineageComplete ∧
-  ReconciliationVerified ∧ NoDispute. E ≠ P; HTTP-success ≠ P; FILLED ≠ P.
+- **P acceptance (conjunctive — ALL must hold):**
+  $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+  $E \neq P$; HTTP-success $\neq P$; FILLED alone $\neq P$; unit tests $\neq P$.
 - **Gate 7 Criteria (design intent):** verified real Paper order-lifecycle
   evidence (P) through the canonical authority pipeline (`AlpacaPaperAdapter` →
   `normalize_broker_event()` → `to_coordinator_event()` →

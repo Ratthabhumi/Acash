@@ -181,7 +181,7 @@ $$\text{Reality Gap} = \Delta_{\text{spread}} + \Delta_{\text{slippage}} + \Delt
 | **Phase 4** | Alpha Engine & Hypotheses | Pre-registered hypotheses, HAC $\hat{\beta}_H$, Blind OOS | 139/139 unit tests, mypy clean | ✅ **GATE 4** |
 | **Phase 5** | Backtesting & Simulation | Nautilus substrate, Reality Gap drag telemetry | 200/200 unit tests, mypy clean | ✅ **GATE 5** |
 | **Phase 6** | Statistical Validation Gate | CPCV, DSR, MinTRL, PBO, Search Ledger | 252/252 unit tests, mypy clean | ✅ **GATE 6** |
-| **Phase 7** | Execution & Broker Mapping | BMAP E-reviewed (01–10 E, 11 E*, 12 D), paper credential boundary, R0/R1 harness | 581/581 unit tests, scoped mypy clean (5 pre-existing) | 🟡 **IN PROGRESS — E only, P = 0** |
+| **Phase 7** | Execution & Broker Mapping | BMAP E-reviewed (01–10 E, 11 E*, 12 D), paper credential boundary, R0/R1 harness, local vault launcher | 588/588 unit tests, scoped mypy clean (5 pre-existing) | 🟡 **IN PROGRESS — E only, P = 0** |
 
 
 
@@ -215,90 +215,122 @@ $$\text{INSPECT} \to \text{UNDERSTAND} \to \text{PLAN} \to \text{APPROVE} \to \t
 
 ## 8. CURRENT STATUS / NEXT STEP — Phase 7 / R1 Paper Exercise
 
-**Checkpoint as of HEAD `8e92188` (pushed to `origin/main`).** This is the
-authoritative resume point for the next session.
+**Checkpoint as of HEAD `61233ad` (pushed to `origin/main`).** This is the authoritative resume point for the current session.
 
-### Branch / checkpoint status
-- `main` == `origin/main` at `8e92188`
-  (`fix(phase7): enforce paper-only transport injection in r1 verification gate`).
-- Latest Phase 7 commits: `7e3a154` transport/credential abstraction, `aa44c91`
-  concrete paper transport, `f2e42a0` paper adapter, `483e744` BMAP-07 fail-closed
-  canceled mapping, `62b790f` paper credential boundary, `424070c` R0 read-only
-  harness, `22b6a28` R1 lifecycle harness, `f1ac319` R1 prep docs,
-  `4a92348` connect-before-submit fix, `8e92188` paper-only injection guard.
-- Untracked (never commit): `.omc/` and `docs/phase7/r1_paper_run_runbook.md`
-  (runbook is DRAFT / NOT AUTHORIZED).
+### 8.1 Branch & Checkpoint Status
+- `main` == `origin/main` at `61233ad` (`docs(phase7): add Phase 7 design proposal and evolution specification with navigation links`).
+- **Key Phase 7 Commits Trail:**
+  - `7e3a154`: Transport & credential abstraction
+  - `aa44c91`: Concrete `PaperHttpAlpacaTransport`
+  - `f2e42a0`: Concrete `AlpacaPaperAdapter`
+  - `483e744`: BMAP-07 fail-closed canceled event mapping
+  - `62b790f`: Paper credential boundary enforcement (`ALPACA_PAPER`)
+  - `424070c`: R0 read-only paper exercise harness
+  - `22b6a28`: R1 order-lifecycle exercise harness (`run_order_exercise_verification`)
+  - `f1ac319`: R1 preparation & contract lock
+  - `4a92348`: Defect fix: `transport.connect()` before submit in R1 entry point
+  - `8e92188`: Defect fix: strict `PaperHttpAlpacaTransport` injection guard
+  - `f9c10bc`: Track R1 operational runbook & `.omc` exclusion
+  - `794d9e9` / `537643f`: Architecture & historical proposals documentation restructuring
+  - `61233ad`: Active Phase 7 high-level proposal & evolution spec (`docs/phase7/phase_7_proposal.md`)
+- **Untracked / Protected:** `.omc/` (internal IDE state, never track/stage/commit). `docs/phase7/r1_paper_run_runbook.md` is tracked as **DRAFT / NOT AUTHORIZED** runbook.
 
-### Phase 7 status
-- Admission/Authorization, Step 8 Contract, 8B State Machine, 8C Broker Event
-  Normalizer, 8D Mock Broker, 8E Coordinator/Reconciliation, Operational
-  Restriction, Real Broker Contract, BMAP framework: **LOCKED**.
-- Alpaca BMAP: E-reviewed (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
-- Concrete Alpaca Paper Transport, `AlpacaPaperAdapter`, Paper Credential
-  Boundary, R0 read-only harness, R1 lifecycle harness: **complete (E-verified)**.
-- **P = 0.** No real Paper order has ever reached the wire. E ≠ P.
+### 8.2 Phase 7 Status & Subsystem Readiness
+- **Core Architecture & Contracts:** Admission/Authorization Gate, Step 8 Contract, 8B State Machine, 8C Broker Event Normalizer, 8D Mock Broker, 8E Coordinator & Reconciliation, Operational Restriction Engine, Real Broker Contract, and Vendor-Agnostic BMAP Framework: **LOCKED**.
+- **Implementation & Local Test Verification:** **588/588 unit tests passing** (100% clean).
+- **Broker Semantic Evidence (BMAP):** E-reviewed against official broker API documentation (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
+- **Concrete Execution Components:** `PaperHttpAlpacaTransport`, `AlpacaPaperAdapter`, Paper Credential Boundary (`ALPACA_PAPER`), R0 Read-Only Harness, R1 Order-Lifecycle Harness, and Local Windows DPAPI Vault Launcher: **Complete & fully tested**.
+- **Empirical Execution:** **P = 0.** No real Paper order has reached the wire or produced valid runtime telemetry.
+- **Live Readiness:** **Live trading is NOT READY and hard-locked.**
 
-### E vs P (critical distinction)
-- **E** = API/documentation/unit verification (581 tests). Proven for the whole
-  Phase 7 code path **except** the still-unexercised real Paper runtime.
-- **P** = actual Paper runtime observation. Requires a real Paper order whose
-  evidence passes ALL conjunctive acceptance criteria.
+### 8.3 Evidence Model ($\text{Unit Tests} \neq E \neq P$)
+- **`Local Unit Tests`:** Automated invariant verification and code regression protection (588 tests).
+- **`D` (Design-Conformant):** Specification and data structures match the canonical schema.
+- **`E` (Broker Semantic Review):** Broker semantic mapping verified against official vendor API documentation (`01–10 E`, `11 E*`, `12 D`).
+- **`E*` (Partially Bounded):** Bounded behavior with known vendor API caveats (e.g. BMAP-11 SSE replay gaps).
+- **`P` (Empirically Proven):** Real execution observed against live Paper venue satisfying full cryptographic lineage ($P = 0$).
 
-### Current blocker
-- The first Paper-run attempt (`acash-r1-paper-20260831-001`) failed **before
-  HTTP** because `run_order_exercise_verification()` did not call
-  `transport.connect()` (fail-closed `transport is not connected`). Fixed by
-  `4a92348`; `8e92188` further closed the injection surface to Paper-only
-  transports.
-- Post-push preflight: provider venue = `ALPACA_PAPER`, endpoint =
-  `https://paper-api.alpaca.markets/v2` — but **credentials are not visible to the
-  Antigravity execution environment** (`CREDENTIALS_LOADED = False`). The
-  operator's interactive PowerShell has them exported; opencode must be
-  relaunched from that session so its process tree inherits them.
+$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
 
-### Go/No-Go
-**NO-GO** until final preflight passes all of:
-`CREDENTIAL_PROVIDER_VENUE=ALPACA_PAPER`, `CREDENTIALS_LOADED=True`,
-`PAPER_ENDPOINT=https://paper-api.alpaca.markets/v2`.
+### 8.4 The Conjunctive P Evidence Acceptance Rule
+$$\boxed{\text{P is valid ONLY when: } \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}}$$
 
-### Approved Paper-run parameters (single order)
-| Field | Value |
+- **`TerminalVerified`:** Order reached an absorbing terminal state (`FILLED` or `CANCELLED`) authorized strictly by `transition_order()`.
+- **`EvidenceLineageComplete`:** Full cryptographic lineage exists (`OrderIntent` $\to$ `ExecutionManifest` $\to$ `BrokerRawEvent` $\to$ `ReconciliationReport`).
+- **`ReconciliationVerified`:** Broker REST snapshot matches ACASH internal accounting within exact tolerance ($|\Delta_{\text{qty}}| = 0, |\Delta_{\text{price}}| \le 10^{-10}$).
+- **`NoDispute`:** Zero unhandled exceptions, zero clock-skew violations ($> 5.0\text{s}$), and zero state machine rejection flags.
+
+> **CRITICAL:** An HTTP `200 OK` response is NOT P. An `accepted` order is NOT P. A `FILLED` state alone is NOT P. Unit/mock tests are NOT P.
+
+### 8.5 Safe Credential Architecture & Handling
+- **Environment Isolation:** Credentials belong strictly in the operator's process environment (`ACASH_ALPACA_API_KEY_ID` / `ACASH_ALPACA_API_SECRET` or `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY`), NEVER in `.env.example`, `.env`, source code, or Git commits.
+- **Zero Leakage:** **Never** read, print, echo, log, or commit credential values.
+- **Venue Pinning:** `paper_credential_provider()` binds strictly to venue `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`). Any configuration pointing to live production endpoints is rejected fail-closed.
+
+### 8.6 Current Blocker & Go/No-Go Gate
+- **Historical First Attempt:** The first Paper-run attempt failed **before HTTP** (`transport is not connected`) because `transport.connect()` was missing. Fixed in `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
+- **Current Active Blocker:** The operator-exported paper credentials are set in PowerShell but were not inherited by the execution environment process tree (`CREDENTIALS_LOADED = False`).
+- **Go / No-Go Gate:** Strictly **NO-GO** until final preflight confirms:
+  1. `CREDENTIAL_PROVIDER_VENUE = ALPACA_PAPER`
+  2. `CREDENTIALS_LOADED = True`
+  3. `PAPER_ENDPOINT = https://paper-api.alpaca.markets/v2`
+  4. Explicit human operator GO authorization.
+
+### 8.7 Approved Paper-Run Parameters (Single Isolated Order)
+| Parameter | Approved Value |
 | :--- | :--- |
-| `symbol` | `SPY` |
-| `quantity` | `1` |
-| `client_order_id` | `acash-r1-paper-20260831-001` |
+| **Symbol** | `SPY` |
+| **Quantity** | `1` share (Market Order / Day) |
+| **Client Order ID** | `acash-r1-paper-20260831-001` |
+| **Target Venue** | `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`) |
+| **Runbook Authority** | [`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md) |
 
-### P acceptance rule (conjunctive — ALL must hold)
-$$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+### 8.8 Local Windows Credential Vault & Launcher Workflow
+To eliminate manual credential re-entry while preserving the strict repository security boundary:
 
-A successful HTTP response alone is NOT P. A `FILLED` state alone is NOT P.
-Unit/fake-transport tests are NOT P.
+1. **One-Time Interactive Registration (Local Windows User Vault):**
+   ```powershell
+   .\scripts\setup_paper_credentials.ps1
+   ```
+   - Interactively prompts for **Paper API Key ID** and **Paper API Secret Key**.
+   - Encrypted with **Windows DPAPI** (`CurrentUser` scope) and saved strictly outside the repository at `$env:USERPROFILE\.acash\paper_credentials.dpapi` (and registered in `Microsoft.PowerShell.SecretStore` if module is available).
+   - Zero secrets stored in Git, `.env`, or plaintext files.
 
-### Safe credential handling
-- Credentials are read ONLY from the operator-exported environment vars
-  `ACASH_ALPACA_API_KEY_ID` / `ACASH_ALPACA_API_SECRET` via
-  `paper_credential_provider()` (venue-pinned to `ALPACA_PAPER`).
-- **Never** read/print/echo/log/commit credential values. `.env.example` is a
-  template-only file; never put real values in it. Secrets stay outside the repo.
-- `Live` trading is **NOT READY** (Phase 13 onward).
+2. **Safe Preflight Verification (Zero Secret Exposure):**
+   ```powershell
+   .\scripts\run_paper.ps1 -PreflightOnly
+   ```
+   - Injects credentials into the local child process scope for verification.
+   - Enforces venue `ALPACA_PAPER` and endpoint `https://paper-api.alpaca.markets/v2`.
+   - Cleans up process environment immediately upon completion.
 
-### Common commands (safe)
+3. **Running ACASH Commands with Paper Credentials:**
+   ```powershell
+   .\scripts\run_paper.ps1 uv run pytest tests/unit/execution/test_paper_launcher.py
+   ```
+
+### 8.9 Safe Operator Commands
 ```powershell
-uv run pytest -q                    # full E-level suite (581 collected)
-uv run mypy src/ tests/             # 5 pre-existing dgp_experiments.py errors only
-git status --short                  # .omc/ + runbook must stay untracked
-git log --oneline -8                # Phase 7 checkpoint trail
+# 1. Safe Preflight Check via Launcher
+.\scripts\run_paper.ps1 -PreflightOnly
+
+# 2. Run Full E-Level Unit Test Suite (588 tests collected)
+uv run pytest -q
+
+# 3. Verify Clean Git Status (.omc must remain untracked)
+git status --short
+
+# 4. View Recent Phase 7 Checkpoints
+git log --oneline -10
 ```
 
-### What NOT to run (until explicit GO)
-- `run_order_exercise_verification()` — the REAL Paper entry point.
-- Any order submit/cancel against the Paper or Live venue.
-- Anything touching Live trading.
+### 8.10 What MUST NOT Be Executed (Until Explicit Operator GO)
+- `run_order_exercise_verification()` — the live Paper execution entry point.
+- Any order submission or cancellation against Paper or Live endpoints.
+- Any command touching Live trading.
 
-### Next action (exact)
-1. Relaunch opencode from a session where the two credential env vars are
-   exported (so the tool's process tree sees them).
-2. Re-run the final preflight and confirm the 3 green results above.
-3. On green → GO → run the ONE approved order (`SPY`/`1`/`acash-r1-paper-20260831-001`)
-   via `run_order_exercise_verification()`.
-4. Record **P** only if the conjunctive rule is fully satisfied.
+### 8.11 Exact Next Actions
+1. Human operator runs `.\scripts\setup_paper_credentials.ps1` once locally.
+2. Verify safe preflight: `.\scripts\run_paper.ps1 -PreflightOnly` returns green.
+3. Upon green preflight and operator authorization $\to$ trigger single approved order (`SPY`/`1`/`acash-r1-paper-20260831-001`) via launcher.
+4. Record **`P`** evidence if and only if the full conjunctive rule is satisfied.

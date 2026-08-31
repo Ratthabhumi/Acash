@@ -111,31 +111,34 @@ Phase 7 evolved through a disciplined sequence of sub-specifications and impleme
 
 ---
 
-## 4. Evidence Classification Model ($E \neq P$)
+## 4. Evidence Classification Model ($\text{Unit Tests} \neq E \neq P$)
 
-To eliminate unverified claims, Phase 7 establishes four formal evidence states:
+To eliminate unverified claims, Phase 7 establishes three orthogonal dimensions of verification:
 
 ```
-  [ D: Design-Conformant ]  ──► Architecture & Contract Spec matches schema
+  [ Local Unit Tests ]    ──► 588 tests passing (Automated Invariants & Regression Safety)
+             │
+  [ D: Design-Conformant ]──► Architecture & Contract Spec matches schema
              │
              ▼
-  [ E: Independently Verified ] ──► Verified against official vendor API docs / static contracts
+  [ E: Broker Semantic ]  ──► Independently verified against official vendor API docs / schemas
              │
              ▼
-  [ E*: Partially Bounded ] ──► Verified with known edge-case caveats (e.g. BMAP-11)
+  [ E*: Partially Bounded]──► Verified with known edge-case caveats (e.g. BMAP-11 SSE replay)
              │
              ▼
-  [ P: Empirically Proven ] ──► Executed & verified in live Paper environment with complete lineage
+  [ P: Empirically Proven]──► Executed & verified in live Paper environment with complete lineage
 ```
 
-$$\boxed{\text{E (API Verification)} \neq \text{P (Empirical Paper Execution)}}$$
+$$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
 
+- **`Local Unit Tests`:** Continuous integration and regression suite proving internal code execution and contract invariants (588 tests).
 - **`D` (Design):** The logic is specified and mathematically consistent on paper.
-- **`E` (Verified):** The broker API behavior is verified against authoritative vendor documentation and synthetic contract tests.
+- **`E` (Broker Semantic Review):** The broker API behavior is verified against authoritative vendor documentation and synthetic contract tests (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
 - **`E*` (Partially Bounded):** Bounded behavior where vendor API has documented limitations (e.g. Alpaca SSE replay gaps).
-- **`P` (Paper Proven):** A real order was dispatched to the broker's sandbox/paper environment, transitioned through the live state machine, and reconciled against actual broker fills with complete cryptographic logs.
+- **`P` (Paper Proven):** A real order was dispatched to the broker's sandbox/paper environment, transitioned through the live state machine, and reconciled against actual broker fills with complete cryptographic logs ($P = 0$).
 
-> **Non-Negotiable Rule:** An item marked **`E`** CANNOT be promoted to **`P`** without real runtime execution logs and reconciliation certificates.
+> **Non-Negotiable Rule:** Unit test execution and items marked **`E`** CANNOT be promoted to **`P`** without real runtime execution logs and reconciliation certificates.
 
 ---
 
@@ -191,21 +194,22 @@ $$\boxed{P_{\text{accepted}} \iff \text{TerminalVerified} \land \text{EvidenceLi
 
 ## 7. Current Implementation Status (Actual Repository State)
 
-As of git commit **[`f9c10bc`](https://github.com/Ratthabhumi/Acash/commit/f9c10bc)** on branch `main`:
+As of git commit **[`61233ad`](https://github.com/Ratthabhumi/Acash/commit/61233ad)** on branch `main`:
 
 | Subsystem Component | Implementation State | Verification Level | Test Suite |
 | :--- | :--- | :--- | :--- |
-| **Admission & Authorization Gate** | Complete (`admission.py`) | **E-Verified** | `tests/unit/execution/test_phase7_contracts.py` |
-| **Execution State Machine** | Complete (`state_machine.py`) | **E-Verified** | `tests/unit/execution/test_execution_state_machine.py` |
-| **Broker Event Normalizer** | Complete (`broker_events.py`) | **E-Verified** | `tests/unit/execution/test_broker_event_normalizer.py` |
-| **Mock Broker & Pipeline** | Complete (`mock_broker.py`) | **E-Verified** | `tests/unit/execution/test_execution_pipeline.py` |
-| **Execution Coordinator** | Complete (`coordinator.py`) | **E-Verified** | `tests/unit/execution/test_execution_coordinator.py` |
-| **Broker Adapter Contract** | Complete (`broker_adapter.py`) | **E-Verified** | `tests/unit/execution/test_broker_adapter.py` |
-| **Alpaca Paper Transport** | Complete (`transport.py`) | **E-Verified** | `tests/unit/execution/test_alpaca_transport.py` |
-| **Alpaca Paper Adapter** | Complete (`adapter.py`) | **E-Verified** | `tests/unit/execution/test_alpaca_paper_adapter_bmap.py` |
-| **R0 Read-Only Harness** | Complete (`paper_exercise.py`) | **E-Verified** | `tests/unit/execution/test_alpaca_paper_exercise.py` |
-| **R1 Order Exercise Harness**| Complete (`order_exercise.py`) | **E-Verified** | `tests/unit/execution/test_alpaca_order_exercise.py` |
-| **R1 Defect Fixes** | Committed (`4a92348`, `8e92188`) | **E-Verified** | Connect-before-submit & Paper transport guard |
+| **Admission & Authorization Gate** | Complete (`admission.py`) | **Tested (Invariant)** | `tests/unit/execution/test_phase7_contracts.py` |
+| **Execution State Machine** | Complete (`state_machine.py`) | **Tested (State Space)** | `tests/unit/execution/test_execution_state_machine.py` |
+| **Broker Event Normalizer** | Complete (`broker_events.py`) | **Tested (Mapping)** | `tests/unit/execution/test_broker_event_normalizer.py` |
+| **Mock Broker & Pipeline** | Complete (`mock_broker.py`) | **Tested (Substrate)** | `tests/unit/execution/test_execution_pipeline.py` |
+| **Execution Coordinator** | Complete (`coordinator.py`) | **Tested (Reconciliation)** | `tests/unit/execution/test_execution_coordinator.py` |
+| **Broker Adapter Contract** | Complete (`broker_adapter.py`) | **Tested (Interface)** | `tests/unit/execution/test_broker_adapter.py` |
+| **Alpaca Paper Transport** | Complete (`transport.py`) | **Tested (Guard)** | `tests/unit/execution/test_alpaca_transport.py` |
+| **Alpaca Paper Adapter** | Complete (`adapter.py`) | **BMAP E-Reviewed** | `tests/unit/execution/test_alpaca_paper_adapter_bmap.py` |
+| **R0 Read-Only Harness** | Complete (`paper_exercise.py`) | **Tested (Read-Only)** | `tests/unit/execution/test_alpaca_paper_exercise.py` |
+| **R1 Order Exercise Harness**| Complete (`order_exercise.py`) | **Tested (Lifecycle Wire)** | `tests/unit/execution/test_alpaca_order_exercise.py` |
+| **R1 Defect Fixes** | Committed (`4a92348`, `8e92188`) | **Tested (Defect Guard)**| Connect-before-submit & Paper transport guard |
+| **Local Credential Vault** | Complete (`scripts/`) | **Tested (DPAPI)** | `tests/unit/execution/test_paper_launcher.py` |
 | **Empirical Paper Execution** | **NOT RUN** | **$P = 0$** | Pending authorized single paper run |
 | **Live Production Trading** | **HARD LOCKED (OFF)** | **N/A** | Out of Phase 7 scope |
 
