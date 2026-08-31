@@ -150,6 +150,7 @@ class AlpacaOrder:
     filled_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
     cancel_requested_at: Optional[datetime] = None
+    filled_avg_price: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
@@ -627,6 +628,7 @@ def _parse_order(body: object) -> AlpacaOrder:
         cancel_requested_at=_optional_datetime(
             body.get("cancel_requested_at"), "cancel_requested_at"
         ),
+        filled_avg_price=_optional_decimal(body.get("filled_avg_price"), "filled_avg_price"),
     )
 
 

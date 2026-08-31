@@ -663,6 +663,7 @@ def run_order_exercise_verification(
     client_order_id: str,
     symbol: str,
     quantity: Decimal,
+    benchmark_mid_price: Decimal = Decimal("500.00"),
     transport: Optional[AlpacaTransport] = None,
 ) -> LifecycleEvidence:
     """Production R1 gate: one REAL paper order through the explicit nominal flow.
@@ -702,20 +703,35 @@ def run_order_exercise_verification(
             "run_order_exercise_verification accepts only a Paper transport; "
             "refusing a non-paper transport injection (paper-only gate)."
         )
-    transport.connect()
     adapter = AlpacaPaperAdapter(transport)
-    harness = OrderExerciseHarness(
-        adapter,
-        execution_id=f"R1_VERIFY_{client_order_id}",
-        requested_qty=quantity,
+    from acash.execution.alpaca.real_driver import R1RealOrderExerciseDriver
+
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport, execution_id_prefix="R1_VERIFY")
+    evidence = driver.submit_and_observe(
         client_order_id=client_order_id,
         symbol=symbol,
-        scenario="verification",
+        quantity=quantity,
+        benchmark_mid_price=benchmark_mid_price,
+        timeout_seconds=30.0,
+        poll_interval_seconds=1.0,
     )
-    harness.submit()
-    harness.acknowledge()
-    harness.full_fill(quantity)
-    return harness.evidence()
+    return LifecycleEvidence(
+        scenario=evidence.scenario,
+        client_order_id=evidence.client_order_id,
+        broker_order_id=evidence.broker_order_id,
+        symbol=evidence.symbol,
+        requested_qty=evidence.requested_qty,
+        venue=evidence.venue,
+        states_reached=evidence.states_reached,
+        final_state=evidence.final_state,
+        final_terminal=evidence.final_terminal,
+        filled_qty=evidence.filled_qty,
+        disputed=evidence.disputed,
+        outcomes=evidence.outcomes,
+        manifest=evidence.manifest,
+        reconciliation_report=evidence.reconciliation_report,
+        recorded_at_utc=evidence.recorded_at_utc,
+    )
 
 
 __all__ = [

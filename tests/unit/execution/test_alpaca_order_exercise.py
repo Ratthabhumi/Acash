@@ -723,15 +723,31 @@ def _paper_paper_transport(
 
 def test_run_order_exercise_verification_connects_before_submit() -> None:
     def _handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "id": "brk-verify-0001",
-                "client_order_id": request.url.params.get("client_order_id")
-                or "acash-r1-paper-20260831-001",
-                "status": "accepted",
-            },
-        )
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "id": "brk-verify-0001",
+                    "client_order_id": "acash-r1-paper-20260831-001",
+                    "status": "accepted",
+                },
+            )
+        if request.method == "GET" and "/orders/" in request.url.path:
+            return httpx.Response(
+                200,
+                json={
+                    "id": "brk-verify-0001",
+                    "client_order_id": "acash-r1-paper-20260831-001",
+                    "symbol": "SPY",
+                    "status": "filled",
+                    "qty": "1",
+                    "filled_qty": "1",
+                    "created_at": "2026-08-31T05:00:00Z",
+                    "updated_at": "2026-08-31T05:00:01Z",
+                    "filled_at": "2026-08-31T05:00:01Z",
+                },
+            )
+        return httpx.Response(404, json={"message": "not found"})
 
     t = _paper_paper_transport(_handler)
     ev = run_order_exercise_verification(
