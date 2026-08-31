@@ -33,8 +33,10 @@ This navigation document implements **Progressive Disclosure of Context** for AI
 | 🚨 **Kill Switch Engine** | First-class KillSwitchEvent, automated triggers (Stale data, Loss, Clock skew, Disconnect) | [`./kill_switch.md`](./kill_switch.md) |
 | ⚖️ **Reconciliation Engine** | Internal vs. Broker state reconciliation, discrepancy detection, automated halt triggers | [`./reconciliation.md`](./reconciliation.md) |
 | 🔌 **Broker Adapter Contract** | Step 8F pre-implementation: broker raw state/error → canonical event mapping, timeout/`UNKNOWN` semantics, idempotency/duplicate/out-of-order, sequence/timestamp/clock-skew, credential boundary | [`./broker_adapter_contract.md`](./broker_adapter_contract.md) |
-| 🧩 **Broker Semantic Mapping** | Step 8F vendor-agnostic framework: per-broker BMAP (status/error/field → canonical), fill triage, sequence/timestamp/ordering policy, conformance checklist; no vendor selected, live path OFF | [`./broker_semantic_mapping.md`](./broker_semantic_mapping.md) |
 | 🦅 **Alpaca BMAP** | Step 8F concrete Broker Mapping spec for Alpaca target: 12-item mapping (ULID `event_ulid` sequence, cancel `reason`/`cancel_requested_at` triage, partial/overfill, SSE `since_id` replay), design-conformant matrix; PROPOSED/audit-pending, live path OFF | [`./alpaca_bmap.md`](./alpaca_bmap.md) |
+| 🧪 **R1 Paper Exercise Contract** | Full order-lifecycle harness contract (submit → ack → fill/cancel → reconciliation), D-to-P promotion criteria | [`./paper_exercise_r1.md`](./paper_exercise_r1.md) |
+| 📋 **R1 Paper Run Runbook** | Single-order operational execution runbook and incident log (`INCIDENT-20260831-R1-SYNTHETIC-FILL`) | [`./r1_paper_run_runbook.md`](./r1_paper_run_runbook.md) |
+| 🛰️ **R1-REAL Driver Contract** | Broker-observed execution driver specification: SSE streaming, REST fallback polling, elimination of synthetic pumps, and resting state handling | [`./r1_real_driver_contract.md`](./r1_real_driver_contract.md) |
 
 ---
 
