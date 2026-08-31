@@ -554,18 +554,29 @@ class _HttpAlpacaEventStream(AlpacaEventStream):
         self._response: Optional[httpx.Response] = None
 
     def __iter__(self) -> Iterator[AlpacaTradeEvent]:
-        with self._client.stream(
-            "GET", self._path, params=self._params
-        ) as resp:
-            if resp.status_code >= 400:
-                raise AlpacaTransportError(
-                    f"event stream rejected: HTTP {resp.status_code}."
-                )
-            self._response = resp
-            for line in resp.iter_lines():
-                event = _parse_sse_line(line, self._venue)
-                if event is not None:
-                    yield event
+        try:
+            with self._client.stream(
+                "GET", self._path, params=self._params
+            ) as resp:
+                if resp.status_code >= 400:
+                    raise AlpacaTransportError(
+                        f"event stream rejected: HTTP {resp.status_code}."
+                    )
+                self._response = resp
+                for line in resp.iter_lines():
+                    event = _parse_sse_line(line, self._venue)
+                    if event is not None:
+                        yield event
+        except (AlpacaTransportTimeoutError, AlpacaTransportError):
+            raise
+        except httpx.TimeoutException as exc:
+            raise AlpacaTransportTimeoutError(
+                f"event stream timed out on {self._path} (fail-closed ambiguity, not a terminal state)."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise AlpacaTransportError(
+                f"event stream network error on {self._path} (fail-closed)."
+            ) from exc
 
     def close(self) -> None:
         if self._response is not None:

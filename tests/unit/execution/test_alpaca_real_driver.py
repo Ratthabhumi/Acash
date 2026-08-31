@@ -65,11 +65,20 @@ class FakeCredentialProvider(AlpacaCredentialProvider):
 
 
 class FakeEventStream(AlpacaEventStream):
-    def __init__(self, events: List[AlpacaTradeEvent]) -> None:
+    def __init__(
+        self,
+        events: List[AlpacaTradeEvent],
+        *,
+        raises_on_iter: Optional[Exception] = None,
+    ) -> None:
         self._events = events
+        self._raises_on_iter = raises_on_iter
 
     def __iter__(self) -> Iterator[AlpacaTradeEvent]:
-        return iter(self._events)
+        for e in self._events:
+            yield e
+        if self._raises_on_iter is not None:
+            raise self._raises_on_iter
 
     def close(self) -> None:
         pass
@@ -84,6 +93,7 @@ class FakeAlpacaTransport(AlpacaTransport):
         stream_events: Optional[List[AlpacaTradeEvent]] = None,
         order_snapshots: Optional[List[AlpacaOrder]] = None,
         stream_raises_timeout: bool = False,
+        stream_iter_raises: Optional[Exception] = None,
     ) -> None:
         endpoint = AlpacaEndpoint(AlpacaVenue.PAPER)
         super().__init__(FakeCredentialProvider(), endpoint)
@@ -91,6 +101,7 @@ class FakeAlpacaTransport(AlpacaTransport):
         self._order_snapshots = order_snapshots or []
         self._snapshot_idx = 0
         self._stream_raises_timeout = stream_raises_timeout
+        self._stream_iter_raises = stream_iter_raises
         self._connected = False
         self.submitted_client_order_ids: list[str] = []
 
@@ -137,7 +148,7 @@ class FakeAlpacaTransport(AlpacaTransport):
     def stream_trade_events(self, since_id: Optional[str] = None) -> AlpacaEventStream:
         if self._stream_raises_timeout:
             raise AlpacaTransportTimeoutError("simulated stream timeout")
-        return FakeEventStream(self._stream_events)
+        return FakeEventStream(self._stream_events, raises_on_iter=self._stream_iter_raises)
 
     def rotate_credentials(self) -> None:
         pass
@@ -602,3 +613,112 @@ def test_adversarial_commission_conforms_to_canonical_schema_validator() -> None
     )
     assert manifest.total_commission_paid == Decimal("0.0")
     assert isinstance(manifest.total_commission_paid, Decimal)
+
+
+def test_adversarial_sse_iter_timeout_recovers_via_rest_snapshot() -> None:
+    """R1-REAL-FINDING-02: SSE stream iterator timeout must fall back to REST recovery without crashing."""
+    broker_order_id = "fake-broker-order-uuid-sse-timeout"
+    t_filled = datetime(2026, 8, 31, 15, 30, 0, tzinfo=timezone.utc)
+    filled_snapshot = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-adv-sse-timeout",
+        symbol="SPY",
+        status=AlpacaOrderStatus.FILLED,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("1"),
+        created_at=_utcnow(),
+        updated_at=t_filled,
+        filled_at=t_filled,
+        filled_avg_price=Decimal("505.25"),
+    )
+
+    transport = FakeAlpacaTransport(
+        stream_events=[],
+        order_snapshots=[filled_snapshot],
+        stream_iter_raises=AlpacaTransportTimeoutError("event stream timed out on /v2/events/trades (fail-closed)"),
+    )
+    adapter = AlpacaPaperAdapter(transport)
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+    evidence = driver.submit_and_observe(
+        client_order_id="coid-adv-sse-timeout",
+        symbol="SPY",
+        quantity=Decimal("1"),
+        benchmark_mid_price=Decimal("505.00"),
+        timeout_seconds=1.0,
+        poll_interval_seconds=0.01,
+    )
+
+    assert evidence.final_state == "FILLED"
+    assert evidence.final_terminal is True
+    assert evidence.filled_qty == Decimal("1")
+    assert evidence.disputed is False
+    assert evidence.manifest is not None
+    assert evidence.manifest.average_fill_price == Decimal("505.25")
+    assert evidence.reconciliation_report is not None
+    assert evidence.reconciliation_report.is_in_parity is True
+
+
+def test_adversarial_sse_iter_http_error_recovers_via_rest_snapshot() -> None:
+    """R1-REAL-FINDING-02: SSE stream iterator network error must fall back to REST recovery without crashing."""
+    broker_order_id = "fake-broker-order-uuid-sse-neterr"
+    t_filled = datetime(2026, 8, 31, 15, 30, 0, tzinfo=timezone.utc)
+    filled_snapshot = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-adv-sse-neterr",
+        symbol="SPY",
+        status=AlpacaOrderStatus.FILLED,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("1"),
+        created_at=_utcnow(),
+        updated_at=t_filled,
+        filled_at=t_filled,
+        filled_avg_price=Decimal("505.50"),
+    )
+
+    transport = FakeAlpacaTransport(
+        stream_events=[],
+        order_snapshots=[filled_snapshot],
+        stream_iter_raises=AlpacaTransportError("event stream network error on /v2/events/trades (fail-closed)"),
+    )
+    adapter = AlpacaPaperAdapter(transport)
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+    evidence = driver.submit_and_observe(
+        client_order_id="coid-adv-sse-neterr",
+        symbol="SPY",
+        quantity=Decimal("1"),
+        benchmark_mid_price=Decimal("505.00"),
+        timeout_seconds=1.0,
+        poll_interval_seconds=0.01,
+    )
+
+    assert evidence.final_state == "FILLED"
+    assert evidence.final_terminal is True
+    assert evidence.filled_qty == Decimal("1")
+    assert evidence.disputed is False
+    assert evidence.manifest is not None
+    assert evidence.manifest.average_fill_price == Decimal("505.50")
+    assert evidence.reconciliation_report is not None
+    assert evidence.reconciliation_report.is_in_parity is True
+
+
+def test_structural_real_driver_invariants_ast() -> None:
+    """AST Invariant: Driver must never call transition_order directly or assign state."""
+    import ast
+    import os
+
+    driver_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "src", "acash", "execution", "alpaca", "real_driver.py"
+    )
+    with open(driver_path, encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=driver_path)
+
+    # Check for direct calls to transition_order
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "transition_order":
+                pytest.fail("real_driver.py must NEVER call transition_order() directly (authority leak).")
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "transition_order":
+                pytest.fail("real_driver.py must NEVER call .transition_order() directly (authority leak).")
+

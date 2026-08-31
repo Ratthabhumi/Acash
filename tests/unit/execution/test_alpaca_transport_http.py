@@ -1,4 +1,4 @@
-﻿"""8F-2: Concrete Alpaca Paper Transport adversarial tests.
+"""8F-2: Concrete Alpaca Paper Transport adversarial tests.
 
 Probes the locked 8F-2 invariants using ``httpx.MockTransport`` (broker behaviour
 is injected; NO real network I/O):
@@ -24,7 +24,7 @@ import ast
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Callable, Optional
+from typing import Callable, Iterator, Optional
 
 import httpx
 import pytest
@@ -365,6 +365,43 @@ def test_sse_unknown_event_type_raises_never_guesses() -> None:
     t = _make_paper(handler)
     with pytest.raises(AlpacaTransportParseError):
         list(t.stream_trade_events())
+
+
+def test_sse_stream_iter_lines_timeout_raises_alpaca_transport_timeout_error() -> None:
+    def stream_generator() -> Iterator[bytes]:
+        yield b": keepalive\n\n"
+        raise httpx.ReadTimeout("read timed out during stream")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=stream_generator(),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    t = _make_paper(handler)
+    stream = t.stream_trade_events()
+    with pytest.raises(AlpacaTransportTimeoutError, match="event stream timed out"):
+        list(stream)
+
+
+def test_sse_stream_iter_lines_http_error_raises_alpaca_transport_error() -> None:
+    def stream_generator() -> Iterator[bytes]:
+        yield b": keepalive\n\n"
+        raise httpx.RemoteProtocolError("connection closed abruptly")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=stream_generator(),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    t = _make_paper(handler)
+    stream = t.stream_trade_events()
+    with pytest.raises(AlpacaTransportError, match="event stream network error"):
+        list(stream)
+
 
 
 # ---------------------------------------------------------------------------
