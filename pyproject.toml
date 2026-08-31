@@ -21,6 +21,18 @@ dependencies = [
     "nautilus-trader==1.231.0",
 ]
 
+[project.optional-dependencies]
+portfolio-skfolio = [
+    "skfolio>=1.0.3",
+]
+portfolio-cvxpy = [
+    "cvxpy>=1.9.2",
+]
+portfolio-all = [
+    "skfolio>=1.0.3",
+    "cvxpy>=1.9.2",
+]
+
 
 [dependency-groups]
 dev = [

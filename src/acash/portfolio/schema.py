@@ -13,7 +13,7 @@ from decimal import Decimal
 import hashlib
 import json
 from typing import Any, Final, Mapping, Optional, Sequence, Tuple
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from acash.core.domain.exceptions import (
     DataContractError,
@@ -248,7 +248,8 @@ class AllocationCandidate(BaseModel):
     cash_weight: Optional[Decimal] = None
     search_trials_k: int = 1
     trial_variance: float = 0.0
-    in_sample_metrics: Mapping[str, Decimal] = {}
+    in_sample_metrics: Mapping[str, Decimal] = Field(default_factory=dict)
+    provenance: Mapping[str, str] = Field(default_factory=dict)
     candidate_digest: str = ""
 
     @model_validator(mode="before")
@@ -258,6 +259,12 @@ class AllocationCandidate(BaseModel):
             raw_weights = data.get("asset_weights", {})
             cleaned_weights: dict[str, Decimal] = {}
             weight_sum = Decimal("0.0")
+
+            prov_raw = data.get("provenance", {})
+            if isinstance(prov_raw, dict):
+                data["provenance"] = {str(k): str(v) for k, v in sorted(prov_raw.items())}
+            else:
+                data["provenance"] = {}
 
             for s, w in raw_weights.items():
                 w_dec = Decimal(str(w))
