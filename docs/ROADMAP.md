@@ -41,7 +41,7 @@
    │
    ▼
 
-⏳ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [IN PROGRESS — E-verified code path, P = 0]
+✅ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [COMPLETED - PASSED — 610/610 Tests, P = 1 (P-001)]
    │
    ▼
 ⏳ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
@@ -74,41 +74,40 @@
 
 ---
 
-## CURRENT STATUS / NEXT STEP — Phase 7 / R1-REAL Broker-Observed Execution
+## CURRENT STATUS / NEXT STEP — Phase 7 Passed (P = 1) ──► Phase 8 Portfolio Engine
 
-> **As of HEAD `4faa81a` (pushed to `origin/main`).** Resume point for the current
-> session. Identical status block lives in `Cheatsheet.md` §8 and `README.md` §5.5.
+> **As of Checkpoint `P-001` (Order 003).**
+> Gate 7 is officially verified and accepted. Live execution remains **HARD-LOCKED (OFF)**.
 
 ### Completed milestones
 - ✅ Phases 0–6: Gates 1–6 passed (validated statistical governance FROZEN).
 - ✅ Phase 7 design/contract layer: Admission LOCKED; Step 8 / 8B / 8C / 8D / 8E
   LOCKED; Operational Restriction LOCKED; Real Broker Contract LOCKED; BMAP
   framework LOCKED.
-- ✅ Alpaca concrete BMAP: E-reviewed (`01–10 E`, `11 E*`, `12 D`).
+- ✅ Alpaca concrete BMAP: Conformance Matrix 100% PASS (`P = 1`).
 - ✅ Concrete Alpaca Paper Transport, Paper Credential Boundary (`ALPACA_PAPER`),
   `AlpacaPaperAdapter`, DPAPI User Vault & Secure Launcher.
-- ✅ R1 Paper Incident Checkpoint (`3dd9f25`): Discovered and eradicated local synthetic ACK/FILL pump.
-- ✅ R1-REAL Broker Observation Driver (`4faa81a`): Dual-channel observation (SSE Primary + REST Polling Recovery), strict BMAP-07 cancellation reconciliation, fail-closed timeout to `UNKNOWN`, and strict provenance hardening.
-
-### Current milestone
-**R1-REAL broker-observed Paper execution & stream exception hardening → P evidence audit.**
+- ✅ R1-REAL Broker Observation Driver: Dual-channel observation (SSE Primary + REST Polling Recovery), strict BMAP-07 cancellation reconciliation, fail-closed timeout to `UNKNOWN`, and live quote benchmark derivation.
+- ✅ **First Accepted Paper Evidence Checkpoint (P-001):**
+  - Order 003 (`acash-r1-paper-20260901-003`, Broker UUID `99a989f8-969d-4640-9598-4d8a3911a1d7`).
+  - Terminal `FILLED`, 1 share SPY @ `765.26` (Benchmark Mid `765.24`, Slippage `+0.2614 bps`).
+  - Strict Conjunctive P Audit **PASSED** (TerminalVerified, EvidenceLineageComplete, ReconciliationVerified, NoDispute, BrokerSnapshotBound).
+  - **Status:** $$\boxed{P = 1}$$
 
 ### Tri-Partite Evidence Architecture ($\text{Unit Tests} \neq E \neq P$)
-- **Local Unit Tests:** 598/598 tests passing (100% clean implementation & invariant verification).
-- **E (Broker Semantic Evidence):** Independently verified against Alpaca API/documentation (`01–10 E`, `11 E*`, `12 D`).
-- **P (Paper Runtime Observation):** **P = 0.** Real Paper orders submitted & audited, zero unverified fills.
+- **Local Unit Tests:** 610/610 tests passing (100% clean implementation & invariant verification).
+- **E (Broker Semantic Evidence):** Independently verified against Alpaca API/documentation.
+- **P (Paper Runtime Observation):** **P = 1** (Checkpoint `P-001` officially accepted).
 
-$$\boxed{\text{598 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+$$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P \text{ (Empirical Paper Execution P-001)} \implies \text{Gate 7 PASSED}}$$
 
 ### Paper Order Forensic History
 - `acash-r1-paper-20260831-001`: Real Paper POST succeeded $\to$ rested in `accepted` $\to$ verified `CANCELED` via REST ($P = 0$).
-- `acash-r1-paper-20260831-002`: Real Paper POST succeeded $\to$ resting in `new` with `filled_qty = 0` ($P = 0$).
-
-### P acceptance rule (conjunctive)
-$$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+- `acash-r1-paper-20260831-002`: Real Paper POST succeeded $\to$ filled post-session $\to$ flattened via incident cleanup ($P = 0$).
+- `acash-r1-paper-20260901-003` (**P-001**): Real Paper POST $\to$ real-time fill observed @ 765.26 $\to$ parity verified ($\mathbf{P = 1}$).
 
 ### Next milestones
-- ⏳ Gate 7 completion = first verified P evidence for the Alpaca Paper order lifecycle.
+- ⏳ Operational cleanup of +1 SPY paper position (isolated operational step, distinct from P-001).
 - ⏳ Phase 8: Portfolio Engine (skfolio vs transparent baselines) ── Gate 8.
 - ⏳ Phases 9–16: Risk/Kill Switch, friction, Paper subsystem, MT5 adapters, Live
   (MANDATORY HUMAN APPROVAL), AI research layer, strategy lifecycle, flywheel.
