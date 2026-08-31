@@ -232,6 +232,7 @@ $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land 
 ---
 
 ### 🟡 Phase 7: Live Execution & Broker Mapping [IN PROGRESS]
+- **Specification & Evolution Proposal:** [`docs/phase7/phase_7_proposal.md`](phase7/phase_7_proposal.md)
 - **Objective:** Build the sovereign execution stack from authorization/admission
   through broker-neutral semantic mapping to a concrete Alpaca Paper integration,
   and exercise a real (Paper) order lifecycle.

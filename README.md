@@ -254,6 +254,7 @@ The complete canonical documentation suite is organized systematically in [`docs
 - **[`docs/validation/phase6_methodology_dgp_report.md`](docs/validation/phase6_methodology_dgp_report.md)**: Data Generating Process (DGP) benchmark empirical experiments report.
 
 ### ⚡ Phase 7: Live Execution & Broker Integration (`docs/phase7/`)
+- **[`docs/phase7/phase_7_proposal.md`](docs/phase7/phase_7_proposal.md)**: Phase 7 Proposal & Evolution Specification (Active Phase Architecture & Evidence Model).
 - **[`docs/phase7/CONTEXT_MAP.md`](docs/phase7/CONTEXT_MAP.md)**: Phase 7 navigation context map and core invariants.
 - **[`docs/phase7/alpaca_bmap.md`](docs/phase7/alpaca_bmap.md)**: Alpaca Concrete Broker Semantic Mapping (BMAP).
 - **[`docs/phase7/paper_exercise_r1.md`](docs/phase7/paper_exercise_r1.md)**: R1 order-lifecycle contract & P evidence checklist.
