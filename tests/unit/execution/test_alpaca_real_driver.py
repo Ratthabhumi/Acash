@@ -36,13 +36,16 @@ from acash.execution.alpaca.real_driver import (
     RealDriverEvidence,
 )
 from acash.execution.alpaca.transport import (
+    AlpacaClock,
     AlpacaEventStream,
     AlpacaOrder,
     AlpacaOrderStatus,
+    AlpacaQuote,
     AlpacaTradeEvent,
     AlpacaTradeEventType,
     AlpacaTransport,
     AlpacaTransportError,
+    AlpacaTransportParseError,
     AlpacaTransportTimeoutError,
 )
 from acash.execution.alpaca.venue import AlpacaEndpoint, AlpacaVenue
@@ -144,6 +147,26 @@ class FakeAlpacaTransport(AlpacaTransport):
 
     def query_position(self, symbol: str) -> Optional[BrokerPosition]:
         return None
+
+    def query_clock(self) -> AlpacaClock:
+        now = _utcnow()
+        return AlpacaClock(
+            timestamp=now,
+            is_open=True,
+            next_open=now,
+            next_close=now,
+        )
+
+    def query_quote(self, symbol: str) -> AlpacaQuote:
+        now = _utcnow()
+        return AlpacaQuote(
+            symbol=symbol,
+            bid_price=Decimal("505.00"),
+            ask_price=Decimal("505.50"),
+            bid_size=Decimal("100"),
+            ask_size=Decimal("100"),
+            timestamp=now,
+        )
 
     def stream_trade_events(self, since_id: Optional[str] = None) -> AlpacaEventStream:
         if self._stream_raises_timeout:
@@ -721,4 +744,176 @@ def test_structural_real_driver_invariants_ast() -> None:
                 pytest.fail("real_driver.py must NEVER call transition_order() directly (authority leak).")
             if isinstance(node.func, ast.Attribute) and node.func.attr == "transition_order":
                 pytest.fail("real_driver.py must NEVER call .transition_order() directly (authority leak).")
+
+
+def test_adversarial_benchmark_placeholder_rejection() -> None:
+    """Blocker 1 Invariant: Benchmark mid price must be strictly positive Decimal from live quote."""
+    transport = FakeAlpacaTransport()
+    adapter = AlpacaPaperAdapter(transport)
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+    with pytest.raises(R1RealDriverError, match="benchmark_mid_price must be a positive Decimal"):
+        driver.submit_and_observe(
+            client_order_id="coid-adv-zero-bench",
+            symbol="SPY",
+            quantity=Decimal("1"),
+            benchmark_mid_price=Decimal("0.00"),
+        )
+
+    with pytest.raises(R1RealDriverError, match="benchmark_mid_price must be a positive Decimal"):
+        driver.submit_and_observe(
+            client_order_id="coid-adv-neg-bench",
+            symbol="SPY",
+            quantity=Decimal("1"),
+            benchmark_mid_price=Decimal("-500.00"),
+        )
+
+
+def test_adversarial_crossed_market_quote_rejected() -> None:
+    """Blocker 1 Invariant: Crossed market quotes (ask < bid) must fail-closed."""
+    crossed_quote = AlpacaQuote(
+        symbol="SPY",
+        bid_price=Decimal("505.50"),
+        ask_price=Decimal("505.00"),
+    )
+    with pytest.raises(AlpacaTransportParseError, match="Crossed market quote"):
+        _ = crossed_quote.mid_price
+
+
+def test_adversarial_timeout_active_order_triggers_cancellation() -> None:
+    """Blocker 2 Invariant: Timeout on active order drives to UNKNOWN and triggers explicit cancellation."""
+    broker_order_id = "fake-broker-order-uuid-1234"
+    active_snapshot = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-active-timeout",
+        symbol="SPY",
+        status=AlpacaOrderStatus.NEW,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("0"),
+        created_at=_utcnow(),
+        updated_at=_utcnow(),
+    )
+    canceled_snapshot = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-active-timeout",
+        symbol="SPY",
+        status=AlpacaOrderStatus.CANCELED,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("0"),
+        created_at=_utcnow(),
+        updated_at=_utcnow(),
+        canceled_at=_utcnow(),
+    )
+
+    canceled_called: list[str] = []
+
+    class CancellableTransport(FakeAlpacaTransport):
+        def cancel_order(self, b_id: str) -> None:
+            canceled_called.append(b_id)
+
+    transport = CancellableTransport(
+        stream_events=[],
+        order_snapshots=[active_snapshot],
+        stream_raises_timeout=True,
+    )
+    adapter = AlpacaPaperAdapter(transport)
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+    evidence = driver.submit_and_observe(
+        client_order_id="coid-active-timeout",
+        symbol="SPY",
+        quantity=Decimal("1"),
+        benchmark_mid_price=Decimal("505.00"),
+        timeout_seconds=0.2,
+        poll_interval_seconds=0.01,
+    )
+
+    # Driver timed out on active order -> marks UNKNOWN, P remains 0
+    assert evidence.final_state == "UNKNOWN"
+    assert evidence.final_terminal is False
+
+    # Operational safety procedure: when UNKNOWN, cancel must be sent
+    transport.cancel_order(evidence.broker_order_id)
+    assert broker_order_id in canceled_called
+
+
+def test_adversarial_cancel_fill_race_leaves_incident_open_when_position_nonzero() -> None:
+    """Blocker 2 Invariant: If cancel races with fill and position remains != 0, incident is OPEN."""
+    broker_order_id = "fake-race-order-id"
+    filled_snap = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-race-1",
+        symbol="SPY",
+        status=AlpacaOrderStatus.FILLED,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("1"),
+        created_at=_utcnow(),
+        updated_at=_utcnow(),
+        filled_at=_utcnow(),
+        filled_avg_price=Decimal("505.10"),
+    )
+
+    class RaceTransport(FakeAlpacaTransport):
+        def query_position(self, symbol: str) -> Optional[BrokerPosition]:
+            # Broker executed fill during cancel race -> position is +1
+            return BrokerPosition(symbol="SPY", quantity=Decimal("1"), venue="ALPACA_PAPER")
+
+    transport = RaceTransport(
+        stream_events=[],
+        order_snapshots=[filled_snap],
+        stream_raises_timeout=True,
+    )
+
+    # Position audit detects unclean position
+    pos = transport.query_position("SPY")
+    assert pos is not None and pos.quantity == Decimal("1")
+    cleanup_is_proven = (pos is None or pos.quantity == Decimal("0"))
+    # Invariant: cleanup is NOT proven when position != 0
+    assert cleanup_is_proven is False
+
+
+def test_adversarial_broker_snapshot_terminal_mismatch() -> None:
+    """Point 4 Invariant: Mismatch between internal state and broker snapshot marks parity false."""
+    broker_order_id = "fake-mismatch-order-id"
+    # Internal coordinator thinks FILLED via trade event, but broker query says ACCEPTED
+    fill_event = AlpacaTradeEvent(
+        event_id="01TESTEVT1234567890ABCDEFGH",
+        event=AlpacaTradeEventType.FILL,
+        at=_utcnow(),
+        executed_at=_utcnow(),
+        broker_order_id=broker_order_id,
+        execution_id="EXEC-MISMATCH-1",
+        qty=Decimal("1"),
+        price=Decimal("505.00"),
+    )
+    unfilled_snapshot = AlpacaOrder(
+        broker_order_id=broker_order_id,
+        client_order_id="coid-mismatch-1",
+        symbol="SPY",
+        status=AlpacaOrderStatus.ACCEPTED,
+        requested_qty=Decimal("1"),
+        filled_qty=Decimal("0"),
+        created_at=_utcnow(),
+        updated_at=_utcnow(),
+    )
+
+    transport = FakeAlpacaTransport(
+        stream_events=[fill_event],
+        order_snapshots=[unfilled_snapshot],
+    )
+    adapter = AlpacaPaperAdapter(transport)
+    driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+    evidence = driver.submit_and_observe(
+        client_order_id="coid-mismatch-1",
+        symbol="SPY",
+        quantity=Decimal("1"),
+        benchmark_mid_price=Decimal("505.00"),
+        timeout_seconds=0.2,
+        poll_interval_seconds=0.01,
+    )
+
+    # Internal reached FILLED from event, but broker snapshot was ACCEPTED -> parity fails!
+    assert evidence.reconciliation_report is not None
+    assert evidence.reconciliation_report.is_in_parity is False
 

@@ -1,332 +1,178 @@
-# R1 Paper Exercise — Runbook (DRAFT — NOT AUTHORIZED)
+# R1-REAL Paper Exercise — Runbook (Order 003 Candidate) (DRAFT — NOT AUTHORIZED)
 
-Status: **DRAFT / NOT AUTHORIZED**. This runbook defines *how* the first real
-Paper order would be exercised — it does **NOT** grant authorization to run.
-`P = 0` until an actual Paper runtime run completes and produces P evidence.
+Status: **DRAFT / NOT AUTHORIZED**. This runbook defines the sovereign execution,
+observation, and safety protocols for the first real Paper order candidate (`Order 003`).
+`P = 0` until an actual Paper runtime run completes and satisfies all Conjunctive P criteria.
 
-This document is a **precondition and plan only**. It must be reviewed and
-explicitly approved by the operator (order parameters + kill/stop go-ahead)
-before any command in it is executed.
-
-References are repository-relative. Authority contract:
-`./paper_exercise_r1.md`; broker adapter contract under `./`; harness source
-`src/acash/execution/alpaca/order_exercise.py`.
+This document is a **precondition and plan only**. It must be reviewed and explicitly
+approved by the operator before any command in it is executed.
 
 ---
 
-## 0. Evidence semantics (E vs P)
+## 0. Evidence Semantics & Invariants
 
-- **E** = API / documentation / semantics verification (the 578-test suite, the
-  R0/R1 harnesses against fake transports). E **never** proves P.
-- **P** = actual Paper runtime observation — a real directive accepted by the
-  Paper venue and a verified broker reality returned. `P = 0` today.
-
-This runbook produces exactly **one** P record: the `LifecycleEvidence` returned
-by a real `run_order_exercise_verification()` call, plus the broker-side reality
-the run induces (order id, status, fills).
+- **E (Empirical / Test Evidence):** Verified by the offline 610-test suite and AST structural guards. E **never** proves P.
+- **P (Paper Runtime Evidence):** Actual Paper runtime observation — a real directive accepted by `ALPACA_PAPER`, observed through real broker lifecycle (SSE primary / REST recovery), and reconciled with broker reality. Current status: `P = 0`.
+- **Core Invariant (Learned from Order 002 Incident):**
+  $$\boxed{\text{Driver Timeout} \neq \text{Broker Order Finished}}$$
+  Driver timeout does NOT imply the order stopped working on the broker. A timeout leaves the order active on the venue unless explicitly canceled and position-reconciled.
 
 ---
 
-## 1. Exact command
+## 1. Exact Execution Script
 
-Run from the repository root directory:
+Run via `run_paper.ps1` from the repository root:
 
 ```powershell
 .\scripts\run_paper.ps1 uv run python -c "
+import time
 from decimal import Decimal
-from acash.execution.alpaca.order_exercise import run_order_exercise_verification
+from acash.execution.alpaca.credentials import paper_credential_provider
+from acash.execution.alpaca.venue import paper_endpoint
+from acash.execution.alpaca.transport import PaperHttpAlpacaTransport, AlpacaOrderStatus
+from acash.execution.alpaca.adapter import AlpacaPaperAdapter
+from acash.execution.alpaca.real_driver import R1RealOrderExerciseDriver
 
-ev = run_order_exercise_verification(
-    client_order_id='acash-r1-paper-20260831-001',
+# 1. Connect Transport
+provider = paper_credential_provider()
+endpoint = paper_endpoint()
+transport = PaperHttpAlpacaTransport(provider=provider, endpoint=endpoint)
+transport.connect()
+
+# 2. Mandatory Preflight: Market Clock
+clock = transport.query_clock()
+print(f'CLOCK_STATUS: is_open={clock.is_open}, next_close={clock.next_close}, next_open={clock.next_open}')
+if not clock.is_open:
+    raise RuntimeError(f'[FAIL-CLOSED] Market is CLOSED. Next open at: {clock.next_open}')
+
+# 3. Mandatory Preflight: Zero Starting Position
+pos = transport.query_position('SPY')
+start_qty = pos.quantity if pos else Decimal('0')
+print(f'STARTING_SPY_POSITION: {start_qty}')
+if start_qty != Decimal('0'):
+    raise RuntimeError(f'[FAIL-CLOSED] Account not flat: SPY position is {start_qty}. Must be 0 before starting.')
+
+# 4. Mandatory Preflight: Live Market Quote Benchmark Derivation (No Placeholders)
+quote = transport.query_quote('SPY')
+benchmark_mid = quote.mid_price
+print(f'BENCHMARK_QUOTE: symbol={quote.symbol}, bid={quote.bid_price}, ask={quote.ask_price}, mid={benchmark_mid}')
+
+# 5. Execute R1-REAL Driver (SSE Primary + REST Recovery)
+client_order_id = 'acash-r1-paper-20260901-003'
+quantity = Decimal('1')
+adapter = AlpacaPaperAdapter(transport)
+driver = R1RealOrderExerciseDriver(adapter, transport=transport)
+
+print(f'LAUNCHING ORDER 003: client_order_id={client_order_id}, qty={quantity} SPY')
+evidence = driver.submit_and_observe(
+    client_order_id=client_order_id,
     symbol='SPY',
-    quantity=Decimal('1'),
+    quantity=quantity,
+    benchmark_mid_price=benchmark_mid,
+    timeout_seconds=30.0,
+    poll_interval_seconds=0.5,
 )
+
 print('--- R1 LIFECYCLE EVIDENCE ---')
-print(ev)
-print('--- P_OBSERVED METRICS ---')
-print({
-    'client_order_id': ev.client_order_id,
-    'broker_order_id': ev.broker_order_id,
-    'final_state': ev.final_state,
-    'final_terminal': ev.final_terminal,
-    'filled_qty': str(ev.filled_qty),
-    'disputed': ev.disputed,
-    'manifest_digest': ev.manifest and ev.manifest.execution_digest,
-    'reconciliation_digest': ev.reconciliation_report and ev.reconciliation_report.report_digest,
-    'is_in_parity': ev.reconciliation_report and ev.reconciliation_report.is_in_parity,
-})
-"
-```
+print(f'broker_order_id: {evidence.broker_order_id}')
+print(f'final_state: {evidence.final_state}')
+print(f'final_terminal: {evidence.final_terminal}')
+print(f'filled_qty: {evidence.filled_qty}')
+print(f'disputed: {evidence.disputed}')
+print(f'is_in_parity: {evidence.reconciliation_report and evidence.reconciliation_report.is_in_parity}')
+print(f'manifest_digest: {evidence.manifest and evidence.manifest.execution_digest}')
+print(f'report_digest: {evidence.reconciliation_report and evidence.reconciliation_report.report_digest}')
 
-`run_order_exercise_verification()` internally builds
-`PaperHttpAlpacaTransport(provider=paper_credential_provider(), endpoint=paper_endpoint())`
-and drives the explicit nominal flow: **submit → acknowledge → full_fill**. All
-state flows only through `ExecutionCoordinator`.
+# 6. Hardened Post-Timeout Active-Order Cleanup Policy
+if not evidence.final_terminal:
+    print('[INCIDENT] Driver timed out in non-terminal state. Initiating Active-Order Resolution...')
+    # Check if order is still active on broker
+    try:
+        broker_snap = transport.query_order(evidence.broker_order_id)
+        if broker_snap.status in {AlpacaOrderStatus.NEW, AlpacaOrderStatus.ACCEPTED, AlpacaOrderStatus.PENDING_NEW, AlpacaOrderStatus.PARTIALLY_FILLED}:
+            print(f'Order is active on broker ({broker_snap.status.value}). Sending cancel request...')
+            transport.cancel_order(evidence.broker_order_id)
+            for _ in range(15):
+                time.sleep(1)
+                poll_snap = transport.query_order(evidence.broker_order_id)
+                if poll_snap.status in {AlpacaOrderStatus.CANCELED, AlpacaOrderStatus.FILLED, AlpacaOrderStatus.REJECTED, AlpacaOrderStatus.EXPIRED}:
+                    print(f'Broker reached terminal state: {poll_snap.status.value}')
+                    break
+    except Exception as exc:
+        print(f'Resolution error: {exc}')
 
----
-
-## 2. Pre-run environment checks (operational authorization)
-
-Before running, ALL must hold — checked against the *effective runtime*, not
-`.env.example`:
-
-1. **Credential venue is Paper.** Confirm the exported
-   `ACASH_ALPACA_API_KEY_ID` belongs to a **Paper** account (never a live key).
-   `paper_credential_provider()` pins venue `ALPACA_PAPER`;
-   `PaperHttpAlpacaTransport` L1b `assert_paper_venue()` rejects a live-scoped
-   provider; `connect()` L2 `_assert_venue_match()` re-asserts credential vs
-   endpoint venue **before** any HTTP client is built.
-2. **Endpoint is Paper.** `paper_endpoint()` derives
-   `https://paper-api.alpaca.markets/v2` (constant; no env host override).
-3. **No live credential/host in effective config.** The committed entry
-   (`order_exercise.py`, `run_order_exercise_verification`) references only
-   `paper_credential_provider`, `paper_endpoint`, `PaperHttpAlpacaTransport`.
-   Grep before run: no `LIVE_API_HOST`, `api.alpaca.markets` (live), or live key
-   prefix in the invocation path.
-4. **Order parameters explicitly approved** — symbol / quantity /
-   client_order_id are caller-supplied and MUST be the operator-confirmed values
-   (Section 7). `quantity` must be a positive, integer/step multiple accepted by
-   Paper for the symbol.
-5. **Paper account buyable** — the symbol must be tradeable in the Paper account
-   and `quantity` within its buying power. Failures surface as `AlpacaTransportError`
-   (fail-closed), never a fabricated terminal state.
-6. **Runtime timeout equality (Section 4)** — assert the effective transport
-   timeout matches the actual HTTP client timeout:
-
-```powershell
-uv run python -c "
-from acash.execution.alpaca.transport import PaperHttpAlpacaTransport, HttpAlpacaTransport
-from acash.execution.alpaca.credentials import paper_credential_provider
-from acash.execution.alpaca.venue import paper_endpoint
-import inspect
-
-# Default chain: harness passes no timeout -> PaperHttpAlpacaTransport(10.0)
-# -> HttpAlpacaTransport(10.0) -> httpx.Client(timeout=10.0).
-assert HttpAlpacaTransport.__init__.__defaults__[0] == 10.0
-t = PaperHttpAlpacaTransport(provider=paper_credential_provider(), endpoint=paper_endpoint())
-print('EFFECTIVE_TRANSPORT_TIMEOUT', t._timeout)
-assert t._timeout == 10.0
-print('TIMEOUT_EQUALITY_OK :', True)
+    # Final Position Audit
+    end_pos = transport.query_position('SPY')
+    end_qty = end_pos.quantity if end_pos else Decimal('0')
+    print(f'POST_TIMEOUT_SPY_POSITION: {end_qty}')
+    if end_qty != Decimal('0'):
+        print('[ALERT] Cleanup NOT complete! Active position remains on broker. Incident remains OPEN.')
+    else:
+        print('[CLEANUP_OK] Account is flat. No active position remains.')
 "
 ```
 
 ---
 
-## 3. Expected Paper-domain observables
+## 2. Pre-Run Checklist & Authorization Gates
 
-Nominal successful run:
+Before execution, ALL of the following must hold:
 
-- `client_order_id` echoed by the venue on the created order.
-- `broker_order_id` = the venue-assigned order UUID (captured in
-  `LifecycleEvidence.broker_order_id` and `ExecutionManifest.broker_order_id`).
-- `final_state == "FILLED"`, `final_terminal is True`, `filled_qty == quantity`.
-- `disputed is False`; `reconciliation_report.is_in_parity is True`.
-- `ExecutionManifest.closed_at` set (verified terminal), `execution_digest` a
-  64-hex sha256.
-- `states_reached` includes `SUBMITTED, ACKNOWLEDGED, PARTIALLY_FILLED, FILLED`
-  (the exact tuple depends on venue fill pacing; at minimum it must end at a
-  verified `FILLED`).
-
-These observables feed the **conjunctive P acceptance rule** (Section 8) —
-`FILLED` alone is not P; it is only the terminal-state conjunct.
-
-Any of these indicates a discrepancy to be treated per Section 6 —
-never coerced to a terminal or "green" outcome:
-
-- `disputed is True`, `final_state == "UNKNOWN"`, `closed_at is None`,
-  `is_in_parity is False`, duplicate/late-event incidents, or a
-  reconcile-token that does not match broker reality.
+1. **Git Commit State:** Head is at verified checkpoint.
+2. **Paper Credential Venue:** Loaded from Windows DPAPI vault (`~/.acash/paper_credentials.dpapi`), pinned to `ALPACA_PAPER`.
+3. **Endpoint Authority:** Pinned to `https://paper-api.alpaca.markets/v2`.
+4. **Market Open Gate:** `clock.is_open == True` (US regular session 9:30–16:00 ET).
+5. **Clean Account Starting State:** `SPY` position is strictly `0 / None`.
+6. **No Placeholder Economics:** `benchmark_mid_price` is computed directly from `transport.query_quote('SPY').mid_price` (`(bid + ask) / 2`).
+7. **Single Order Scope:** Exactly 1 market order for `1 SPY`. No retries, no second order.
+8. **Live Execution:** `HARD-LOCKED (OFF)`.
 
 ---
 
-## 4. Timeout / abort behavior
+## 3. Post-Timeout Safety & Incident Resolution
 
-**Effective timeout is the code default, verified from source** (not a runbook
-preference). The committed chain is:
+If the 30-second observation window expires without reaching a verified terminal state:
 
-- `run_order_exercise_verification()` builds
-  `PaperHttpAlpacaTransport(provider=…, endpoint=…)` with **no** `timeout`
-  argument → the default applies.
-- `PaperHttpAlpacaTransport.__init__(timeout: float = 10.0)` (`transport.py:513-531`)
-  forwards `timeout=timeout` to `HttpAlpacaTransport`.
-- `HttpAlpacaTransport.__init__(timeout: float = 10.0)` stores it as
-  `self._timeout` (`transport.py:329-333`).
-- `connect()` passes `timeout=self._timeout` to `httpx.Client(...)`
-  (`transport.py:367-375`) → **actual HTTP client timeout = 10.0s**.
-
-∴ `runbook timeout == effective transport timeout == actual HTTP client timeout
-== 10.0s` by the default chain. A pre-run check (Section 2.6) asserts this
-equality programmatically.
-
-Timeout semantics (not just operational preference):
-
-$$ \text{timeout} \rightarrow \text{CONNECTION\_LOST} \rightarrow \text{UNKNOWN} $$
-
-- A timeout raises `AlpacaTransportTimeoutError` (fail-closed **ambiguity**, not
-  a terminal guess); harness `connect()`/`submit` will propagate it and the order
-  is treated as UNKNOWN — never CANCELLED/REJECTED/FILLED by assumption.
-- Harness errors (`OrderExerciseError`) are reserved for ordering/usage mistakes.
-- No silent retry, no silent floor, no fabricated parity.
+1. **State Safety:** Internal coordinator state transitions to `UNKNOWN`, `final_terminal = False`, `P = 0`.
+2. **Active Order Inquiry:** Query `transport.query_order(broker_order_id)`.
+3. **Cancel Directive:** If status is `NEW`, `ACCEPTED`, or `PARTIALLY_FILLED`, send `DELETE /v2/orders/{id}` via `transport.cancel_order()`.
+4. **Polling for Absorption:** Poll broker snapshot until terminal confirmation (`CANCELED`, `FILLED`, etc.).
+5. **Position Audit:** Query `transport.query_position('SPY')`.
+   - If `position == 0`: Cleanup complete, account is flat, incident closed with $P = 0$.
+   - If `position != 0` (e.g. cancel raced with fill): **Incident remains OPEN**. The run stops immediately, requiring explicit operator flatten.
 
 ---
 
-## 5. How to identify the created order
+## 4. Conjunctive P Acceptance Audit
 
-- Primary: `broker_order_id` from the returned `LifecycleEvidence`.
-- Cross-check in the Alpaca Paper UI / API: locate the order by
-  `client_order_id` (unique on Paper), confirm venue = Paper, status = `filled`,
-  symbol + qty match.
-- The Paper account position screen must reflect `quantity` of `<SYMBOL>` after
-  fill (if it was not already held).
+$$\boxed{P = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute} \land \text{BrokerSnapshotBound}}$$
 
----
+A run is accepted as the first **P** evidence if and only if:
 
-## 6. How to reconcile afterward
+- [ ] **Terminal Verified:** `evidence.final_terminal is True` and `evidence.final_state == "FILLED"`
+- [ ] **Evidence Lineage Complete:**
+  - `evidence.manifest.execution_digest` is a 64-hex SHA-256 string
+  - `evidence.reconciliation_report.report_digest` is a 64-hex SHA-256 string
+- [ ] **Reconciliation Verified:** `evidence.reconciliation_report.is_in_parity is True`
+- [ ] **No Dispute:** `evidence.disputed is False`
+- [ ] **Broker Snapshot Bound:**
+  - `broker_snapshot.status == AlpacaOrderStatus.FILLED`
+  - `broker_snapshot.filled_qty == Decimal("1")`
+  - `broker_snapshot.filled_avg_price == evidence.manifest.average_fill_price`
+  - `broker_snapshot.filled_at is not None`
 
-Use a read-only follow-up (paper venue only):
-
-```powershell
-uv run python -c "
-from acash.execution.alpaca.transport import PaperHttpAlpacaTransport
-from acash.execution.alpaca.credentials import paper_credential_provider
-from acash.execution.alpaca.venue import paper_endpoint
-
-t = PaperHttpAlpacaTransport(provider=paper_credential_provider(), endpoint=paper_endpoint())
-t.connect()
-o = t.query_order('<BROKER_ORDER_ID>')
-print('VENUE', t.endpoint.venue.value)
-print('STATUS', o.status)
-print('FILLED_QTY', o.filled_qty)
-"
-```
-
-Reconciliation rule (from `state_machine.py` §2.3): an UNKNOWN shadow exits
-toward a terminal **only** via `reconcile(...)` with an evidence token that names
-the verified broker outcome. If the shadow is already terminal and broker reality
-contradicts it, the coordinator records a `RECONCILIATION_CONFLICT` incident and
-marks the execution disputed (no self-selection, never a regression). P is
-recorded **only** when `LifecycleEvidence` shows a verified terminal + parity.
+If any criterion fails $\implies$ **$P = 0$**, recorded as an incident report, and no promotion occurs.
 
 ---
 
-## 7. Order parameters (OPERATOR MUST CONFIRM — NOT SET BY ANTIGRAVITY)
+## 5. Historical Incidents Log
 
-These are caller-supplied to `run_order_exercise_verification` and are **not**
-chosen by Antigravity, per security discipline:
+### 5.1 Incident 001 (`INCIDENT-20260831-R1-SYNTHETIC-FILL`)
+- **Root Cause:** Synthetic event pump used after real HTTP POST wire submission.
+- **Remediation:** Implementation of `R1RealOrderExerciseDriver` with real SSE/REST observation.
 
-| Field | Value | Confirmed by operator |
-|-------|-------|-----------------------|
-| `symbol` | `<SYMBOL>` | ☐ |
-| `quantity` | `<QTY>` | ☐ |
-| `client_order_id` | `<COID>` | ☐ |
-
-Placeholder values (`<...>`) are NOT runnable. No wire activity occurs until the
-operator fills these in AND grants go-ahead.
-
----
-
-## 8. What exactly gets recorded as **P**
-
-The single P artifact is the `LifecycleEvidence` returned by a **real** Paper
-run (Section 1), plus the broker-side reality confirmed in Section 5/6. P is
-**NOT** `final_state == "FILLED"` alone. Acceptance is the **conjunctive** rule:
-
-$$ \boxed{P = \underbrace{\text{Terminal Verified}}_{\text{final\_state terminal} \land \text{closed\_at set}} \land \underbrace{\text{Evidence Lineage Complete}}_{\text{manifest + report digests valid} \land \text{refs bound}} \land \underbrace{\text{Reconciliation Verified}}_{\text{is\_in\_parity} \land \text{snapshot matches state}} \land \underbrace{\text{No Dispute}}_{\text{disputed == False}} } $$
-
-Operationally, every conjunct must hold:
-
-1. **Terminal Verified** — `final_terminal is True`, `final_state in ("FILLED", "CANCELLED")`,
-   `manifest is not None`, and `manifest.closed_at is not None`.
-2. **Evidence Lineage Complete** — `ExecutionManifest` exists with valid 64-character
-   hex SHA-256 `execution_digest`, `ReconciliationReport` exists with valid
-   64-character hex SHA-256 `report_digest`, and `evidence_refs` resolve to the
-   execution evidence chain.
-3. **Reconciliation Verified** — `ReconciliationReport.is_in_parity is True` AND
-   the resolved state matches the verified broker snapshot:
-   - If `final_state == "FILLED"`: `filled_qty == quantity`
-   - If `final_state == "CANCELLED"`: `filled_qty <= quantity` and broker snapshot confirms `CANCELLED`
-4. **No Dispute** — `disputed is False`; zero `RECONCILIATION_CONFLICT`,
-   zero `UNKNOWN_RECONCILIATION`, zero state-machine rejections, and all step
-   outcomes applied cleanly.
-
-If ANY conjunct is false (e.g. `FILLED` but `disputed is True`, or `FILLED` but
-`is_in_parity is False`, or `closed_at is None`), the run is **NOT P** regardless
-of the `final_state` string.
-
-The accepted P record is:
-
-- `P_OBSERVED` payload above (client_order_id, broker_order_id, final_state,
-  final_terminal, filled_qty, disputed, manifest digest, reconciliation digest,
-  is_in_parity).
-- The `LifecycleEvidence` object itself (no secret material by construction:
-  `credentials` env vars are redacted; `manifest`/`report` carry only hashes and
-  the nominal intent — see the "NOT admission proof" caveat on
-  `build_nominal_intent`).
-
-Counter-evidence is NOT P:
-- Unit/integration tests (E only).
-- Fake-transport harness runs (E only).
-- A run that ends UNKNOWN/disputed/aborted (that is a recorded E/incident, not P
-  of a filled Paper lifecycle).
-- Any run that fails even one conjunct above — `FILLED` with a dispute, a parity
-  failure, or missing lineage is an incident, not P.
-
----
-
-## 9. Emergency / abort procedure
-
-Do **not** run until this section is approved.
-
-1. **Immediate stop**: terminate the Python run (Ctrl-C / kill the process).
-   The harness is fail-closed — no retry on interruption; the order is left
-   UNKNOWN and must be resolved, not assumed.
-2. **Identify the order** (Section 5). If a `broker_order_id` was already
-   returned, find it in the Paper account by `client_order_id`.
-3. **Stop the Paper order** (only if it is still working / not terminal):
-   issue a cancel to Paper via the read-only/paper transport:
-   `t.cancel_order('<BROKER_ORDER_ID>')` — a REQUEST, never a confirmation; then
-   observe broker reality (canceled / filled / rejected) and reconcile
-   accordingly. If already FILLED or non-cancellable, record truth and reconcile.
-4. **Record the incident**: preserve the exception, any partial `LifecycleEvidence`,
-   and the broker reality; mark this run as NOT-P (no fabricated parity).
-5. **Do not re-submit** the same order blindly; confirm the abort reason first.
-
----
-
-## 10. Authorization gate (this is NOT a run)
-
-Execution of this runbook requires explicit operator sign-off on:
-- the exact `symbol` / `quantity` / `client_order_id` (Section 7);
-- the kill/stop procedure (Section 9);
-- confirmation that the exported credentials are Paper-scoped (Section 2.1).
-
-Until signed off, `run_order_exercise_verification()` must not be called and the
-runbook is a **draft only**. `P` remains **0**.
-
----
-
-## 11. Executed R1 Run Record & Incident Finding (2026-08-31)
-
-### 11.1 Run Record
-- **Run Timestamp:** `2026-08-31T04:53:47Z`
-- **Venue:** `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`)
-- **Client Order ID:** `acash-r1-paper-20260831-001`
-- **Broker Order ID:** `46865b08-8da2-4955-9486-ee7ce2ac9cde`
-- **Symbol / Requested Qty:** `SPY` / `1` share
-- **Wire Submission:** Real HTTP POST Accepted (`AlpacaOrderStatus.ACCEPTED`)
-
-### 11.2 Incident & Parity Failure (`INCIDENT-20260831-R1-SYNTHETIC-FILL`)
-- **Incident Description:** `run_order_exercise_verification` submitted the order to Alpaca Paper via real HTTP POST, but subsequently pumped synthetic `acknowledge()` and `full_fill()` events into the internal `ExecutionCoordinator`, driving ACASH internal state to `FILLED` (`filled_qty = 1`).
-- **Authoritative Broker REST Snapshot:** `query_order("46865b08-8da2-4955-9486-ee7ce2ac9cde")` revealed the broker reality was `ACCEPTED` (`filled_qty = 0`) because US Equity markets were closed at the time of submission.
-- **Reconciliation Parity:** **FAILED** (Internal `FILLED/1` $\neq$ Broker `ACCEPTED/0`).
-- **Conjunctive P Decision:** $P_{\text{accepted}} = \text{FALSE} \implies \boxed{P = 0}$.
-
-### 11.3 Emergency Kill / Stop Execution & Verification
-- **Cancel Request Dispatched:** `DELETE /v2/orders/46865b08-8da2-4955-9486-ee7ce2ac9cde` (HTTP 204).
-- **Broker Reality Confirmed:** `status: AlpacaOrderStatus.CANCELED`, `canceled_at: 2026-08-31 04:59:14.619267+00:00`.
-- **Account State Cleanliness:** `query_position('SPY') == None` (zero open position, 100% clean account).
-
-### 11.4 Architectural Finding (`R1-REAL-EXECUTION-FINDING`)
-$$\boxed{\text{Real Submission } \neq \text{ Real Broker Fill } \neq \text{ Synthetic Event Pump}}$$
-- **Rule:** Synthetic event injection cannot produce valid $P$ evidence.
-- **Remediation Plan:** Redesign `R1-REAL` driver to observe real SSE streams / authoritative REST polling for broker-originated transitions and authentic execution fill economics. Live trading remains **HARD-LOCKED**.
+### 5.2 Incident 002 (`INCIDENT-20260831-R1-MARKET-CLOSED-FILL`)
+- **Root Cause:** Order submitted outside regular market hours; driver timeout disconnected observation while broker kept order active and filled at market open.
+- **Remediation:**
+  1. Mandatory Preflight Market Clock Gate (`is_open == True`).
+  2. Hardened Post-Timeout Active-Order Cancellation & Position Audit.

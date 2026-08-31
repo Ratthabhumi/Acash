@@ -177,6 +177,40 @@ class AlpacaTradeEvent:
     order: Optional[AlpacaOrder] = None
 
 
+@dataclass(frozen=True)
+class AlpacaClock:
+    """Authoritative Alpaca market clock snapshot."""
+
+    timestamp: datetime
+    is_open: bool
+    next_open: datetime
+    next_close: datetime
+
+
+@dataclass(frozen=True)
+class AlpacaQuote:
+    """Authoritative Alpaca BBO quote snapshot for benchmark mid-price derivation."""
+
+    symbol: str
+    bid_price: Decimal
+    ask_price: Decimal
+    bid_size: Optional[Decimal] = None
+    ask_size: Optional[Decimal] = None
+    timestamp: Optional[datetime] = None
+
+    @property
+    def mid_price(self) -> Decimal:
+        if self.bid_price <= Decimal("0") or self.ask_price <= Decimal("0"):
+            raise AlpacaTransportParseError(
+                f"Quote bid/ask must be positive, got bid={self.bid_price}, ask={self.ask_price}"
+            )
+        if self.ask_price < self.bid_price:
+            raise AlpacaTransportParseError(
+                f"Crossed market quote: ask {self.ask_price} < bid {self.bid_price}"
+            )
+        return (self.bid_price + self.ask_price) / Decimal("2")
+
+
 class AlpacaTransport(ABC):
     """Abstract Alpaca network/API seam (typed paper/live venue).
 
@@ -231,6 +265,14 @@ class AlpacaTransport(ABC):
     @abstractmethod
     def query_position(self, symbol: str) -> Optional[BrokerPosition]:
         """Return broker-side position snapshot for a symbol."""
+
+    def query_clock(self) -> AlpacaClock:
+        """Query authoritative broker market clock."""
+        raise NotImplementedError("Transport subclass does not implement query_clock")
+
+    def query_quote(self, symbol: str) -> AlpacaQuote:
+        """Query authoritative top-of-book market quote for symbol."""
+        raise NotImplementedError("Transport subclass does not implement query_quote")
 
     @abstractmethod
     def stream_trade_events(
@@ -451,6 +493,52 @@ class HttpAlpacaTransport(AlpacaTransport):
             quantity=_to_decimal(body.get("qty"), "position qty"),
             venue=self._endpoint.venue.value,
         )
+
+    def query_clock(self) -> AlpacaClock:
+        client = self._require_client()
+        resp = self._request(client, "GET", "/clock")
+        if resp.status_code >= 400:
+            self._raise_http("query_clock", resp.status_code)
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise AlpacaTransportParseError("clock reply is not an object.")
+        return AlpacaClock(
+            timestamp=_to_datetime(body.get("timestamp"), "clock timestamp"),
+            is_open=bool(body.get("is_open")),
+            next_open=_to_datetime(body.get("next_open"), "clock next_open"),
+            next_close=_to_datetime(body.get("next_close"), "clock next_close"),
+        )
+
+    def query_quote(self, symbol: str) -> AlpacaQuote:
+        client = self._require_client()
+        data_url = f"https://data.alpaca.markets/v2/stocks/{symbol}/quotes/latest"
+        resp = self._request(client, "GET", data_url)
+        if resp.status_code >= 400:
+            self._raise_http("query_quote", resp.status_code)
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise AlpacaTransportParseError("quote reply is not an object.")
+        raw_quote = body.get("quote")
+        if not isinstance(raw_quote, dict):
+            raise AlpacaTransportParseError(f"quote reply missing 'quote' object for {symbol}.")
+
+        bid_price = _to_decimal(raw_quote.get("bp"), f"{symbol} bid price")
+        ask_price = _to_decimal(raw_quote.get("ap"), f"{symbol} ask price")
+        bid_size = _to_decimal(raw_quote.get("bs"), f"{symbol} bid size") if raw_quote.get("bs") is not None else None
+        ask_size = _to_decimal(raw_quote.get("as"), f"{symbol} ask size") if raw_quote.get("as") is not None else None
+        t_raw = raw_quote.get("t")
+        t_stamp = _to_datetime(t_raw, f"{symbol} quote timestamp") if isinstance(t_raw, str) else None
+
+        quote = AlpacaQuote(
+            symbol=symbol,
+            bid_price=bid_price,
+            ask_price=ask_price,
+            bid_size=bid_size,
+            ask_size=ask_size,
+            timestamp=t_stamp,
+        )
+        _ = quote.mid_price
+        return quote
 
     def stream_trade_events(
         self,

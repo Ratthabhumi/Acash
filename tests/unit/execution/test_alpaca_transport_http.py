@@ -30,9 +30,11 @@ import httpx
 import pytest
 
 from acash.execution.alpaca import (
+    AlpacaClock,
     AlpacaNonCancellableError,
     AlpacaOrder,
     AlpacaOrderStatus,
+    AlpacaQuote,
     AlpacaTradeEvent,
     AlpacaTradeEventType,
     AlpacaTransportAuthError,
@@ -283,6 +285,62 @@ def test_query_position_parses_snapshot() -> None:
     assert pos.symbol == "AAPL"
     assert pos.quantity == Decimal("42.5")
     assert pos.venue == "ALPACA_PAPER"
+
+
+def test_query_clock_parses_market_status() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/clock"
+        return httpx.Response(
+            200,
+            json={
+                "timestamp": "2026-08-31T14:30:00.123456Z",
+                "is_open": True,
+                "next_open": "2026-09-01T09:30:00Z",
+                "next_close": "2026-08-31T16:00:00Z",
+            },
+        )
+
+    t = _make_paper(handler)
+    clock = t.query_clock()
+    assert clock.is_open is True
+    assert isinstance(clock.timestamp, datetime)
+    assert clock.timestamp.tzinfo is not None
+    assert clock.next_close == datetime.fromisoformat("2026-08-31T16:00:00+00:00")
+
+
+def test_query_quote_computes_mid_price_and_rejects_crossed_market() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "quotes/latest" in str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "symbol": "SPY",
+                "quote": {
+                    "bp": "505.10",
+                    "ap": "505.20",
+                    "bs": 100,
+                    "as": 200,
+                    "t": "2026-08-31T14:30:00.000000Z",
+                },
+            },
+        )
+
+    t = _make_paper(handler)
+    quote = t.query_quote("SPY")
+    assert quote.symbol == "SPY"
+    assert quote.bid_price == Decimal("505.10")
+    assert quote.ask_price == Decimal("505.20")
+    assert quote.mid_price == Decimal("505.15")
+
+    # Rejection of crossed market quote
+    crossed_quote = AlpacaQuote(
+        symbol="SPY",
+        bid_price=Decimal("505.50"),
+        ask_price=Decimal("505.00"),
+    )
+    with pytest.raises(AlpacaTransportParseError, match="Crossed market quote"):
+        _ = crossed_quote.mid_price
+
 
 
 # ---------------------------------------------------------------------------

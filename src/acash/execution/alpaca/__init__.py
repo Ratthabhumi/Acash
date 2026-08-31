@@ -63,10 +63,12 @@ from acash.execution.alpaca.paper_exercise import (
 )
 from acash.execution.alpaca.transport import (
     AlpacaCancelReason,
+    AlpacaClock,
     AlpacaEventStream,
     AlpacaNonCancellableError,
     AlpacaOrder,
     AlpacaOrderStatus,
+    AlpacaQuote,
     AlpacaTradeEvent,
     AlpacaTradeEventType,
     AlpacaTransport,
@@ -88,6 +90,7 @@ from acash.execution.alpaca.venue import (
 __all__ = [
     "AlpacaAdapterMappingError",
     "AlpacaCancelReason",
+    "AlpacaClock",
     "AlpacaCredentialError",
     "AlpacaCredentialProvider",
     "AlpacaCredentials",
@@ -97,6 +100,7 @@ __all__ = [
     "AlpacaOrder",
     "AlpacaOrderStatus",
     "AlpacaPaperAdapter",
+    "AlpacaQuote",
     "AlpacaTradeEvent",
     "AlpacaTradeEventType",
     "AlpacaTransport",
