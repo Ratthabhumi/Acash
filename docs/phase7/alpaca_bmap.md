@@ -448,43 +448,43 @@ $$\boxed{P = 1 \text{ (First Paper Evidence Checkpoint: P-001)}}$$
   - `NoDispute` = **PASS** (`disputed == False`)
 - **Conclusion:** **Order 003 is the first accepted Paper evidence checkpoint (P-001).**
 
-| BMAP | Status | Evidence (current Alpaca source & Paper Runtime) |
+| BMAP | Status | Evidence (Alpaca Source & Runtime Provenance) |
 | :-- | :--: | :-- |
-| 01 | P | **verified event vocabulary**: real broker lifecycle observed (`accepted/new` -> `fill`) under `R1RealOrderExerciseDriver` (P-001) |
-| 02 | P | **current field/schema verified**: `broker_order_id`, `client_order_id`, `filled_qty`, `filled_avg_price` mapped into `ExecutionManifest` (P-001) |
-| 03 | P | **`event_id` ULID semantics verified**: publication sequence kept verbatim without timestamp mutation |
-| 04 | P | **cursor/replay capability verified**: `/v2/events/trades` SSE stream + REST snapshot fallback verified |
-| 05 | P | **reconciliation endpoints verified**: REST `GET /v2/orders/{id}` and `/v2/positions` verified in parity (P-001) |
-| 06 | P | **fill/partial semantics verified**: full fill quantity `1` at `765.26` verified on broker (P-001) |
-| 07 | P | **cancel lifecycle/API semantics verified**: BMAP-07 strict cancel provenance & timeout-to-cancel safety protocol verified |
-| 08 | P | **reconnect + redelivery/idempotency semantics verified**: duplicate / replay resilience verified |
-| 09 | P | **time-field separation verified**: `created_at` (18:45:16Z) vs `filled_at` (18:45:17Z) preserved with UTC awareness |
-| 10 | P | **credential/paper-live separation verified**: DPAPI user vault + `ALPACA_PAPER` isolation strictly enforced |
-| 11 | P | **source fields/identities & canonical digest verified**: SHA-256 digests recomputed and verified (P-001) |
-| 12 | P | **conformance checklist verified**: offline 610-test suite + real paper runtime execution (P-001) |
+| 01 | P-001 | **verified nominal event vocabulary**: real broker lifecycle observed (`accepted/new` -> `fill`) under `R1RealOrderExerciseDriver` (P-001) |
+| 02 | P-001 | **current field/schema verified**: `broker_order_id`, `client_order_id`, `filled_qty`, `filled_avg_price` mapped into `ExecutionManifest` (P-001) |
+| 03 | P-001 | **`event_id` ULID semantics verified**: publication sequence kept verbatim without timestamp mutation |
+| 04 | P-001 | **cursor/replay capability verified**: `/v2/events/trades` SSE stream + REST snapshot fallback verified |
+| 05 | P-001 | **reconciliation endpoints verified**: REST `GET /v2/orders/{id}` and `/v2/positions` verified in parity (P-001) |
+| 06 | P-001 | **fill/full fill semantics verified**: full fill quantity `1` at `765.26` verified on broker (P-001) |
+| 07 | E | **cancel lifecycle/API semantics**: BMAP-07 strict cancel provenance & timeout-to-cancel safety protocol verified via adversarial test suite |
+| 08 | E | **reconnect + redelivery/idempotency semantics**: duplicate / replay resilience verified via adversarial test suite |
+| 09 | P-001 | **time-field separation verified**: `created_at` (18:45:16Z) vs `filled_at` (18:45:17Z) preserved with UTC awareness |
+| 10 | P-001 | **credential/paper-live separation verified**: DPAPI user vault + `ALPACA_PAPER` isolation strictly enforced |
+| 11 | P-001 | **source fields/identities & canonical digest verified**: SHA-256 digests recomputed and verified (P-001) |
+| 12 | P-001 | **conformance checklist verified**: offline 610-test suite + real paper runtime nominal execution (P-001) |
 
 ---
 
-## A. Adapter Conformance Matrix — Alpaca (VERIFIED & AUDITED: P = 1)
+## A. Adapter Conformance Matrix — Alpaca (VERIFIED: P-001 ACCEPTED)
 
-> All 12 items verified through offline adversarial test suite and empirical Paper Runtime execution (Checkpoint `P-001`, Order 003).
+> The nominal Paper Order Lifecycle is empirically verified via Checkpoint `P-001` (Order 003). Non-nominal edge paths (e.g. complex cancel races, redeliveries) retain their established offline adversarial E-verification.
 
-| # | Requirement (normative item) | Alpaca (status) |
-| :--- | :--- | :---: |
-| 1 | Raw broker event → `BrokerEventKind` mapping | **PASS (P)** |
-| 2 | Required / optional fields (`field_map`) | **PASS (P)** |
-| 3 | `broker_sequence` semantics documented (ULID, verbatim) | **PASS (P)** |
-| 4 | Fallback ordering declared (no look-alike, REST path only) | **PASS (P)** |
-| 5 | Timeout / ambiguous → `UNKNOWN` (never CANCELLED/REJECTED) | **PASS (P)** |
-| 6 | Partial / full / overfill (overfill fail-closed) | **PASS (P)** |
-| 7 | Cancel request / ack / reject (`CancelRequested ≠ Cancelled`; ambiguous `canceled` → fail-closed) | **PASS (P)** |
-| 8 | Duplicate / out-of-order (coordinator-adjudicated; SSE `since_id` replay) | **PASS (P)** |
-| 9 | Timestamp / clock-skew (UTC, broker report time) | **PASS (P)** |
-| 10 | Credential & secret boundary (paper keys, no leak) | **PASS (P)** |
-| 11 | Evidence provenance / digest (fail-closed on tamper) | **PASS (P)** |
-| 12 | Conformance test checklist (adversarial & runtime P-001) | **PASS (P)** |
+| # | Requirement (normative item) | Alpaca (status) | Evidence Mode |
+| :--- | :--- | :---: | :--- |
+| 1 | Raw broker event → `BrokerEventKind` mapping | **PASS** | `P-001` (Nominal Lifecycle) |
+| 2 | Required / optional fields (`field_map`) | **PASS** | `P-001` (Real Broker Fields) |
+| 3 | `broker_sequence` semantics documented (ULID, verbatim) | **PASS** | `P-001` (Verbatim ULID) |
+| 4 | Fallback ordering declared (no look-alike, REST path only) | **PASS** | `P-001` (SSE Primary + REST Recovery) |
+| 5 | Timeout / ambiguous → `UNKNOWN` (never CANCELLED/REJECTED) | **PASS** | `E` (Adversarial Tests) + `P-001` Protocol |
+| 6 | Partial / full / overfill (overfill fail-closed) | **PASS** | `P-001` (Full Fill) + `E` (Overfill Guard) |
+| 7 | Cancel request / ack / reject (`CancelRequested ≠ Cancelled`; ambiguous `canceled` → fail-closed) | **PASS** | `E` (Adversarial Tests) + Order 001/002 Incident Audit |
+| 8 | Duplicate / out-of-order (coordinator-adjudicated; SSE `since_id` replay) | **PASS** | `E` (Adversarial Tests) |
+| 9 | Timestamp / clock-skew (UTC, broker report time) | **PASS** | `P-001` (UTC-aware timestamps) |
+| 10 | Credential & secret boundary (paper keys, no leak) | **PASS** | `P-001` (DPAPI Vault & Redaction) |
+| 11 | Evidence provenance / digest (fail-closed on tamper) | **PASS** | `P-001` (Cryptographic Lineage Verified) |
+| 12 | Conformance test checklist (adversarial & runtime P-001) | **PASS** | `P-001` (610 Tests + Real Paper Execution) |
 
-Admission rule (framework §2.1 SM-0): **BMAP is LOCKED and VERIFIED with P = 1.**
+Admission rule (framework §2.1 SM-0): **BMAP is LOCKED and VERIFIED with P = 1 (P-001 Accepted).**
 
 ---
 
