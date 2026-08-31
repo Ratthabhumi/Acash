@@ -42,16 +42,16 @@ Phase 0 discovery and architecture evaluation is complete. All architectural fou
 
 ## 4. Phase 0 Deliverables Complete in `docs/`
 
-1. [x] [docs/TECHNOLOGY_EVALUATION.md](./TECHNOLOGY_EVALUATION.md)
-2. [x] [docs/ARCHITECTURE.md](./ARCHITECTURE.md)
-3. [x] [docs/DATA_ARCHITECTURE.md](./DATA_ARCHITECTURE.md)
-4. [x] [docs/EXECUTION_ARCHITECTURE.md](./EXECUTION_ARCHITECTURE.md)
-5. [x] [docs/PORTFOLIO_ARCHITECTURE.md](./PORTFOLIO_ARCHITECTURE.md)
-6. [x] [docs/RESEARCH_ARCHITECTURE.md](./RESEARCH_ARCHITECTURE.md)
-7. [x] [docs/DECISIONS.md](./DECISIONS.md) (ADR-001 through ADR-015)
+1. [x] [docs/architecture/technology_evaluation.md](./architecture/technology_evaluation.md)
+2. [x] [docs/architecture/system_architecture.md](./architecture/system_architecture.md)
+3. [x] [docs/architecture/data_architecture.md](./architecture/data_architecture.md)
+4. [x] [docs/architecture/execution_architecture.md](./architecture/execution_architecture.md)
+5. [x] [docs/architecture/portfolio_architecture.md](./architecture/portfolio_architecture.md)
+6. [x] [docs/architecture/research_architecture.md](./architecture/research_architecture.md)
+7. [x] [docs/DECISIONS.md](./DECISIONS.md) (ADR-001 through ADR-019)
 8. [x] [docs/RISKS.md](./RISKS.md)
 9. [x] [docs/ROADMAP.md](./ROADMAP.md)
-10. [x] [docs/PHASE_1_PLAN.md](./PHASE_1_PLAN.md)
+10. [x] [docs/proposals/phase_1_foundation.md](./proposals/phase_1_foundation.md)
 
 
 ---

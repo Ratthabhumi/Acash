@@ -222,29 +222,46 @@ ACASH explicitly decouples state management from decision and execution flows:
 
 ## 5. Documentation Index (`docs/`)
 
-The complete canonical documentation suite is organized in [`docs/`](docs/):
+The complete canonical documentation suite is organized systematically in [`docs/`](docs/):
 
-- **[`docs/DATA_CONTRACT.md`](docs/DATA_CONTRACT.md)**: Canonical Market Data Contract, Decimal128(38,18), bi-temporal precision, and Recoverable Batch Commit Protocol.
-- **[`docs/DATA_ARCHITECTURE.md`](docs/DATA_ARCHITECTURE.md)**: Analytical (Parquet+DuckDB) partitioned immutable parts, bi-temporal P-I-T qualification queries, and provenance ledger.
-- **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Architectural Decision Records (**ADR-001 through ADR-019**).
-- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: Workspace discovery, runtime state, and infrastructure boundaries.
-- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit phase gates.
-- **[`docs/PHASE_3C_DESIGN_PROPOSAL.md`](docs/PHASE_3C_DESIGN_PROPOSAL.md)**: Microstructure Feature Extraction Engine Design Proposal (Signed Off).
-- **[`docs/PHASE_4_DESIGN_PROPOSAL.md`](docs/PHASE_4_DESIGN_PROPOSAL.md)**: Alpha Research Engine and Hypothesis Contract (Signed Off).
-- **[`docs/PHASE_5_DESIGN_PROPOSAL.md`](docs/PHASE_5_DESIGN_PROPOSAL.md)**: Event-Driven Backtesting Substrate & Simulation Integration (v1.2.0 Signed Off).
-- **[`docs/PHASE_6_DESIGN_PROPOSAL.md`](docs/PHASE_6_DESIGN_PROPOSAL.md)**: Statistical Validation & Overfitting Controls Engine (Gate 6 Passed).
-
-- **[`docs/phase7/CONTEXT_MAP.md`](docs/phase7/CONTEXT_MAP.md)**: Phase 7 context map (Execution & Broker Mapping) — navigation matrix and core invariants.
-- **[`docs/phase7/alpaca_bmap.md`](docs/phase7/alpaca_bmap.md)**: Alpaca concrete Broker Semantic Mapping (BMAP) — E-review status; `P` pending real Paper exercise.
-- **[`docs/phase7/paper_exercise_r1.md`](docs/phase7/paper_exercise_r1.md)**: R1 order-lifecycle contract & P evidence checklist (frozen).
-- **[`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md)**: R1 Paper-run runbook — **DRAFT / NOT AUTHORIZED** (untracked, never commit).
-
-- **[`docs/TECHNOLOGY_EVALUATION.md`](docs/TECHNOLOGY_EVALUATION.md)**: 17-technology evaluation matrix across 10 engineering criteria.
-- **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
-- **[`docs/PORTFOLIO_ARCHITECTURE.md`](docs/PORTFOLIO_ARCHITECTURE.md)**: Portfolio optimization and risk-allocation methods vs transparent baselines.
-- **[`docs/EXECUTION_ARCHITECTURE.md`](docs/EXECUTION_ARCHITECTURE.md)**: Pluggable execution adapters (Mock, MT5, Nautilus substrate).
-- **[`docs/RESEARCH_ARCHITECTURE.md`](docs/RESEARCH_ARCHITECTURE.md)**: Two-tier backtesting (vectorbt $\to$ Nautilus), CPCV, Deflated Sharpe Ratio, and Reality Gap Analysis.
+### 🧭 System Governance & Roadmap
+- **[`docs/README.md`](docs/README.md)**: Master Documentation Hub and Progressive Disclosure Index.
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit quality gates.
+- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: Current system discovery, runtime state, and infrastructure boundaries.
+- **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Canonical Architectural Decision Records (**ADR-001 through ADR-019**).
 - **[`docs/RISKS.md`](docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
+
+### 🏛️ Core Architecture Specifications (`docs/architecture/`)
+- **[`docs/architecture/system_architecture.md`](docs/architecture/system_architecture.md)**: 7 decoupled layers, system dataflow, and performance hierarchy.
+- **[`docs/architecture/data_architecture.md`](docs/architecture/data_architecture.md)**: Analytical (Parquet+DuckDB) partitioned immutable storage & bi-temporal qualification.
+- **[`docs/architecture/data_contract.md`](docs/architecture/data_contract.md)**: Canonical Market Data Contract, `Decimal128(38,18)`, and Recoverable Batch Commit Protocol.
+- **[`docs/architecture/execution_architecture.md`](docs/architecture/execution_architecture.md)**: Sovereign execution subsystem, order lifecycle state machine, and reconciliation loop.
+- **[`docs/architecture/portfolio_architecture.md`](docs/architecture/portfolio_architecture.md)**: `skfolio` optimization vs transparent baselines (Equal Weight, Inv Vol, Cash).
+- **[`docs/architecture/research_architecture.md`](docs/architecture/research_architecture.md)**: Two-tier research engine, econometric inference, and reality gap decomposition.
+- **[`docs/architecture/technology_evaluation.md`](docs/architecture/technology_evaluation.md)**: 17-technology evaluation matrix across 10 engineering criteria.
+
+### 📜 Historical Phase Plans & Proposals (`docs/proposals/`)
+- **[`docs/proposals/phase_1_foundation.md`](docs/proposals/phase_1_foundation.md)**: Phase 1 Foundation & Domain Core Plan.
+- **[`docs/proposals/phase_3_microstructure.md`](docs/proposals/phase_3_microstructure.md)**: Phase 3 Market Microstructure & PIT Feature Engine Plan.
+- **[`docs/proposals/phase_3b_orderbook.md`](docs/proposals/phase_3b_orderbook.md)**: Phase 3B Canonical Order Book & Reconstruction Proposal.
+- **[`docs/proposals/phase_3c_feature_engine.md`](docs/proposals/phase_3c_feature_engine.md)**: Phase 3C Microstructure Feature Extraction Engine Proposal.
+- **[`docs/proposals/phase_4_alpha_engine.md`](docs/proposals/phase_4_alpha_engine.md)**: Phase 4 Alpha Research Engine and Hypothesis Contract.
+- **[`docs/proposals/phase_5_simulation.md`](docs/proposals/phase_5_simulation.md)**: Phase 5 Event-Driven Backtesting Substrate & Simulation Proposal.
+- **[`docs/proposals/phase_6_validation.md`](docs/proposals/phase_6_validation.md)**: Phase 6 Statistical Validation & Overfitting Controls Proposal.
+
+### 🛡️ Phase 6: Statistical Governance (`docs/validation/`)
+- **[`docs/validation/methodology_contract.md`](docs/validation/methodology_contract.md)**: Master Methodology Contract (DSR, MinTRL, CPCV, Mid-Rank PBO, FWER).
+- **[`docs/validation/phase6_methodology_dgp_report.md`](docs/validation/phase6_methodology_dgp_report.md)**: Data Generating Process (DGP) benchmark empirical experiments report.
+
+### ⚡ Phase 7: Live Execution & Broker Integration (`docs/phase7/`)
+- **[`docs/phase7/CONTEXT_MAP.md`](docs/phase7/CONTEXT_MAP.md)**: Phase 7 navigation context map and core invariants.
+- **[`docs/phase7/alpaca_bmap.md`](docs/phase7/alpaca_bmap.md)**: Alpaca Concrete Broker Semantic Mapping (BMAP).
+- **[`docs/phase7/paper_exercise_r1.md`](docs/phase7/paper_exercise_r1.md)**: R1 order-lifecycle contract & P evidence checklist.
+- **[`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md)**: R1 Paper-run operational runbook.
+- **[`docs/phase7/execution_state_machine.md`](docs/phase7/execution_state_machine.md)**: Sovereign order & fill execution state machine.
+
+### 🌐 Project Atlas Knowledge Graph (`docs/atlas/`)
+- **[`docs/atlas/CONTEXT_MAP.md`](docs/atlas/CONTEXT_MAP.md)**: Project Atlas Master Architecture & Microstructure Ontology.
 
 ---
 
