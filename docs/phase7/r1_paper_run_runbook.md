@@ -29,24 +29,22 @@ the run induces (order id, status, fills).
 
 ## 1. Exact command
 
-Run from the repository root (`C:\Users\MewMew\Desktop\Co-op\Acash`).
+Run from the repository root directory:
 
 ```powershell
-# Session: credentials must be exported into the SAME process environment.
-$env:ACASH_ALPACA_API_KEY_ID = "<PAPER account key id>"
-$env:ACASH_ALPACA_API_SECRET = "<PAPER account secret>"
-
-uv run python -c "
-from acash.execution.alpaca.order_exercise import run_order_exercise_verification
+.\scripts\run_paper.ps1 uv run python -c "
 from decimal import Decimal
+from acash.execution.alpaca.order_exercise import run_order_exercise_verification
 
 ev = run_order_exercise_verification(
-    client_order_id='<COID>',   # operator-supplied, explicit
-    symbol='<SYMBOL>',          # operator-supplied, explicit
-    quantity=Decimal('<QTY>'),  # operator-supplied, explicit
+    client_order_id='acash-r1-paper-20260831-001',
+    symbol='SPY',
+    quantity=Decimal('1'),
 )
+print('--- R1 LIFECYCLE EVIDENCE ---')
 print(ev)
-print('P_OBSERVED', {
+print('--- P_OBSERVED METRICS ---')
+print({
     'client_order_id': ev.client_order_id,
     'broker_order_id': ev.broker_order_id,
     'final_state': ev.final_state,
@@ -233,20 +231,23 @@ The single P artifact is the `LifecycleEvidence` returned by a **real** Paper
 run (Section 1), plus the broker-side reality confirmed in Section 5/6. P is
 **NOT** `final_state == "FILLED"` alone. Acceptance is the **conjunctive** rule:
 
-$$ \boxed{P = \underbrace{\text{Terminal Verified}}_{\text{final\_state terminal} \land \text{closed\_at set}} \land \underbrace{\text{Evidence Lineage Complete}}_{\text{manifest + report digests present}} \land \underbrace{\text{Reconciliation Verified}}_{\text{is\_in\_parity}} \land \underbrace{\text{No Dispute}}_{\text{disputed == False}} } $$
+$$ \boxed{P = \underbrace{\text{Terminal Verified}}_{\text{final\_state terminal} \land \text{closed\_at set}} \land \underbrace{\text{Evidence Lineage Complete}}_{\text{manifest + report digests valid} \land \text{refs bound}} \land \underbrace{\text{Reconciliation Verified}}_{\text{is\_in\_parity} \land \text{snapshot matches state}} \land \underbrace{\text{No Dispute}}_{\text{disputed == False}} } $$
 
 Operationally, every conjunct must hold:
 
-1. **Terminal Verified** — `final_terminal is True` and `ExecutionManifest.closed_at`
-   is set (a terminal state is never asserted bare; it carries lineage).
-2. **Evidence Lineage Complete** — `ExecutionManifest.execution_digest` and
-   `ReconciliationReport.report_digest` are present (64-hex sha256), and the
-   intent/manifest/report are bound.
-3. **Reconciliation Verified** — `ReconciliationReport.is_in_parity is True`
-   (single-order parity between internal shadow and broker reality).
-4. **No Dispute** — `disputed is False`; no `RECONCILIATION_CONFLICT` /
-   `UNKNOWN_RECONCILIATION` / late-event / duplicate anomalies against the
-   terminal outcome.
+1. **Terminal Verified** — `final_terminal is True`, `final_state in ("FILLED", "CANCELLED")`,
+   `manifest is not None`, and `manifest.closed_at is not None`.
+2. **Evidence Lineage Complete** — `ExecutionManifest` exists with valid 64-character
+   hex SHA-256 `execution_digest`, `ReconciliationReport` exists with valid
+   64-character hex SHA-256 `report_digest`, and `evidence_refs` resolve to the
+   execution evidence chain.
+3. **Reconciliation Verified** — `ReconciliationReport.is_in_parity is True` AND
+   the resolved state matches the verified broker snapshot:
+   - If `final_state == "FILLED"`: `filled_qty == quantity`
+   - If `final_state == "CANCELLED"`: `filled_qty <= quantity` and broker snapshot confirms `CANCELLED`
+4. **No Dispute** — `disputed is False`; zero `RECONCILIATION_CONFLICT`,
+   zero `UNKNOWN_RECONCILIATION`, zero state-machine rejections, and all step
+   outcomes applied cleanly.
 
 If ANY conjunct is false (e.g. `FILLED` but `disputed is True`, or `FILLED` but
 `is_in_parity is False`, or `closed_at is None`), the run is **NOT P** regardless
@@ -301,3 +302,31 @@ Execution of this runbook requires explicit operator sign-off on:
 
 Until signed off, `run_order_exercise_verification()` must not be called and the
 runbook is a **draft only**. `P` remains **0**.
+
+---
+
+## 11. Executed R1 Run Record & Incident Finding (2026-08-31)
+
+### 11.1 Run Record
+- **Run Timestamp:** `2026-08-31T04:53:47Z`
+- **Venue:** `ALPACA_PAPER` (`https://paper-api.alpaca.markets/v2`)
+- **Client Order ID:** `acash-r1-paper-20260831-001`
+- **Broker Order ID:** `46865b08-8da2-4955-9486-ee7ce2ac9cde`
+- **Symbol / Requested Qty:** `SPY` / `1` share
+- **Wire Submission:** Real HTTP POST Accepted (`AlpacaOrderStatus.ACCEPTED`)
+
+### 11.2 Incident & Parity Failure (`INCIDENT-20260831-R1-SYNTHETIC-FILL`)
+- **Incident Description:** `run_order_exercise_verification` submitted the order to Alpaca Paper via real HTTP POST, but subsequently pumped synthetic `acknowledge()` and `full_fill()` events into the internal `ExecutionCoordinator`, driving ACASH internal state to `FILLED` (`filled_qty = 1`).
+- **Authoritative Broker REST Snapshot:** `query_order("46865b08-8da2-4955-9486-ee7ce2ac9cde")` revealed the broker reality was `ACCEPTED` (`filled_qty = 0`) because US Equity markets were closed at the time of submission.
+- **Reconciliation Parity:** **FAILED** (Internal `FILLED/1` $\neq$ Broker `ACCEPTED/0`).
+- **Conjunctive P Decision:** $P_{\text{accepted}} = \text{FALSE} \implies \boxed{P = 0}$.
+
+### 11.3 Emergency Kill / Stop Execution & Verification
+- **Cancel Request Dispatched:** `DELETE /v2/orders/46865b08-8da2-4955-9486-ee7ce2ac9cde` (HTTP 204).
+- **Broker Reality Confirmed:** `status: AlpacaOrderStatus.CANCELED`, `canceled_at: 2026-08-31 04:59:14.619267+00:00`.
+- **Account State Cleanliness:** `query_position('SPY') == None` (zero open position, 100% clean account).
+
+### 11.4 Architectural Finding (`R1-REAL-EXECUTION-FINDING`)
+$$\boxed{\text{Real Submission } \neq \text{ Real Broker Fill } \neq \text{ Synthetic Event Pump}}$$
+- **Rule:** Synthetic event injection cannot produce valid $P$ evidence.
+- **Remediation Plan:** Redesign `R1-REAL` driver to observe real SSE streams / authoritative REST polling for broker-originated transitions and authentic execution fill economics. Live trading remains **HARD-LOCKED**.

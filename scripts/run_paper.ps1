@@ -23,14 +23,14 @@
 
 [CmdletBinding()]
 param (
-    [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
-    [string[]]$Command,
-
     [Parameter(Mandatory = $false)]
     [switch]$PreflightOnly,
 
     [Parameter(Mandatory = $false)]
-    [switch]$ShowHelp
+    [switch]$ShowHelp,
+
+    [Parameter(Mandatory = $false, ValueFromRemainingArguments = $true)]
+    [string[]]$Command
 )
 
 $ErrorActionPreference = "Stop"
@@ -170,9 +170,8 @@ try {
         $exe = $uvExe
     }
     $argsList = if ($Command.Length -gt 1) { $Command[1..($Command.Length - 1)] } else { @() }
-
     & $exe @argsList
-    $exitCode = $LASTEXITCODE
+    $exitCode = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }
 }
 finally {
     # 6. Strict environment cleanup: clear secrets from process scope
