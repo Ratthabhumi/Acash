@@ -252,13 +252,14 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 8: Portfolio Engine (skfolio & Baselines) [UPCOMING]
+### ✅ Phase 8: Portfolio Engine (Native Optimizers, Baselines & Governance) [COMPLETED & FROZEN]
 - **Objective:** Allocate capital across candidate assets/signals and cash ("NOWHERE").
 - **Deliverables:**
-  - Transparent Baseline Allocators: Equal Weight (1/N), Inverse Volatility (1/$\sigma$), 100% Cash.
-  - `skfolio` portfolio optimization and risk-allocation methods including HRP, ERC and CVaR-based approaches.
-  - Hurdle rate gate: If return < cost + hurdle, allocate to Cash.
-- **Gate 8 Criteria:** `skfolio` must be evaluated for statistically significant incremental value versus transparent baselines out-of-sample; fallback to baseline if optimizer fails.
+  - Transparent Baseline Allocators: Equal Weight (1/N), Inverse Volatility (1/$\sigma$), 100% Cash (`CashAllocator`, `EqualWeightAllocator`, `InverseVolatilityAllocator`).
+  - Native Portfolio Optimizers: Hierarchical Risk Parity (HRP) and Equal Risk Contribution (ERC) with zero-leakage out-of-sample tournament (`AllocationTournamentRunner`).
+  - Optional Adapters: `skfolio` and `cvxpy` adapters with graceful degradation when optional packages are not installed in clean core.
+  - Sovereign Governance Gate: If net expected return fails risk-free rate + hurdle margin, sovereignly allocate 100% Cash via `GOVERNANCE_FALLBACK`.
+- **Gate 8 Criteria:** Fully audited out-of-sample tournament (`Gate 8 Native Allocation Tournament`); Candidate $\neq$ Evaluation $\neq$ Decision; Ranking $\neq$ Approval; Policy-estimated friction (12 bps); Max Drawdown evaluated on net equity path. Commit: `e6f1d04`.
 
 ---
 

@@ -31,6 +31,7 @@ Thumbs.db
 *.parquet
 *.duckdb
 /logs/
+/scratch/
 
 # Secrets: local env files. NEVER commit a real credential.
 # Copy .env.example -> .env and fill in paper-only values by hand.

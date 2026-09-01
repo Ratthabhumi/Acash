@@ -1,7 +1,7 @@
 # ACASH — Developer & Quant Quick Reference Cheatsheet
 
 **Project:** ACASH (Automated Capital Allocation System)  
-**Version:** 1.6.0 (Phases 0–6 Complete & Hardened)  
+**Version:** 1.8.0 (Phases 0–8 Complete & Hardened)
 **Operating Philosophy:** *"DO NOT ASSUME AN EDGE. PROVE IT."*
 
 $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to \text{ALPHA} \to \text{VALIDATION} \to \text{PORTFOLIO} \to \text{RISK} \to \text{EXECUTION} \to \text{OUTCOME} \to \text{FEEDBACK}$$
