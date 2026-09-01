@@ -212,7 +212,7 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
   through broker-neutral semantic mapping to a concrete Alpaca Paper integration,
   and exercise a real (Paper) order lifecycle.
 - **Explicit Paper-before-Live Execution Sequence:**
-  $$\text{Phase 7 Implementation} \to \text{R0 (Read-Only)} \to \text{R1 (Lifecycle Harness)} \to \text{Security Preflight} \to \text{Paper Exercise} \to \text{P Evidence} \to \text{Readiness Review} \to \text{Live Authorization (Phase 13)}$$
+  $$\text{Phase 7 Implementation} \to \text{R0 (Read-Only)} \to \text{R1 (Lifecycle Harness)} \to \text{Security Preflight} \to \text{Paper Exercise} \to \text{P Evidence} \to \text{Readiness Review} \to \text{Live Authorization Hard-Lock}$$
 - **Completed (LOCKED / E-reviewed — 588 tests passing):**
   - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State
     Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E
