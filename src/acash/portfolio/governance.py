@@ -77,6 +77,13 @@ class PortfolioGovernanceGate:
 
             if verdict == "APPROVED":
                 # Candidate approved by sovereign governance!
+                is_cash = (candidate.allocator_name == "CASH")
+                gate_verdict = "CASH_SOVEREIGN_FALLBACK" if is_cash else "APPROVED_INVESTABLE_ALLOCATION"
+                rationale_text = (
+                    f"Candidate '{candidate.candidate_id}' satisfied all sovereign risk, hurdle, and constraint gates."
+                    if not is_cash
+                    else f"Cash fallback baseline authorized: {candidate.candidate_id}."
+                )
                 return AllocationDecision(
                     decision_id=f"DEC_{candidate.candidate_id}_{int(auth_ts.timestamp())}",
                     selected_candidate_id=candidate.candidate_id,
@@ -84,9 +91,9 @@ class PortfolioGovernanceGate:
                     authorized_weights=eval_rec.normalized_weights,
                     cash_weight=eval_rec.normalized_cash_weight,
                     authorization_timestamp=auth_ts,
-                    is_fallback_baseline=(candidate.allocator_name == "CASH"),
-                    gate_verdict="APPROVED_INVESTABLE_ALLOCATION",
-                    rationale=f"Candidate '{candidate.candidate_id}' satisfied all sovereign risk, hurdle, and constraint gates.",
+                    is_fallback_baseline=is_cash,
+                    gate_verdict=gate_verdict,
+                    rationale=rationale_text,
                     candidate_digest=candidate.candidate_digest,
                     evaluation_digest=eval_rec.evaluation_digest,
                     risk_snapshot_digest=risk_snapshot.snapshot_digest,

@@ -42,11 +42,23 @@ from acash.portfolio.schema import (
     recompute_digest,
 )
 
+from acash.portfolio.tournament import (
+    AllocationTournamentRunner,
+    AllocatorSummary,
+    SplitRecord,
+    TournamentConfig,
+    TournamentReport,
+    TournamentSplitConfig,
+    slice_panel,
+)
+
 __all__ = [
     "AllocationCandidate",
     "AllocationDecision",
     "AllocationEvaluation",
     "AllocationEvaluator",
+    "AllocationTournamentRunner",
+    "AllocatorSummary",
     "AssetReturnPanel",
     "CashAllocator",
     "CovarianceEstimator",
@@ -66,5 +78,10 @@ __all__ = [
     "RebalancePlan",
     "RiskSnapshot",
     "SampleCovarianceEstimator",
+    "SplitRecord",
+    "TournamentConfig",
+    "TournamentReport",
+    "TournamentSplitConfig",
     "recompute_digest",
+    "slice_panel",
 ]

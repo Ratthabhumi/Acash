@@ -72,6 +72,8 @@ class RebalancePlanner:
         # 3. Decision Approval Status Verification
         if decision.gate_verdict not in (
             "APPROVED_INVESTABLE_ALLOCATION",
+            "CASH_SOVEREIGN_FALLBACK",
+            "EXPLICIT_CASH_ALLOCATION",
             "PRE_RISK_GATE_KILL_SWITCH_ACTIVE",
             "PRE_RISK_GATE_DRAWDOWN_LIMIT_BREACHED",
             "PRE_RISK_GATE_MARGIN_BUFFER_BREACHED",
