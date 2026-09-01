@@ -261,15 +261,15 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
   - Sovereign Governance Gate: If net expected return fails risk-free rate + hurdle margin, sovereignly allocate 100% Cash via `GOVERNANCE_FALLBACK`.
 - **Gate 8 Criteria:** Fully audited out-of-sample tournament (`Gate 8 Native Allocation Tournament`); Candidate $\neq$ Evaluation $\neq$ Decision; Ranking $\neq$ Approval; Policy-estimated friction (12 bps); Max Drawdown evaluated on net equity path. Commit: `e6f1d04`.
 
----
-
-### ⏳ Phase 9: Deterministic Risk Engine & Kill Switch [UPCOMING]
-- **Objective:** Implement non-negotiable risk boundaries that overrule all upstream models.
+### ✅ Phase 9: Deterministic Risk Engine & Kill Switch [COMPLETED & FROZEN]
+- **Objective:** Implement non-negotiable sovereign risk boundaries that overrule all upstream models.
 - **Deliverables:**
-  - Position limits, maximum leverage limit, maximum portfolio drawdown limit, daily loss limit.
-  - Deterministic Risk Evaluator: `evaluate_allocation(...) -> Approved / Reduced / Rejected`.
-  - Global Kill Switch: Immediate order cancellation and position flattening.
-- **Gate 9 Criteria:** 100% passing rate on risk violation tests (oversized orders, drawdown breaches, rapid loss triggers).
+  - `DeterministicRiskEngine` realizing `IRiskEngine` with multi-tier boundary evaluation (gross leverage, asset concentration, mandatory cash floor, drawdown, daily loss).
+  - `DeriskEngine` implementing proven monotonic `EXACT_SCALE_DOWN` derisking and `BINARY_REJECT`.
+  - `SovereignKillSwitchController` with append-only disk persistence, crash/restart recovery in `PERSISTENTLY_BLOCKED`, and multi-sig `Ed25519TrustStore` quorum reset verification.
+  - `EmergencyFlattenGenerator` emitting zero-target liquidation intents ($q_{\text{target}} \equiv 0.0, \Delta q_i = -q_i$) and `EmergencyFlattenTracker` evaluating completion strictly against Phase 7 broker reconciliation.
+  - `RiskStateBridge` ensuring type-safe, loss-bounded conversions across `PortfolioState`, `RiskSnapshot`, `CandidateRiskAllocation`, and `RiskState`.
+- **Gate 9 Criteria:** 100% passing rate on 70 unit and integration tests; strict fail-closed contract; zero direct broker execution authority in Phase 9. Commit: `6bd40d8`.
 
 ---
 
