@@ -41,7 +41,7 @@ portfolio-all = [
 ```
 
 ### B. Locked Tested Production Stack (`uv.lock`)
-Defines the exact, bit-for-bit validated runtime versions and cryptographic package hashes:
+`uv.lock` freezes the resolved package artifacts for the tested environment; numerical reproducibility is verified for the declared runtime configuration:
 
 | Package | Locked Tested Version | Primary Role / Backend |
 | :--- | :--- | :--- |
