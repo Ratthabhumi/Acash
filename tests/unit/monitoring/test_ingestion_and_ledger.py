@@ -19,16 +19,22 @@ from pathlib import Path
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
-from acash.monitoring.ingestion import ForwardTelemetryIngestor, StreamStatus
+from acash.monitoring.ingestion import (
+    ForwardTelemetryIngestor,
+    StreamIntegrityState,
+    StreamStatus,
+)
 from acash.monitoring.ledger import MonitoringEvidenceLedger
 from acash.monitoring.schema import (
     ExecutionCostEvidence,
     ForwardGovernanceRecommendation,
+    ForwardHealthPolicy,
     ForwardHealthState,
     ForwardObservation,
     ForwardWindowMetrics,
     StrategyForwardDriftEvidence,
 )
+from acash.monitoring.state_machine import ForwardHealthStateMachine
 from acash.runtime.ledger import GENESIS_PREVIOUS_DIGEST
 
 BASE_TIME = datetime(2026, 9, 2, 10, 0, 0, tzinfo=timezone.utc)
@@ -159,9 +165,118 @@ def test_intermediate_sequence_gap_rejected_and_stream_blocked() -> None:
 
     assert ingestor.is_telemetry_valid("STRAT_A") is False
 
-    # Subsequent observation (even if seq 1 arrives late) is rejected because stream is blocked
-    with pytest.raises(DataContractError, match="STREAM_PERMANENTLY_BLOCKED"):
+    # Subsequent observation without explicit reinitialization is rejected
+    with pytest.raises(DataContractError, match="STREAM_BLOCKED"):
         ingestor.ingest_observation(_create_forward_observation("OBS_1", "STRAT_A", 1, t0 + timedelta(minutes=5)))
+
+
+def test_stream_recovery_after_gap_with_explicit_reinitialization() -> None:
+    """Explicit stream recovery/reinitialization boundary after a sequence gap outage.
+
+    Contract Invariants:
+    1. Stream gap marks integrity_state = BLOCKED.
+    2. Attempting to continue the old sequence without reinitialization fails closed.
+    3. reinitialize_stream() advances epoch_index, restores VALID state, resets sequence to -1.
+    4. In the new epoch, sequence must restart at 0 (does NOT continue old sequence or heal missing bars).
+    5. Observation IDs from previous epochs cannot be replayed.
+    """
+    ingestor = ForwardTelemetryIngestor()
+    t0 = BASE_TIME
+
+    # Epoch 0: Ingest seq 0
+    obs0 = _create_forward_observation("OBS_0", "STRAT_A", 0, t0)
+    ingestor.ingest_observation(obs0)
+
+    # Gap: Observation 2 arrives (missing 1) -> stream blocked!
+    obs2 = _create_forward_observation("OBS_2", "STRAT_A", 2, t0 + timedelta(minutes=10))
+    with pytest.raises(DataContractError, match="SEQUENCE_GAP_DETECTED"):
+        ingestor.ingest_observation(obs2)
+
+    status_blocked = ingestor.get_stream_status("STRAT_A")
+    assert status_blocked is not None
+    assert status_blocked.integrity_state == StreamIntegrityState.BLOCKED
+    assert ingestor.is_telemetry_valid("STRAT_A") is False
+
+    # Attempting to auto-resume from 3 or 1 is strictly rejected
+    with pytest.raises(DataContractError, match="STREAM_BLOCKED"):
+        ingestor.ingest_observation(_create_forward_observation("OBS_3", "STRAT_A", 3, t0 + timedelta(minutes=15)))
+
+    # Explicit Operator/Supervisor Stream Reinitialization
+    status_reinit = ingestor.reinitialize_stream("STRAT_A", recovery_reason="Network gap investigated; epoch re-anchored")
+    assert status_reinit.epoch_index == 1
+    assert status_reinit.last_sequence == -1
+    assert status_reinit.integrity_state == StreamIntegrityState.VALID
+    assert ingestor.is_telemetry_valid("STRAT_A") is True
+
+    # In Epoch 1: Attempting to start at sequence 1 fails closed (must start at 0!)
+    with pytest.raises(DataContractError, match="SEQUENCE_GAP_DETECTED"):
+        ingestor.ingest_observation(_create_forward_observation("OBS_E1_SEQ1", "STRAT_A", 1, t0 + timedelta(minutes=20)))
+
+    # Since attempting sequence 1 blocked Epoch 1, reinitialize again to test clean epoch start
+    ingestor.reinitialize_stream("STRAT_A", recovery_reason="Re-anchoring clean epoch after test error")
+    assert ingestor.is_telemetry_valid("STRAT_A") is True
+
+    # In clean Epoch 2: Starting cleanly at sequence 0 succeeds!
+    t1 = t0 + timedelta(minutes=20)
+    obs_e2_0 = _create_forward_observation("OBS_E2_0", "STRAT_A", 0, t1)
+    res_e2_0 = ingestor.ingest_observation(obs_e2_0)
+    assert res_e2_0.observation_sequence == 0
+
+    # In clean Epoch 2: Sequence 1 follows sequence 0 cleanly
+    obs_e2_1 = _create_forward_observation("OBS_E2_1", "STRAT_A", 1, t1 + timedelta(minutes=5))
+    res_e2_1 = ingestor.ingest_observation(obs_e2_1)
+    assert res_e2_1.observation_sequence == 1
+
+    # Replay of old observation ID from Epoch 0 is rejected fail-closed
+    with pytest.raises(DataContractError, match="DUPLICATE_OBSERVATION_REJECTED"):
+        ingestor.ingest_observation(_create_forward_observation("OBS_0", "STRAT_A", 2, t1 + timedelta(minutes=10)))
+
+
+def test_state_machine_recovery_end_to_end_with_ingestor() -> None:
+    """End-to-end integration: Ingestor telemetry outage -> MONITORING_BLOCKED -> reinitialization -> INSUFFICIENT_EVIDENCE."""
+    ingestor = ForwardTelemetryIngestor()
+    policy = ForwardHealthPolicy()
+    state_machine = ForwardHealthStateMachine(policy)
+
+    # 1. Telemetry failure on ingestor
+    obs_bad = _create_forward_observation("OBS_ERR", "STRAT_A", 0, BASE_TIME, is_telemetry_valid=False)
+    ingestor.ingest_observation(obs_bad)
+    assert ingestor.is_telemetry_valid("STRAT_A") is False
+
+    # 2. State machine detects invalid telemetry -> enters MONITORING_BLOCKED
+    metrics = ForwardWindowMetrics(
+        window_size=60,
+        observation_count=60,
+        mean_realized_return_annualized=Decimal("0.185"),
+        realized_volatility_annualized=Decimal("0.120"),
+        realized_sharpe_ratio=Decimal("1.54"),
+        max_drawdown=Decimal("0.045"),
+        inception_max_drawdown=Decimal("0.062"),
+        hit_rate=Decimal("0.58"),
+        t_stat_decay=Decimal("2.41"),
+    )
+    res1 = state_machine.evaluate_step(
+        current_state=ForwardHealthState.HEALTHY,
+        metrics=metrics,
+        is_telemetry_valid=ingestor.is_telemetry_valid("STRAT_A"),
+    )
+    assert res1.state == ForwardHealthState.MONITORING_BLOCKED
+    assert res1.recommendation == ForwardGovernanceRecommendation.MONITORING_BLOCKED_FLAG
+
+    # 3. Telemetry Stream Reinitialized
+    ingestor.reinitialize_stream("STRAT_A", recovery_reason="Outage resolved")
+    assert ingestor.is_telemetry_valid("STRAT_A") is True
+
+    # 4. State machine evaluates step with restored telemetry:
+    # Under Slice 3 contract: transitions to INSUFFICIENT_EVIDENCE to rebuild evidence!
+    res2 = state_machine.evaluate_step(
+        current_state=ForwardHealthState.MONITORING_BLOCKED,
+        metrics=metrics,
+        is_telemetry_valid=ingestor.is_telemetry_valid("STRAT_A"),
+    )
+    assert res2.state == ForwardHealthState.INSUFFICIENT_EVIDENCE
+    assert res2.recommendation == ForwardGovernanceRecommendation.CONTINUE_UNRESTRICTED
+    assert "TELEMETRY_RESTORED_RESET_TO_INSUFFICIENT_EVIDENCE" in res2.drift_flags
 
 
 def test_out_of_order_timestamp_rejected() -> None:

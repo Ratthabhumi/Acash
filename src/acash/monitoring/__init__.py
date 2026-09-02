@@ -12,6 +12,7 @@ from acash.monitoring.attribution import (
 )
 from acash.monitoring.ingestion import (
     ForwardTelemetryIngestor,
+    StreamIntegrityState,
     StreamStatus,
 )
 from acash.monitoring.ledger import (
@@ -65,6 +66,7 @@ __all__ = [
     "decompose_execution_drag",
     "aggregate_execution_cost_evidence",
     "ForwardTelemetryIngestor",
+    "StreamIntegrityState",
     "StreamStatus",
     "MonitoringEvidenceLedger",
 ]
