@@ -177,8 +177,8 @@ class ForwardWindowMetrics(BaseModel):
     
     # Statistical Decay Estimators
     tracking_error_annualized: Decimal       # Deviation from expected return stream
-    information_coefficient: Optional[Decimal] # Correlation(signal, forward_return)
-    ic_decay_slope: Optional[Decimal]        # Linear slope of rolling IC over time
+    information_coefficient: Optional[Decimal] = None # Explicitly deferred (Option B) pending cross-sectional telemetry contract
+    ic_decay_slope: Optional[Decimal] = None        # Explicitly deferred (Option B) pending cross-sectional telemetry contract
     t_stat_decay: Decimal                    # Student's t-statistic of excess returns
     expected_vs_realized_divergence_bps: Decimal # Divergence from research baseline expectation
 ```
@@ -283,21 +283,32 @@ Phase 8 Governance Review (Approved Friction Parameters for Portfolio Rebalance)
 
 ### B. Mathematical Definitions & Sign Conventions
 
-To avoid conflating execution economics with data validity or alpha manufacturing, the following deterministic sign conventions are established:
+To avoid conflating transit market movement (timing) with broker execution slippage and spread, `ExecutionObservation` ingests discrete price milestones (`decision_mid`, `arrival_mid`, `arrival_bid`, `arrival_ask`, `executed_fill`). The following deterministic formulas and sign conventions are established:
 
-1. **Spread Drag ($\text{bps}$):**
-   $$\text{SpreadDrag} = \frac{|\text{QuotedAsk} - \text{QuotedBid}|}{2 \cdot \text{DecisionMidPrice}} \times 10{,}000 \ge 0.0$$
-2. **Slippage Drag ($\text{bps}$):**
-   $$\text{SlippageDrag} = \text{SideSign} \times \frac{\text{ExecutedFillPrice} - \text{ArrivalPrice}}{\text{ArrivalPrice}} \times 10{,}000$$
-   *(Where $\text{SideSign} = +1$ for BUY and $-1$ for SELL. Adverse price movement produces positive slippage drag).*
-3. **Timing / Latency Drag ($\text{bps}$):**
-   $$\text{TimingDrag} = \text{SideSign} \times \frac{\text{ArrivalPrice} - \text{DecisionMidPrice}}{\text{DecisionMidPrice}} \times 10{,}000$$
+1. **Quoted Spread Drag ($\text{bps}$):**
+   Half-spread quoted upon order arrival at the execution venue:
+   $$\text{SpreadDrag} = \frac{\text{arrival\_ask\_price} - \text{arrival\_bid\_price}}{2 \cdot \text{arrival\_mid\_price}} \times 10{,}000 \ge 0.0$$
+
+2. **Timing / Pre-Arrival Market Movement Drag ($\text{bps}$):**
+   Price drift between decision authorization and venue arrival:
+   $$\text{TimingDrag} = \text{SideSign} \times \frac{\text{arrival\_mid\_price} - \text{decision\_mid\_price}}{\text{decision\_mid\_price}} \times 10{,}000$$
+   *(Where $\text{SideSign} = +1$ for BUY and $-1$ for SELL. Adverse market movement produces positive drag; favorable drift produces negative drag).*
+
+3. **Execution Slippage Drag ($\text{bps}$):**
+   Execution price achieved relative to expected execution quote at arrival:
+   $$P_{\text{arrival\_quoted}} = \begin{cases} \text{arrival\_ask\_price} & \text{for BUY} \\ \text{arrival\_bid\_price} & \text{for SELL} \end{cases}$$
+   $$\text{SlippageDrag} = \text{SideSign} \times \frac{\text{executed\_fill\_price} - P_{\text{arrival\_quoted}}}{P_{\text{arrival\_quoted}}} \times 10{,}000$$
+   *(Measures execution impact and broker slippage beyond the quoted spread at arrival).*
+
 4. **Commission & Exchange Fee Drag ($\text{bps}$):**
    $$\text{FeeDrag} = \frac{\text{TotalFeesUSD}}{\text{FilledNotionalUSD}} \times 10{,}000 \ge 0.0$$
+
 5. **Maker Rebate Benefit ($\text{bps}$):**
    $$\text{RebateBenefit} = \frac{\text{TotalRebateUSD}}{\text{FilledNotionalUSD}} \times 10{,}000 \ge 0.0$$
+
 6. **Gross Execution Drag ($\text{bps}$):**
-   $$\text{GrossDrag} = \text{SpreadDrag} + \max(0.0, \text{SlippageDrag}) + \max(0.0, \text{TimingDrag}) + \text{FeeDrag} \ge 0.0$$
+   $$\text{GrossDrag} = \text{SpreadDrag} + \max(0.0, \text{TimingDrag}) + \max(0.0, \text{SlippageDrag}) + \text{FeeDrag} \ge 0.0$$
+
 7. **Net Realized Execution Cost ($\text{bps}$):**
    $$\text{NetRealizedCost} = \text{GrossDrag} - \text{RebateBenefit}$$
    *(May legitimately be negative if $\text{RebateBenefit} > \text{GrossDrag}$. Represents factual net execution economics).*
@@ -309,7 +320,7 @@ To avoid conflating execution economics with data validity or alpha manufacturin
 #### 1. `ExecutionObservation` (Ingested from Phase 7 `ExecutionManifest`)
 ```python
 class ExecutionObservation(BaseModel):
-    """Normalized atomic fill observation ingested from Phase 7 ExecutionManifest."""
+    """Normalized atomic fill observation with discrete price milestones ingested from Phase 7."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     observation_id: str
@@ -320,15 +331,17 @@ class ExecutionObservation(BaseModel):
     symbol: str
     order_side: str                          # 'BUY' | 'SELL'
     
-    decision_timestamp_utc: datetime         # Moment OrderIntent was generated
-    submission_timestamp_utc: datetime       # Moment packet sent to broker socket
+    decision_timestamp_utc: datetime         # Moment OrderIntent was authorized
+    arrival_timestamp_utc: datetime          # Moment order arrived at broker socket
     fill_timestamp_utc: datetime             # Broker observed execution timestamp
     
     requested_qty: Decimal
     filled_qty: Decimal
     
-    decision_mid_price: Decimal              # Benchmark mid-price at decision time
-    arrival_price: Decimal                   # Quoted price at broker receipt
+    decision_mid_price: Decimal              # Benchmark mid-price at decision authorization
+    arrival_mid_price: Decimal               # Benchmark mid-price at broker receipt
+    arrival_bid_price: Decimal               # Quoted bid at arrival
+    arrival_ask_price: Decimal               # Quoted ask at arrival
     executed_fill_price: Decimal             # Volume-weighted average fill price
     commission_fee_usd: Decimal              # Total broker & exchange fees paid (>= 0.0)
     rebate_usd: Decimal                      # Total maker rebates received (>= 0.0)
@@ -348,8 +361,8 @@ class RealizedExecutionDrag(BaseModel):
     symbol: str
     
     spread_drag_bps: Decimal                 # Cost paid across bid/ask spread (>= 0.0)
-    slippage_drag_bps: Decimal               # Adverse market movement (positive = adverse)
-    timing_latency_drag_bps: Decimal         # Price drift between decision and arrival
+    timing_drag_bps: Decimal                 # Price drift between decision and arrival (Signed)
+    slippage_drag_bps: Decimal               # Adverse market impact beyond arrival quote (Signed)
     commission_fee_bps: Decimal              # Broker/exchange fees in basis points (>= 0.0)
     rebate_benefit_bps: Decimal              # Maker rebate reduction in basis points (>= 0.0)
     
@@ -473,20 +486,26 @@ To eliminate any ambiguity between universal mathematical truths and configurabl
 
 ---
 
-## 6. Dual-Clock & Idempotency Rules
+## 6. Dual-Clock, Stream Scope, & Idempotency Rules
 
 1. **Temporal Separation:**
    $$\boxed{\mathbf{as\_of\_utc} \neq \mathbf{wall\_clock\_utc}}$$
    - All rolling econometric statistics and window indices operate strictly on `as_of_utc`.
    - Telemetry latency, queue delays, and disk persistence operate on `wall_clock_utc`.
-2. **Idempotent Observation Ingestion:**
-   $$\text{Ingest}(\text{Observation}_k) \land \text{observation\_id} \in \text{ObservedSet} \implies \text{DataContractError("DUPLICATE\_OBSERVATION")}$$
-3. **Monotonic Sequence Enforcement:**
-   - Observations for a strategy must arrive with strictly increasing sequence numbers: $\text{Seq}[k] = \text{Seq}[k-1] + 1$.
-   - Out-of-order timestamps fail closed immediately.
-4. **Monitoring Lockout Fail-Closed:**
-   - When telemetry is interrupted or out-of-order, transition to `MONITORING_BLOCKED`.
-   - Never substitute missing periods with zero or fabricated values.
+2. **Per-Strategy Stream Scope & Duplicate Gating:**
+   - **Stream Identity:** Sequence and timestamp monotonicity are scoped strictly **per-strategy**:
+     $$\text{Stream Identity} \equiv \text{strategy\_id}$$
+     $$\text{Seq}_s[k] = \text{Seq}_s[k-1] + 1 \quad \text{and} \quad t_{\text{as\_of}, s}[k] > t_{\text{as\_of}, s}[k-1]$$
+   - **Authoritative Duplicate Key:** Evaluated on Composite Key `(strategy_id, observation_sequence)` AND SHA-256 `observation_id`. Any seen duplicate fails closed with `DataContractError("DUPLICATE_OBSERVATION")`.
+3. **Monitoring Lockout Fail-Closed:**
+   - When a sequence gap is detected ($\text{Seq}_s[k] \neq \text{Seq}_s[k-1] + 1$) or timestamps are inverted, transition immediately to `MONITORING_BLOCKED`.
+   - Never substitute missing periods with zero or fabricated return values (`No Evidence != Negative Evidence`).
+4. **Structural Break Drawdown Reference Window:**
+   - `ForwardWindowMetrics.max_drawdown` measures peak-to-trough drawdown **within the rolling $W$-period window** (e.g. $W=60$).
+   - `policy.critical_drawdown_limit` (triggering `STRUCTURAL_BREAK`) is measured against the **Forward-Monitoring Inception High-Water Mark (HWM)**:
+     $$\text{HWM}_{\text{inception}}(t) = \max_{0 \le \tau \le t} \text{CumulativeEquity}_{\text{forward}}(\tau)$$
+     $$\text{Drawdown}_{\text{inception}}(t) = \frac{\text{HWM}_{\text{inception}}(t) - \text{CumulativeEquity}_{\text{forward}}(t)}{\text{HWM}_{\text{inception}}(t)}$$
+   - A strategy immediately trips `STRUCTURAL_BREAK` when $\text{Drawdown}_{\text{inception}}(t) \ge \text{policy.critical\_drawdown\_limit}$.
 
 ---
 

@@ -66,8 +66,8 @@ to **26 distinct adversarial attack vectors** spanning econometric instability, 
 
 ### Attack 01: Catastrophic Performance Collapse
 - **Threat Vector:** A strategy suffers an immediate -25% drawdown in forward paper trading due to an unmodeled regime shift or market structural break.
-- **Detection:** `ForwardWindowMetrics.max_drawdown` exceeds `policy.critical_drawdown_limit` (0.20) or cumulative loss exceeds `policy.critical_cumulative_loss_bps`.
-- **Containment:** Forward monitor immediately transitions state from `HEALTHY` to `STRUCTURAL_BREAK` without requiring hysteresis delay. Single catastrophic breach trips the structural breaker.
+- **Detection:** Inception high-water mark drawdown $\text{Drawdown}_{\text{inception}}$ exceeds `policy.critical_drawdown_limit` (0.20) or cumulative loss exceeds `policy.critical_cumulative_loss_bps`.
+- **Containment:** Forward monitor immediately transitions state from `HEALTHY` to `STRUCTURAL_BREAK` without requiring hysteresis delay. Single catastrophic breach of inception boundary trips the structural breaker.
 - **Authority Boundary:** Phase 11 Monitor emits `StrategyForwardDriftEvidence` with recommendation `RECOMMEND_RETIREMENT`.
 - **State Transition:** `HEALTHY` $\longrightarrow$ `STRUCTURAL_BREAK`.
 - **Recovery:** Irreversible terminal state. Historical Phase 8.5 dossier remains untouched.
@@ -107,22 +107,22 @@ to **26 distinct adversarial attack vectors** spanning econometric instability, 
 ---
 
 ### Attack 06: Missing / Dropped Daily Observations (Sequence Gap)
-- **Threat Vector:** An operational glitch causes observation #14 to be skipped, sending observation #15 immediately after #13.
-- **Detection:** Ingestion finds $\text{Observation}.\text{observation\_sequence} = 15 \neq 13 + 1$.
-- **Containment:** Immediate fail-closed halt with `DataContractError("OBSERVATION_SEQUENCE_GAP: Expected 14, received 15")`. State machine locks into `MONITORING_BLOCKED` until replay audit reconciles the sequence.
+- **Threat Vector:** An operational glitch causes observation #14 to be skipped for strategy `STRAT_01`, sending observation #15 immediately after #13.
+- **Detection:** Ingestion evaluates per-strategy stream and finds $\text{Observation}.\text{observation\_sequence} = 15 \neq 13 + 1$ for `STRAT_01`.
+- **Containment:** Immediate fail-closed halt with `DataContractError("OBSERVATION_SEQUENCE_GAP: Strategy STRAT_01 expected 14, received 15")`. State machine locks into `MONITORING_BLOCKED` until replay audit reconciles the stream.
 
 ---
 
 ### Attack 07: Out-of-Order Observation Injection
-- **Threat Vector:** Observations arrive inverted in time ($t_{\text{as\_of}} = 2026\text{-}09\text{-}03$ arrives before $2026\text{-}09\text{-}02$).
-- **Detection:** `as_of_utc <= last_observed_as_of_utc`.
+- **Threat Vector:** Observations arrive inverted in time ($t_{\text{as\_of}} = 2026\text{-}09\text{-}03$ arrives before $2026\text{-}09\text{-}02$) for the same strategy stream.
+- **Detection:** Per-strategy evaluation: `as_of_utc <= last_observed_as_of_utc[strategy_id]`.
 - **Containment:** Strict fail-closed rejection with `DataContractError("TEMPORAL_INVERSION_DETECTED")`. Out-of-order records are rejected at the boundary.
 
 ---
 
 ### Attack 08: Duplicate Observation Replay
-- **Threat Vector:** A network retry resends an already processed `observation_id`.
-- **Detection:** `observation_id in self._processed_observation_ids`.
+- **Threat Vector:** A network retry resends an already processed `observation_id` or duplicate `(strategy_id, observation_sequence)`.
+- **Detection:** Composite key `(strategy_id, observation_sequence) in self._processed_sequence_keys` or `observation_id in self._processed_observation_ids`.
 - **Containment:** Ingestion rejects duplicate with `DataContractError("DUPLICATE_OBSERVATION")`. Window metrics remain unchanged.
 
 ---
