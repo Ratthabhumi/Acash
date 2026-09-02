@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/contract_specification_v1.md`  
 > **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
-> **Baseline Commit:** `f3ee841` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `01d7e69` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -518,7 +518,8 @@ $$\boxed{\text{Receive} \longrightarrow \text{IP/Token Auth} \longrightarrow \te
 2. **Payload Token Validation:** Verify pre-shared passphrase (`401 Unauthorized`).
 3. **Canonical Event ID Derivation:** Calculate deterministic `event_id`.
 4. **Idempotency Lookup (Executed PRE-Freshness):**
-   - Query bounded LRU cache / persistent ledger for `event_id`.
+   - Query durable disk-backed receipt ledger (with bounded in-memory LRU cache acceleration) for `event_id`.
+   - **Durable Persistence Invariant:** Idempotency receipts MUST survive process crashes and coordinator restarts. In-memory-only cache implementations that lose idempotency history on restart are strictly prohibited.
    - If `event_id` was previously processed successfully $\implies$ **Return HTTP 200 Idempotent ACK** (`status="IDEMPOTENT_ACK_DUPLICATE_DROPPED"`) without generating duplicate candidate signals.
 5. **Freshness Validation (For New Events Only):**
    - Evaluate $\text{received\_at} - \text{event\_timestamp} \le T_{\text{max}} = 60\text{s}$.
@@ -534,7 +535,7 @@ $$\boxed{\text{Receive} \longrightarrow \text{IP/Token Auth} \longrightarrow \te
 - **Fast-ACK + Durable Enqueue Pattern:**
   The synchronous request path is strictly constrained to:
   $$\text{Receive} \to \text{Auth} \to \text{Parse} \to \text{Canonical ID} \to \text{Idempotency Lookup} \to \text{Freshness} \to \text{Durable Enqueue} \to \text{HTTP 200 Fast-ACK}$$
-- **Operational SLA Target:** Ingress synchronous processing must complete with target latency $t_{\text{resp}} < 50\text{ms}$ (and hard timeout at $1500\text{ms}$), well within TradingView's 3-second delivery constraint. All econometric research, tournament evaluation, risk gating, and broker routing occur strictly asynchronously on downstream worker cycles.
+- **ACASH Internal Ingress SLA:** Ingress synchronous processing must complete with target latency $t_{\text{resp}} < 50\text{ms}$ (and hard internal timeout at $1500\text{ms}$). This internal performance SLA ensures deterministic delivery completion well before TradingView's ~3-second request abort threshold. All econometric research, tournament evaluation, risk gating, and broker routing occur strictly asynchronously on downstream worker cycles.
 
 ---
 
@@ -596,7 +597,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 17. Verification Ledger & Audit Signoff
 
-- **Active Baseline Commit:** `f3ee841` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `01d7e69` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors in 245 files).
 - **Rule:** Do NOT write production code for Phase 12 until this Contract Specification v1.0 and the accompanying Red-Team Adversarial Matrix are reviewed and locked.
