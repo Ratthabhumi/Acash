@@ -5,6 +5,11 @@ to evaluate forward strategy health and attribute empirical execution friction
 without claiming operational execution or historical research authority.
 """
 
+from acash.monitoring.attribution import (
+    ExecutionAttributionEngine,
+    aggregate_execution_cost_evidence,
+    decompose_execution_drag,
+)
 from acash.monitoring.metrics import (
     DEFAULT_ANNUALIZATION_FACTOR,
     ForwardMetricsCalculator,
@@ -47,4 +52,7 @@ __all__ = [
     "calculate_forward_window_metrics",
     "ForwardHealthStateMachine",
     "StateTransitionResult",
+    "ExecutionAttributionEngine",
+    "decompose_execution_drag",
+    "aggregate_execution_cost_evidence",
 ]
