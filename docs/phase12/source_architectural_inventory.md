@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `4022ef2` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `e663fa5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -173,9 +173,11 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
 ```
 
 #### Deterministic Resolution Algorithm:
-1. **Passive Maker Request Check:** If `execution_policy == "PASSIVE_MAKER"`:
+1. **Passive Maker Request Check (BOC Exception):** If `execution_policy == "PASSIVE_MAKER"`:
    - Verify `order_type` $\in$ {`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`}. If not, fail closed with `DataContractError("BOC_INVALID_FOR_ORDER_TYPE")`.
-   - Verify `symbol_info.filling_mode` contains `SYMBOL_FILLING_BOC`. If not, fail closed with `DataContractError("SYMBOL_DOES_NOT_SUPPORT_BOC")`.
+   - Verify `symbol_info.trade_execution_mode == "EXCHANGE"`. If not, fail closed with `DataContractError("BOC_REQUIRES_EXCHANGE_EXECUTION_MODE")`.
+   - Verify `symbol_info.filling_mode` bitmask contains `SYMBOL_FILLING_BOC`. If not, fail closed with `DataContractError("SYMBOL_DOES_NOT_SUPPORT_BOC")`.
+   - Verify order capability: if limit order, verify `symbol_info.order_mode` contains `SYMBOL_ORDER_LIMIT`; if stop-limit, verify `SYMBOL_ORDER_STOP_LIMIT`. If not, fail closed with `DataContractError("SYMBOL_ORDER_MODE_NOT_PERMITTED")`.
    - Assign `ORDER_FILLING_BOC`.
 2. **Generic Pending Orders Path:** If `order_type` is pending (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`) without passive BOC override:
    - Assign `ORDER_FILLING_RETURN` strictly (MQL5 universal pending-order standard).
@@ -341,7 +343,7 @@ Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `4022ef2` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `e663fa5` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
