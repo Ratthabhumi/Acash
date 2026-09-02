@@ -367,10 +367,10 @@ Slice 3: MT5 Terminal Driver & IPC Transport Bridge (Windows Local)
 Slice 4: MT5 Broker Adapter (MT5BrokerAdapter) & 6-D Reconciliation Engine
    │
    ▼
-Slice 5: TradingView Ingress Gateway (HMAC Sanitizer & Candidate Signal DTO)
+Slice 5: TradingView Ingress Gateway (IP/Token Sanitizer & Candidate Signal DTO)
    │
    ▼
-Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
+Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 ```
 
 ---

@@ -2,8 +2,8 @@
 ## Adversarial Stress Vectors, Boundary Violations & Failure Modes
 
 > **Document:** `docs/phase12/red_team_matrix_v1.md`  
-> **Status:** RED-TEAM ADVERSARIAL MATRIX v1.0 (LOCKED ADVERSARIAL SPECIFICATION)  
-> **Baseline Commit:** `0816bf5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
+> **Baseline Commit:** `0ae5c69` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Target System:** Phase 12 MT5 Broker Adapter, Contract Normalizer, 6-D Reconciliation & TradingView Ingress  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Single Authority Invariant)
 
@@ -13,7 +13,7 @@
 
 The Phase 12 execution adapter sits directly on the boundary between ACASH deterministic mathematical state and volatile broker socket reality. Unit tests proving happy-path serialization are **insufficient**.
 
-Every test vector in this matrix attacks the assumptions of the adapter, terminal driver, contract normalizer, and webhook ingress across 6 adversarial domains:
+Every test vector in this matrix attacks the assumptions of the adapter, terminal driver, contract normalizer, and webhook ingress across 6 adversarial domains (**31 adversarial vectors across 6 domains**):
 1. **Order Lifecycle & Fill Telemetry Corruption (Vectors 1–6)**
 2. **Terminal Disconnect, In-Flight Ambiguity & Reconnection (Vectors 7–11)**
 3. **Multi-Account, Namespace Collision & Cryptographic Integrity (Vectors 12–15)**
@@ -106,13 +106,13 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 │ RT-25│ BOC Price Not Passive (Limit Order)      │ BUY_LIMIT price >= current_ask     │ DataContractError        │
 │      │                                          │ (taker fill danger)                 │ (BOC_PRICE_NOT_PASSIVE)  │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-26│ BOC Price Not Passive (Stop-Limit Order) │ BUY_STOP_LIMIT resting limit >=     │ DataContractError        │
-│      │                                          │ stop trigger price                  │ (BOC_PRICE_NOT_PASSIVE)  │
+│ RT-26│ BOC Stop-Limit 4-Case Boundary Violations│ Trigger <= ask, limit >= trigger,   │ DataContractError        │
+│      │ & Post-Quantization Spread Crossing     │ or tick quantization crossing spread│ (BOC_PRICE_NOT_PASSIVE)  │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-27│ TradingView Non-Allowlisted IP / Token   │ Webhook from unknown IP or with     │ Ingress rejects with     │
 │      │                                          │ invalid passphrase/token            │ 403 Forbidden / 401 Unauth│
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-28│ TradingView 5-Second Retry Handling      │ TradingView resends identical alert │ Idempotency cache emits  │
+│ RT-28│ TradingView 5-Second Retry Handling      │ TradingView resends identical alert │ Pre-freshness lookup ACK │
 │      │                                          │ payload after 5s retry attempt      │ 200 OK without duplicate │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-29│ TradingView Malformed JSON / Stale Alert │ Webhook with invalid JSON format or │ Ingress rejects with     │
@@ -215,7 +215,62 @@ def test_rt06_requote_emits_observation_without_synthetic_drag():
     assert manifest.execution_drag_bps == Decimal("0.0")
 ```
 
-### RT-28: TradingView 5-Second Retry Handling
+### RT-26: Stop-Limit BOC Invariants & Post-Quantization Boundary Testing
+```python
+def test_rt26_boc_stop_limit_comprehensive_boundary_rejections():
+    """Verify all 4 Stop-Limit BOC invalid boundary states fail closed."""
+    spec = create_exchange_symbol_spec(allowed_filling=("SYMBOL_FILLING_BOC",))
+    
+    # Case 1: BUY_STOP_LIMIT with trigger <= ask (Aggressive trigger)
+    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_BUY_STOP_LIMIT"):
+        resolve_filling_mode(
+            symbol_spec=spec,
+            order_type=MT5OrderType.BUY_STOP_LIMIT,
+            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
+            trigger_price=Decimal("1.0852"), # Equal to ask!
+            limit_price=Decimal("1.0845"),
+            current_bid=Decimal("1.0850"),
+            current_ask=Decimal("1.0852"),
+        )
+
+    # Case 2: BUY_STOP_LIMIT with limit >= trigger (Aggressive limit on trigger)
+    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_BUY_STOP_LIMIT"):
+        resolve_filling_mode(
+            symbol_spec=spec,
+            order_type=MT5OrderType.BUY_STOP_LIMIT,
+            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
+            trigger_price=Decimal("1.0900"),
+            limit_price=Decimal("1.0900"), # Equal to trigger!
+            current_bid=Decimal("1.0850"),
+            current_ask=Decimal("1.0852"),
+        )
+
+    # Case 3: SELL_STOP_LIMIT with trigger >= bid (Aggressive trigger)
+    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_SELL_STOP_LIMIT"):
+        resolve_filling_mode(
+            symbol_spec=spec,
+            order_type=MT5OrderType.SELL_STOP_LIMIT,
+            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
+            trigger_price=Decimal("1.0850"), # Equal to bid!
+            limit_price=Decimal("1.0855"),
+            current_bid=Decimal("1.0850"),
+            current_ask=Decimal("1.0852"),
+        )
+
+    # Case 4: SELL_STOP_LIMIT with limit <= trigger (Aggressive limit on trigger)
+    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_SELL_STOP_LIMIT"):
+        resolve_filling_mode(
+            symbol_spec=spec,
+            order_type=MT5OrderType.SELL_STOP_LIMIT,
+            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
+            trigger_price=Decimal("1.0800"),
+            limit_price=Decimal("1.0800"), # Equal to trigger!
+            current_bid=Decimal("1.0850"),
+            current_ask=Decimal("1.0852"),
+        )
+```
+
+### RT-28: TradingView 5-Second Retry Handling with Pre-Freshness Idempotency
 ```python
 def test_rt28_tradingview_5s_retry_handled_idempotently():
     """Verify legitimate 5-second retry returns 200 OK without duplicate candidate creation."""
@@ -225,9 +280,9 @@ def test_rt28_tradingview_5s_retry_handled_idempotently():
         "strategy_id": "MOM_ALPHA_01",
         "action": "BUY",
         "symbol": "EURUSD",
-        "bar_time_utc": "2026-09-02T12:00:00Z",
-        "alert_timestamp_utc": "2026-09-02T12:00:01Z",
-        "nonce": "unique-nonce-123",
+        "bar_time_utc": "2026-09-02T12:00:00.000000Z",
+        "event_timestamp_utc": "2026-09-02T12:00:01.000000Z",
+        "nonce": "producer-unique-nonce-123",
     }
     
     # Initial attempt
@@ -235,7 +290,7 @@ def test_rt28_tradingview_5s_retry_handled_idempotently():
     assert res1.status_code == 200
     assert res1.json()["status"] == "PROPOSAL_INGESTED"
     
-    # Simulated TradingView 5s retry with identical event payload
+    # Simulated TradingView 5s retry with identical producer event payload and nonce
     res2 = client.post("/api/v1/ingress/tradingview", json=payload)
     assert res2.status_code == 200
     assert res2.json()["status"] == "IDEMPOTENT_ACK_DUPLICATE_DROPPED"
@@ -249,6 +304,6 @@ def test_rt28_tradingview_5s_retry_handled_idempotently():
 
 ## 4. Verification Ledger & Audit Signoff
 
-- **Active Baseline Commit:** `0816bf5` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `0ae5c69` (`HEAD == origin/main`)
 - **Total Adversarial Vectors:** 31 Vectors across 6 Domains.
 - **Rule:** Every one of the 31 vectors must have an automated test in `tests/unit/execution/` and `tests/adversarial/` before Phase 12 Gate Freeze.

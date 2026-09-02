@@ -2,8 +2,8 @@
 ## Multi-Venue Execution Topology, MetaTrader 5 (MT5) Adapter & TradingView Integration
 
 > **Document:** `docs/phase12/contract_specification_v1.md`  
-> **Status:** CONTRACT SPECIFICATION v1.0 (LOCKED ARCHITECTURAL SPECIFICATION)  
-> **Baseline Commit:** `0816bf5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
+> **Baseline Commit:** `0ae5c69` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -15,9 +15,9 @@
 Phase 12 expands the sovereign execution framework established in Phase 7 by implementing:
 1. **Multi-Venue Execution Topology:** Decoupled broker routing infrastructure operating under the Phase 7 `ExecutionCoordinator`.
 2. **MetaTrader 5 (MT5) Execution Adapter (#1):** High-fidelity, local IPC bridge communicating directly with official MetaTrader 5 Windows terminal instances.
-3. **Immutable Contract Normalization (`BrokerSymbolSpec`):** Versioned broker instrument specifications, deterministic Decimal volume quantization, tick-grid price alignment, and stop-level enforcement.
+3. **Immutable Contract Normalization (`BrokerSymbolSpec`):** Versioned broker instrument specifications, deterministic Decimal volume quantization with positive preconditions, tick-grid price alignment, and stop-level enforcement.
 4. **Authoritative 6-Dimensional Reconciliation Engine:** Shadow ledger reconciliation across Balances, Equity, Margin, Positions, Resting Orders, and Historical Deals, emitting evidence for `ExecutionCoordinator` lifecycle governance.
-5. **TradingView Decoupled Auxiliary Ingress & Visualization Gateway:** Native HTTP POST ingress with IP allowlisting, payload token validation, replay/freshness decoupling, and read-only charting telemetry.
+5. **TradingView Decoupled Auxiliary Ingress & Visualization Gateway:** Native HTTP POST ingress with IP allowlisting, payload token validation, deterministic event canonicalization, replay/freshness decoupling, and read-only charting telemetry.
 
 ### 1.2 Explicit Non-Goals
 - **No Direct Strategy Execution from TradingView:** TradingView alerts are strictly candidate proposals; they never bypass research, tournament, risk, or execution admission gates.
@@ -390,33 +390,53 @@ def resolve_filling_mode(
 ## 8. Deterministic Decimal Unit, Volume & Price Normalization Contract
 
 ### 8.1 Input Sizing Semantics & Lot Quantization
-- **Input Semantic:** `target_units: Decimal` represents the desired base asset quantity (e.g. `Decimal("100000")` EUR for EURUSD, `Decimal("1.5")` BTC for BTCUSD).
+- **Strict Precondition:** `target_units: Decimal` represents the desired base asset quantity (e.g. `Decimal("100000")` EUR for EURUSD, `Decimal("1.5")` BTC for BTCUSD) and **MUST be strictly positive** ($\text{target\_units} > 0$).
+  - If $\text{target\_units} \le 0 \implies$ raise `DataContractError("TARGET_UNITS_MUST_BE_POSITIVE")`.
 - **Lot Sizing Conversion:**
   $$\text{raw\_lots} = \frac{\text{target\_units}}{\text{spec.contract\_size}}$$
-- **Deterministic Step Quantization (Decimal `ROUND_DOWN`):**
-  To prevent unauthorized capital over-allocation, volume quantization strictly truncates to the nearest lower discrete lot step:
-  $$\text{steps} = \left\lfloor \frac{\text{raw\_lots}}{\text{spec.volume\_step}} \right\rfloor$$
+- **Deterministic Step Quantization:**
+  With the strict invariant $\text{raw\_lots} > 0$, Python Decimal `ROUND_DOWN` (truncation towards zero) matches mathematical $\lfloor x \rfloor$ exactly:
+  $$\text{steps} = \left\lfloor \frac{\text{raw\_lots}}{\text{spec.volume\_step}} \right\rfloor \quad (\text{via Decimal } \texttt{ROUND\_DOWN})$$
   $$\text{quantized\_lots} = \text{steps} \cdot \text{spec.volume\_step}$$
 - **Fail-Closed Boundary Invariants:**
   - If $\text{quantized\_lots} < \text{spec.volume\_min} \implies$ raise `DataContractError("VOLUME_BELOW_MINIMUM")`.
   - If $\text{quantized\_lots} > \text{spec.volume\_max} \implies$ raise `DataContractError("VOLUME_ABOVE_MAXIMUM")`.
   - If $(\text{quantized\_lots} \pmod{\text{spec.volume\_step}}) \neq 0 \implies$ raise `DataContractError("VOLUME_STEP_MISMATCH")`.
 
-### 8.2 Deterministic Price & Tick-Grid Quantization
-- **Tick-Grid Alignment:** All order prices are snapped to the broker `tick_size` (derived as $10^{-\text{digits}}$ or explicit `spec.tick_size`):
-  $$\text{ticks} = \text{quantize}\left(\frac{\text{raw\_price}}{\text{spec.tick\_size}}, \text{mode}\right)$$
-  $$\text{quantized\_price} = \text{ticks} \cdot \text{spec.tick\_size}$$
-- **Directional Rounding Policies:**
-  - **Market Orders:** Quantized using standard symmetrical Decimal `ROUND_HALF_EVEN`.
-  - **Limit Orders (`BUY_LIMIT`):** Quantized using Decimal `ROUND_FLOOR` (downwards away from market spread to ensure maker passivity).
-  - **Limit Orders (`SELL_LIMIT`):** Quantized using Decimal `ROUND_CEILING` (upwards away from market spread to ensure maker passivity).
-  - **Stop Orders (`BUY_STOP`):** Quantized using Decimal `ROUND_CEILING`.
-  - **Stop Orders (`SELL_STOP`):** Quantized using Decimal `ROUND_FLOOR`.
-  - **Stop-Limit Orders:** Trigger price and limit price are independently quantized under directional maker rules and validated against the BOC price safety invariant.
-- **Stop Distance Verification:**
-  - Order distance from current market quote must satisfy:
-    $$\Delta \text{points} = \frac{|\text{order\_price} - \text{market\_price}|}{\text{spec.point\_size}} \ge \text{spec.stops\_level\_points}$$
-  - If violated $\implies$ fail closed with `DataContractError("STOP_LEVEL_VIOLATION")`.
+### 8.2 Deterministic Price & Tick-Grid Quantization Pipeline
+$$\boxed{\mathbf{Price\ Normalization} \neq \mathbf{Passivity\ Validation}}$$
+Price normalization aligns raw price inputs to discrete broker tick boundaries, but **normalization does not guarantee passivity**. A normalized price can still cross the market spread and violate BOC policies.
+
+Execution normalization follows a strict 5-stage sequential pipeline:
+```
+Raw Input Price
+      │
+      ▼
+1. Tick-Grid Snapping: ticks = quantize(raw_price / spec.tick_size)
+      │
+      ▼
+2. Side-Aware Directional Rounding:
+   - BUY_LIMIT  -> Decimal ROUND_FLOOR   (downwards into resting DOM)
+   - SELL_LIMIT -> Decimal ROUND_CEILING (upwards into resting DOM)
+   - BUY_STOP   -> Decimal ROUND_CEILING
+   - SELL_STOP  -> Decimal ROUND_FLOOR
+      │
+      ▼
+3. Stop-Level Distance Validation:
+   - Verify |order_price - market_price| / spec.point_size >= spec.stops_level_points
+   - If closer -> raise DataContractError("STOP_LEVEL_VIOLATION")
+      │
+      ▼
+4. Market-Reference Spread Validation (prevents immediate taker fill)
+      │
+      ▼
+5. BOC Passive Invariant Validation:
+   - BUY_LIMIT: limit_price < current_ask
+   - SELL_LIMIT: limit_price > current_bid
+   - BUY_STOP_LIMIT: trigger_price > current_ask AND limit_price < trigger_price
+   - SELL_STOP_LIMIT: trigger_price < current_bid AND limit_price > trigger_price
+   - If any condition fails -> raise DataContractError("BOC_PRICE_NOT_PASSIVE")
+```
 
 ---
 
@@ -472,47 +492,39 @@ $$\text{Reconciliation} = (\text{Balance}, \text{Equity}, \text{Margin}, \text{P
 ## 13. TradingView Native Ingress, Replay Decoupling & $0.00 Capital Boundary
 
 ### 13.1 Native Webhook Ingress Authentication Protocol
-TradingView webhook dispatch uses standard HTTP POST containing alert text in the body without arbitrary custom header injection. Authentication and ingress integrity are enforced via:
+TradingView webhook dispatch uses standard HTTP POST containing alert text in the body without arbitrary custom header injection. Authentication and ingress integrity are enforced via a defense-in-depth hierarchy:
 1. **Transport Security:** Mandatory TLS/HTTPS encryption (`https://...`).
 2. **Origin IP Allowlisting:** Ingress filters incoming TCP connections against official TradingView source IP ranges (`52.89.214.238`, `34.212.75.30`, `54.218.53.128`, `52.32.178.7`). Non-allowlisted connections are dropped with `403 Forbidden`.
-3. **Payload Token & Dedicated Ingress Path:** Webhooks include a pre-shared strategy authentication token embedded either in the JSON payload (`"passphrase": "..."`) or via a private per-strategy URL path (`/api/v1/ingress/tv/{secret_webhook_token}`).
+3. **Payload Token & Dedicated Ingress Path:** Webhooks include a pre-shared strategy authentication token embedded in the JSON payload (`"passphrase": "..."`) or via a dedicated webhook path (`/api/v1/ingress/tv/{secret_webhook_token}`). Custom outbound HTTP headers (such as `X-TradingView-Signature`) are **strictly not assumed**.
 4. **Server Certificate Verification:** TradingView verifies the recipient server's TLS certificate.
 
-### 13.2 Replay Defense vs. TradingView Retry Behavior
+### 13.2 Deterministic Event Identity & Idempotent Ingress Pipeline
 TradingView documentation specifies that if an endpoint returns a `5xx` error (excluding `504`), the server automatically retries sending the alert after **5 seconds**, up to **4 total attempts**.
 
-To accommodate legitimate retries while preventing malicious replays, ACASH strictly decouples **Freshness** from **Idempotency**:
+To accommodate legitimate retries without allowing duplicate processing, ACASH enforces a deterministic canonical identity specification:
+- **Event Identity Specification:**
+  - `strategy_id`: Canonical strategy identifier string.
+  - `event_timestamp`: UTC ISO-8601 string (`YYYY-MM-DDTHH:MM:SS.ffffffZ`) representing the exact alert trigger timestamp.
+  - `bar_timestamp`: UTC ISO-8601 string representing the bar open/close timestamp.
+  - `nonce`: **PRODUCER-SUPPLIED UNIQUE STRING**. The producer MUST preserve the identical nonce across retransmissions of the same logical alert. Receiver-generated nonces are **strictly forbidden** for event identity.
+- **Canonical Serialization & Event ID Derivation:**
+  $$\text{canonical\_form} = \text{strategy\_id} + \text{"|"} + \text{event\_timestamp} + \text{"|"} + \text{bar\_timestamp} + \text{"|"} + \text{nonce}$$
+  $$\text{event\_id} = \text{SHA256}(\text{UTF8}(\text{canonical\_form}))$$
 
-```
-Incoming Webhook POST
-          │
-          ▼
-1. Source IP & Token Verification (Passphrase / Private Path)
-          │
-          ▼
-2. Freshness Gate (alert_timestamp_utc within T_max = 60s of wall clock)
-          │
-          ▼
-3. Idempotency Key Extraction: event_id = SHA256(strategy_id + alert_time + bar_time + nonce)
-          │
-          ├──────────────────────────────────────────────────┐
-          ▼                                                  ▼
-   Seen in Replay Cache?                              New Event Key
-          │                                                  │
-   ┌──────┴──────┐                                           ▼
-   ▼             ▼                                    Store event_id in LRU Cache
-Previous      Previous                                & Persisted Ledger
-Success       Failure                                        │
-   │             │                                           ▼
-Return 200    Re-process                              Emit CandidateSignal DTO
-(Idempotent   Safe Retry                              (0.00 USD Capital Authority)
- ACK, No Dup)
-```
+### 13.3 Sequential Ingress Pipeline Ordering
+$$\boxed{\text{Receive} \longrightarrow \text{IP/Token Auth} \longrightarrow \text{Parse} \longrightarrow \text{Canonical event\_id} \longrightarrow \mathbf{Idempotency\ Lookup} \longrightarrow \mathbf{Freshness\ Validation} \longrightarrow \text{Candidate Signal}}$$
 
-### 13.3 Sovereign Capital Authority Boundary
-$$\boxed{\mathbf{TradingView\ CandidateSignal} \equiv \mathbf{0.00\ USD\ Capital\ Authority}}$$
-- TradingView candidate signals enter strictly as unvalidated research proposals.
-- They must navigate Phase 8.5 qualification, Phase 8 tournament, Phase 9 sovereign risk veto, and Phase 7 execution admission before touching MT5.
+1. **Transport & IP Allowlist Validation:** Reject unauthorized source IPs (`403 Forbidden`).
+2. **Payload Token Validation:** Verify pre-shared passphrase (`401 Unauthorized`).
+3. **Canonical Event ID Derivation:** Calculate deterministic `event_id`.
+4. **Idempotency Lookup (Executed PRE-Freshness):**
+   - Query bounded LRU cache / persistent ledger for `event_id`.
+   - If `event_id` was previously processed successfully $\implies$ **Return HTTP 200 Idempotent ACK** (`status="IDEMPOTENT_ACK_DUPLICATE_DROPPED"`) without generating duplicate candidate signals.
+5. **Freshness Validation (For New Events Only):**
+   - Evaluate $\text{received\_at} - \text{event\_timestamp} \le T_{\text{max}} = 60\text{s}$.
+   - If $\text{age} > 60\text{s} \implies$ reject with `400 Bad Request` (`TRADINGVIEW_STALE_PAYLOAD`).
+6. **Candidate Signal Emission:**
+   - Emit `TradingViewCandidateSignal` with **0.00 USD Capital Authority**.
 
 ---
 
@@ -524,6 +536,7 @@ $$\boxed{\mathbf{TradingView\ CandidateSignal} \equiv \mathbf{0.00\ USD\ Capital
 | `TERMINAL_NOT_CONNECTED` | `MT5ConnectionError` | MT5 IPC socket disconnect |
 | `NO_COMPATIBLE_FILLING_MODE` | `DataContractError` | Incompatible filling mode resolution |
 | `BOC_PRICE_NOT_PASSIVE` | `DataContractError` | BOC limit/stop-limit price crosses market spread |
+| `TARGET_UNITS_MUST_BE_POSITIVE` | `DataContractError` | Requested units are <= 0 |
 | `VOLUME_BELOW_MINIMUM` | `DataContractError` | Sized volume is below broker symbol `volume_min` |
 | `VOLUME_ABOVE_MAXIMUM` | `DataContractError` | Sized volume is above broker symbol `volume_max` |
 | `VOLUME_STEP_MISMATCH` | `DataContractError` | Sized volume is not an integer multiple of `volume_step` |
@@ -572,7 +585,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 17. Verification Ledger & Audit Signoff
 
-- **Active Baseline Commit:** `0816bf5` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `0ae5c69` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors in 245 files).
 - **Rule:** Do NOT write production code for Phase 12 until this Contract Specification v1.0 and the accompanying Red-Team Adversarial Matrix are reviewed and locked.
