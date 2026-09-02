@@ -13,6 +13,7 @@ from acash.execution.mt5.enums import (
     MT5Retcode,
     MT5TradeAction,
     MT5TradeExecutionMode,
+    MT5ApiErrorCode,
 )
 from acash.execution.mt5.exceptions import (
     MT5DomainError,
@@ -75,6 +76,7 @@ __all__ = [
     "MT5PositionType",
     "MT5TradeExecutionMode",
     "MT5Retcode",
+    "MT5ApiErrorCode",
     # Exceptions
     "MT5DomainError",
     "MT5ValidationError",

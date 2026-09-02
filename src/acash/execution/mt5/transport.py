@@ -19,6 +19,7 @@ from acash.execution.mt5.enums import (
     MT5Retcode,
     MT5TradeAction,
     MT5TradeExecutionMode,
+    MT5ApiErrorCode,
 )
 from acash.execution.mt5.exceptions import (
     MT5DomainError,
@@ -722,7 +723,10 @@ class NativeMT5Transport:
             last_err = mt5.last_error()
             err_code = int(last_err[0]) if last_err else -1
             err_desc = str(last_err[1]) if last_err else "order_send returned None"
-            is_timeout = err_code == 10004 or "timeout" in err_desc.lower()
+            is_timeout = (
+                err_code == MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value
+                or "timeout" in err_desc.lower()
+            )
             raise MT5TransportError(
                 f"NATIVE_ORDER_SEND_FAILED: {err_desc} (API error code {err_code})",
                 api_code=err_code,

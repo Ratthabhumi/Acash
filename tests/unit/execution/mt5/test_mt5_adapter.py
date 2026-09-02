@@ -1051,5 +1051,114 @@ def test_t30_native_api_invalid_params_error_separation(
     assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
 
 
+# --- T31: Native API Timeout (-10005) Classified as Timeout ---
+def test_t31_native_api_timeout_error_classification(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.enums import MT5ApiErrorCode, MT5FillingMode, MT5TradeAction
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.schemas import MT5ExecutionLineage, MT5TradeRequest
+    from acash.execution.mt5.transport import NativeMT5Transport, MT5TransportCommand
+
+    class MockNativeTimeoutModule:
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value, "internal IPC timeout")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeTimeoutModule)
+
+    transport = NativeMT5Transport()
+    req = MT5TradeRequest(
+        action=MT5TradeAction.TRADE_ACTION_DEAL,
+        symbol="EURUSD",
+        volume=Decimal("1.00"),
+        type=MT5OrderType.BUY,
+        type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+    )
+    lineage = MT5ExecutionLineage(
+        broker_id="MOCK_BROKER",
+        account_id="ACC_999",
+        terminal_instance_id="TERM_1",
+        strategy_id="STRAT_1",
+        cycle_id="CYC_1",
+        intent_id="INT_1",
+    )
+    cmd = MT5TransportCommand(request=req, lineage=lineage)
+
+    with pytest.raises(MT5TransportError) as exc_info:
+        transport.order_send(cmd)
+
+    assert exc_info.value.is_timeout is True
+    assert exc_info.value.api_code == -10005
+
+
+# --- T32: Native API 10004 Requote Code Is NOT Classified as Timeout ---
+def test_t32_native_api_requote_10004_not_timeout(
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockNative10004Module:
+        @staticmethod
+        def terminal_info() -> object:
+            return DummyNamedTuple(connected=True, trade_allowed=True, trade_expert=True)
+
+        @staticmethod
+        def account_info() -> object:
+            return DummyNamedTuple(
+                login=123456,
+                trade_mode=0,
+                leverage=100,
+                limit_orders=200,
+                margin_so_mode=0,
+                trade_allowed=True,
+                trade_expert=True,
+                balance=100000.0,
+                credit=0.0,
+                profit=0.0,
+                equity=100000.0,
+                margin=0.0,
+                margin_free=100000.0,
+                margin_level=0.0,
+                margin_so_call=50.0,
+                margin_so_so=30.0,
+                margin_initial=0.0,
+                margin_maintenance=0.0,
+                currency="USD",
+            )
+
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10004, "requote")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNative10004Module)
+
+    native_transport = NativeMT5Transport()
+    adapter = MT5BrokerAdapter(
+        broker_id="TEST_BROKER",
+        account_id="ACC_1001",
+        terminal_instance_id="TERM_1",
+        transport=native_transport,
+    )
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+
+    # Invariant: 10004 in last_error must NOT be classified as timeout
+    assert obs.raw_retcode is None
+    assert obs.event_kind == BrokerEventKind.CONNECTION_LOST
+    assert obs.requires_reconciliation is True
+    assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
+
+
+
 
 
