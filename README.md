@@ -2,7 +2,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 10 Frozen (904 tests) - Phase 11 Contract Locked](https://img.shields.io/badge/status-Phase%2010%20Frozen%20(904%20tests)%20--%20Phase%2011%20Contract%20Locked-green.svg)](docs/ROADMAP.md)
+[![Status: Phase 11 Frozen (1,020 tests)](https://img.shields.io/badge/status-Phase%2011%20Frozen%20(1,020%20tests)-green.svg)](docs/ROADMAP.md)
 
 ---
 
@@ -276,43 +276,35 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ---
 
-## 5.5 CURRENT STATUS / NEXT STEP — Phase 7 / R1-REAL Broker-Observed Execution
+## 5.5 CURRENT STATUS / NEXT STEP — Phase 11 Approved & Frozen ──► Phase 12 MT5 & Venue Execution Adapters
 
-> **As of HEAD `4faa81a` (pushed to `origin/main`).** This is the authoritative resume point
+> **As of Code Freeze `092a2b1` (pushed to `origin/main`).** This is the authoritative resume point
 > for the current session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
-> [`Cheatsheet.md`](Cheatsheet.md) for the identical status block.
+> [`Cheatsheet.md`](Cheatsheet.md) for the synchronized status block.
 
 ### Where the project is
-- Phases 0–6 complete & hardened (Gates 1–6 passed).
-- **Phase 7 (Live Execution & Broker Mapping): IN PROGRESS.**
-  - Real Broker Observation Driver `R1RealOrderExerciseDriver` implemented and provenance-hardened (`4faa81a`).
-  - Strict BMAP-07 cancellation reconciliation, dual-channel observation (SSE Primary + REST Polling Recovery), and fail-closed timeout to `UNKNOWN`.
-  - **598 unit and invariant tests passing** (100% clean offline).
-  - DPAPI Local User Vault & Secure Launcher operational.
-- **Key Phase 7 Commits Trail:** `22b6a28` (R1 harness) · `4a92348` (connect-before-submit fix) · `8e92188` (paper-only injection guard) · `61233ad` (Phase 7 proposal) · `3dd9f25` (Paper incident checkpoint) · `353ac8c` (R1-REAL spec) · `4faa81a` (R1-REAL provenance hardening).
+- **Phases 0–11 complete, hardened, and frozen** (Gates 1–11 passed).
+- **Phase 11 (Forward Monitoring, Online Drift Detection & Execution Reality Attribution): OFFICIALLY FROZEN.**
+  - Full decoupled pipeline: Forward telemetry stream ingestion, deterministic window metrics (discrete simple returns), asymmetric health state machine (anti-whipsaw hysteresis), taker-only execution attribution engine, forensic evidence ledger adapter.
+  - **1,020 collected tests across repository (1,017 passed, 3 skipped, 0 failed)** (100% clean regression).
+  - **26/26 Red-Team Adversarial Vectors PASSED** ([`docs/phase11/red_team_review.md`](docs/phase11/red_team_review.md)).
+  - **9/9 Cross-Phase Integration Pipeline Tests PASSED**.
+  - **107/107 Monitoring Unit Tests PASSED**.
+  - **MyPy Static Type Checker:** 0 errors across 40 source files.
+  - **Authority Decoupling:** Phase 11 contains zero methods or fields to mutate Phase 10 census, modify Phase 8 friction, or submit live orders.
+- **Key Phase 11 Commits Trail:** `86bff0d` (Contract & Red-Team Spec) · `ca74d49` (Slice 1) · `2b69464` (Slice 2) · `23a7e32` (Slice 3) · `2f42a69` (Slice 4) · `82273f9` (Slice 5) · `092a2b1` (Slice 6 & Freeze).
 
-### Tri-Partite Evidence & Verification Architecture
-| Dimension | Meaning | Current Phase 7 Status |
-| :--- | :--- | :--- |
-| **Local Unit Tests** | Automated code regression & invariant verification | **598/598 tests passing** (100% clean) |
-| **E (Broker Semantic Review)** | Specification verified against official broker API documentation | **BMAP 01–10 = E, BMAP 11 = E\*, BMAP 12 = D** |
-| **P (Paper Runtime Observation)** | Actual Paper runtime execution with complete cryptographic lineage | **P = 0** (Paper orders submitted & audited, zero unverified fills) |
+### Sovereign Separation of Concerns
+$$\boxed{\mathbf{Research\ (8.5)} \neq \mathbf{Forward\ Monitoring\ (11)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (7)} \neq \mathbf{Broker}}$$
 
-$$\boxed{\text{598 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+- Phase 11 is strictly an observational and advisory engine.
+- Phase 10 Stage 2 Census maintains sovereign authority over strategy tournament eligibility.
+- **Live capital trading remains HARD-LOCKED.** Phase 13 gate requires explicit human approval.
 
-A successful HTTP response, a unit test pass, or a `FILLED` state alone is **not** P.
-Only a real Paper order whose evidence satisfies the full conjunctive rule produces valid P evidence.
-
-### What has and has NOT been proven
-- **Proven (Implementation, E-Review, & Real Wire POST):** Real HTTP order submission to Alpaca Paper, REST snapshot recovery, BMAP-07 reconciliation, fail-closed timeout to `UNKNOWN`, zero synthetic event injections, DPAPI credential protection.
-- **NOT proven (P & Live):** Executed fill under real market conditions ($P = 0$), Live readiness. **Live trading is HARD-LOCKED.**
-
-### Paper Order Forensic History
-- **Order 001 (`acash-r1-paper-20260831-001`):** Real Paper POST succeeded $\to$ rested in `accepted` $\to$ confirmed `CANCELED` via REST ($P = 0$).
-- **Order 002 (`acash-r1-paper-20260831-002`):** Real Paper POST succeeded $\to$ resting in `new` with `filled_qty = 0` ($P = 0$).
-
-### P acceptance rule (conjunctive — ALL must hold)
-$$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+### Next milestones
+- ⏳ Phase 12: MT5 & Venue Execution Adapters ── Gate 12.
+- ⏳ Phase 13: Live Small Capital Deployment (MANDATORY HUMAN APPROVAL).
+- ⏳ Phases 14–16: AI quantitative research layer, strategy lifecycle flywheel.
 
 ---
 

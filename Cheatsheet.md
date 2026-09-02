@@ -1,8 +1,8 @@
 # ACASH — Developer & Quant Quick Reference Cheatsheet
 
 **Project:** ACASH (Automated Capital Allocation System)  
-**Version:** 1.11.0 (Phases 0–10 Frozen & Hardened | Phase 11 Contract Spec v1.0 Locked)  
-**Test Suite:** 904 / 904 Tests Passed | MyPy: 0 Errors | HEAD: `origin/main`  
+**Version:** 1.12.0 (Phases 0–11 Frozen & Hardened | Gate 11 Approved)  
+**Test Suite:** 1,020 Collected | 1,017 Passed, 3 Skipped, 0 Failed | MyPy: 0 Errors (40 files) | HEAD: `origin/main`  
 **Operating Philosophy:** *"DO NOT ASSUME AN EDGE. PROVE IT."*
 
 $$\boxed{\mathbf{Research\ (8.5)} \longrightarrow \mathbf{Allocation\ (8)} \longrightarrow \mathbf{Supervisor\ (10)} \longrightarrow \mathbf{Risk\ (9)} \longrightarrow \mathbf{Execution\ (7)} \longrightarrow \mathbf{Ledger\ (10)} \quad \Big\vert \quad \mathbf{Monitoring\ (11)}}$$
@@ -391,34 +391,52 @@ $$\text{Stage 1: Data Check} \longrightarrow \text{Stage 2: Strategy Census} \lo
 
 ---
 
-## 12. Phase 11: Forward Monitoring & Execution Reality (Contract v1.0)
+## 12. Phase 11: Forward Monitoring, Strategy Drift & Execution Reality Attribution [COMPLETED & FROZEN]
 
 ### 12.1 Track A: Strategy Forward Drift & Decay Monitor
-- **Forward Health State:** `INSUFFICIENT_EVIDENCE` $\to$ `HEALTHY` $\longleftrightarrow$ `DEGRADED` $\to$ `STRUCTURAL_BREAK`.
+- **Forward Health State:** `INSUFFICIENT_EVIDENCE` $\to$ `HEALTHY` $\longleftrightarrow$ `DEGRADED` $\to$ `STRUCTURAL_BREAK` (Absorbing).
 - **Core Invariant:** $\boxed{\mathbf{Historical\ Qualification\ (8.5)} \neq \mathbf{Current\ Forward\ Health\ (11)}}$.
-- **Metrics Tracked:** Rolling Sharpe, Rolling Vol, Drawdown, Hit Rate, IC Decay, $t$-stat Decay.
-- **Output:** Emits `StrategyForwardDriftEvidence` for Stage 2 Census exclusion.
+- **Metrics Tracked:** Rolling Sharpe, Rolling Vol, Drawdown (Multiplicative Compounding), Hit Rate, $t$-stat Decay.
+- **Fail-Closed Mathematics:** Discrete Simple Period Returns ($R > -1.0$); zero sample variance strictly raises `DataContractError`.
+- **Anti-Whipsaw Hysteresis:** Degradation Persistence ($N=3$), Recovery Persistence ($M=10$), Recovery Cooldown ($T=5$).
+- **Decoupled Telemetry:** `MONITORING_BLOCKED` freezes counters and does NOT penalize strategy performance (`No Evidence != Negative Evidence`).
+- **Output:** Emits `StrategyForwardDriftEvidence` (Tier 1 SHA-256 Digest) as advisory recommendation for Stage 2 Census.
 
-### 12.2 Track B: Execution Reality Attribution
-- **Drag Decomposition (in bps):** $\text{Realized Drag} = \text{Spread} + \text{Slippage} + \text{Timing} + \text{Fees} - \text{Rebates}$.
-- **Phase 8 Seam Invariant:** $\boxed{\mathbf{ExecutionCostEvidence} \nRightarrow \text{Direct Phase 8 Overwrite}}$.
-- **Output:** Emits empirical friction distributions for versioned governance review.
+### 12.2 Track B: Execution Reality Attribution Engine
+- **Drag Decomposition (in bps):** 7 exact components: $\text{Net Realized Cost} = \text{Spread} + \text{Timing} + \text{Slippage} + \text{Commission} - \text{Rebate}$.
+- **Taker-Only Scope Guard:** Phase 11 v1 is strictly scoped to aggressive/taker execution (arrival quote benchmark). Passive/maker fills are strictly rejected fail-closed.
+- **Coverage Denominator Guard:** Requires authoritative execution manifest census; coverage $< 0.80$ strictly fails closed with `DataContractError`.
+- **Phase 8 Seam Invariant:** $\boxed{\mathbf{ExecutionCostEvidence} \nRightarrow \text{Direct Phase 8 Overwrite}}$ (frozen DTOs).
+- **Output:** Emits empirical friction distributions (`ExecutionCostEvidence`) with robust median, mean, p95, and confidence intervals.
+
+### 12.3 Track C: Stream Ingestion & Forensic Ledger Persistence
+- **Decoupled Planes:** Stream Integrity Plane (`VALID` $\leftrightarrow$ `BLOCKED`) vs Strategy Health Plane.
+- **Fail-Closed Gap Defense:** Any sequence gap or temporal non-monotonicity transitions stream to `BLOCKED`.
+- **Explicit Epoch Recovery (`reinitialize_stream`):** Advances `epoch_index += 1`, restarts sequence at 0; strictly forbids backfilling or synthesizing gap observations.
+- **Forensic Ledger Adapter:** `MonitoringEvidenceLedger` wraps Phase 10 `OperationalLedger`, preserving Tier 1 evidence digests within Tier 2 chained `OperationalCycleEvent`s.
+
+### 12.4 Red-Team & Authority Verification
+- **26/26 Attack Vectors Verified:** Full adversarial test coverage (`tests/unit/monitoring/test_phase11_red_team_adversarial.py`).
+- **Authority Invariants:** Phase 11 $\neq$ Phase 10 Census $\neq$ Phase 8 Friction $\neq$ Phase 8.5 Dossier. Zero live trading or broker connectivity.
 
 ---
 
 ## 13. Canonical Developer Commands
 
 ```powershell
-# 1. Run Full Regression Test Suite (904 passed tests)
+# 1. Run Full Regression Test Suite (1,020 collected | 1,017 passed, 3 skipped, 0 failed)
 uv run pytest -q
 
-# 2. Run Runtime Unit & Integration Tests (62 tests)
-uv run pytest tests/unit/runtime/ tests/integration/test_phase10_runtime_pipeline.py -v
+# 2. Run Phase 11 Monitoring Suite (107 unit tests)
+uv run pytest tests/unit/monitoring/ -v
 
-# 3. Run Static Type Checker
-uv run mypy src/acash/runtime/ tests/unit/runtime/ tests/integration/
+# 3. Run Phase 11 Integration & Red-Team Adversarial Suites (35 tests)
+uv run pytest tests/integration/test_phase11_monitoring_pipeline.py tests/unit/monitoring/test_phase11_red_team_adversarial.py -v
 
-# 4. Check Git Status & Branch Lineage
+# 4. Run Static Type Checker (MyPy - 40 source files clean)
+uv run mypy src/acash/monitoring/ tests/unit/monitoring/ tests/integration/ src/acash/runtime/ src/acash/research/ src/acash/risk/
+
+# 5. Check Git Status & Branch Lineage
 git status --short
 git branch -vv
 git log -3 --oneline --decorate
