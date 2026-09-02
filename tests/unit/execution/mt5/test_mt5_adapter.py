@@ -1393,6 +1393,38 @@ def test_t37_res_e_internal_fail_receive_ipc_unavailable(
     assert req_recon is True
 
 
+# --- T38: Contradictory Flag is_timeout=True CANNOT Override api_code=-2 ---
+def test_t38_is_timeout_flag_cannot_override_api_code() -> None:
+    from acash.execution.mt5.adapter import classify_mt5_transport_error
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import TransportFailureCause
+
+    err = MT5TransportError("malformed param with contradictory timeout flag", api_code=-2, is_timeout=True)
+    cause, event_kind, retcode, req_recon = classify_mt5_transport_error(err)
+
+    assert cause == TransportFailureCause.CLIENT_API_ERROR
+    assert event_kind == BrokerEventKind.REJECT
+    assert retcode is None
+    assert req_recon is False
+
+
+# --- T39: Contradictory Flag is_timeout=False CANNOT Override Timeout api_code=-10005 ---
+def test_t39_non_timeout_flag_cannot_override_timeout_api_code() -> None:
+    from acash.execution.mt5.adapter import classify_mt5_transport_error
+    from acash.execution.mt5.enums import MT5Retcode
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import TransportFailureCause
+
+    err = MT5TransportError("timeout error with contradictory is_timeout=False flag", api_code=-10005, is_timeout=False)
+    cause, event_kind, retcode, req_recon = classify_mt5_transport_error(err)
+
+    assert cause == TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN
+    assert event_kind == BrokerEventKind.CONNECTION_LOST
+    assert retcode == MT5Retcode.TRADE_RETCODE_TIMEOUT.value
+    assert req_recon is True
+
+
+
 
 
 

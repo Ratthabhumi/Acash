@@ -97,16 +97,39 @@ def classify_mt5_transport_error(
     - Unclassified fallback:
       cause=TERMINAL_IPC_UNAVAILABLE, event=CONNECTION_LOST, retcode=None, requires_reconciliation=True (fail-closed)
     """
-    if error.is_timeout or error.api_code == MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value:
-        return (
-            TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
-            BrokerEventKind.CONNECTION_LOST,
-            MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
-            True,
-        )
-
     code = error.api_code
-    if code is not None and -10003 <= code <= -10000:
+    if code is not None:
+        if code == MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value:
+            return (
+                TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
+                BrokerEventKind.CONNECTION_LOST,
+                MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
+                True,
+            )
+        if -10003 <= code <= -10000:
+            return (
+                TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
+                BrokerEventKind.CONNECTION_LOST,
+                None,
+                True,
+            )
+        if code == MT5ApiErrorCode.RES_E_AUTO_TRADING_DISABLED.value:
+            event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
+            return (
+                TransportFailureCause.TRADING_PERMISSION_DISABLED,
+                event,
+                None,
+                False,
+            )
+        if -8 < code < 0:
+            event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
+            return (
+                TransportFailureCause.CLIENT_API_ERROR,
+                event,
+                None,
+                False,
+            )
+        # Unclassified integer code: fail closed
         return (
             TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
             BrokerEventKind.CONNECTION_LOST,
@@ -114,22 +137,13 @@ def classify_mt5_transport_error(
             True,
         )
 
-    if code == MT5ApiErrorCode.RES_E_AUTO_TRADING_DISABLED.value:
-        event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
+    # When api_code is None, fallback to boolean is_timeout flag
+    if error.is_timeout:
         return (
-            TransportFailureCause.TRADING_PERMISSION_DISABLED,
-            event,
-            None,
-            False,
-        )
-
-    if code is not None and -8 < code < 0:
-        event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
-        return (
-            TransportFailureCause.CLIENT_API_ERROR,
-            event,
-            None,
-            False,
+            TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
+            BrokerEventKind.CONNECTION_LOST,
+            MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
+            True,
         )
 
     return (
