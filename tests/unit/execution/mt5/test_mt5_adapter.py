@@ -995,4 +995,61 @@ def test_t28_physical_disconnect_after_last_ready_health_check_blocks_dispatch(
     assert adapter.can_dispatch() is False
 
 
+# --- T29: Unknown Position Type Fails Closed ---
+def test_t29_unknown_position_type_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    bad_position = DummyNamedTuple(
+        ticket=301,
+        symbol="EURUSD",
+        type=99,  # Unknown position type (neither 0 BUY nor 1 SELL)
+        volume=1.0,
+        price_open=1.08500,
+        price_current=1.08500,
+        sl=0.0,
+        tp=0.0,
+        swap=0.0,
+        profit=0.0,
+        magic=0,
+        comment="Test",
+        time=1700000000,
+    )
+
+    class MockBadPosition:
+        @staticmethod
+        def positions_get(**kwargs: Any) -> object:
+            return [bad_position]
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockBadPosition)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5ValidationError, match="UNKNOWN_POSITION_TYPE"):
+        transport.positions_get()
+
+
+# --- T30: Native API Error Separation (Non-Timeout Does Not Fabricate 10012) ---
+def test_t30_native_api_invalid_params_error_separation(
+    adapter: MT5BrokerAdapter,
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    def fail_with_invalid_params(cmd: object) -> object:
+        raise MT5TransportError("NATIVE_ORDER_SEND_FAILED: RES_E_INVALID_PARAMS (API error code -2)", api_code=-2, is_timeout=False)
+
+    monkeypatch.setattr(adapter.transport, "order_send", fail_with_invalid_params)
+
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+
+    # Invariant: Must NOT fabricate 10012 timeout retcode
+    assert obs.raw_retcode is None
+    assert obs.requires_reconciliation is True
+    assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
+
+
+
 

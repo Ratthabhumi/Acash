@@ -1,7 +1,6 @@
-"""Sovereign domain exceptions for MetaTrader 5 (MT5) execution adapter."""
+from typing import Optional
 
 from acash.core.domain.exceptions import DomainValidationError
-
 
 class MT5DomainError(DomainValidationError):
     """Base exception for all MT5 execution domain errors."""
@@ -29,4 +28,15 @@ class MT5SymbolSpecError(MT5DomainError):
 
 class MT5TransportError(MT5DomainError):
     """Raised on low-level transport, IPC, or network communication failures."""
+
+    def __init__(
+        self,
+        message: str,
+        api_code: Optional[int] = None,
+        is_timeout: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.api_code = api_code
+        self.is_timeout = is_timeout
+
 

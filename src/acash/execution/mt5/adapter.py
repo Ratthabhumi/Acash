@@ -65,7 +65,7 @@ class MT5BrokerObservation(BaseModel):
     event_kind: BrokerEventKind
     broker_order_id: str
     observed_at: datetime
-    raw_retcode: int
+    raw_retcode: Optional[int] = None
     raw_deal: int = 0
     raw_order: int = 0
     volume: Decimal = Decimal("0.0")
@@ -113,7 +113,14 @@ class MT5BrokerAdapter:
         self.is_reconciled: bool = False
 
     def can_dispatch(self) -> bool:
-        """Evaluate whether adapter is in a safe, verified state to dispatch outbound requests."""
+        """Evaluate whether the adapter's cached safety state permits order dispatch.
+
+        ARCHITECTURAL INVARIANT:
+        This predicate evaluates the adapter's cached safety gate:
+            can_dispatch() == True iff safety_state == READY and is_reconciled is True.
+        Actual dispatch entrypoints (submit_order, cancel_order) MUST and DO execute a real-time
+        pre-dispatch physical health verification (check_health()) immediately before evaluating this predicate.
+        """
         return (
             self.safety_state == MT5TransportSafetyState.READY
             and self.is_reconciled is True
@@ -313,10 +320,10 @@ class MT5BrokerAdapter:
 
         try:
             observation = self.transport.order_send(command)
-        except (TimeoutError, ConnectionError, OSError, MT5TransportError) as e:
+        except TimeoutError as e:
             self.mark_reconciliation_required(
                 TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
-                f"order_send transport exception: {e}",
+                f"order_send timeout exception: {e}",
             )
             broker_order_id = f"UNKNOWN_{intent.intent_id}"
             exec_event, evidence = normalize_broker_event(
@@ -331,6 +338,59 @@ class MT5BrokerAdapter:
                 broker_order_id=broker_order_id,
                 observed_at=now,
                 raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
+                comment=str(e),
+                lineage=lineage,
+                requires_reconciliation=True,
+                execution_event=exec_event,
+                evidence=evidence,
+            )
+        except MT5TransportError as e:
+            cause = (
+                TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN
+                if e.is_timeout
+                else TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
+            )
+            self.mark_reconciliation_required(
+                cause,
+                f"order_send transport failure: {e}",
+            )
+            broker_order_id = f"UNKNOWN_{intent.intent_id}"
+            exec_event, evidence = normalize_broker_event(
+                broker_order_id=broker_order_id,
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                observed_at=now,
+                source=source,
+                broker_sequence=f"SEQ_ERR_{intent.intent_id}",
+            )
+            return MT5BrokerObservation(
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                broker_order_id=broker_order_id,
+                observed_at=now,
+                raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value if e.is_timeout else None,
+                comment=str(e),
+                lineage=lineage,
+                requires_reconciliation=True,
+                execution_event=exec_event,
+                evidence=evidence,
+            )
+        except (ConnectionError, OSError) as e:
+            self.mark_reconciliation_required(
+                TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
+                f"order_send IPC exception: {e}",
+            )
+            broker_order_id = f"UNKNOWN_{intent.intent_id}"
+            exec_event, evidence = normalize_broker_event(
+                broker_order_id=broker_order_id,
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                observed_at=now,
+                source=source,
+                broker_sequence=f"SEQ_ERR_{intent.intent_id}",
+            )
+            return MT5BrokerObservation(
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                broker_order_id=broker_order_id,
+                observed_at=now,
+                raw_retcode=None,
                 comment=str(e),
                 lineage=lineage,
                 requires_reconciliation=True,
@@ -443,10 +503,10 @@ class MT5BrokerAdapter:
 
         try:
             obs = self.transport.order_send(command)
-        except (TimeoutError, ConnectionError, OSError, MT5TransportError) as e:
+        except TimeoutError as e:
             self.mark_reconciliation_required(
                 TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
-                f"cancel_order transport exception: {e}",
+                f"cancel_order timeout exception: {e}",
             )
             exec_event, evidence = normalize_broker_event(
                 broker_order_id=str(order_ticket),
@@ -460,6 +520,57 @@ class MT5BrokerAdapter:
                 broker_order_id=str(order_ticket),
                 observed_at=now,
                 raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
+                comment=str(e),
+                lineage=lineage,
+                requires_reconciliation=True,
+                execution_event=exec_event,
+                evidence=evidence,
+            )
+        except MT5TransportError as e:
+            cause = (
+                TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN
+                if e.is_timeout
+                else TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
+            )
+            self.mark_reconciliation_required(
+                cause,
+                f"cancel_order transport failure: {e}",
+            )
+            exec_event, evidence = normalize_broker_event(
+                broker_order_id=str(order_ticket),
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                observed_at=now,
+                source=source,
+                broker_sequence=f"SEQ_CANCEL_ERR_{order_ticket}",
+            )
+            return MT5BrokerObservation(
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                broker_order_id=str(order_ticket),
+                observed_at=now,
+                raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value if e.is_timeout else None,
+                comment=str(e),
+                lineage=lineage,
+                requires_reconciliation=True,
+                execution_event=exec_event,
+                evidence=evidence,
+            )
+        except (ConnectionError, OSError) as e:
+            self.mark_reconciliation_required(
+                TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
+                f"cancel_order IPC exception: {e}",
+            )
+            exec_event, evidence = normalize_broker_event(
+                broker_order_id=str(order_ticket),
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                observed_at=now,
+                source=source,
+                broker_sequence=f"SEQ_CANCEL_ERR_{order_ticket}",
+            )
+            return MT5BrokerObservation(
+                event_kind=BrokerEventKind.CONNECTION_LOST,
+                broker_order_id=str(order_ticket),
+                observed_at=now,
+                raw_retcode=None,
                 comment=str(e),
                 lineage=lineage,
                 requires_reconciliation=True,
