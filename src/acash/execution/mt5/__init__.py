@@ -28,6 +28,16 @@ from acash.execution.mt5.mapping import (
     map_order_intent_to_trade_request,
     select_mt5_filling_mode,
 )
+from acash.execution.mt5.normalizer import (
+    DECIMAL_NORMALIZER_PRECISION,
+    MT5SymbolNormalizer,
+    convert_lots_to_units,
+    convert_units_to_lots,
+    normalize_price,
+    normalize_volume,
+    validate_boc_passivity,
+    validate_stop_level,
+)
 from acash.execution.mt5.schemas import (
     BrokerSymbolSpec,
     MT5AccountReality,
@@ -74,4 +84,13 @@ __all__ = [
     "classify_trade_result_observation",
     "select_mt5_filling_mode",
     "map_order_intent_to_trade_request",
+    # Normalizer & Sizing
+    "DECIMAL_NORMALIZER_PRECISION",
+    "MT5SymbolNormalizer",
+    "normalize_volume",
+    "normalize_price",
+    "validate_stop_level",
+    "validate_boc_passivity",
+    "convert_units_to_lots",
+    "convert_lots_to_units",
 ]
