@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `2a224fd` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `cda2c1f` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -145,6 +145,7 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
    - **Execution Mode Requirement:** Requires `symbol_info.trade_execution_mode == "EXCHANGE"`.
    - **Forbidden Order Types:** `ORDER_FILLING_BOC` is **strictly forbidden for market orders (`BUY`, `SELL`) and breakout stop orders (`BUY_STOP`, `SELL_STOP`)**.
    - **Capability Requirement:** Requires the broker symbol's `symbol_info.filling_mode` bitmask to explicitly enable `SYMBOL_FILLING_BOC` alongside `SYMBOL_ORDER_LIMIT` / `SYMBOL_ORDER_STOP_LIMIT` capability.
+   - **Price-Side Passive Invariant (MQL5 Standard):** A BOC order can be placed **strictly in the Depth of Market (DOM)**. The order price must be passive relative to the prevailing market quotes (i.e. `limit_price < ask` for buy limit orders, and `limit_price > bid` for sell limit orders). If the order price crosses or equals the market price (which would cause an immediate fill upon placement), the trade server cancels the request. The contract normalizer enforces this invariant pre-flight.
 3. **Execution Mode Compatibility for Market Orders (`BUY`, `SELL`):**
    - **`SYMBOL_TRADE_EXECUTION_REQUEST` & `SYMBOL_TRADE_EXECUTION_INSTANT`:**
      - `ORDER_FILLING_FOK`, `ORDER_FILLING_IOC`, and `ORDER_FILLING_RETURN` are **all available regardless of symbol filling flags** (MQL5 trade server standard).
@@ -188,6 +189,7 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
    - Verify `symbol_info.trade_execution_mode == "EXCHANGE"`. If not, fail closed with `DataContractError("BOC_REQUIRES_EXCHANGE_EXECUTION_MODE")`.
    - Verify `symbol_info.filling_mode` bitmask contains `SYMBOL_FILLING_BOC`. If not, fail closed with `DataContractError("SYMBOL_DOES_NOT_SUPPORT_BOC")`.
    - Verify order capability: if limit order, verify `symbol_info.order_mode` contains `SYMBOL_ORDER_LIMIT`; if stop-limit, verify `SYMBOL_ORDER_STOP_LIMIT`. If not, fail closed with `DataContractError("SYMBOL_ORDER_MODE_NOT_PERMITTED")`.
+   - Verify price-side passive condition: if `BUY` limit order, verify `limit_price < current_ask`; if `SELL` limit order, verify `limit_price > current_bid`. If order price crosses or touches the market spread (triggering immediate taker fill), fail closed with `DataContractError("BOC_PRICE_NOT_PASSIVE")`.
    - Return `ORDER_FILLING_BOC`.
 2. **Generic Pending Orders Path:** If `order_type` is pending (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`) without passive BOC override:
    - Return `ORDER_FILLING_RETURN` strictly (MQL5 universal pending-order standard).
@@ -365,7 +367,7 @@ Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `2a224fd` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `cda2c1f` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
