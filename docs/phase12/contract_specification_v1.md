@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/contract_specification_v1.md`  
 > **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
-> **Baseline Commit:** `0ae5c69` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `c0499c7` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -526,6 +526,16 @@ $$\boxed{\text{Receive} \longrightarrow \text{IP/Token Auth} \longrightarrow \te
 6. **Candidate Signal Emission:**
    - Emit `TradingViewCandidateSignal` with **0.00 USD Capital Authority**.
 
+### 13.4 Ingress Synchronous Response SLA & Asynchronous Queue Isolation
+- **Documented TradingView Timeout Window:** Official TradingView documentation states that if webhook processing exceeds **approximately 3 seconds**, the request is cancelled / aborted on the sender side.
+- **Strict Prohibition of Synchronous Pipeline Execution:**
+  The synchronous webhook HTTP request thread **MUST NEVER** execute:
+  $$\text{Webhook Request Thread} \quad \centernot\longrightarrow \quad \{\text{Research (8.5)}, \text{Validation (8.5)}, \text{Tournament (8)}, \text{Risk (9)}, \text{MT5 Execution (12)}\}$$
+- **Fast-ACK + Durable Enqueue Pattern:**
+  The synchronous request path is strictly constrained to:
+  $$\text{Receive} \to \text{Auth} \to \text{Parse} \to \text{Canonical ID} \to \text{Idempotency Lookup} \to \text{Freshness} \to \text{Durable Enqueue} \to \text{HTTP 200 Fast-ACK}$$
+- **Operational SLA Target:** Ingress synchronous processing must complete with target latency $t_{\text{resp}} < 50\text{ms}$ (and hard timeout at $1500\text{ms}$), well within TradingView's 3-second delivery constraint. All econometric research, tournament evaluation, risk gating, and broker routing occur strictly asynchronously on downstream worker cycles.
+
 ---
 
 ## 14. Deterministic Error Taxonomy
@@ -557,6 +567,7 @@ $$\boxed{\text{Receive} \longrightarrow \text{IP/Token Auth} \longrightarrow \te
 6. **NO Plaintext Secrets:** Passwords and keys shall NEVER be serialized or logged in plaintext.
 7. **NO Silent Fallbacks:** Ambiguous or failing execution states shall NEVER use default or fabricated responses.
 8. **NO Synthetic Drag on Requotes:** Retcode 10004 REQUOTE shall NEVER generate execution drag records without confirmed deal evidence.
+9. **NO Synchronous Strategy Execution in Webhook:** Webhook ingress handlers shall NEVER synchronously execute research, risk, or execution pipelines.
 
 ---
 
@@ -585,7 +596,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 17. Verification Ledger & Audit Signoff
 
-- **Active Baseline Commit:** `0ae5c69` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `c0499c7` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors in 245 files).
 - **Rule:** Do NOT write production code for Phase 12 until this Contract Specification v1.0 and the accompanying Red-Team Adversarial Matrix are reviewed and locked.

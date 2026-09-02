@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `bca72aa` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `c0499c7` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -322,14 +322,16 @@ TradingView Alert (Chart/Indicator)
       HTTP POST (JSON)
            │
            ▼
-TradingViewIngressGateway
-  ├── HMAC-SHA256 Secret Verification
-  ├── IP Whitelist / Timestamp Nonce Check
-  ├── Schema Validation (Symbol, Timeframe, Signal Direction)
-  └── Envelope Dispatcher
+TradingViewIngressGateway (Fast-ACK Ingress SLA < 3000ms)
+  ├── TLS / HTTPS Transport
+  ├── TradingView Source IP Allowlist (52.89.214.238, 34.212.75.30, 54.218.53.128, 52.32.178.7)
+  ├── Pre-Shared Payload Token / Dedicated Path Auth (No custom outbound HMAC headers assumed)
+  ├── Canonical Event ID & Pre-Freshness Idempotency Lookup
+  ├── Freshness Gate (received_at - event_timestamp <= 60s)
+  └── Durable Candidate Enqueue -> HTTP 200 Fast-ACK
            │
-           ▼
-CandidateSignalEvent (Raw External Proposal)
+           ▼ (Asynchronous Queue Processing)
+CandidateSignalEvent (Raw External Proposal, 0.00 USD Capital Authority)
            │
            ▼
 [ACASH Research -> Validation -> Tournament -> Risk -> Admission]
@@ -377,7 +379,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `bca72aa` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `c0499c7` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
