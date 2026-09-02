@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/contract_specification_v1.md`  
 > **Status:** CONTRACT SPECIFICATION v1.0 (LOCKED ARCHITECTURAL SPECIFICATION)  
-> **Baseline Commit:** `31bb9bb` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `0816bf5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -15,9 +15,9 @@
 Phase 12 expands the sovereign execution framework established in Phase 7 by implementing:
 1. **Multi-Venue Execution Topology:** Decoupled broker routing infrastructure operating under the Phase 7 `ExecutionCoordinator`.
 2. **MetaTrader 5 (MT5) Execution Adapter (#1):** High-fidelity, local IPC bridge communicating directly with official MetaTrader 5 Windows terminal instances.
-3. **Immutable Contract Normalization (`BrokerSymbolSpec`):** Versioned broker instrument specifications, volume quantization, price step alignment, and stop-level enforcement.
-4. **Authoritative 6-Dimensional Reconciliation Engine:** Complete shadow ledger reconciliation across Balances, Equity, Margin, Positions, Resting Orders, and Historical Deals.
-5. **TradingView Decoupled Auxiliary Ingress & Visualization Gateway:** Secure HMAC-verified webhook signal ingress and read-only charting telemetry.
+3. **Immutable Contract Normalization (`BrokerSymbolSpec`):** Versioned broker instrument specifications, deterministic Decimal volume quantization, tick-grid price alignment, and stop-level enforcement.
+4. **Authoritative 6-Dimensional Reconciliation Engine:** Shadow ledger reconciliation across Balances, Equity, Margin, Positions, Resting Orders, and Historical Deals, emitting evidence for `ExecutionCoordinator` lifecycle governance.
+5. **TradingView Decoupled Auxiliary Ingress & Visualization Gateway:** Native HTTP POST ingress with IP allowlisting, payload token validation, replay/freshness decoupling, and read-only charting telemetry.
 
 ### 1.2 Explicit Non-Goals
 - **No Direct Strategy Execution from TradingView:** TradingView alerts are strictly candidate proposals; they never bypass research, tournament, risk, or execution admission gates.
@@ -43,18 +43,22 @@ $$\boxed{\mathbf{Research\ (8.5)} \neq \mathbf{Monitoring\ (11)} \neq \mathbf{Al
 │ MT5BrokerAdapter (12)     │ Command Sink + Observation Source│ Order State Mutation,         │
 │                           │ (Translates MT5 reality to DTOs)│ Risk Sizing, Capital Decision │
 ├───────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
+│ ReconciliationEngine (12) │ Evidence Emission Authority     │ Direct State Mutation         │
+│                           │ (Emits ReconciliationEvidence)  │ (`transition_order` bypass)   │
+├───────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
 │ TradingView Ingress (12)  │ Auxiliary Proposal Buffer       │ Order Submission, Risk Veto,  │
-│                           │ (HMAC Verified Webhooks)        │ Execution Authority ($0.00)   │
+│                           │ (IP & Token Verified Ingress)   │ Execution Authority ($0.00)   │
 ├───────────────────────────┼─────────────────────────────────┼───────────────────────────────┤
 │ Broker Trade Server (Ext) │ Final External Matching Reality │ Internal State Governance     │
 └───────────────────────────┴─────────────────────────────────┴───────────────────────────────┘
 ```
 
 ### Invariant: BrokerAdapter $\neq$ StateAuthority
-$$\boxed{\mathbf{BrokerAdapter} \neq \mathbf{StateAuthority}}$$
-- The broker adapter **never** mutates `OrderLifecycleState` directly.
+$$\boxed{\mathbf{BrokerAdapter} \neq \mathbf{StateAuthority} \quad \land \quad \mathbf{ReconciliationEngine} \neq \mathbf{StateAuthority}}$$
+- The broker adapter and reconciliation engine **never** mutate `OrderLifecycleState` or position tables directly.
 - The adapter communicates observations strictly by emitting canonical `BrokerRawEvent` records to the `ExecutionCoordinator`.
-- `transition_order()` in Phase 7 remains the **sole state transition authority**.
+- The reconciliation engine emits `ReconciliationEvidence` records.
+- `ExecutionCoordinator` / `transition_order()` in Phase 7 remains the **sole state transition authority**.
 
 ---
 
@@ -94,16 +98,17 @@ class BrokerSymbolSpec(BaseModel):
 
     canonical_symbol: str
     broker_symbol: str
-    contract_size: Decimal
-    volume_min: Decimal
-    volume_max: Decimal
-    volume_step: Decimal
-    digits: int
-    point_size: Decimal
+    contract_size: Decimal              # e.g. Decimal("100000") for EURUSD, Decimal("1") for BTCUSD
+    volume_min: Decimal                 # e.g. Decimal("0.01")
+    volume_max: Decimal                 # e.g. Decimal("100.00")
+    volume_step: Decimal                # e.g. Decimal("0.01")
+    digits: int                         # Price decimal precision (e.g. 5)
+    point_size: Decimal                 # e.g. Decimal("0.00001")
+    tick_size: Decimal                  # Minimum price movement (e.g. Decimal("0.00001"))
     trade_execution_mode: str           # 'MARKET', 'INSTANT', 'REQUEST', 'EXCHANGE'
     allowed_filling_flags: Tuple[str, ...] # ('SYMBOL_FILLING_FOK', 'SYMBOL_FILLING_IOC', 'SYMBOL_FILLING_BOC')
     allowed_order_modes: Tuple[str, ...]   # ('SYMBOL_ORDER_LIMIT', 'SYMBOL_ORDER_STOP_LIMIT', etc.)
-    stops_level_points: int
+    stops_level_points: int             # Minimum distance for SL/TP and pending orders in points
     margin_currency: str
     profit_currency: str
     spec_digest: str                   # SHA-256 of canonical fields
@@ -199,7 +204,7 @@ MT5 Order / TradeRequest (order_ticket)
 ### 4.1 Multi-Deal Accumulation Semantics
 When an `OrderIntent` generates $N \ge 1$ deals (e.g. sweeping multiple price levels or partial executions), the `ExecutionCoordinator` accumulates all linked deals into the `ExecutionManifest`:
 $$\text{Realized VWAP} = \frac{\sum_{i=1}^N \text{volume}_i \cdot \text{price}_i}{\sum_{i=1}^N \text{volume}_i}$$
-$$\text{Total Realized Commission} = \sum_{i=1}^N \text{commission}_i + \text{fee}_i$$
+$$\text{Total Realized Commission} = \sum_{i=1}^N (\text{commission}_i + \text{fee}_i)$$
 
 ---
 
@@ -244,12 +249,12 @@ ExecutionCoordinator.apply()  [Phase 7 Engine]
 transition_order()  [SOLE State Machine Authority]
 ```
 
-### 6.1 Return Code Mapping Table
+### 6.1 Return Code Mapping & Requote Semantics
 | MT5 Retcode | Meaning | Emitted `BrokerRawEvent` | Coordinator Action |
 | :--- | :--- | :--- | :--- |
 | `10009` (`TRADE_RETCODE_DONE`) | Server processed request | `SUBMISSION_ACKNOWLEDGED` / `FILL_OBSERVED` | Reconcile deals $\to$ `FILLED` |
 | `10010` (`TRADE_RETCODE_DONE_PARTIAL`)| Partial execution | `PARTIAL_FILL_OBSERVED` | Reconcile deal $\to$ `PARTIALLY_FILLED` |
-| `10004` (`TRADE_RETCODE_REQUOTE`) | Price moved | `REJECT_OBSERVED` (`REQUOTE`) | Fail closed / Record drag attribution |
+| `10004` (`TRADE_RETCODE_REQUOTE`) | Price moved | `REJECT_OBSERVED` (`REQUOTE_OBSERVED`) | **Request rejected; ZERO realized execution drag recorded without deal** |
 | `10006` (`TRADE_RETCODE_REJECT`) | Server rejected request | `REJECT_OBSERVED` | Transition to `REJECTED` |
 | `10018` (`TRADE_RETCODE_MARKET_CLOSED`)| Market is closed | `REJECT_OBSERVED` | Transition to `REJECTED` |
 | `10027` (`TRADE_RETCODE_AUTOTRADING_DISABLED`)| Terminal autotrading off | `CONNECTION_LOST` / `UNHEALTHY` | Block cycle pulse |
@@ -382,16 +387,36 @@ def resolve_filling_mode(
 
 ---
 
-## 8. Unit, Volume & Price Normalization Contract
+## 8. Deterministic Decimal Unit, Volume & Price Normalization Contract
 
-1. **Volume Quantization:**
-   $$\text{lot\_volume} = \text{round}\left(\frac{\text{requested\_units}}{\text{contract\_size} \cdot \text{volume\_step}}\right) \cdot \text{volume\_step}$$
-   - Precondition: $\text{volume\_min} \le \text{lot\_volume} \le \text{volume\_max}$. If out of bounds, fail closed with `DataContractError("VOLUME_OUT_OF_BOUNDS")`.
-2. **Price Quantization:**
-   $$\text{quantized\_price} = \text{round}(\text{raw\_price}, \text{digits})$$
-3. **Stop Distance Enforcement:**
-   - For Limit and Stop orders, distance from current market price must satisfy:
-     $$\Delta \text{points} \ge \text{stops\_level\_points}$$
+### 8.1 Input Sizing Semantics & Lot Quantization
+- **Input Semantic:** `target_units: Decimal` represents the desired base asset quantity (e.g. `Decimal("100000")` EUR for EURUSD, `Decimal("1.5")` BTC for BTCUSD).
+- **Lot Sizing Conversion:**
+  $$\text{raw\_lots} = \frac{\text{target\_units}}{\text{spec.contract\_size}}$$
+- **Deterministic Step Quantization (Decimal `ROUND_DOWN`):**
+  To prevent unauthorized capital over-allocation, volume quantization strictly truncates to the nearest lower discrete lot step:
+  $$\text{steps} = \left\lfloor \frac{\text{raw\_lots}}{\text{spec.volume\_step}} \right\rfloor$$
+  $$\text{quantized\_lots} = \text{steps} \cdot \text{spec.volume\_step}$$
+- **Fail-Closed Boundary Invariants:**
+  - If $\text{quantized\_lots} < \text{spec.volume\_min} \implies$ raise `DataContractError("VOLUME_BELOW_MINIMUM")`.
+  - If $\text{quantized\_lots} > \text{spec.volume\_max} \implies$ raise `DataContractError("VOLUME_ABOVE_MAXIMUM")`.
+  - If $(\text{quantized\_lots} \pmod{\text{spec.volume\_step}}) \neq 0 \implies$ raise `DataContractError("VOLUME_STEP_MISMATCH")`.
+
+### 8.2 Deterministic Price & Tick-Grid Quantization
+- **Tick-Grid Alignment:** All order prices are snapped to the broker `tick_size` (derived as $10^{-\text{digits}}$ or explicit `spec.tick_size`):
+  $$\text{ticks} = \text{quantize}\left(\frac{\text{raw\_price}}{\text{spec.tick\_size}}, \text{mode}\right)$$
+  $$\text{quantized\_price} = \text{ticks} \cdot \text{spec.tick\_size}$$
+- **Directional Rounding Policies:**
+  - **Market Orders:** Quantized using standard symmetrical Decimal `ROUND_HALF_EVEN`.
+  - **Limit Orders (`BUY_LIMIT`):** Quantized using Decimal `ROUND_FLOOR` (downwards away from market spread to ensure maker passivity).
+  - **Limit Orders (`SELL_LIMIT`):** Quantized using Decimal `ROUND_CEILING` (upwards away from market spread to ensure maker passivity).
+  - **Stop Orders (`BUY_STOP`):** Quantized using Decimal `ROUND_CEILING`.
+  - **Stop Orders (`SELL_STOP`):** Quantized using Decimal `ROUND_FLOOR`.
+  - **Stop-Limit Orders:** Trigger price and limit price are independently quantized under directional maker rules and validated against the BOC price safety invariant.
+- **Stop Distance Verification:**
+  - Order distance from current market quote must satisfy:
+    $$\Delta \text{points} = \frac{|\text{order\_price} - \text{market\_price}|}{\text{spec.point\_size}} \ge \text{spec.stops\_level\_points}$$
+  - If violated $\implies$ fail closed with `DataContractError("STOP_LEVEL_VIOLATION")`.
 
 ---
 
@@ -427,7 +452,7 @@ $$\boxed{\mathbf{MT5\ Comment} \equiv \mathbf{Transport\ Correlation\ Metadata\ 
 
 ---
 
-## 12. Fail-Closed Resilience & 6-Dimensional Reconciliation Loop
+## 12. Fail-Closed Resilience & Authoritative 6-Dimensional Reconciliation Loop
 
 ### 12.1 Disconnect & Unknown State Handling
 - If `mt5.terminal_info().connected == False` or IPC socket times out:
@@ -436,23 +461,57 @@ $$\boxed{\mathbf{MT5\ Comment} \equiv \mathbf{Transport\ Correlation\ Metadata\ 
   3. All future cycle pulses are blocked until terminal reconnection.
   4. Mandatory **6-Dimensional Reconciliation** must succeed before restoring normal operations.
 
-### 12.2 6-Dimensional Reconciliation Dimensions
+### 12.2 6-Dimensional Reconciliation Contract
 $$\text{Reconciliation} = (\text{Balance}, \text{Equity}, \text{Margin}, \text{Positions}, \text{Resting Orders}, \text{Historical Deals})$$
-- If any discrepancy between ACASH internal shadow state and broker reality exceeds configured tolerances, the engine raises `MT5ReconciliationError` and halts trading.
+- The reconciliation engine compares broker reality against the ACASH shadow ledger and produces an immutable `ReconciliationEvidence` record.
+- **Authority Discipline:** The reconciliation engine **never** mutates state machine tables directly; it delivers evidence to `ExecutionCoordinator.apply_reconciliation()`, which performs authoritative lifecycle reconciliation.
+- If any discrepancy exceeds configured numeric tolerance thresholds, `ExecutionCoordinator` halts trading immediately with `MT5ReconciliationError`.
 
 ---
 
-## 13. TradingView Webhook Ingress & $0.00 Capital Authority Gateway
+## 13. TradingView Native Ingress, Replay Decoupling & $0.00 Capital Boundary
 
-### 13.1 Webhook Verification Protocol
-- **Endpoint:** `POST /api/v1/ingress/tradingview`
-- **Authentication:** HMAC-SHA256 signature verification via `X-TradingView-Signature` header.
-- **Timestamp / Nonce Replay Check:** Request timestamp must be within $\pm 3000\text{ms}$ of wall-clock UTC.
-- **Fail-Safe Policy:** Malformed, delayed, or unverified webhooks return `401 Unauthorized` / `400 Bad Request` and are dropped without disrupting active runtime cycles.
+### 13.1 Native Webhook Ingress Authentication Protocol
+TradingView webhook dispatch uses standard HTTP POST containing alert text in the body without arbitrary custom header injection. Authentication and ingress integrity are enforced via:
+1. **Transport Security:** Mandatory TLS/HTTPS encryption (`https://...`).
+2. **Origin IP Allowlisting:** Ingress filters incoming TCP connections against official TradingView source IP ranges (`52.89.214.238`, `34.212.75.30`, `54.218.53.128`, `52.32.178.7`). Non-allowlisted connections are dropped with `403 Forbidden`.
+3. **Payload Token & Dedicated Ingress Path:** Webhooks include a pre-shared strategy authentication token embedded either in the JSON payload (`"passphrase": "..."`) or via a private per-strategy URL path (`/api/v1/ingress/tv/{secret_webhook_token}`).
+4. **Server Certificate Verification:** TradingView verifies the recipient server's TLS certificate.
 
-### 13.2 Sovereign Capital Authority Boundary
+### 13.2 Replay Defense vs. TradingView Retry Behavior
+TradingView documentation specifies that if an endpoint returns a `5xx` error (excluding `504`), the server automatically retries sending the alert after **5 seconds**, up to **4 total attempts**.
+
+To accommodate legitimate retries while preventing malicious replays, ACASH strictly decouples **Freshness** from **Idempotency**:
+
+```
+Incoming Webhook POST
+          │
+          ▼
+1. Source IP & Token Verification (Passphrase / Private Path)
+          │
+          ▼
+2. Freshness Gate (alert_timestamp_utc within T_max = 60s of wall clock)
+          │
+          ▼
+3. Idempotency Key Extraction: event_id = SHA256(strategy_id + alert_time + bar_time + nonce)
+          │
+          ├──────────────────────────────────────────────────┐
+          ▼                                                  ▼
+   Seen in Replay Cache?                              New Event Key
+          │                                                  │
+   ┌──────┴──────┐                                           ▼
+   ▼             ▼                                    Store event_id in LRU Cache
+Previous      Previous                                & Persisted Ledger
+Success       Failure                                        │
+   │             │                                           ▼
+Return 200    Re-process                              Emit CandidateSignal DTO
+(Idempotent   Safe Retry                              (0.00 USD Capital Authority)
+ ACK, No Dup)
+```
+
+### 13.3 Sovereign Capital Authority Boundary
 $$\boxed{\mathbf{TradingView\ CandidateSignal} \equiv \mathbf{0.00\ USD\ Capital\ Authority}}$$
-- TradingView candidate signals enter as unvalidated research proposals.
+- TradingView candidate signals enter strictly as unvalidated research proposals.
 - They must navigate Phase 8.5 qualification, Phase 8 tournament, Phase 9 sovereign risk veto, and Phase 7 execution admission before touching MT5.
 
 ---
@@ -465,21 +524,26 @@ $$\boxed{\mathbf{TradingView\ CandidateSignal} \equiv \mathbf{0.00\ USD\ Capital
 | `TERMINAL_NOT_CONNECTED` | `MT5ConnectionError` | MT5 IPC socket disconnect |
 | `NO_COMPATIBLE_FILLING_MODE` | `DataContractError` | Incompatible filling mode resolution |
 | `BOC_PRICE_NOT_PASSIVE` | `DataContractError` | BOC limit/stop-limit price crosses market spread |
-| `VOLUME_OUT_OF_BOUNDS` | `DataContractError` | Order volume violates min/max/step bounds |
+| `VOLUME_BELOW_MINIMUM` | `DataContractError` | Sized volume is below broker symbol `volume_min` |
+| `VOLUME_ABOVE_MAXIMUM` | `DataContractError` | Sized volume is above broker symbol `volume_max` |
+| `VOLUME_STEP_MISMATCH` | `DataContractError` | Sized volume is not an integer multiple of `volume_step` |
+| `STOP_LEVEL_VIOLATION` | `DataContractError` | Order price is closer than `stops_level_points` from quote |
 | `RECONCILIATION_STATE_MISMATCH` | `MT5ReconciliationError` | Internal shadow ledger deviates from broker reality |
-| `TRADINGVIEW_HMAC_INVALID` | `TradingViewIngressError` | Invalid webhook signature |
+| `TRADINGVIEW_AUTH_FAILED` | `TradingViewIngressError` | IP not allowlisted or passphrase invalid |
+| `TRADINGVIEW_STALE_PAYLOAD` | `TradingViewIngressError` | Webhook alert timestamp older than 60s window |
 
 ---
 
 ## 15. Explicit Prohibitions
 
-1. **NO Direct State Mutation:** The broker adapter shall NEVER call `transition_order()` directly.
+1. **NO Direct State Mutation:** The broker adapter and reconciliation engine shall NEVER call `transition_order()` directly.
 2. **NO Synthetic Fills:** The adapter shall NEVER manufacture synthetic fills on timeout or connection loss.
 3. **NO Execution via TradingView:** TradingView shall NEVER be placed in the critical execution chain ($\text{ACASH} \to \text{TradingView} \to \text{MT5} \to \text{Broker}$ is strictly prohibited).
 4. **NO Market RETURN Orders:** `ORDER_FILLING_RETURN` shall NEVER be submitted for market orders under `SYMBOL_TRADE_EXECUTION_MARKET`.
 5. **NO Aggressive BOC Orders:** `ORDER_FILLING_BOC` shall NEVER be submitted with prices that cross or touch the prevailing market quote.
 6. **NO Plaintext Secrets:** Passwords and keys shall NEVER be serialized or logged in plaintext.
 7. **NO Silent Fallbacks:** Ambiguous or failing execution states shall NEVER use default or fabricated responses.
+8. **NO Synthetic Drag on Requotes:** Retcode 10004 REQUOTE shall NEVER generate execution drag records without confirmed deal evidence.
 
 ---
 
@@ -498,17 +562,17 @@ Slice 3: MT5 Terminal Driver & IPC Transport Bridge (Windows Local)
 Slice 4: MT5 Broker Adapter (MT5BrokerAdapter) & 6-D Reconciliation Engine
    │
    ▼
-Slice 5: TradingView Ingress Gateway (HMAC Sanitizer & Candidate Signal DTO)
+Slice 5: TradingView Ingress Gateway (IP/Token Sanitizer & Candidate Signal DTO)
    │
    ▼
-Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
+Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 ```
 
 ---
 
 ## 17. Verification Ledger & Audit Signoff
 
-- **Baseline Commit:** `31bb9bb` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `0816bf5` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
-- **Static Type Checker:** MyPy clean across all active modules (0 errors).
+- **Static Type Checker:** MyPy clean across all active modules (0 errors in 245 files).
 - **Rule:** Do NOT write production code for Phase 12 until this Contract Specification v1.0 and the accompanying Red-Team Adversarial Matrix are reviewed and locked.

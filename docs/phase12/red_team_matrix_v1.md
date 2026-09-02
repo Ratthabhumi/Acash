@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/red_team_matrix_v1.md`  
 > **Status:** RED-TEAM ADVERSARIAL MATRIX v1.0 (LOCKED ADVERSARIAL SPECIFICATION)  
-> **Baseline Commit:** `31bb9bb` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `0816bf5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Target System:** Phase 12 MT5 Broker Adapter, Contract Normalizer, 6-D Reconciliation & TradingView Ingress  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Single Authority Invariant)
 
@@ -31,11 +31,11 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 ├──────┬──────────────────────────────────────────┬─────────────────────────────────────┬──────────────────────────┤
 │ ID   │ Adversarial Attack Vector                │ Expected Failure Mode / Boundary    │ Required Invariant Action│
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-01│ Duplicate Order Submission               │ Re-submitting identical intent_id   │ Fail-closed idempotency  │
-│      │                                          │ within same cycle pulse             │ block (cached receipt)   │
+│ RT-01│ Multi-Scope Duplicate Submission         │ Re-submitting identical intent_id   │ Global persisted receipt │
+│      │                                          │ across cycles/restarts/reconnects   │ blocks duplicate order   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-02│ Duplicate Deal Ticket Observation        │ Adapter receives identical          │ Idempotent deal dedupe   │
-│      │                                          │ deal_ticket twice                   │ (no duplicate exposure)  │
+│ RT-02│ Multi-Account Deal Ticket Collision      │ Identical deal_ticket received from │ 9-tuple namespace check  │
+│      │                                          │ distinct accounts/terminals         │ isolates deal identities │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-03│ Single Order Split into 3 Fills (VWAP)   │ OrderIntent for 1.0 lot fills via   │ Aggregate to VWAP on     │
 │      │                                          │ 3 distinct deal tickets             │ ExecutionManifest        │
@@ -46,8 +46,8 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 │ RT-05│ Order Send Success with Zero Deal Ticket │ order_send returns 10009 but deals  │ In-flight order stays    │
 │      │                                          │ table empty (settlement lag)        │ SUBMITTED until deal poll│
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-06│ Requote (10004) under Market Slippage    │ Broker server requotes price        │ Emit REJECT_OBSERVED;    │
-│      │                                          │ during execution                    │ record drag attribution  │
+│ RT-06│ Requote (10004) without Executed Deal    │ Broker server requotes price        │ Emit REQUOTE_OBSERVED;   │
+│      │                                          │ without generating a deal ticket    │ ZERO realized drag added │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-07│ Connection Drop Mid-order_send()         │ Socket cuts during socket packet tx │ Transition in-flight to  │
 │      │                                          │ (unknown if server processed)       │ UNKNOWN; block cycles    │
@@ -77,22 +77,22 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 │      │                                          │ context than DPAPI owner            │ on startup (exit 1)      │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-16│ Sub-Minimum Lot Sizing Attempt           │ Request volume 0.005 lot when       │ DataContractError        │
-│      │                                          │ volume_min = 0.01                   │ (VOLUME_OUT_OF_BOUNDS)   │
+│      │                                          │ volume_min = 0.01                   │ (VOLUME_BELOW_MINIMUM)   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-17│ Non-Quantized Lot Step Attempt           │ Request volume 0.123 lot when       │ DataContractError        │
-│      │                                          │ volume_step = 0.01                  │ (VOLUME_STEP_MISMATCH)   │
+│ RT-17│ Non-Quantized Lot Step Attempt           │ Request volume 0.123 lot when       │ Quantizer rounds down to │
+│      │                                          │ volume_step = 0.01                  │ 0.12 lot via ROUND_DOWN  │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-18│ Super-Maximum Lot Sizing Attempt         │ Request volume 150.0 lots when      │ DataContractError        │
-│      │                                          │ volume_max = 100.0                  │ (VOLUME_OUT_OF_BOUNDS)   │
+│      │                                          │ volume_max = 100.0                  │ (VOLUME_ABOVE_MAXIMUM)   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-19│ Unnormalized Price Decimal Attack        │ Limit price with 7 digits when      │ Normalizer quantizes to  │
-│      │                                          │ symbol digits = 5                   │ 5 digits via point_size  │
+│ RT-19│ Unnormalized Price Tick-Grid Attack      │ Limit price with unaligned decimal  │ Normalizer snaps to tick │
+│      │                                          │ (e.g. 1.085123 on 5-digit point)    │ grid using maker rules   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-20│ Stop Distance Violation                  │ Limit order within stops_level      │ DataContractError        │
 │      │                                          │ boundary from market price          │ (STOP_LEVEL_VIOLATION)   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-21│ Market Execution RETURN Filling Attempt  │ Market BUY with RETURN filling      │ Fail closed pre-flight   │
-│      │                                          │ under SYMBOL_TRADE_EXEC_MARKET      │ (RETURN_FORBIDDEN)       │
+│      │                                          │ under SYMBOL_TRADE_EXEC_MARKET      │ (NO_COMPATIBLE_FILLING)  │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-22│ BOC on Unsupported Order Type            │ PASSIVE_MAKER on market BUY or      │ DataContractError        │
 │      │                                          │ breakout BUY_STOP                   │ (BOC_INVALID_ORDER_TYPE) │
@@ -109,14 +109,14 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 │ RT-26│ BOC Price Not Passive (Stop-Limit Order) │ BUY_STOP_LIMIT resting limit >=     │ DataContractError        │
 │      │                                          │ stop trigger price                  │ (BOC_PRICE_NOT_PASSIVE)  │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-27│ TradingView Invalid HMAC Signature       │ Webhook payload with invalid or     │ Ingress rejects with 401;│
-│      │                                          │ forged HMAC-SHA256 signature        │ zero internal mutation   │
+│ RT-27│ TradingView Non-Allowlisted IP / Token   │ Webhook from unknown IP or with     │ Ingress rejects with     │
+│      │                                          │ invalid passphrase/token            │ 403 Forbidden / 401 Unauth│
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-28│ TradingView Replayed Webhook Attack      │ Valid webhook re-sent with expired  │ Nonce / timestamp window │
-│      │                                          │ timestamp (> 3000ms drift)          │ (>3s) rejects with 400   │
+│ RT-28│ TradingView 5-Second Retry Handling      │ TradingView resends identical alert │ Idempotency cache emits  │
+│      │                                          │ payload after 5s retry attempt      │ 200 OK without duplicate │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
-│ RT-29│ TradingView Malformed JSON Injection     │ Webhook sends malformed JSON or     │ Pydantic strict parsing  │
-│      │                                          │ injection strings in symbol/action  │ rejects with 422         │
+│ RT-29│ TradingView Malformed JSON / Stale Alert │ Webhook with invalid JSON format or │ Ingress rejects with     │
+│      │                                          │ timestamp older than 60s window     │ 422 Unproc / 400 Stale   │
 ├──────┼──────────────────────────────────────────┼─────────────────────────────────────┼──────────────────────────┤
 │ RT-30│ TradingView Direct Execution Bypass      │ Webhook payload attempts to force   │ $0.00 capital boundary   │
 │      │                                          │ direct broker ticket execution      │ enforces candidate route │
@@ -130,78 +130,125 @@ Every test vector in this matrix attacks the assumptions of the adapter, termina
 
 ## 3. Detailed Attack Vector Specifications
 
-### RT-25 & RT-26: BOC Price-Side Passive Invariant Verification
+### RT-01: Multi-Scope Duplicate Submission Idempotency
 ```python
-def test_rt25_boc_non_passive_buy_limit_fails():
-    """Verify BUY_LIMIT with price >= ask is rejected pre-flight."""
-    spec = create_exchange_symbol_spec(allowed_filling=("SYMBOL_FILLING_BOC",))
-    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_BUY_LIMIT"):
-        resolve_filling_mode(
-            symbol_spec=spec,
-            order_type=MT5OrderType.BUY_LIMIT,
-            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
-            limit_price=Decimal("1.0855"),
-            current_bid=Decimal("1.0850"),
-            current_ask=Decimal("1.0852"), # Price crosses ask!
-        )
-
-
-def test_rt26_boc_non_passive_stop_limit_fails():
-    """Verify BUY_STOP_LIMIT with limit_price >= trigger_price is rejected."""
-    spec = create_exchange_symbol_spec(allowed_filling=("SYMBOL_FILLING_BOC",))
-    with pytest.raises(DataContractError, match="BOC_PRICE_NOT_PASSIVE_BUY_STOP_LIMIT"):
-        resolve_filling_mode(
-            symbol_spec=spec,
-            order_type=MT5OrderType.BUY_STOP_LIMIT,
-            execution_policy=MT5ExecutionPolicy.PASSIVE_MAKER,
-            trigger_price=Decimal("1.0900"),
-            limit_price=Decimal("1.0905"), # Limit price higher than trigger!
-            current_bid=Decimal("1.0850"),
-            current_ask=Decimal("1.0852"),
-        )
+def test_rt01_duplicate_submission_blocked_across_restarts():
+    """Verify that an identical intent_id cannot be submitted twice even across restarts."""
+    coordinator = create_execution_coordinator()
+    intent = create_valid_order_intent(intent_id="intent-101")
+    
+    # 1. Initial submission
+    receipt1 = coordinator.submit_intent(intent)
+    assert receipt1.status == SubmissionStatus.ACCEPTED
+    
+    # 2. Re-submission in next cycle
+    receipt2 = coordinator.submit_intent(intent)
+    assert receipt2.status == SubmissionStatus.DUPLICATE_REJECTED
+    
+    # 3. Simulate process restart and reload
+    coordinator_reloaded = reload_execution_coordinator_from_ledger()
+    receipt3 = coordinator_reloaded.submit_intent(intent)
+    assert receipt3.status == SubmissionStatus.DUPLICATE_REJECTED
 ```
 
-### RT-07: In-Flight Socket Drop Disconnect Handling
+### RT-02: Namespace-Aware Deal Deduplication
 ```python
-def test_rt07_socket_drop_transitions_to_unknown():
-    """Verify socket drop during order submission marks order UNKNOWN."""
-    adapter = create_mock_mt5_adapter(simulate_socket_timeout=True)
-    with pytest.raises(MT5ConnectionError):
-        adapter.submit_order(intent)
-
-    # Sovereign ExecutionCoordinator must record UNKNOWN, not CANCELLED/REJECTED
-    order_state = coordinator.get_order(intent.intent_id)
-    assert order_state.lifecycle_state == OrderLifecycleState.UNKNOWN
+def test_rt02_deal_dedupe_is_namespace_aware():
+    """Verify deal tickets are partitioned across (broker_id, account_id, terminal_instance_id)."""
+    coordinator = create_execution_coordinator()
+    
+    deal_account_a = MT5DealReality(
+        deal_ticket=12345,
+        order_ticket=999,
+        position_ticket=101,
+        symbol="EURUSD",
+        deal_type="DEAL_TYPE_BUY",
+        volume=Decimal("1.0"),
+        price=Decimal("1.0850"),
+        commission=Decimal("2.0"),
+        fee=Decimal("0.0"),
+        swap=Decimal("0.0"),
+        profit=Decimal("0.0"),
+        deal_time_utc=datetime.now(timezone.utc),
+        comment="test-a",
+        magic=1001,
+    )
+    
+    # Deal on Account A processed
+    event_a = BrokerRawEvent(
+        broker_id="mt5_demo",
+        account_id="acc_1001",
+        terminal_instance_id="term_1",
+        event_kind=BrokerEventKind.FILL_OBSERVED,
+        deal_payload=deal_account_a,
+    )
+    assert coordinator.apply(event_a).is_accepted
+    
+    # Duplicate deal on Account A rejected
+    assert coordinator.apply(event_a).is_duplicate_ignored
+    
+    # Same deal ticket on Account B is distinct and valid
+    event_b = BrokerRawEvent(
+        broker_id="mt5_demo",
+        account_id="acc_1002",
+        terminal_instance_id="term_2",
+        event_kind=BrokerEventKind.FILL_OBSERVED,
+        deal_payload=deal_account_a,
+    )
+    assert coordinator.apply(event_b).is_accepted
 ```
 
-### RT-27 & RT-28: TradingView Ingress Security & Replay Attacks
+### RT-06: Requote Observation without Synthetic Drag
 ```python
-def test_rt27_tradingview_invalid_hmac_rejected():
-    """Verify forged webhook signature returns 401 Unauthorized."""
-    response = client.post(
-        "/api/v1/ingress/tradingview",
-        content=valid_payload_bytes,
-        headers={"X-TradingView-Signature": "invalid_forged_signature"},
-    )
-    assert response.status_code == 401
+def test_rt06_requote_emits_observation_without_synthetic_drag():
+    """Verify retcode 10004 REQUOTE does not generate false execution drag records."""
+    adapter = create_mock_mt5_adapter(simulate_retcode=10004) # REQUOTE
+    intent = create_valid_order_intent()
+    
+    event = adapter.submit_order(intent)
+    assert event.event_kind == BrokerEventKind.REJECT_OBSERVED
+    assert event.rejection_reason == "REQUOTE_OBSERVED"
+    
+    # ExecutionCoordinator verifies no deal tickets exist -> drag record is NOT manufactured
+    manifest = coordinator.get_execution_manifest(intent.intent_id)
+    assert manifest.realized_vwap is None
+    assert manifest.execution_drag_bps == Decimal("0.0")
+```
 
-
-def test_rt28_tradingview_replayed_timestamp_rejected():
-    """Verify expired webhook timestamp is rejected."""
-    expired_payload = create_tv_payload(timestamp_utc=now() - timedelta(seconds=10))
-    signature = sign_hmac(expired_payload, secret_key)
-    response = client.post(
-        "/api/v1/ingress/tradingview",
-        content=expired_payload,
-        headers={"X-TradingView-Signature": signature},
-    )
-    assert response.status_code == 400
+### RT-28: TradingView 5-Second Retry Handling
+```python
+def test_rt28_tradingview_5s_retry_handled_idempotently():
+    """Verify legitimate 5-second retry returns 200 OK without duplicate candidate creation."""
+    client = create_tradingview_test_client()
+    payload = {
+        "passphrase": "VALID_SECRET_TOKEN",
+        "strategy_id": "MOM_ALPHA_01",
+        "action": "BUY",
+        "symbol": "EURUSD",
+        "bar_time_utc": "2026-09-02T12:00:00Z",
+        "alert_timestamp_utc": "2026-09-02T12:00:01Z",
+        "nonce": "unique-nonce-123",
+    }
+    
+    # Initial attempt
+    res1 = client.post("/api/v1/ingress/tradingview", json=payload)
+    assert res1.status_code == 200
+    assert res1.json()["status"] == "PROPOSAL_INGESTED"
+    
+    # Simulated TradingView 5s retry with identical event payload
+    res2 = client.post("/api/v1/ingress/tradingview", json=payload)
+    assert res2.status_code == 200
+    assert res2.json()["status"] == "IDEMPOTENT_ACK_DUPLICATE_DROPPED"
+    
+    # Ensure only 1 candidate signal was emitted to research queue
+    signals = get_unvalidated_candidate_signals()
+    assert len([s for s in signals if s.strategy_id == "MOM_ALPHA_01"]) == 1
 ```
 
 ---
 
 ## 4. Verification Ledger & Audit Signoff
 
-- **Baseline Commit:** `31bb9bb` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `0816bf5` (`HEAD == origin/main`)
 - **Total Adversarial Vectors:** 31 Vectors across 6 Domains.
 - **Rule:** Every one of the 31 vectors must have an automated test in `tests/unit/execution/` and `tests/adversarial/` before Phase 12 Gate Freeze.
