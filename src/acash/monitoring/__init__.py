@@ -5,6 +5,11 @@ to evaluate forward strategy health and attribute empirical execution friction
 without claiming operational execution or historical research authority.
 """
 
+from acash.monitoring.metrics import (
+    DEFAULT_ANNUALIZATION_FACTOR,
+    ForwardMetricsCalculator,
+    calculate_forward_window_metrics,
+)
 from acash.monitoring.schema import (
     USD_SCALE,
     ExecutionAttributionPolicy,
@@ -22,6 +27,7 @@ from acash.monitoring.schema import (
 
 __all__ = [
     "USD_SCALE",
+    "DEFAULT_ANNUALIZATION_FACTOR",
     "ExecutionSide",
     "ForwardHealthState",
     "ForwardGovernanceRecommendation",
@@ -33,4 +39,6 @@ __all__ = [
     "RealizedExecutionDrag",
     "ExecutionAttributionPolicy",
     "ExecutionCostEvidence",
+    "ForwardMetricsCalculator",
+    "calculate_forward_window_metrics",
 ]
