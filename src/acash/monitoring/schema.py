@@ -133,6 +133,16 @@ class ForwardObservation(BaseModel):
             if t_dec < Decimal("0.0") or t_dec > Decimal("2.0"):
                 raise DataContractError(f"turnover_ratio must be in [0.0, 2.0], got {t_dec}.")
 
+        # Validate realized_return domain invariant: simple discrete period return must be strictly > -1.0
+        r_ret = data.get("realized_return")
+        if r_ret is not None:
+            r_dec = Decimal(str(r_ret))
+            if r_dec <= Decimal("-1.0"):
+                raise DataContractError(
+                    f"Domain invariant violated: simple discrete realized_return ({r_dec}) must be strictly > -1.0. "
+                    "Return <= -1.0 collapses equity to zero or negative values."
+                )
+
         # Validate historical dossier digest reference format
         dossier_d = data.get("dossier_digest")
         if dossier_d is not None:

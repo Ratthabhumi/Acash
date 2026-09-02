@@ -209,6 +209,29 @@ def test_forward_observation_digest_tamper_detection(valid_forward_obs_payload: 
         ForwardObservation(**valid_forward_obs_payload)
 
 
+def test_forward_observation_realized_return_domain_guard(valid_forward_obs_payload: dict[str, Any]) -> None:
+    """Enforce realized_return > -1.0 domain invariant.
+
+    R == -1.0 -> fail closed (collapses equity to zero).
+    R < -1.0  -> fail closed (negative equity).
+    R > -1.0  -> accepted.
+    """
+    # R == -1.0
+    valid_forward_obs_payload["realized_return"] = Decimal("-1.0")
+    with pytest.raises(DataContractError, match="Domain invariant violated: simple discrete realized_return"):
+        ForwardObservation(**valid_forward_obs_payload)
+
+    # R < -1.0
+    valid_forward_obs_payload["realized_return"] = Decimal("-1.05")
+    with pytest.raises(DataContractError, match="Domain invariant violated: simple discrete realized_return"):
+        ForwardObservation(**valid_forward_obs_payload)
+
+    # R > -1.0 (-0.99 is valid severe loss)
+    valid_forward_obs_payload["realized_return"] = Decimal("-0.99")
+    obs = ForwardObservation(**valid_forward_obs_payload)
+    assert obs.realized_return == Decimal("-0.99")
+
+
 # ============================================================================
 # 4. FORWARD HEALTH POLICY INVARIANTS
 # ============================================================================

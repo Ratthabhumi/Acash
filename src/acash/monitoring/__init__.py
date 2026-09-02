@@ -24,6 +24,10 @@ from acash.monitoring.schema import (
     RealizedExecutionDrag,
     StrategyForwardDriftEvidence,
 )
+from acash.monitoring.state_machine import (
+    ForwardHealthStateMachine,
+    StateTransitionResult,
+)
 
 __all__ = [
     "USD_SCALE",
@@ -41,4 +45,6 @@ __all__ = [
     "ExecutionCostEvidence",
     "ForwardMetricsCalculator",
     "calculate_forward_window_metrics",
+    "ForwardHealthStateMachine",
+    "StateTransitionResult",
 ]
