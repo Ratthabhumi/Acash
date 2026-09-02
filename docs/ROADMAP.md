@@ -43,18 +43,19 @@
 
 ✅ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [COMPLETED - PASSED — 610/610 Tests, P = 1 (P-001)]
    │
-   ▼
-⏳ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8
+✅ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8 [COMPLETED - PASSED]
    │
    ▼
-⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
-
+✅ Phase 8.5: Alpha Research & Economic Evidence Engine ──► Gate 8.5 [COMPLETED - PASSED]
    │
    ▼
-⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
+✅ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9 [COMPLETED - PASSED]
    │
    ▼
-⏳ Phase 11: Paper Trading Subsystem ──► Gate 11
+✅ Phase 10: Runtime Orchestration & Continuous Paper Operations ──► Gate 10 [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [COMPLETED - PASSED — 107 Tests, 26 Red Team, 9 Integration]
    │
    ▼
 ⏳ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
@@ -297,19 +298,24 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### 🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [CONTRACT SPEC v1.1 LOCKED]
+### ✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [APPROVED & FROZEN]
 - **Objective:** Provide an independent observational and evidence plane to monitor forward strategy decay and attribute realized execution drag from Phase 7 fills without mutating historical research or overwriting allocation policies.
 - **Pre-Phase-11 Architecture Hygiene:** Source-of-truth documentation synchronized (`docs/architecture/system_architecture.md`), dual-clock determinism verified (`Supervisor cycle => explicit as_of_utc`), one-way Decimal precision boundary established, and 3-tier hashing authority classified.
 - **Deliverables (Contract v1.1):**
   - **Track A (Strategy Drift):** `ForwardObservation`, `ForwardWindowMetrics`, `ForwardHealthPolicy` (with anti-whipsaw hysteresis $N_{\text{degrade}}, M_{\text{recover}}, T_{\text{cooldown}}$), `ForwardHealthState`, `ForwardGovernanceRecommendation`, `StrategyForwardDriftEvidence`.
   - **Track B (Execution Reality):** `ExecutionObservation`, `RealizedExecutionDrag` (explicit signed conventions: gross drag $\ge 0$, net realized drag = gross - rebate), `ExecutionAttributionPolicy`, `ExecutionCostEvidence` (with sample count, coverage ratio, and confidence interval metadata).
+  - **Track C (Ingestion & Forensic Persistence):** `ForwardTelemetryIngestor` with decoupled Stream Integrity Plane (`VALID` $\leftrightarrow$ `BLOCKED`) vs Strategy Health Plane, explicit `reinitialize_stream()` epoch recovery without backfilling gaps, and `MonitoringEvidenceLedger` adapting Phase 10 `OperationalLedger`.
   - **Core Invariants:**
     - $\text{Historical Research Qualification } (\text{Phase 8.5}) \neq \text{Current Forward Health } (\text{Phase 11})$.
     - $\text{Detection } \neq \text{Governance } \neq \text{Eligibility}$ (Phase 11 recommends; Phase 10 Stage 2 Census decides).
     - $\text{No Evidence } \neq \text{Negative Evidence}$ (telemetry disruption $\implies \text{MONITORING\_BLOCKED}$, not strategy decay).
     - $\text{Zero Decimal } \to \text{float } \to \text{Decimal in Evidence Generation}$.
     - $\text{Tier 1 CanonicalConfigSerializer Authority for all Evidence Digests}$.
-- **Gate 11 Criteria:** Contract Specification v1.1 locked (`docs/phase11/contract_specification.md`) and 26-vector Red-Team Review approved (`docs/phase11/red_team_review.md`). Commit: `86bff0d`.
+    - $\text{Taker-Only Execution Scope Guard in v1 (Maker execution strictly rejected fail-closed)}$.
+- **Gate 11 Criteria:** 1,020 collected tests (1,017 passed, 3 skipped, 0 failed); 26/26 Red-Team Adversarial Vectors PASSED; 9/9 Cross-Phase Integration Tests PASSED; 107/107 Monitoring Unit Tests PASSED; MyPy 0 errors across 40 files; Git clean with zero modifications to Phases 1–10. Commit: `092a2b1`.
+- **Release Caveats:**
+  1. Authority decoupling ("no authority creep") is verified against current implementation behaviors and structural interfaces rather than an eternal mathematical impossibility against future arbitrary modification.
+  2. Remote CI was not independently available/executed in this environment; all release guarantees are fully verified on local canonical execution.
 
 ---
 
