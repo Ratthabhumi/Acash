@@ -1,5 +1,6 @@
 """Phase 12 MetaTrader 5 (MT5) Execution Adapter Domain Module."""
 
+from acash.execution.mt5.adapter import MT5BrokerAdapter, MT5BrokerObservation
 from acash.execution.mt5.enums import (
     MT5DealEntry,
     MT5DealType,
@@ -48,6 +49,17 @@ from acash.execution.mt5.schemas import (
     MT5TradeRequest,
     MT5TradeResult,
 )
+from acash.execution.mt5.transport import (
+    MockMT5Transport,
+    MT5HealthReport,
+    MT5ReconciliationConfirmation,
+    MT5TransportCommand,
+    MT5TransportObservation,
+    MT5TransportProtocol,
+    MT5TransportSafetyState,
+    NativeMT5Transport,
+    TransportFailureCause,
+)
 
 __all__ = [
     # Enums
@@ -93,4 +105,16 @@ __all__ = [
     "validate_boc_passivity",
     "convert_units_to_lots",
     "convert_lots_to_units",
+    # Transport & Adapter
+    "TransportFailureCause",
+    "MT5TransportSafetyState",
+    "MT5HealthReport",
+    "MT5TransportCommand",
+    "MT5TransportObservation",
+    "MT5ReconciliationConfirmation",
+    "MT5TransportProtocol",
+    "MockMT5Transport",
+    "NativeMT5Transport",
+    "MT5BrokerAdapter",
+    "MT5BrokerObservation",
 ]
