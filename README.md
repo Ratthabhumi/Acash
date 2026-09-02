@@ -1,20 +1,8 @@
 # ACASH — Automated Capital Allocation System
-
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 7 In Progress](https://img.shields.io/badge/status-Phase%207%20In%20Progress%20(598%20tests)%20-%20P%3D0-orange.svg)](docs/ROADMAP.md)
-
-
-
-
-
-
-
-
-
-
-
+[![Status: Phase 10 Frozen (904 tests) - Phase 11 Contract Locked](https://img.shields.io/badge/status-Phase%2010%20Frozen%20(904%20tests)%20--%20Phase%2011%20Contract%20Locked-green.svg)](docs/ROADMAP.md)
 
 ---
 
@@ -36,56 +24,69 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 
 ---
 
-## 2. System Architecture & 7 Decoupled Layers
+## 2. System Architecture & Decoupled Sovereign Layers
 
 ACASH is built as a sovereign **Modular Monolith** in Python executing locally on a single workstation (AIO):
 
 ```
-                                ACASH SYSTEM CORE
-                                       │
-                       ┌───────────────┴───────────────┐
-                       │                               │
-              1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
-            (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
-                       │                               │
-                       └───────────────┬───────────────┘
-                                       │
-                                       ▼
-                                 3. ALPHA ENGINE
-                          (Signals & Expected Returns)
-                                       │
-                                       ▼
-                             4. VALIDATION ENGINE
-                            (Purged CPCV & DSR Gate)
-                                       │
-                                       ▼
-                              5. PORTFOLIO ENGINE
-                      (skfolio + Baselines: EW/InvVol/Cash)
-                                       │
-                                       ▼
-                              6. RISK ENGINE
-                      (Hard Deterministic Boundary)
-                                       │
-                                       ▼
-                             7. EXECUTION ENGINE
-                              (IExecutionEngine)
-                                 /           \
-                           MT5 Adapter      NautilusTrader Substrate
-                           (Phase 12)       (Phase 5 Gate Passed)
-                                 │
-                                 ▼
-                    LOCAL TRANSACTIONAL CONTROL PLANE
-                       (SQLite Append-Only Ledger)
+                                 ACASH SYSTEM CORE
+                                        │
+                        ┌───────────────┴───────────────┐
+                        │                               │
+               1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
+             (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
+                        │                               │
+                        └───────────────┬───────────────┘
+                                        │
+                                        ▼
+                                  3. ALPHA ENGINE
+                          (Signals & Hypothesis Specification)
+                                        │
+                                        ▼
+                                4. VALIDATION ENGINE
+                             (Purged CPCV & DSR Gate)
+                                        │
+                                        ▼
+                              5. ALPHA QUALIFICATION
+                       (Phase 8.5 Dossiers & Economic Lineage)
+                                        │
+                                        ▼
+                               6. PORTFOLIO ENGINE
+                      (Phase 8 Tournament vs Baselines: EW/InvVol/Cash)
+                                        │
+                                        ▼
+                              7. RUNTIME SUPERVISOR
+                     (Phase 10 5-Stage Orchestrator & Dual-Clock)
+                                        │
+                                        ▼
+                                8. SOVEREIGN RISK
+                     (Phase 9 Deterministic Veto & Kill Switch)
+                                        │
+                                        ▼
+                               9. EXECUTION ENGINE
+                      (Phase 7 Coordinator & Alpaca Paper)
+                                        │
+                                        ▼
+                    10. APPEND-ONLY OPERATIONAL LEDGER
+                      (Phase 10 SHA-256 Chained Disk Events)
+                                        │
+                                        ▼
+                    11. FORWARD MONITORING & REALITY GAP
+                     (Phase 11 Strategy Drift & Drag Attribution)
 ```
 
-### Layer Responsibilities
+### Sovereign Layer Responsibilities
 1. **Research Data Layer (Analytical):** Partitioned Parquet files + embedded DuckDB query engine for vectorized analytical SQL queries + `yfinance` research data adapter.
-2. **Transactional Control Plane (Operational):** `SQLite` handles local ACID operational state, order state machines, and **append-only decision audit records**. `PostgreSQL` is **DEFERRED** until concurrent multi-user/writer requirements justify it.
-3. **Analytics & Quant Research:** `pandas`, `NumPy`, `vectorbt` (Tier-1 rapid parameter screening), and `Plotly` (interactive visualization).
-4. **Portfolio Engine:** `skfolio` (portfolio optimization and risk-allocation methods including HRP, ERC, CVaR) evaluated strictly against transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE).
-5. **Event Simulation Substrate:** Native unmocked `NautilusTrader` Substrate and Sovereign Event Matching Engine (Phase 5 Gate Passed with Level-2 Depth Sweeps, Maker Queue Tracking, Double-Entry Shadow Ledger, and Disjoint Reference-Price Telemetry Attribution).
-6. **Execution Subsystem:** Sovereign `IExecutionEngine` abstraction decoupling broker mechanics (Phase 12 MT5 adapter for live execution).
-7. **Performance Layer:** Python-first $\to$ NumPy/Numba vectorization $\to$ Nautilus Rust core where applicable $\to$ custom C++/Rust only after measured profiling.
+2. **Analytics & Quant Research:** `pandas`, `NumPy`, `vectorbt` (Tier-1 rapid parameter screening), and `Plotly` (interactive visualization).
+3. **Alpha Engine & Hypothesis Contract:** Strict pre-registered hypothesis contracts, econometric forward returns, and Newey-West / HAC inference.
+4. **Statistical Validation Engine:** Combinatorial Purged Cross-Validation (CPCV), Deflated Sharpe Ratio (DSR), MinTRL, Holm-Bonferroni FWER multiple testing corrections, and Probability of Backtest Overfitting (PBO).
+5. **Alpha Qualification Engine (Phase 8.5):** Canonical `AlphaQualificationDossier` and `AlphaEconomicDecomposition` DTOs certifying economic edge ($Net = Gross - Friction$) with **$0.00 capital authority**.
+6. **Portfolio Engine & Tournament (Phase 8):** Native HRP and ERC optimizers evaluated strictly in zero-leakage tournaments against transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE).
+7. **Runtime Supervisor & Operational Scheduler (Phase 10):** Dual-clock cadence coordination ($as\_of\_utc \neq wall\_clock\_utc$) and authoritative 5-stage cycle orchestration ($\text{Data} \to \text{Census} \to \text{Tournament} \to \text{Risk} \to \text{Admission}$).
+8. **Deterministic Risk Engine & Kill Switch (Phase 9):** Non-negotiable sovereign risk boundary (`DeterministicRiskEngine`), exact monotonic derisking (`EXACT_SCALE_DOWN`), and multi-sig `Ed25519TrustStore` quorum reset control.
+9. **Execution Engine & Broker Mapping (Phase 7):** Sovereign `ExecutionCoordinator`, vendor-agnostic broker semantic mapping (BMAP), and venue-pinned Alpaca Paper adapter.
+10. **Operational Ledger (Phase 10):** Cryptographic SHA-256 chained disk ledger (`OperationalLedger`) with full crash recovery and tamper detection.
+11. **Forward Monitoring & Execution Reality (Phase 11):** Independent observational plane tracking online strategy decay (`StrategyForwardDriftEvidence`) and empirical execution drag decomposition (`ExecutionCostEvidence`).
 
 ---
 
@@ -126,19 +127,18 @@ ACASH explicitly decouples state management from decision and execution flows:
                                                 ──► NEW PortfolioState
         CROSS-CUTTING AUDIT LINEAGE
         ───────────────────────────
-               DecisionRecord (Append-Only)
+               OperationalCycleEvent / DecisionRecord (Append-Only)
           ↳ Observed Market Inputs
-          ↳ Signal Reference
-          ↳ Target Allocation
-          ↳ Risk Assessment Verdict
-          ↳ Order Intent / Order ID
-          ↳ Fill(s) & Execution Realization
-          ↳ PnL Outcome
+          ↳ Alpha Qualification Dossier Hash
+          ↳ Target Allocation Decision Hash
+          ↳ Risk Evaluation Verdict
+          ↳ Execution Manifest Digest
+          ↳ Chained Event Digest (SHA-256)
 ```
 
 ---
 
-## 4. Completed Milestones & Quality Gates (Phases 0–16)
+## 4. Completed Milestones & Quality Gates (Phases 0–11)
 
 ```
 ✅ Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
@@ -151,8 +151,18 @@ ACASH explicitly decouples state management from decision and execution flows:
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 200/200 Tests, mypy clean]
 ✅ Phase 6: Statistical Validation & Overfitting Controls ──► [GATE 6 PASSED — CPCV, DSR, MinTRL, PBO, Search Ledger, OOS Hard Gate]
-⏳ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [IN PROGRESS — E-verified code path, P = 0]
-⏳ Phase 8: Portfolio Engine (skfolio vs Baselines) ──► Gate 8
+✅ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [FROZEN — E-verified code path, P = 0]
+✅ Phase 8: Portfolio Engine (Native HRP/ERC Optimizers vs Baselines & Tournament) ──► Gate 8 [FROZEN @ e6f1d04]
+✅ Phase 8.5: Alpha Research & Economic Evidence Engine (Dossier Gate & Lineage DTOs) ──► Gate 8.5 [FROZEN @ 9ce1365]
+✅ Phase 9: Deterministic Risk Engine & Sovereign Kill Switch ──► Gate 9 [FROZEN @ 6bd40d8]
+✅ Phase 10: Runtime Orchestration & Continuous Paper Operations (Supervisor + Scheduler + Ledger) ──► Gate 10 [FROZEN @ 3955bf6]
+🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [CONTRACT SPEC v1.0 LOCKED @ e2534dc]
+⏳ Phase 12: MT5 & Multi-Venue Execution Adapters ──► Gate 12
+⏳ Phase 13: Live Small Capital Deployment ──► Gate 13 (MANDATORY HUMAN APPROVAL)
+⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
+⏳ Phase 15: Strategy Lifecycle Management ──► Gate 15
+⏳ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
+```es) ──► Gate 8
 ⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
 ⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
 ⏳ Phase 11: Paper Trading Subsystem ──► Gate 11

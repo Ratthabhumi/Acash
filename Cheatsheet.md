@@ -1,10 +1,11 @@
 # ACASH — Developer & Quant Quick Reference Cheatsheet
 
 **Project:** ACASH (Automated Capital Allocation System)  
-**Version:** 1.8.0 (Phases 0–8 Complete & Hardened)
+**Version:** 1.11.0 (Phases 0–10 Frozen & Hardened | Phase 11 Contract Spec v1.0 Locked)  
+**Test Suite:** 904 / 904 Tests Passed | MyPy: 0 Errors | HEAD: `origin/main`  
 **Operating Philosophy:** *"DO NOT ASSUME AN EDGE. PROVE IT."*
 
-$$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to \text{ALPHA} \to \text{VALIDATION} \to \text{PORTFOLIO} \to \text{RISK} \to \text{EXECUTION} \to \text{OUTCOME} \to \text{FEEDBACK}$$
+$$\boxed{\mathbf{Research\ (8.5)} \longrightarrow \mathbf{Allocation\ (8)} \longrightarrow \mathbf{Supervisor\ (10)} \longrightarrow \mathbf{Risk\ (9)} \longrightarrow \mathbf{Execution\ (7)} \longrightarrow \mathbf{Ledger\ (10)} \quad \Big\vert \quad \mathbf{Monitoring\ (11)}}$$
 
 ---
 
@@ -13,54 +14,65 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 1. **The North Star Question:**
    > *"Given the current market state, available opportunities, portfolio state, uncertainty, liquidity, and risk constraints, where should capital be allocated?"*
    - Valid, supported answer: **"NOWHERE"** (100% Cash Allocation).
-2. **Deterministic Risk Boundary:**
-   - The Risk Engine is a non-negotiable hard boundary. If AI/Strategy says `BUY` and Risk Engine says `REJECT` $\implies$ **`REJECT`** (Always).
-3. **Statistical Significance $\neq$ Tradeable Alpha:**
-   - Statistical significance proves non-randomness under the null hypothesis.
-   - Tradeable Alpha requires positive post-friction return, flat parameter curvature, low PBO ($< 0.25$), and un-retuned out-of-sample survival ($\text{SR}_{\text{OOS}} \ge 0.50 \cdot \text{SR}_{\text{IS}}$).
-4. **No Speculative AI Trading Bots:**
-   - AI is strictly an analytical component, never the final execution authority.
+2. **Deterministic Sovereign Risk Boundary:**
+   - The Risk Engine is a non-negotiable hard boundary. If AI/Strategy says `BUY` and Risk Engine says `REJECT` $\implies$ **`REJECT`** (Always, 0 orders admitted).
+3. **Five-Way Sovereign Separation of Concerns:**
+   $$\boxed{\mathbf{Research\ (8.5)} \neq \mathbf{Forward\ Monitoring\ (11)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (7)} \neq \mathbf{Broker}}$$
+4. **Historical Qualification $\neq$ Current Forward Health:**
+   $$\boxed{\mathbf{AlphaQualificationDossier}_{\text{historical}} \neq \mathbf{ForwardStrategyHealth}_{\text{current}}}$$
+5. **No Speculative AI Trading Bots & Zero Direct Broker Wires:**
+   - AI is strictly an analytical component, never an execution authority.
+   - Zero direct broker sockets in research, portfolio, supervisor, risk, or monitoring layers.
 
 ---
 
-## 2. 7-Layer Modular Monolith Architecture
+## 2. Decoupled Sovereign System Architecture
 
 ```
-                               ACASH SYSTEM CORE
-                                      │
-                      ┌───────────────┴───────────────┐
-                      │                               │
-             1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
-           (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
-                      │                               │
-                      └───────────────┬───────────────┘
-                                      │
-                                      ▼
-                                3. ALPHA ENGINE
-                         (Signals & Expected Returns)
-                                      │
-                                      ▼
-                             4. VALIDATION ENGINE
-                        (Purged CPCV & DSR/OOS Gate)
-                                      │
-                                      ▼
-                             5. PORTFOLIO ENGINE
-                     (skfolio + Baselines: EW/InvVol/Cash)
-                                      │
-                                      ▼
-                               6. RISK ENGINE
-                      (Hard Deterministic Boundary)
-                                      │
-                                      ▼
-                             7. EXECUTION ENGINE
-                             (IExecutionEngine)
-                                /           \
-                          MT5 Adapter      NautilusTrader Substrate
-                          (Phase 12)       (Phase 5 Gate Passed)
-                                │
-                                ▼
-                   LOCAL TRANSACTIONAL CONTROL PLANE
-                      (SQLite Append-Only Ledger)
+                                ACASH SYSTEM CORE
+                                       │
+                       ┌───────────────┴───────────────┐
+                       │                               │
+              1. RESEARCH DATA LAYER          2. ANALYTICS & RESEARCH
+            (Parquet + DuckDB + yfinance)    (pandas + NumPy + vectorbt + Plotly)
+                       │                               │
+                       └───────────────┬───────────────┘
+                                       │
+                                       ▼
+                                 3. ALPHA ENGINE
+                          (Signals & Hypothesis Specification)
+                                       │
+                                       ▼
+                                4. VALIDATION ENGINE
+                             (Purged CPCV & DSR Gate)
+                                       │
+                                       ▼
+                              5. ALPHA QUALIFICATION
+                       (Phase 8.5 Dossiers & Economic Lineage)
+                                       │
+                                       ▼
+                               6. PORTFOLIO ENGINE
+                      (Phase 8 Tournament vs Baselines: EW/InvVol/Cash)
+                                       │
+                                       ▼
+                              7. RUNTIME SUPERVISOR
+                     (Phase 10 5-Stage Orchestrator & Dual-Clock)
+                                       │
+                                       ▼
+                                8. SOVEREIGN RISK
+                     (Phase 9 Deterministic Veto & Kill Switch)
+                                       │
+                                       ▼
+                               9. EXECUTION ENGINE
+                      (Phase 7 Coordinator & Alpaca Paper)
+                                       │
+                                       ▼
+                    10. APPEND-ONLY OPERATIONAL LEDGER
+                      (Phase 10 SHA-256 Chained Disk Events)
+                                       │
+                                       ▼
+                    11. FORWARD MONITORING & REALITY GAP
+                     (Phase 11 Strategy Drift & Drag Attribution)
 ```
 
 ### Technology Decision Matrix
@@ -332,3 +344,82 @@ git status --short
 - $\boxed{\text{Timeout / Ambiguity} \longrightarrow \text{CONNECTION\_LOST} \longrightarrow \text{UNKNOWN} \longrightarrow \text{Reconciliation Required}}$
 - $\boxed{\text{Real Paper Submission} \neq \text{Real Broker Fill} \implies P = 0}$
 - $\boxed{\text{Live Trading} \equiv \text{HARD-LOCKED}}$
+
+---
+
+## 9. Phase 8 & 8.5: Portfolio Tournament & Alpha Qualification
+
+### 9.1 Phase 8.5 Alpha Research & Qualification DTOs
+- **`AlphaQualificationDossier`:** Canonical qualification certificate certifying historical econometric edge.
+- **Economic Invariant:** $\text{Net Trading Alpha} = \text{Gross PnL} - \text{Spread/Slippage} - \text{Commissions}$. Maker rebates cannot alter Net Alpha.
+- **Capital Boundary:** $CapitalAuthorityUSD \equiv 0.00$ for all Phase 8.5 states.
+
+### 9.2 Phase 8 Portfolio Tournament
+- **Baseline Allocators:** Equal Weight (1/N), Inverse Volatility (1/$\sigma$), 100% Cash (`CashAllocator`).
+- **Tournament Rule:** Zero-leakage out-of-sample evaluation (`AllocationTournamentRunner`).
+- **Governance Gate:** If expected net portfolio return fails risk-free rate + hurdle, sovereignly allocate 100% Cash (`GOVERNANCE_FALLBACK`).
+
+---
+
+## 10. Phase 9: Deterministic Sovereign Risk Engine & Kill Switch
+
+### 10.1 Deterministic Risk Engine (`IRiskEngine`)
+- **Hard Boundaries:** Gross leverage limit, asset concentration limit, mandatory cash floor (min 5%), daily loss limit, max drawdown.
+- **Derisking:** Proven monotonic scaling (`EXACT_SCALE_DOWN`) and `BINARY_REJECT`.
+- **Sovereign Veto:** $\text{Risk REJECTED} \implies 0\text{ Orders Transmitted}$.
+
+### 10.2 Sovereign Kill Switch Controller
+- **Append-Only Disk Persistence:** `kill_switch_state.jsonl` with SHA-256 event chaining.
+- **Fail-Closed Restart:** Crash/restart in `TRIPPED` state recovers into `PERSISTENTLY_BLOCKED`.
+- **Quorum Reset:** Requires $M$-of-$N$ signed `Ed25519` authorizations from `Ed25519TrustStore`.
+- **Emergency Flatten:** Emits zero-target intents ($\Delta q_i = -q_i$); completion confirmed strictly via Phase 7 broker reconciliation.
+
+---
+
+## 11. Phase 10: Runtime Orchestration & Continuous Paper Operations
+
+### 11.1 5-Stage Authoritative Pipeline (`RuntimeSupervisor`)
+$$\text{Stage 1: Data Check} \longrightarrow \text{Stage 2: Strategy Census} \longrightarrow \text{Stage 3: Tournament} \longrightarrow \text{Stage 4: Risk Gate} \longrightarrow \text{Stage 5: Admission}$$
+- **Zero God Object:** Orchestrates without computing alphas, allocations, or risk rules.
+- **Health State Machine:** `RUNTIME_HEALTHY`, `RUNTIME_DEGRADED`, `RUNTIME_PAUSED`, `RUNTIME_HALTED`.
+- **Health vs Risk Separation:** $\boxed{\mathbf{RuntimeHealthStatus} \neq \mathbf{KillSwitchState}}$.
+
+### 11.2 Dual-Clock & Event Ledger Discipline
+- **Dual-Clock:** $\boxed{\mathbf{as\_of\_utc} \neq \mathbf{wall\_clock\_utc}}$ (Decision time vs System NTP time).
+- **Append-Only Ledger (`OperationalLedger`):** $\text{Event}[n].\text{prev} \equiv \text{Event}[n-1].\text{curr}$, fail-closed on disk tampering.
+- **Paper Daemon:** `ContinuousPaperDaemon` has **0 broker wire authority** ($0 live capital authorization).
+
+---
+
+## 12. Phase 11: Forward Monitoring & Execution Reality (Contract v1.0)
+
+### 12.1 Track A: Strategy Forward Drift & Decay Monitor
+- **Forward Health State:** `INSUFFICIENT_EVIDENCE` $\to$ `HEALTHY` $\longleftrightarrow$ `DEGRADED` $\to$ `STRUCTURAL_BREAK`.
+- **Core Invariant:** $\boxed{\mathbf{Historical\ Qualification\ (8.5)} \neq \mathbf{Current\ Forward\ Health\ (11)}}$.
+- **Metrics Tracked:** Rolling Sharpe, Rolling Vol, Drawdown, Hit Rate, IC Decay, $t$-stat Decay.
+- **Output:** Emits `StrategyForwardDriftEvidence` for Stage 2 Census exclusion.
+
+### 12.2 Track B: Execution Reality Attribution
+- **Drag Decomposition (in bps):** $\text{Realized Drag} = \text{Spread} + \text{Slippage} + \text{Timing} + \text{Fees} - \text{Rebates}$.
+- **Phase 8 Seam Invariant:** $\boxed{\mathbf{ExecutionCostEvidence} \nRightarrow \text{Direct Phase 8 Overwrite}}$.
+- **Output:** Emits empirical friction distributions for versioned governance review.
+
+---
+
+## 13. Canonical Developer Commands
+
+```powershell
+# 1. Run Full Regression Test Suite (904 passed tests)
+uv run pytest -q
+
+# 2. Run Runtime Unit & Integration Tests (62 tests)
+uv run pytest tests/unit/runtime/ tests/integration/test_phase10_runtime_pipeline.py -v
+
+# 3. Run Static Type Checker
+uv run mypy src/acash/runtime/ tests/unit/runtime/ tests/integration/
+
+# 4. Check Git Status & Branch Lineage
+git status --short
+git branch -vv
+git log -3 --oneline --decorate
+```

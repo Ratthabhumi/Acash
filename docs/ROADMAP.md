@@ -261,7 +261,20 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
   - Sovereign Governance Gate: If net expected return fails risk-free rate + hurdle margin, sovereignly allocate 100% Cash via `GOVERNANCE_FALLBACK`.
 - **Gate 8 Criteria:** Fully audited out-of-sample tournament (`Gate 8 Native Allocation Tournament`); Candidate $\neq$ Evaluation $\neq$ Decision; Ranking $\neq$ Approval; Policy-estimated friction (12 bps); Max Drawdown evaluated on net equity path. Commit: `e6f1d04`.
 
-### ✅ Phase 9: Deterministic Risk Engine & Kill Switch [COMPLETED & FROZEN]
+---
+
+### ✅ Phase 8.5: Alpha Research & Economic Evidence Engine [COMPLETED & FROZEN]
+- **Objective:** Establish formal alpha qualification, research lineage DTOs, and multi-horizon falsification hurdles with zero trading authority.
+- **Deliverables:**
+  - `AlphaQualificationDossier` and `AlphaEconomicDecomposition` DTOs enforcing $Net = Gross - Friction$.
+  - Formal multi-hurdle qualification gate (`AlphaQualificationGate`) requiring positive net edge, Holm-Bonferroni FWER significance, and zero rebate-inflated edge.
+  - Explicit forward lifecycle state machine (`HYPOTHESIS` $\to$ `CANDIDATE` $\to$ `RESEARCH_QUALIFIED` $\to$ `RETIRED_STRUCTURAL_BREAK`).
+  - Strict boundary: $CapitalAuthorityUSD \equiv 0.00$.
+- **Gate 8.5 Criteria:** 100% passing tests across 6 slices; cryptographic SHA-256 DAG binding hypothesis, trial ledger, and validation reports. Commit: `9ce1365`.
+
+---
+
+### ✅ Phase 9: Deterministic Risk Engine & Sovereign Kill Switch [COMPLETED & FROZEN]
 - **Objective:** Implement non-negotiable sovereign risk boundaries that overrule all upstream models.
 - **Deliverables:**
   - `DeterministicRiskEngine` realizing `IRiskEngine` with multi-tier boundary evaluation (gross leverage, asset concentration, mandatory cash floor, drawdown, daily loss).
@@ -273,23 +286,24 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 10: Transaction Cost & Slippage Modeling [UPCOMING]
-- **Objective:** Embed high-fidelity friction models into every strategy evaluation.
+### ✅ Phase 10: Runtime Orchestration & Continuous Paper Operations [COMPLETED & FROZEN]
+- **Objective:** Establish the 5-stage authoritative runtime supervisor, operational scheduler, and append-only event ledger for continuous paper operations.
 - **Deliverables:**
-  - Non-linear slippage models based on market volatility and order size relative to volume.
-  - Spread and commission tables for target assets.
-  - Net P&L verification harness.
-- **Gate 10 Criteria:** Backtests evaluate strictly on Net P&L after friction; zero gross-only reporting permitted.
+  - `RuntimeSupervisor`: 5-stage fail-closed pipeline orchestrator ($\text{Data} \to \text{Census} \to \text{Tournament} \to \text{Risk} \to \text{Admission}$).
+  - `OperationalScheduler`: Dual-clock discipline ($as\_of\_utc \neq wall\_clock\_utc$), cadence evaluation, and concurrency lockout.
+  - `OperationalLedger`: Append-only SHA-256 chained disk ledger (`OperationalCycleEvent`) with replay and tampering verification.
+  - `ContinuousPaperDaemon`: Long-running paper harness loop with pre-flight fail-closed ledger checks and zero live capital authority.
+- **Gate 10 Criteria:** 904 repository tests passing; full cross-phase integration suite; zero direct broker sockets in runtime layer. Commit: `3955bf6`.
 
 ---
 
-### ⏳ Phase 11: Paper Trading Subsystem [UPCOMING]
-- **Objective:** Real-time simulated execution against live market feeds.
-- **Deliverables:**
-  - Live data ingestion stream $\to$ Signal $\to$ Portfolio $\to$ Risk $\to$ Paper Execution.
-  - Paper trade ledger recording signal timestamp, order timestamp, simulated fill, and slippage.
-  - Continuous runtime operational verification.
-- **Gate 11 Criteria:** Paper trading operates continuously without unhandled exceptions or state desynchronization.
+### 🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [CONTRACT SPEC v1.0 LOCKED]
+- **Objective:** Provide an independent observational and evidence plane to monitor forward strategy decay and attribute realized execution drag from Phase 7 fills without mutating historical research or overwriting allocation policies.
+- **Deliverables (Contract v1.0):**
+  - **Track A (Strategy Drift):** `ForwardObservation`, `ForwardWindowMetrics`, `ForwardHealthPolicy`, `ForwardHealthState`, `StrategyForwardDriftEvidence`.
+  - **Track B (Execution Reality):** `ExecutionObservation`, `RealizedExecutionDrag` (spread, slippage, commission, timing drag), `ExecutionCostEvidence`.
+  - **Non-Negotiable Invariant:** $\text{Historical Research Qualification } (\text{Phase 8.5}) \neq \text{Current Forward Health } (\text{Phase 11})$.
+- **Gate 11 Criteria:** Contract Specification v1.0 locked (`docs/phase11/contract_specification.md`) and 19-vector Red-Team Review approved (`docs/phase11/red_team_review.md`). Commit: `e2534dc`.
 
 ---
 
