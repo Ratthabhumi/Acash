@@ -217,7 +217,7 @@ def validate_boc_passivity(
 
 
 def convert_units_to_lots(target_units: Decimal, symbol_spec: BrokerSymbolSpec) -> Decimal:
-    """Convert base asset quantity to raw lot volume without float loss under 28-digit context."""
+    """Convert base asset quantity to raw lot volume under an explicit 28-digit arithmetic context with no float conversion."""
     ensure_finite_decimal(target_units, field_name="target_units")
     if target_units <= Decimal("0.0"):
         raise MT5ValidationError(f"target_units must be > 0, got: {target_units}")
@@ -228,7 +228,7 @@ def convert_units_to_lots(target_units: Decimal, symbol_spec: BrokerSymbolSpec) 
 
 
 def convert_lots_to_units(lots: Decimal, symbol_spec: BrokerSymbolSpec) -> Decimal:
-    """Convert lot volume to base asset units without float loss under 28-digit context."""
+    """Convert lot volume to base asset units under an explicit 28-digit arithmetic context with no float conversion."""
     ensure_finite_decimal(lots, field_name="lots")
     if lots <= Decimal("0.0"):
         raise MT5ValidationError(f"lots must be > 0, got: {lots}")
