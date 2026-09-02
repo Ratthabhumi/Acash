@@ -304,7 +304,7 @@ def run_correlated_search_experiment(
         sr0_annual = sr0_period * math.sqrt(252.0)
 
         dsr_res = DeflatedSharpeEngine.evaluate_dsr(
-            returns=trial_matrix[:, 0],
+            returns=trial_matrix[:, 0].tolist(),
             dsr_trials_k=K,
             variance_of_trials=var_sharpes / 252.0,
             mean_of_trials=0.0,
@@ -691,69 +691,70 @@ def generate_markdown_benchmark_report(data: Dict[str, Any]) -> str:
             f"[{row['hac_newey_west_wilson_95_ci'][0]*100:.2f}%, {row['hac_newey_west_wilson_95_ci'][1]*100:.2f}%] |"
         )
 
-    lines.extend([
-        "",
-        "## 4. Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
-        "",
-        "### Topology 1: Diverse Search Universe (1 True Alpha + 9 Exploratory Noise Models)",
-        "#### A. Marginal Layer Admission Rates",
-        "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
-        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ])
-    for row in exp_d["admission_curve_diverse_noise_universe"]:
-        l = row["marginal_layer_pass_rates"]
-        lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
-            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
-            f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
-            f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
-        )
+    if exp_d is not None:
+        lines.extend([
+            "",
+            "## 4. Experiment D: End-to-End Governance Admission Probability & Layer Decomposition",
+            "",
+            "### Topology 1: Diverse Search Universe (1 True Alpha + 9 Exploratory Noise Models)",
+            "#### A. Marginal Layer Admission Rates",
+            "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
+            "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        ])
+        for row in exp_d.get("admission_curve_diverse_noise_universe", []):
+            l = row["marginal_layer_pass_rates"]
+            lines.append(
+                f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
+                f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
+                f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
+                f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
+            )
 
-    lines.extend([
-        "",
-        "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
-        "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
-        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ])
-    for row in exp_d["admission_curve_diverse_noise_universe"]:
-        c = row["conditional_transition_probabilities"]
-        lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
-            f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
-            f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
-            f"{c['p_joint_given_s5']*100:.1f}% |"
-        )
+        lines.extend([
+            "",
+            "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
+            "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
+            "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        ])
+        for row in exp_d.get("admission_curve_diverse_noise_universe", []):
+            c = row["conditional_transition_probabilities"]
+            lines.append(
+                f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
+                f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
+                f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
+                f"{c['p_joint_given_s5']*100:.1f}% |"
+            )
 
-    lines.extend([
-        "",
-        "### Topology 2: Collinear Sweep Universe (1 Primary + 9 Correlated Perturbations $\\rho=0.85$)",
-        "#### A. Marginal Layer Admission Rates",
-        "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
-        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ])
-    for row in exp_d["admission_curve_collinear_sweep_universe"]:
-        l = row["marginal_layer_pass_rates"]
-        lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
-            f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
-            f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
-            f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
-        )
+        lines.extend([
+            "",
+            "### Topology 2: Collinear Sweep Universe (1 Primary + 9 Correlated Perturbations $\\rho=0.85$)",
+            "#### A. Marginal Layer Admission Rates",
+            "| True $SR$ | Joint $P(\\text{PASS})$ | Wilson 95% CI | DSR Pass | Holm Pass | Haircut Pass | PBO Pass | OOS Pass | Robust Pass |",
+            "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        ])
+        for row in exp_d.get("admission_curve_collinear_sweep_universe", []):
+            l = row["marginal_layer_pass_rates"]
+            lines.append(
+                f"| {row['true_annualized_sharpe']:.2f} | {row['joint_admission_probability'] * 100:.2f}% | "
+                f"[{row['wilson_95_ci'][0]*100:.2f}%, {row['wilson_95_ci'][1]*100:.2f}%] | "
+                f"{l['dsr']*100:.1f}% | {l['holm']*100:.1f}% | {l['haircut']*100:.1f}% | "
+                f"{l['pbo']*100:.1f}% | {l['oos']*100:.1f}% | {l['perturbation']*100:.1f}% |"
+            )
 
-    lines.extend([
-        "",
-        "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
-        "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
-        "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
-    ])
-    for row in exp_d["admission_curve_collinear_sweep_universe"]:
-        c = row["conditional_transition_probabilities"]
-        lines.append(
-            f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
-            f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
-            f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
-            f"{c['p_joint_given_s5']*100:.1f}% |"
-        )
+        lines.extend([
+            "",
+            "#### B. Sequential Conditional Admission Funnel $P(L_j \\mid \\bigcap_{i<j} L_i)$",
+            "| True $SR$ | $P(\\text{DSR})$ | $P(\\text{Holm} \\mid \\text{DSR})$ | $P(\\text{Haircut} \\mid \\text{S2})$ | $P(\\text{PBO} \\mid \\text{S3})$ | $P(\\text{OOS} \\mid \\text{S4})$ | $P(\\text{Joint} \\mid \\text{S5})$ |",
+            "| :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+        ])
+        for row in exp_d.get("admission_curve_collinear_sweep_universe", []):
+            c = row["conditional_transition_probabilities"]
+            lines.append(
+                f"| {row['true_annualized_sharpe']:.2f} | {c['p_dsr']*100:.1f}% | "
+                f"{c['p_holm_given_dsr']*100:.1f}% | {c['p_haircut_given_s2']*100:.1f}% | "
+                f"{c['p_pbo_given_s3']*100:.1f}% | {c['p_oos_given_s4']*100:.1f}% | "
+                f"{c['p_joint_given_s5']*100:.1f}% |"
+            )
 
     return "\n".join(lines)
 
