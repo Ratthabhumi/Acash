@@ -34,6 +34,7 @@ from acash.monitoring.schema import (
     ExecutionCostEvidence,
     ExecutionObservation,
     ExecutionSide,
+    LiquidityRole,
     RealizedExecutionDrag,
 )
 
@@ -58,6 +59,16 @@ class ExecutionAttributionEngine:
         Returns:
             RealizedExecutionDrag containing exact basis point attribution categories.
         """
+        # Strict Maker/Taker Scope Guard (Option A):
+        # Phase 11 v1 execution attribution engine is explicitly scoped to aggressive/taker-style executions.
+        # Passive/maker executions have fundamentally different benchmark mechanics (e.g. queue priority, adverse selection)
+        # and are explicitly out-of-scope for the taker-style arrival quoted benchmark.
+        if observation.liquidity_role == LiquidityRole.MAKER:
+            raise DataContractError(
+                f"MAKER_EXECUTION_OUT_OF_SCOPE: Observation {observation.observation_id} has liquidity_role=MAKER. "
+                "Phase 11 v1 attribution engine is strictly scoped to aggressive/taker-style executions."
+            )
+
         side_sign = observation.side.side_sign  # +1.0 for BUY, -1.0 for SELL
 
         # 1. Spread Drag (bps)
@@ -128,7 +139,7 @@ class ExecutionAttributionEngine:
         as_of_utc: datetime,
         coverage_start_utc: datetime,
         coverage_end_utc: datetime,
-        expected_fill_count: Optional[int] = None,
+        expected_fill_count: Optional[int],
         evidence_id: Optional[str] = None,
     ) -> ExecutionCostEvidence:
         """Aggregate sample execution observations into forensic empirical cost evidence.
@@ -141,19 +152,32 @@ class ExecutionAttributionEngine:
             as_of_utc: Timestamp of evidence aggregation.
             coverage_start_utc: Inception timestamp of attribution window.
             coverage_end_utc: Final timestamp of attribution window.
-            expected_fill_count: Optional total intended fills for coverage ratio calculation.
+            expected_fill_count: Authoritative total intended fills from upstream execution manifest census.
             evidence_id: Optional custom evidence ID.
 
         Returns:
             ExecutionCostEvidence with complete statistical uncertainty metadata.
 
         Raises:
-            DataContractError: On 0 fills, temporal inversion, or critical coverage breach (< 80%).
+            DataContractError: On missing expected_fill_count, 0 fills, temporal inversion, or critical coverage breach (< 80%).
         """
         if coverage_start_utc > coverage_end_utc:
             raise DataContractError(
                 f"coverage_start_utc ({coverage_start_utc}) cannot exceed coverage_end_utc ({coverage_end_utc})."
             )
+
+        # Authoritative Coverage Denominator Provenance:
+        # The expected_fill_count must be explicitly provided from the upstream authoritative order/execution
+        # intent manifest or census. Phase 11 is strictly forbidden from self-deriving its own denominator
+        # from ingested observations to prevent circular evidence validity.
+        if expected_fill_count is None:
+            raise DataContractError(
+                "UNVERIFIABLE_COVERAGE_DENOMINATOR: expected_fill_count must be explicitly provided from "
+                "the upstream authoritative execution manifest or census lineage. "
+                "Missing denominator cannot be assumed to represent 100% coverage."
+            )
+        if expected_fill_count <= 0:
+            raise DataContractError(f"expected_fill_count must be strictly positive, got {expected_fill_count}.")
 
         # Filter observations matching venue, symbol, and temporal coverage
         matching_obs = [
@@ -172,20 +196,15 @@ class ExecutionAttributionEngine:
             )
 
         # Calculate coverage ratio
-        if expected_fill_count is not None:
-            if expected_fill_count <= 0:
-                raise DataContractError(f"expected_fill_count must be positive, got {expected_fill_count}.")
-            coverage_ratio = Decimal(str(fill_count)) / Decimal(str(expected_fill_count))
+        coverage_ratio = Decimal(str(fill_count)) / Decimal(str(expected_fill_count))
 
-            # Critical Fail-Closed Coverage Guard
-            if coverage_ratio < policy.critical_fail_closed_coverage_ratio:
-                raise DataContractError(
-                    f"CRITICAL_COVERAGE_BREACH: Execution telemetry coverage ratio ({coverage_ratio:.4f}) "
-                    f"breached critical fail-closed threshold ({policy.critical_fail_closed_coverage_ratio}). "
-                    "Cannot emit unverified execution cost evidence."
-                )
-        else:
-            coverage_ratio = Decimal("1.0")
+        # Critical Fail-Closed Coverage Guard
+        if coverage_ratio < policy.critical_fail_closed_coverage_ratio:
+            raise DataContractError(
+                f"CRITICAL_COVERAGE_BREACH: Execution telemetry coverage ratio ({coverage_ratio:.4f}) "
+                f"breached critical fail-closed threshold ({policy.critical_fail_closed_coverage_ratio}). "
+                "Cannot emit unverified execution cost evidence."
+            )
 
         # Decompose drag for each atomic observation
         drags = [self.decompose_execution_drag(obs) for obs in matching_obs]

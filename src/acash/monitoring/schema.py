@@ -55,6 +55,13 @@ class ExecutionSide(str, Enum):
         return Decimal("1.0") if self == ExecutionSide.BUY else Decimal("-1.0")
 
 
+class LiquidityRole(str, Enum):
+    """Authoritative liquidity role of the execution fill (taker aggressive vs maker passive)."""
+
+    TAKER = "TAKER"
+    MAKER = "MAKER"
+
+
 class ForwardHealthState(str, Enum):
     """Deterministic forward health state classification for active strategies."""
 
@@ -453,6 +460,7 @@ class ExecutionObservation(BaseModel):
     venue: str
     symbol: str
     side: ExecutionSide
+    liquidity_role: LiquidityRole = LiquidityRole.TAKER
 
     # Quantities & Notional Value
     requested_quantity: Decimal
@@ -492,6 +500,18 @@ class ExecutionObservation(BaseModel):
                 data["side"] = ExecutionSide(side_val)
             except ValueError:
                 raise DataContractError(f"Invalid ExecutionSide '{side_val}': must be 'BUY' or 'SELL'.")
+
+        # Validate liquidity role
+        liq_val = data.get("liquidity_role", LiquidityRole.TAKER)
+        if isinstance(liq_val, str):
+            try:
+                data["liquidity_role"] = LiquidityRole(liq_val)
+            except ValueError:
+                raise DataContractError(f"Invalid LiquidityRole '{liq_val}': must be 'TAKER' or 'MAKER'.")
+        elif isinstance(liq_val, LiquidityRole):
+            data["liquidity_role"] = liq_val
+        else:
+            raise DataContractError(f"Invalid LiquidityRole '{liq_val}': must be LiquidityRole enum or str.")
 
         # Validate timestamps and temporal ordering
         d_ts = _ensure_utc(data["decision_timestamp_utc"], "decision_timestamp_utc")
@@ -576,6 +596,8 @@ class ExecutionObservation(BaseModel):
         """Compute authoritative Tier 1 digest of payload excluding execution_digest."""
         side_val = data.get("side")
         side_str = side_val.value if isinstance(side_val, ExecutionSide) else str(side_val)
+        liq_val = data.get("liquidity_role", LiquidityRole.TAKER)
+        liq_str = liq_val.value if isinstance(liq_val, LiquidityRole) else str(liq_val)
 
         payload = {
             "observation_id": str(data.get("observation_id", "")),
@@ -585,6 +607,7 @@ class ExecutionObservation(BaseModel):
             "venue": str(data.get("venue", "")),
             "symbol": str(data.get("symbol", "")),
             "side": side_str,
+            "liquidity_role": liq_str,
             "requested_quantity": str(data.get("requested_quantity", "0.0")),
             "filled_quantity": str(data.get("filled_quantity", "0.0")),
             "filled_notional_usd": str(data.get("filled_notional_usd", "0.0")),

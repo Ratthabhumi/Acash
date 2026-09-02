@@ -26,6 +26,7 @@ from acash.monitoring.schema import (
     ForwardHealthState,
     ForwardObservation,
     ForwardWindowMetrics,
+    LiquidityRole,
     RealizedExecutionDrag,
     StrategyForwardDriftEvidence,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "USD_SCALE",
     "DEFAULT_ANNUALIZATION_FACTOR",
     "ExecutionSide",
+    "LiquidityRole",
     "ForwardHealthState",
     "ForwardGovernanceRecommendation",
     "ForwardObservation",
