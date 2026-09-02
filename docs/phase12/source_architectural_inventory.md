@@ -1,9 +1,9 @@
-# Phase 12 Architecture & Capability Inventory (Revision 2)
+# Phase 12 Architecture & Capability Inventory (Revision 3)
 ## Multi-Venue Execution Topology, MetaTrader 5 (MT5) Adapter & TradingView Integration
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `049e155` (`HEAD == origin/main`, 1,020 tests passed, MyPy clean)  
+> **Baseline Commit:** `8a980c9` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -81,9 +81,26 @@ MT5 Order / TradeRequest (order_ticket)
 - Market execution or sweeping resting liquidity may result in **$0..N$ discrete Deal tickets** (partial fills, multi-level fills).
 - `ExecutionManifest` in ACASH natively accumulates all linked `deal_ticket` records to compute exact Volume-Weighted Average Price (VWAP), total realized commissions, and slippage drag.
 
-#### Lineage & Multi-Account Identification Tuple:
+#### Lineage 9-Tuple Semantics & Nullability Matrix:
 To prevent collisions across multi-account, multi-strategy, or concurrent deployments, all execution observations are bound to the 9-tuple:
 $$\boxed{(\text{broker\_id}, \text{account\_id}, \text{terminal\_instance\_id}, \text{strategy\_id}, \text{cycle\_id}, \text{intent\_id}, \text{mt5\_order\_ticket}, \text{mt5\_deal\_ticket}, \text{position\_id})}$$
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                       9-TUPLE LIFECYCLE & NULLABILITY SPECIFICATION                         │
+├──────────────────────────┬───────────────────┬─────────────────────────┬────────────────────┤
+│ Lifecycle Stage          │ `mt5_order_ticket`│ `mt5_deal_ticket`       │ `position_id`      │
+├──────────────────────────┼───────────────────┼─────────────────────────┼────────────────────┤
+│ 1. Pre-Submission        │ `None`            │ `None`                  │ `None` / `pos_ref*`│
+│ 2. Order Placed/Resting  │ `int` (ticket > 0)│ `None`                  │ `None` / `pos_ref*`│
+│ 3. Single Complete Fill  │ `int` (ticket > 0)│ `(int,)` (single deal)  │ `int` (pos_ticket) │
+│ 4. Partial / Multi-Fill  │ `int` (ticket > 0)│ `(int, int, ...)` (>=1) │ `int` (pos_ticket) │
+│ 5. Position Close/Reduce │ `int` (ticket > 0)│ `(int, ...)` (close deal│ `int` (pos_target) │
+│ 6. Order Rejected/Expired│ `int` or `None`   │ `None`                  │ `None`             │
+└──────────────────────────┴───────────────────┴─────────────────────────┴────────────────────┘
+* Note: When an order is intentionally closing or reducing an existing position, position_id contains
+  the target position reference; for new opening positions, position_id is None until first deal creation.
+```
 
 ---
 
@@ -91,7 +108,7 @@ $$\boxed{(\text{broker\_id}, \text{account\_id}, \text{terminal\_instance\_id}, 
 
 `mt5.order_send()` returns an `MqlTradeResult` structure containing a return code (`retcode`).
 
-$$\boxed{\mathbf{MT5\ Retcode} \equiv \text{Adapter-Level Request Processing Outcome} \neq \mathbf{Final\ Lifecycle\ State}}$$
+$$\boxed{\mathbf{MT5\ Retcode} \equiv \text{Adapter-Level Request Processing Observation} \neq \mathbf{Terminal\ Lifecycle\ Event}}$$
 
 ```
 mt5.order_send() Result (Observation)
@@ -106,36 +123,54 @@ ExecutionCoordinator.apply()  [Phase 7 Engine]
 transition_order()  [SOLE State Machine Authority]
 ```
 
-- A retcode of `10009` (`TRADE_RETCODE_DONE`) indicates that the trade server accepted/processed the request packet. It is treated as an **adapter observation**, which is then reconciled against authoritative `orders_get()`, `history_deals_get()`, and `positions_get()` streams before reaching terminal `FILLED` state in ACASH.
+- **Invariant:** `order_send() response is a transport/request-processing observation, never a terminal lifecycle event`.
+- A retcode of `10009` (`TRADE_RETCODE_DONE`) indicates only that the trade server accepted/processed the request packet. It is treated as an **adapter observation**, which is then reconciled against authoritative `orders_get()`, `history_deals_get()`, and `positions_get()` streams before reaching terminal `FILLED` state in ACASH.
 - Retcodes `10004` (`REQUOTE`), `10006` (`REJECT`), `10018` (`MARKET_CLOSED`), and `10031` (`CONNECTION_LOST`) emit structured raw observations triggering deterministic fail-closed coordination.
 
 ---
 
-### C. Multi-Dimensional Filling-Mode Resolution Matrix
+### C. MQL5 Canonical Filling-Mode Resolution Matrix
 
-Selecting a filling mode cannot rely on `SYMBOL_FILLING_MODE` alone. It requires evaluating a 4-dimensional compatibility matrix:
+Selecting a filling mode requires evaluating official MQL5 trade execution rules across 4 dimensions:
 
 $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filling Flags}, \text{Order Type}, \text{Broker Policy})$$
 
+#### MQL5 Hard Compatibility Rules:
+1. **`SYMBOL_TRADE_EXECUTION_MARKET` (Market Execution):**
+   - The trade server executes market orders at prevailing market prices without requotes.
+   - **Hard Rule (MQL5 Standard):** `ORDER_FILLING_RETURN` is **strictly forbidden for market orders** under Market Execution mode.
+   - Only `ORDER_FILLING_FOK` or `ORDER_FILLING_IOC` may be used for market orders (depending on `SYMBOL_FILLING_MODE` flags).
+2. **`SYMBOL_TRADE_EXECUTION_REQUEST` & `SYMBOL_TRADE_EXECUTION_INSTANT`:**
+   - Broker quotes price; supports `ORDER_FILLING_RETURN`, `ORDER_FILLING_FOK`, and `ORDER_FILLING_IOC` (subject to symbol flags).
+3. **`SYMBOL_TRADE_EXECUTION_EXCHANGE` (Exchange Execution):**
+   - Exchange execution book; supports `ORDER_FILLING_RETURN` (partial fill rests on book), `ORDER_FILLING_IOC`, and `ORDER_FILLING_BOC` (Book or Cancel / Passive Maker).
+4. **Pending Orders (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`):**
+   - Permitted filling modes are governed by the broker's pending order filling policy (typically `ORDER_FILLING_RETURN` or `ORDER_FILLING_FOK`).
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     MT5 FILLING MODE RESOLUTION MATRIX                      │
-├────────────────────────────┬─────────────────────────────┬──────────────────┤
-│ Symbol Execution Mode      │ Order Type                  │ Permitted Mode   │
-├────────────────────────────┼─────────────────────────────┼──────────────────┤
-│ `SYMBOL_TRADE_EXEC_MARKET` │ Market (`BUY`/`SELL`)       │ `FOK` or `IOC`   │
-│ (Market Execution)         │                             │ (*RETURN invalid)│
-├────────────────────────────┼─────────────────────────────┼──────────────────┤
-│ `SYMBOL_TRADE_EXEC_REQUEST`│ Market / Instant            │ `FOK` / `IOC`    │
-│ / `INSTANT`                │                             │                  │
-├────────────────────────────┼─────────────────────────────┼──────────────────┤
-│ `SYMBOL_TRADE_EXEC_EXCHANGE`│ Exchange Market / Limit     │ `RETURN` / `IOC` │
-├────────────────────────────┼─────────────────────────────┼──────────────────┤
-│ Any Execution Mode         │ Pending (`LIMIT`/`STOP`)    │ `RETURN` (GTC)   │
-└────────────────────────────┴─────────────────────────────┴──────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                            MT5 FILLING MODE RESOLUTION MATRIX                               │
+├────────────────────────────┬─────────────────────────────┬──────────────────────────────────┤
+│ Symbol Execution Mode      │ Order Type                  │ MQL5 Allowed Filling Modes       │
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ `SYMBOL_TRADE_EXEC_MARKET` │ Market (`BUY`/`SELL`)       │ `FOK` or `IOC` (*RETURN invalid) │
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ `SYMBOL_TRADE_EXEC_REQUEST`│ Market / Instant            │ `RETURN`, `FOK`, or `IOC`        │
+│ / `INSTANT`                │                             │                                  │
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ `SYMBOL_TRADE_EXEC_EXCHANGE`│ Market / Limit / Stop      │ `RETURN`, `IOC`, or `BOC` (Maker)│
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ Any Execution Mode         │ Pending Limit / Stop        │ `RETURN`, `FOK`, or `IOC`        │
+└────────────────────────────┴─────────────────────────────┴──────────────────────────────────┘
 ```
 
-> **Critical MQL5 Rule:** In **Market Execution** (`SYMBOL_TRADE_EXECUTION_MARKET`), the trade server executes at prevailing market prices and strictly **forbids `ORDER_FILLING_RETURN`** for market orders. The adapter normalizer verifies the symbol flags (`SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`) and selects the supported policy prior to socket transmission.
+#### Deterministic 6-Step Resolution Algorithm:
+1. Query `symbol_info.trade_execution_mode` (`MARKET`, `INSTANT`, `REQUEST`, `EXCHANGE`).
+2. Determine `order_type` (Market vs. Pending Limit/Stop).
+3. Query `symbol_info.filling_mode` bitmask (`SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`, `SYMBOL_FILLING_BOC`).
+4. Apply MQL5 hard compatibility rules (e.g., exclude `RETURN` if `MARKET` execution for market order).
+5. Apply ACASH broker policy (prefer `IOC` for taker liquidity sweeps; prefer `RETURN` for exchange limit orders).
+6. **Fail-Closed:** If the intersection of allowed modes is empty, reject order pre-flight with `DataContractError("NO_COMPATIBLE_FILLING_MODE")`.
 
 ---
 
@@ -168,8 +203,8 @@ class BrokerSymbolSpec(BaseModel):
     volume_step: Decimal                     # e.g. 0.01 Lot
     digits: int                              # e.g. 5
     point_size: Decimal                      # e.g. 0.00001
-    trade_execution_mode: str                # 'MARKET', 'INSTANT', 'EXCHANGE'
-    allowed_filling_modes: Tuple[str, ...]   # ('FOK', 'IOC')
+    trade_execution_mode: str                # 'MARKET', 'INSTANT', 'REQUEST', 'EXCHANGE'
+    allowed_filling_modes: Tuple[str, ...]   # ('FOK', 'IOC', 'RETURN', 'BOC')
     stops_level_points: int                  # Minimum stop distance in points
     margin_currency: str                     # e.g. 'USD'
     profit_currency: str                     # e.g. 'USD'
@@ -292,7 +327,7 @@ Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `049e155` (`HEAD == origin/main`)
-- **Full Test Suite:** 1,020 passed, 0 failures, 2 warnings.
-- **Static Type Checker:** MyPy clean across all active modules.
+- **Active Baseline Commit:** `8a980c9` (`HEAD == origin/main`)
+- **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
+- **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
