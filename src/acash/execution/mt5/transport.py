@@ -48,6 +48,7 @@ class TransportFailureCause(str, Enum):
     TRADE_SERVER_DISCONNECTED = "TRADE_SERVER_DISCONNECTED"  # Retcode 10031
     TRADING_PERMISSION_DISABLED = "TRADING_PERMISSION_DISABLED"  # trade_allowed / trade_expert False
     ORDER_SEND_TIMEOUT_UNCERTAIN = "ORDER_SEND_TIMEOUT_UNCERTAIN"
+    CLIENT_API_ERROR = "CLIENT_API_ERROR"
 
 
 class MT5TransportSafetyState(str, Enum):

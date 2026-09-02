@@ -1047,8 +1047,8 @@ def test_t30_native_api_invalid_params_error_separation(
 
     # Invariant: Must NOT fabricate 10012 timeout retcode
     assert obs.raw_retcode is None
-    assert obs.requires_reconciliation is True
-    assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
+    assert obs.event_kind == BrokerEventKind.REJECT
+    assert obs.requires_reconciliation is False
 
 
 # --- T31: Native API Timeout (-10005) Classified as Timeout ---
@@ -1211,6 +1211,187 @@ def test_t34_api_error_code_constants_and_connect_code() -> None:
     assert MT5ApiErrorCode.RES_E_INTERNAL_FAIL_CONNECT.value == -10003
     assert MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value == -10005
     assert MT5ApiErrorCode.RES_E_INVALID_PARAMS.value == -2
+
+
+# --- T35: RES_E_INVALID_PARAMS (-2) is NOT IPC_UNAVAILABLE and NOT CONNECTION_LOST ---
+def test_t35_res_e_invalid_params_semantic_rejection(
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from acash.execution.mt5.adapter import classify_mt5_transport_error
+    from acash.execution.mt5.enums import MT5ApiErrorCode
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport, TransportFailureCause
+
+    class MockNativeInvalidParamsModule:
+        @staticmethod
+        def terminal_info() -> object:
+            return DummyNamedTuple(connected=True, trade_allowed=True, trade_expert=True)
+
+        @staticmethod
+        def account_info() -> object:
+            return DummyNamedTuple(
+                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
+                equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
+                margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
+            )
+
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (MT5ApiErrorCode.RES_E_INVALID_PARAMS.value, "invalid parameters")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeInvalidParamsModule)
+
+    native_transport = NativeMT5Transport()
+    adapter = MT5BrokerAdapter(
+        broker_id="TEST_BROKER",
+        account_id="ACC_1001",
+        terminal_instance_id="TERM_1",
+        transport=native_transport,
+    )
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+
+    # Invariants for T35
+    assert obs.raw_retcode is None
+    assert obs.event_kind != BrokerEventKind.CONNECTION_LOST
+    assert obs.event_kind == BrokerEventKind.REJECT
+    assert obs.requires_reconciliation is False
+
+    err = MT5TransportError("test", api_code=-2, is_timeout=False)
+    cause, event_kind, retcode, req_recon = classify_mt5_transport_error(err)
+    assert cause != TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
+    assert cause == TransportFailureCause.CLIENT_API_ERROR
+    assert event_kind != BrokerEventKind.CONNECTION_LOST
+    assert event_kind == BrokerEventKind.REJECT
+
+
+# --- T36: RES_E_AUTO_TRADING_DISABLED (-8) is NOT IPC_UNAVAILABLE and Degrades Safety State ---
+def test_t36_res_e_auto_trading_disabled_permission_degraded(
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from acash.execution.mt5.adapter import classify_mt5_transport_error
+    from acash.execution.mt5.enums import MT5ApiErrorCode
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport, TransportFailureCause
+
+    class MockNativeAutoTradingDisabledModule:
+        @staticmethod
+        def terminal_info() -> object:
+            return DummyNamedTuple(connected=True, trade_allowed=True, trade_expert=True)
+
+        @staticmethod
+        def account_info() -> object:
+            return DummyNamedTuple(
+                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
+                equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
+                margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
+            )
+
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (MT5ApiErrorCode.RES_E_AUTO_TRADING_DISABLED.value, "auto trading disabled")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeAutoTradingDisabledModule)
+
+    native_transport = NativeMT5Transport()
+    adapter = MT5BrokerAdapter(
+        broker_id="TEST_BROKER",
+        account_id="ACC_1001",
+        terminal_instance_id="TERM_1",
+        transport=native_transport,
+    )
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+    assert adapter.can_dispatch() is True
+
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+
+    # Invariants for T36
+    assert obs.raw_retcode is None
+    assert obs.event_kind == BrokerEventKind.REJECT
+    assert obs.requires_reconciliation is False
+    assert adapter.safety_state == MT5TransportSafetyState.DEGRADED
+    assert adapter.can_dispatch() is False
+
+    err = MT5TransportError("test", api_code=-8, is_timeout=False)
+    cause, event_kind, retcode, req_recon = classify_mt5_transport_error(err)
+    assert cause != TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
+    assert cause == TransportFailureCause.TRADING_PERMISSION_DISABLED
+    assert event_kind == BrokerEventKind.REJECT
+
+
+# --- T37: RES_E_INTERNAL_FAIL_RECEIVE (-10002) is TERMINAL_IPC_UNAVAILABLE ---
+def test_t37_res_e_internal_fail_receive_ipc_unavailable(
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from acash.execution.mt5.adapter import classify_mt5_transport_error
+    from acash.execution.mt5.enums import MT5ApiErrorCode
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport, TransportFailureCause
+
+    class MockNativeIpcFailReceiveModule:
+        @staticmethod
+        def terminal_info() -> object:
+            return DummyNamedTuple(connected=True, trade_allowed=True, trade_expert=True)
+
+        @staticmethod
+        def account_info() -> object:
+            return DummyNamedTuple(
+                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
+                equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
+                margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
+            )
+
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (MT5ApiErrorCode.RES_E_INTERNAL_FAIL_RECEIVE.value, "internal fail receive")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeIpcFailReceiveModule)
+
+    native_transport = NativeMT5Transport()
+    adapter = MT5BrokerAdapter(
+        broker_id="TEST_BROKER",
+        account_id="ACC_1001",
+        terminal_instance_id="TERM_1",
+        transport=native_transport,
+    )
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+
+    # Invariants for T37
+    assert obs.raw_retcode is None
+    assert obs.event_kind == BrokerEventKind.CONNECTION_LOST
+    assert obs.requires_reconciliation is True
+    assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
+
+    err = MT5TransportError("test", api_code=-10002, is_timeout=False)
+    cause, event_kind, retcode, req_recon = classify_mt5_transport_error(err)
+    assert cause == TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
+    assert event_kind == BrokerEventKind.CONNECTION_LOST
+    assert req_recon is True
+
 
 
 

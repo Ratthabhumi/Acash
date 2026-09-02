@@ -12,6 +12,7 @@ from acash.execution.broker_events import (
     normalize_broker_event,
 )
 from acash.execution.mt5.enums import (
+    MT5ApiErrorCode,
     MT5ExecutionPolicy,
     MT5FillingMode,
     MT5OrderTime,
@@ -75,6 +76,68 @@ class MT5BrokerObservation(BaseModel):
     requires_reconciliation: bool = False
     execution_event: ExecutionEvent
     evidence: Optional[ReconciliationEvidence] = None
+
+
+def classify_mt5_transport_error(
+    error: MT5TransportError,
+    *,
+    is_cancel: bool = False,
+) -> Tuple[TransportFailureCause, BrokerEventKind, Optional[int], bool]:
+    """Classify native MT5TransportError into failure cause, event kind, raw retcode, and requires_reconciliation.
+
+    Rules:
+    - Timeout Uncertainty (-10005):
+      cause=ORDER_SEND_TIMEOUT_UNCERTAIN, event=CONNECTION_LOST, retcode=10012, requires_reconciliation=True
+    - Internal IPC / Network Failure (-10000..-10003):
+      cause=TERMINAL_IPC_UNAVAILABLE, event=CONNECTION_LOST, retcode=None, requires_reconciliation=True
+    - Trading Permission Disabled (-8):
+      cause=TRADING_PERMISSION_DISABLED, event=CANCEL_REJECTED (cancel) or REJECT (deal), retcode=None, requires_reconciliation=False
+    - Client / Parameter Semantic Errors (-1..-7):
+      cause=CLIENT_API_ERROR, event=CANCEL_REJECTED (cancel) or REJECT (deal), retcode=None, requires_reconciliation=False
+    - Unclassified fallback:
+      cause=TERMINAL_IPC_UNAVAILABLE, event=CONNECTION_LOST, retcode=None, requires_reconciliation=True (fail-closed)
+    """
+    if error.is_timeout or error.api_code == MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value:
+        return (
+            TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
+            BrokerEventKind.CONNECTION_LOST,
+            MT5Retcode.TRADE_RETCODE_TIMEOUT.value,
+            True,
+        )
+
+    code = error.api_code
+    if code is not None and -10003 <= code <= -10000:
+        return (
+            TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
+            BrokerEventKind.CONNECTION_LOST,
+            None,
+            True,
+        )
+
+    if code == MT5ApiErrorCode.RES_E_AUTO_TRADING_DISABLED.value:
+        event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
+        return (
+            TransportFailureCause.TRADING_PERMISSION_DISABLED,
+            event,
+            None,
+            False,
+        )
+
+    if code is not None and -8 < code < 0:
+        event = BrokerEventKind.CANCEL_REJECTED if is_cancel else BrokerEventKind.REJECT
+        return (
+            TransportFailureCause.CLIENT_API_ERROR,
+            event,
+            None,
+            False,
+        )
+
+    return (
+        TransportFailureCause.TERMINAL_IPC_UNAVAILABLE,
+        BrokerEventKind.CONNECTION_LOST,
+        None,
+        True,
+    )
 
 
 class MT5BrokerAdapter:
@@ -345,31 +408,32 @@ class MT5BrokerAdapter:
                 evidence=evidence,
             )
         except MT5TransportError as e:
-            cause = (
-                TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN
-                if e.is_timeout
-                else TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
-            )
-            self.mark_reconciliation_required(
-                cause,
-                f"order_send transport failure: {e}",
-            )
+            cause, event_kind, raw_retcode, req_recon = classify_mt5_transport_error(e, is_cancel=False)
+            if req_recon:
+                self.mark_reconciliation_required(
+                    cause,
+                    f"order_send transport failure: {e}",
+                )
+            elif cause == TransportFailureCause.TRADING_PERMISSION_DISABLED:
+                if self.safety_state not in (MT5TransportSafetyState.BLOCKED, MT5TransportSafetyState.RECONCILIATION_REQUIRED):
+                    self.safety_state = MT5TransportSafetyState.DEGRADED
+
             broker_order_id = f"UNKNOWN_{intent.intent_id}"
             exec_event, evidence = normalize_broker_event(
                 broker_order_id=broker_order_id,
-                event_kind=BrokerEventKind.CONNECTION_LOST,
+                event_kind=event_kind,
                 observed_at=now,
                 source=source,
                 broker_sequence=f"SEQ_ERR_{intent.intent_id}",
             )
             return MT5BrokerObservation(
-                event_kind=BrokerEventKind.CONNECTION_LOST,
+                event_kind=event_kind,
                 broker_order_id=broker_order_id,
                 observed_at=now,
-                raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value if e.is_timeout else None,
+                raw_retcode=raw_retcode,
                 comment=str(e),
                 lineage=lineage,
-                requires_reconciliation=True,
+                requires_reconciliation=req_recon,
                 execution_event=exec_event,
                 evidence=evidence,
             )
@@ -527,30 +591,31 @@ class MT5BrokerAdapter:
                 evidence=evidence,
             )
         except MT5TransportError as e:
-            cause = (
-                TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN
-                if e.is_timeout
-                else TransportFailureCause.TERMINAL_IPC_UNAVAILABLE
-            )
-            self.mark_reconciliation_required(
-                cause,
-                f"cancel_order transport failure: {e}",
-            )
+            cause, event_kind, raw_retcode, req_recon = classify_mt5_transport_error(e, is_cancel=True)
+            if req_recon:
+                self.mark_reconciliation_required(
+                    cause,
+                    f"cancel_order transport failure: {e}",
+                )
+            elif cause == TransportFailureCause.TRADING_PERMISSION_DISABLED:
+                if self.safety_state not in (MT5TransportSafetyState.BLOCKED, MT5TransportSafetyState.RECONCILIATION_REQUIRED):
+                    self.safety_state = MT5TransportSafetyState.DEGRADED
+
             exec_event, evidence = normalize_broker_event(
                 broker_order_id=str(order_ticket),
-                event_kind=BrokerEventKind.CONNECTION_LOST,
+                event_kind=event_kind,
                 observed_at=now,
                 source=source,
                 broker_sequence=f"SEQ_CANCEL_ERR_{order_ticket}",
             )
             return MT5BrokerObservation(
-                event_kind=BrokerEventKind.CONNECTION_LOST,
+                event_kind=event_kind,
                 broker_order_id=str(order_ticket),
                 observed_at=now,
-                raw_retcode=MT5Retcode.TRADE_RETCODE_TIMEOUT.value if e.is_timeout else None,
+                raw_retcode=raw_retcode,
                 comment=str(e),
                 lineage=lineage,
-                requires_reconciliation=True,
+                requires_reconciliation=req_recon,
                 execution_event=exec_event,
                 evidence=evidence,
             )
