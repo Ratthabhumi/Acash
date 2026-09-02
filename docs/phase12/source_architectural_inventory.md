@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `e663fa5` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `2a224fd` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -142,14 +142,20 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
 2. **Explicit Passive-Maker Exception (`ORDER_FILLING_BOC`):**
    - MQL5 defines `ORDER_FILLING_BOC` (Book or Cancel) as an explicit execution policy for passive liquidity provision (maker-only).
    - **Order Type Restriction:** `ORDER_FILLING_BOC` is **strictly restricted to Limit and Stop-Limit orders** (`ORDER_TYPE_BUY_LIMIT`, `ORDER_TYPE_SELL_LIMIT`, `ORDER_TYPE_BUY_STOP_LIMIT`, `ORDER_TYPE_SELL_STOP_LIMIT`).
+   - **Execution Mode Requirement:** Requires `symbol_info.trade_execution_mode == "EXCHANGE"`.
    - **Forbidden Order Types:** `ORDER_FILLING_BOC` is **strictly forbidden for market orders (`BUY`, `SELL`) and breakout stop orders (`BUY_STOP`, `SELL_STOP`)**.
-   - **Capability Requirement:** Requires the broker symbol's `symbol_info.filling_mode` bitmask to explicitly enable `SYMBOL_FILLING_BOC` alongside exchange order capability.
-3. **Market Execution Mode (`SYMBOL_TRADE_EXECUTION_MARKET`):**
-   - The trade server executes market orders at prevailing market prices without requotes.
-   - **Hard Rule (MQL5 Standard):** `ORDER_FILLING_RETURN` is **strictly forbidden for market orders** under Market Execution mode.
-   - Market orders under `MARKET` execution must use `ORDER_FILLING_FOK` or `ORDER_FILLING_IOC` (depending on `SYMBOL_FILLING_MODE` flags).
-4. **Request, Instant & Exchange Market Orders:**
-   - Under `REQUEST`, `INSTANT`, and `EXCHANGE` execution modes, market orders support `ORDER_FILLING_RETURN`, `ORDER_FILLING_FOK`, or `ORDER_FILLING_IOC` (subject to symbol filling flags).
+   - **Capability Requirement:** Requires the broker symbol's `symbol_info.filling_mode` bitmask to explicitly enable `SYMBOL_FILLING_BOC` alongside `SYMBOL_ORDER_LIMIT` / `SYMBOL_ORDER_STOP_LIMIT` capability.
+3. **Execution Mode Compatibility for Market Orders (`BUY`, `SELL`):**
+   - **`SYMBOL_TRADE_EXECUTION_REQUEST` & `SYMBOL_TRADE_EXECUTION_INSTANT`:**
+     - `ORDER_FILLING_FOK`, `ORDER_FILLING_IOC`, and `ORDER_FILLING_RETURN` are **all available regardless of symbol filling flags** (MQL5 trade server standard).
+   - **`SYMBOL_TRADE_EXECUTION_MARKET` (Market Execution):**
+     - `ORDER_FILLING_RETURN` is **strictly forbidden for market orders** under Market Execution mode.
+     - `ORDER_FILLING_FOK` is available **only if `SYMBOL_FILLING_FOK` is set** in `symbol_info.filling_mode`.
+     - `ORDER_FILLING_IOC` is available **only if `SYMBOL_FILLING_IOC` is set** in `symbol_info.filling_mode`.
+   - **`SYMBOL_TRADE_EXECUTION_EXCHANGE` (Exchange Execution):**
+     - `ORDER_FILLING_RETURN` is **always available** (standard exchange order book behavior).
+     - `ORDER_FILLING_FOK` and `ORDER_FILLING_IOC` are available subject to `SYMBOL_FILLING_FOK` / `SYMBOL_FILLING_IOC` flags.
+   - *Note on MQL5 Bitmask Identifiers:* The `SYMBOL_FILLING_MODE` bitmask contains flags strictly for `SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`, and `SYMBOL_FILLING_BOC`. There is **no `SYMBOL_FILLING_RETURN` flag** in MQL5; `ORDER_FILLING_RETURN` availability is governed by execution mode and order semantics.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -161,14 +167,18 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
 │                            │ (Limit, Stop, Stop-Limit)   │ (*Standard pending baseline)     │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
 │ Exchange Execution Mode    │ Passive Maker Limit Orders  │ `ORDER_FILLING_BOC`              │
-│ (with `SYMBOL_FILLING_BOC`)│ (`BUY_LIMIT`, `SELL_LIMIT`, │ (*Explicit Maker-only exception) │
-│                            │ `BUY/SELL_STOP_LIMIT`)      │                                  │
+│ (with `SYMBOL_FILLING_BOC`)│ (`BUY/SELL_LIMIT`,          │ (*Explicit Maker-only exception) │
+│                            │  `BUY/SELL_STOP_LIMIT`)     │                                  │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
-│ `SYMBOL_TRADE_EXEC_MARKET` │ Market Orders (`BUY`/`SELL`)│ `ORDER_FILLING_FOK` or `_IOC`    │
-│ (Market Execution)         │                             │ (*RETURN invalid for Market)     │
+│ `SYMBOL_TRADE_EXEC_MARKET` │ Market Orders (`BUY`/`SELL`)│ `ORDER_FILLING_FOK` (if flag),   │
+│ (Market Execution)         │                             │ `ORDER_FILLING_IOC` (if flag)    │
+│                            │                             │ (*RETURN strictly forbidden)     │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
 │ `SYMBOL_TRADE_EXEC_REQUEST`│ Market Orders (`BUY`/`SELL`)│ `ORDER_FILLING_RETURN`, `_FOK`,  │
-│ / `INSTANT` / `EXCHANGE`   │                             │ or `_IOC` (subject to flags)     │
+│ / `INSTANT`                │                             │ or `_IOC` (all available)        │
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ `SYMBOL_TRADE_EXEC_EXCHANGE`│ Market Orders (`BUY`/`SELL`)│ `ORDER_FILLING_RETURN` (always), │
+│ (Exchange Execution)       │                             │ `_FOK` (if flag), `_IOC` (if flag│
 └────────────────────────────┴─────────────────────────────┴──────────────────────────────────┘
 ```
 
@@ -178,14 +188,26 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
    - Verify `symbol_info.trade_execution_mode == "EXCHANGE"`. If not, fail closed with `DataContractError("BOC_REQUIRES_EXCHANGE_EXECUTION_MODE")`.
    - Verify `symbol_info.filling_mode` bitmask contains `SYMBOL_FILLING_BOC`. If not, fail closed with `DataContractError("SYMBOL_DOES_NOT_SUPPORT_BOC")`.
    - Verify order capability: if limit order, verify `symbol_info.order_mode` contains `SYMBOL_ORDER_LIMIT`; if stop-limit, verify `SYMBOL_ORDER_STOP_LIMIT`. If not, fail closed with `DataContractError("SYMBOL_ORDER_MODE_NOT_PERMITTED")`.
-   - Assign `ORDER_FILLING_BOC`.
+   - Return `ORDER_FILLING_BOC`.
 2. **Generic Pending Orders Path:** If `order_type` is pending (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`) without passive BOC override:
-   - Assign `ORDER_FILLING_RETURN` strictly (MQL5 universal pending-order standard).
+   - Return `ORDER_FILLING_RETURN` strictly (MQL5 universal pending-order standard).
 3. **Market Orders Path:** If `order_type` is Market (`BUY`, `SELL`):
-   - Query `symbol_info.trade_execution_mode` (`MARKET`, `INSTANT`, `REQUEST`, `EXCHANGE`).
-   - Query `symbol_info.filling_mode` bitmask (`SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`, `SYMBOL_FILLING_RETURN`).
-   - If `SYMBOL_TRADE_EXECUTION_MARKET`: exclude `RETURN`, select supported mode from `IOC` (preferred for taker sweeps) or `FOK`.
-   - If `REQUEST` / `INSTANT` / `EXCHANGE`: select supported mode based on policy (`IOC` for taker sweeps, `RETURN` for exchange book).
+   - Query `mode = symbol_info.trade_execution_mode`.
+   - **Case `REQUEST` or `INSTANT`:**
+     - All three modes (`RETURN`, `IOC`, `FOK`) are supported by MQL5 trade server.
+     - If `execution_policy == "TAKER_SWEEP"` $\implies$ return `ORDER_FILLING_IOC`.
+     - Otherwise $\implies$ return `ORDER_FILLING_RETURN`.
+   - **Case `MARKET` (Market Execution):**
+     - `ORDER_FILLING_RETURN` is strictly forbidden.
+     - Evaluate supported flags: check `SYMBOL_FILLING_IOC` and `SYMBOL_FILLING_FOK`.
+     - If `execution_policy == "TAKER_SWEEP"` and `SYMBOL_FILLING_IOC` is set $\implies$ return `ORDER_FILLING_IOC`.
+     - If `SYMBOL_FILLING_FOK` is set $\implies$ return `ORDER_FILLING_FOK`.
+     - If `SYMBOL_FILLING_IOC` is set $\implies$ return `ORDER_FILLING_IOC`.
+     - Else fail closed with `DataContractError("NO_COMPATIBLE_FILLING_MODE")`.
+   - **Case `EXCHANGE` (Exchange Execution):**
+     - `ORDER_FILLING_RETURN` is always supported.
+     - If `execution_policy == "TAKER_SWEEP"` and `symbol_info.filling_mode` contains `SYMBOL_FILLING_IOC` $\implies$ return `ORDER_FILLING_IOC`.
+     - Otherwise $\implies$ return `ORDER_FILLING_RETURN`.
 4. **Fail-Closed:** If no compatible filling mode exists for the symbol and order type, reject order pre-flight with `DataContractError("NO_COMPATIBLE_FILLING_MODE")`.
 
 ---
@@ -343,7 +365,7 @@ Slice 6: Full Multi-Venue Integration, 20-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `e663fa5` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `2a224fd` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
