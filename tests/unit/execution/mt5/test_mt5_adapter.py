@@ -770,3 +770,229 @@ def test_four_dimensional_consistency_order_deal_position(
     assert positions[0].position_ticket == obs.raw_order
 
 
+# --- T20 to T23: Reconciliation Queries Returning None Fail Closed with MT5TransportError ---
+def test_t20_orders_get_none_raises_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockNoneOrders:
+        @staticmethod
+        def orders_get(**kwargs: Any) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10004, "Terminal IPC disconnect")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNoneOrders)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5TransportError, match="NATIVE_ORDERS_GET_FAILED"):
+        transport.orders_get()
+
+
+def test_t21_history_orders_get_none_raises_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockNoneHistOrders:
+        @staticmethod
+        def history_orders_get(**kwargs: Any) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10004, "Terminal IPC disconnect")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNoneHistOrders)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5TransportError, match="NATIVE_HISTORY_ORDERS_GET_FAILED"):
+        transport.history_orders_get()
+
+
+def test_t22_history_deals_get_none_raises_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockNoneDeals:
+        @staticmethod
+        def history_deals_get(**kwargs: Any) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10004, "Terminal IPC disconnect")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNoneDeals)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5TransportError, match="NATIVE_HISTORY_DEALS_GET_FAILED"):
+        transport.history_deals_get()
+
+
+def test_t23_positions_get_none_raises_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockNonePositions:
+        @staticmethod
+        def positions_get(**kwargs: Any) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10004, "Terminal IPC disconnect")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNonePositions)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5TransportError, match="NATIVE_POSITIONS_GET_FAILED"):
+        transport.positions_get()
+
+
+# --- T24 to T27: Unknown Native Enum Decoding Fails Closed ---
+def test_t24_unknown_order_type_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    bad_order = DummyNamedTuple(
+        ticket=101,
+        symbol="EURUSD",
+        type=99,  # Unknown order type
+        state=1,  # ORDER_STATE_PLACED
+        volume_initial=1.0,
+        volume_current=1.0,
+        price_open=1.08500,
+        sl=0.0,
+        tp=0.0,
+        time_setup=1700000000,
+        magic=0,
+        comment="Test",
+    )
+
+    class MockBadOrder:
+        @staticmethod
+        def orders_get(**kwargs: Any) -> object:
+            return [bad_order]
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockBadOrder)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5ValidationError, match="UNKNOWN_ORDER_TYPE"):
+        transport.orders_get()
+
+
+def test_t25_unknown_order_state_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    bad_order = DummyNamedTuple(
+        ticket=102,
+        symbol="EURUSD",
+        type=0,  # ORDER_TYPE_BUY
+        state=99,  # Unknown order state
+        volume_initial=1.0,
+        volume_current=1.0,
+        price_open=1.08500,
+        sl=0.0,
+        tp=0.0,
+        time_setup=1700000000,
+        magic=0,
+        comment="Test",
+    )
+
+    class MockBadOrderState:
+        @staticmethod
+        def orders_get(**kwargs: Any) -> object:
+            return [bad_order]
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockBadOrderState)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5ValidationError, match="UNKNOWN_ORDER_STATE"):
+        transport.orders_get()
+
+
+def test_t26_unknown_deal_type_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    bad_deal = DummyNamedTuple(
+        ticket=201,
+        order=101,
+        position_id=101,
+        symbol="EURUSD",
+        type=99,  # Unknown deal type
+        volume=1.0,
+        price=1.08500,
+        commission=0.0,
+        fee=0.0,
+        swap=0.0,
+        profit=0.0,
+        time=1700000000,
+        comment="Test",
+        magic=0,
+    )
+
+    class MockBadDeal:
+        @staticmethod
+        def history_deals_get(**kwargs: Any) -> object:
+            return [bad_deal]
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockBadDeal)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5ValidationError, match="UNKNOWN_DEAL_TYPE"):
+        transport.history_deals_get()
+
+
+def test_t27_unknown_execution_mode_raises_symbol_spec_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5SymbolSpecError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    bad_symbol = DummyNamedTuple(
+        name="EURUSD",
+        trade_contract_size=100000.0,
+        volume_min=0.01,
+        volume_max=100.0,
+        volume_step=0.01,
+        digits=5,
+        point=0.00001,
+        trade_tick_size=0.00001,
+        trade_execution_mode=99,  # Unknown execution mode
+        filling_mode=1,
+        order_mode=1,
+        trade_stops_level=0,
+        currency_margin="EUR",
+        currency_profit="USD",
+    )
+
+    class MockBadSymbol:
+        @staticmethod
+        def symbol_info(symbol: str) -> object:
+            return bad_symbol
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockBadSymbol)
+    transport = NativeMT5Transport()
+    with pytest.raises(MT5SymbolSpecError, match="UNKNOWN_TRADE_EXECUTION_MODE"):
+        transport.symbol_info("EURUSD")
+
+
+# --- T28: Physical Disconnect Detected in Pre-Dispatch Health Check ---
+def test_t28_physical_disconnect_after_last_ready_health_check_blocks_dispatch(
+    adapter: MT5BrokerAdapter,
+    mock_transport: MockMT5Transport,
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+) -> None:
+    # 1. Establish initial READY state
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+    assert adapter.can_dispatch() is True
+    assert adapter.is_reconciled is True
+
+    # 2. Simulate physical disconnection before submit_order
+    mock_transport.set_connected(False)
+
+    # 3. submit_order must execute real-time health check, degrade state, and raise MT5DomainError
+    with pytest.raises(MT5DomainError, match="DISPATCH_BLOCKED"):
+        adapter.submit_order(sample_intent, symbol_spec)
+
+    assert adapter.safety_state == MT5TransportSafetyState.DEGRADED
+    assert adapter.can_dispatch() is False
+
+
+

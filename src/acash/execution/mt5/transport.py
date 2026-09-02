@@ -23,6 +23,7 @@ from acash.execution.mt5.enums import (
 from acash.execution.mt5.exceptions import (
     MT5DomainError,
     MT5RetcodeError,
+    MT5SymbolSpecError,
     MT5TransportError,
     MT5ValidationError,
 )
@@ -326,6 +327,25 @@ class MockMT5Transport:
             )
             self.active_positions[ticket] = pos
 
+            filled_order = MT5OrderReality(
+                order_ticket=ticket,
+                position_ticket=ticket,
+                symbol=req.symbol,
+                order_type=req.type,
+                state=MT5OrderState.ORDER_STATE_FILLED,
+                volume_initial=req.volume,
+                volume_current=Decimal("0.0"),
+                price_open=deal.price,
+                price_stoplimit=None,
+                sl=req.sl,
+                tp=req.tp,
+                time_setup_utc=now,
+                time_done_utc=now,
+                magic=req.magic,
+                comment=req.comment,
+            )
+            self.history_orders[ticket] = filled_order
+
             result = MT5TradeResult(
                 retcode=MT5Retcode.TRADE_RETCODE_DONE.value,
                 deal=deal_ticket,
@@ -364,15 +384,24 @@ class MockMT5Transport:
             )
 
         elif req.action == MT5TradeAction.TRADE_ACTION_REMOVE:
-            if req.order in self.active_orders:
+            if req.order is not None and req.order in self.active_orders:
                 removed_order = self.active_orders.pop(req.order)
-                self.history_orders[req.order] = removed_order
+                canceled_order = removed_order.model_copy(
+                    update={"state": MT5OrderState.ORDER_STATE_CANCELED, "time_done_utc": now}
+                )
+                self.history_orders[req.order] = canceled_order
 
-            result = MT5TradeResult(
-                retcode=MT5Retcode.TRADE_RETCODE_CANCEL.value,
-                order=req.order if req.order is not None else ticket,
-                comment="Order removed",
-            )
+                result = MT5TradeResult(
+                    retcode=MT5Retcode.TRADE_RETCODE_CANCEL.value,
+                    order=req.order,
+                    comment="Order removed",
+                )
+            else:
+                result = MT5TradeResult(
+                    retcode=MT5Retcode.TRADE_RETCODE_INVALID_ORDER.value,
+                    order=req.order if req.order is not None else ticket,
+                    comment="Invalid order ticket or order not found",
+                )
 
         else:
             result = MT5TradeResult(
@@ -553,10 +582,12 @@ class NativeMT5Transport:
             2: MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET,
             3: MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_EXCHANGE,
         }
-        exec_mode = exec_mode_map.get(
-            int(info.trade_execution_mode),
-            MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET,
-        )
+        raw_exec_mode = int(info.trade_execution_mode)
+        if raw_exec_mode not in exec_mode_map:
+            raise MT5SymbolSpecError(
+                f"UNKNOWN_TRADE_EXECUTION_MODE: unmapped trade_execution_mode {raw_exec_mode} for symbol {symbol}"
+            )
+        exec_mode = exec_mode_map[raw_exec_mode]
 
         filling_flags: List[str] = []
         filling_mode_mask = int(getattr(info, "filling_mode", 0))
@@ -726,7 +757,10 @@ class NativeMT5Transport:
 
         raw_orders = mt5.orders_get(**kwargs)
         if raw_orders is None:
-            return ()
+            last_err = mt5.last_error()
+            err_code = int(last_err[0]) if last_err else -1
+            err_desc = str(last_err[1]) if last_err else "orders_get returned None"
+            raise MT5TransportError(f"NATIVE_ORDERS_GET_FAILED: {err_desc} (API error code {err_code})")
 
         parsed: List[MT5OrderReality] = []
         for o in raw_orders:
@@ -752,7 +786,10 @@ class NativeMT5Transport:
 
         raw_orders = mt5.history_orders_get(**kwargs)
         if raw_orders is None:
-            return ()
+            last_err = mt5.last_error()
+            err_code = int(last_err[0]) if last_err else -1
+            err_desc = str(last_err[1]) if last_err else "history_orders_get returned None"
+            raise MT5TransportError(f"NATIVE_HISTORY_ORDERS_GET_FAILED: {err_desc} (API error code {err_code})")
 
         parsed: List[MT5OrderReality] = []
         for o in raw_orders:
@@ -773,11 +810,23 @@ class NativeMT5Transport:
 
         raw_positions = mt5.positions_get(**kwargs)
         if raw_positions is None:
-            return ()
+            last_err = mt5.last_error()
+            err_code = int(last_err[0]) if last_err else -1
+            err_desc = str(last_err[1]) if last_err else "positions_get returned None"
+            raise MT5TransportError(f"NATIVE_POSITIONS_GET_FAILED: {err_desc} (API error code {err_code})")
 
         parsed: List[MT5PositionReality] = []
         for p in raw_positions:
-            pos_type = MT5PositionType.POSITION_TYPE_BUY if p.type == 0 else MT5PositionType.POSITION_TYPE_SELL
+            raw_pos_type = int(p.type)
+            if raw_pos_type == 0:
+                pos_type = MT5PositionType.POSITION_TYPE_BUY
+            elif raw_pos_type == 1:
+                pos_type = MT5PositionType.POSITION_TYPE_SELL
+            else:
+                raise MT5ValidationError(
+                    f"UNKNOWN_POSITION_TYPE: received unmapped position type {raw_pos_type} for position {p.ticket}"
+                )
+
             parsed.append(
                 MT5PositionReality(
                     position_ticket=int(p.ticket),
@@ -816,7 +865,10 @@ class NativeMT5Transport:
 
         raw_deals = mt5.history_deals_get(**kwargs)
         if raw_deals is None:
-            return ()
+            last_err = mt5.last_error()
+            err_code = int(last_err[0]) if last_err else -1
+            err_desc = str(last_err[1]) if last_err else "history_deals_get returned None"
+            raise MT5TransportError(f"NATIVE_HISTORY_DEALS_GET_FAILED: {err_desc} (API error code {err_code})")
 
         parsed: List[MT5DealReality] = []
         deal_type_map = {
@@ -841,13 +893,19 @@ class NativeMT5Transport:
         }
 
         for d in raw_deals:
+            raw_deal_type = int(d.type)
+            if raw_deal_type not in deal_type_map:
+                raise MT5ValidationError(
+                    f"UNKNOWN_DEAL_TYPE: received unmapped deal type {raw_deal_type} for deal {d.ticket}"
+                )
+
             parsed.append(
                 MT5DealReality(
                     deal_ticket=int(d.ticket),
                     order_ticket=int(d.order),
                     position_ticket=int(d.position_id),
                     symbol=str(d.symbol),
-                    deal_type=deal_type_map.get(int(d.type), MT5DealType.DEAL_TYPE_BUY),
+                    deal_type=deal_type_map[raw_deal_type],
                     volume=Decimal(str(d.volume)),
                     price=Decimal(str(d.price)),
                     commission=Decimal(str(d.commission)),
@@ -886,6 +944,18 @@ class NativeMT5Transport:
             9: MT5OrderState.ORDER_STATE_REQUEST_CANCEL,
         }
 
+        raw_order_type = int(o.type)
+        if raw_order_type not in order_type_map:
+            raise MT5ValidationError(
+                f"UNKNOWN_ORDER_TYPE: received unmapped order type {raw_order_type} for order {o.ticket}"
+            )
+
+        raw_order_state = int(o.state)
+        if raw_order_state not in order_state_map:
+            raise MT5ValidationError(
+                f"UNKNOWN_ORDER_STATE: received unmapped order state {raw_order_state} for order {o.ticket}"
+            )
+
         time_done = (
             datetime.fromtimestamp(o.time_done, timezone.utc)
             if getattr(o, "time_done", 0) > 0
@@ -900,8 +970,8 @@ class NativeMT5Transport:
             order_ticket=int(o.ticket),
             position_ticket=pos_ticket,
             symbol=str(o.symbol),
-            order_type=order_type_map.get(int(o.type), MT5OrderType.BUY),
-            state=order_state_map.get(int(o.state), MT5OrderState.ORDER_STATE_PLACED),
+            order_type=order_type_map[raw_order_type],
+            state=order_state_map[raw_order_state],
             volume_initial=Decimal(str(o.volume_initial)),
             volume_current=Decimal(str(o.volume_current)),
             price_open=Decimal(str(o.price_open)),

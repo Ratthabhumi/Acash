@@ -268,9 +268,11 @@ class MT5BrokerAdapter:
         INVARIANT:
         The adapter strictly returns raw broker observations and NEVER mutates order lifecycle state.
         """
+        # Pre-dispatch fresh physical health observation
+        health = self.check_health()
         if not self.can_dispatch():
             raise MT5DomainError(
-                f"DISPATCH_BLOCKED: safety_state={self.safety_state}, is_reconciled={self.is_reconciled}"
+                f"DISPATCH_BLOCKED: safety_state={self.safety_state.value}, is_reconciled={self.is_reconciled}, failure_cause={health.failure_cause}"
             )
 
         # 1. Normalize volume and price
@@ -408,6 +410,13 @@ class MT5BrokerAdapter:
         """Issue order cancellation request to MT5."""
         if order_ticket <= 0:
             raise MT5ValidationError(f"order_ticket must be > 0, got: {order_ticket}")
+
+        # Pre-dispatch fresh physical health observation
+        health = self.check_health()
+        if not self.can_dispatch():
+            raise MT5DomainError(
+                f"DISPATCH_BLOCKED: safety_state={self.safety_state.value}, is_reconciled={self.is_reconciled}, failure_cause={health.failure_cause}"
+            )
 
         request = MT5TradeRequest(
             action=MT5TradeAction.TRADE_ACTION_REMOVE,
