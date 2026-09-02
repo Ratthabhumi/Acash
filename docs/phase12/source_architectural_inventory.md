@@ -136,16 +136,19 @@ Selecting a filling mode requires evaluating official MQL5 trade execution rules
 $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filling Flags}, \text{Order Type}, \text{Broker Policy})$$
 
 #### MQL5 Hard Compatibility Rules:
-1. **`SYMBOL_TRADE_EXECUTION_MARKET` (Market Execution):**
+1. **Pending Orders (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`):**
+   - **Hard Rule (MQL5 Standard):** When placing pending orders, the filling type is **strictly `ORDER_FILLING_RETURN`** regardless of `SYMBOL_TRADE_EXECUTION_MODE`, because pending orders do not execute instantaneously upon submission and rest on the broker order book. `FOK` and `IOC` are invalid for pending orders.
+2. **`SYMBOL_TRADE_EXECUTION_MARKET` (Market Execution):**
    - The trade server executes market orders at prevailing market prices without requotes.
    - **Hard Rule (MQL5 Standard):** `ORDER_FILLING_RETURN` is **strictly forbidden for market orders** under Market Execution mode.
    - Only `ORDER_FILLING_FOK` or `ORDER_FILLING_IOC` may be used for market orders (depending on `SYMBOL_FILLING_MODE` flags).
-2. **`SYMBOL_TRADE_EXECUTION_REQUEST` & `SYMBOL_TRADE_EXECUTION_INSTANT`:**
-   - Broker quotes price; supports `ORDER_FILLING_RETURN`, `ORDER_FILLING_FOK`, and `ORDER_FILLING_IOC` (subject to symbol flags).
-3. **`SYMBOL_TRADE_EXECUTION_EXCHANGE` (Exchange Execution):**
-   - Exchange execution book; supports `ORDER_FILLING_RETURN` (partial fill rests on book), `ORDER_FILLING_IOC`, and `ORDER_FILLING_BOC` (Book or Cancel / Passive Maker).
-4. **Pending Orders (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`):**
-   - Permitted filling modes are governed by the broker's pending order filling policy (typically `ORDER_FILLING_RETURN` or `ORDER_FILLING_FOK`).
+3. **`SYMBOL_TRADE_EXECUTION_REQUEST` & `SYMBOL_TRADE_EXECUTION_INSTANT`:**
+   - Broker quotes price; supports `ORDER_FILLING_RETURN`, `ORDER_FILLING_FOK`, and `ORDER_FILLING_IOC` for market requests (subject to symbol flags).
+4. **`SYMBOL_TRADE_EXECUTION_EXCHANGE` (Exchange Execution) & `ORDER_FILLING_BOC`:**
+   - Supports `ORDER_FILLING_RETURN`, `ORDER_FILLING_IOC`, and `ORDER_FILLING_FOK` for market/exchange orders.
+   - **`ORDER_FILLING_BOC` (Book or Cancel / Passive Maker):** Strictly restricted to passive Limit and Stop-Limit orders (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`).
+   - **`ORDER_FILLING_BOC` is strictly forbidden for market orders (`BUY`, `SELL`) and breakout stop orders (`BUY_STOP`, `SELL_STOP`)**.
+   - Requires `SYMBOL_FILLING_BOC` to be explicitly enabled in `symbol_info.filling_mode` alongside exchange order capability.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -153,24 +156,28 @@ $$\text{Filling Mode} = f(\text{Symbol Trade Execution Mode}, \text{Symbol Filli
 ├────────────────────────────┬─────────────────────────────┬──────────────────────────────────┤
 │ Symbol Execution Mode      │ Order Type                  │ MQL5 Allowed Filling Modes       │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
+│ Any Execution Mode         │ Pending Orders (All Types)  │ `RETURN` strictly (MQL5 Rule)    │
+├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
 │ `SYMBOL_TRADE_EXEC_MARKET` │ Market (`BUY`/`SELL`)       │ `FOK` or `IOC` (*RETURN invalid) │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
 │ `SYMBOL_TRADE_EXEC_REQUEST`│ Market / Instant            │ `RETURN`, `FOK`, or `IOC`        │
 │ / `INSTANT`                │                             │                                  │
 ├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
-│ `SYMBOL_TRADE_EXEC_EXCHANGE`│ Market / Limit / Stop      │ `RETURN`, `IOC`, or `BOC` (Maker)│
-├────────────────────────────┼─────────────────────────────┼──────────────────────────────────┤
-│ Any Execution Mode         │ Pending Limit / Stop        │ `RETURN`, `FOK`, or `IOC`        │
+│ `SYMBOL_TRADE_EXEC_EXCHANGE`│ Market (`BUY`/`SELL`)      │ `RETURN`, `IOC`, or `FOK`        │
+│                            │ Limit / Stop-Limit (Passive)│ `BOC` (Maker only)               │
 └────────────────────────────┴─────────────────────────────┴──────────────────────────────────┘
 ```
 
-#### Deterministic 6-Step Resolution Algorithm:
-1. Query `symbol_info.trade_execution_mode` (`MARKET`, `INSTANT`, `REQUEST`, `EXCHANGE`).
-2. Determine `order_type` (Market vs. Pending Limit/Stop).
-3. Query `symbol_info.filling_mode` bitmask (`SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`, `SYMBOL_FILLING_BOC`).
-4. Apply MQL5 hard compatibility rules (e.g., exclude `RETURN` if `MARKET` execution for market order).
-5. Apply ACASH broker policy (prefer `IOC` for taker liquidity sweeps; prefer `RETURN` for exchange limit orders).
-6. **Fail-Closed:** If the intersection of allowed modes is empty, reject order pre-flight with `DataContractError("NO_COMPATIBLE_FILLING_MODE")`.
+#### Deterministic Resolution Algorithm:
+1. **Pending Order Path:** If `order_type` is pending (`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP`, `SELL_STOP`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`):
+   - If passive maker execution is explicitly configured AND `order_type` $\in$ {`BUY_LIMIT`, `SELL_LIMIT`, `BUY_STOP_LIMIT`, `SELL_STOP_LIMIT`} AND `SYMBOL_FILLING_BOC` is enabled $\implies$ assign `ORDER_FILLING_BOC`.
+   - Otherwise $\implies$ assign `ORDER_FILLING_RETURN` strictly (MQL5 pending-order rule).
+2. **Market Order Path:** If `order_type` is Market (`BUY`, `SELL`):
+   - Query `symbol_info.trade_execution_mode` (`MARKET`, `INSTANT`, `REQUEST`, `EXCHANGE`).
+   - Query `symbol_info.filling_mode` bitmask (`SYMBOL_FILLING_FOK`, `SYMBOL_FILLING_IOC`, etc.).
+   - Apply MQL5 hard rule: if `SYMBOL_TRADE_EXECUTION_MARKET` $\implies$ exclude `RETURN`, select supported mode from `FOK` / `IOC`.
+   - If `REQUEST` / `INSTANT` / `EXCHANGE` $\implies$ select supported mode based on ACASH broker policy (`IOC` for taker liquidity sweeps, `RETURN` for exchange book).
+3. **Fail-Closed:** If no compatible filling mode exists for the symbol and order type, reject order pre-flight with `DataContractError("NO_COMPATIBLE_FILLING_MODE")`.
 
 ---
 
