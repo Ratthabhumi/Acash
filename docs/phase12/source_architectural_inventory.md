@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/source_architectural_inventory.md`  
 > **Status:** APPROVED ARCHITECTURAL INVENTORY (Pre-Contract Specification v1.0)  
-> **Baseline Commit:** `719c1a2` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `89674c4` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -379,7 +379,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 8. Verification & Next Steps
 
-- **Active Baseline Commit:** `719c1a2` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `89674c4` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors).
 - **Rule:** Do NOT write production code for Phase 12 until this revised Inventory is approved and **Phase 12 Contract Specification v1.0** is drafted and locked.
