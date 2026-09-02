@@ -3,7 +3,7 @@
 
 > **Document:** `docs/phase12/contract_specification_v1.md`  
 > **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
-> **Baseline Commit:** `48e415b` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
+> **Baseline Commit:** `a4a4647` (`HEAD == origin/main`, 1,020 collected: 1,017 passed, 3 skipped, 0 failed, MyPy clean)  
 > **Frozen Baselines:** Phase 7 (Frozen), Phase 8 (`e6f1d04`), Phase 8.5 (`9ce1365`), Phase 9 (`6bd40d8`), Phase 10 (`3955bf6`), Phase 11 (`092a2b1`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Sovereign Authority Separation)
 
@@ -597,7 +597,7 @@ Slice 6: Full Multi-Venue Integration, 31-Vector Red-Team & Freeze
 
 ## 17. Verification Ledger & Audit Signoff
 
-- **Active Baseline Commit:** `48e415b` (`HEAD == origin/main`)
+- **Active Baseline Commit:** `a4a4647` (`HEAD == origin/main`)
 - **Full Test Suite:** 1,020 collected (1,017 passed, 3 skipped, 0 failed, exit code 0).
 - **Static Type Checker:** MyPy clean across all active modules (0 errors in 245 files).
 - **Rule:** Do NOT write production code for Phase 12 until this Contract Specification v1.0 and the accompanying Red-Team Adversarial Matrix are reviewed and locked.
