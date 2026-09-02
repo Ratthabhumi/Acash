@@ -207,9 +207,9 @@ to **26 distinct adversarial attack vectors** spanning econometric instability, 
 ---
 
 ### Attack 20: Phase 11 Mutating Historical Phase 8.5 Qualification Dossier
-- **Threat Vector:** When a strategy degrades, Phase 11 attempts to set `AlphaQualificationDossier.lifecycle_state = RETIRED`.
+- **Threat Vector:** When a strategy degrades, Phase 11 attempts to set `AlphaQualificationDossier.lifecycle_state = RETIRED` or substitute the underlying `dossier_digest`.
 - **Detection:** `AlphaQualificationDossier` is a frozen Pydantic model (`frozen=True, extra="forbid"`).
-- **Containment:** Immutability error raised at runtime. Phase 11 maintains its own `ForwardHealthState`; historical research dossiers remain completely immutable.
+- **Containment:** Immutability error raised at runtime. Phase 11 maintains its own `ForwardHealthState`; historical research dossiers remain completely immutable and `dossier_digest` cannot be recomputed, mutated, or replaced.
 
 ---
 

@@ -160,6 +160,10 @@ class ForwardObservation(BaseModel):
     observation_digest: str                  # Canonical SHA-256 digest
 ```
 
+> [!IMPORTANT]
+> **Historical Dossier Lineage Invariant:**  
+> `dossier_digest` is a strict, immutable cryptographic reference to the historical Phase 8.5 `AlphaQualificationDossier`. Phase 11 is strictly forbidden from recomputing, mutating, or substituting this digest. The pair `(strategy_id, dossier_digest)` must be verified against historical records to prevent cross-version lineage leakage.
+
 #### 2. `ForwardWindowMetrics` (Rolling Econometric Estimators)
 ```python
 class ForwardWindowMetrics(BaseModel):
@@ -283,6 +287,10 @@ Phase 8 Governance Review (Approved Friction Parameters for Portfolio Rebalance)
 
 ### B. Mathematical Definitions & Sign Conventions
 
+> [!NOTE]
+> **Deterministic Attribution Categories vs Single Implementation Shortfall:**  
+> The components defined below represent **deterministic, policy-defined execution-cost attribution categories** under declared benchmark conventions. Because each category intentionally uses a specific, economically relevant reference denominator (`arrival_mid` for spread, `decision_mid` for timing, `arrival_quoted` for execution slippage, and `filled_notional` for fees/rebates), **they are not required to algebraically reconcile to a single decision-to-fill implementation shortfall in all cases**.
+
 To avoid conflating transit market movement (timing) with broker execution slippage and spread, `ExecutionObservation` ingests discrete price milestones (`decision_mid`, `arrival_mid`, `arrival_bid`, `arrival_ask`, `executed_fill`). The following deterministic formulas and sign conventions are established:
 
 1. **Quoted Spread Drag ($\text{bps}$):**
@@ -291,8 +299,9 @@ To avoid conflating transit market movement (timing) with broker execution slipp
 
 2. **Timing / Pre-Arrival Market Movement Drag ($\text{bps}$):**
    Price drift between decision authorization and venue arrival:
+   $$\text{SideSign} = \begin{cases} +1 & \text{for BUY} \\ -1 & \text{for SELL} \end{cases}$$
    $$\text{TimingDrag} = \text{SideSign} \times \frac{\text{arrival\_mid\_price} - \text{decision\_mid\_price}}{\text{decision\_mid\_price}} \times 10{,}000$$
-   *(Where $\text{SideSign} = +1$ for BUY and $-1$ for SELL. Adverse market movement produces positive drag; favorable drift produces negative drag).*
+   *(Where adverse market movement produces positive drag; favorable drift produces negative drag).*
 
 3. **Execution Slippage Drag ($\text{bps}$):**
    Execution price achieved relative to expected execution quote at arrival:
@@ -301,10 +310,10 @@ To avoid conflating transit market movement (timing) with broker execution slipp
    *(Measures execution impact and broker slippage beyond the quoted spread at arrival).*
 
 4. **Commission & Exchange Fee Drag ($\text{bps}$):**
-   $$\text{FeeDrag} = \frac{\text{TotalFeesUSD}}{\text{FilledNotionalUSD}} \times 10{,}000 \ge 0.0$$
+   $$\text{FeeDrag} = \frac{\text{commission\_fee\_usd}}{\text{filled\_notional\_usd}} \times 10{,}000 \ge 0.0$$
 
 5. **Maker Rebate Benefit ($\text{bps}$):**
-   $$\text{RebateBenefit} = \frac{\text{TotalRebateUSD}}{\text{FilledNotionalUSD}} \times 10{,}000 \ge 0.0$$
+   $$\text{RebateBenefit} = \frac{\text{rebate\_usd}}{\text{filled\_notional\_usd}} \times 10{,}000 \ge 0.0$$
 
 6. **Gross Execution Drag ($\text{bps}$):**
    $$\text{GrossDrag} = \text{SpreadDrag} + \max(0.0, \text{TimingDrag}) + \max(0.0, \text{SlippageDrag}) + \text{FeeDrag} \ge 0.0$$
@@ -329,27 +338,40 @@ class ExecutionObservation(BaseModel):
     strategy_id: str
     venue: str                               # Venue identifier (e.g., 'ALPACA_PAPER')
     symbol: str
-    order_side: str                          # 'BUY' | 'SELL'
+    side: str                                # 'BUY' | 'SELL'
     
+    # Quantities & Notional Value
+    requested_quantity: Decimal              # Total shares/contracts requested (> 0.0)
+    filled_quantity: Decimal                 # Total shares/contracts executed (> 0.0)
+    filled_notional_usd: Decimal             # Total executed dollar value (> 0.0)
+    
+    # Price Milestones & Option A Canonical Midpoint
+    decision_mid_price: Decimal              # Benchmark mid-price at decision authorization (> 0.0)
+    arrival_bid_price: Decimal               # Quoted bid at arrival (> 0.0)
+    arrival_ask_price: Decimal               # Quoted ask at arrival (> 0.0)
+    arrival_mid_price: Decimal               # Canonical midpoint: (arrival_bid + arrival_ask) / 2 (> 0.0)
+    executed_fill_price: Decimal             # Volume-weighted average fill price (> 0.0)
+    
+    # Monetary Frictions
+    commission_fee_usd: Decimal              # Total broker & exchange fees paid (>= 0.0)
+    rebate_usd: Decimal                      # Total maker rebates received (>= 0.0)
+    
+    # Discrete Timestamps
     decision_timestamp_utc: datetime         # Moment OrderIntent was authorized
     arrival_timestamp_utc: datetime          # Moment order arrived at broker socket
     fill_timestamp_utc: datetime             # Broker observed execution timestamp
-    
-    requested_qty: Decimal
-    filled_qty: Decimal
-    
-    decision_mid_price: Decimal              # Benchmark mid-price at decision authorization
-    arrival_mid_price: Decimal               # Benchmark mid-price at broker receipt
-    arrival_bid_price: Decimal               # Quoted bid at arrival
-    arrival_ask_price: Decimal               # Quoted ask at arrival
-    executed_fill_price: Decimal             # Volume-weighted average fill price
-    commission_fee_usd: Decimal              # Total broker & exchange fees paid (>= 0.0)
-    rebate_usd: Decimal                      # Total maker rebates received (>= 0.0)
     
     network_latency_ms: Optional[float]
     is_partial_fill: bool
     execution_digest: str
 ```
+
+#### Strict Price, Notional, & Timestamp Invariants:
+1. `decision_mid_price > 0, arrival_mid_price > 0, arrival_bid_price > 0, arrival_ask_price > 0, executed_fill_price > 0`
+2. `arrival_bid_price <= arrival_ask_price`
+3. **Option A Canonical Midpoint:** `arrival_mid_price == (arrival_bid_price + arrival_ask_price) / Decimal("2.0")`
+4. `decision_timestamp_utc <= arrival_timestamp_utc <= fill_timestamp_utc`
+5. `filled_notional_usd == filled_quantity * executed_fill_price`
 
 #### 2. `RealizedExecutionDrag` (Granular Decomposed Costs)
 ```python
