@@ -61,17 +61,19 @@ class ForwardHealthStateMachine:
     ) -> StateTransitionResult:
         """Evaluate next health state and advisory recommendation.
 
-        Transition Rules:
+        Deterministic Transition Precedence:
         1. Telemetry Failure: If is_telemetry_valid == False, transition immediately to MONITORING_BLOCKED.
-        2. Catastrophic Drawdown: If inception_max_drawdown >= critical_drawdown_limit, transition
-           immediately to STRUCTURAL_BREAK (absorbing state; bypasses degradation hysteresis).
-        3. Insufficient Observations: If observation_count < min_observations, state is INSUFFICIENT_EVIDENCE.
-        4. Absorbing Break: If already STRUCTURAL_BREAK, remains in STRUCTURAL_BREAK.
-        5. Asymmetric Hysteresis:
+        2. Catastrophic Structural Break: If inception_max_drawdown >= critical_drawdown_limit, transition
+           immediately to STRUCTURAL_BREAK (takes precedence over observation count when telemetry is valid).
+        3. Absorbing Break: If already in STRUCTURAL_BREAK, state is absorbing and cannot auto-recover.
+        4. Re-entry from Blocked: If current_state == MONITORING_BLOCKED and telemetry is restored, transition
+           to INSUFFICIENT_EVIDENCE to rebuild clean evidence without synthesizing missing data.
+        5. Insufficient Evidence: If observation_count < min_observations, state is INSUFFICIENT_EVIDENCE.
+        6. Asymmetric Anti-Whipsaw Hysteresis:
            - HEALTHY -> DEGRADED requires N_degrade consecutive degraded periods.
-           - DEGRADED -> HEALTHY requires M_recover consecutive healthy periods AND cooldown remaining == 0.
+           - DEGRADED -> HEALTHY requires M_recover consecutive healthy periods AND recovery_cooldown_remaining == 0.
         """
-        # Rule 1: Telemetry Failure (Infrastructure state, NOT performance degradation)
+        # Priority 1: Telemetry Failure (Infrastructure state, NOT performance degradation)
         if not is_telemetry_valid:
             return StateTransitionResult(
                 state=ForwardHealthState.MONITORING_BLOCKED,
@@ -82,7 +84,9 @@ class ForwardHealthStateMachine:
                 drift_flags=("TELEMETRY_CORRUPTED",),
             )
 
-        # Rule 2: Catastrophic Structural Break (Inception HWM Drawdown Threshold Breach)
+        # Priority 2: Catastrophic Structural Break (Inception HWM Drawdown Threshold Breach)
+        # Precedence Invariant: Catastrophic structural break takes precedence over insufficient observation
+        # count when telemetry is valid, ensuring catastrophic loss is never obscured by low bar count.
         if metrics.inception_max_drawdown >= self.policy.critical_drawdown_limit:
             return StateTransitionResult(
                 state=ForwardHealthState.STRUCTURAL_BREAK,
@@ -93,7 +97,7 @@ class ForwardHealthStateMachine:
                 drift_flags=("CRITICAL_DRAWDOWN_BREACH",),
             )
 
-        # Rule 3: Absorbing Structural Break (Cannot auto-recover via market movement)
+        # Priority 3: Absorbing Structural Break (Cannot auto-recover via market movement)
         if current_state == ForwardHealthState.STRUCTURAL_BREAK:
             return StateTransitionResult(
                 state=ForwardHealthState.STRUCTURAL_BREAK,
@@ -104,7 +108,21 @@ class ForwardHealthStateMachine:
                 drift_flags=("ABSORBING_STRUCTURAL_BREAK",),
             )
 
-        # Rule 4: Insufficient Evidence
+        # Priority 4: Re-entry from MONITORING_BLOCKED
+        # Fail-closed semantics: When telemetry is restored after being blocked, state transitions to
+        # INSUFFICIENT_EVIDENCE to rebuild clean evidence. It does not assume prior state validity and
+        # never synthesizes missing observations across the outage gap.
+        if current_state == ForwardHealthState.MONITORING_BLOCKED:
+            return StateTransitionResult(
+                state=ForwardHealthState.INSUFFICIENT_EVIDENCE,
+                recommendation=ForwardGovernanceRecommendation.CONTINUE_UNRESTRICTED,
+                consecutive_degraded_periods=0,
+                consecutive_recovery_periods=0,
+                recovery_cooldown_remaining=0,
+                drift_flags=("TELEMETRY_RESTORED_RESET_TO_INSUFFICIENT_EVIDENCE",),
+            )
+
+        # Priority 5: Insufficient Evidence
         if metrics.observation_count < self.policy.min_observations:
             return StateTransitionResult(
                 state=ForwardHealthState.INSUFFICIENT_EVIDENCE,

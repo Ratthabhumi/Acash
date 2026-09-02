@@ -270,8 +270,135 @@ def test_state_machine_telemetry_failure_triggers_monitoring_blocked() -> None:
     assert "TELEMETRY_CORRUPTED" in res.drift_flags
 
 
+def test_state_machine_monitoring_blocked_recovery_resets_to_insufficient_evidence() -> None:
+    """Telemetry restoration after MONITORING_BLOCKED transitions to INSUFFICIENT_EVIDENCE.
+
+    Fail-closed invariant:
+    Does NOT restore prior health state automatically.
+    Does NOT synthesize missing observations.
+    Resets degraded and recovery counters to 0.
+    """
+    policy = ForwardHealthPolicy()
+    sm = ForwardHealthStateMachine(policy)
+
+    metrics = _create_sample_metrics(observation_count=60, sharpe=Decimal("1.80"))
+    res = sm.evaluate_step(
+        current_state=ForwardHealthState.MONITORING_BLOCKED,
+        metrics=metrics,
+        consecutive_degraded_periods=2,
+        consecutive_recovery_periods=3,
+        recovery_cooldown_remaining=2,
+        is_telemetry_valid=True,
+    )
+
+    assert res.state == ForwardHealthState.INSUFFICIENT_EVIDENCE
+    assert res.recommendation == ForwardGovernanceRecommendation.CONTINUE_UNRESTRICTED
+    assert res.consecutive_degraded_periods == 0
+    assert res.consecutive_recovery_periods == 0
+    assert res.recovery_cooldown_remaining == 0
+    assert "TELEMETRY_RESTORED_RESET_TO_INSUFFICIENT_EVIDENCE" in res.drift_flags
+
+
 # ============================================================================
-# 6. EVIDENCE GENERATION & AUTHORITY ISOLATION
+# 6. RECOVERY COOLDOWN BOUNDARY MATRIX & PRECEDENCE
+# ============================================================================
+
+def test_state_machine_recovery_cooldown_boundary_matrix() -> None:
+    """Exhaustive boundary testing for M_recover and T_cooldown interaction."""
+    policy = ForwardHealthPolicy(
+        degradation_persistence_n=3,
+        recovery_persistence_m=10,
+        recovery_cooldown_periods=5,
+    )
+    sm = ForwardHealthStateMachine(policy)
+    good_metrics = _create_sample_metrics(observation_count=60, sharpe=Decimal("1.50"))
+
+    # Boundary Case 1: 9 healthy periods (M=9 < 10) with cooldown == 0 -> still DEGRADED
+    res1 = sm.evaluate_step(
+        current_state=ForwardHealthState.DEGRADED,
+        metrics=good_metrics,
+        consecutive_recovery_periods=8,  # will increment to 9
+        recovery_cooldown_remaining=0,
+    )
+    assert res1.state == ForwardHealthState.DEGRADED
+    assert res1.consecutive_recovery_periods == 9
+    assert res1.recommendation == ForwardGovernanceRecommendation.DEGRADED_PROBATION
+
+    # Boundary Case 2: 10 healthy periods (M=10 == M_recover) BUT cooldown > 0 -> still DEGRADED
+    res2 = sm.evaluate_step(
+        current_state=ForwardHealthState.DEGRADED,
+        metrics=good_metrics,
+        consecutive_recovery_periods=9,  # will increment to 10
+        recovery_cooldown_remaining=2,  # will decrement to 1 (> 0)
+    )
+    assert res2.state == ForwardHealthState.DEGRADED
+    assert res2.consecutive_recovery_periods == 10
+    assert res2.recovery_cooldown_remaining == 1
+    assert res2.recommendation == ForwardGovernanceRecommendation.DEGRADED_PROBATION
+
+    # Boundary Case 3: 10 healthy periods AND cooldown == 0 -> HEALTHY
+    res3 = sm.evaluate_step(
+        current_state=ForwardHealthState.DEGRADED,
+        metrics=good_metrics,
+        consecutive_recovery_periods=9,  # will increment to 10
+        recovery_cooldown_remaining=1,  # will decrement to 0 (== 0)
+    )
+    assert res3.state == ForwardHealthState.HEALTHY
+    assert res3.consecutive_recovery_periods == 0
+    assert res3.recovery_cooldown_remaining == 0
+    assert res3.recommendation == ForwardGovernanceRecommendation.CONTINUE_UNRESTRICTED
+    assert "RECOVERY_CONFIRMED" in res3.drift_flags
+
+
+def test_state_machine_precedence_catastrophic_break_over_insufficient_evidence() -> None:
+    """Catastrophic structural break takes precedence over insufficient evidence count when telemetry is valid."""
+    policy = ForwardHealthPolicy(critical_drawdown_limit=Decimal("0.20"))
+    sm = ForwardHealthStateMachine(policy)
+
+    # N = 10 < min_observations (30), but drawdown is 25% >= 20% limit
+    catastrophic_early_metrics = _create_sample_metrics(
+        observation_count=10,
+        sharpe=Decimal("0.50"),
+        inception_max_dd=Decimal("0.25"),
+    )
+
+    res = sm.evaluate_step(
+        current_state=ForwardHealthState.INSUFFICIENT_EVIDENCE,
+        metrics=catastrophic_early_metrics,
+        is_telemetry_valid=True,
+    )
+
+    # Catastrophic structural break must trigger immediately
+    assert res.state == ForwardHealthState.STRUCTURAL_BREAK
+    assert res.recommendation == ForwardGovernanceRecommendation.RECOMMEND_EXCLUSION
+    assert "CRITICAL_DRAWDOWN_BREACH" in res.drift_flags
+
+
+def test_state_machine_precedence_telemetry_failure_over_structural_break() -> None:
+    """Telemetry failure takes precedence over structural break (infrastructure supremacy)."""
+    policy = ForwardHealthPolicy(critical_drawdown_limit=Decimal("0.20"))
+    sm = ForwardHealthStateMachine(policy)
+
+    # Telemetry is invalid AND drawdown is 30%
+    catastrophic_metrics = _create_sample_metrics(
+        observation_count=60,
+        inception_max_dd=Decimal("0.30"),
+    )
+
+    res = sm.evaluate_step(
+        current_state=ForwardHealthState.HEALTHY,
+        metrics=catastrophic_metrics,
+        is_telemetry_valid=False,
+    )
+
+    # Infrastructure corruption must trigger MONITORING_BLOCKED, not performance attribution
+    assert res.state == ForwardHealthState.MONITORING_BLOCKED
+    assert res.recommendation == ForwardGovernanceRecommendation.MONITORING_BLOCKED_FLAG
+    assert "TELEMETRY_CORRUPTED" in res.drift_flags
+
+
+# ============================================================================
+# 7. EVIDENCE GENERATION & AUTHORITY ISOLATION
 # ============================================================================
 
 def test_generate_evidence_dto_clean_lineage_and_no_authority_creep() -> None:
