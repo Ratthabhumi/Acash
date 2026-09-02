@@ -1159,6 +1159,61 @@ def test_t32_native_api_requote_10004_not_timeout(
     assert adapter.safety_state == MT5TransportSafetyState.RECONCILIATION_REQUIRED
 
 
+# --- T33: Description Substring 'timeout' Does NOT Override Non-Timeout Code (-2) ---
+def test_t33_description_substring_timeout_does_not_override_api_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.enums import MT5FillingMode, MT5TradeAction
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.schemas import MT5ExecutionLineage, MT5TradeRequest
+    from acash.execution.mt5.transport import NativeMT5Transport, MT5TransportCommand
+
+    class MockNativeInvalidParamsWithTimeoutTextModule:
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (-2, "invalid parameter: timeout field is malformed")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeInvalidParamsWithTimeoutTextModule)
+
+    transport = NativeMT5Transport()
+    req = MT5TradeRequest(
+        action=MT5TradeAction.TRADE_ACTION_DEAL,
+        symbol="EURUSD",
+        volume=Decimal("1.00"),
+        type=MT5OrderType.BUY,
+        type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+    )
+    lineage = MT5ExecutionLineage(
+        broker_id="MOCK_BROKER",
+        account_id="ACC_999",
+        terminal_instance_id="TERM_1",
+        strategy_id="STRAT_1",
+        cycle_id="CYC_1",
+        intent_id="INT_1",
+    )
+    cmd = MT5TransportCommand(request=req, lineage=lineage)
+
+    with pytest.raises(MT5TransportError) as exc_info:
+        transport.order_send(cmd)
+
+    # Invariant: Must strictly NOT classify as timeout just because description contains 'timeout'
+    assert exc_info.value.is_timeout is False
+    assert exc_info.value.api_code == -2
+
+
+# --- T34: Canonical MQL5 Client Library Return Code Constants ---
+def test_t34_api_error_code_constants_and_connect_code() -> None:
+    from acash.execution.mt5.enums import MT5ApiErrorCode
+
+    assert MT5ApiErrorCode.RES_E_INTERNAL_FAIL_INIT.value == -10003
+    assert MT5ApiErrorCode.RES_E_INTERNAL_FAIL_CONNECT.value == -10003
+    assert MT5ApiErrorCode.RES_E_INTERNAL_FAIL_TIMEOUT.value == -10005
+    assert MT5ApiErrorCode.RES_E_INVALID_PARAMS.value == -2
+
+
+
 
 
 
