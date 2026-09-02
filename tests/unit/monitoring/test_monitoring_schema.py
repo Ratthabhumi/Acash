@@ -297,6 +297,45 @@ def test_strategy_forward_drift_evidence_happy_path(sample_metrics: ForwardWindo
     assert not hasattr(evidence, "is_tournament_eligible")
 
 
+def test_strategy_forward_drift_evidence_with_none_expectation() -> None:
+    """Verify clean evidence serialization when ex-ante expectation metrics are None."""
+    t0 = datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc)
+    policy = ForwardHealthPolicy()
+
+    metrics_none_exp = ForwardWindowMetrics(
+        window_size=60,
+        observation_count=60,
+        mean_realized_return_annualized=Decimal("0.185"),
+        realized_volatility_annualized=Decimal("0.120"),
+        realized_sharpe_ratio=Decimal("1.54"),
+        max_drawdown=Decimal("0.045"),
+        inception_max_drawdown=Decimal("0.062"),
+        hit_rate=Decimal("0.58"),
+        tracking_error_annualized=None,
+        t_stat_decay=Decimal("2.41"),
+        expected_vs_realized_divergence_bps=None,
+        information_coefficient=None,
+        ic_decay_slope=None,
+    )
+
+    evidence = StrategyForwardDriftEvidence(
+        evidence_id="EVID_002",
+        strategy_id="STRAT_01",
+        dossier_digest=VALID_DIGEST_A,
+        as_of_utc=t0,
+        wall_clock_utc=t0,
+        health_state=ForwardHealthState.HEALTHY,
+        recommendation=ForwardGovernanceRecommendation.CONTINUE_UNRESTRICTED,
+        metrics=metrics_none_exp,
+        policy_digest=policy.policy_digest,
+        consecutive_degraded_periods=0,
+        consecutive_recovery_periods=10,
+        drift_flags=(),
+    )
+    assert evidence.evidence_id == "EVID_002"
+    assert len(evidence.evidence_digest) == 64
+
+
 def test_strategy_forward_drift_evidence_authority_creep_forbidden(sample_metrics: ForwardWindowMetrics) -> None:
     """Strictly reject attempt to inject is_tournament_eligible into StrategyForwardDriftEvidence."""
     t0 = datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc)

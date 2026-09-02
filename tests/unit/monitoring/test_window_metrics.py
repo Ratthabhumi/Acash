@@ -262,12 +262,16 @@ def test_tracking_error_and_divergence_calculation() -> None:
     assert metrics.expected_vs_realized_divergence_bps == Decimal("0.0")
 
 
-def test_none_expected_returns_defaults_to_zero_divergence() -> None:
-    """Verify that when expected_returns is None on all observations, divergence and TE are Decimal('0.0')."""
+def test_none_expected_returns_yields_none_divergence_and_tracking_error() -> None:
+    """Verify that when expected_return is None on all observations, divergence and TE are None.
+
+    Enforces: No Evidence != Negative Evidence.
+    Missing ex-ante expectation must not be penalized as 0.0 or negative drift.
+    """
     obs_list = [
         _create_dummy_observation(1, Decimal("0.01"), expected_return=None),
         _create_dummy_observation(2, Decimal("0.02"), expected_return=None),
     ]
     metrics = calculate_forward_window_metrics(obs_list)
-    assert metrics.tracking_error_annualized == Decimal("0.0")
-    assert metrics.expected_vs_realized_divergence_bps == Decimal("0.0")
+    assert metrics.tracking_error_annualized is None
+    assert metrics.expected_vs_realized_divergence_bps is None

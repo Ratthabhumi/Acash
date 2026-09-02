@@ -38,6 +38,12 @@ class ForwardMetricsCalculator:
         annualization_factor: Decimal = DEFAULT_ANNUALIZATION_FACTOR,
         risk_free_rate_annualized: Decimal = Decimal("0.0"),
     ) -> None:
+        """Initialize calculator with explicit units.
+
+        Args:
+            annualization_factor: Number of observation periods per year (e.g. 252 for daily observations).
+            risk_free_rate_annualized: Annualized benchmark risk-free rate (e.g. 0.04 for 4% p.a.).
+        """
         if annualization_factor <= Decimal("0.0"):
             raise DataContractError(
                 f"annualization_factor must be strictly positive, got {annualization_factor}."
@@ -134,9 +140,14 @@ class ForwardMetricsCalculator:
         hit_rate = Decimal(str(positive_count)) / n_dec
 
         # 8. Tracking Error & Expected vs Realized Divergence
+        # Semantics: If expected_return is unavailable (None across all observations),
+        # tracking error and divergence are set to None (No Evidence != Negative Evidence).
         expected_returns = [obs.expected_return for obs in window_obs]
         has_expected = all(e is not None for e in expected_returns)
         has_none_expected = all(e is None for e in expected_returns)
+
+        tracking_error_annualized: Optional[Decimal]
+        expected_vs_realized_divergence_bps: Optional[Decimal]
 
         if has_expected:
             diffs = [
@@ -155,8 +166,9 @@ class ForwardMetricsCalculator:
             mean_exp = sum(exp_vals, Decimal("0.0")) / n_dec
             expected_vs_realized_divergence_bps = (mean_daily_return - mean_exp) * BPS_SCALER
         elif has_none_expected:
-            tracking_error_annualized = Decimal("0.0")
-            expected_vs_realized_divergence_bps = Decimal("0.0")
+            # Explicitly None when ex-ante expectation is not emitted by model
+            tracking_error_annualized = None
+            expected_vs_realized_divergence_bps = None
         else:
             raise DataContractError(
                 "Inconsistent expected_return telemetry: expected_return must be uniformly present "
@@ -187,7 +199,14 @@ class ForwardMetricsCalculator:
 
     @staticmethod
     def _compute_max_drawdown(returns: Sequence[Decimal]) -> Decimal:
-        """Compute maximum peak-to-trough percentage drawdown from a return series."""
+        """Compute maximum peak-to-trough percentage drawdown from discrete simple period returns.
+
+        Semantics (Option A: Simple Period Return Compounding):
+        - Input R_t represents simple discrete period return (not log return).
+        - Cumulative Equity compounds multiplicatively: Equity_t = Equity_(t-1) * (1 + R_t).
+        - Peak_t = max_{0 <= tau <= t} Equity_tau.
+        - Drawdown_t = (Peak_t - Equity_t) / Peak_t.
+        """
         if not returns:
             return Decimal("0.0")
 

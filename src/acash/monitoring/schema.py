@@ -271,9 +271,9 @@ class ForwardWindowMetrics(BaseModel):
     hit_rate: Decimal
 
     # Statistical Decay Estimators
-    tracking_error_annualized: Decimal
+    tracking_error_annualized: Optional[Decimal] = None
     t_stat_decay: Decimal
-    expected_vs_realized_divergence_bps: Decimal
+    expected_vs_realized_divergence_bps: Optional[Decimal] = None
     information_coefficient: Optional[Decimal] = None
     ic_decay_slope: Optional[Decimal] = None
 
@@ -359,9 +359,17 @@ class StrategyForwardDriftEvidence(BaseModel):
                 "max_drawdown": str(metrics_obj.max_drawdown),
                 "inception_max_drawdown": str(metrics_obj.inception_max_drawdown),
                 "hit_rate": str(metrics_obj.hit_rate),
-                "tracking_error_annualized": str(metrics_obj.tracking_error_annualized),
+                "tracking_error_annualized": (
+                    str(metrics_obj.tracking_error_annualized)
+                    if metrics_obj.tracking_error_annualized is not None
+                    else None
+                ),
                 "t_stat_decay": str(metrics_obj.t_stat_decay),
-                "expected_vs_realized_divergence_bps": str(metrics_obj.expected_vs_realized_divergence_bps),
+                "expected_vs_realized_divergence_bps": (
+                    str(metrics_obj.expected_vs_realized_divergence_bps)
+                    if metrics_obj.expected_vs_realized_divergence_bps is not None
+                    else None
+                ),
                 "information_coefficient": (
                     str(metrics_obj.information_coefficient)
                     if metrics_obj.information_coefficient is not None
