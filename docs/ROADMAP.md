@@ -297,13 +297,19 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### 🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [CONTRACT SPEC v1.0 LOCKED]
+### 🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [CONTRACT SPEC v1.1 LOCKED]
 - **Objective:** Provide an independent observational and evidence plane to monitor forward strategy decay and attribute realized execution drag from Phase 7 fills without mutating historical research or overwriting allocation policies.
-- **Deliverables (Contract v1.0):**
-  - **Track A (Strategy Drift):** `ForwardObservation`, `ForwardWindowMetrics`, `ForwardHealthPolicy`, `ForwardHealthState`, `StrategyForwardDriftEvidence`.
-  - **Track B (Execution Reality):** `ExecutionObservation`, `RealizedExecutionDrag` (spread, slippage, commission, timing drag), `ExecutionCostEvidence`.
-  - **Non-Negotiable Invariant:** $\text{Historical Research Qualification } (\text{Phase 8.5}) \neq \text{Current Forward Health } (\text{Phase 11})$.
-- **Gate 11 Criteria:** Contract Specification v1.0 locked (`docs/phase11/contract_specification.md`) and 19-vector Red-Team Review approved (`docs/phase11/red_team_review.md`). Commit: `e2534dc`.
+- **Pre-Phase-11 Architecture Hygiene:** Source-of-truth documentation synchronized (`docs/architecture/system_architecture.md`), dual-clock determinism verified (`Supervisor cycle => explicit as_of_utc`), one-way Decimal precision boundary established, and 3-tier hashing authority classified.
+- **Deliverables (Contract v1.1):**
+  - **Track A (Strategy Drift):** `ForwardObservation`, `ForwardWindowMetrics`, `ForwardHealthPolicy` (with anti-whipsaw hysteresis $N_{\text{degrade}}, M_{\text{recover}}, T_{\text{cooldown}}$), `ForwardHealthState`, `ForwardGovernanceRecommendation`, `StrategyForwardDriftEvidence`.
+  - **Track B (Execution Reality):** `ExecutionObservation`, `RealizedExecutionDrag` (explicit signed conventions: gross drag $\ge 0$, net realized drag = gross - rebate), `ExecutionAttributionPolicy`, `ExecutionCostEvidence` (with sample count, coverage ratio, and confidence interval metadata).
+  - **Core Invariants:**
+    - $\text{Historical Research Qualification } (\text{Phase 8.5}) \neq \text{Current Forward Health } (\text{Phase 11})$.
+    - $\text{Detection } \neq \text{Governance } \neq \text{Eligibility}$ (Phase 11 recommends; Phase 10 Stage 2 Census decides).
+    - $\text{No Evidence } \neq \text{Negative Evidence}$ (telemetry disruption $\implies \text{MONITORING\_BLOCKED}$, not strategy decay).
+    - $\text{Zero Decimal } \to \text{float } \to \text{Decimal in Evidence Generation}$.
+    - $\text{Tier 1 CanonicalConfigSerializer Authority for all Evidence Digests}$.
+- **Gate 11 Criteria:** Contract Specification v1.1 locked (`docs/phase11/contract_specification.md`) and 26-vector Red-Team Review approved (`docs/phase11/red_team_review.md`). Commit: `86bff0d`.
 
 ---
 
