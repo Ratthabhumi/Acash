@@ -22,6 +22,7 @@ from acash.execution.mt5.enums import (
 from acash.execution.mt5.exceptions import (
     MT5DomainError,
     MT5RetcodeError,
+    MT5TransportError,
     MT5ValidationError,
 )
 from acash.execution.mt5.mapping import (
@@ -310,7 +311,7 @@ class MT5BrokerAdapter:
 
         try:
             observation = self.transport.order_send(command)
-        except Exception as e:
+        except (TimeoutError, ConnectionError, OSError, MT5TransportError) as e:
             self.mark_reconciliation_required(
                 TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
                 f"order_send transport exception: {e}",
@@ -335,7 +336,13 @@ class MT5BrokerAdapter:
                 evidence=evidence,
             )
 
-        # 5. Handle Broker Connection Lost (10031)
+        # 5. Verify Lineage Integrity (Fail Closed)
+        if observation.lineage != command.lineage:
+            raise MT5ValidationError(
+                f"LINEAGE_INTEGRITY_MISMATCH: outbound lineage {command.lineage} does not match inbound lineage {observation.lineage}"
+            )
+
+        # 6. Handle Broker Connection Lost (10031)
         res = observation.result
         if res.retcode == MT5Retcode.TRADE_RETCODE_CONNECTION.value:
             self.mark_reconciliation_required(
@@ -362,7 +369,7 @@ class MT5BrokerAdapter:
                 evidence=evidence,
             )
 
-        # 6. Classify Observation & Normalize Broker Event
+        # 7. Classify Observation & Normalize Broker Event
         event_kind = classify_trade_result_observation(res, authoritative_deal_confirmed=False)
         broker_order_id = str(res.order if res.order != 0 else (res.deal if res.deal != 0 else f"UNCONFIRMED_{intent.intent_id}"))
         broker_seq = str(res.deal if res.deal != 0 else (res.order if res.order != 0 else f"SEQ_{intent.intent_id}"))
@@ -427,7 +434,7 @@ class MT5BrokerAdapter:
 
         try:
             obs = self.transport.order_send(command)
-        except Exception as e:
+        except (TimeoutError, ConnectionError, OSError, MT5TransportError) as e:
             self.mark_reconciliation_required(
                 TransportFailureCause.ORDER_SEND_TIMEOUT_UNCERTAIN,
                 f"cancel_order transport exception: {e}",
@@ -449,6 +456,12 @@ class MT5BrokerAdapter:
                 requires_reconciliation=True,
                 execution_event=exec_event,
                 evidence=evidence,
+            )
+
+        # Verify Lineage Integrity
+        if obs.lineage != command.lineage:
+            raise MT5ValidationError(
+                f"LINEAGE_INTEGRITY_MISMATCH: outbound lineage {command.lineage} does not match inbound lineage {obs.lineage}"
             )
 
         res = obs.result

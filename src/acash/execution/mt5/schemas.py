@@ -6,7 +6,7 @@ import hashlib
 import re
 from typing import Any, Dict, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from acash.core.domain.exceptions import DomainValidationError
 from acash.core.domain.types import ensure_finite_decimal
@@ -136,7 +136,7 @@ class MT5TradeRequest(BaseModel):
     magic: int = Field(default=0, ge=0, description="Expert Advisor / Strategy identifier (ulong semantic).")
     order: Optional[int] = Field(default=None, gt=0, description="Order ticket for modify/cancel (ulong semantic).")
     symbol: str = Field(min_length=1, description="Trade symbol name.")
-    volume: Decimal = Field(gt=Decimal("0.0"), description="Requested volume in lots (> 0).")
+    volume: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"), description="Requested volume in lots.")
     price: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"), description="Order execution price.")
     stoplimit: Optional[Decimal] = Field(default=None, gt=Decimal("0.0"), description="StopLimit price level.")
     sl: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"), description="Stop Loss price level.")
@@ -163,6 +163,19 @@ class MT5TradeRequest(BaseModel):
         if v is not None:
             ensure_finite_decimal(v, field_name=info.field_name or "stoplimit")
         return v
+
+    @model_validator(mode="after")
+    def validate_action_specific_requirements(self) -> "MT5TradeRequest":
+        if self.action in (MT5TradeAction.TRADE_ACTION_DEAL, MT5TradeAction.TRADE_ACTION_PENDING):
+            if self.volume <= Decimal("0.0"):
+                raise MT5ValidationError(
+                    f"volume must be strictly positive (> 0) for action {self.action.value}, got: {self.volume}"
+                )
+        elif self.action == MT5TradeAction.TRADE_ACTION_REMOVE:
+            if self.order is None or self.order <= 0:
+                raise MT5ValidationError("order ticket must be specified (> 0) for TRADE_ACTION_REMOVE")
+        return self
+
 
 
 class MT5TradeResult(BaseModel):

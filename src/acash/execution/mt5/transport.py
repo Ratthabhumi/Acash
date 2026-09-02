@@ -23,6 +23,7 @@ from acash.execution.mt5.enums import (
 from acash.execution.mt5.exceptions import (
     MT5DomainError,
     MT5RetcodeError,
+    MT5TransportError,
     MT5ValidationError,
 )
 from acash.execution.mt5.schemas import (
@@ -308,6 +309,23 @@ class MockMT5Transport:
             )
             self.history_deals[deal_ticket] = deal
 
+            pos = MT5PositionReality(
+                position_ticket=ticket,
+                symbol=req.symbol,
+                position_type=MT5PositionType.POSITION_TYPE_BUY if req.type == MT5OrderType.BUY else MT5PositionType.POSITION_TYPE_SELL,
+                volume=req.volume,
+                price_open=deal.price,
+                price_current=deal.price,
+                sl=req.sl,
+                tp=req.tp,
+                swap=Decimal("0.00"),
+                profit=Decimal("0.00"),
+                magic=req.magic,
+                comment=req.comment,
+                time_open_utc=now,
+            )
+            self.active_positions[ticket] = pos
+
             result = MT5TradeResult(
                 retcode=MT5Retcode.TRADE_RETCODE_DONE.value,
                 deal=deal_ticket,
@@ -549,7 +567,24 @@ class NativeMT5Transport:
         if filling_mode_mask & 4:
             filling_flags.append("SYMBOL_FILLING_BOC")
 
-        order_modes: List[str] = ["SYMBOL_ORDER_MARKET", "SYMBOL_ORDER_LIMIT"]
+        order_mode_mask = int(getattr(info, "order_mode", 0))
+        order_modes: List[str] = []
+        if order_mode_mask & 1 or order_mode_mask == 0:
+            order_modes.append("SYMBOL_ORDER_MARKET")
+        if order_mode_mask & 2:
+            order_modes.append("SYMBOL_ORDER_LIMIT")
+        if order_mode_mask & 4:
+            order_modes.append("SYMBOL_ORDER_STOP")
+        if order_mode_mask & 8:
+            order_modes.append("SYMBOL_ORDER_STOP_LIMIT")
+        if order_mode_mask & 16:
+            order_modes.append("SYMBOL_ORDER_SL")
+        if order_mode_mask & 32:
+            order_modes.append("SYMBOL_ORDER_TP")
+        if order_mode_mask & 64:
+            order_modes.append("SYMBOL_ORDER_CLOSEBY")
+        if not order_modes:
+            order_modes = ["SYMBOL_ORDER_MARKET", "SYMBOL_ORDER_LIMIT"]
 
         digest = BrokerSymbolSpec.compute_spec_digest(
             canonical_symbol=symbol,
@@ -654,12 +689,9 @@ class NativeMT5Transport:
 
         if native_res is None:
             last_err = mt5.last_error()
-            err_code = int(last_err[0]) if last_err else MT5Retcode.TRADE_RETCODE_ERROR.value
+            err_code = int(last_err[0]) if last_err else -1
             err_desc = str(last_err[1]) if last_err else "order_send returned None"
-            result = MT5TradeResult(
-                retcode=err_code,
-                comment=err_desc,
-            )
+            raise MT5TransportError(f"NATIVE_ORDER_SEND_FAILED: {err_desc} (API error code {err_code})")
         else:
             result = MT5TradeResult(
                 retcode=int(native_res.retcode),

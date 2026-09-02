@@ -8,6 +8,7 @@ from acash.execution.broker_events import BrokerEventKind
 from acash.execution.mt5.adapter import MT5BrokerAdapter, MT5BrokerObservation
 from acash.execution.mt5.enums import (
     MT5ExecutionPolicy,
+    MT5OrderState,
     MT5OrderType,
     MT5Retcode,
     MT5TradeExecutionMode,
@@ -16,7 +17,7 @@ from acash.execution.mt5.exceptions import (
     MT5DomainError,
     MT5ValidationError,
 )
-from acash.execution.mt5.schemas import BrokerSymbolSpec
+from acash.execution.mt5.schemas import BrokerSymbolSpec, MT5OrderReality
 from acash.execution.mt5.transport import (
     MockMT5Transport,
     MT5ReconciliationConfirmation,
@@ -25,7 +26,7 @@ from acash.execution.mt5.transport import (
 )
 from acash.execution.schema import OrderIntent, OrderSide, OrderType, TimeInForce
 from acash.execution.state_machine import ExecutionEvent
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 
 @pytest.fixture
@@ -570,4 +571,202 @@ def test_native_transport_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     assert obs.result.order == 77777
     assert obs.result.volume == Decimal("1.0")
     assert obs.result.price == Decimal("1.08550")
+
+
+def test_cancel_order_success_path(
+    adapter: MT5BrokerAdapter,
+    mock_transport: MockMT5Transport,
+    symbol_spec: BrokerSymbolSpec,
+) -> None:
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    # Place a pending order first
+    now = datetime.now(timezone.utc)
+    pending_order = MT5OrderReality(
+        order_ticket=99901,
+        position_ticket=None,
+        symbol="EURUSD",
+        order_type=MT5OrderType.BUY_LIMIT,
+        state=MT5OrderState.ORDER_STATE_PLACED,
+        volume_initial=Decimal("1.00"),
+        volume_current=Decimal("1.00"),
+        price_open=Decimal("1.08000"),
+        price_stoplimit=None,
+        sl=Decimal("0.0"),
+        tp=Decimal("0.0"),
+        time_setup_utc=now,
+        time_done_utc=None,
+        magic=10,
+        comment="Test pending",
+    )
+    mock_transport.active_orders[99901] = pending_order
+
+    # Issue cancel_order
+    obs = adapter.cancel_order(order_ticket=99901, symbol="EURUSD", magic=10, comment="Cancel limit")
+
+    assert obs.event_kind == BrokerEventKind.ORDER_CANCELLED
+    assert obs.execution_event == ExecutionEvent.CANCEL_ACK
+    assert obs.broker_order_id == "99901"
+    assert 99901 not in mock_transport.active_orders
+    assert 99901 in mock_transport.history_orders
+
+
+def test_programmer_bug_not_swallowed_as_timeout(
+    adapter: MT5BrokerAdapter,
+    mock_transport: MockMT5Transport,
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    def buggy_order_send(cmd: object) -> object:
+        raise AttributeError("'MockMT5Transport' has no attribute 'missing_field'")
+
+    monkeypatch.setattr(mock_transport, "order_send", buggy_order_send)
+
+    # Programmer error must raise directly and NOT be swallowed as timeout uncertainty
+    with pytest.raises(AttributeError, match="missing_field"):
+        adapter.submit_order(sample_intent, symbol_spec)
+
+    # Adapter state must remain READY (not transitioned to RECONCILIATION_REQUIRED)
+    assert adapter.safety_state == MT5TransportSafetyState.READY
+    assert adapter.is_reconciled is True
+
+
+# --- T19: Inbound Lineage Mismatch Fails Closed ---
+def test_t19_inbound_mismatched_lineage_fails_closed(
+    adapter: MT5BrokerAdapter,
+    mock_transport: MockMT5Transport,
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    from acash.execution.mt5.schemas import MT5ExecutionLineage, MT5TradeResult
+    from acash.execution.mt5.transport import MT5TransportObservation
+
+    def hijacked_order_send(cmd: object) -> MT5TransportObservation:
+        # Returns observation with different intent_id / strategy_id
+        tampered_lineage = MT5ExecutionLineage(
+            broker_id="TAMPERED_BROKER",
+            account_id="ACC_TAMPERED",
+            terminal_instance_id="TERM_TAMPERED",
+            strategy_id="UNKNOWN_STRAT",
+            cycle_id="UNKNOWN_CYCLE",
+            intent_id="UNKNOWN_INTENT",
+        )
+        res = MT5TradeResult(retcode=10009, deal=123, order=456, volume=Decimal("1.0"), price=Decimal("1.08500"))
+        return MT5TransportObservation(result=res, lineage=tampered_lineage, observed_at=datetime.now(timezone.utc))
+
+    monkeypatch.setattr(mock_transport, "order_send", hijacked_order_send)
+
+    with pytest.raises(MT5ValidationError, match="LINEAGE_INTEGRITY_MISMATCH"):
+        adapter.submit_order(sample_intent, symbol_spec)
+
+
+def test_native_transport_order_send_none_raises_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.exceptions import MT5TransportError
+    from acash.execution.mt5.transport import NativeMT5Transport, MT5TransportCommand
+    from acash.execution.mt5.schemas import MT5TradeRequest, MT5ExecutionLineage
+    from acash.execution.mt5.enums import MT5TradeAction, MT5FillingMode
+
+    class MockNativeFailModule:
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            return None
+
+        @staticmethod
+        def last_error() -> Tuple[int, str]:
+            return (10014, "Invalid volume")
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeFailModule)
+
+    transport = NativeMT5Transport()
+    req = MT5TradeRequest(
+        action=MT5TradeAction.TRADE_ACTION_DEAL,
+        symbol="EURUSD",
+        volume=Decimal("1.00"),
+        type=MT5OrderType.BUY,
+        type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+    )
+    lineage = MT5ExecutionLineage(
+        broker_id="MOCK_BROKER",
+        account_id="ACC_999",
+        terminal_instance_id="TERM_1",
+        strategy_id="STRAT_1",
+        cycle_id="CYC_1",
+        intent_id="INT_1",
+    )
+    cmd = MT5TransportCommand(request=req, lineage=lineage)
+
+    with pytest.raises(MT5TransportError, match="NATIVE_ORDER_SEND_FAILED"):
+        transport.order_send(cmd)
+
+
+def test_native_transport_symbol_info_order_mode_bitmask(monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    mock_symbol = DummyNamedTuple(
+        name="GBPUSD.pro",
+        trade_contract_size=100000.0,
+        volume_min=0.01,
+        volume_max=100.0,
+        volume_step=0.01,
+        digits=5,
+        point=0.00001,
+        trade_tick_size=0.00001,
+        trade_execution_mode=2,
+        filling_mode=3,
+        order_mode=1 | 2 | 4 | 8 | 64,  # Market, Limit, Stop, StopLimit, CloseBy
+        trade_stops_level=20,
+        currency_margin="GBP",
+        currency_profit="USD",
+    )
+
+    class MockNativeSymbolModule:
+        @staticmethod
+        def symbol_info(symbol: str) -> object:
+            return mock_symbol
+
+    monkeypatch.setattr("importlib.import_module", lambda name: MockNativeSymbolModule)
+
+    transport = NativeMT5Transport()
+    spec = transport.symbol_info("GBPUSD")
+    assert spec is not None
+    assert "SYMBOL_ORDER_MARKET" in spec.allowed_order_modes
+    assert "SYMBOL_ORDER_LIMIT" in spec.allowed_order_modes
+    assert "SYMBOL_ORDER_STOP" in spec.allowed_order_modes
+    assert "SYMBOL_ORDER_STOP_LIMIT" in spec.allowed_order_modes
+    assert "SYMBOL_ORDER_CLOSEBY" in spec.allowed_order_modes
+
+
+def test_four_dimensional_consistency_order_deal_position(
+    adapter: MT5BrokerAdapter,
+    mock_transport: MockMT5Transport,
+    symbol_spec: BrokerSymbolSpec,
+    sample_intent: OrderIntent,
+) -> None:
+    adapter.confirm_reconciliation(make_valid_confirmation(adapter))
+
+    # Execute a market order
+    obs = adapter.submit_order(sample_intent, symbol_spec)
+    assert obs.event_kind == BrokerEventKind.ACK  # Invariant: 10009 deal unconfirmed -> ACK observation
+    assert obs.raw_deal > 0
+
+    # Check 4-D consistency: deal and position both created
+    deals = adapter.fetch_history_deals()
+    positions = adapter.fetch_open_positions()
+
+    assert len(deals) == 1
+    assert deals[0].deal_ticket == obs.raw_deal
+    assert deals[0].symbol == "EURUSD.pro"
+    assert deals[0].volume == Decimal("1.00")
+
+    assert len(positions) == 1
+    assert positions[0].symbol == "EURUSD.pro"
+    assert positions[0].volume == Decimal("1.00")
+    assert positions[0].position_ticket == obs.raw_order
+
 

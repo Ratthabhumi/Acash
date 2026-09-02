@@ -25,3 +25,8 @@ class MT5FillingModeError(MT5DomainError):
 
 class MT5SymbolSpecError(MT5DomainError):
     """Raised on malformed, non-positive, or inconsistent symbol specifications."""
+
+
+class MT5TransportError(MT5DomainError):
+    """Raised on low-level transport, IPC, or network communication failures."""
+

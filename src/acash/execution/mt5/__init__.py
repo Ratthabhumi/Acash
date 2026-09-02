@@ -20,6 +20,7 @@ from acash.execution.mt5.exceptions import (
     MT5NormalizationError,
     MT5RetcodeError,
     MT5SymbolSpecError,
+    MT5TransportError,
     MT5ValidationError,
 )
 from acash.execution.mt5.mapping import (
@@ -81,6 +82,7 @@ __all__ = [
     "MT5RetcodeError",
     "MT5FillingModeError",
     "MT5SymbolSpecError",
+    "MT5TransportError",
     # Schemas
     "BrokerSymbolSpec",
     "MT5TradeRequest",
