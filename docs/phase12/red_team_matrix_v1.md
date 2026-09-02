@@ -4,8 +4,8 @@
 > **Document:** `docs/phase12/red_team_matrix_v1.md`  
 > **Status:** FINAL DRAFT — PENDING FINAL AUDIT APPROVAL  
 > **Contract Basis Revision:** `01d7e69`  
-> **Current Evidence Revision:** `a2e1e66`  
-> **Repository State:** `HEAD == origin/main == a2e1e66` (1,020 collected: 1,020 passed, 0 skipped, 0 failed, MyPy clean)  
+> **Current Evidence Revision:** `c3a3ff5`  
+> **Repository State:** `HEAD == origin/main == c3a3ff5` (1,020 collected: 1,020 passed, 0 skipped, 0 failed, MyPy clean)  
 > **Target System:** Phase 12 MT5 Broker Adapter, Contract Normalizer, 6-D Reconciliation & TradingView Ingress  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Single Authority Invariant)
 
@@ -307,7 +307,7 @@ def test_rt28_tradingview_5s_retry_handled_idempotently():
 ## 4. Verification Ledger & Audit Signoff
 
 - **Contract Basis Revision:** `01d7e69`
-- **Current Evidence Revision:** `a2e1e66`
-- **Repository State:** `HEAD == origin/main == a2e1e66`
+- **Current Evidence Revision:** `c3a3ff5`
+- **Repository State:** `HEAD == origin/main == c3a3ff5`
 - **Total Adversarial Vectors:** 31 Vectors across 6 Domains.
 - **Rule:** Every one of the 31 vectors must have an automated test in `tests/unit/execution/` and `tests/adversarial/` before Phase 12 Gate Freeze.
