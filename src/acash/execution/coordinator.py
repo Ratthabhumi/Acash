@@ -121,6 +121,18 @@ class CoordinatorOutcome:
     restriction_request: Optional[OperationalRestrictionRequest] = None
 
 
+@dataclass(frozen=True)
+class CoordinatorExecutionSnapshot:
+    """Immutable public snapshot of an individual execution's shadow lifecycle state."""
+
+    execution_id: str
+    state: OrderLifecycleState
+    requested_qty: Decimal
+    filled_qty: Decimal
+    disputed: bool
+    incident_count: int
+
+
 class ExecutionCoordinator:
     """Shadow-state owner for a single order execution.
 
@@ -162,6 +174,17 @@ class ExecutionCoordinator:
     @property
     def incidents(self) -> Tuple[CoordinatorIncident, ...]:
         return tuple(self._incidents)
+
+    def snapshot_execution_state(self) -> "CoordinatorExecutionSnapshot":
+        """Public read-only lifecycle snapshot for a single execution."""
+        return CoordinatorExecutionSnapshot(
+            execution_id=self.execution_id,
+            state=self.shadow_state,
+            requested_qty=self.requested_qty,
+            filled_qty=self.filled_qty,
+            disputed=self._disputed,
+            incident_count=len(self._incidents),
+        )
 
     # -- core application ---------------------------------------------------
 
@@ -232,6 +255,26 @@ class ExecutionCoordinator:
         )
 
     # -- reconciliation -----------------------------------------------------
+
+    def apply_reconciliation(
+        self,
+        *,
+        broker_event_id: str,
+        broker_sequence: str,
+        evidence_token: str,
+        order_id: Optional[str] = None,
+        observed_at: Optional[datetime] = None,
+        evidence_refs: Tuple[str, ...] = (),
+    ) -> CoordinatorOutcome:
+        """Canonical Phase 12 lifecycle reconciliation seam, forwarding to reconcile()."""
+        return self.reconcile(
+            broker_event_id=broker_event_id,
+            broker_sequence=broker_sequence,
+            evidence_token=evidence_token,
+            order_id=order_id,
+            observed_at=observed_at,
+            evidence_refs=evidence_refs,
+        )
 
     def reconcile(
         self,

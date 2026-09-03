@@ -40,3 +40,12 @@ class MT5TransportError(MT5DomainError):
         self.is_timeout = is_timeout
 
 
+class MT5ReconciliationError(MT5DomainError):
+    """Raised when critical 6-D reconciliation discrepancies prevent dispatch."""
+
+
+class ReconciliationIntegrityError(MT5DomainError):
+    """Raised when reconciliation digests or cryptographic lineage proof are tampered or mismatched."""
+
+
+

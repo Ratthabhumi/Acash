@@ -185,3 +185,12 @@ class MT5ApiErrorCode(int, Enum):
     RES_E_INTERNAL_FAIL_CONNECT = -10003
     RES_E_INTERNAL_FAIL_TIMEOUT = -10005
 
+
+class MT5AccountMarginMode(int, Enum):
+    """MQL5 account margin calculation modes (ENUM_ACCOUNT_MARGIN_MODE)."""
+
+    ACCOUNT_MARGIN_MODE_RETAIL_NETTING = 0
+    ACCOUNT_MARGIN_MODE_EXCHANGE = 1
+    ACCOUNT_MARGIN_MODE_RETAIL_HEDGING = 2
+
+
