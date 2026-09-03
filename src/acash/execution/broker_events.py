@@ -143,11 +143,12 @@ class ReconciliationEvidence(BaseModel):
         bridge and does NOT weaken the structured source of truth.
         """
         token = self.observed_status.value
-        if token in ("FILLED", "ORDER_CANCELLED", "REJECTED", "EXPIRED"):
+        if token in ("FILLED", "ORDER_CANCELLED", "REJECT", "REJECTED", "EXPIRED"):
             # Map broker kind back to a reconciliation-verifiable terminal token.
             mapping = {
                 "FILLED": "FILLED",
                 "ORDER_CANCELLED": "CANCELLED",
+                "REJECT": "REJECTED",
                 "REJECTED": "REJECTED",
                 "EXPIRED": "EXPIRED",
             }

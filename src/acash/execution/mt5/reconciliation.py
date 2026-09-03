@@ -20,12 +20,17 @@ from decimal import Decimal
 from enum import Enum
 import hashlib
 import json
+import math
 import time
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from acash.execution.broker_events import BrokerEventKind, ReconciliationEvidence
+from acash.execution.broker_events import (
+    BrokerEventKind,
+    ReconciliationEvidence,
+    normalize_broker_event,
+)
 from acash.execution.coordinator import CoordinatorOutcome, ExecutionCoordinator
 from acash.execution.operational_restriction import (
     OperationalRestrictionRequest,
@@ -36,6 +41,7 @@ from acash.execution.schema import OrderLifecycleState
 from acash.execution.mt5.adapter import MT5BrokerAdapter
 from acash.execution.mt5.enums import (
     MT5AccountMarginMode,
+    MT5DealEntry,
     MT5DealType,
     MT5OrderState,
     MT5PositionType,
@@ -254,6 +260,7 @@ class HistoricalDealCoverage(BaseModel):
     from_timestamp: datetime
     to_timestamp: datetime
     watermark_ticket: Optional[int] = None
+    watermark_time_msc: Optional[int] = None
     last_deal_ticket: Optional[int] = None
     total_deals_retrieved: int
     is_complete: bool
@@ -264,12 +271,13 @@ class CaptureCompletenessStatus(str, Enum):
     """Status of observation capture query cycle."""
 
     COMPLETE = "COMPLETE"
+    BOUNDARY_ACTIVITY_DETECTED = "BOUNDARY_ACTIVITY_DETECTED"
     CAPTURE_TIMEOUT = "CAPTURE_TIMEOUT"
     PARTIAL_QUERY_FAILED = "PARTIAL_QUERY_FAILED"
 
 
 class ReconciliationCaptureContext(BaseModel):
-    """Observation capture metadata defining temporal bounds and latencies."""
+    """Observation capture metadata defining temporal bounds, latencies, and multi-pass provenance."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -284,11 +292,15 @@ class ReconciliationCaptureContext(BaseModel):
     capture_duration_ms: float
     max_capture_window_ms: float
     completeness_status: CaptureCompletenessStatus
+    boundary_activity_detected: bool = False
+    recapture_attempt: int = 0
+    prior_capture_context: Optional["ReconciliationCaptureContext"] = None
 
     @property
     def is_coherent(self) -> bool:
         return (
             self.completeness_status == CaptureCompletenessStatus.COMPLETE
+            and not self.boundary_activity_detected
             and self.capture_duration_ms <= self.max_capture_window_ms
         )
 
@@ -303,12 +315,12 @@ class ShadowPosition(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    position_ticket: int
-    position_identifier: int
-    symbol: str
+    position_ticket: int = Field(gt=0)
+    position_identifier: int = Field(gt=0)
+    symbol: str = Field(min_length=1)
     side: str
-    volume: Decimal
-    open_price: Decimal
+    volume: Decimal = Field(gt=Decimal("0.0"))
+    open_price: Decimal = Field(gt=Decimal("0.0"))
     magic: int = 0
     comment: str = ""
 
@@ -319,10 +331,10 @@ class ShadowRestingOrder(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     intent_id: str
-    order_ticket: int
-    symbol: str
+    order_ticket: int = Field(gt=0)
+    symbol: str = Field(min_length=1)
     order_type: str
-    volume: Decimal
+    volume: Decimal = Field(gt=Decimal("0.0"))
     price: Optional[Decimal] = None
     magic: int = 0
     comment: str = ""
@@ -333,14 +345,14 @@ class ShadowDealRecord(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    deal_ticket: int
-    order_ticket: int
-    position_id: int
+    deal_ticket: int = Field(gt=0)
+    order_ticket: int = Field(gt=0)
+    position_id: int = Field(ge=0)
     intent_id: str
-    symbol: str
+    symbol: str = Field(min_length=1)
     side: str
-    volume: Decimal
-    price: Decimal
+    volume: Decimal = Field(gt=Decimal("0.0"))
+    price: Decimal = Field(gt=Decimal("0.0"))
     commission: Decimal = Decimal("0.0")
     executed_at: datetime
 
@@ -443,21 +455,35 @@ def match_position_identity(
     broker_pos: MT5PositionReality,
     margin_mode: MT5AccountMarginMode,
 ) -> bool:
-    """Margin-mode-aware position matching predicate using canonical MT5AccountMarginMode."""
+    """Strict margin-mode-aware position matching predicate.
+
+    Zero loose OR conditions. All matches require symbol equality and valid position_identifier.
+    """
+    if not broker_pos.position_identifier or broker_pos.position_identifier <= 0:
+        raise MT5ValidationError(
+            f"INVALID_BROKER_POSITION_IDENTIFIER: ticket={broker_pos.position_ticket}, "
+            f"identifier={broker_pos.position_identifier}"
+        )
+    if not shadow_pos.position_identifier or shadow_pos.position_identifier <= 0:
+        raise MT5ValidationError(
+            f"INVALID_SHADOW_POSITION_IDENTIFIER: ticket={shadow_pos.position_ticket}, "
+            f"identifier={shadow_pos.position_identifier}"
+        )
+
     if margin_mode in (
         MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
         MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_EXCHANGE,
     ):
-        # Netting: primary authority is position_identifier; symbol must match
+        # Netting: primary authority is immutable position_identifier AND symbol must match
         return (
-            shadow_pos.position_identifier == broker_pos.position_ticket
-            or shadow_pos.position_identifier == broker_pos.magic  # fallback identifier
-            or shadow_pos.symbol == broker_pos.symbol
+            shadow_pos.position_identifier == broker_pos.position_identifier
+            and shadow_pos.symbol == broker_pos.symbol
         )
     elif margin_mode == MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING:
-        # Hedging: primary authority is position_ticket and symbol
+        # Hedging: primary authority is (position_ticket, position_identifier) AND symbol must match
         return (
             shadow_pos.position_ticket == broker_pos.position_ticket
+            and shadow_pos.position_identifier == broker_pos.position_identifier
             and shadow_pos.symbol == broker_pos.symbol
         )
     else:
@@ -468,15 +494,27 @@ def verify_order_deal_execution(
     order_ticket: int,
     historical_order: MT5OrderReality,
     matching_deals: Sequence[MT5DealReality],
-) -> Tuple[OrderLifecycleState, Decimal, Decimal]:
+) -> Tuple[OrderLifecycleState, Decimal, Decimal, str, Tuple[str, ...]]:
     """Authoritative lifecycle proof of execution volume and terminal state.
 
-    Requires MT5OrderState canonical enum + complete deal coverage.
-    Returns (resolved_state, total_executed_volume, vwap).
+    Enforces canonical multi-deal ordering (deal_time_msc, deal_ticket).
+    Excludes canceled deal types (BUY_CANCELED, SELL_CANCELED) from fresh execution volume.
+    Returns (resolved_state, total_executed_volume, vwap, broker_event_id, evidence_refs).
     """
-    total_volume = sum((d.volume for d in matching_deals), Decimal("0.0"))
+    # Deterministic canonical ordering
+    sorted_deals = sorted(
+        matching_deals,
+        key=lambda d: (int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket),
+    )
+
+    # Exclude canceled deal types from fresh execution volume
+    execution_deals = [
+        d for d in sorted_deals if categorize_deal(d.deal_type) == MT5DealCategory.TRADE_EXECUTION_DEAL
+    ]
+
+    total_volume = sum((d.volume for d in execution_deals), Decimal("0.0"))
     if total_volume > Decimal("0.0"):
-        total_cost = sum((d.volume * d.price for d in matching_deals), Decimal("0.0"))
+        total_cost = sum((d.volume * d.price for d in execution_deals), Decimal("0.0"))
         vwap = total_cost / total_volume
     else:
         vwap = Decimal("0.0")
@@ -485,25 +523,34 @@ def verify_order_deal_execution(
     if not isinstance(order_state, MT5OrderState):
         raise MT5DomainError(f"INVALID_ORDER_STATE_TYPE: expected MT5OrderState, got {type(order_state)}")
 
-    # 1. Authoritative FILLED proof: state == ORDER_STATE_FILLED and deal volume == requested volume
+    # 1. Authoritative FILLED proof
     if order_state == MT5OrderState.ORDER_STATE_FILLED:
         if total_volume != historical_order.volume_initial:
             raise MT5ReconciliationError(
                 f"FILLED_VOLUME_MISMATCH: deal_volume={total_volume} != initial={historical_order.volume_initial}"
             )
-        return OrderLifecycleState.FILLED, total_volume, vwap
+        if not execution_deals:
+            raise MT5ReconciliationError("FILLED_ORDER_WITHOUT_EXECUTION_DEALS")
+        final_deal = execution_deals[-1]
+        broker_event_id = str(final_deal.deal_ticket)
+        evidence_refs = tuple(str(d.deal_ticket) for d in execution_deals)
+        return OrderLifecycleState.FILLED, total_volume, vwap, broker_event_id, evidence_refs
 
-    # 2. Authoritative CANCELLED proof: handles zero-fill and partial-fill then cancelled
+    # 2. Authoritative CANCELLED proof
     if order_state == MT5OrderState.ORDER_STATE_CANCELED:
-        if total_volume > Decimal("0.0"):
-            return OrderLifecycleState.CANCELLED, total_volume, vwap
-        return OrderLifecycleState.CANCELLED, Decimal("0.0"), Decimal("0.0")
+        broker_event_id = str(historical_order.order_ticket)
+        evidence_refs = tuple(str(d.deal_ticket) for d in execution_deals)
+        return OrderLifecycleState.CANCELLED, total_volume, vwap, broker_event_id, evidence_refs
 
-    # 3. Authoritative REJECTED or EXPIRED
+    # 3. Authoritative REJECTED proof
     if order_state == MT5OrderState.ORDER_STATE_REJECTED:
-        return OrderLifecycleState.REJECTED, Decimal("0.0"), Decimal("0.0")
+        broker_event_id = str(historical_order.order_ticket)
+        return OrderLifecycleState.REJECTED, Decimal("0.0"), Decimal("0.0"), broker_event_id, ()
+
+    # 4. Authoritative EXPIRED proof
     if order_state == MT5OrderState.ORDER_STATE_EXPIRED:
-        return OrderLifecycleState.EXPIRED, Decimal("0.0"), Decimal("0.0")
+        broker_event_id = str(historical_order.order_ticket)
+        return OrderLifecycleState.EXPIRED, Decimal("0.0"), Decimal("0.0"), broker_event_id, ()
 
     raise MT5ReconciliationError(f"UNSUPPORTED_TERMINAL_ORDER_STATE: {order_state.value}")
 
@@ -524,6 +571,7 @@ class MT5ReconciliationEngine:
         shadow: ACASHShadowLedgerSnapshot,
         broker: MT5BrokerRealitySnapshot,
         tolerances: Optional[ReconciliationToleranceConfig] = None,
+        coordinator_map: Optional[Mapping[str, ExecutionCoordinator]] = None,
     ) -> MT56DReconciliationReport:
         """Perform authoritative 6-dimensional reconciliation audit."""
         cfg = tolerances or self.tolerances
@@ -578,7 +626,9 @@ class MT5ReconciliationEngine:
                     detail="Mismatched terminal_instance_id across shadow and broker snapshots.",
                 )
             )
-        if shadow.currency != broker.account.currency:
+
+        currency_mismatch = shadow.currency != broker.account.currency
+        if currency_mismatch:
             discrepancies.append(
                 MT5Discrepancy(
                     kind=MT5DiscrepancyKind.CURRENCY_MISMATCH,
@@ -587,9 +637,12 @@ class MT5ReconciliationEngine:
                     identifier="account_currency",
                     expected_value=shadow.currency,
                     observed_value=broker.account.currency,
-                    detail="Account base currency mismatch.",
+                    detail="Account base currency mismatch. Financial dimensions unverifiable.",
                 )
             )
+            dim_verification["balance"] = False
+            dim_verification["equity"] = False
+            dim_verification["margin"] = False
 
         # 0.1 Cryptographic Lineage Verification
         expected_shadow_digest = compute_payload_digest(
@@ -669,8 +722,8 @@ class MT5ReconciliationEngine:
                     severity=MT5DiscrepancySeverity.CRITICAL,
                     dimension="coherence",
                     identifier="capture_duration_ms",
-                    expected_value=f"<={broker.capture_context.max_capture_window_ms}ms",
-                    observed_value=f"{broker.capture_context.capture_duration_ms:.1f}ms",
+                    expected_value=f"<={broker.capture_context.max_capture_window_ms}ms and coherent",
+                    observed_value=f"{broker.capture_context.capture_duration_ms:.1f}ms, status={broker.capture_context.completeness_status.value}",
                     detail="Observation capture duration exceeded maximum window or failed coherence.",
                 )
             )
@@ -689,59 +742,61 @@ class MT5ReconciliationEngine:
                 raise MT5ValidationError(f"DUPLICATE_POSITION_TICKET: {p.position_ticket}")
             pos_tickets_seen.add(p.position_ticket)
 
-        # --- DIMENSION 1: BALANCE ---
-        delta_balance = abs(broker.account.balance - shadow.balance)
-        if delta_balance > cfg.balance_tolerance:
-            discrepancies.append(
-                MT5Discrepancy(
-                    kind=MT5DiscrepancyKind.BALANCE_MISMATCH,
-                    severity=MT5DiscrepancySeverity.CRITICAL,
-                    dimension="balance",
-                    identifier="balance",
-                    expected_value=f"{shadow.balance} {shadow.currency}",
-                    observed_value=f"{broker.account.balance} {broker.account.currency}",
-                    delta=delta_balance,
-                    detail=f"Balance discrepancy {delta_balance} exceeds tolerance {cfg.balance_tolerance}.",
+        # --- FINANCIAL DIMENSIONS (Only verified if currency matches) ---
+        if not currency_mismatch:
+            # --- DIMENSION 1: BALANCE ---
+            delta_balance = abs(broker.account.balance - shadow.balance)
+            if delta_balance > cfg.balance_tolerance:
+                discrepancies.append(
+                    MT5Discrepancy(
+                        kind=MT5DiscrepancyKind.BALANCE_MISMATCH,
+                        severity=MT5DiscrepancySeverity.CRITICAL,
+                        dimension="balance",
+                        identifier="balance",
+                        expected_value=f"{shadow.balance} {shadow.currency}",
+                        observed_value=f"{broker.account.balance} {broker.account.currency}",
+                        delta=delta_balance,
+                        detail=f"Balance discrepancy {delta_balance} exceeds tolerance {cfg.balance_tolerance}.",
+                    )
                 )
-            )
-        else:
-            dim_verification["balance"] = True
+            else:
+                dim_verification["balance"] = True
 
-        # --- DIMENSION 2: EQUITY ---
-        delta_equity = abs(broker.account.equity - shadow.equity)
-        if delta_equity > cfg.equity_tolerance:
-            discrepancies.append(
-                MT5Discrepancy(
-                    kind=MT5DiscrepancyKind.EQUITY_MISMATCH,
-                    severity=MT5DiscrepancySeverity.CRITICAL,
-                    dimension="equity",
-                    identifier="equity",
-                    expected_value=f"{shadow.equity} {shadow.currency}",
-                    observed_value=f"{broker.account.equity} {broker.account.currency}",
-                    delta=delta_equity,
-                    detail=f"Equity discrepancy {delta_equity} exceeds tolerance {cfg.equity_tolerance}.",
+            # --- DIMENSION 2: EQUITY ---
+            delta_equity = abs(broker.account.equity - shadow.equity)
+            if delta_equity > cfg.equity_tolerance:
+                discrepancies.append(
+                    MT5Discrepancy(
+                        kind=MT5DiscrepancyKind.EQUITY_MISMATCH,
+                        severity=MT5DiscrepancySeverity.CRITICAL,
+                        dimension="equity",
+                        identifier="equity",
+                        expected_value=f"{shadow.equity} {shadow.currency}",
+                        observed_value=f"{broker.account.equity} {broker.account.currency}",
+                        delta=delta_equity,
+                        detail=f"Equity discrepancy {delta_equity} exceeds tolerance {cfg.equity_tolerance}.",
+                    )
                 )
-            )
-        else:
-            dim_verification["equity"] = True
+            else:
+                dim_verification["equity"] = True
 
-        # --- DIMENSION 3: MARGIN ---
-        delta_margin = abs(broker.account.margin - shadow.margin)
-        if delta_margin > cfg.margin_tolerance:
-            discrepancies.append(
-                MT5Discrepancy(
-                    kind=MT5DiscrepancyKind.MARGIN_MISMATCH,
-                    severity=MT5DiscrepancySeverity.CRITICAL,
-                    dimension="margin",
-                    identifier="margin",
-                    expected_value=f"{shadow.margin} {shadow.currency}",
-                    observed_value=f"{broker.account.margin} {broker.account.currency}",
-                    delta=delta_margin,
-                    detail=f"Margin discrepancy {delta_margin} exceeds tolerance {cfg.margin_tolerance}.",
+            # --- DIMENSION 3: MARGIN ---
+            delta_margin = abs(broker.account.margin - shadow.margin)
+            if delta_margin > cfg.margin_tolerance:
+                discrepancies.append(
+                    MT5Discrepancy(
+                        kind=MT5DiscrepancyKind.MARGIN_MISMATCH,
+                        severity=MT5DiscrepancySeverity.CRITICAL,
+                        dimension="margin",
+                        identifier="margin",
+                        expected_value=f"{shadow.margin} {shadow.currency}",
+                        observed_value=f"{broker.account.margin} {broker.account.currency}",
+                        delta=delta_margin,
+                        detail=f"Margin discrepancy {delta_margin} exceeds tolerance {cfg.margin_tolerance}.",
+                    )
                 )
-            )
-        else:
-            dim_verification["margin"] = True
+            else:
+                dim_verification["margin"] = True
 
         # --- DIMENSION 4: POSITIONS ---
         margin_mode = MT5AccountMarginMode(broker.account.trade_mode if broker.account.trade_mode in (0, 1, 2) else 0)
@@ -822,6 +877,7 @@ class MT5ReconciliationEngine:
         # --- DIMENSION 5: RESTING ORDERS ---
         broker_orders_by_ticket = {o.order_ticket: o for o in broker.orders}
         shadow_orders_by_ticket = {o.order_ticket: o for o in shadow.resting_orders}
+        broker_history_orders_by_ticket = {o.order_ticket: o for o in broker.history_orders}
 
         # Check for Orphan Orders (broker has resting order not in shadow)
         for b_ord in broker.orders:
@@ -852,51 +908,114 @@ class MT5ReconciliationEngine:
                         )
                     )
 
-        # Check for Missing Orders (shadow expects resting order not in broker)
+        # Check for Missing Orders and resolve transitions
         for s_ord in shadow.resting_orders:
             if s_ord.order_ticket not in broker_orders_by_ticket:
-                discrepancies.append(
-                    MT5Discrepancy(
-                        kind=MT5DiscrepancyKind.MISSING_RESTING_ORDER,
-                        severity=MT5DiscrepancySeverity.CRITICAL,
-                        dimension="orders",
-                        identifier=str(s_ord.order_ticket),
-                        expected_value=f"{s_ord.symbol} {s_ord.volume} lots",
-                        observed_value="None",
-                        detail=f"Tracked resting order ticket {s_ord.order_ticket} missing from broker order book.",
+                # Order transitioned: check broker history orders
+                if s_ord.order_ticket in broker_history_orders_by_ticket:
+                    b_h_ord = broker_history_orders_by_ticket[s_ord.order_ticket]
+                    matching_deals = [d for d in broker.deals if d.order_ticket == s_ord.order_ticket]
+                    resolved_state, total_vol, vwap, broker_event_id, evidence_refs = verify_order_deal_execution(
+                        order_ticket=s_ord.order_ticket,
+                        historical_order=b_h_ord,
+                        matching_deals=matching_deals,
                     )
-                )
+                    if resolved_state == OrderLifecycleState.FILLED:
+                        b_kind = BrokerEventKind.FILLED
+                    elif resolved_state == OrderLifecycleState.CANCELLED:
+                        b_kind = BrokerEventKind.ORDER_CANCELLED
+                    elif resolved_state == OrderLifecycleState.REJECTED:
+                        b_kind = BrokerEventKind.REJECT
+                    elif resolved_state == OrderLifecycleState.EXPIRED:
+                        b_kind = BrokerEventKind.EXPIRED
+                    else:
+                        raise MT5DomainError(f"UNSUPPORTED_ORDER_STATE: {resolved_state}")
+
+                    _, evidence = normalize_broker_event(
+                        broker_order_id=str(s_ord.order_ticket),
+                        event_kind=b_kind,
+                        observed_at=broker.observed_at,
+                        source=f"mt5:{broker.broker_id}",
+                        broker_sequence=broker_event_id,
+                        cancel_was_requested=True,
+                    )
+                    if evidence is not None:
+                        resolved_orders.append(evidence)
+                else:
+                    discrepancies.append(
+                        MT5Discrepancy(
+                            kind=MT5DiscrepancyKind.MISSING_RESTING_ORDER,
+                            severity=MT5DiscrepancySeverity.CRITICAL,
+                            dimension="orders",
+                            identifier=str(s_ord.order_ticket),
+                            expected_value=f"{s_ord.symbol} {s_ord.volume} lots",
+                            observed_value="None",
+                            detail=f"Tracked resting order ticket {s_ord.order_ticket} missing from broker order book.",
+                        )
+                    )
 
         if not any(d.dimension == "orders" for d in discrepancies):
             dim_verification["orders"] = True
 
-        # --- DIMENSION 6: HISTORICAL DEALS & LINEAGE AUDIT ---
+        # --- DIMENSION 6: HISTORICAL DEALS & RELATIONAL LINEAGE ---
         shadow_deals_by_ticket = {d.deal_ticket: d for d in shadow.deals}
+        broker_positions_by_identifier = {p.position_identifier: p for p in broker.positions}
 
         for b_deal in broker.deals:
             deal_category = categorize_deal(b_deal.deal_type)
             if deal_category == MT5DealCategory.TRADE_EXECUTION_DEAL:
-                # Trade deals must correlate to an ACASH intent or known shadow deal
-                if b_deal.deal_ticket not in shadow_deals_by_ticket:
-                    # Check if it has valid lineage comment or matches a tracked order
-                    has_tracked_order = any(
-                        s_ord.order_ticket == b_deal.order_ticket for s_ord in shadow.resting_orders
+                # 1. Close-by fail closed check
+                if b_deal.entry == MT5DealEntry.DEAL_ENTRY_OUT_BY:
+                    raise MT5DomainError(
+                        "CLOSE_BY_UNSUPPORTED: DEAL_ENTRY_OUT_BY is not authorized under current execution contract"
                     )
-                    has_tracked_deal = any(
-                        s_deal.order_ticket == b_deal.order_ticket for s_deal in shadow.deals
+
+                # 2. Lineage Correlation Check (Zero comment bypass)
+                is_known_deal = b_deal.deal_ticket in shadow_deals_by_ticket
+                is_tracked_resting = b_deal.order_ticket in shadow_orders_by_ticket
+                is_tracked_history = b_deal.order_ticket in broker_history_orders_by_ticket
+                is_coord_tracked = False
+                if coordinator_map:
+                    is_coord_tracked = any(
+                        str(b_deal.order_ticket) == c.execution_id for c in coordinator_map.values()
                     )
-                    if not b_deal.comment and not has_tracked_order and not has_tracked_deal:
-                        discrepancies.append(
-                            MT5Discrepancy(
-                                kind=MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL,
-                                severity=MT5DiscrepancySeverity.CRITICAL,
-                                dimension="deals",
-                                identifier=str(b_deal.deal_ticket),
-                                expected_value="Tracked Intent Lineage",
-                                observed_value=f"deal_ticket={b_deal.deal_ticket}, order={b_deal.order_ticket}",
-                                detail=f"Trade execution deal {b_deal.deal_ticket} without valid ACASH intent lineage.",
-                            )
+
+                if not (is_known_deal or is_tracked_resting or is_tracked_history or is_coord_tracked):
+                    discrepancies.append(
+                        MT5Discrepancy(
+                            kind=MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL,
+                            severity=MT5DiscrepancySeverity.CRITICAL,
+                            dimension="deals",
+                            identifier=str(b_deal.deal_ticket),
+                            expected_value="Tracked Intent Lineage",
+                            observed_value=f"deal_ticket={b_deal.deal_ticket}, order={b_deal.order_ticket}",
+                            detail=f"Trade execution deal {b_deal.deal_ticket} without valid ACASH intent lineage.",
                         )
+                    )
+                else:
+                    # 3. Relational Position Lifecycle Integrity
+                    # DEAL_POSITION_ID represents the position lifecycle identifier
+                    if b_deal.entry == MT5DealEntry.DEAL_ENTRY_IN:
+                        # Opening or increasing a position: resulting broker position identifier must match
+                        # or have been subsequently closed in historical deals
+                        if b_deal.position_ticket not in broker_positions_by_identifier:
+                            has_subsequent_close = any(
+                                other.position_ticket == b_deal.position_ticket
+                                and other.deal_ticket > b_deal.deal_ticket
+                                for other in broker.deals
+                            )
+                            if not has_subsequent_close:
+                                discrepancies.append(
+                                    MT5Discrepancy(
+                                        kind=MT5DiscrepancyKind.PHANTOM_POSITION,
+                                        severity=MT5DiscrepancySeverity.CRITICAL,
+                                        dimension="positions",
+                                        identifier=str(b_deal.position_ticket),
+                                        expected_value="Known Resulting Position",
+                                        observed_value=f"deal_position_id={b_deal.position_ticket}",
+                                        detail=f"DEAL_ENTRY_IN for deal {b_deal.deal_ticket} lacks corresponding resulting position.",
+                                    )
+                                )
 
         if not any(d.dimension == "deals" for d in discrepancies):
             dim_verification["deals"] = True
@@ -927,7 +1046,10 @@ class MT5ReconciliationEngine:
             )
             confirmation = None
 
-        resolved_evidence_digests = tuple(e.to_evidence_string() for e in resolved_orders)
+        # Cryptographic SHA-256 evidence digests
+        resolved_evidence_digests = tuple(
+            e.evidence_digest for e in resolved_orders
+        )
         report_digest_payload = {
             "reconciliation_id": reconciliation_id,
             "schema_version": "1.0.0",
@@ -972,15 +1094,22 @@ class MT5ReconciliationEngine:
         account_id: str,
         terminal_instance_id: str,
         scope: HistoricalDealScopeKind = HistoricalDealScopeKind.FULL_CYCLE,
+        watermark_ticket: int = 0,
+        watermark_time_msc: int = 0,
+        date_from: Optional[datetime] = None,
         max_capture_window_ms: float = 2000.0,
+        recapture_attempt: int = 0,
+        prior_capture_context: Optional[ReconciliationCaptureContext] = None,
     ) -> MT5BrokerRealitySnapshot:
-        """Capture coherent-enough bounded broker observation across 4-D queries."""
+        """Capture coherent-enough bounded broker observation across 4-D queries.
+
+        Enforces frozen capture cutoff and raw-query count oracle completeness.
+        """
         start_time = datetime.now(timezone.utc)
         start_msc = int(start_time.timestamp() * 1000)
         query_latencies: Dict[str, float] = {}
 
-        # 1. Pre-capture watermark
-        pre_watermark_ticket = 0
+        # 1. Account, Positions, Orders queries
         t0 = time.perf_counter()
         acc = transport.account_info()
         query_latencies["account_info"] = (time.perf_counter() - t0) * 1000
@@ -1005,19 +1134,62 @@ class MT5ReconciliationEngine:
         if history_orders is None:
             raise MT5TransportError("history_orders_get() returned None")
 
-        t0 = time.perf_counter()
-        deals = transport.history_deals_get()
-        query_latencies["history_deals_get"] = (time.perf_counter() - t0) * 1000
-        if deals is None:
-            raise MT5TransportError("history_deals_get() returned None")
+        # 2. Frozen observation cutoff timestamp for both count oracle and get query
+        capture_to = datetime.now(timezone.utc)
+        completed_msc = int(capture_to.timestamp() * 1000)
 
+        # 3. Dual-Scope Historical Deal Queries with Count Oracle
+        t0 = time.perf_counter()
+        if scope == HistoricalDealScopeKind.FULL_CYCLE:
+            query_from = date_from or start_time
+            expected_raw_count = transport.history_deals_total(date_from=query_from, date_to=capture_to)
+            raw_deals = transport.history_deals_get(date_from=query_from, date_to=capture_to)
+
+            if (
+                raw_deals is not None
+                and len(raw_deals) == expected_raw_count
+                and all(query_from <= d.deal_time_utc <= capture_to for d in raw_deals)
+            ):
+                is_complete = True
+                deals = raw_deals
+            else:
+                is_complete = False
+                deals = raw_deals if raw_deals is not None else ()
+        elif scope == HistoricalDealScopeKind.WATERMARK_INCREMENTAL:
+            coarse_sec = max(0.0, math.floor(watermark_time_msc / 1000.0) - 1.0)
+            query_from = datetime.fromtimestamp(coarse_sec, tz=timezone.utc)
+            expected_raw_count = transport.history_deals_total(date_from=query_from, date_to=capture_to)
+            raw_deals = transport.history_deals_get(date_from=query_from, date_to=capture_to)
+
+            if raw_deals is None or len(raw_deals) != expected_raw_count:
+                is_complete = False
+                deals = ()
+            else:
+                # Apply exact 2-tuple millisecond + ticket post-filter on proven complete raw set
+                filtered_deals = [
+                    d
+                    for d in raw_deals
+                    if (int(d.deal_time_utc.timestamp() * 1000) > watermark_time_msc)
+                    or (
+                        int(d.deal_time_utc.timestamp() * 1000) == watermark_time_msc
+                        and d.deal_ticket > watermark_ticket
+                    )
+                ]
+                deals = tuple(filtered_deals)
+                is_complete = True
+        else:
+            query_from = date_from or start_time
+            raw_deals = transport.history_deals_get(date_from=query_from, date_to=capture_to)
+            deals = raw_deals if raw_deals is not None else ()
+            is_complete = raw_deals is not None
+
+        query_latencies["history_deals_get"] = (time.perf_counter() - t0) * 1000
         completed_time = datetime.now(timezone.utc)
-        completed_msc = int(completed_time.timestamp() * 1000)
         duration_ms = (completed_time - start_time).total_seconds() * 1000
 
-        post_watermark_ticket = max((d.deal_ticket for d in deals), default=0)
+        post_watermark_ticket = max((d.deal_ticket for d in deals), default=watermark_ticket)
 
-        # Straddle / Boundary Activity Check
+        # 4. Straddle / Boundary Activity Check
         resting_order_tickets = {o.order_ticket for o in orders}
         boundary_activity_detected = False
         for d in deals:
@@ -1025,10 +1197,19 @@ class MT5ReconciliationEngine:
             if (
                 d.order_ticket in resting_order_tickets
                 and start_msc <= d_time_msc <= completed_msc
-                and pre_watermark_ticket < d.deal_ticket <= post_watermark_ticket
+                and watermark_ticket < d.deal_ticket <= post_watermark_ticket
             ):
                 boundary_activity_detected = True
                 break
+
+        if boundary_activity_detected:
+            completeness_status = CaptureCompletenessStatus.BOUNDARY_ACTIVITY_DETECTED
+        elif duration_ms > max_capture_window_ms:
+            completeness_status = CaptureCompletenessStatus.CAPTURE_TIMEOUT
+        elif not is_complete:
+            completeness_status = CaptureCompletenessStatus.PARTIAL_QUERY_FAILED
+        else:
+            completeness_status = CaptureCompletenessStatus.COMPLETE
 
         capture_ctx = ReconciliationCaptureContext(
             reconciliation_id=f"CAP_{int(start_msc)}",
@@ -1036,34 +1217,41 @@ class MT5ReconciliationEngine:
             capture_completed_at=completed_time,
             capture_started_at_msc=start_msc,
             capture_completed_at_msc=completed_msc,
-            pre_watermark_deal_ticket=pre_watermark_ticket,
+            pre_watermark_deal_ticket=watermark_ticket,
             post_watermark_deal_ticket=post_watermark_ticket,
             query_latencies_ms=query_latencies,
             capture_duration_ms=duration_ms,
             max_capture_window_ms=max_capture_window_ms,
-            completeness_status=(
-                CaptureCompletenessStatus.COMPLETE
-                if (duration_ms <= max_capture_window_ms and not boundary_activity_detected)
-                else CaptureCompletenessStatus.CAPTURE_TIMEOUT
-            ),
+            completeness_status=completeness_status,
+            boundary_activity_detected=boundary_activity_detected,
+            recapture_attempt=recapture_attempt,
+            prior_capture_context=prior_capture_context,
+        )
+
+        coverage_digest = compute_payload_digest(
+            {
+                "scope_kind": scope.value,
+                "from_timestamp": query_from,
+                "to_timestamp": capture_to,
+                "watermark_time_msc": watermark_time_msc,
+                "watermark_ticket": watermark_ticket,
+                "last_deal_ticket": post_watermark_ticket,
+                "deal_tickets": sorted(d.deal_ticket for d in deals),
+                "total_deals": len(deals),
+                "is_complete": is_complete,
+            }
         )
 
         coverage = HistoricalDealCoverage(
             scope_kind=scope,
-            from_timestamp=start_time,
-            to_timestamp=completed_time,
-            watermark_ticket=pre_watermark_ticket,
+            from_timestamp=query_from,
+            to_timestamp=capture_to,
+            watermark_ticket=watermark_ticket,
+            watermark_time_msc=watermark_time_msc,
             last_deal_ticket=post_watermark_ticket,
             total_deals_retrieved=len(deals),
-            is_complete=True,
-            coverage_digest=compute_payload_digest(
-                {
-                    "scope_kind": scope.value,
-                    "from_timestamp": start_time,
-                    "to_timestamp": completed_time,
-                    "total_deals": len(deals),
-                }
-            ),
+            is_complete=is_complete,
+            coverage_digest=coverage_digest,
         )
 
         broker_payload = {
@@ -1104,39 +1292,58 @@ class MT5ReconciliationEngine:
         shadow_ledger: ACASHShadowLedger,
         coordinator_map: Mapping[str, ExecutionCoordinator],
         tolerances: Optional[ReconciliationToleranceConfig] = None,
+        watermark_ticket: int = 0,
+        watermark_time_msc: int = 0,
     ) -> MT56DReconciliationReport:
-        """Execute end-to-end reconciliation cycle.
-
-        Coordinates shadow snapshot, broker snapshot, 6D audit, and adapter unlocking.
-        Uses coordinator_map exclusively via public apply_reconciliation() API.
-        """
+        """Execute end-to-end reconciliation cycle with real 2-pass recapture."""
         cfg = tolerances or self.tolerances
         shadow = shadow_ledger.snapshot_reconciliation_state()
+
+        # Pass 1: Initial observation
         broker = self.capture_bounded_broker_observation(
             transport=adapter.transport,
             broker_id=adapter.broker_id,
             account_id=adapter.account_id,
             terminal_instance_id=adapter.terminal_instance_id,
+            watermark_ticket=watermark_ticket,
+            watermark_time_msc=watermark_time_msc,
             max_capture_window_ms=cfg.max_capture_window_ms,
+            recapture_attempt=0,
         )
 
-        report = self.reconcile_6d(shadow, broker, cfg)
+        # Pass 2: Synchronized re-capture if boundary activity detected
+        if broker.capture_context.boundary_activity_detected:
+            broker = self.capture_bounded_broker_observation(
+                transport=adapter.transport,
+                broker_id=adapter.broker_id,
+                account_id=adapter.account_id,
+                terminal_instance_id=adapter.terminal_instance_id,
+                watermark_ticket=broker.capture_context.post_watermark_deal_ticket,
+                watermark_time_msc=broker.capture_context.capture_completed_at_msc,
+                max_capture_window_ms=cfg.max_capture_window_ms,
+                recapture_attempt=1,
+                prior_capture_context=broker.capture_context,
+            )
+
+        report = self.reconcile_6d(shadow, broker, cfg, coordinator_map=coordinator_map)
 
         if report.is_clean and report.confirmation is not None:
-            # Deliver evidence to any coordinators with UNKNOWN orders
-            for execution_id, coordinator in coordinator_map.items():
-                if coordinator.state == OrderLifecycleState.UNKNOWN:
-                    for d in broker.deals:
-                        if coordinator.execution_id in d.comment or str(d.order_ticket) == coordinator.execution_id:
-                            coordinator.apply_reconciliation(
-                                broker_event_id=str(d.deal_ticket),
-                                broker_sequence=str(d.deal_ticket),
-                                evidence_token="FILLED",
-                                order_id=str(d.order_ticket),
-                                observed_at=d.deal_time_utc,
-                                evidence_refs=(report.report_digest,),
-                            )
-                            break
+            # Deliver evidence to coordinators via public seam
+            for evidence in report.resolved_orders:
+                for execution_id, coordinator in coordinator_map.items():
+                    if (
+                        coordinator.execution_id == evidence.broker_order_id
+                        or getattr(coordinator, "order_id", None) == evidence.broker_order_id
+                        or execution_id == evidence.broker_order_id
+                    ):
+                        coordinator.apply_reconciliation(
+                            broker_event_id=evidence.broker_sequence,
+                            broker_sequence=evidence.broker_sequence,
+                            evidence_token=evidence.to_evidence_string(),
+                            order_id=evidence.broker_order_id,
+                            observed_at=evidence.observed_at,
+                            evidence_refs=(report.report_digest,),
+                        )
             # Unlock adapter
             adapter.confirm_reconciliation(report.confirmation)
         else:

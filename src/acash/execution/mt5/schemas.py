@@ -12,6 +12,7 @@ from acash.core.domain.exceptions import DomainValidationError
 from acash.core.domain.types import ensure_finite_decimal
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.execution.mt5.enums import (
+    MT5DealEntry,
     MT5DealType,
     MT5ExecutionPolicy,
     MT5FillingMode,
@@ -221,6 +222,7 @@ class MT5DealReality(BaseModel):
     deal_time_utc: datetime = Field(description="UTC execution timestamp.")
     comment: str = Field(default="", description="Deal comment.")
     magic: int = Field(default=0, ge=0, description="Expert Advisor / Strategy ID.")
+    entry: Optional[MT5DealEntry] = Field(default=None, description="MQL5 deal entry mode (DEAL_ENTRY).")
 
     @field_validator("volume", "price", "commission", "fee", "swap", "profit")
     @classmethod
@@ -236,7 +238,7 @@ class MT5OrderReality(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     order_ticket: int = Field(gt=0, description="Unique MT5 order ticket.")
-    position_ticket: Optional[int] = Field(default=None, gt=0, description="Linked position ticket.")
+    position_ticket: Optional[int] = Field(default=None, ge=0, description="Linked MT5 position ticket.")
     symbol: str = Field(min_length=1, description="Symbol name.")
     order_type: MT5OrderType = Field(description="Order type.")
     state: MT5OrderState = Field(description="Order state.")
@@ -272,6 +274,7 @@ class MT5PositionReality(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     position_ticket: int = Field(gt=0, description="Unique MT5 position ticket.")
+    position_identifier: int = Field(gt=0, description="Immutable originating position identifier (POSITION_IDENTIFIER).")
     symbol: str = Field(min_length=1, description="Position symbol.")
     position_type: MT5PositionType = Field(description="Position direction (BUY or SELL).")
     volume: Decimal = Field(gt=Decimal("0.0"), description="Position volume in lots.")

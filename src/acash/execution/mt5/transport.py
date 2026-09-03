@@ -161,6 +161,12 @@ class MT5TransportProtocol(Protocol):
         date_to: Optional[datetime] = None,
     ) -> Tuple[MT5DealReality, ...]: ...
 
+    def history_deals_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int: ...
+
 
 class MockMT5Transport:
     """Deterministic, high-fidelity in-memory simulator for MT5 IPC transport."""
@@ -314,6 +320,7 @@ class MockMT5Transport:
 
             pos = MT5PositionReality(
                 position_ticket=ticket,
+                position_identifier=ticket,
                 symbol=req.symbol,
                 position_type=MT5PositionType.POSITION_TYPE_BUY if req.type == MT5OrderType.BUY else MT5PositionType.POSITION_TYPE_SELL,
                 volume=req.volume,
@@ -477,6 +484,14 @@ class MockMT5Transport:
         if date_to is not None:
             deals = [d for d in deals if d.deal_time_utc <= date_to]
         return tuple(deals)
+
+    def history_deals_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int:
+        deals = self.history_deals_get(date_from=date_from, date_to=date_to)
+        return len(deals)
 
 
 class NativeMT5Transport:
@@ -837,6 +852,7 @@ class NativeMT5Transport:
             parsed.append(
                 MT5PositionReality(
                     position_ticket=int(p.ticket),
+                    position_identifier=int(getattr(p, "identifier", p.ticket)),
                     symbol=str(p.symbol),
                     position_type=pos_type,
                     volume=Decimal(str(p.volume)),
@@ -925,6 +941,33 @@ class NativeMT5Transport:
                 )
             )
         return tuple(parsed)
+
+    def history_deals_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int:
+        if not self.is_connected():
+            raise MT5TransportError("Cannot query history_deals_total: transport is disconnected.")
+        mt5 = self._get_mt5()
+        try:
+            if date_from is not None and date_to is not None:
+                total = mt5.history_deals_total(date_from, date_to)
+            else:
+                total = mt5.history_deals_total()
+            if total is None:
+                last_err = mt5.last_error()
+                err_code = int(last_err[0]) if last_err else -1
+                err_desc = str(last_err[1]) if last_err else "history_deals_total returned None"
+                raise MT5TransportError(
+                    f"history_deals_total query failed: {err_desc} (code={err_code})",
+                    api_code=err_code,
+                )
+            return int(total)
+        except Exception as e:
+            if isinstance(e, MT5TransportError):
+                raise
+            raise MT5TransportError(f"history_deals_total failed with unexpected error: {e}") from e
 
     def _parse_order_tuple(self, o: Any) -> MT5OrderReality:
         order_type_map = {
