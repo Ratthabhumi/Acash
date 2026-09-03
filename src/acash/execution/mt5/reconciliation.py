@@ -44,6 +44,7 @@ from acash.execution.mt5.enums import (
     MT5DealEntry,
     MT5DealType,
     MT5OrderState,
+    MT5OrderType,
     MT5PositionType,
 )
 from acash.execution.mt5.exceptions import (
@@ -519,6 +520,54 @@ def verify_order_deal_execution(
     else:
         vwap = Decimal("0.0")
 
+    # Relational Validation: Direction (DEAL_TYPE) and Lifecycle (DEAL_ENTRY)
+    buy_order_types = {
+        MT5OrderType.BUY, MT5OrderType.BUY_LIMIT, MT5OrderType.BUY_STOP, MT5OrderType.BUY_STOP_LIMIT
+    }
+    sell_order_types = {
+        MT5OrderType.SELL, MT5OrderType.SELL_LIMIT, MT5OrderType.SELL_STOP, MT5OrderType.SELL_STOP_LIMIT
+    }
+
+    for d in execution_deals:
+        # 1. Directional validation
+        if historical_order.order_type in buy_order_types and d.deal_type != MT5DealType.DEAL_TYPE_BUY:
+            raise MT5ReconciliationError(
+                f"DEAL_DIRECTION_MISMATCH: order {historical_order.order_ticket} is {historical_order.order_type.value} "
+                f"but execution deal {d.deal_ticket} is {d.deal_type.value}"
+            )
+        if historical_order.order_type in sell_order_types and d.deal_type != MT5DealType.DEAL_TYPE_SELL:
+            raise MT5ReconciliationError(
+                f"DEAL_DIRECTION_MISMATCH: order {historical_order.order_ticket} is {historical_order.order_type.value} "
+                f"but execution deal {d.deal_ticket} is {d.deal_type.value}"
+            )
+
+        # 2. Entry lifecycle validation
+        if d.entry == MT5DealEntry.DEAL_ENTRY_OUT_BY:
+            raise MT5DomainError(
+                "CLOSE_BY_UNSUPPORTED: DEAL_ENTRY_OUT_BY is not authorized under current contract"
+            )
+        if d.entry is not None:
+            if d.entry not in (
+                MT5DealEntry.DEAL_ENTRY_IN,
+                MT5DealEntry.DEAL_ENTRY_OUT,
+                MT5DealEntry.DEAL_ENTRY_INOUT,
+            ):
+                raise MT5DomainError(f"UNSUPPORTED_DEAL_ENTRY: {d.entry.value}")
+
+            # Position opening orders (position_ticket is None or 0) cannot produce DEAL_ENTRY_OUT
+            is_opening_order = (
+                historical_order.position_ticket is None or historical_order.position_ticket == 0
+            )
+            if is_opening_order and d.entry == MT5DealEntry.DEAL_ENTRY_OUT:
+                raise MT5ReconciliationError(
+                    f"RELATIONAL_ENTRY_MISMATCH: opening order {historical_order.order_ticket} produced DEAL_ENTRY_OUT"
+                )
+            # Position closing orders (position_ticket > 0) cannot produce DEAL_ENTRY_IN
+            if not is_opening_order and d.entry == MT5DealEntry.DEAL_ENTRY_IN:
+                raise MT5ReconciliationError(
+                    f"RELATIONAL_ENTRY_MISMATCH: closing order {historical_order.order_ticket} produced DEAL_ENTRY_IN"
+                )
+
     order_state = historical_order.state
     if not isinstance(order_state, MT5OrderState):
         raise MT5DomainError(f"INVALID_ORDER_STATE_TYPE: expected MT5OrderState, got {type(order_state)}")
@@ -799,7 +848,9 @@ class MT5ReconciliationEngine:
                 dim_verification["margin"] = True
 
         # --- DIMENSION 4: POSITIONS ---
-        margin_mode = MT5AccountMarginMode(broker.account.trade_mode if broker.account.trade_mode in (0, 1, 2) else 0)
+        margin_mode = broker.account.margin_mode
+        if not isinstance(margin_mode, MT5AccountMarginMode):
+            raise MT5DomainError(f"INVALID_MARGIN_MODE_TYPE: expected MT5AccountMarginMode, got {type(margin_mode)}")
 
         # Check for Phantom Positions (broker has position not in shadow)
         for b_pos in broker.positions:
@@ -938,6 +989,7 @@ class MT5ReconciliationEngine:
                         source=f"mt5:{broker.broker_id}",
                         broker_sequence=broker_event_id,
                         cancel_was_requested=True,
+                        evidence_refs=evidence_refs,
                     )
                     if evidence is not None:
                         resolved_orders.append(evidence)
@@ -970,24 +1022,25 @@ class MT5ReconciliationEngine:
                         "CLOSE_BY_UNSUPPORTED: DEAL_ENTRY_OUT_BY is not authorized under current execution contract"
                     )
 
-                # 2. Lineage Correlation Check (Zero comment bypass)
+                # 2. Lineage Correlation Check (Zero comment bypass, ACASH-owned only)
                 is_known_deal = b_deal.deal_ticket in shadow_deals_by_ticket
                 is_tracked_resting = b_deal.order_ticket in shadow_orders_by_ticket
-                is_tracked_history = b_deal.order_ticket in broker_history_orders_by_ticket
                 is_coord_tracked = False
                 if coordinator_map:
                     is_coord_tracked = any(
-                        str(b_deal.order_ticket) == c.execution_id for c in coordinator_map.values()
+                        str(b_deal.order_ticket) == c.execution_id
+                        or str(b_deal.order_ticket) == getattr(c, "order_id", None)
+                        for c in coordinator_map.values()
                     )
 
-                if not (is_known_deal or is_tracked_resting or is_tracked_history or is_coord_tracked):
+                if not (is_known_deal or is_tracked_resting or is_coord_tracked):
                     discrepancies.append(
                         MT5Discrepancy(
                             kind=MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL,
                             severity=MT5DiscrepancySeverity.CRITICAL,
                             dimension="deals",
                             identifier=str(b_deal.deal_ticket),
-                            expected_value="Tracked Intent Lineage",
+                            expected_value="ACASH Tracked Intent Lineage",
                             observed_value=f"deal_ticket={b_deal.deal_ticket}, order={b_deal.order_ticket}",
                             detail=f"Trade execution deal {b_deal.deal_ticket} without valid ACASH intent lineage.",
                         )
@@ -999,11 +1052,22 @@ class MT5ReconciliationEngine:
                         # Opening or increasing a position: resulting broker position identifier must match
                         # or have been subsequently closed in historical deals
                         if b_deal.position_ticket not in broker_positions_by_identifier:
-                            has_subsequent_close = any(
-                                other.position_ticket == b_deal.position_ticket
-                                and other.deal_ticket > b_deal.deal_ticket
-                                for other in broker.deals
-                            )
+                            b_deal_time_msc = int(b_deal.deal_time_utc.timestamp() * 1000)
+                            has_subsequent_close = False
+                            for other in broker.deals:
+                                other_time_msc = int(other.deal_time_utc.timestamp() * 1000)
+                                is_subsequent = (
+                                    other_time_msc > b_deal_time_msc
+                                    or (other_time_msc == b_deal_time_msc and other.deal_ticket > b_deal.deal_ticket)
+                                )
+                                if (
+                                    other.position_ticket == b_deal.position_ticket
+                                    and is_subsequent
+                                    and other.entry in (MT5DealEntry.DEAL_ENTRY_OUT, MT5DealEntry.DEAL_ENTRY_INOUT)
+                                    and categorize_deal(other.deal_type) == MT5DealCategory.TRADE_EXECUTION_DEAL
+                                ):
+                                    has_subsequent_close = True
+                                    break
                             if not has_subsequent_close:
                                 discrepancies.append(
                                     MT5Discrepancy(
@@ -1011,9 +1075,9 @@ class MT5ReconciliationEngine:
                                         severity=MT5DiscrepancySeverity.CRITICAL,
                                         dimension="positions",
                                         identifier=str(b_deal.position_ticket),
-                                        expected_value="Known Resulting Position",
+                                        expected_value="Known Resulting Position or Subsequent Close",
                                         observed_value=f"deal_position_id={b_deal.position_ticket}",
-                                        detail=f"DEAL_ENTRY_IN for deal {b_deal.deal_ticket} lacks corresponding resulting position.",
+                                        detail=f"DEAL_ENTRY_IN for deal {b_deal.deal_ticket} lacks corresponding resulting position or subsequent close.",
                                     )
                                 )
 
@@ -1128,20 +1192,29 @@ class MT5ReconciliationEngine:
         if orders is None:
             raise MT5TransportError("orders_get() returned None")
 
+        # 2. Frozen observation cutoff timestamp for both count oracle and get queries
+        capture_to = datetime.now(timezone.utc)
+        completed_msc = int(capture_to.timestamp() * 1000)
+
         t0 = time.perf_counter()
-        history_orders = transport.history_orders_get()
+        expected_orders_count = transport.history_orders_total(date_from=date_from, date_to=capture_to)
+        query_latencies["history_orders_total"] = (time.perf_counter() - t0) * 1000
+
+        t0 = time.perf_counter()
+        history_orders = transport.history_orders_get(date_from=date_from, date_to=capture_to)
         query_latencies["history_orders_get"] = (time.perf_counter() - t0) * 1000
         if history_orders is None:
             raise MT5TransportError("history_orders_get() returned None")
-
-        # 2. Frozen observation cutoff timestamp for both count oracle and get query
-        capture_to = datetime.now(timezone.utc)
-        completed_msc = int(capture_to.timestamp() * 1000)
+        if len(history_orders) != expected_orders_count:
+            raise MT5ReconciliationError(
+                f"INCOMPLETE_HISTORY_ORDERS_SCOPE: history_orders_total={expected_orders_count} "
+                f"!= history_orders_get={len(history_orders)}"
+            )
 
         # 3. Dual-Scope Historical Deal Queries with Count Oracle
         t0 = time.perf_counter()
         if scope == HistoricalDealScopeKind.FULL_CYCLE:
-            query_from = date_from or start_time
+            query_from = date_from or datetime.fromtimestamp(0, tz=timezone.utc)
             expected_raw_count = transport.history_deals_total(date_from=query_from, date_to=capture_to)
             raw_deals = transport.history_deals_get(date_from=query_from, date_to=capture_to)
 
@@ -1294,6 +1367,7 @@ class MT5ReconciliationEngine:
         tolerances: Optional[ReconciliationToleranceConfig] = None,
         watermark_ticket: int = 0,
         watermark_time_msc: int = 0,
+        date_from: Optional[datetime] = None,
     ) -> MT56DReconciliationReport:
         """Execute end-to-end reconciliation cycle with real 2-pass recapture."""
         cfg = tolerances or self.tolerances
@@ -1307,6 +1381,7 @@ class MT5ReconciliationEngine:
             terminal_instance_id=adapter.terminal_instance_id,
             watermark_ticket=watermark_ticket,
             watermark_time_msc=watermark_time_msc,
+            date_from=date_from,
             max_capture_window_ms=cfg.max_capture_window_ms,
             recapture_attempt=0,
         )
@@ -1320,6 +1395,7 @@ class MT5ReconciliationEngine:
                 terminal_instance_id=adapter.terminal_instance_id,
                 watermark_ticket=broker.capture_context.post_watermark_deal_ticket,
                 watermark_time_msc=broker.capture_context.capture_completed_at_msc,
+                date_from=date_from,
                 max_capture_window_ms=cfg.max_capture_window_ms,
                 recapture_attempt=1,
                 prior_capture_context=broker.capture_context,
@@ -1329,12 +1405,14 @@ class MT5ReconciliationEngine:
 
         if report.is_clean and report.confirmation is not None:
             # Deliver evidence to coordinators via public seam
+            ticket_to_intent = {str(o.order_ticket): o.intent_id for o in shadow.resting_orders}
             for evidence in report.resolved_orders:
+                target_intent = ticket_to_intent.get(evidence.broker_order_id)
                 for execution_id, coordinator in coordinator_map.items():
                     if (
-                        coordinator.execution_id == evidence.broker_order_id
-                        or getattr(coordinator, "order_id", None) == evidence.broker_order_id
-                        or execution_id == evidence.broker_order_id
+                        coordinator.execution_id in (evidence.broker_order_id, target_intent)
+                        or getattr(coordinator, "order_id", None) in (evidence.broker_order_id, target_intent)
+                        or execution_id in (evidence.broker_order_id, target_intent)
                     ):
                         coordinator.apply_reconciliation(
                             broker_event_id=evidence.broker_sequence,
@@ -1342,7 +1420,7 @@ class MT5ReconciliationEngine:
                             evidence_token=evidence.to_evidence_string(),
                             order_id=evidence.broker_order_id,
                             observed_at=evidence.observed_at,
-                            evidence_refs=(report.report_digest,),
+                            evidence_refs=(*evidence.evidence_refs, report.report_digest),
                         )
             # Unlock adapter
             adapter.confirm_reconciliation(report.confirmation)

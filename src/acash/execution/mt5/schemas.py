@@ -12,6 +12,7 @@ from acash.core.domain.exceptions import DomainValidationError
 from acash.core.domain.types import ensure_finite_decimal
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.execution.mt5.enums import (
+    MT5AccountMarginMode,
     MT5DealEntry,
     MT5DealType,
     MT5ExecutionPolicy,
@@ -303,6 +304,7 @@ class MT5AccountReality(BaseModel):
 
     login: int = Field(gt=0, description="Account login number.")
     trade_mode: int = Field(ge=0, description="Account trade mode (0=Demo, 1=Contest, 2=Real).")
+    margin_mode: MT5AccountMarginMode = Field(description="Account margin calculation mode (strictly required, no silent fallback).")
     leverage: int = Field(gt=0, description="Account leverage ratio (e.g. 100 for 1:100).")
     limit_orders: int = Field(ge=0, description="Maximum allowed active pending orders.")
     margin_so_mode: int = Field(ge=0, description="Margin stop-out mode.")

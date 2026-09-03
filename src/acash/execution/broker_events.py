@@ -100,6 +100,7 @@ class ReconciliationEvidence(BaseModel):
     observed_at: datetime = Field(description="UTC timestamp of the broker report.")
     source: str = Field(description="Originating venue/adapter name.")
     broker_sequence: str = Field(description="Broker sequence / execution report id.")
+    evidence_refs: Tuple[str, ...] = Field(default_factory=tuple, description="Canonical references to underlying execution deals or events.")
 
     evidence_digest: str = Field(description="SHA-256 of canonical evidence payload.")
 
@@ -121,6 +122,7 @@ class ReconciliationEvidence(BaseModel):
             observed_at=self.observed_at,
             source=self.source,
             broker_sequence=self.broker_sequence,
+            evidence_refs=self.evidence_refs,
         )
 
     def verify_digest(self) -> None:
@@ -167,6 +169,7 @@ def normalize_broker_event(
     source: str,
     broker_sequence: str,
     cancel_was_requested: bool = False,
+    evidence_refs: Tuple[str, ...] = (),
 ) -> Tuple[ExecutionEvent, Optional[ReconciliationEvidence]]:
     """Normalize a broker raw event into (canonical ExecutionEvent, evidence).
 
@@ -237,6 +240,7 @@ def normalize_broker_event(
         observed_at=observed_at,
         source=source,
         broker_sequence=broker_sequence,
+        evidence_refs=evidence_refs,
     )
 
     return canonical_event, evidence
@@ -249,6 +253,7 @@ def _canonical_evidence_payload(
     observed_at: datetime,
     source: str,
     broker_sequence: str,
+    evidence_refs: Tuple[str, ...] = (),
 ) -> Dict[str, Any]:
     """Canonical dict of evidence content (shared, deterministic)."""
     return {
@@ -257,6 +262,7 @@ def _canonical_evidence_payload(
         "observed_at": observed_at.isoformat(),
         "source": source,
         "broker_sequence": broker_sequence,
+        "evidence_refs": list(evidence_refs),
     }
 
 
@@ -267,6 +273,7 @@ def _evidence_payload_bytes(
     observed_at: datetime,
     source: str,
     broker_sequence: str,
+    evidence_refs: Tuple[str, ...] = (),
 ) -> bytes:
     payload = _canonical_evidence_payload(
         broker_order_id=broker_order_id,
@@ -274,6 +281,7 @@ def _evidence_payload_bytes(
         observed_at=observed_at,
         source=source,
         broker_sequence=broker_sequence,
+        evidence_refs=evidence_refs,
     )
     return CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
 
@@ -285,6 +293,7 @@ def _build_evidence(
     observed_at: datetime,
     source: str,
     broker_sequence: str,
+    evidence_refs: Tuple[str, ...] = (),
 ) -> Optional[ReconciliationEvidence]:
     """Build typed ReconciliationEvidence for reconciliation-verifiable outcomes.
 
@@ -307,6 +316,7 @@ def _build_evidence(
             observed_at=observed_at,
             source=source,
             broker_sequence=broker_sequence,
+            evidence_refs=evidence_refs,
         )
     ).hexdigest()
 
@@ -316,5 +326,6 @@ def _build_evidence(
         observed_at=observed_at,
         source=source,
         broker_sequence=broker_sequence,
+        evidence_refs=evidence_refs,
         evidence_digest=content_digest,
     )

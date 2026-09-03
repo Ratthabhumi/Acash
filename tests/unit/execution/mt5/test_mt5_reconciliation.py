@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from pydantic import ValidationError
 import pytest
 
 from acash.core.domain.exceptions import DomainValidationError
@@ -92,11 +93,13 @@ def make_sample_account_reality(
     equity: Decimal = Decimal("100000.00"),
     margin: Decimal = Decimal("0.00"),
     currency: str = "USD",
-    margin_mode: int = 0,
+    margin_mode: Any = MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
 ) -> MT5AccountReality:
+    mode = margin_mode if isinstance(margin_mode, MT5AccountMarginMode) else MT5AccountMarginMode(margin_mode)
     return MT5AccountReality(
         login=1001,
-        trade_mode=margin_mode,
+        trade_mode=0,
+        margin_mode=mode,
         leverage=100,
         limit_orders=200,
         margin_so_mode=0,
@@ -309,6 +312,14 @@ class MockTransportForEngine(MockMT5Transport):
     ) -> int:
         deals = self.history_deals_get(date_from=date_from, date_to=date_to)
         return len(deals)
+
+    def history_orders_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int:
+        orders = self.history_orders_get(date_from=date_from, date_to=date_to)
+        return len(orders)
 
 
 # ============================================================================
@@ -772,7 +783,7 @@ def test_r27_mt5_hedging_multi_position_same_symbol() -> None:
     b_pos2 = MT5PositionReality(position_ticket=102, position_identifier=102, symbol="EURUSD", position_type=MT5PositionType.POSITION_TYPE_BUY, volume=Decimal("0.5"), price_open=Decimal("1.0860"), price_current=Decimal("1.0855"), time_open_utc=datetime.now(timezone.utc))
     b_pos3 = MT5PositionReality(position_ticket=103, position_identifier=103, symbol="EURUSD", position_type=MT5PositionType.POSITION_TYPE_SELL, volume=Decimal("0.3"), price_open=Decimal("1.0840"), price_current=Decimal("1.0855"), time_open_utc=datetime.now(timezone.utc))
 
-    hedging_acc = make_sample_account_reality(margin_mode=2)  # Hedging
+    hedging_acc = make_sample_account_reality(margin_mode=MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)  # Hedging
     shadow = make_sample_shadow_snapshot(positions=(s_pos1, s_pos2, s_pos3))
     broker = make_sample_broker_snapshot(account=hedging_acc, positions=(b_pos1, b_pos2, b_pos3))
 
@@ -1573,10 +1584,11 @@ def test_r77_same_timestamp_watermark_boundary_is_not_missed() -> None:
 
 
 def test_r78_deal_entry_is_not_used_as_trade_direction() -> None:
-    """Closing short: DEAL_TYPE_BUY + DEAL_ENTRY_OUT is valid and properly verified."""
+    """DEAL_TYPE is direction (BUY), while DEAL_ENTRY is lifecycle (OUT). Valid close of short."""
     t0 = datetime.now(timezone.utc)
+    # Valid close of short: position_ticket > 0 (closing order), order BUY, deal BUY, entry OUT
     close_short_order = MT5OrderReality(
-        order_ticket=778, symbol="EURUSD", order_type=MT5OrderType.BUY,
+        order_ticket=778, position_ticket=978, symbol="EURUSD", order_type=MT5OrderType.BUY,
         state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("1.0"),
         volume_current=Decimal("0.0"), price_open=Decimal("1.0850"), time_setup_utc=t0,
     )
@@ -1588,6 +1600,16 @@ def test_r78_deal_entry_is_not_used_as_trade_direction() -> None:
     resolved_state, vol, vwap, broker_event_id, evidence_refs = verify_order_deal_execution(778, close_short_order, (close_short_deal,))
     assert resolved_state == OrderLifecycleState.FILLED
     assert vol == Decimal("1.0")
+
+    # Hardened negative check 1: Direction mismatch (BUY order with SELL deal) fails closed
+    bad_dir_deal = close_short_deal.model_copy(update={"deal_type": MT5DealType.DEAL_TYPE_SELL})
+    with pytest.raises(MT5ReconciliationError, match="DEAL_DIRECTION_MISMATCH"):
+        verify_order_deal_execution(778, close_short_order, (bad_dir_deal,))
+
+    # Hardened negative check 2: Opening order with DEAL_ENTRY_OUT fails closed
+    opening_order = close_short_order.model_copy(update={"position_ticket": None})
+    with pytest.raises(MT5ReconciliationError, match="RELATIONAL_ENTRY_MISMATCH"):
+        verify_order_deal_execution(778, opening_order, (close_short_deal,))
 
 
 def test_r79_deal_position_id_matches_position_identifier() -> None:
@@ -1612,20 +1634,24 @@ def test_r79_deal_position_id_matches_position_identifier() -> None:
 
 
 def test_r80_deal_type_and_entry_are_validated_independently() -> None:
-    """DEAL_TYPE (direction) and DEAL_ENTRY (lifecycle) are validated as orthogonal dimensions."""
+    """DEAL_TYPE (direction) and DEAL_ENTRY (lifecycle) are validated relationally against order intent."""
     t0 = datetime.now(timezone.utc)
-    # 1. Long Entry: BUY + IN
-    d_long_in = MT5DealReality(deal_ticket=1, order_ticket=1, position_ticket=1, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN)
-    # 2. Long Exit: SELL + OUT
-    d_long_out = MT5DealReality(deal_ticket=2, order_ticket=2, position_ticket=1, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_SELL, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_OUT)
-    # 3. Short Entry: SELL + IN
-    d_short_in = MT5DealReality(deal_ticket=3, order_ticket=3, position_ticket=2, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_SELL, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN)
-    # 4. Short Exit: BUY + OUT
-    d_short_out = MT5DealReality(deal_ticket=4, order_ticket=4, position_ticket=2, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_OUT)
+    # Long Entry Order (position_ticket None, order BUY)
+    order_long_in = MT5OrderReality(order_ticket=1, position_ticket=None, symbol="EURUSD", order_type=MT5OrderType.BUY, state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("1.0"), volume_current=Decimal("0.0"), price_open=Decimal("1.0"), time_setup_utc=t0)
+    # Contradictory entry: DEAL_ENTRY_OUT on opening order
+    d_bad_entry = MT5DealReality(deal_ticket=1, order_ticket=1, position_ticket=1, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_OUT)
+    with pytest.raises(MT5ReconciliationError, match="RELATIONAL_ENTRY_MISMATCH"):
+        verify_order_deal_execution(1, order_long_in, (d_bad_entry,))
 
-    for d in (d_long_in, d_long_out, d_short_in, d_short_out):
-        cat = categorize_deal(d.deal_type)
-        assert cat == MT5DealCategory.TRADE_EXECUTION_DEAL
+    # Contradictory direction: DEAL_TYPE_SELL on BUY order
+    d_bad_dir = MT5DealReality(deal_ticket=2, order_ticket=1, position_ticket=1, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_SELL, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN)
+    with pytest.raises(MT5ReconciliationError, match="DEAL_DIRECTION_MISMATCH"):
+        verify_order_deal_execution(1, order_long_in, (d_bad_dir,))
+
+    # DEAL_ENTRY_OUT_BY strictly fails closed
+    d_out_by = MT5DealReality(deal_ticket=3, order_ticket=1, position_ticket=1, symbol="EURUSD", deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0"), deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_OUT_BY)
+    with pytest.raises(MT5DomainError, match="CLOSE_BY_UNSUPPORTED"):
+        verify_order_deal_execution(1, order_long_in, (d_out_by,))
 
 
 def test_r81_incremental_count_mismatch_fails_closed() -> None:
@@ -1667,3 +1693,183 @@ def test_r82_cancelled_deal_type_is_not_treated_as_fresh_fill() -> None:
     # Canceled deal is excluded -> total execution volume is 0.0 -> fails volume mismatch!
     with pytest.raises(MT5ReconciliationError, match="FILLED_VOLUME_MISMATCH"):
         verify_order_deal_execution(782, hist_order, (canceled_deal,))
+
+
+def test_r83_lineage_bypass_via_broker_history_orders_prevented() -> None:
+    """Manual/external broker trade with order in broker.history_orders is strictly rejected as UNTRACKED_TRADE_DEAL."""
+    t0 = datetime.now(timezone.utc)
+    # External trader executed order 999 directly on broker
+    manual_order = MT5OrderReality(
+        order_ticket=999, symbol="EURUSD", order_type=MT5OrderType.BUY,
+        state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("1.0"),
+        volume_current=Decimal("0.0"), price_open=Decimal("1.0850"), time_setup_utc=t0,
+    )
+    manual_deal = MT5DealReality(
+        deal_ticket=1999, order_ticket=999, position_ticket=2999, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN,
+    )
+    # ACASH shadow ledger knows NOTHING about order 999 or deal 1999
+    shadow = make_sample_shadow_snapshot(broker_id="TEST", account_id="ACC", terminal_instance_id="TERM")
+    transport = MockTransportForEngine(history_orders=(manual_order,), deals=(manual_deal,))
+    engine = MT5ReconciliationEngine()
+    snapshot = engine.capture_bounded_broker_observation(transport, "TEST", "ACC", "TERM")
+
+    report = engine.reconcile_6d(shadow, snapshot, coordinator_map={})
+    assert report.is_clean is False
+    assert any(d.kind == MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL and d.identifier == "1999" for d in report.discrepancies)
+
+
+def test_r84_direction_mismatch_in_transitioned_order_fails_closed() -> None:
+    """Resting BUY order matched with SELL deal execution fails closed with DEAL_DIRECTION_MISMATCH."""
+    t0 = datetime.now(timezone.utc)
+    hist_order = MT5OrderReality(
+        order_ticket=784, symbol="EURUSD", order_type=MT5OrderType.BUY_LIMIT,
+        state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("1.0"),
+        volume_current=Decimal("0.0"), price_open=Decimal("1.0850"), time_setup_utc=t0,
+    )
+    contradictory_deal = MT5DealReality(
+        deal_ticket=884, order_ticket=784, position_ticket=984, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_SELL, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN,
+    )
+    with pytest.raises(MT5ReconciliationError, match="DEAL_DIRECTION_MISMATCH"):
+        verify_order_deal_execution(784, hist_order, (contradictory_deal,))
+
+
+def test_r85_end_to_end_evidence_refs_preserved_to_coordinator() -> None:
+    """Multi-deal execution refs are preserved through ReconciliationEvidence into coordinator.apply_reconciliation."""
+    t0 = datetime.now(timezone.utc) - timedelta(milliseconds=500)
+    hist_order = MT5OrderReality(
+        order_ticket=785, symbol="EURUSD", order_type=MT5OrderType.BUY_LIMIT,
+        state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("2.0"),
+        volume_current=Decimal("0.0"), price_open=Decimal("1.0850"), time_setup_utc=t0,
+    )
+    d1 = MT5DealReality(
+        deal_ticket=8851, order_ticket=785, position_ticket=985, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN,
+    )
+    d2 = MT5DealReality(
+        deal_ticket=8852, order_ticket=785, position_ticket=985, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0 + timedelta(milliseconds=10), entry=MT5DealEntry.DEAL_ENTRY_IN,
+    )
+    transport = MockTransportForEngine(history_orders=(hist_order,), deals=(d1, d2))
+    adapter = MT5BrokerAdapter("TEST", "ACC", "TERM", transport=transport)
+    engine = MT5ReconciliationEngine()
+
+    shadow_order = ShadowRestingOrder(
+        intent_id="EXEC_785", order_ticket=785, symbol="EURUSD",
+        order_type="BUY_LIMIT", volume=Decimal("2.0"), price=Decimal("1.0850"),
+    )
+    broker_pos = MT5PositionReality(
+        position_ticket=985, position_identifier=985, symbol="EURUSD",
+        position_type=MT5PositionType.POSITION_TYPE_BUY, volume=Decimal("2.0"),
+        price_open=Decimal("1.0850"), price_current=Decimal("1.0850"), time_open_utc=t0,
+    )
+    shadow_pos = ShadowPosition(
+        position_ticket=985, position_identifier=985, symbol="EURUSD",
+        side="BUY", volume=Decimal("2.0"), open_price=Decimal("1.0850"),
+    )
+    shadow_d1 = ShadowDealRecord(deal_ticket=8851, order_ticket=785, position_id=985, intent_id="EXEC_785", symbol="EURUSD", side="BUY", volume=Decimal("1.0"), price=Decimal("1.0850"), executed_at=t0)
+    shadow_d2 = ShadowDealRecord(deal_ticket=8852, order_ticket=785, position_id=985, intent_id="EXEC_785", symbol="EURUSD", side="BUY", volume=Decimal("1.0"), price=Decimal("1.0850"), executed_at=t0)
+    shadow = make_sample_shadow_snapshot(
+        broker_id="TEST", account_id="ACC", terminal_instance_id="TERM",
+        resting_orders=(shadow_order,), positions=(shadow_pos,), deals=(shadow_d1, shadow_d2),
+    )
+    transport.active_positions[985] = broker_pos
+
+    coordinator = ExecutionCoordinator("EXEC_785", Decimal("2.0"), initial_state=OrderLifecycleState.UNKNOWN)
+    coordinator_map = {"EXEC_785": coordinator}
+
+    report = engine.execute_reconciliation_cycle(
+        adapter=adapter,
+        shadow_ledger=MockShadowLedger(shadow),
+        coordinator_map=coordinator_map,
+    )
+    assert report.is_clean is True
+    assert len(report.resolved_orders) == 1
+    ev = report.resolved_orders[0]
+    assert ev.evidence_refs == ("8851", "8852")
+    assert coordinator.state == OrderLifecycleState.FILLED
+
+
+def test_r86_history_orders_count_oracle_mismatch_fails_closed() -> None:
+    """Discrepancy between history_orders_total and retrieved orders count fails closed."""
+    t0 = datetime.now(timezone.utc)
+    o1 = MT5OrderReality(order_ticket=1, symbol="EURUSD", order_type=MT5OrderType.BUY, state=MT5OrderState.ORDER_STATE_FILLED, volume_initial=Decimal("1.0"), volume_current=Decimal("0.0"), price_open=Decimal("1.0"), time_setup_utc=t0)
+
+    class OrderCountMismatchTransport(MockTransportForEngine):
+        def history_orders_total(self, date_from: Optional[datetime] = None, date_to: Optional[datetime] = None) -> int:
+            return 5  # Claims 5, returns 1
+
+    transport = OrderCountMismatchTransport(history_orders=(o1,))
+    engine = MT5ReconciliationEngine()
+    with pytest.raises(MT5ReconciliationError, match="INCOMPLETE_HISTORY_ORDERS_SCOPE"):
+        engine.capture_bounded_broker_observation(transport, "TEST", "ACC", "TERM")
+
+
+def test_r87_strict_margin_mode_fail_closed_on_invalid_value() -> None:
+    """Invalid margin mode type on account reality fails closed immediately."""
+    engine = MT5ReconciliationEngine()
+    shadow = make_sample_shadow_snapshot()
+    # Malformed broker account with invalid margin_mode
+    broker_acc = make_sample_account_reality()
+    object.__setattr__(broker_acc, "margin_mode", "INVALID_MODE")
+    broker = make_sample_broker_snapshot(account=broker_acc)
+
+    with pytest.raises(MT5DomainError, match="INVALID_MARGIN_MODE_TYPE"):
+        engine.reconcile_6d(shadow, broker)
+
+
+def test_r88_missing_margin_mode_fails_closed_in_account_reality() -> None:
+    """Constructing MT5AccountReality without margin_mode fails closed via validation error."""
+    with pytest.raises(ValidationError):
+        MT5AccountReality(  # type: ignore[call-arg]
+            login=1001,
+            trade_mode=0,
+            # margin_mode omitted!
+            leverage=100,
+            limit_orders=200,
+            margin_so_mode=0,
+            trade_allowed=True,
+            trade_expert=True,
+            balance=Decimal("100000.00"),
+            credit=Decimal("0.0"),
+            profit=Decimal("0.0"),
+            equity=Decimal("100000.00"),
+            margin=Decimal("0.00"),
+            margin_free=Decimal("100000.00"),
+            margin_level=Decimal("0.0"),
+            margin_so_call=Decimal("50.0"),
+            margin_so_so=Decimal("30.0"),
+            currency="USD",
+        )
+
+
+def test_r89_canceled_deal_cannot_prove_subsequent_close() -> None:
+    """Canceled deal types (BUY_CANCELED, SELL_CANCELED) with DEAL_ENTRY_OUT cannot prove subsequent close."""
+    t0 = datetime.now(timezone.utc)
+    entry_deal = MT5DealReality(
+        deal_ticket=8891, order_ticket=789, position_ticket=989, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_BUY, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0, entry=MT5DealEntry.DEAL_ENTRY_IN,
+    )
+    # Subsequent deal is a CANCELED deal type, NOT a TRADE_EXECUTION_DEAL!
+    canceled_close_deal = MT5DealReality(
+        deal_ticket=8892, order_ticket=790, position_ticket=989, symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_SELL_CANCELED, volume=Decimal("1.0"), price=Decimal("1.0850"),
+        deal_time_utc=t0 + timedelta(seconds=1), entry=MT5DealEntry.DEAL_ENTRY_OUT,
+    )
+    shadow_deal = ShadowDealRecord(deal_ticket=8891, order_ticket=789, position_id=989, intent_id="INT_789", symbol="EURUSD", side="BUY", volume=Decimal("1.0"), price=Decimal("1.0850"), executed_at=t0)
+    shadow = make_sample_shadow_snapshot(broker_id="TEST", account_id="ACC", terminal_instance_id="TERM", deals=(shadow_deal,))
+
+    transport = MockTransportForEngine(deals=(entry_deal, canceled_close_deal))
+    engine = MT5ReconciliationEngine()
+    snapshot = engine.capture_bounded_broker_observation(transport, "TEST", "ACC", "TERM")
+
+    # Resulting position is missing, and canceled deal cannot act as close -> PHANTOM_POSITION
+    report = engine.reconcile_6d(shadow, snapshot)
+    assert report.is_clean is False
+    assert any(d.kind == MT5DiscrepancyKind.PHANTOM_POSITION and d.identifier == "989" for d in report.discrepancies)

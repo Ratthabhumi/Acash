@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from acash.execution.mt5.enums import (
+    MT5AccountMarginMode,
     MT5DealEntry,
     MT5DealType,
     MT5FillingMode,
@@ -147,6 +148,12 @@ class MT5TransportProtocol(Protocol):
         date_to: Optional[datetime] = None,
     ) -> Tuple[MT5OrderReality, ...]: ...
 
+    def history_orders_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int: ...
+
     def positions_get(
         self,
         symbol: Optional[str] = None,
@@ -245,6 +252,7 @@ class MockMT5Transport:
         return MT5AccountReality(
             login=123456,
             trade_mode=0,
+            margin_mode=MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
             leverage=100,
             limit_orders=200,
             margin_so_mode=0,
@@ -455,6 +463,14 @@ class MockMT5Transport:
             orders = [o for o in orders if o.time_setup_utc <= date_to]
         return tuple(orders)
 
+    def history_orders_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int:
+        orders = self.history_orders_get(date_from=date_from, date_to=date_to)
+        return len(orders)
+
     def positions_get(
         self,
         symbol: Optional[str] = None,
@@ -565,9 +581,19 @@ class NativeMT5Transport:
         acc = mt5.account_info()
         if acc is None:
             return None
+        raw_margin_mode = int(getattr(acc, "margin_mode", 0))
+        margin_mode_map = {
+            0: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
+            1: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_EXCHANGE,
+            2: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING,
+        }
+        if raw_margin_mode not in margin_mode_map:
+            raise MT5DomainError(f"UNKNOWN_ACCOUNT_MARGIN_MODE: unmapped margin_mode {raw_margin_mode}")
+        margin_mode = margin_mode_map[raw_margin_mode]
         return MT5AccountReality(
             login=int(acc.login),
             trade_mode=int(acc.trade_mode),
+            margin_mode=margin_mode,
             leverage=int(acc.leverage),
             limit_orders=int(acc.limit_orders),
             margin_so_mode=int(acc.margin_so_mode),
@@ -817,6 +843,33 @@ class NativeMT5Transport:
         for o in raw_orders:
             parsed.append(self._parse_order_tuple(o))
         return tuple(parsed)
+
+    def history_orders_total(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> int:
+        if not self.is_connected():
+            raise MT5TransportError("Cannot query history_orders_total: transport is disconnected.")
+        mt5 = self._get_mt5()
+        try:
+            if date_from is not None and date_to is not None:
+                total = mt5.history_orders_total(date_from, date_to)
+            else:
+                total = mt5.history_orders_total()
+            if total is None:
+                last_err = mt5.last_error()
+                err_code = int(last_err[0]) if last_err else -1
+                err_desc = str(last_err[1]) if last_err else "history_orders_total returned None"
+                raise MT5TransportError(
+                    f"history_orders_total query failed: {err_desc} (code={err_code})",
+                    api_code=err_code,
+                )
+            return int(total)
+        except Exception as e:
+            if isinstance(e, MT5TransportError):
+                raise
+            raise MT5TransportError(f"history_orders_total failed with unexpected error: {e}") from e
 
     def positions_get(
         self,
