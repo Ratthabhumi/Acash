@@ -426,15 +426,21 @@ ForwardHealthStateMachine.advance()
 - Operator demonstrates reading and acknowledging the structured WARNING within SLA
 - Rehearse manual kill switch trip triggered by missed acknowledgement
 
-### 11.3 MONITORING_BLOCKED Semantics
+### 11.3 MONITORING_BLOCKED Operational Consequence (Fail-Closed)
 
 ```
 MONITORING_BLOCKED ≠ DEGRADED
 MONITORING_BLOCKED = telemetry pipeline disruption ONLY
   → logs structured ERROR (not WARNING)
   → NOT treated as strategy decay evidence
-  → operator investigates telemetry
-  → does NOT alone trigger kill switch
+
+OPERATIONAL CONSEQUENCE:
+  1. Halt on NEW live order creation (no new OrderIntent permitted while telemetry broken)
+  2. Existing open positions remain under MT5 broker-side protection/management (no blind market flatten)
+  3. Operator investigates telemetry pipeline immediately (SLA ≤ 15 minutes)
+  4. Mandatory human decision / escalation window:
+     - If telemetry restored ≤ 30 minutes: resume normal monitoring
+     - If telemetry remains unresolved > 30 minutes: Operator MUST manually trip kill switch to PERSISTENTLY_BLOCKED
 ```
 
 ---
@@ -629,6 +635,7 @@ $$\boxed{P_{13} = \text{GateA\_PASS} \land \text{M6\_ACTIVE} \land \text{G3\_GO}
 | 6-D RECON pass (`can_dispatch() == True`) | Machine (fail-closed) | `adapter.py:197` |
 | `RiskStatus == NORMAL` | Machine (fail-closed) | `admission.py:696` |
 | `CalculationStatus == NOMINAL` | Machine (fail-closed) | `admission.py:691` |
+| `ForwardHealthState != MONITORING_BLOCKED` | Governance / Operational | Section 11.3 (telemetry healthy) |
 | Human GO on record | Governance | G-3 |
 
 $$\text{HTTP-success} \neq P_{13} \quad \text{ACK} \neq P_{13} \quad \text{unit tests} \neq P_{13} \quad \text{verbal "GO" alone} \neq P_{13}$$
@@ -644,6 +651,7 @@ $$\text{HTTP-success} \neq P_{13} \quad \text{ACK} \neq P_{13} \quad \text{unit 
 | `KillSwitchState != ARMED` | **Machine** | `kill_switch.py:158` — fail-closed |
 | RECON failing | **Machine** | `can_dispatch()` — fail-closed |
 | `RiskStatus != NORMAL` | **Machine** | `admission.py:696` — fail-closed |
+| `ForwardHealthState == MONITORING_BLOCKED` | Operational | Section 11.3 — halts new live orders |
 | A-11 demo test not completed | Governance | Human |
 | DEGRADED SLA procedure not rehearsed | Governance | Human |
 | `max_notional` currency denomination not confirmed | Governance | Human (M-2) |
