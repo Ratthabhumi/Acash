@@ -172,3 +172,18 @@ Broker (live, micro-lots)
 - **Source Code Audit:** VERIFIED (Slice 5 user-conducted audit + this session architecture audit)
 - **Phase 12 Freeze:** OFFICIAL
 - **Phase 13 Entry Gate:** OPEN (pending human approval per Gate 13 criteria)
+
+---
+
+## 7. Phase 13 Slice 1 — Gate A Pre-Live Certification (Current Status)
+
+- **Governing Specification:** `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md`
+- **Recovery Runbook:** `docs/phase13/recovery_runbook.md`
+- **Gate A Evidence Pack:** `docs/phase13/gate_a_evidence_pack.md`
+- **Gate A Test Suite:** `tests/integration/test_phase13_slice1_gate_a.py`
+- **Layer A Contract Evidence:** ✅ 11/11 PASSED
+- **Full Test Suite Status:** ✅ 1251/1251 PASSED (0 failures, 3 expected warnings)
+- **Type Checker (MyPy):** ✅ 264 source files clean (0 errors)
+- **Live Capital Authority:** 🔒 STRICT $0.00 (Frozen Invariant)
+- **Gate Status:** 🟡 Gate A Layer A VERIFIED / Layer B Protocol Ready / STOPPED FOR HUMAN AUDIT. Strictly blocked from Gate B.
+
