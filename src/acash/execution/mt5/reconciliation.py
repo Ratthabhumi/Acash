@@ -1383,24 +1383,78 @@ class MT5ReconciliationEngine:
         report = self.reconcile_6d(shadow, broker, cfg, coordinator_map=coordinator_map)
 
         if report.is_clean and report.confirmation is not None:
-            # Deliver evidence to coordinators via public seam
-            ticket_to_intent = {str(o.order_ticket): o.intent_id for o in shadow.resting_orders}
+            # ── Gate 6 Evidence Delivery: Two-Phase Routing ────────────────────────
+            #
+            # Phase-A Preflight Atomicity: any routing or lineage validation failure
+            # is raised BEFORE any coordinator is mutated.
+            #
+            # Phase-B Apply: entered only after Phase A fully passes. Phase B is NOT
+            # transactionally atomic — an exception in apply_reconciliation() mid-loop
+            # leaves coordinators 1..K-1 mutated. This is an acknowledged architectural
+            # limitation; transaction/rollback is deferred beyond Slice 5 scope.
+            #
+            # Routing key: c.intent_id ONLY (direct attribute access, not getattr).
+            # execution_id is NOT a routing identity in Gate 6.
+
+            # ── Phase A: PREFLIGHT VALIDATION — zero coordinator mutations ─────────
+
+            # A-0: Detect duplicate order_ticket in shadow resting_orders
+            seen_tickets: Dict[str, str] = {}
+            for o in shadow.resting_orders:
+                key = str(o.order_ticket)
+                if key in seen_tickets:
+                    raise MT5ReconciliationError(
+                        f"EVIDENCE_ROUTING_AMBIGUOUS: duplicate order_ticket={key!r} in "
+                        f"shadow.resting_orders (intent_ids: {seen_tickets[key]!r}, "
+                        f"{o.intent_id!r}). Lineage is ambiguous — cannot route safely."
+                    )
+                seen_tickets[key] = o.intent_id
+
+            ticket_to_intent: Dict[str, str] = {
+                str(o.order_ticket): o.intent_id for o in shadow.resting_orders
+            }
+
+            routing_plan: List[Tuple["ReconciliationEvidence", "ExecutionCoordinator"]] = []
+
             for evidence in report.resolved_orders:
+                # A-1: Shadow lineage check
                 target_intent = ticket_to_intent.get(evidence.broker_order_id)
-                for execution_id, coordinator in coordinator_map.items():
-                    if (
-                        coordinator.execution_id in (evidence.broker_order_id, target_intent)
-                        or getattr(coordinator, "order_id", None) in (evidence.broker_order_id, target_intent)
-                        or execution_id in (evidence.broker_order_id, target_intent)
-                    ):
-                        coordinator.apply_reconciliation(
-                            broker_event_id=evidence.broker_sequence,
-                            broker_sequence=evidence.broker_sequence,
-                            evidence_token=evidence.to_evidence_string(),
-                            order_id=evidence.broker_order_id,
-                            observed_at=evidence.observed_at,
-                            evidence_refs=(*evidence.evidence_refs, report.report_digest),
-                        )
+                if target_intent is None:
+                    raise MT5ReconciliationError(
+                        f"EVIDENCE_ROUTING_TARGET_NOT_FOUND: resolved evidence for "
+                        f"broker_order_id={evidence.broker_order_id!r} has no shadow "
+                        f"resting_order mapping. Evidence cannot be silently discarded."
+                    )
+
+                # A-2: Coordinator exact-one match via intent_id (direct attribute access)
+                matches = [
+                    c for c in coordinator_map.values()
+                    if c.intent_id == target_intent
+                ]
+                if len(matches) == 0:
+                    raise MT5ReconciliationError(
+                        f"EVIDENCE_ROUTING_TARGET_NOT_FOUND: no coordinator with "
+                        f"intent_id={target_intent!r} found in coordinator_map."
+                    )
+                if len(matches) > 1:
+                    raise MT5ReconciliationError(
+                        f"EVIDENCE_ROUTING_AMBIGUOUS: {len(matches)} coordinators share "
+                        f"intent_id={target_intent!r}. Coordinator registry integrity failure."
+                    )
+
+                routing_plan.append((evidence, matches[0]))
+
+            # ── Phase B: APPLY — entered only if Phase A fully succeeded ──────────
+            for evidence, coordinator in routing_plan:
+                coordinator.apply_reconciliation(
+                    broker_event_id=evidence.broker_sequence,
+                    broker_sequence=evidence.broker_sequence,
+                    evidence_token=evidence.to_evidence_string(),
+                    order_id=evidence.broker_order_id,
+                    observed_at=evidence.observed_at,
+                    evidence_refs=(*evidence.evidence_refs, report.report_digest),
+                )
+
             # Unlock adapter
             adapter.confirm_reconciliation(report.confirmation)
         else:

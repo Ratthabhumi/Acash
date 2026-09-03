@@ -137,7 +137,16 @@ class ExecutionCoordinator:
     """Shadow-state owner for a single order execution.
 
     Attributes:
-        execution_id: tied to ``ExecutionManifest.execution_id``.
+        execution_id: tied to ``ExecutionManifest.execution_id``. This is the
+            primary audit-lineage identity of the coordinator and is used as the
+            key in ``coordinator_map`` dictionaries. It is NOT the routing identity
+            in Gate 6 evidence delivery — see ``intent_id`` for that.
+        intent_id: linked ``OrderIntent.intent_id``. When supplied, used as the
+            EXCLUSIVE coordinator routing identity in
+            ``execute_reconciliation_cycle()`` evidence delivery (Gate 6 Phase A).
+            Structurally distinct from ``execution_id`` (``ExecutionManifest``
+            lineage identifier). Do NOT set ``intent_id = execution_id`` unless
+            they are genuinely the same lifecycle object.
         requested_qty: requested volume from the originating ``OrderIntent``.
     """
 
@@ -146,12 +155,14 @@ class ExecutionCoordinator:
         execution_id: str,
         requested_qty: Decimal,
         initial_state: OrderLifecycleState = OrderLifecycleState.SUBMITTED,
+        intent_id: Optional[str] = None,
     ) -> None:
         if not execution_id or not execution_id.strip():
             raise ValueError("execution_id must be non-empty")
         if requested_qty < Decimal("0"):
             raise ValueError("requested_qty cannot be negative")
         self.execution_id = execution_id
+        self.intent_id: Optional[str] = intent_id
         self.requested_qty = requested_qty
         self.shadow_state: OrderLifecycleState = initial_state
         self.filled_qty: Decimal = Decimal("0")

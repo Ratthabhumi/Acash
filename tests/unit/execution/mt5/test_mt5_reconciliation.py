@@ -1780,7 +1780,7 @@ def test_r85_end_to_end_evidence_refs_preserved_to_coordinator() -> None:
     )
     transport.active_positions[985] = broker_pos
 
-    coordinator = ExecutionCoordinator("EXEC_785", Decimal("2.0"), initial_state=OrderLifecycleState.UNKNOWN)
+    coordinator = ExecutionCoordinator("EXEC_785", Decimal("2.0"), initial_state=OrderLifecycleState.UNKNOWN, intent_id="EXEC_785")
     coordinator_map = {"EXEC_785": coordinator}
 
     report = engine.execute_reconciliation_cycle(
