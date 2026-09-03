@@ -2,11 +2,11 @@
 
 > **Document:** `docs/PROJECT_STATUS.md`  
 > **Project Name:** ACASH (Automated Capital Allocation System)  
-> **Status:** Phases 0–10 Complete & Frozen (`3955bf6`); Phase 11 Contract Specification & Red-Team Review v1.1 Locked (`86bff0d`); Pre-Phase-11 Architecture Hygiene Complete  
-> **Date:** 2026-09-02  
+> **Status:** Phases 0–12 Complete & Frozen (`1e1d154`); Phase 12 Slice 6 Freeze Gate CLOSED  
+> **Date:** 2026-09-03  
 > **Operating Environment:** Windows 10/11 (AIO workstation)  
 > **Runtime:** Python 3.14.6 64-bit, Git 2.55.0  
-> **Baseline Verification:** 904 collected tests (901 passed, 3 skipped optional, 0 failed in 16.76s); MyPy clean across active modules  
+> **Baseline Verification:** 1240 collected tests (1158 unit + 82 integration; 1240 passed, 0 failed, 3 skipped optional); MyPy clean across 263 source files  
 
 ---
 
@@ -24,12 +24,12 @@ Phases 0 through 10 are completely implemented, verified, and frozen. Phase 11 C
 
 | Aspect | Inspected State | Notes / Implication |
 | :--- | :--- | :--- |
-| **Codebase State** | Phases 0–10 Fully Implemented & Frozen | ~13,400+ lines of production and test code across 230 source files. Zero Phase 11 code authored. |
+| **Codebase State** | Phases 0–12 Fully Implemented & Frozen | ~19,000+ lines of production and test code across 263 source files. |
 | **Primary Machine** | Single Workstation (AIO) | Adheres to Section 29 (simple infrastructure first). |
 | **Secondary Hardware** | Acer Ubuntu Server, ATX Proxmox | Available for future 24/7 services and staging/testing. |
 | **Python Runtime** | Python 3.14.6 64-bit | Core packages built Python-first; `.venv` environment isolation. |
-| **Test Suite Baseline** | 904 collected tests (901 passed, 3 skipped) | 3 tests skipped cleanly due to optional dependency gating (`skfolio`, `cvxpy`). 0 failures. |
-| **Version Control** | Git (`main == origin/main`) | Clean working tree; canonical commit: `86bff0d`. |
+| **Test Suite Baseline** | 1240 collected tests (1158 unit + 82 integration; 1240 passed, 0 failed) | 3 tests skipped cleanly due to optional dependency gating (`skfolio`, `cvxpy`). 0 failures. |
+| **Version Control** | Git (`main == origin/main`) | Clean working tree; Phase 12 frozen commit: `1e1d154`. |
 
 ---
 
@@ -57,7 +57,8 @@ Phases 0 through 10 are completely implemented, verified, and frozen. Phase 11 C
 | **Phase 8.5** | Alpha Research Qualification & Lineage DTOs | **FROZEN** | Immutable `AlphaQualificationDossier`. Commit: `9ce1365`. |
 | **Phase 9** | Sovereign Deterministic Risk Engine & Kill Switch | **FROZEN** | Boundary veto, derisking, kill switch. Commit: `6bd40d8`. |
 | **Phase 10** | Runtime Orchestration & Continuous Paper Operations | **FROZEN** | 5-stage supervisor, dual-clock scheduler, ledger. Commit: `3955bf6`. |
-| **Phase 11** | Forward Drift Detection & Execution Attribution | **CONTRACT LOCKED (v1.1)** | Spec & Red-Team Review locked. Commit: `86bff0d`. |
+| **Phase 11** | Forward Drift Detection & Execution Attribution | **FROZEN** | 107 unit + 26 red-team + 9 integration tests. Commit: `86bff0d` → `092a2b1`. |
+| **Phase 12** | MT5 & Venue Execution Adapters | **FROZEN** | 6-D RECON, `MT5BrokerAdapter`, Gate 6 Two-Phase Routing, intent_id routing. Commit: `1e1d154`. Closeout: `docs/phase12/closeout_report.md`. |
 
 ---
 

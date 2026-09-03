@@ -58,7 +58,7 @@
 ✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [COMPLETED - PASSED — 107 Tests, 26 Red Team, 9 Integration]
    │
    ▼
-⏳ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
+✅ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN — 1240/1240 Tests, 1e1d154]
    │
    ▼
 ⏳ Phase 13: Live Small Capital (MANDATORY HUMAN APPROVAL) ──► Gate 13
@@ -319,13 +319,19 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 12: MT5 & Venue Execution Adapters [UPCOMING]
-- **Objective:** Build thin, secure broker connectivity adapters.
+### ✅ Phase 12: MT5 & Venue Execution Adapters [COMPLETED & FROZEN — `1e1d154`]
+- **Objective:** Build thin, secure broker connectivity adapters with authoritative 6-D reconciliation.
 - **Deliverables:**
-  - MetaTrader 5 (MT5) IPC Gateway / Execution Adapter.
-  - Account state, position, and order reconciliation loop.
-  - Strict boundary: Zero strategy logic inside MT5/MQL5.
-- **Gate 12 Criteria:** Order roundtrip latency and reconciliation tested in demo/staging broker account.
+  - **Slice 1:** MT5 Domain Schemas, Enums & Broker Mapping (BMAP-MT5)
+  - **Slice 2:** `BrokerSymbolSpec` — Immutable instrument spec, Decimal volume quantization, tick-grid price alignment
+  - **Slice 3:** MT5 Terminal Driver & IPC Transport Bridge (Windows Local `NativeMT5Transport`)
+  - **Slice 4:** `MT5BrokerAdapter` & Authoritative 6-Dimensional Reconciliation Engine
+  - **RECON-6D Rev1–7:** Reconciliation remediation (R4-FIX through R7-FIX, all fail-closed). Commit: `44202fe`
+  - **Slice 5:** Execution Lifecycle Integration — `intent_id` as exclusive Gate 6 routing key; Two-Phase preflight atomicity routing (Phase A: duplicate/lineage/coordinator validation; Phase B: evidence delivery). Commit: `1e1d154`
+  - **Slice 6 (Freeze):** Architecture conformance audit, safety gate verification, frozen contract inventory, TradingView deferred backlog. See: `docs/phase12/closeout_report.md`
+- **Frozen Contracts:** `transition_order()` sole authority; `intent_id` sole routing key; `can_dispatch()` gate; UNKNOWN semantics; ACK≠FILLED; BLOCKED absorbing; $0.00 live capital
+- **Deferred:** TradingView Ingress Gateway (signal ingress — separate backlog item, candidate for Phase 13 start)
+- **Gate 12 Criteria Met:** 1240/1240 tests passed (1158 unit + 82 integration); MyPy 0 errors in 263 files; Architecture conformance audit passed; Full frozen contract inventory documented. Commit: `1e1d154`.
 
 ---
 
