@@ -117,13 +117,38 @@ Phase 13: Live Small Capital (MANDATORY HUMAN APPROVAL)
 - All safety gates, kill switches, and alerts verified operational
 - Live telemetry dashboard and real-time risk monitor operational
 
-### 5.2 Recommended Phase 13 Starting Work
+### 5.2 Phase 13 = Live Small Capital Deployment
 
-**Option A (TradingView first):** TradingView Ingress Gateway — adds signal ingress pipeline without touching execution authority. Lowest risk starting point. Fully decoupled from Phase 12 frozen contracts.
+Per `ROADMAP.md` Gate 13 — Phase 13 is **Live Small Capital Deployment**, not TradingView.
 
-**Option B (Live harness first):** Build live execution harness with micro-lot sizing. Higher risk; requires explicit human approval gate before any live capital deployment.
+TradingView Ingress Gateway is a **separate deferred backlog item** and does NOT gate Phase 13.
 
-> **Recommendation:** Option A first — complete the deferred Phase 12 signal ingress before enabling live capital. This completes the full ACASH → TradingView signal pipeline without reopening execution contracts.
+**Phase 13 execution path uses the existing stack as-is:**
+```
+Strategy / Signal
+      ↓
+Research → Validation → Tournament
+      ↓
+Risk Engine
+      ↓
+Admission Gate
+      ↓
+ExecutionCoordinator
+      ↓
+MT5BrokerAdapter
+      ↓
+Broker (live, micro-lots)
+```
+
+**Phase 13 pre-conditions (go/no-go gate before live capital):**
+1. Operational readiness review
+2. Paper/demo evidence from MT5 demo account
+3. Safety / kill-switch verified operational
+4. Monitoring / reconciliation confirmed ready
+5. Live capital limit explicitly defined (micro-lots)
+6. **MANDATORY HUMAN APPROVAL** (Gate 13 hard requirement)
+
+**$0.00 live capital remains frozen invariant until Phase 13 explicit authorization.**
 
 ### 5.3 What Phase 13 MUST NOT Do
 

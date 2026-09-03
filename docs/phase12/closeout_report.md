@@ -346,9 +346,38 @@ Per `ROADMAP.md` Phase 13 definition:
 - Reconciliation between expected vs broker execution prices
 - **Gate 13 Criteria:** EXPLICIT HUMAN APPROVAL REQUIRED; all safety gates, kill switches, and alerts verified operational
 
-### 7.3 First Phase 13 Work Candidate
+### 7.3 Phase 13 = Live Small Capital Deployment
 
-TradingView Ingress Gateway implementation is a natural Phase 13 starting point — it adds signal ingress without touching execution authority. It provides the signal pipeline from TradingView → ACASH research queue, completing the original Phase 12 contract spec intent in a safer incremental manner.
+**Phase 13 is Live Small Capital Deployment** per the original `ROADMAP.md`, not TradingView.
+
+TradingView Ingress Gateway is a separate deferred backlog item and does **NOT** gate Phase 13.
+
+**Phase 13 execution path uses the existing Phase 12 stack:**
+```
+Strategy / Signal
+      ↓
+Research → Validation → Tournament
+      ↓
+Risk Engine
+      ↓
+Admission Gate
+      ↓
+ExecutionCoordinator
+      ↓
+MT5BrokerAdapter (live account, micro-lots)
+      ↓
+Broker (live)
+```
+
+**Pre-conditions before Phase 13 live capital activation:**
+1. Operational readiness review
+2. Paper/demo evidence from MT5 demo account
+3. Safety / kill-switch verified operational
+4. Monitoring / reconciliation confirmed ready
+5. Live capital limit explicitly defined (micro-lots)
+6. **MANDATORY HUMAN APPROVAL** (Gate 13 hard requirement — non-negotiable)
+
+TradingView Ingress can be added **independently** as a backlog item — before, during, or after Phase 13 — without touching the execution authority contracts.
 
 ---
 
