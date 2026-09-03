@@ -1873,3 +1873,37 @@ def test_r89_canceled_deal_cannot_prove_subsequent_close() -> None:
     report = engine.reconcile_6d(shadow, snapshot)
     assert report.is_clean is False
     assert any(d.kind == MT5DiscrepancyKind.PHANTOM_POSITION and d.identifier == "989" for d in report.discrepancies)
+
+
+def test_r95_populated_entry_actively_enforces_relational_lifecycle() -> None:
+    """R95: Populating entry enables active relational lifecycle verification (DEAL_ENTRY_IN/OUT)."""
+    from acash.execution.mt5.reconciliation import verify_order_deal_execution
+
+    opening_order = MT5OrderReality(
+        order_ticket=1001,
+        position_ticket=0,  # opening order
+        symbol="EURUSD",
+        order_type=MT5OrderType.BUY,
+        state=MT5OrderState.ORDER_STATE_FILLED,
+        volume_initial=Decimal("1.0"),
+        volume_current=Decimal("0.0"),
+        price_open=Decimal("1.0850"),
+        time_setup_utc=datetime.now(timezone.utc),
+    )
+
+    # Contradictory execution deal: opening order produced DEAL_ENTRY_OUT
+    contradictory_deal = MT5DealReality(
+        deal_ticket=2001,
+        order_ticket=1001,
+        position_ticket=3001,
+        symbol="EURUSD",
+        deal_type=MT5DealType.DEAL_TYPE_BUY,
+        volume=Decimal("1.0"),
+        price=Decimal("1.0850"),
+        deal_time_utc=datetime.now(timezone.utc),
+        entry=MT5DealEntry.DEAL_ENTRY_OUT,
+    )
+
+    with pytest.raises(MT5ReconciliationError, match="RELATIONAL_ENTRY_MISMATCH: opening order 1001 produced DEAL_ENTRY_OUT"):
+        verify_order_deal_execution(1001, opening_order, (contradictory_deal,))
+

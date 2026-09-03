@@ -1,10 +1,13 @@
 """Deterministic mapping and classification logic for MetaTrader 5 execution."""
 
 from decimal import Decimal
-from typing import Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from acash.execution.broker_events import BrokerEventKind
 from acash.execution.mt5.enums import (
+    MT5AccountMarginMode,
+    MT5DealEntry,
+    MT5DealType,
     MT5ExecutionPolicy,
     MT5FillingMode,
     MT5OrderTime,
@@ -14,6 +17,7 @@ from acash.execution.mt5.enums import (
     MT5TradeExecutionMode,
 )
 from acash.execution.mt5.exceptions import (
+    MT5DomainError,
     MT5FillingModeError,
     MT5RetcodeError,
     MT5ValidationError,
@@ -282,3 +286,69 @@ def map_order_intent_to_trade_request(
         position=position,
         position_by=None,
     )
+
+
+# ============================================================================
+# PROTOCOL BOUNDARY CANONICAL MQL5 INTEGER DECODERS (SINGLE CANONICAL AUTHORITY)
+# ============================================================================
+
+# Canonical MQL5 ENUM_DEAL_TYPE mapping (0..17)
+MQL5_DEAL_TYPE_DECODE_MAP: Dict[int, MT5DealType] = {
+    0: MT5DealType.DEAL_TYPE_BUY,
+    1: MT5DealType.DEAL_TYPE_SELL,
+    2: MT5DealType.DEAL_TYPE_BALANCE,
+    3: MT5DealType.DEAL_TYPE_CREDIT,
+    4: MT5DealType.DEAL_TYPE_CHARGE,
+    5: MT5DealType.DEAL_TYPE_CORRECTION,
+    6: MT5DealType.DEAL_TYPE_BONUS,
+    7: MT5DealType.DEAL_TYPE_COMMISSION,
+    8: MT5DealType.DEAL_TYPE_COMMISSION_DAILY,
+    9: MT5DealType.DEAL_TYPE_COMMISSION_MONTHLY,
+    10: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_DAILY,
+    11: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_MONTHLY,
+    12: MT5DealType.DEAL_TYPE_INTEREST,
+    13: MT5DealType.DEAL_TYPE_BUY_CANCELED,
+    14: MT5DealType.DEAL_TYPE_SELL_CANCELED,
+    15: MT5DealType.DEAL_DIVIDEND,
+    16: MT5DealType.DEAL_DIVIDEND_FRANKED,
+    17: MT5DealType.DEAL_TAX,
+}
+
+
+def decode_mt5_deal_type(raw: int) -> MT5DealType:
+    """Protocol boundary decoder: maps raw external MQL5 integer to canonical MT5DealType."""
+    if raw not in MQL5_DEAL_TYPE_DECODE_MAP:
+        raise MT5DomainError(f"UNKNOWN_MQL5_DEAL_TYPE: {raw}")
+    return MQL5_DEAL_TYPE_DECODE_MAP[raw]
+
+
+# Canonical MQL5 ENUM_DEAL_ENTRY mapping (0..3)
+MQL5_DEAL_ENTRY_DECODE_MAP: Dict[int, MT5DealEntry] = {
+    0: MT5DealEntry.DEAL_ENTRY_IN,
+    1: MT5DealEntry.DEAL_ENTRY_OUT,
+    2: MT5DealEntry.DEAL_ENTRY_INOUT,
+    3: MT5DealEntry.DEAL_ENTRY_OUT_BY,
+}
+
+
+def decode_mt5_deal_entry(raw: int) -> MT5DealEntry:
+    """Protocol boundary decoder: maps raw external MQL5 integer to canonical MT5DealEntry."""
+    if raw not in MQL5_DEAL_ENTRY_DECODE_MAP:
+        raise MT5ValidationError(f"UNKNOWN_DEAL_ENTRY: unmapped deal entry {raw}")
+    return MQL5_DEAL_ENTRY_DECODE_MAP[raw]
+
+
+# Canonical MQL5 ENUM_ACCOUNT_MARGIN_MODE mapping (0..2)
+MQL5_MARGIN_MODE_DECODE_MAP: Dict[int, MT5AccountMarginMode] = {
+    0: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
+    1: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_EXCHANGE,
+    2: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING,
+}
+
+
+def decode_mt5_margin_mode(raw: int) -> MT5AccountMarginMode:
+    """Protocol boundary decoder: maps raw external MQL5 integer to canonical MT5AccountMarginMode."""
+    if raw not in MQL5_MARGIN_MODE_DECODE_MAP:
+        raise MT5DomainError(f"UNKNOWN_ACCOUNT_MARGIN_MODE: unmapped margin_mode {raw}")
+    return MQL5_MARGIN_MODE_DECODE_MAP[raw]
+

@@ -211,7 +211,13 @@ class MT5DealReality(BaseModel):
 
     deal_ticket: int = Field(gt=0, description="Unique MT5 deal ticket.")
     order_ticket: int = Field(gt=0, description="Linked MT5 order ticket.")
-    position_ticket: int = Field(ge=0, description="Linked MT5 position ticket.")
+    position_ticket: int = Field(
+        ge=0,
+        description=(
+            "Linked MT5 position ticket (corresponds to MQL5 DEAL_POSITION_ID, which is the lifecycle "
+            "identifier of the position this deal affected; distinct from individual ticket numbers in hedging mode)."
+        ),
+    )
     symbol: str = Field(min_length=1, description="Symbol name.")
     deal_type: MT5DealType = Field(description="Deal operation type.")
     volume: Decimal = Field(gt=Decimal("0.0"), description="Executed volume.")

@@ -60,6 +60,10 @@ from acash.execution.mt5.schemas import (
     MT5OrderReality,
     MT5PositionReality,
 )
+from acash.execution.mt5.mapping import (
+    MQL5_DEAL_TYPE_DECODE_MAP as MQL5_DEAL_TYPE_DECODE_MAP,
+    decode_mt5_deal_type as decode_mt5_deal_type,
+)
 from acash.execution.mt5.transport import (
     MT5HealthReport,
     MT5ReconciliationConfirmation,
@@ -170,34 +174,8 @@ class ReconciliationToleranceConfig(BaseModel):
 # 3. CANONICAL DEAL DECODING & ARCHITECTURAL CATEGORIZATION
 # ============================================================================
 
-# Protocol Boundary Decode Table — maps raw external MQL5 integer to canonical MT5DealType
-_MQL5_DEAL_TYPE_DECODE_MAP: Dict[int, MT5DealType] = {
-    0: MT5DealType.DEAL_TYPE_BUY,
-    1: MT5DealType.DEAL_TYPE_SELL,
-    2: MT5DealType.DEAL_TYPE_BALANCE,
-    3: MT5DealType.DEAL_TYPE_CREDIT,
-    4: MT5DealType.DEAL_TYPE_CHARGE,
-    5: MT5DealType.DEAL_TYPE_CORRECTION,
-    6: MT5DealType.DEAL_TYPE_BONUS,
-    7: MT5DealType.DEAL_TYPE_COMMISSION,
-    8: MT5DealType.DEAL_TYPE_COMMISSION_DAILY,
-    9: MT5DealType.DEAL_TYPE_COMMISSION_MONTHLY,
-    10: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_DAILY,
-    11: MT5DealType.DEAL_TYPE_INTEREST,
-    12: MT5DealType.DEAL_DIVIDEND,
-    13: MT5DealType.DEAL_DIVIDEND_FRANKED,
-    14: MT5DealType.DEAL_TAX,
-    15: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_MONTHLY,
-    16: MT5DealType.DEAL_TYPE_BUY_CANCELED,
-    17: MT5DealType.DEAL_TYPE_SELL_CANCELED,
-}
-
-
-def decode_mt5_deal_type(raw_dtype: int) -> MT5DealType:
-    """Protocol boundary decoder: maps raw external MQL5 integer to canonical MT5DealType."""
-    if raw_dtype not in _MQL5_DEAL_TYPE_DECODE_MAP:
-        raise MT5DomainError(f"UNKNOWN_MQL5_DEAL_TYPE: {raw_dtype}")
-    return _MQL5_DEAL_TYPE_DECODE_MAP[raw_dtype]
+# Single Canonical Authority: imported from acash.execution.mt5.mapping
+_MQL5_DEAL_TYPE_DECODE_MAP = MQL5_DEAL_TYPE_DECODE_MAP
 
 
 class MT5DealCategory(str, Enum):
@@ -1197,11 +1175,12 @@ class MT5ReconciliationEngine:
         completed_msc = int(capture_to.timestamp() * 1000)
 
         t0 = time.perf_counter()
-        expected_orders_count = transport.history_orders_total(date_from=date_from, date_to=capture_to)
+        orders_from = date_from or datetime.fromtimestamp(0, tz=timezone.utc)
+        expected_orders_count = transport.history_orders_total(date_from=orders_from, date_to=capture_to)
         query_latencies["history_orders_total"] = (time.perf_counter() - t0) * 1000
 
         t0 = time.perf_counter()
-        history_orders = transport.history_orders_get(date_from=date_from, date_to=capture_to)
+        history_orders = transport.history_orders_get(date_from=orders_from, date_to=capture_to)
         query_latencies["history_orders_get"] = (time.perf_counter() - t0) * 1000
         if history_orders is None:
             raise MT5TransportError("history_orders_get() returned None")

@@ -26,7 +26,7 @@ from acash.execution.mt5.transport import (
 )
 from acash.execution.schema import OrderIntent, OrderSide, OrderType, TimeInForce
 from acash.execution.state_machine import ExecutionEvent
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 @pytest.fixture
@@ -457,6 +457,7 @@ def test_native_transport_translation(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_account = DummyNamedTuple(
         login=999999,
         trade_mode=2,
+        margin_mode=0,
         leverage=500,
         limit_orders=500,
         margin_so_mode=0,
@@ -918,6 +919,7 @@ def test_t26_unknown_deal_type_fails_closed(monkeypatch: pytest.MonkeyPatch) -> 
         position_id=101,
         symbol="EURUSD",
         type=99,  # Unknown deal type
+        entry=0,
         volume=1.0,
         price=1.08500,
         commission=0.0,
@@ -936,7 +938,7 @@ def test_t26_unknown_deal_type_fails_closed(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr("importlib.import_module", lambda name: MockBadDeal)
     transport = NativeMT5Transport()
-    with pytest.raises(MT5ValidationError, match="UNKNOWN_DEAL_TYPE"):
+    with pytest.raises(MT5DomainError, match="UNKNOWN_MQL5_DEAL_TYPE"):
         transport.history_deals_get()
 
 
@@ -1112,6 +1114,7 @@ def test_t32_native_api_requote_10004_not_timeout(
             return DummyNamedTuple(
                 login=123456,
                 trade_mode=0,
+                margin_mode=0,
                 leverage=100,
                 limit_orders=200,
                 margin_so_mode=0,
@@ -1232,7 +1235,7 @@ def test_t35_res_e_invalid_params_semantic_rejection(
         @staticmethod
         def account_info() -> object:
             return DummyNamedTuple(
-                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                login=123456, trade_mode=0, margin_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
                 trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
                 equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
                 margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
@@ -1292,7 +1295,7 @@ def test_t36_res_e_auto_trading_disabled_permission_degraded(
         @staticmethod
         def account_info() -> object:
             return DummyNamedTuple(
-                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                login=123456, trade_mode=0, margin_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
                 trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
                 equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
                 margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
@@ -1353,7 +1356,7 @@ def test_t37_res_e_internal_fail_receive_ipc_unavailable(
         @staticmethod
         def account_info() -> object:
             return DummyNamedTuple(
-                login=123456, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+                login=123456, trade_mode=0, margin_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
                 trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0, profit=0.0,
                 equity=100000.0, margin=0.0, margin_free=100000.0, margin_level=0.0, margin_so_call=50.0,
                 margin_so_so=30.0, margin_initial=0.0, margin_maintenance=0.0, currency="USD",
@@ -1422,6 +1425,285 @@ def test_t39_non_timeout_flag_cannot_override_timeout_api_code() -> None:
     assert event_kind == BrokerEventKind.CONNECTION_LOST
     assert retcode == MT5Retcode.TRADE_RETCODE_TIMEOUT.value
     assert req_recon is True
+
+
+# ============================================================================
+# R90 - R94: Native Boundary Strict Fail-Closed & Canonical Enum Tests (Rev 7)
+# ============================================================================
+
+def test_r90_native_account_missing_or_invalid_margin_mode_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R90: NativeMT5Transport.account_info() fails closed when margin_mode is missing or invalid."""
+    import importlib
+    from acash.execution.mt5.enums import MT5AccountMarginMode
+    from acash.execution.mt5.exceptions import MT5DomainError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    raw_acc_no_margin = DummyNamedTuple(
+        login=1001, trade_mode=0, leverage=100, limit_orders=200, margin_so_mode=0,
+        trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0,
+        profit=0.0, equity=100000.0, margin=0.0, margin_free=100000.0,
+        margin_level=0.0, margin_so_call=50.0, margin_so_so=30.0, currency="USD",
+    )
+    class MockAccMod:
+        current_acc: Any = raw_acc_no_margin
+        @classmethod
+        def account_info(cls) -> object:
+            return cls.current_acc
+
+    monkeypatch.setattr(importlib, "import_module", lambda name: MockAccMod)
+    transport = NativeMT5Transport()
+
+    # Case 1: missing margin_mode attribute
+    MockAccMod.current_acc = raw_acc_no_margin
+    with pytest.raises(MT5DomainError, match="MISSING_ACCOUNT_MARGIN_MODE"):
+        transport.account_info()
+
+    # Case 2: margin_mode is None
+    MockAccMod.current_acc = DummyNamedTuple(
+        login=1001, trade_mode=0, margin_mode=None, leverage=100, limit_orders=200, margin_so_mode=0,
+        trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0,
+        profit=0.0, equity=100000.0, margin=0.0, margin_free=100000.0,
+        margin_level=0.0, margin_so_call=50.0, margin_so_so=30.0, currency="USD",
+    )
+    with pytest.raises(MT5DomainError, match="MISSING_ACCOUNT_MARGIN_MODE"):
+        transport.account_info()
+
+    # Case 3: margin_mode has unknown value 99
+    MockAccMod.current_acc = DummyNamedTuple(
+        login=1001, trade_mode=0, margin_mode=99, leverage=100, limit_orders=200, margin_so_mode=0,
+        trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0,
+        profit=0.0, equity=100000.0, margin=0.0, margin_free=100000.0,
+        margin_level=0.0, margin_so_call=50.0, margin_so_so=30.0, currency="USD",
+    )
+    with pytest.raises(MT5DomainError, match="UNKNOWN_ACCOUNT_MARGIN_MODE"):
+        transport.account_info()
+
+    # Case 4: valid margin_mode 0, 1, 2
+    for raw_m, expected_enum in [
+        (0, MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING),
+        (1, MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_EXCHANGE),
+        (2, MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING),
+    ]:
+        MockAccMod.current_acc = DummyNamedTuple(
+            login=1001, trade_mode=0, margin_mode=raw_m, leverage=100, limit_orders=200, margin_so_mode=0,
+            trade_allowed=True, trade_expert=True, balance=100000.0, credit=0.0,
+            profit=0.0, equity=100000.0, margin=0.0, margin_free=100000.0,
+            margin_level=0.0, margin_so_call=50.0, margin_so_so=30.0, currency="USD",
+        )
+        acc_reality = transport.account_info()
+        assert acc_reality is not None
+        assert acc_reality.margin_mode == expected_enum
+
+
+def test_r91_native_position_missing_or_invalid_identifier_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R91: NativeMT5Transport.positions_get() fails closed on missing/<=0 identifier with NO fallback to ticket."""
+    import importlib
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockPosMod:
+        current_positions: List[Any] = []
+        @classmethod
+        def positions_get(cls, **kwargs: Any) -> object:
+            return cls.current_positions
+
+    monkeypatch.setattr(importlib, "import_module", lambda name: MockPosMod)
+    transport = NativeMT5Transport()
+
+    # Case 1: position missing identifier attribute (must NOT fallback to ticket 777)
+    MockPosMod.current_positions = [
+        DummyNamedTuple(
+            ticket=777, symbol="EURUSD", type=0, volume=1.0, price_open=1.085,
+            price_current=1.085, sl=0.0, tp=0.0, swap=0.0, profit=0.0, magic=0, comment="", time=1700000000,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="MISSING_POSITION_IDENTIFIER"):
+        transport.positions_get()
+
+    # Case 2: position identifier is 0
+    MockPosMod.current_positions = [
+        DummyNamedTuple(
+            ticket=777, identifier=0, symbol="EURUSD", type=0, volume=1.0, price_open=1.085,
+            price_current=1.085, sl=0.0, tp=0.0, swap=0.0, profit=0.0, magic=0, comment="", time=1700000000,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="INVALID_POSITION_IDENTIFIER"):
+        transport.positions_get()
+
+    # Case 3: position identifier is negative
+    MockPosMod.current_positions = [
+        DummyNamedTuple(
+            ticket=777, identifier=-10, symbol="EURUSD", type=0, volume=1.0, price_open=1.085,
+            price_current=1.085, sl=0.0, tp=0.0, swap=0.0, profit=0.0, magic=0, comment="", time=1700000000,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="INVALID_POSITION_IDENTIFIER"):
+        transport.positions_get()
+
+    # Case 4: valid distinct identifier and ticket
+    MockPosMod.current_positions = [
+        DummyNamedTuple(
+            ticket=777, identifier=9999, symbol="EURUSD", type=0, volume=1.0, price_open=1.085,
+            price_current=1.085, sl=0.0, tp=0.0, swap=0.0, profit=0.0, magic=0, comment="", time=1700000000,
+        )
+    ]
+    res = transport.positions_get()
+    assert len(res) == 1
+    assert res[0].position_ticket == 777
+    assert res[0].position_identifier == 9999
+
+
+def test_r92_native_deal_entry_decoding_and_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R92: NativeMT5Transport.history_deals_get() decodes d.entry to canonical MT5DealEntry and fails closed if missing/unknown."""
+    import importlib
+    from acash.execution.mt5.enums import MT5DealEntry
+    from acash.execution.mt5.exceptions import MT5ValidationError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    class MockDealMod:
+        current_deals: List[Any] = []
+        @classmethod
+        def history_deals_get(cls, **kwargs: Any) -> object:
+            return cls.current_deals
+
+    monkeypatch.setattr(importlib, "import_module", lambda name: MockDealMod)
+    transport = NativeMT5Transport()
+
+    # Case 1: missing entry attribute
+    MockDealMod.current_deals = [
+        DummyNamedTuple(
+            ticket=101, order=201, position_id=301, symbol="EURUSD", type=0,
+            volume=1.0, price=1.085, commission=0.0, fee=0.0, swap=0.0, profit=0.0,
+            time=1700000000, comment="", magic=0,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="MISSING_DEAL_ENTRY"):
+        transport.history_deals_get()
+
+    # Case 2: entry is None
+    MockDealMod.current_deals = [
+        DummyNamedTuple(
+            ticket=101, order=201, position_id=301, symbol="EURUSD", type=0,
+            volume=1.0, price=1.085, commission=0.0, fee=0.0, swap=0.0, profit=0.0,
+            time=1700000000, comment="", magic=0, entry=None,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="MISSING_DEAL_ENTRY"):
+        transport.history_deals_get()
+
+    # Case 3: entry has unmapped integer 99
+    MockDealMod.current_deals = [
+        DummyNamedTuple(
+            ticket=101, order=201, position_id=301, symbol="EURUSD", type=0,
+            volume=1.0, price=1.085, commission=0.0, fee=0.0, swap=0.0, profit=0.0,
+            time=1700000000, comment="", magic=0, entry=99,
+        )
+    ]
+    with pytest.raises(MT5ValidationError, match="UNKNOWN_DEAL_ENTRY"):
+        transport.history_deals_get()
+
+    # Case 4: valid entries 0..3
+    entry_test_pairs = [
+        (0, MT5DealEntry.DEAL_ENTRY_IN),
+        (1, MT5DealEntry.DEAL_ENTRY_OUT),
+        (2, MT5DealEntry.DEAL_ENTRY_INOUT),
+        (3, MT5DealEntry.DEAL_ENTRY_OUT_BY),
+    ]
+    for raw_e, expected_enum in entry_test_pairs:
+        MockDealMod.current_deals = [
+            DummyNamedTuple(
+                ticket=101, order=201, position_id=301, symbol="EURUSD", type=0,
+                volume=1.0, price=1.085, commission=0.0, fee=0.0, swap=0.0, profit=0.0,
+                time=1700000000, comment="", magic=0, entry=raw_e,
+            )
+        ]
+        deals = transport.history_deals_get()
+        assert len(deals) == 1
+        assert deals[0].entry == expected_enum
+
+
+def test_r93_native_deal_type_mapping_matches_mql5_canonical(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R93: NativeMT5Transport.history_deals_get() strictly maps all 18 MQL5 deal types (0..17) to canonical enum."""
+    import importlib
+    from acash.execution.mt5.enums import MT5DealType
+    from acash.execution.mt5.exceptions import MT5DomainError
+    from acash.execution.mt5.transport import NativeMT5Transport
+
+    expected_mapping = {
+        0: MT5DealType.DEAL_TYPE_BUY,
+        1: MT5DealType.DEAL_TYPE_SELL,
+        2: MT5DealType.DEAL_TYPE_BALANCE,
+        3: MT5DealType.DEAL_TYPE_CREDIT,
+        4: MT5DealType.DEAL_TYPE_CHARGE,
+        5: MT5DealType.DEAL_TYPE_CORRECTION,
+        6: MT5DealType.DEAL_TYPE_BONUS,
+        7: MT5DealType.DEAL_TYPE_COMMISSION,
+        8: MT5DealType.DEAL_TYPE_COMMISSION_DAILY,
+        9: MT5DealType.DEAL_TYPE_COMMISSION_MONTHLY,
+        10: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_DAILY,
+        11: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_MONTHLY,
+        12: MT5DealType.DEAL_TYPE_INTEREST,
+        13: MT5DealType.DEAL_TYPE_BUY_CANCELED,
+        14: MT5DealType.DEAL_TYPE_SELL_CANCELED,
+        15: MT5DealType.DEAL_DIVIDEND,
+        16: MT5DealType.DEAL_DIVIDEND_FRANKED,
+        17: MT5DealType.DEAL_TAX,
+    }
+
+    class MockSingleDealMod:
+        current_deals: List[Any] = []
+        @classmethod
+        def history_deals_get(cls, **kwargs: Any) -> object:
+            return cls.current_deals
+
+    monkeypatch.setattr(importlib, "import_module", lambda name: MockSingleDealMod)
+    transport = NativeMT5Transport()
+
+    # Test all 18 canonical integers individually
+    for raw_dtype, expected_deal_type in expected_mapping.items():
+        MockSingleDealMod.current_deals = [
+            DummyNamedTuple(
+                ticket=500 + raw_dtype, order=200, position_id=300, symbol="EURUSD",
+                type=raw_dtype, entry=0, volume=1.0, price=1.085, commission=0.0,
+                fee=0.0, swap=0.0, profit=0.0, time=1700000000, comment="", magic=0,
+            )
+        ]
+        deals = transport.history_deals_get()
+        assert len(deals) == 1
+        assert deals[0].deal_type == expected_deal_type, f"Mismatch at raw deal type {raw_dtype}"
+
+    # Verify unknown deal type 18 fails closed
+    MockSingleDealMod.current_deals = [
+        DummyNamedTuple(
+            ticket=600, order=200, position_id=300, symbol="EURUSD",
+            type=18, entry=0, volume=1.0, price=1.085, commission=0.0,
+            fee=0.0, swap=0.0, profit=0.0, time=1700000000, comment="", magic=0,
+        )
+    ]
+    with pytest.raises(MT5DomainError, match="UNKNOWN_MQL5_DEAL_TYPE"):
+        transport.history_deals_get()
+
+
+def test_r94_cross_module_canonical_decoder_consistency() -> None:
+    """R94: Cross-module canonical decoder consistency asserting single authority and absence of local duplicate maps."""
+    import acash.execution.mt5.mapping as mapping_mod
+    import acash.execution.mt5.reconciliation as recon_mod
+    import acash.execution.mt5.transport as transport_mod
+
+    # 1. Assert reconciliation re-exports the exact function from mapping
+    assert recon_mod.decode_mt5_deal_type is mapping_mod.decode_mt5_deal_type
+
+    # 2. Assert reconciliation table alias is the exact same mapping object
+    assert recon_mod._MQL5_DEAL_TYPE_DECODE_MAP is mapping_mod.MQL5_DEAL_TYPE_DECODE_MAP
+
+    # 3. Assert transport.py has no local deal_type_map or duplicate decoders
+    assert not hasattr(transport_mod, "deal_type_map")
+    assert not hasattr(transport_mod, "_MQL5_DEAL_TYPE_DECODE_MAP")
+
+    # 4. Assert mapping has exactly 18 entries matching canonical MQL5 range
+    assert len(mapping_mod.MQL5_DEAL_TYPE_DECODE_MAP) == 18
+    assert set(mapping_mod.MQL5_DEAL_TYPE_DECODE_MAP.keys()) == set(range(18))
+
 
 
 

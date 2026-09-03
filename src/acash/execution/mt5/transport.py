@@ -29,6 +29,11 @@ from acash.execution.mt5.exceptions import (
     MT5TransportError,
     MT5ValidationError,
 )
+from acash.execution.mt5.mapping import (
+    decode_mt5_deal_entry,
+    decode_mt5_deal_type,
+    decode_mt5_margin_mode,
+)
 from acash.execution.mt5.schemas import (
     BrokerSymbolSpec,
     MT5AccountReality,
@@ -581,15 +586,10 @@ class NativeMT5Transport:
         acc = mt5.account_info()
         if acc is None:
             return None
-        raw_margin_mode = int(getattr(acc, "margin_mode", 0))
-        margin_mode_map = {
-            0: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_NETTING,
-            1: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_EXCHANGE,
-            2: MT5AccountMarginMode.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING,
-        }
-        if raw_margin_mode not in margin_mode_map:
-            raise MT5DomainError(f"UNKNOWN_ACCOUNT_MARGIN_MODE: unmapped margin_mode {raw_margin_mode}")
-        margin_mode = margin_mode_map[raw_margin_mode]
+        raw_margin_mode = getattr(acc, "margin_mode", None)
+        if raw_margin_mode is None:
+            raise MT5DomainError("MISSING_ACCOUNT_MARGIN_MODE: account object missing required margin_mode property")
+        margin_mode = decode_mt5_margin_mode(int(raw_margin_mode))
         return MT5AccountReality(
             login=int(acc.login),
             trade_mode=int(acc.trade_mode),
@@ -828,8 +828,15 @@ class NativeMT5Transport:
             kwargs["ticket"] = ticket
         if position is not None:
             kwargs["position"] = position
-        if date_from is not None and date_to is not None:
-            kwargs["date_from"] = date_from
+        effective_from = date_from
+        if date_to is not None and effective_from is None:
+            effective_from = datetime.fromtimestamp(0, timezone.utc)
+        if effective_from is not None and date_to is not None:
+            kwargs["date_from"] = effective_from
+            kwargs["date_to"] = date_to
+        elif effective_from is not None:
+            kwargs["date_from"] = effective_from
+        elif date_to is not None:
             kwargs["date_to"] = date_to
 
         raw_orders = mt5.history_orders_get(**kwargs)
@@ -853,8 +860,13 @@ class NativeMT5Transport:
             raise MT5TransportError("Cannot query history_orders_total: transport is disconnected.")
         mt5 = self._get_mt5()
         try:
-            if date_from is not None and date_to is not None:
-                total = mt5.history_orders_total(date_from, date_to)
+            effective_from = date_from
+            if date_to is not None and effective_from is None:
+                effective_from = datetime.fromtimestamp(0, timezone.utc)
+            if effective_from is not None and date_to is not None:
+                total = mt5.history_orders_total(effective_from, date_to)
+            elif effective_from is not None:
+                total = mt5.history_orders_total(effective_from)
             else:
                 total = mt5.history_orders_total()
             if total is None:
@@ -902,10 +914,21 @@ class NativeMT5Transport:
                     f"UNKNOWN_POSITION_TYPE: received unmapped position type {raw_pos_type} for position {p.ticket}"
                 )
 
+            raw_identifier = getattr(p, "identifier", None)
+            if raw_identifier is None:
+                raise MT5ValidationError(
+                    f"MISSING_POSITION_IDENTIFIER: position object {p.ticket} missing required identifier property"
+                )
+            position_identifier = int(raw_identifier)
+            if position_identifier <= 0:
+                raise MT5ValidationError(
+                    f"INVALID_POSITION_IDENTIFIER: position identifier must be positive int, got {position_identifier} for position {p.ticket}"
+                )
+
             parsed.append(
                 MT5PositionReality(
                     position_ticket=int(p.ticket),
-                    position_identifier=int(getattr(p, "identifier", p.ticket)),
+                    position_identifier=position_identifier,
                     symbol=str(p.symbol),
                     position_type=pos_type,
                     volume=Decimal(str(p.volume)),
@@ -935,8 +958,15 @@ class NativeMT5Transport:
             kwargs["ticket"] = ticket
         if position is not None:
             kwargs["position"] = position
-        if date_from is not None and date_to is not None:
-            kwargs["date_from"] = date_from
+        effective_from = date_from
+        if date_to is not None and effective_from is None:
+            effective_from = datetime.fromtimestamp(0, timezone.utc)
+        if effective_from is not None and date_to is not None:
+            kwargs["date_from"] = effective_from
+            kwargs["date_to"] = date_to
+        elif effective_from is not None:
+            kwargs["date_from"] = effective_from
+        elif date_to is not None:
             kwargs["date_to"] = date_to
 
         raw_deals = mt5.history_deals_get(**kwargs)
@@ -947,33 +977,16 @@ class NativeMT5Transport:
             raise MT5TransportError(f"NATIVE_HISTORY_DEALS_GET_FAILED: {err_desc} (API error code {err_code})")
 
         parsed: List[MT5DealReality] = []
-        deal_type_map = {
-            0: MT5DealType.DEAL_TYPE_BUY,
-            1: MT5DealType.DEAL_TYPE_SELL,
-            2: MT5DealType.DEAL_TYPE_BALANCE,
-            3: MT5DealType.DEAL_TYPE_CREDIT,
-            4: MT5DealType.DEAL_TYPE_CHARGE,
-            5: MT5DealType.DEAL_TYPE_CORRECTION,
-            6: MT5DealType.DEAL_TYPE_BONUS,
-            7: MT5DealType.DEAL_TYPE_COMMISSION,
-            8: MT5DealType.DEAL_TYPE_COMMISSION_DAILY,
-            9: MT5DealType.DEAL_TYPE_COMMISSION_MONTHLY,
-            10: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_DAILY,
-            11: MT5DealType.DEAL_TYPE_COMMISSION_AGENT_MONTHLY,
-            12: MT5DealType.DEAL_TYPE_INTEREST,
-            13: MT5DealType.DEAL_TYPE_BUY_CANCELED,
-            14: MT5DealType.DEAL_TYPE_SELL_CANCELED,
-            15: MT5DealType.DEAL_DIVIDEND,
-            16: MT5DealType.DEAL_DIVIDEND_FRANKED,
-            17: MT5DealType.DEAL_TAX,
-        }
-
         for d in raw_deals:
             raw_deal_type = int(d.type)
-            if raw_deal_type not in deal_type_map:
+            deal_type = decode_mt5_deal_type(raw_deal_type)
+
+            raw_entry = getattr(d, "entry", None)
+            if raw_entry is None:
                 raise MT5ValidationError(
-                    f"UNKNOWN_DEAL_TYPE: received unmapped deal type {raw_deal_type} for deal {d.ticket}"
+                    f"MISSING_DEAL_ENTRY: deal {d.ticket} missing required entry property"
                 )
+            deal_entry = decode_mt5_deal_entry(int(raw_entry))
 
             parsed.append(
                 MT5DealReality(
@@ -981,7 +994,7 @@ class NativeMT5Transport:
                     order_ticket=int(d.order),
                     position_ticket=int(d.position_id),
                     symbol=str(d.symbol),
-                    deal_type=deal_type_map[raw_deal_type],
+                    deal_type=deal_type,
                     volume=Decimal(str(d.volume)),
                     price=Decimal(str(d.price)),
                     commission=Decimal(str(d.commission)),
@@ -991,6 +1004,7 @@ class NativeMT5Transport:
                     deal_time_utc=datetime.fromtimestamp(d.time, timezone.utc),
                     comment=str(d.comment),
                     magic=int(d.magic),
+                    entry=deal_entry,
                 )
             )
         return tuple(parsed)
@@ -1004,8 +1018,13 @@ class NativeMT5Transport:
             raise MT5TransportError("Cannot query history_deals_total: transport is disconnected.")
         mt5 = self._get_mt5()
         try:
-            if date_from is not None and date_to is not None:
-                total = mt5.history_deals_total(date_from, date_to)
+            effective_from = date_from
+            if date_to is not None and effective_from is None:
+                effective_from = datetime.fromtimestamp(0, timezone.utc)
+            if effective_from is not None and date_to is not None:
+                total = mt5.history_deals_total(effective_from, date_to)
+            elif effective_from is not None:
+                total = mt5.history_deals_total(effective_from)
             else:
                 total = mt5.history_deals_total()
             if total is None:
