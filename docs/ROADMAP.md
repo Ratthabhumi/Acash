@@ -330,7 +330,7 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
   - **Slice 5:** Execution Lifecycle Integration — `intent_id` as exclusive Gate 6 routing key; Two-Phase preflight atomicity routing (Phase A: duplicate/lineage/coordinator validation; Phase B: evidence delivery). Commit: `1e1d154`
   - **Slice 6 (Freeze):** Architecture conformance audit, safety gate verification, frozen contract inventory, TradingView deferred backlog. See: `docs/phase12/closeout_report.md`
 - **Frozen Contracts:** `transition_order()` sole authority; `intent_id` sole routing key; `can_dispatch()` gate; UNKNOWN semantics; ACK≠FILLED; BLOCKED absorbing; $0.00 live capital
-- **Deferred:** TradingView Ingress Gateway (signal ingress — separate backlog item, candidate for Phase 13 start)
+- **Deferred:** TradingView Ingress Gateway (signal ingress — separate independent backlog item; does NOT gate Phase 13)
 - **Gate 12 Criteria Met:** 1240/1240 tests passed (1158 unit + 82 integration); MyPy 0 errors in 263 files; Architecture conformance audit passed; Full frozen contract inventory documented. Commit: `1e1d154`.
 
 ---
