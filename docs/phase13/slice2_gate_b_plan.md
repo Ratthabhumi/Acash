@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 7)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 8)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 7)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 8)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 7 Audit Adjustments)
+## User Review Required (Rev 8 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,28 +31,33 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 7 (Addressing Audit Findings B25–B29):
+### Key Refinements in Rev 8 (Addressing Audit Findings B30–B34):
 
-1. **[BLOCKER B25 RESOLVED] Removal of Operational Default for `max_quote_age_ms`:**
-   - Eliminated the `= 500` default argument from `assert_valid_and_fresh()`. It is now a mandatory keyword-only parameter.
-   - Added `max_quote_age_ms: int` to `LiveAuthorization` as a **MANDATORY HUMAN / EXECUTION POLICY INPUT** with **zero schema default**.
-   - If missing, `None`, or $\le 0$, order admission strictly fails closed with `PreLiveRiskAdmissionError("MAX_QUOTE_AGE_UNDEFINED")`.
-2. **[BLOCKER B26 RESOLVED] Strict UTC-Aware Provenance & Future Timestamp Rejection:**
-   - `MT5QuoteSnapshot.assert_valid_and_fresh()` enforces:
-     - `self.timestamp_utc.tzinfo is not None` and `self.timestamp_utc.utcoffset() == timedelta(0)`.
-     - Non-negative quote age: $0 \le \text{quote\_age\_ms} \le \text{max\_quote\_age\_ms}$.
-     - Any negative age ($\text{age\_ms} < 0$, indicative of future clock skew or forged timestamps) fails closed immediately as `FUTURE_TIMESTAMP_ANOMALY`.
-3. **[BLOCKER B27 RESOLVED] Fail-Closed Guard Against Non-Positive Worst-Case Price:**
-   - In `construct_order_intent()`, added an explicit mathematical assertion:
-     $$\text{worst\_case\_price} > \text{Decimal("0")}$$
-   - If an extreme assumed slippage buffer causes $\text{worst\_case\_price} \le 0$ (e.g. during a SELL with wide buffer), admission immediately raises `PreLiveRiskAdmissionError("INVALID_WORST_CASE_EXECUTION_PRICE")` to prevent negative notional bypassing the ceiling.
-4. **[B28 RESOLVED] Honest Concurrency Statement (Serialized Critical Section):**
-   - Replaced the unprovable claim of "completely race-free" with an exact technical specification:
-     $$\textbf{ACASH order dispatch is serialized through a single ExecutionCoordinator critical section.}$$
-   - Provable properties: $\le 1$ active dispatcher in runtime; lock acquisition failure fails closed immediately; external venue mutations are trapped via post-reconciliation.
-5. **[B29 RESOLVED] Measurable Post-Dispatch Reconciliation SLA Timeout:**
-   - Replaced "immediate reconciliation" with a formal SLA parameter: `post_dispatch_reconciliation_timeout_ms: int` (e.g. $5000\text{ ms}$).
-   - If the broker matching and history visibility cannot be definitively reconciled within the SLA timeout, the state is classified as `UNKNOWN`, the adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.INDETERMINATE_EXECUTION_TIMEOUT`, and all subsequent dispatches are locked.
+1. **[BLOCKER B30 RESOLVED] Authoritative Ledger Head Continuity & Fork Prevention:**
+   - Signing `previous_record_digest` inside the payload prevents link tampering, but does not prevent chain resets or forks using rogue genesis blocks.
+   - **Ledger Head Invariant:** `activate_live_authorization()` verifies that:
+     $$\text{go\_record.previous\_record\_digest} == \text{authoritative\_go\_ledger.current\_head\_digest}$$
+   - For the initial deployment (Genesis):
+     $$\text{authoritative\_go\_ledger.is\_genesis} \land \text{go\_record.previous\_record\_digest} == \text{"0" } \times 64$$
+   - Upon valid activation, the ledger atomically commits the record and advances `current_head_digest = go_record.record_digest`.
+2. **[BLOCKER B31 RESOLVED] Removal of Schema Default for `decision`:**
+   - Removed `default="GO"` from `HumanGORecord.decision`.
+   - `decision: Literal["GO"]` is now a mandatory explicit human input. Omitting the field fails Pydantic schema validation closed.
+3. **[BLOCKER B32 RESOLVED] Removal of Schema Default for `approver_role` & Two-Sided Validation:**
+   - Removed `default=ApproverRole.HUMAN_AUDITOR` from `HumanGORecord.approver_role`.
+   - `approver_role: ApproverRole` is a mandatory explicit human input.
+   - **Two-Sided Invariant:** Activation strictly checks:
+     $$\text{go\_record.approver\_role} == \text{trust\_store}[\text{key\_id}].\text{role} == \text{ApproverRole.HUMAN\_AUDITOR}$$
+4. **[B33 RESOLVED] Strictly Positive Bounds on `post_dispatch_reconciliation_timeout_ms`:**
+   - Added validation: $0 < \text{timeout\_ms} \le 30000\text{ ms}$.
+   - Timeout of $0$ or negative values fail closed with `PreLiveRiskAdmissionError("INVALID_RECONCILIATION_TIMEOUT")`.
+5. **[B34 RESOLVED] Coordinated Observation Semantics & Strict No-Retry Policy on UNKNOWN:**
+   - Replaced "Unified Transactional Observation" with:
+     $$\textbf{Coordinated observation under ACASH serial lock}$$
+     (Accurately disclosing that broker API queries are sequentially coordinated under a local mutex, not atomic across the broker network).
+   - **Strict No-Retry Invariant:** If reconciliation times out, the outcome is `UNKNOWN` (which $\neq$ `FAILED`). The order may already be filled at the broker. The adapter transitions to `BLOCKED`, strictly prohibits automated retries, and requires forensic manual audit.
+6. **[TEST EXPANSION] Complete 39-Test Matrix:**
+   - Expanded the automated test suite to **39 discrete unit tests** covering all chain continuity, role mismatch, zero-default, and timeout no-retry invariants.
 
 ---
 
@@ -60,7 +65,7 @@
 
 The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 7, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and tamper-evident audit chain digests.
+Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 8, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and unbroken audit chain lineage bound to the authoritative ledger head.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -92,10 +97,10 @@ Gate B is the sole authoritative mechanism in ACASH capable of transitioning `Li
          │ [SOVEREIGN HUMAN GOVERNANCE GATE]
          │ G-1: Gate A Evidence Pack Verified (Digest Match)
          │ G-2: Live Broker Account Verified via Read-Only Preflight
-         │ G-3: Human Issues Explicit Signed HumanGORecord (Ed25519)
-         │ G-4: HumanGORecord Archived in Repository Ledger
+         │ G-3: Human Issues Explicit Signed HumanGORecord (Ed25519, No Defaults)
+         │ G-4: HumanGORecord Verified Against Authoritative Ledger Head
          │
-         │ activate_live_authorization(auth, go_record, trust_store)
+         │ activate_live_authorization(auth, go_record, trust_store, go_ledger)
          ▼
         ACTIVE          ◄── [Machine-enables admission.py per-order checks]
          │
@@ -111,9 +116,9 @@ Gate B is the sole authoritative mechanism in ACASH capable of transitioning `Li
 
 ---
 
-## 3. Cryptographic `HumanGORecord` Contract Specification (B11, B13, B14, B15)
+## 3. Cryptographic `HumanGORecord` Contract Specification (B11, B13, B14, B15, B30, B31, B32)
 
-To provide genuine non-repudiation and prevent audit chain tampering, Slice 2 introduces the formal `HumanGORecord` domain model in `src/acash/execution/schema.py`:
+To provide genuine non-repudiation, eliminate defaults, and prevent chain-fork attacks, `HumanGORecord` in `src/acash/execution/schema.py` is defined as:
 
 ```python
 class HumanGORecord(BaseModel):
@@ -121,7 +126,7 @@ class HumanGORecord(BaseModel):
     
     Proves that a designated human authority personally authorized live capital
     deployment for a specific strategy on a specific broker account with verified
-    Gate A evidence and unbroken audit lineage.
+    Gate A evidence, explicit zero-default governance inputs, and unbroken audit lineage.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -130,13 +135,13 @@ class HumanGORecord(BaseModel):
     authorization_digest: str = Field(description="Exact SHA-256 digest of the LiveAuthorization artifact.")
     gate_a_evidence_digest: str = Field(description="Exact SHA-256 digest of certified Gate A evidence pack.")
     live_account_identity_digest: str = Field(description="Exact SHA-256 digest of verified live account identity.")
-    decision: Literal["GO"] = Field(default="GO", description="Explicit sovereign authorization decision.")
+    decision: Literal["GO"] = Field(description="Explicit sovereign authorization decision (REQUIRED; NO DEFAULT).")
     approver_identity: str = Field(description="Descriptive metadata: Human authority name / role.")
-    approver_public_key_id: str = Field(description="Key ID in Ed25519TrustStore (must have role HUMAN_AUDITOR).")
-    approver_role: ApproverRole = Field(default=ApproverRole.HUMAN_AUDITOR, description="Required role: HUMAN_AUDITOR.")
+    approver_public_key_id: str = Field(description="Key ID in Ed25519TrustStore.")
+    approver_role: ApproverRole = Field(description="Explicit governance role (REQUIRED; NO DEFAULT; MUST BE HUMAN_AUDITOR).")
     issued_at_utc: datetime = Field(description="Strict UTC timestamp of human decision.")
     expires_at_utc: datetime = Field(description="Mandatory expiration window for this GO decision.")
-    previous_record_digest: str = Field(default="0" * 64, description="Tamper-evident audit chain linkage.")
+    previous_record_digest: str = Field(description="Tamper-evident audit chain linkage (REQUIRED; NO DEFAULT).")
     signature_algorithm: Literal["Ed25519"] = Field(default="Ed25519")
     signature: str = Field(description="Base64-encoded Ed25519 digital signature over canonical payload.")
     record_digest: str = Field(description="Canonical SHA-256 digest over canonical payload bytes.")
@@ -159,7 +164,7 @@ class HumanGORecord(BaseModel):
             "approver_role": self.approver_role.value,
             "issued_at_utc": self.issued_at_utc.isoformat(),
             "expires_at_utc": self.expires_at_utc.isoformat(),
-            "previous_record_digest": self.previous_record_digest,  # CRITICAL B13 BINDING
+            "previous_record_digest": self.previous_record_digest,  # CRITICAL B13 & B30 BINDING
         }
         return CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
 ```
@@ -175,8 +180,9 @@ $$\begin{array}{rcll}
 $$\boxed{\begin{aligned}
 &\text{SHA-256}(\text{canonical\_payload}) == \text{record\_digest} \quad \land \\
 &\text{Ed25519.verify}(\text{public\_key}, \text{canonical\_payload}, \text{signature}) \quad \land \\
-&\text{trust\_store.get\_key}(\text{key\_id}).\text{role} == \text{HUMAN\_AUDITOR} \quad \land \\
+&\text{go\_record.approver\_role} == \text{trust\_store.get\_key}(\text{key\_id}).\text{role} == \text{HUMAN\_AUDITOR} \quad \land \\
 &\text{trust\_store.get\_key}(\text{key\_id}).\text{is\_active} == \text{True} \quad \land \\
+&\text{go\_record.previous\_record\_digest} == \text{authoritative\_go\_ledger.current\_head\_digest} \quad \land \\
 &\text{auth.authorization\_digest} == \text{go\_record.authorization\_digest} \quad \land \\
 &\text{gate\_a\_evidence\_digest} == \text{go\_record.gate\_a\_evidence\_digest} \quad \land \\
 &\text{live\_account\_identity\_digest} == \text{go\_record.live\_account\_identity\_digest} \quad \land \\
@@ -186,7 +192,7 @@ $$\boxed{\begin{aligned}
 &\text{now\_utc} < \text{auth.expires\_at}
 \end{aligned}}$$
 
-If any single condition fails, activation raises `DataContractError` immediately.
+If any single condition fails, activation raises `DataContractError` immediately. Upon successful activation, the ledger atomically commits the record and advances `current_head_digest = go_record.record_digest`.
 
 ---
 
@@ -296,11 +302,14 @@ if bounded_executable_notional > authorization.max_notional:
     )
 ```
 
-### 4.3 Post-Fill Detective Anomaly Trap & SLA Timeout (B21 & B29)
+### 4.3 Post-Fill Detective Anomaly Trap & SLA Timeout (B21, B29, B33, B34)
 ACASH does not control venue order matching engines during extreme market gaps. If an adverse venue gap causes the actual fill price to result in $\text{actual\_notional} > \text{max\_notional}$:
 - The 6-D reconciliation engine detects the discrepancy immediately upon fill confirmation.
 - The adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.NOTIONAL_BREACH_ANOMALY`.
-- **SLA Timeout (B29):** If reconciliation cannot confirm terminal broker deal/position state within `post_dispatch_reconciliation_timeout_ms` (e.g. $5000\text{ ms}$), the adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.INDETERMINATE_EXECUTION_TIMEOUT`. All subsequent dispatches are locked.
+- **SLA Timeout (B29 & B33):** Requires $0 < \text{post\_dispatch\_reconciliation\_timeout\_ms} \le 30000\text{ ms}$. If reconciliation cannot confirm terminal broker deal/position state within this timeout:
+  - The state is classified as `UNKNOWN` (which $\ne$ `FAILED`).
+  - **Strict No-Retry Invariant (B34):** Automated retries are strictly prohibited to prevent duplicate fills.
+  - The adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.INDETERMINATE_EXECUTION_TIMEOUT`. All subsequent dispatches are locked pending manual forensic audit.
 
 ---
 
@@ -314,7 +323,7 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 | `max_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Bounded)** (B12, B21) | **Human Auditor** |
 | `max_slippage_points` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Assumed Risk Bound)** (B17, B22) | **Human Auditor / Policy** |
 | `max_quote_age_ms` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Zero Default)** (B25) | **Human Auditor / Policy** |
-| `post_dispatch_reconciliation_timeout_ms` | `int` | **[TBD — REQUIRED GOVERNANCE INPUT]** | **Machine-Enforced SLA** (B29) | **Execution SLA Policy** |
+| `post_dispatch_reconciliation_timeout_ms` | `int` | **[TBD — REQUIRED GOVERNANCE INPUT]** | **Machine-Enforced SLA (> 0)** (B29, B33) | **Execution SLA Policy** |
 | `max_position_size` | `Decimal` | `Decimal("0.01")` (Micro-lot) | **Machine-Enforced Per-Order** (`admission.py:685`) | **Plan Rev3 §4.6** |
 | `max_order_rate_per_minute` | `int` | `1` (Throttle limit) | **NOT MACHINE-ENFORCED** (B19 Phase 14 Debt) | **Governance Policy** |
 | `max_daily_loss_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced by RiskEngine** (Binary Reject) | **Human Auditor** |
@@ -329,13 +338,13 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 
 ---
 
-## 6. Serialized Execution Coordinator Critical Section & Anomaly Detection (B18, B24, B28, B29)
+## 6. Serialized Execution Coordinator Critical Section & Anomaly Detection (B18, B24, B28, B29, B34)
 
 ### 6.1 Honest Concurrency Specification (B28):
 ACASH order dispatch is serialized through a single `ExecutionCoordinator` critical section.
 - **Runtime Property:** Exactly $\le 1$ active dispatcher inside the runtime process.
 - **Fail-Closed Mutex:** If lock acquisition fails or times out, dispatch aborts immediately with `PreLiveRiskAdmissionError("DISPATCH_LOCK_ACQUISITION_FAILED")`.
-- **External Venue Concurrency (B24):** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 GUI, EA, other terminal). External mutations are handled via **pre-dispatch assertion rejection** and **post-dispatch reconciliation anomaly detection & containment**.
+- **External Venue Concurrency (B24 & B34):** ACASH cannot prevent external actions on the broker account. External mutations are handled via **pre-dispatch assertion rejection** and **post-dispatch reconciliation anomaly detection & containment**.
 
 ### 6.2 Exclusive Serial Dispatch Lock Lifecycle:
 
@@ -346,7 +355,7 @@ ACASH order dispatch is serialized through a single `ExecutionCoordinator` criti
 Acquire SerialDispatchLock (Exclusive Mutex with Timeout)
        │  (If acquisition fails: Fail closed, raise PreLiveRiskAdmissionError)
        ▼
-Capture Unified Transactional Observation under lock:
+Coordinated observation under ACASH serial lock:
   - Fresh Broker Reality Snapshot (< 100ms old)
   - Fresh MT5QuoteSnapshot (UTC-aware, age <= max_quote_age_ms, ask >= bid > 0)
        │
@@ -372,6 +381,7 @@ Synchronous Post-Dispatch Reconciliation (with post_dispatch_reconciliation_time
   - Detect concurrent external broker mutation (UNTRACKED_BROKER_POSITION)
   - Detect NOTIONAL_BREACH_ANOMALY if fill breached max_notional
   - If reconciliation SLA times out -> Transition to BLOCKED (INDETERMINATE_EXECUTION_TIMEOUT)
+  - STRICTLY NO AUTOMATED RETRY of order_send (B34)
        │  (If anomaly detected: Transition to BLOCKED, raise CRITICAL alert)
        ▼
 Release SerialDispatchLock
@@ -415,9 +425,9 @@ Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-e
 
 ---
 
-## 9. Comprehensive Automated Test Matrix (30 Tests)
+## 9. Comprehensive Automated Test Matrix (39 Tests)
 
-The implementation of Slice 2 will include the following 30 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
+The implementation of Slice 2 will include the following 39 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
 
 1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema bounds.
 2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks (USD, currency match).
@@ -449,6 +459,15 @@ The implementation of Slice 2 will include the following 30 unit tests in `tests
 28. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is omitted.
 29. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
 30. `test_revocation_event_halts_issuance`: Verifies that a `CertificateRevocationEvent` immediately revokes authorization, transitions to `REVOKED`, and halts order admission (B20).
+31. `test_human_go_rejects_chain_fork`: Verifies activation fails if `previous_record_digest` does not match authoritative ledger head (B30).
+32. `test_human_go_rejects_stale_previous_digest`: Verifies activation fails if submitting an older previous digest against an updated ledger head (B30).
+33. `test_first_human_go_requires_genesis_digest`: Verifies initial record requires exact genesis digest `"0"*64` (B30).
+34. `test_go_ledger_head_updates_atomically`: Verifies that upon successful activation, ledger head advances to new record digest atomically (B30).
+35. `test_human_go_requires_explicit_decision`: Verifies that omitting `decision` in input fails schema validation closed (B31).
+36. `test_human_go_requires_explicit_approver_role`: Verifies that omitting `approver_role` in input fails schema validation closed (B32).
+37. `test_human_go_rejects_record_role_mismatch`: Verifies activation fails if `go_record.approver_role != trust_store[key_id].role` (B32).
+38. `test_reconciliation_timeout_requires_positive_value`: Verifies fail-closed when `post_dispatch_reconciliation_timeout_ms <= 0` or missing (B33).
+39. `test_reconciliation_timeout_does_not_retry_order`: Verifies that upon timeout, adapter enters `BLOCKED` with `UNKNOWN` state and strictly disallows automated retry of `order_send` (B34).
 
 ---
 
@@ -461,14 +480,15 @@ The implementation of Slice 2 will include the following 30 unit tests in `tests
 Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
 2. HumanGORecord non-repudiable verification machinery will be fully operational.
-3. Worst-case executable notional machine gate with explicit slippage will be operational.
-4. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
-5. Serial critical section with timeout and post-reconciliation SLA operational.
-6. Live Capital remains strictly $0.00.
-7. Zero broker orders will be sent.
-8. Master trading password will NOT be loaded.
-9. All execution will STOP completely.
-10. Progression to Slice 3 (First Live Order) requires explicit, independent
+3. Authoritative ledger head continuity verification will be fully operational.
+4. Worst-case executable notional machine gate with explicit slippage will be operational.
+5. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
+6. Serial critical section with timeout and post-reconciliation SLA operational.
+7. Live Capital remains strictly $0.00.
+8. Zero broker orders will be sent.
+9. Master trading password will NOT be loaded.
+10. All execution will STOP completely.
+11. Progression to Slice 3 (First Live Order) requires explicit, independent
     Human Sign-Off.
 ================================================================================
 ```
