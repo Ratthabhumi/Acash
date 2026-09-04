@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 5)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 6)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 5)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 6)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 5 Audit Adjustments)
+## User Review Required (Rev 6 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,29 +31,27 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 5 (Addressing Audit Findings B17–B20):
+### Key Refinements in Rev 6 (Addressing Audit Findings B21–B24):
 
-1. **[BLOCKER B17 RESOLVED] Explicit `max_slippage_points` Parameter (Zero Defaults, No Proxy):**
-   - **Segregation of Concerns:** `stops_level_points` is strictly a broker minimum distance constraint for resting SL/TP orders; it is **NOT** a slippage tolerance proxy.
-   - **Zero Operational Defaults:** Completely removed the `or 10` fallback.
-   - **Parameter Ownership:** Added `max_slippage_points: int` to `LiveAuthorization` as a **MANDATORY HUMAN / RISK POLICY INPUT**.
-   - **Fail-Closed Enforcement:** If `authorization.max_slippage_points` is missing, `None`, or $\le 0$, order admission strictly fails closed with `PreLiveRiskAdmissionError("MAX_SLIPPAGE_POINTS_UNDEFINED")`.
-2. **[BLOCKER B18 RESOLVED] Elimination of TOCTOU Gap via Exclusive Serial Dispatch Lock:**
-   - Anchoring admission to a snapshot $< 1000\text{ ms}$ old is insufficient to guarantee state preservation at dispatch.
-   - **Single Dispatcher Invariant:** All order admissions and dispatches are routed through a single, non-competing `ExecutionCoordinator`.
-   - **Atomic Lock Pipeline:** Dispatch is wrapped in an exclusive `SerialDispatchLock`:
-     $$\text{Acquire Lock} \to \text{Fresh Reconciliation} \to \text{Serial Assertion} \to \text{Admission} \to \text{Dispatch} \to \text{Post-Reconciliation} \to \text{Release Lock}$$
-   - **Anomaly Trap:** If broker state mutates concurrently prior to or during dispatch, post-dispatch reconciliation detects the discrepancy, transitions adapter to `BLOCKED`, and raises `CRITICAL` alert.
-3. **[B19 RESOLVED] Accurate Semantic Classification of `max_order_rate_per_minute`:**
-   - **Boundary Statement:** `STRICT_SERIAL_MODE` provides **concurrency containment** ($\le 1$ active order/position at any time), but **DOES NOT enforce order-rate limits** (e.g., it does not prevent rapid sequential orders if a position closes in seconds).
-   - Formally designated as:
-     $$\text{max\_order\_rate\_per\_minute} = \textbf{NOT MACHINE-ENFORCED} \quad (\text{Deferred to Phase 14 Debt})$$
-   - Removed any claim that serial execution substitutes for rate-throttle mechanisms.
-4. **[B20 RESOLVED] Test Matrix Reconciliation & Test Regression Restored (24 Tests):**
-   - Corrected test suite count to **24 discrete automated tests**.
-   - Restored `test_revocation_event_halts_issuance` (emergency rollback check).
-   - Added `test_strict_serial_toctou_prevention_under_concurrent_mutation` (B18 race prevention).
-   - Added `test_worst_case_notional_requires_explicit_max_slippage_points` (B17 zero-default check).
+1. **[B21 RESOLVED] Accurate Separation of Preventive vs. Detective Capital Controls:**
+   - **Terminological Discipline:** Removed all claims of "guaranteeing that actual broker execution does not breach `max_notional`". ACASH does not control venue order matching engines during extreme market gaps.
+   - **Preventive Control (Pre-Admission):** Prevents the submission of any order whose *bounded executable risk* (derived from conservative worst-case price) exceeds `max_notional`.
+   - **Detective & Containment Control (Post-Fill):** Detects any broker execution that fills outside the authorized capital bound during 6-D reconciliation, immediately transitions adapter to `BLOCKED`, raises `NOTIONAL_BREACH_ANOMALY`, and fail-closes all subsequent execution.
+2. **[B22 RESOLVED] Explicit Semantics of `max_slippage_points`:**
+   - Formally designated as: **ACASH Assumed Adverse Price Movement Bound** (and forwarded as broker request parameter `MqlTradeRequest.deviation` where supported).
+   - Clarified that it constitutes an internal risk-bound ceiling for pre-admission bounding, **NOT** a venue-guaranteed fill ceiling during extreme market illiquidity.
+3. **[B23 RESOLVED] Formal `MT5QuoteSnapshot` Contract & Freshness Bounds:**
+   - Added a dedicated, immutable `MT5QuoteSnapshot` domain contract with strict mathematical assertions:
+     - Strict UTC timestamp: `timestamp_utc`.
+     - Quote freshness ceiling: $\text{quote\_age} \le \text{max\_quote\_age\_ms}$ (Default: $500\text{ ms}$, Zero magic floor).
+     - Symbol alignment: `quote.symbol == intent.symbol`.
+     - Positive and non-inverted spread: $\text{ask} \ge \text{bid} > 0$.
+     - Positive units: $\text{point\_size} > 0 \land \text{contract\_size} > 0$.
+   - **Transactional Observation Boundary:** Both `MT5BrokerRealitySnapshot` and `MT5QuoteSnapshot` are captured under the exclusive `SerialDispatchLock` immediately prior to admission.
+4. **[B24 RESOLVED] Accurate Concurrency Boundary Framing:**
+   - Reframed concurrency boundary:
+     - **ACASH-Internal Races:** Eliminated via `ExecutionCoordinator` exclusive `SerialDispatchLock`.
+     - **External Broker Mutations:** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 terminal, EA); external mutations are handled via **pre-dispatch assertion rejection** and **immediate post-dispatch reconciliation anomaly detection & containment**.
 
 ---
 
@@ -61,7 +59,7 @@
 
 The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 5, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and tamper-evident audit chain digests.
+Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 6, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and tamper-evident audit chain digests.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -191,42 +189,78 @@ If any single condition fails, activation raises `DataContractError` immediately
 
 ---
 
-## 4. Worst-Case Executable Notional & Explicit Slippage Bound (B12 & B17)
+## 4. Pre-Admission Bounding, Quote Contract & Slippage Semantics (B12, B17, B21, B22, B23)
 
-To guarantee that actual broker execution does not breach `max_notional`, `construct_order_intent()` in `src/acash/execution/admission.py` machine-enforces the **worst-case executable notional** using the mandatory governance parameter `max_slippage_points`:
+### 4.1 Formal `MT5QuoteSnapshot` Contract (B23)
+To eliminate stale-price and unvalidated market quote gaps, admission requires a validated `MT5QuoteSnapshot`:
 
 ```python
-# 1. Enforce presence of explicit governance slippage parameter (ZERO DEFAULT)
+class MT5QuoteSnapshot(BaseModel):
+    """Authoritative market price observation bound to transaction window."""
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    symbol: str = Field(description="Normalized symbol (e.g. EURUSD).")
+    bid: Decimal = Field(gt=Decimal("0"), description="Live broker bid price.")
+    ask: Decimal = Field(gt=Decimal("0"), description="Live broker ask price.")
+    point_size: Decimal = Field(gt=Decimal("0"), description="Symbol tick/point dimension.")
+    contract_size: Decimal = Field(gt=Decimal("0"), description="Units per standard lot.")
+    timestamp_utc: datetime = Field(description="Strict UTC timestamp of quote observation.")
+
+    def assert_valid_and_fresh(self, max_quote_age_ms: int = 500) -> None:
+        """Enforce strict quote freshness and sanity bounds."""
+        if self.ask < self.bid:
+            raise PreLiveRiskAdmissionError(
+                f"INVALID_QUOTE: Inverted market spread ask ({self.ask}) < bid ({self.bid})"
+            )
+        now_utc = datetime.now(timezone.utc)
+        age_ms = (now_utc - self.timestamp_utc).total_seconds() * 1000.0
+        if age_ms > max_quote_age_ms:
+            raise PreLiveRiskAdmissionError(
+                f"STALE_QUOTE: Quote age {age_ms:.1f}ms exceeds maximum allowed {max_quote_age_ms}ms"
+            )
+```
+
+### 4.2 Pre-Admission Bounding with `max_slippage_points` (B17 & B22)
+In `construct_order_intent()`, ACASH prevents submitting orders whose conservative bounded executable risk exceeds authorized capital:
+
+```python
+# 1. Enforce explicit governance-defined assumed adverse price movement (ZERO DEFAULT)
 if authorization.max_slippage_points is None or authorization.max_slippage_points <= 0:
     raise PreLiveRiskAdmissionError(
         "MANDATORY_PARAMETER_MISSING: authorization.max_slippage_points is undefined or non-positive. "
         "Operational defaults (e.g. stops_level_points or magic numbers) are strictly prohibited."
     )
 
-# 2. Calculate worst-case executable price bound
-slippage_buffer = Decimal(str(authorization.max_slippage_points)) * symbol_spec.point_size
+# 2. Assert quote validity and freshness (B23)
+quote.assert_valid_and_fresh(max_quote_age_ms=500)
+
+# 3. Derive ACASH conservative worst-case executable price bound
+slippage_buffer = Decimal(str(authorization.max_slippage_points)) * quote.point_size
 
 if side == OrderSide.BUY:
-    worst_case_price = current_ask + slippage_buffer
+    worst_case_price = quote.ask + slippage_buffer
 else:
-    worst_case_price = current_bid - slippage_buffer
+    worst_case_price = quote.bid - slippage_buffer
 
-# 3. Compute worst-case executable notional in account currency
-order_units = quantity * symbol_spec.contract_size
-worst_case_notional = order_units * worst_case_price
+# 4. Compute bounded executable notional in account currency
+order_units = quantity * quote.contract_size
+bounded_executable_notional = order_units * worst_case_price
 
-# 4. Machine-Enforce worst-case notional ceiling
-if worst_case_notional > authorization.max_notional:
+# 5. Machine-Enforce capital ceiling (Preventive Control - B21)
+if bounded_executable_notional > authorization.max_notional:
     raise PreLiveRiskAdmissionError(
-        f"Worst-case executable notional {worst_case_notional:.2f} exceeds "
+        f"Bounded executable notional {bounded_executable_notional:.2f} exceeds "
         f"authorized max_notional {authorization.max_notional:.2f} "
-        f"(Reference Price: {current_ask if side == OrderSide.BUY else current_bid}, "
-        f"Worst-Case Price: {worst_case_price}, Slippage Buffer: {slippage_buffer})"
+        f"(Reference Price: {quote.ask if side == OrderSide.BUY else quote.bid}, "
+        f"Worst-Case Price: {worst_case_price}, Assumed Slippage Buffer: {slippage_buffer})"
     )
 ```
 
-### Post-Fill Anomaly Trap (Reconciliation):
-During 6-D reconciliation, if actual fill price results in $\text{actual\_notional} > \text{max\_notional}$ (due to venue gap slippage exceeding `max_slippage_points`), the adapter immediately transitions to `BLOCKED` with `MT5DiscrepancyKind.NOTIONAL_BREACH_ANOMALY` and halts further order processing.
+### 4.3 Post-Fill Detective Anomaly Trap (B21)
+ACASH does not control venue order matching engines during extreme market gaps. If an adverse venue gap causes the actual fill price to result in $\text{actual\_notional} > \text{max\_notional}$:
+- The 6-D reconciliation engine detects the discrepancy immediately upon fill confirmation.
+- The adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.NOTIONAL_BREACH_ANOMALY`.
+- All further order submissions and dispatches are fail-closed.
 
 ---
 
@@ -237,8 +271,8 @@ During 6-D reconciliation, if actual fill price results in $\text{actual\_notion
 | `authorization_id` | `str` | `AUTH_P13_LIVE_001` | **Cryptographically Bound** | Machine / Unique |
 | `certificate_id` | `str` | Linked Phase 6/8.5 Certificate | **Cryptographically Bound** | Statistical Authority |
 | `strategy_id` | `str` | Target Live Strategy ID | **Machine-Enforced** per order | Strategy Authority |
-| `max_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Worst-Case)** (B12) | **Human Auditor** |
-| `max_slippage_points` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (No Defaults)** (B17) | **Human Auditor / Policy** |
+| `max_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Bounded)** (B12, B21) | **Human Auditor** |
+| `max_slippage_points` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Assumed Risk Bound)** (B17, B22) | **Human Auditor / Policy** |
 | `max_position_size` | `Decimal` | `Decimal("0.01")` (Micro-lot) | **Machine-Enforced Per-Order** (`admission.py:685`) | **Plan Rev3 §4.6** |
 | `max_order_rate_per_minute` | `int` | `1` (Throttle limit) | **NOT MACHINE-ENFORCED** (B19 Phase 14 Debt) | **Governance Policy** |
 | `max_daily_loss_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced by RiskEngine** (Binary Reject) | **Human Auditor** |
@@ -253,15 +287,13 @@ During 6-D reconciliation, if actual fill price results in $\text{actual\_notion
 
 ---
 
-## 6. Closing the TOCTOU Gap in `STRICT_SERIAL_MODE` (B18)
+## 6. Closing ACASH-Internal Dispatch Race & Detecting External Broker Mutation (B18 & B24)
 
-To eliminate the Time-of-Check to Time-of-Use (TOCTOU) race window between broker snapshot capture and order dispatch:
+### 6.1 Architectural Demarcation of Concurrency Boundaries (B24):
+- **ACASH-Internal Concurrency:** Completely serialized and race-free. Only a single `ExecutionCoordinator` holding an exclusive dispatch mutex executes admission and dispatch.
+- **External Venue Concurrency:** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 GUI, EA, other terminal). External mutations are handled via **pre-dispatch assertion rejection** and **immediate post-dispatch reconciliation anomaly detection & containment**.
 
-### 1. Single Dispatcher Architectural Invariant:
-All order admission and execution dispatch must flow through a single, non-competing `ExecutionCoordinator`. No secondary threads, subprocesses, or competing dispatch loops are permitted.
-
-### 2. Exclusive Serial Dispatch Lock Lifecycle:
-Every dispatch sequence executes inside an exclusive serial dispatch mutex:
+### 6.2 Exclusive Serial Dispatch Lock Lifecycle:
 
 ```
 [DISPATCH INITIATION]
@@ -270,7 +302,9 @@ Every dispatch sequence executes inside an exclusive serial dispatch mutex:
 Acquire SerialDispatchLock (Exclusive Mutex)
        │
        ▼
-Synchronous Fresh Broker Snapshot & Reconciliation (< 100ms old, captured under lock)
+Capture Unified Transactional Observation under lock:
+  - Fresh Broker Reality Snapshot (< 100ms old)
+  - Fresh MT5QuoteSnapshot (< 500ms old, positive & non-inverted spread)
        │
        ▼
 Assert Strict Serial Invariants:
@@ -282,25 +316,23 @@ Assert Strict Serial Invariants:
 Order Admission Evaluation:
   - Authorization ACTIVE and not expired
   - HumanGORecord valid and not expired
-  - worst_case_notional <= max_notional
+  - bounded_executable_notional <= max_notional
        │  (If rejected: Abort, release lock, raise PreLiveRiskAdmissionError)
        ▼
-Atomic Dispatch: adapter.order_send()
+Atomic Dispatch: adapter.order_send(deviation=max_slippage_points)
        │
        ▼
 Immediate Synchronous Post-Dispatch Reconciliation:
   - Verify deal execution matches intent
-  - Detect concurrent external broker mutation or NOTIONAL_BREACH_ANOMALY
-       │
+  - Detect concurrent external broker mutation (UNTRACKED_BROKER_POSITION)
+  - Detect NOTIONAL_BREACH_ANOMALY if fill breached max_notional
+       │  (If anomaly detected: Transition to BLOCKED, raise CRITICAL alert)
        ▼
 Release SerialDispatchLock
        │
        ▼
 [DISPATCH COMPLETE]
 ```
-
-### 3. TOCTOU Anomaly Detection:
-If external mutation occurs at the broker during the microsecond dispatch window, the immediate post-dispatch reconciliation detects `UNTRACKED_BROKER_POSITION` or `DISPATCH_SEQUENCE_MUTATION`, transitions the adapter immediately to `BLOCKED`, and raises a `CRITICAL` discrepancy.
 
 ---
 
@@ -312,7 +344,7 @@ Item M-2 validates the dynamic execution valuation framework:
 2. **Monetary Unit:** Stated in 1.00 base units of account currency.
 3. **Asset Valuation Basis:** EURUSD base currency is EUR, quote currency is USD.
 4. **Dynamic Valuation Contract:**
-   $$\text{Estimated Executable Notional} = \text{Volume (lots)} \times \text{Contract Size} \times \text{Worst-Case Price}$$
+   $$\text{Bounded Executable Notional} = \text{Volume (lots)} \times \text{Contract Size} \times \text{Worst-Case Price}$$
 5. **Illustrative Reference (Example Only — Not a Static Invariant):**
    - At Ask = $1.16282$ with `max_slippage_points = 20` (0.00020 buffer), worst-case price is $1.16302$, representing $\approx 1,163.02\text{ USD}$ notional for 0.01 lot EURUSD.
    - At Ask = $1.18000$, the same 0.01 lot order represents $\approx 1,180.20\text{ USD}$ notional.
@@ -337,9 +369,9 @@ Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-e
 
 ---
 
-## 9. Comprehensive Automated Test Matrix (24 Tests)
+## 9. Comprehensive Automated Test Matrix (25 Tests)
 
-The implementation of Slice 2 will include the following 24 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
+The implementation of Slice 2 will include the following 25 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
 
 1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema bounds.
 2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks (USD, currency match).
@@ -355,16 +387,17 @@ The implementation of Slice 2 will include the following 24 unit tests in `tests
 12. `test_human_go_rejects_unregistered_or_revoked_key`: Verifies rejection if key is not in TrustStore or is revoked (B14).
 13. `test_human_go_expiry_subordination_at_activation`: Verifies rejection if `go_record.expires_at_utc > auth.expires_at` (B15).
 14. `test_admission_rejects_expired_authorization_or_go`: Verifies double-window expiry check at admission (`now >= min(auth, go)`) (B15).
-15. `test_worst_case_notional_requires_explicit_max_slippage_points`: Verifies fail-closed when `max_slippage_points` is missing, None, or $\le 0$ (B17 zero-default check).
-16. `test_worst_case_notional_nominal_pass_worst_case_fail`: Verifies B12/B17 boundary: nominal price $\le$ `max_notional`, but Ask + slippage $>$ `max_notional` fails closed.
-17. `test_worst_case_notional_pass_within_boundary`: Verifies B12/B17: worst-case price $\le$ `max_notional` passes admission.
-18. `test_reconciliation_detects_post_fill_notional_breach`: Verifies B12: fill price $>$ worst-case causing notional breach triggers `NOTIONAL_BREACH_ANOMALY` & adapter block.
-19. `test_strict_serial_mode_rejections`: Verifies discrete pre-dispatch snapshot checks (pending $\neq 0$, in-flight $\neq 0$, open $\neq 0$).
-20. `test_strict_serial_toctou_prevention_under_concurrent_mutation`: Verifies that state mutation occurring between check and dispatch fails closed under `SerialDispatchLock` (B18).
-21. `test_required_approvals_cannot_default`: Verifies fail-closed when `required_approvals` is omitted.
-22. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is omitted.
-23. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
-24. `test_revocation_event_halts_issuance`: Verifies that a `CertificateRevocationEvent` immediately revokes authorization, transitions to `REVOKED`, and halts order admission (B20).
+15. `test_admission_rejects_stale_or_invalid_price_quote`: Verifies fail-closed when quote age $> 500\text{ ms}$, spread is inverted, or prices non-positive (B23).
+16. `test_worst_case_notional_requires_explicit_max_slippage_points`: Verifies fail-closed when `max_slippage_points` is missing, None, or $\le 0$ (B17 zero-default check).
+17. `test_worst_case_notional_nominal_pass_worst_case_fail`: Verifies B12/B17 boundary: nominal price $\le$ `max_notional`, but Ask + slippage $>$ `max_notional` fails closed.
+18. `test_worst_case_notional_pass_within_boundary`: Verifies B12/B17: worst-case price $\le$ `max_notional` passes admission.
+19. `test_reconciliation_detects_post_fill_notional_breach`: Verifies B12/B21: fill price $>$ worst-case causing notional breach triggers `NOTIONAL_BREACH_ANOMALY` & adapter block.
+20. `test_strict_serial_mode_rejections`: Verifies discrete pre-dispatch snapshot checks (pending $\neq 0$, in-flight $\neq 0$, open $\neq 0$).
+21. `test_strict_serial_toctou_prevention_under_concurrent_mutation`: Verifies that internal concurrent dispatch attempts fail closed under `SerialDispatchLock` and external mutations are trapped (B18/B24).
+22. `test_required_approvals_cannot_default`: Verifies fail-closed when `required_approvals` is omitted.
+23. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is omitted.
+24. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
+25. `test_revocation_event_halts_issuance`: Verifies that a `CertificateRevocationEvent` immediately revokes authorization, transitions to `REVOKED`, and halts order admission (B20).
 
 ---
 
@@ -378,12 +411,13 @@ Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
 2. HumanGORecord non-repudiable verification machinery will be fully operational.
 3. Worst-case executable notional machine gate with explicit slippage will be operational.
-4. SerialDispatchLock with TOCTOU race prevention will be operational.
-5. Live Capital remains strictly $0.00.
-6. Zero broker orders will be sent.
-7. Master trading password will NOT be loaded.
-8. All execution will STOP completely.
-9. Progression to Slice 3 (First Live Order) requires explicit, independent
-   Human Sign-Off.
+4. MT5QuoteSnapshot contract & freshness validation will be fully operational.
+5. SerialDispatchLock with internal race prevention & external anomaly trap operational.
+6. Live Capital remains strictly $0.00.
+7. Zero broker orders will be sent.
+8. Master trading password will NOT be loaded.
+9. All execution will STOP completely.
+10. Progression to Slice 3 (First Live Order) requires explicit, independent
+    Human Sign-Off.
 ================================================================================
 ```
