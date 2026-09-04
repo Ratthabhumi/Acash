@@ -625,7 +625,14 @@ class NativeMT5Transport:
             2: MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET,
             3: MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_EXCHANGE,
         }
-        raw_exec_mode = int(info.trade_execution_mode)
+        if hasattr(info, "trade_exemode"):
+            raw_exec_mode = int(info.trade_exemode)
+        elif hasattr(info, "trade_execution_mode"):
+            raw_exec_mode = int(info.trade_execution_mode)
+        else:
+            raise MT5TransportError(
+                f"MT5 SymbolInfo does not expose a supported execution-mode attribute for {symbol}"
+            )
         if raw_exec_mode not in exec_mode_map:
             raise MT5SymbolSpecError(
                 f"UNKNOWN_TRADE_EXECUTION_MODE: unmapped trade_execution_mode {raw_exec_mode} for symbol {symbol}"

@@ -1705,6 +1705,79 @@ def test_r94_cross_module_canonical_decoder_consistency() -> None:
     assert set(mapping_mod.MQL5_DEAL_TYPE_DECODE_MAP.keys()) == set(range(18))
 
 
+def test_native_transport_symbol_info_execution_mode_compatibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify symbol_info execution mode extraction across C-extension and legacy schemas:
+    1. trade_exemode (official Windows C-extension) -> mapped to canonical MT5TradeExecutionMode
+    2. trade_execution_mode (legacy/mock schema) -> mapped to canonical MT5TradeExecutionMode
+    3. Neither attribute present -> strictly raises MT5TransportError (fail-closed)
+    """
+    from acash.execution.mt5.transport import NativeMT5Transport
+    from acash.execution.mt5.exceptions import MT5TransportError
+    class DummySymbolInfo:
+        def __init__(self, **kwargs: Any) -> None:
+            self.__dict__.update(kwargs)
+
+    base_kwargs: Dict[str, Any] = {
+        "name": "EURUSD",
+        "trade_contract_size": 100000.0,
+        "volume_min": 0.01,
+        "volume_max": 100.0,
+        "volume_step": 0.01,
+        "digits": 5,
+        "point": 0.00001,
+        "trade_tick_size": 0.00001,
+        "filling_mode": 1,
+        "order_mode": 1,
+        "trade_stops_level": 0,
+        "currency_margin": "EUR",
+        "currency_profit": "USD",
+    }
+
+    # Case 1: Official Windows C-extension attribute `trade_exemode`
+    sym_c_ext = DummySymbolInfo(trade_exemode=2, **base_kwargs)
+
+    class MockCExtModule:
+        @staticmethod
+        def symbol_info(symbol: str) -> object:
+            return sym_c_ext
+
+    transport_1 = NativeMT5Transport()
+    transport_1._mt5 = MockCExtModule
+    spec_1 = transport_1.symbol_info("EURUSD")
+    assert spec_1 is not None
+    assert spec_1.trade_execution_mode == MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET
+
+    # Case 2: Legacy / mock schema attribute `trade_execution_mode`
+    sym_legacy = DummySymbolInfo(trade_execution_mode=2, **base_kwargs)
+
+    class MockLegacyModule:
+        @staticmethod
+        def symbol_info(symbol: str) -> object:
+            return sym_legacy
+
+    transport_2 = NativeMT5Transport()
+    transport_2._mt5 = MockLegacyModule
+    spec_2 = transport_2.symbol_info("EURUSD")
+    assert spec_2 is not None
+    assert spec_2.trade_execution_mode == MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET
+
+    # Case 3: Neither attribute present -> strictly fail-closed MT5TransportError
+    sym_missing = DummySymbolInfo(**base_kwargs)
+
+    class MockMissingModule:
+        @staticmethod
+        def symbol_info(symbol: str) -> object:
+            return sym_missing
+
+    transport_3 = NativeMT5Transport()
+    transport_3._mt5 = MockMissingModule
+    with pytest.raises(MT5TransportError, match="MT5 SymbolInfo does not expose a supported execution-mode attribute"):
+        transport_3.symbol_info("EURUSD")
+
+
+
 
 
 
