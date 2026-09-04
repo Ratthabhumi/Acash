@@ -296,3 +296,21 @@
   7. **Canonical Invariants:** All broker adapters must adhere to the sovereign ACASH boundary: zero lifecycle authority, fail-closed startup, absorbing BLOCKED state, zero synthetic fills or intent IDs, and full 6-D reconciliation provenance.
   8. **Full Specification:** Detailed in [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
 - **Consequences:** Permanently protects ACASH Core against broker and asset-class lock-in, provides a clear multi-venue roadmap, and guarantees that multi-broker expansion preserves mathematical and governance integrity without premature implementation complexity.
+
+---
+
+## ADR-022: Market-Adaptive, Strategy-Agnostic & Event-Aware Trading Governance (Flexible Decisions + Fixed Safety Guardrails)
+
+- **Status:** **Approved (Strategic Governance & Research Principle — Documentation Only)**
+- **Date:** 2026-09-04
+- **Context:** ACASH is an autonomous quantitative trading infrastructure. The system must not become permanently coupled to any single strategy, asset class, broker, or market regime, nor suffer from developer hubris assuming internal models or complex architectures are inherently superior. Trading performance must be evaluated purely on empirical risk-adjusted evidence across distinct market regimes and event conditions.
+- **Decision:**
+  1. **Core Paradigm (Flexible Decisions + Fixed Safety Guardrails):** ACASH Core decouples execution/risk infrastructure from strategy alpha. Software reliability, safety state machines, and reconciliation do not equate to a trading edge.
+  2. **Strategy-Agnostic Neutrality:** Commercial EAs, grid/martingale systems, trend followers, and third-party algorithms are treated as legitimate benchmarks, research candidates, and potential execution targets, evaluated without condescension or unverified acceptance.
+  3. **Market-Adaptive & Event-Aware Risk Governance:** High-impact economic news is treated as an explicit risk dimension with graduated policies (ALLOW, REDUCE, HOLD, BLOCK NEW ENTRY, DELAY, FLATTEN, EXIT, $0 ALLOCATION) rather than a crude universal binary trading ban. Acknowledges that Stop Loss is not a guaranteed execution price during news dislocations.
+  4. **Strategy $\times$ Regime Evaluation:** Recognizes that strategies possess regime-dependent edges ($\text{Strategy} \times \text{Regime}$) rather than universal superiority.
+  5. **Explainable Dynamic Capital Allocation:** Capital scales dynamically with empirical evidence and regime suitability, but remains strictly bounded by hard, non-negotiable risk limits. Every allocation decision must answer 9 explicit audit questions.
+  6. **Anti-Bias Code of Conduct:** Epistemic claims must distinguish `PROVEN`, `REPORTED`, `UNVERIFIED`, `INFERRED`, and `UNKNOWN`. Evaluation rules, test periods, and hurdle rates must be frozen prior to tournaments to prevent retrospective goalpost shifting.
+  7. **Full Specification:** Detailed in [`docs/architecture/market_adaptive_strategy_governance.md`](architecture/market_adaptive_strategy_governance.md).
+- **Consequences:** Permanently protects ACASH against self-deception, model overfitting, and architectural dogmatism. Establishes a permanent culture of intellectual honesty where capital allocation decisions are guided strictly by empirical evidence rather than ownership.
+
