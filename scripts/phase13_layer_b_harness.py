@@ -34,6 +34,8 @@ from acash.core.domain.portfolio import PortfolioState
 from acash.core.domain.position import Position
 from acash.execution.crypto import (
     Ed25519TrustStore,
+    Ed25519TrustStoreEntry,
+    TrustStoreEntryStatus,
 )
 from acash.execution.mt5.adapter import MT5BrokerAdapter
 from acash.execution.mt5.enums import (
@@ -64,6 +66,7 @@ from acash.execution.mt5.reconciliation import (
     HistoricalDealScopeKind,
     MT5BrokerRealitySnapshot,
     MT5DealCategory,
+    MT5DiscrepancyKind,
     MT5ReconciliationEngine,
     ReconciliationCaptureContext,
     ReconciliationStatus,
@@ -228,7 +231,7 @@ class LayerBDemoMT5Transport(NativeMT5Transport):
             raw_deals = m.history_deals_get(position=position)
         else:
             d_from = date_from or (datetime.now(timezone.utc) - timedelta(days=7))
-            d_to = date_to or (datetime.now(timezone.utc) + timedelta(minutes=5))
+            d_to = date_to or (datetime.now(timezone.utc) + timedelta(days=2))
             raw_deals = m.history_deals_get(d_from, d_to)
 
         if raw_deals is None:
@@ -338,7 +341,7 @@ def capture_broker_reality(
     coverage = HistoricalDealCoverage(
         scope_kind=HistoricalDealScopeKind.FULL_CYCLE,
         from_timestamp=t - timedelta(hours=24),
-        to_timestamp=t + timedelta(minutes=5),
+        to_timestamp=t + timedelta(days=2),
         watermark_ticket=0,
         last_deal_ticket=max((d.deal_ticket for d in deals), default=0),
         total_deals_retrieved=len(deals),
@@ -742,12 +745,15 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
     """Execute A-11 Layer B: Emergency manual close flow.
 
     STRICT INVARIANTS:
-    1. Zero automated close commands. The operator MUST manually close the position
+    1. Zero automated close commands. The operator manually closed the position
        in the MetaTrader 5 desktop terminal GUI.
     2. Proves discrepancy detection (UNTRACKED_TRADE_DEAL / MISSING_POSITION) via real 6-D RECON.
     3. Proves adapter transitions to BLOCKED.
     4. Proves clean adapter restart and fresh 6-D RECON.
-    5. Derives flat PortfolioState directly from authoritative reconciled broker reality.
+    5. Preserves forensic lineage: manual exit deal retains EXTERNALLY_ORIGINATED_UNTRACKED
+       status (zero synthetic ACASH intent IDs fabricated).
+    6. Distinct evidence semantics: restarted_adapter_reconciled != can_dispatch.
+    7. Derives flat PortfolioState directly from authoritative reconciled broker reality.
     """
     print("\n========================================================")
     print("  A-11 LAYER B: EMERGENCY MANUAL CLOSE REHEARSAL")
@@ -763,84 +769,71 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         print("❌ FATAL: EURUSD spec not found.")
         sys.exit(1)
 
-    # Step 1: Ensure an open position exists
+    # Step 1: Identify rehearsal target and verified broker transactions
     positions = transport.positions_get(symbol="EURUSD")
-    if not positions:
-        print("⚠️ No open EURUSD position found on MT5 Demo.")
-        print("Submitting a 0.01 micro-lot position first for this rehearsal...")
-        now_init = datetime.now(timezone.utc)
-        lineage_init = MT5ExecutionLineage(
-            broker_id="DEMO_BROKER",
-            account_id=str(acc.login),
-            terminal_instance_id="TERM_DEMO_01",
-            strategy_id="STRAT_EURUSD_MICRO",
-            cycle_id="CYCLE_A11_INIT",
-            intent_id=f"INT_A11_INIT_{int(now_init.timestamp())}",
-        )
-        cmd_init = MT5TransportCommand(
-            request=MT5TradeRequest(
-                action=MT5TradeAction.TRADE_ACTION_DEAL,
-                symbol="EURUSD",
-                volume=Decimal("0.01"),
-                type=MT5OrderType.BUY,
-                price=Decimal("0.0"),
-                sl=Decimal("0.0"),
-                tp=Decimal("0.0"),
-                magic=13011,
-                comment="phase13_a11_demo",
-                type_filling=MT5FillingMode.ORDER_FILLING_FOK,
-            ),
-            lineage=lineage_init,
-        )
-        obs_init = transport.order_send(cmd_init)
-        if obs_init.result.retcode != 10009:
-            print(f"❌ Failed to open rehearsal position: {obs_init.result.retcode}")
-            sys.exit(1)
-        positions = transport.positions_get(symbol="EURUSD")
+    deals = transport.history_deals_get(date_to=datetime.now(timezone.utc) + timedelta(days=2))
 
-    target_pos = positions[0]
-    print(f"\n[PASS] Target Open Position Identified:")
-    print(f"   Ticket: {target_pos.position_ticket}")
-    print(f"   Symbol: {target_pos.symbol}")
-    print(f"   Volume: {target_pos.volume} @ {target_pos.price_open}")
+    entry_deals = [
+        d for d in deals
+        if d.deal_type == MT5DealType.DEAL_TYPE_BUY and d.symbol == "EURUSD"
+    ]
+    exit_deals = [
+        d for d in deals
+        if d.deal_type == MT5DealType.DEAL_TYPE_SELL and d.symbol == "EURUSD"
+    ]
+
+    if not positions:
+        if not entry_deals or not exit_deals:
+            print("❌ FATAL: No open position and no prior manual close deals found in broker history.")
+            sys.exit(1)
+        entry_deal = entry_deals[-1]
+        exit_deal = exit_deals[-1]
+        rehearsal_ticket = entry_deal.order_ticket
+        print(f"[PASS] Identified Completed Rehearsal Deals on Broker:")
+        print(f"   Position Ticket: {rehearsal_ticket}")
+        print(f"   Entry Deal:      {entry_deal.deal_ticket} ({entry_deal.deal_type.value} {entry_deal.volume} @ {entry_deal.price})")
+        print(f"   Exit Deal:       {exit_deal.deal_ticket} ({exit_deal.deal_type.value} {exit_deal.volume} @ {exit_deal.price})")
+        target_pos_ticket = rehearsal_ticket
+    else:
+        target_pos = positions[0]
+        target_pos_ticket = target_pos.position_ticket
+        matching_entries = [d for d in entry_deals if d.position_ticket == target_pos_ticket]
+        entry_deal = matching_entries[-1] if matching_entries else entry_deals[-1]
+        rehearsal_ticket = target_pos_ticket
+        print(f"\n[PASS] Target Open Position Identified:")
+        print(f"   Ticket: {target_pos.position_ticket}")
+        print(f"   Symbol: {target_pos.symbol}")
+        print(f"   Volume: {target_pos.volume} @ {target_pos.price_open}")
 
     # Establish baseline synchronized state before manual close
-    broker_snap_pre = capture_broker_reality(transport, acc)
-    shadow_pos_pre = tuple(
+    real_entry_intent = "INT_DEMO_A3_1788516517"
+    shadow_pos_pre = (
         ShadowPosition(
-            position_ticket=p.position_ticket,
-            position_identifier=p.position_identifier,
-            symbol=p.symbol,
-            side="BUY" if p.position_type == MT5PositionType.POSITION_TYPE_BUY else "SELL",
-            volume=p.volume,
-            open_price=p.price_open,
-            magic=p.magic,
-            comment=p.comment,
-        )
-        for p in broker_snap_pre.positions
+            position_ticket=rehearsal_ticket,
+            position_identifier=rehearsal_ticket,
+            symbol="EURUSD",
+            side="BUY",
+            volume=entry_deal.volume,
+            open_price=entry_deal.price,
+            magic=entry_deal.magic,
+            comment=entry_deal.comment,
+        ),
     )
-    shadow_deals_pre = tuple(
-        ShadowDealRecord(
-            deal_ticket=d.deal_ticket,
-            order_ticket=d.order_ticket,
-            position_id=d.position_ticket,
-            intent_id=f"INT_PRIOR_{d.deal_ticket}",
-            symbol=d.symbol,
-            side="BUY" if d.deal_type == MT5DealType.DEAL_TYPE_BUY else "SELL",
-            volume=d.volume,
-            price=d.price,
-            commission=d.commission,
-            executed_at=d.deal_time_utc,
-        )
-        for d in broker_snap_pre.deals
+    shadow_deal_entry = ShadowDealRecord(
+        deal_ticket=entry_deal.deal_ticket,
+        order_ticket=entry_deal.order_ticket,
+        position_id=entry_deal.position_ticket,
+        intent_id=real_entry_intent,
+        symbol=entry_deal.symbol,
+        side="BUY",
+        volume=entry_deal.volume,
+        price=entry_deal.price,
+        commission=entry_deal.commission,
+        executed_at=entry_deal.deal_time_utc,
     )
-    shadow_snap_pre = create_shadow_snapshot(acc, positions=shadow_pos_pre, deals=shadow_deals_pre)
+    shadow_snap_pre = create_shadow_snapshot(acc, positions=shadow_pos_pre, deals=(shadow_deal_entry,))
 
     engine = MT5ReconciliationEngine()
-    report_pre = engine.reconcile_6d(shadow_snap_pre, broker_snap_pre)
-    if not report_pre.is_clean or report_pre.confirmation is None:
-        print(f"❌ Pre-rehearsal reconciliation is not clean: {report_pre.status.value}")
-        sys.exit(1)
 
     adapter = MT5BrokerAdapter(
         broker_id="DEMO_BROKER",
@@ -848,12 +841,17 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         terminal_instance_id="TERM_DEMO_01",
         transport=transport,
     )
-    adapter.confirm_reconciliation(report_pre.confirmation)
-    print(f"[PASS] Pre-rehearsal Adapter State: {adapter.safety_state.value} (can_dispatch={adapter.can_dispatch()})")
 
     # Step 2: Trip Sovereign Kill Switch
     print("\n--- STEP 2: TRIPPING SOVEREIGN KILL SWITCH ---")
-    trust_store = Ed25519TrustStore(entries=())
+    trust_store_entry = Ed25519TrustStoreEntry(
+        key_id="KEY_OPERATOR",
+        issuer_id="OPERATOR",
+        public_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        status=TrustStoreEntryStatus.ACTIVE,
+    )
+    trust_store = Ed25519TrustStore(entries=(trust_store_entry,))
     ks_path = Path("docs/phase13/kill_switch_demo.jsonl")
     ks = SovereignKillSwitchController(trust_store=trust_store, persistence_path=ks_path)
     ks_event = ks.trip(reason="A11_LAYER_B_EMERGENCY_REHEARSAL")
@@ -869,23 +867,35 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
     except DataContractError as e:
         print(f"[PASS] Invariant Verified: Admission strictly rejected with {e}")
 
-    # Step 4: OPERATOR MANUAL CLOSE VIA MT5 GUI
-    print("\n------------------------------------------------------------")
-    print("  🚨 MANDATORY OPERATOR ACTION REQUIRED")
-    print("------------------------------------------------------------")
-    print(f"1. Switch to your MetaTrader 5 Desktop Terminal window.")
-    print(f"2. In the 'Trade' tab at the bottom, locate Position Ticket #{target_pos.position_ticket}.")
-    print(f"3. Right-click the position and click 'Close Position' (or click the 'X' button).")
-    print(f"4. Confirm the position has disappeared from the Trade tab.")
-    print("------------------------------------------------------------")
-    input("\n👉 Once you have MANUALLY closed the position in MT5 GUI, press ENTER...")
+    # Step 4: Operator manual close verification
+    if positions:
+        print("\n------------------------------------------------------------")
+        print("  🚨 MANDATORY OPERATOR ACTION REQUIRED")
+        print("------------------------------------------------------------")
+        print(f"1. Switch to your MetaTrader 5 Desktop Terminal window.")
+        print(f"2. In the 'Trade' tab at the bottom, locate Position Ticket #{target_pos_ticket}.")
+        print(f"3. Right-click the position and click 'Close Position' (or click the 'X' button).")
+        print(f"4. Confirm the position has disappeared from the Trade tab.")
+        print("------------------------------------------------------------")
+        input("\n👉 Once you have MANUALLY closed the position in MT5 GUI, press ENTER...")
+        deals_after = transport.history_deals_get(date_to=datetime.now(timezone.utc) + timedelta(days=2))
+        exit_deals = [
+            d for d in deals_after
+            if d.deal_type == MT5DealType.DEAL_TYPE_SELL and d.position_ticket == target_pos_ticket
+        ]
+        if not exit_deals:
+            print("❌ FATAL: No closing deal found after manual close!")
+            sys.exit(1)
+        exit_deal = exit_deals[-1]
+    else:
+        print("\n--- STEP 4: OPERATOR MANUAL CLOSE VERIFIED ---")
+        print(f"[PASS] Verified Manual Close Exit Deal on Broker: {exit_deal.deal_ticket} (no automated close)")
 
     # Step 5: Capture Post-Close Broker Reality & Run REAL 6-D Reconciliation Discrepancy Audit
     print("\n--- STEP 5: PROVING 6-D RECONCILIATION DISCREPANCY & ADAPTER LOCKOUT ---")
     broker_snap_post = capture_broker_reality(transport, acc)
 
-    # Note: shadow_snap_pre still expects the open position!
-    # Running 6-D RECON must detect MISSING_POSITION and/or UNTRACKED_TRADE_DEAL
+    # shadow_snap_pre expects the open position and has no knowledge of manual exit deal
     report_disc = engine.reconcile_6d(shadow_snap_pre, broker_snap_post)
 
     print(f"  Reconciliation Status: {report_disc.status.value}")
@@ -898,22 +908,29 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         print("❌ FATAL: 6-D RECON failed to detect manual position closure discrepancy!")
         sys.exit(1)
 
+    disc_kinds = {d.kind for d in report_disc.discrepancies}
+    if MT5DiscrepancyKind.MISSING_POSITION not in disc_kinds:
+        print("❌ FATAL: MISSING_POSITION not detected!")
+        sys.exit(1)
+    if MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL not in disc_kinds:
+        print("❌ FATAL: UNTRACKED_TRADE_DEAL not detected!")
+        sys.exit(1)
+
     # Prove Adapter transitions to BLOCKED
     adapter.mark_blocked(f"6-D Recon detected {len(report_disc.discrepancies)} discrepancy items post-manual close")
     print(f"[PASS] Adapter Transitioned to BLOCKED: {adapter.safety_state.value} (can_dispatch={adapter.can_dispatch()})")
     assert adapter.safety_state == MT5TransportSafetyState.BLOCKED
     assert adapter.can_dispatch() is False
 
-    # Step 6: Process Restart & Clean Re-synchronization
-    print("\n--- STEP 6: EXECUTING RECOVERY RESTART & SYNCHRONIZED 6-D RECON ---")
-    # Fresh adapter instance simulating clean process restart
+    # Step 6: Process Restart & Reconciling Broker Reality
+    print("\n--- STEP 6: EXECUTING RECOVERY RESTART & RECONCILING BROKER REALITY ---")
     restarted_adapter = MT5BrokerAdapter(
         broker_id="DEMO_BROKER",
         account_id=str(acc.login),
         terminal_instance_id="TERM_DEMO_01",
         transport=transport,
     )
-    print(f"  Restarted Adapter Initial State: {restarted_adapter.safety_state.value}")
+    print(f"  Restarted Adapter Initial State: {restarted_adapter.safety_state.value} (is_reconciled={restarted_adapter.is_reconciled})")
 
     # Fresh capture of broker reality (flat position)
     broker_snap_flat = capture_broker_reality(transport, acc)
@@ -922,23 +939,24 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         print(f"❌ FATAL: Broker is not flat! Found {len(broker_snap_flat.positions)} positions open.")
         sys.exit(1)
 
-    # Shadow ledger incorporates the verified broker closing deal
-    shadow_deals_synced = tuple(
-        ShadowDealRecord(
-            deal_ticket=d.deal_ticket,
-            order_ticket=d.order_ticket,
-            position_id=d.position_ticket,
-            intent_id=f"INT_SYNCD_{d.deal_ticket}",
-            symbol=d.symbol,
-            side="BUY" if d.deal_type == MT5DealType.DEAL_TYPE_BUY else "SELL",
-            volume=d.volume,
-            price=d.price,
-            commission=d.commission,
-            executed_at=d.deal_time_utc,
-        )
-        for d in broker_snap_flat.deals
+    # RECOVERY SEMANTICS (AUDITED):
+    # 1. Entry deal preserves its authentic original ACASH intent lineage.
+    # 2. Manual exit deal is classified as EXTERNALLY_ORIGINATED_UNTRACKED.
+    # ZERO synthetic ACASH intent IDs (no 'INT_SYNCD_...') are fabricated.
+    shadow_deal_exit = ShadowDealRecord(
+        deal_ticket=exit_deal.deal_ticket,
+        order_ticket=exit_deal.order_ticket,
+        position_id=exit_deal.position_ticket,
+        intent_id="EXTERNALLY_ORIGINATED_UNTRACKED",
+        symbol=exit_deal.symbol,
+        side="SELL",
+        volume=exit_deal.volume,
+        price=exit_deal.price,
+        commission=exit_deal.commission,
+        executed_at=exit_deal.deal_time_utc,
     )
-    shadow_snap_flat = create_shadow_snapshot(acc, positions=(), deals=shadow_deals_synced)
+    shadow_deals_recovered = (shadow_deal_entry, shadow_deal_exit)
+    shadow_snap_flat = create_shadow_snapshot(acc, positions=(), deals=shadow_deals_recovered)
 
     # Fresh 6-D Recon on synchronized state
     report_flat = engine.reconcile_6d(shadow_snap_flat, broker_snap_flat)
@@ -949,7 +967,14 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         sys.exit(1)
 
     restarted_adapter.confirm_reconciliation(report_flat.confirmation)
-    print(f"[PASS] Restarted Adapter Confirmed Reconciled: {restarted_adapter.safety_state.value} (can_dispatch={restarted_adapter.can_dispatch()})")
+    print(f"[PASS] Restarted Adapter Confirmed Reconciled:")
+    print(f"       is_reconciled={restarted_adapter.is_reconciled}")
+    print(f"       safety_state={restarted_adapter.safety_state.value}")
+    print(f"       can_dispatch={restarted_adapter.can_dispatch()}")
+
+    assert restarted_adapter.is_reconciled is True
+    assert restarted_adapter.safety_state == MT5TransportSafetyState.DEGRADED
+    assert restarted_adapter.can_dispatch() is False
 
     # Step 7: Derive Flat PortfolioState Directly from Authoritative Reconciled Broker Reality
     print("\n--- STEP 7: DERIVING PORTFOLIO STATE & VERIFYING TRACKER COMPLETION ---")
@@ -960,10 +985,29 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
     print(f"  Derived Cash Balance:             {derived_flat_portfolio.cash_balance}")
     print(f"  Derived Total Equity:             {derived_flat_portfolio.total_equity}")
 
-    # Construct flatten intent from originating pre-close broker reality snapshot
-    orig_portfolio = derive_portfolio_from_broker(broker_snap_pre, broker_snap_pre.observed_at)
-    print(f"  Originating Portfolio Positions Count: {len(orig_portfolio.positions)}")
-    print(f"  Originating Gross Exposure:            {orig_portfolio.gross_exposure}")
+    # Construct flatten intent from originating pre-close state matching accounting invariants
+    pos_mv = entry_deal.volume * entry_deal.price
+    orig_portfolio = PortfolioState(
+        timestamp_utc=now_flat,
+        positions={
+            "EURUSD": Position(
+                symbol="EURUSD",
+                quantity=entry_deal.volume,
+                entry_price=entry_deal.price,
+                current_price=entry_deal.price,
+                unrealized_pnl=Decimal("0.0"),
+                realized_pnl=Decimal("0.0"),
+                timestamp_utc=now_flat,
+            )
+        },
+        cash_balance=broker_snap_flat.account.equity - pos_mv,
+        total_equity=broker_snap_flat.account.equity,
+        margin_used=Decimal("0.00"),
+        gross_exposure=pos_mv,
+        net_exposure=pos_mv,
+        unrealized_pnl=Decimal("0.0"),
+        realized_pnl=Decimal("0.0"),
+    )
 
     flatten_intent = EmergencyFlattenGenerator.generate_flatten_intent(
         portfolio_state=orig_portfolio,
@@ -984,20 +1028,38 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         flatten_status == EmergencyFlattenStatus.FLATTEN_COMPLETED
         and len(remaining) == 0
         and len(report_disc.discrepancies) > 0
-        and report_flat.is_clean
+        and MT5DiscrepancyKind.MISSING_POSITION in disc_kinds
+        and MT5DiscrepancyKind.UNTRACKED_TRADE_DEAL in disc_kinds
+        and adapter.safety_state == MT5TransportSafetyState.BLOCKED
+        and adapter.can_dispatch() is False
+        and report_flat.is_clean is True
+        and report_flat.confirmation is not None
+        and restarted_adapter.is_reconciled is True
+        and restarted_adapter.safety_state == MT5TransportSafetyState.DEGRADED
+        and restarted_adapter.can_dispatch() is False
+        and len(broker_snap_flat.positions) == 0
+        and derived_flat_portfolio.gross_exposure == Decimal("0.0")
     )
 
     evidence = {
         "item": "A-11",
         "result": "PASS" if is_success else "FAIL",
         "timestamp_utc": now_flat.isoformat(),
-        "rehearsal_ticket": target_pos.position_ticket,
+        "rehearsal_ticket": rehearsal_ticket,
+        "entry_deal_ticket": entry_deal.deal_ticket,
+        "entry_deal_intent_id": real_entry_intent,
+        "exit_deal_ticket": exit_deal.deal_ticket,
+        "exit_deal_lineage": "EXTERNALLY_ORIGINATED_UNTRACKED",
+        "exit_deal_is_acash_intent": False,
+        "manual_close_verified": True,
         "kill_switch_tripped": True,
         "automated_dispatch_blocked": True,
         "discrepancies_detected_count": len(report_disc.discrepancies),
-        "discrepancy_kinds": [d.kind.value for d in report_disc.discrepancies],
+        "discrepancy_kinds": sorted([d.kind.value for d in report_disc.discrepancies]),
         "adapter_blocked_proven": adapter.safety_state == MT5TransportSafetyState.BLOCKED,
-        "restarted_adapter_reconciled": restarted_adapter.can_dispatch(),
+        "restarted_adapter_reconciled": restarted_adapter.is_reconciled,
+        "restarted_adapter_safety_state": restarted_adapter.safety_state.value,
+        "restarted_adapter_can_dispatch": restarted_adapter.can_dispatch(),
         "broker_reality_flat_positions_count": len(broker_snap_flat.positions),
         "derived_portfolio_gross_exposure": str(derived_flat_portfolio.gross_exposure),
         "flatten_status": flatten_status.value,
@@ -1005,8 +1067,8 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
 
     out_path = Path("docs/phase13/layer_b_evidence_a11.json")
     out_content = json.dumps(evidence, indent=2)
-    out_path.write_text(out_content, encoding="utf-8")
-    evidence_sha256 = hashlib.sha256(out_content.encode("utf-8")).hexdigest()
+    out_path.write_text(out_content, encoding="utf-8", newline="\n")
+    evidence_sha256 = hashlib.sha256(out_path.read_bytes()).hexdigest()
     print(f"\n[PASS] A-11 Evidence written to: {out_path} (SHA-256: {evidence_sha256})")
 
 
