@@ -315,3 +315,28 @@
   8. **Research & Strategy Evaluation Extension:** The formal 12-layer strategy evaluation methodology, cost models, near-death analysis, and fair tournament framework are detailed in [`docs/architecture/strategy_forensic_evaluation_framework.md`](architecture/strategy_forensic_evaluation_framework.md).
 - **Consequences:** Permanently protects ACASH against self-deception, model overfitting, and architectural dogmatism. Establishes a permanent culture of intellectual honesty where capital allocation decisions are guided strictly by empirical evidence rather than ownership.
 
+---
+
+## ADR-023: Strategy Admission Standard, Quantitative Market State Architecture & Bounded Capital Governance
+
+- **Status:** **Approved (Phase 17 Rev 4.1 Specification & Governance Contract)**
+- **Date:** 2026-09-04
+- **Context:** Quantitative systems fail when observed profitability is conflated with persistent skill or when backtests are treated as executable reality. To prevent curve-fitting, survivorship bias, regime blindness, and premature capital allocation, ACASH requires a formal institutional Strategy Admission Standard before any strategy may enter the sovereign catalog or be considered for capital allocation.
+- **Decision:**
+  1. **Epistemic Invariant:** Observed Profit $\neq$ Proven Skill $\neq$ Structural Edge $\neq$ Luck-Free Performance. Observed profitability is evidence to investigate, not permission to allocate capital.
+  2. **Multi-Tier Pipeline:**
+     $$\text{Raw Market Data} \longrightarrow \text{Feature Engineering} \longrightarrow \text{MarketStateVector} \longrightarrow \text{Regime Classification} \longrightarrow \text{Strategy} \times \text{Regime} \longrightarrow \text{Attribution} \longrightarrow \text{Admission} \longrightarrow \text{Capital Eligibility}$$
+  3. **Quant Candlestick Architecture:** Candle/Bar representations are structured numerical observations, not visual discretionary signals. Features like returns, body/range ratio, wick asymmetry, and close location feed continuous `MarketStateVector` without embedding discrete regime labels.
+  4. **Volume Provenance:** `VolumeType` strictly distinguishes `TICK_VOLUME`, `REAL_VOLUME`, `EXCHANGE_VOLUME`, and `UNKNOWN`.
+  5. **Decoupled Uncertainty & Confidence:** Classification status (`CLASSIFIED`, `UNCLASSIFIED`, `INSUFFICIENT_EVIDENCE`), numeric confidence score, and derived `ConfidenceAssessment` (`ACCEPTABLE` vs `LOW`) carry explicit `ParameterProvenance` (eliminating ungrounded magic numbers).
+  6. **11-Gate Admission Lifecycle (Gate 0–10):** From Strategy Definition (Gate 0) through Forward Demo Evidence (Gate 8) and Final Admission Dossier (Gate 10).
+  7. **Strict Anti-Calendar Certification Rule:** Calendar duration (e.g. 90 days on demo) is strictly rejected as proof of edge. Certification requires `EffectiveEvidenceSample` ($N_{\text{eff}}$), regime diversity, stress survival, and execution observations.
+  8. **Performance Attribution & Residual Invariant:** Historical performance is decomposed across 5 categorical sources (Skill, Structural Edge, Factor Exposure, Regime Tailwind, Luck). Unexplained residual return is strictly NOT assumed to be alpha.
+  9. **Rejection of Single Skill Score:** Composite scalar scores (e.g. `skill_score = 87/100`) are prohibited; skill is represented via multi-dimensional `SkillEvidence` vector DTO using `EvidenceSupportLevel`.
+  10. **Alternative Explanation Register:** Mandatory register of counter-hypotheses (`ALT-01` through `ALT-06`) answering the 20 Mandatory Admission Questions, including mandatory Q20: *"Why should this strategy NOT receive additional capital yet?"*
+  11. **Decoupled Mechanism vs Style:** `StrategyMechanism` (market interaction/economics) is strictly separated from `StrategyStyle` (behavioral archetype).
+  12. **Bounded Capital Allocation & Mandatory Zero Floor:** Phase 17 governs eligibility, bounds, proposals, and zero-allocation semantics (`allocation = $0.00` is always valid and default). Optimization solvers are deferred to Phase 21.
+  13. **Strict Boundaries:** Live capital remains hard-locked at $0.00. Zero mutations to `src/acash/execution/`. MetaTrader 5 demo terminal remains 100% flat.
+- **Consequences:** Permanently protects ACASH against performance chasing, selection bias, and unearned capital allocation. Establishes a reproducible, institutional standard for strategy research and qualification.
+
+

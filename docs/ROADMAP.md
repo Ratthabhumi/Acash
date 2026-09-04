@@ -356,22 +356,54 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 15: Strategy Lifecycle Management [UPCOMING]
-- **Objective:** Enforce automated governance from idea generation to retirement.
-- **Deliverables:**
-  - Strategy lifecycle state machine (`IDEA` $\to \dots \to$ `PRODUCTION` $\to$ `REDUCE` $\to$ `RETIRE`).
-  - Rolling metric monitors (Sharpe, Drawdown, Profit Factor vs historical expectations).
-- **Gate 15 Criteria:** Automated downgrade triggered when strategy underperforms statistical confidence bands.
+### ⏳ Phase 15: Strategy Lifecycle Management & Phase 16: Performance Degradation (Harmonized)
+- **Harmonization Notice:** The early conceptual drafts of Phase 15 (Strategy Lifecycle Management) and Phase 16 (Performance Degradation & Memory Flywheel) have been formally extracted, preserved, and structured into the institutional **Phase 17–22 Architecture Sequence** (ADR-023).
+  - *Lifecycle State Machine & Rolling Monitors:* Merged into **Phase 17** (`StrategyAdmissionStatus` + `StrategyLifecycleState` + Gate 9).
+  - *Statistical Degradation Detection:* Preserved in **Phase 17** Gate 9 and Phase 11 `ForwardTelemetryIngestor`.
+  - *Decision Outcome Recording & Memory Ledger:* Deferred to **Phase 20** (Strategy Selection) and **Phase 22** (Organizational Memory Ledger).
+  - *Zero Requirements Deleted:* Complete traceability preserved in [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md).
 
 ---
 
-### ⏳ Phase 16: Performance Degradation & Data Flywheel [UPCOMING]
-- **Objective:** Build long-term memory of decisions, outcomes, and market states.
+### ✅ Phase 17: Strategy Admission Standard & Regime-Aware Capital Allocation Framework [SPECIFIED — ADR-023]
+- **Objective:** Institutional governance foundation establishing the mandatory gateway before any strategy may enter the catalog or receive capital.
 - **Deliverables:**
-  - Decision outcome recorder linking decisions to multi-horizon forward returns.
-  - Degradation detector measuring statistical divergence in live vs backtest performance.
-  - Proprietary decision memory database.
-- **Gate 16 Criteria:** Continuous logging of all live decisions and automated alert on performance divergence.
+  - 11-Gate Admission Standard (Gate 0–10) incorporating the 20 Mandatory Admission Questions.
+  - Epistemic Identity: $\text{Observed Profit} \neq \text{Proven Skill} \neq \text{Structural Edge} \neq \text{Luck-Free Performance}$.
+  - Performance Attribution across 5 sources (Skill, Structural Edge, Beta/Factor, Regime Tailwind, Luck).
+  - Multi-dimensional `SkillEvidence` vector DTO using `EvidenceSupportLevel` (scalar composite scores strictly forbidden).
+  - `AlternativeExplanationRegister` tracking counter-hypotheses (Market Beta, Short Vol, Regime Tailwind, Selection Bias, Execution Fantasy).
+  - `EffectiveEvidenceSample` ($N_{\text{eff}}$) with declared dependency assumptions (rejection of raw trade count & calendar duration as sole evidence).
+  - Quant Candlestick Architecture: `PriceStructureMeasurements` (returns, range/ATR, body/range, wick asymmetry, close location, gap) feeding continuous `MarketStateVector`.
+  - Decoupled `VolumeType` (`TICK_VOLUME`, `REAL_VOLUME`, `EXCHANGE_VOLUME`, `UNKNOWN`).
+  - Decoupled `StrategyMechanism` (market interaction) vs `StrategyStyle` (behavioral style).
+  - Bounded Capital Allocation contracts enforcing the core invariant: **`allocation = $0.00` is always valid and default**.
+- **Governance:** Live capital remains hard-locked at $0.00; zero broker mutations; optimization solvers deferred to Phase 21; live regime engine deferred to Phase 19.
+
+---
+
+### ⏳ Phase 18: Strategy Research & Tournament Pipeline [UPCOMING]
+- **Objective:** Automated, reproducible research execution, hypothesis evaluation, and fair tournament ranking with frozen prior criteria and winner's curse discounting.
+
+---
+
+### ⏳ Phase 19: Empirical Regime Detection Engine [UPCOMING]
+- **Objective:** Empirical estimation and online classification of market states (orthogonal trend, volatility, liquidity, spread, and microstructure dimensions) with probabilistic confidence.
+
+---
+
+### ⏳ Phase 20: Regime × Strategy Selection & Decision Engine [UPCOMING]
+- **Objective:** Dynamic strategy eligibility gating, state compatibility matching, and multi-horizon decision memory recording.
+
+---
+
+### ⏳ Phase 21: Risk-Based Capital Allocation Solvers [UPCOMING]
+- **Objective:** Production mathematical solvers (Equal Risk Contribution, Volatility Targeting, Haircut Optimization) adhering to Phase 17 `IAllocationPolicy` and safety bounds.
+
+---
+
+### ⏳ Phase 22: Portfolio / Multi-Strategy Orchestration & Memory Flywheel [UPCOMING]
+- **Objective:** Enterprise multi-strategy execution orchestration, aggregate exposure netting, cross-strategy margin monitoring, and long-term organizational decision memory ledger.
 
 ---
 
