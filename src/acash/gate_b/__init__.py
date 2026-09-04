@@ -1,7 +1,7 @@
 """Phase 13 Slice 2: Gate B Dual-Layer Mandatory Authorization Module.
 
-Exposes canonical schemas, DTOs, exceptions, and cryptographic validation primitives
-for Gate B preflight verification and activation transactions.
+Exposes canonical schemas, DTOs, exceptions, storage engines, and cryptographic
+validation primitives for Gate B preflight verification and activation transactions.
 """
 
 from acash.gate_b.exceptions import (
@@ -28,10 +28,19 @@ from acash.gate_b.schema import (
     calculate_worst_case_notional,
     verify_human_go_record_integrity,
 )
+from acash.gate_b.storage import (
+    AuthoritativeGOLedger,
+    LedgerStorageTransaction,
+    StorageCommitContract,
+    StorageEngineSigner,
+    StoragePlatformUtils,
+    WALJournal,
+)
 
 __all__ = [
     "AuthoritativeAbortRecordBlock",
     "AuthoritativeCommitRecordBlock",
+    "AuthoritativeGOLedger",
     "AuthoritativeLedgerProtocol",
     "CryptographicVerificationError",
     "DataContractError",
@@ -40,13 +49,18 @@ __all__ = [
     "GateBError",
     "HumanGORecord",
     "JournalState",
+    "LedgerStorageTransaction",
     "LiveAuthorization",
     "LiveAuthorizationStatus",
     "MT5QuoteSnapshot",
     "PreLiveRiskAdmissionError",
     "QuarantineError",
+    "StorageCommitContract",
     "StorageDurabilityError",
+    "StorageEngineSigner",
+    "StoragePlatformUtils",
     "SystemSafetyMode",
+    "WALJournal",
     "assert_activation_preconditions",
     "calculate_worst_case_notional",
     "verify_human_go_record_integrity",
