@@ -70,3 +70,7 @@ In ACASH, **execution is an operational gateway, not the brain**:
 
 ### 3.4 NautilusTraderAdapter (Phase 5 PoC Candidate)
 - **Role:** **Tier-2 event-driven simulation and future execution candidate.** Evaluated during Phase 5 PoC. Replaced if acceptance criteria are not met.
+
+### 3.5 Multi-Broker & Multi-Asset Expansion Roadmap (ADR-021)
+- **Role:** ACASH Core is asset-agnostic and broker-agnostic. Future multi-venue execution roadmap evaluates Pepperstone (primary external MT5 candidate), Alpaca (existing testing + future US Equities/ETF candidate), OANDA API (secondary direct-API FX candidate), and Interactive Brokers (future multi-asset candidate). Orders are never duplicated; routing is policy-driven. See [`docs/architecture/multi_broker_multi_asset_decision.md`](multi_broker_multi_asset_decision.md).
+

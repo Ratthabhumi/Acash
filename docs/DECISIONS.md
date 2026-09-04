@@ -273,13 +273,26 @@
   8. **Downstream Feature Boundary & Configurable Research Conventions (Phase 3C):** Order Flow, Footprint Delta, Volume Profile (Value Area 70%), Imbalance (3x), and VWAP are computed as pure downstream mathematical transformations with versioned parameter configuration captured in Feature Manifests, containing zero strategy/signal logic.
 - **Consequences:** Provides a rigorous, mathematically sound foundation for tick-by-tick microstructure research while eliminating look-ahead bias and delimiter ambiguity.
 
+---
 
+## ADR-021: Multi-Broker & Multi-Asset Architecture Decision (Asset-Agnostic Core, Independent Opportunity Discovery, and Policy-Driven Venue Routing)
 
-
-
-
-
-
-
-
-
+- **Status:** **Approved (Architecture Decision — Documentation Only)**
+- **Date:** 2026-09-04
+- **Context:** ACASH is designed as an autonomous, opportunity-driven trading infrastructure. The Core engine must not be architecturally coupled to any single broker or to the asset classes supported by the initial integration (MetaTrader 5). The broker is an execution venue, not the definition of ACASH's opportunity universe.
+- **Decision:**
+  1. **Asset-Class Agnostic Core:** ACASH Core is independent of asset class. MT5 / Pepperstone integration does not make ACASH a "Forex-only" system. Alpaca integration does not make ACASH an "equities-only" system.
+  2. **Independent Opportunity Discovery:** Opportunity discovery is decoupled from broker connectivity. The Opportunity Engine scans market data for mathematical/economic edges first, identifies candidate instruments, determines venue eligibility, and selects venues via explicit policy. It does not restrict discovery to currently connected brokers.
+  3. **Multi-Asset Architectural Horizon:** System design supports future discovery across FX, US Equities, ETFs, Futures, Options, and Crypto, contingent on canonical data, alpha, risk, and execution support.
+  4. **Instrument & Venue Routing Layer:** Conceptually introduces a policy-driven, deterministic routing layer between Admission and Venue Adapters (e.g. AAPL $\to$ Alpaca/IBKR, EURUSD $\to$ MT5/OANDA).
+  5. **Broker Roadmap & Priority:**
+     - 1. MetaQuotes MT5 Demo: Current active certification baseline.
+     - 2. Pepperstone + MT5: Primary external retail MT5 execution candidate (does not define asset scope).
+     - 3. Alpaca: Existing integration/testing candidate + future US Equities/ETF execution candidate (requires formal architectural audit before live production use).
+     - 4. OANDA API: Secondary direct-API native FX execution candidate (proves direct REST/v20 vs terminal-mediated execution).
+     - 5. Interactive Brokers (IBKR): Future multi-asset execution candidate (Stocks, ETFs, Futures, Options).
+     - 6. Multiple simultaneous live brokers: Strictly NOT APPROVED at current stage.
+  6. **Zero Automatic Order Duplication:** Orders are never automatically mirrored or duplicated across venues. Multi-broker architecture is a capital allocation and venue routing model; total risk exposure remains strictly controlled.
+  7. **Canonical Invariants:** All broker adapters must adhere to the sovereign ACASH boundary: zero lifecycle authority, fail-closed startup, absorbing BLOCKED state, zero synthetic fills or intent IDs, and full 6-D reconciliation provenance.
+  8. **Full Specification:** Detailed in [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
+- **Consequences:** Permanently protects ACASH Core against broker and asset-class lock-in, provides a clear multi-venue roadmap, and guarantees that multi-broker expansion preserves mathematical and governance integrity without premature implementation complexity.
