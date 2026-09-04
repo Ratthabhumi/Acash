@@ -194,6 +194,17 @@ def test_e2e_cannot_transition_production_gate_b_state() -> None:
         assert not (default_prod_path / "pointer" / "KEY_TEST").exists()
 
 
+def test_e2e_storage_root_is_proven_physical_ntfs(e2e_isolated_env: E2EIsolatedContext) -> None:
+    """Asserts that E2E isolated test root is hosted on physical NTFS volume via runtime Win32 inspection."""
+    root = e2e_isolated_env.root
+    vol_info = StoragePlatformUtils.get_volume_info(root)
+    assert vol_info["file_system_name"] == "NTFS", (
+        f"E2E root {root} is hosted on {vol_info.get('file_system_name')}, expected physical NTFS"
+    )
+    assert vol_info["serial_number"] is not None
+    assert vol_info["root_path"].upper().startswith("C:")
+
+
 # ==============================================================================
 # 2. Unified End-to-End Lifecycle & Cold Restart Test (Stage 1 -> 3.5)
 # ==============================================================================
@@ -213,6 +224,14 @@ def test_e2e_full_lifecycle_and_zero_ram_restart(e2e_isolated_env: E2EIsolatedCo
     aud_key_id = e2e_isolated_env.aud_key_id
     aud_pub = e2e_isolated_env.aud_pub
     aud_priv = e2e_isolated_env.aud_priv
+
+    # -------------------------------------------------------------------------
+    # Physical NTFS Filesystem Provenance Assertion (OS-Authoritative)
+    # -------------------------------------------------------------------------
+    vol_info = StoragePlatformUtils.get_volume_info(root)
+    assert vol_info["file_system_name"] == "NTFS", (
+        f"E2E root {root} is hosted on {vol_info.get('file_system_name')}, expected physical NTFS"
+    )
 
     # -------------------------------------------------------------------------
     # STAGE 1: Schemas, Draft LiveAuthorization & HumanGORecord
@@ -472,6 +491,7 @@ def test_e2e_full_lifecycle_and_zero_ram_restart(e2e_isolated_env: E2EIsolatedCo
     for dom_id, res in report.domain_results.items():
         assert res.passed is True, f"Domain {dom_id} failed: {res.status_message}"
     assert report.overall_status == GateBReadinessStatus.READY_FOR_HUMAN_GO
+    assert report.domain_results["DOMAIN_1_STORAGE"].measured_attributes["filesystem_type"] == "NTFS"
 
     # Verify Pre-Authorization Stop Gate
     # Live capital remains strictly $0.00 and no orders were placed

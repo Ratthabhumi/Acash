@@ -296,11 +296,36 @@ class GateBReadinessChecker:
         finally:
             shutil.rmtree(probe_dir, ignore_errors=True)
 
+        # 4. Filesystem provenance verification (NTFS on Windows)
+        try:
+            vol_info = StoragePlatformUtils.get_volume_info(self._root)
+            fs_name = vol_info.get("file_system_name", "UNKNOWN")
+            attrs["filesystem_type"] = fs_name
+            attrs["volume_root"] = vol_info.get("root_path")
+            attrs["volume_serial"] = vol_info.get("serial_number")
+            if os.name == "nt" and fs_name != "NTFS":
+                return GateBDomainCheckResult(
+                    domain_id="DOMAIN_1_STORAGE",
+                    passed=False,
+                    status=GateBReadinessStatus.BLOCKED,
+                    status_message=f"Storage substrate volume filesystem is {fs_name}, expected physical NTFS",
+                    measured_attributes=attrs,
+                )
+        except Exception as exc:
+            attrs["filesystem_verification_error"] = str(exc)
+            return GateBDomainCheckResult(
+                domain_id="DOMAIN_1_STORAGE",
+                passed=False,
+                status=GateBReadinessStatus.BLOCKED,
+                status_message=f"Failed to query volume filesystem information: {exc}",
+                measured_attributes=attrs,
+            )
+
         return GateBDomainCheckResult(
             domain_id="DOMAIN_1_STORAGE",
             passed=True,
             status=GateBReadinessStatus.READY_FOR_HUMAN_GO,
-            status_message="Storage substrate and durability barriers verified clean",
+            status_message="Storage substrate, NTFS provenance, and durability barriers verified clean",
             measured_attributes=attrs,
         )
 

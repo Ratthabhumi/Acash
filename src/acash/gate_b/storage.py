@@ -115,6 +115,7 @@ class StoragePlatformUtils:
     _FlushFileBuffers: Any = None
     _CreateFileW: Any = None
     _CloseHandle: Any = None
+    _GetVolumeInformationW: Any = None
 
     # Win32 Constants
     GENERIC_READ: int = 0x80000000
@@ -162,6 +163,19 @@ class StoragePlatformUtils:
         cls._CloseHandle = kernel32.CloseHandle
         cls._CloseHandle.argtypes = [wintypes.HANDLE]
         cls._CloseHandle.restype = wintypes.BOOL
+
+        cls._GetVolumeInformationW = kernel32.GetVolumeInformationW
+        cls._GetVolumeInformationW.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+            ctypes.POINTER(wintypes.DWORD),
+            ctypes.POINTER(wintypes.DWORD),
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+        ]
+        cls._GetVolumeInformationW.restype = wintypes.BOOL
 
         cls._win32_initialized = True
 
@@ -327,6 +341,61 @@ class StoragePlatformUtils:
             os.chmod(directory, rw_mode)
         except Exception:
             pass
+
+    @classmethod
+    def get_volume_info(cls, path: Path) -> Dict[str, Any]:
+        """Query authoritative Win32 volume information (filesystem name, serial, flags)."""
+        if os.name == "nt":
+            cls._ensure_win32_initialized()
+            resolved = path.resolve()
+            drive = os.path.splitdrive(str(resolved))[0]
+            if not drive.endswith("\\"):
+                drive += "\\"
+
+            vol_name_buf = ctypes.create_unicode_buffer(261)
+            fs_name_buf = ctypes.create_unicode_buffer(261)
+            serial_num = wintypes.DWORD()
+            max_comp_len = wintypes.DWORD()
+            fs_flags = wintypes.DWORD()
+
+            res = cls._GetVolumeInformationW(
+                drive,
+                vol_name_buf,
+                261,
+                ctypes.byref(serial_num),
+                ctypes.byref(max_comp_len),
+                ctypes.byref(fs_flags),
+                fs_name_buf,
+                261,
+            )
+            if not res:
+                err = ctypes.get_last_error()
+                raise StorageDurabilityError(
+                    f"WIN32_GET_VOLUME_INFORMATION_FAILED: drive={drive}, error={err}"
+                )
+            return {
+                "root_path": drive,
+                "volume_name": vol_name_buf.value,
+                "serial_number": hex(serial_num.value),
+                "file_system_name": fs_name_buf.value,
+                "max_component_length": max_comp_len.value,
+                "file_system_flags": hex(fs_flags.value),
+            }
+        else:
+            return {
+                "root_path": "/",
+                "volume_name": "",
+                "serial_number": "0x0",
+                "file_system_name": "posix",
+                "max_component_length": 255,
+                "file_system_flags": "0x0",
+            }
+
+    @classmethod
+    def get_filesystem_type(cls, path: Path) -> str:
+        """Return authoritative filesystem type string for volume hosting path (e.g. 'NTFS')."""
+        return str(cls.get_volume_info(path).get("file_system_name", "UNKNOWN"))
+
 
 
 class LedgerStorageTransaction:
