@@ -25,7 +25,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Final, List, Optional, Sequence, Tuple
 
 import MetaTrader5 as mt5  # type: ignore[import-untyped]
 
@@ -740,6 +740,77 @@ def run_a10_human_sla() -> None:
 # 6. Procedure A-11: Emergency Manual Close Rehearsal (GUI Close + Real RECON)
 # ===========================================================================
 
+# ---------------------------------------------------------------------------
+# Canonical Historical A-3 Rehearsal Authority (Immutable Reference)
+# ---------------------------------------------------------------------------
+CANONICAL_A3_INTENT: Final[str] = "INT_DEMO_A3_1788516518"
+CANONICAL_A3_DEAL_TICKET: Final[int] = 10071863196
+CANONICAL_A3_ORDER_TICKET: Final[int] = 10355518139
+CANONICAL_A3_POSITION_TICKET: Final[int] = 10355518139
+
+
+def select_authoritative_exit_deal(
+    entry_deal: MT5DealReality,
+    all_deals: Sequence[MT5DealReality],
+) -> MT5DealReality:
+    """Select the latest authoritative exit deal matching the entry deal's position lifecycle.
+
+    Lifecycle Invariants & Selection Semantics:
+    1. Deal type must be SELL (closing BUY position).
+    2. Symbol must match entry deal symbol.
+    3. Position ticket MUST strictly match entry_deal.position_ticket (lifecycle binding).
+    4. Deterministic tie-breaking: sorted by (deal_time_utc timestamp in ms, deal_ticket) ascending.
+    5. Returns the latest authoritative exit deal for THIS position lifecycle.
+    6. Fails closed (DataContractError) if no matching exit deal exists.
+    """
+    matching_exits = [
+        d
+        for d in all_deals
+        if d.deal_type == MT5DealType.DEAL_TYPE_SELL
+        and d.symbol == entry_deal.symbol
+        and d.position_ticket == entry_deal.position_ticket
+    ]
+    if not matching_exits:
+        raise DataContractError(
+            f"No exit deal found matching position lifecycle {entry_deal.position_ticket} for symbol {entry_deal.symbol}"
+        )
+    matching_exits.sort(key=lambda d: (int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket))
+    return matching_exits[-1]
+
+
+def validate_a3_lifecycle_binding(
+    entry_deal: MT5DealReality,
+    intent_id: str,
+) -> None:
+    """Validate the 4-tier cross-identity lifecycle relationship for A-3 rehearsal:
+
+    intent_id (INT_DEMO_A3_1788516518)
+        ↓
+    deal_ticket (10071863196)
+        ↓
+    order_ticket (10355518139)
+        ↓
+    position_ticket (10355518139)
+
+    Fails closed (DataContractError) if any tier does not match canonical historical authority.
+    """
+    if intent_id != CANONICAL_A3_INTENT:
+        raise DataContractError(
+            f"Intent lineage mismatch: got '{intent_id}', expected '{CANONICAL_A3_INTENT}'"
+        )
+    if entry_deal.deal_ticket != CANONICAL_A3_DEAL_TICKET:
+        raise DataContractError(
+            f"Entry deal ticket mismatch: got {entry_deal.deal_ticket}, expected {CANONICAL_A3_DEAL_TICKET}"
+        )
+    if entry_deal.order_ticket != CANONICAL_A3_ORDER_TICKET:
+        raise DataContractError(
+            f"Entry order ticket mismatch: got {entry_deal.order_ticket}, expected {CANONICAL_A3_ORDER_TICKET}"
+        )
+    if entry_deal.position_ticket != CANONICAL_A3_POSITION_TICKET:
+        raise DataContractError(
+            f"Entry position ticket mismatch: got {entry_deal.position_ticket}, expected {CANONICAL_A3_POSITION_TICKET}"
+        )
+
 
 def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
     """Execute A-11 Layer B: Emergency manual close flow.
@@ -777,17 +848,18 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         d for d in deals
         if d.deal_type == MT5DealType.DEAL_TYPE_BUY and d.symbol == "EURUSD"
     ]
-    exit_deals = [
-        d for d in deals
-        if d.deal_type == MT5DealType.DEAL_TYPE_SELL and d.symbol == "EURUSD"
-    ]
 
     if not positions:
-        if not entry_deals or not exit_deals:
-            print("❌ FATAL: No open position and no prior manual close deals found in broker history.")
+        matching_entries = [
+            d for d in entry_deals
+            if d.position_ticket == CANONICAL_A3_POSITION_TICKET
+        ]
+        if not matching_entries:
+            print(f"❌ FATAL: No entry deal found for canonical position {CANONICAL_A3_POSITION_TICKET} in broker history.")
             sys.exit(1)
-        entry_deal = entry_deals[-1]
-        exit_deal = exit_deals[-1]
+        matching_entries.sort(key=lambda d: (int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket))
+        entry_deal = matching_entries[-1]
+        exit_deal = select_authoritative_exit_deal(entry_deal, deals)
         rehearsal_ticket = entry_deal.order_ticket
         print(f"[PASS] Identified Completed Rehearsal Deals on Broker:")
         print(f"   Position Ticket: {rehearsal_ticket}")
@@ -798,7 +870,11 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         target_pos = positions[0]
         target_pos_ticket = target_pos.position_ticket
         matching_entries = [d for d in entry_deals if d.position_ticket == target_pos_ticket]
-        entry_deal = matching_entries[-1] if matching_entries else entry_deals[-1]
+        if not matching_entries:
+            print(f"❌ FATAL: No entry deal found for open position {target_pos_ticket} in broker history.")
+            sys.exit(1)
+        matching_entries.sort(key=lambda d: (int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket))
+        entry_deal = matching_entries[-1]
         rehearsal_ticket = target_pos_ticket
         print(f"\n[PASS] Target Open Position Identified:")
         print(f"   Ticket: {target_pos.position_ticket}")
@@ -806,7 +882,17 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         print(f"   Volume: {target_pos.volume} @ {target_pos.price_open}")
 
     # Establish baseline synchronized state before manual close
-    real_entry_intent = "INT_DEMO_A3_1788516517"
+    real_entry_intent = CANONICAL_A3_INTENT
+    try:
+        validate_a3_lifecycle_binding(entry_deal, real_entry_intent)
+        print(f"[PASS] Canonical 4-Tier Lifecycle Cross-Identity Validated:")
+        print(f"   Intent ID:       {real_entry_intent}")
+        print(f"   Deal Ticket:     {entry_deal.deal_ticket}")
+        print(f"   Order Ticket:    {entry_deal.order_ticket}")
+        print(f"   Position Ticket: {entry_deal.position_ticket}")
+    except DataContractError as exc:
+        print(f"❌ FATAL: {exc}")
+        sys.exit(1)
     shadow_pos_pre = (
         ShadowPosition(
             position_ticket=rehearsal_ticket,
@@ -879,14 +965,7 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         print("------------------------------------------------------------")
         input("\n👉 Once you have MANUALLY closed the position in MT5 GUI, press ENTER...")
         deals_after = transport.history_deals_get(date_to=datetime.now(timezone.utc) + timedelta(days=2))
-        exit_deals = [
-            d for d in deals_after
-            if d.deal_type == MT5DealType.DEAL_TYPE_SELL and d.position_ticket == target_pos_ticket
-        ]
-        if not exit_deals:
-            print("❌ FATAL: No closing deal found after manual close!")
-            sys.exit(1)
-        exit_deal = exit_deals[-1]
+        exit_deal = select_authoritative_exit_deal(entry_deal, deals_after)
     else:
         print("\n--- STEP 4: OPERATOR MANUAL CLOSE VERIFIED ---")
         print(f"[PASS] Verified Manual Close Exit Deal on Broker: {exit_deal.deal_ticket} (no automated close)")
@@ -1047,8 +1126,12 @@ def run_a11_emergency_close(transport: LayerBDemoMT5Transport) -> None:
         "timestamp_utc": now_flat.isoformat(),
         "rehearsal_ticket": rehearsal_ticket,
         "entry_deal_ticket": entry_deal.deal_ticket,
+        "entry_deal_order_ticket": entry_deal.order_ticket,
+        "entry_deal_position_ticket": entry_deal.position_ticket,
         "entry_deal_intent_id": real_entry_intent,
         "exit_deal_ticket": exit_deal.deal_ticket,
+        "exit_deal_order_ticket": exit_deal.order_ticket,
+        "exit_deal_position_ticket": exit_deal.position_ticket,
         "exit_deal_lineage": "EXTERNALLY_ORIGINATED_UNTRACKED",
         "exit_deal_is_acash_intent": False,
         "manual_close_verified": True,

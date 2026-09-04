@@ -1,0 +1,30 @@
+{
+  "item": "A-11",
+  "result": "PASS",
+  "timestamp_utc": "2026-09-04T10:19:29.039804+00:00",
+  "rehearsal_ticket": 10355518139,
+  "entry_deal_ticket": 10071863196,
+  "entry_deal_order_ticket": 10355518139,
+  "entry_deal_position_ticket": 10355518139,
+  "entry_deal_intent_id": "INT_DEMO_A3_1788516518",
+  "exit_deal_ticket": 10073606868,
+  "exit_deal_order_ticket": 10357157859,
+  "exit_deal_position_ticket": 10355518139,
+  "exit_deal_lineage": "EXTERNALLY_ORIGINATED_UNTRACKED",
+  "exit_deal_is_acash_intent": false,
+  "manual_close_verified": true,
+  "kill_switch_tripped": true,
+  "automated_dispatch_blocked": true,
+  "discrepancies_detected_count": 2,
+  "discrepancy_kinds": [
+    "MISSING_POSITION",
+    "UNTRACKED_TRADE_DEAL"
+  ],
+  "adapter_blocked_proven": true,
+  "restarted_adapter_reconciled": true,
+  "restarted_adapter_safety_state": "DEGRADED",
+  "restarted_adapter_can_dispatch": false,
+  "broker_reality_flat_positions_count": 0,
+  "derived_portfolio_gross_exposure": "0.0",
+  "flatten_status": "FLATTEN_COMPLETED"
+}

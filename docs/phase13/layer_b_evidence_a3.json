@@ -1,0 +1,33 @@
+{
+  "item": "A-3",
+  "result": "PASS",
+  "timestamp_utc": "2026-09-04T08:29:55.491914+00:00",
+  "intent_id": "INT_DEMO_A3_1788516518",
+  "order_ticket": 10355518139,
+  "deal_ticket": 10071863196,
+  "volume": "0.01",
+  "price": "1.16282",
+  "broker_snapshot_digest": "40d92a93e75e0465c38b7bc064b912876495ea0b3c78447f53e6c5767e41b4e8",
+  "shadow_ledger_digest": "517d47a027b1b04230d9955bc04d84f117f39a07dc848739ab04421302df4b94",
+  "reconciliation_clean": true,
+  "reconciliation_status": "CLEAN",
+  "discrepancies_count": 0,
+  "deal_audit": {
+    "raw_deals_count": 2,
+    "trade_execution_deals_count": 1,
+    "non_trade_deals_count": 1,
+    "non_trade_breakdown": {
+      "DEAL_TYPE_BALANCE": 1
+    },
+    "non_trade_records": [
+      {
+        "ticket": 10034767853,
+        "order": 0,
+        "deal_type": "DEAL_TYPE_BALANCE",
+        "category": "ACCOUNTING_DEAL",
+        "comment": "",
+        "profit": "3000.0"
+      }
+    ]
+  }
+}
