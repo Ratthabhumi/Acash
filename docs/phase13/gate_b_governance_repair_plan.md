@@ -1,9 +1,9 @@
-# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 4)
+# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 5)
 
-**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV4`  
+**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV5`  
 **Parent Incident Report:** `docs/phase13/gate_b_forensic_reconciliation_report.md` (Commit `affc5ce`)  
 **Governing Specification Baseline:** `docs/phase13/slice2_gate_b_plan.md` (Rev 20 Frozen Baseline, Spec Commit `647ba75`)  
-**Auditor Review Baseline:** Human Auditor Review of Rev 3 (Resolving Blockers R3-1, R3-2, and Findings R3-3, R3-4)  
+**Auditor Review Baseline:** Human Auditor Review of Rev 4 (Resolving Blockers R4-1, R4-2, and Findings R4-3, R4-4)  
 **Current System State:**  
 - Transaction Persistence: `COMMITTED` (Incident transaction `339ce2fd-a215-4569-9bf4-84a6812175d1` on physical NTFS)  
 - Authorization Provenance: `INVALID` (Self-authorizing runtime runner loop)  
@@ -12,7 +12,7 @@
 - Live Capital Deployed: `$0.00`  
 - Live Orders Transmitted: `0`  
 - Broker Connection: `DISCONNECTED`  
-**Document Status:** REVISION 4 — SUBMITTED FOR FORMAL AUDIT APPROVAL (ZERO EXECUTION / ZERO CODE MUTATION)
+**Document Status:** REVISION 5 — SUBMITTED FOR FORMAL AUDIT APPROVAL (ZERO EXECUTION / ZERO CODE MUTATION)
 
 ---
 
@@ -22,45 +22,44 @@ During the Gate B activation attempt on 2026-09-05, the runner script committed 
 
 While the physical storage mechanics (two-phase commit, fsync barriers, CAS elevations, pointer transitions, NTFS DACL) executed correctly as software code, the **governance provenance is mathematically and organizationally invalid**.
 
-In Revision 3, the architecture replaced filesystem timestamps with SHA-256 manifests and established process separation. However, audit review identified that **hash integrity is not sovereign authority**: an attacker or rogue script modifying both the payload and manifest can recompute SHA-256 hashes, satisfying integrity checks without possessing authentic sovereign authority.
+In Revision 4, the architecture introduced Ed25519 digital signatures on manifests, process separation, and dynamic test counting. However, audit review of Revision 4 identified four critical boundaries that remained underspecified:
+1. **TTY Presence $\neq$ Human Presence:** A pseudo-terminal (PTY / ConPTY) or automated subshell can satisfy `isatty() == True` and supply tokens programmatically.
+2. **`sys.modules` $\neq$ Full Dependency Closure:** Runtime module inspection only audits loaded modules in a specific execution path; lazy, conditional, or dynamic imports are invisible to `sys.modules`.
+3. **Sovereign Root-of-Root Governance:** The provenance, pinning, and change-control gates governing the compiled Root Anchor itself were not formally specified.
+4. **Deny ACE $\neq$ Privilege Isolation:** File-level Deny ACEs can be bypassed if the runner process token holds Windows administrative privileges (`SeTakeOwnershipPrivilege`, `SeRestorePrivilege`).
 
-This Revision 4 Governance Repair Plan establishes a true cryptographic root-of-trust, permanently closing every vulnerability:
-1. **Cryptographic Authority via External Digital Signatures (Blocker R3-1 Resolution):** `TrustAnchorManifest` and `GenesisBootstrapManifest` are digitally signed (`Ed25519`) by external sovereign authorities. The Runner verifies external digital signatures against an immutable root-of-trust anchor before reading digests or loading keys. Hash integrity verifies corruption; digital signatures verify authentic sovereign authority.
-2. **Cryptographic Binding for Genesis Authority (Blocker R3-2 Resolution):** `GenesisBootstrapManifest` eliminates arbitrary string identifiers (`ceremony_authority_id`) in favor of cryptographic binding (`bootstrap_signer_key_id`, `bootstrap_signature_ed25519`), verified against the external sovereign bootstrap root anchor.
-3. **Transitive Capability Isolation (Finding R3-3 Resolution):** Enforces an explicit capability allowlist dependency graph. Automated audits verify that the Runner's entire **transitive import closure** possesses zero private key loading, key generation, signing, or trust-store mutation capabilities.
-4. **Human-Presence Requirement in Mint Tool (Finding R3-4 Resolution):** Process A (Mint Tool) enforces interactive TTY presence and manual operator challenge-token entry, preventing automated scripts, pipelines, or background callers from silently driving the minting process.
-5. **OS-Level Capability Boundary:** Enforces kernel-level ownership separation, non-elevation, and anti-replacement policies preventing runner identity from mutating trust-store files.
-6. **Mandatory Forensic Archive (Option 2):** The incident storage `var/gate_b/` is preserved as an immutable archive (`var/gate_b_incident_archive/`). The `COMMITTED` transaction state is never rewritten or falsified.
-7. **Decoupled Test Acceptance Language:** Acceptance criteria require that all repository tests pass with exact counts reported dynamically from actual execution, rather than rigid hardcoded numbers.
+This Revision 5 Governance Repair Plan formally resolves all four gaps:
+- **Authenticated Human Authorization Ceremony (Blocker R4-1 Resolution):** Replaces TTY presence with an external out-of-band authenticated ceremony. TTY is retained strictly as anti-pipe hygiene, not proof of human identity. Key unlocking requires an external human factor (hardware token / out-of-band passphrase) unavailable to automated host runners.
+- **Full Static Recursive Dependency Closure Audit (Blocker R4-2 Resolution):** Replaces runtime `sys.modules` checks with a static AST recursive import closure audit analyzing direct, transitive, lazy, and dynamic imports. Enforces an absolute capability ban on private key loading, key generation, signing, and trust-store mutation in the runner's dependency graph.
+- **Sovereign Root-of-Root Governance Specification (Finding R4-3 Resolution):** Defines the formal provenance of the Sovereign Root Anchor, pinned to the audited executable release identity (`commit_sha`, reproducible build manifest), rejecting any runtime injection or tampering.
+- **Windows Process Token Privilege Boundary (Finding R4-4 Resolution):** Formally restricts the Runner process identity to an unprivileged standard token, verifying that `SeTakeOwnershipPrivilege`, `SeRestorePrivilege`, and elevation tokens are absent before Stage 1 execution.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                      GOVERNANCE REPAIR ARCHITECTURE (REVISION 4)                       │
+│                      GOVERNANCE REPAIR ARCHITECTURE (REVISION 5)                       │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 1. INCIDENT FORENSIC ARCHIVE (Mandatory Option 2):                                     │
 │    var/gate_b/ ──> var/gate_b_incident_archive/ (Immutable NTFS Deny DACL)             │
 │    (Tx 339ce2fd-... remains COMMITTED in archive; authorization provenance INVALID)    │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 2. EXTERNAL GENESIS BOOTSTRAP AUTHORITY (Pre-Run Sovereign Ceremony):                   │
+│ 2. PINNED SOVEREIGN ROOT ANCHOR (Root-of-Root Governance):                             │
+│    - Generated in offline hardware ceremony; pinned to audited release commit SHA      │
+│    - Runner verifies pinned anchor against release manifest; rejects runtime mutation │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 3. EXTERNAL SOVEREIGN CEREMONIES (Signed Manifest Roots):                              │
 │    - External Bootstrap Authority signs genesis_bootstrap_manifest.json (Ed25519)     │
-│    - Cryptographically binds: root_id, genesis_head_digest, archive_manifest_digest    │
-│    - Initializes fresh root var/gate_b/ starting at GENESIS_HEAD_DIGEST                │
-│    - Runner VERIFIES external signature; Runner CANNOT create or initialize Genesis   │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 3. EXTERNAL SOVEREIGN TRUST ANCHOR CEREMONY (Offline Human Authority):                 │
-│    - Sovereign Human Private Key held strictly offline / external to ACASH codebase    │
-│    - Signs trust_anchor_manifest.json (Ed25519) referencing trust_store_digest         │
+│    - Sovereign Authority signs trust_anchor_manifest.json (Ed25519)                    │
 │    - Ingests sealed public keys into var/gate_b/trust_store.json                       │
-│    - OS Boundary: Governance-owned, Runner identity has NO write/DACL/replace access   │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 4. PROCESS A: INTERACTIVE MINT TOOL (tools/governance/mint_human_go_record.py):        │
-│    - Requires interactive TTY human presence (asserts isatty; prompts operator)        │
-│    - Binds full operational context: Gate A digest, account, limits, fresh Genesis     │
-│    - Signs with Sovereign Approver Key ──> outputs human_go_record.json artifact       │
+│ 4. PROCESS A: AUTHENTICATED HUMAN AUTHORIZATION CEREMONY (Interactive Mint Tool):      │
+│    - Anti-pipe TTY check (hygiene only; NOT treated as human proof)                    │
+│    - Requires out-of-band human authentication factor (external passphrase / token)    │
+│    - Signs canonical HumanGORecord payload with Sovereign Approver Key                 │
 │    - Lacks ledger mutation APIs; lacks trust-store mutation APIs; exits immediately    │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 5. PROCESS B: VERIFY-ONLY RUNNER (src/acash/gate_b/runner.py):                         │
-│    - Separate OS process; Transitive dependency closure has ZERO signing/keygen       │
+│ 5. PROCESS B: VERIFY-ONLY RUNNER (Zero-Capability Dependency Closure):                 │
+│    - Unprivileged Windows Process Token (No SeTakeOwnership, No SeRestore, No Admin)   │
+│    - Static AST Dependency Closure Audit verifies ZERO signing/keygen/trust-write code │
 │    - Verifies external Ed25519 signature on genesis_bootstrap_manifest.json            │
 │    - Verifies external Ed25519 signature on trust_anchor_manifest.json                 │
 │    - Verifies exact SHA-256 digest of trust_store.json against signed manifest         │
@@ -87,7 +86,7 @@ Prior to any fresh activation attempt, the incident storage environment will be 
 
 ---
 
-## 3. Authoritative Genesis Bootstrap Manifest (Blocker R3-2 Resolution)
+## 3. Authoritative Genesis Bootstrap Manifest
 
 To guarantee that the activation runner does not grant itself Genesis authority by calling `mkdir` or generating a Genesis head, Genesis initialization is established as an **external pre-run bootstrap ceremony** digitally signed by the Sovereign Bootstrap Authority.
 
@@ -148,36 +147,7 @@ class GenesisBootstrapManifest(BaseModel):
 
 ---
 
-## 4. Cryptographic Trust-Store Provenance & Authority (Blocker R3-1 Resolution)
-
-Filesystem timestamps are mutable metadata, and standalone hashes only verify file integrity without authenticating origin. Trust-anchor pre-existence and authority must be **verified cryptographically via external digital signature**.
-
-```text
-External Sovereign Authority (Offline)
-                 │
-                 ▼ signs via Sovereign Private Key
-┌────────────────────────────────────────────────────────┐
-│             TrustAnchorManifest (Signed)               │
-├────────────────────────────────────────────────────────┤
-│ manifest_version: 1                                    │
-│ ceremony_id: "CEREMONY_SOVEREIGN_ROOT_20260905"        │
-│ trust_store_digest: SHA256(trust_store.json)           │
-│ trust_store_key_ids: ["KEY_HUMAN_GOVERNANCE_..."]      │
-│ sovereign_signer_key_id: "KEY_EXTERNAL_SOVEREIGN_ROOT" │
-│ sovereign_signature_ed25519: <Ed25519 Signature>       │
-└────────────────────────────────────────────────────────┘
-                 │
-                 ▼ verifies signature against compiled Root Anchor
-┌────────────────────────────────────────────────────────┐
-│             Activation Runner (Verify-Only)            │
-├────────────────────────────────────────────────────────┤
-│ 1. Verify sovereign_signature_ed25519 (Authenticity)   │
-│ 2. Compute SHA256(trust_store.json) (Integrity)        │
-│ 3. Assert compute_digest == manifest.trust_store_digest│
-│ 4. Assert key_ids in manifest.trust_store_key_ids      │
-│ 5. ONLY THEN ingest trust_store.json                   │
-└────────────────────────────────────────────────────────┘
-```
+## 4. Cryptographic Trust-Store Provenance & Sovereign Root-of-Root Governance
 
 ### 4.1 `TrustAnchorManifest` Schema
 ```python
@@ -214,21 +184,37 @@ class TrustAnchorManifest(BaseModel):
 ### 4.2 Runner Cryptographic Ingestion Contract
 Before reading any key entry or initializing `Ed25519TrustStore`:
 1. Ingest `var/gate_b/trust_anchor_manifest.json`.
-2. Extract `sovereign_signer_key_id` and match against the immutable external root anchor.
-3. Cryptographically verify `sovereign_signature_ed25519` over `compute_canonical_signed_bytes()` using the sovereign root public key.
+2. Extract `sovereign_signer_key_id` and match against the pinned Sovereign Root Anchor.
+3. Cryptographically verify `sovereign_signature_ed25519` over `compute_canonical_signed_bytes()` using the pinned Sovereign Root Public Key.
 4. Compute `actual_trust_store_digest = sha256(read_bytes(var/gate_b/trust_store.json))`.
 5. Assert `actual_trust_store_digest == manifest.trust_store_digest`.
 6. Assert all required key IDs (`KEY_HUMAN_GOVERNANCE_AUDITOR_001`, `KEY_STORAGE_ENGINE_PROD_001`) exist in `manifest.trust_store_key_ids`.
 7. If signature fails, digest mismatches, or required keys are missing $\to$ Raise `DataContractError: TRUST_STORE_CRYPTOGRAPHIC_AUTHORITY_INVALID` (Fail-Closed).
 8. Only upon 100% cryptographic verification of the manifest does the runner load `trust_store.json`.
 
+### 4.3 Sovereign Root-of-Root Governance Specification (Finding R4-3 Resolution)
+To guarantee that the Root Anchor itself cannot be replaced, altered, or injected during runtime:
+1. **Provenance:** The Sovereign Root Keypair is generated during an offline, air-gapped Sovereign Key Generation Ceremony. The private key never exists on any network-connected host or runner filesystem.
+2. **Release Identity Pinning:** The public key of the Sovereign Root Anchor is cryptographically bound to the **Audited Executable Release Identity**:
+   $$\text{RootPin} = \left(\text{root\_key\_id}, \text{root\_pubkey\_hex}, \text{release\_commit\_sha}, \text{release\_manifest\_digest}\right)$$
+   The release identity is frozen in immutable compiled code (`acash.governance.root_anchor`) and signed in the Git release tag.
+3. **Change-Control Policy:** Altering the pinned Root Anchor requires:
+   - Formal Multi-Party Key Ceremony documented in a signed ceremony ledger.
+   - Re-audit of the entire repository governance chain.
+   - New signed release commit tag.
+4. **Runtime Immutability:** The Runner strictly prohibits loading or overriding the Root Anchor from:
+   - Environment variables (`ACASH_ROOT_KEY_OVERRIDE`, etc. $\to$ Hard Exception).
+   - Dynamic command-line flags.
+   - Local filesystem or mutable configuration files.
+   If the pinned root anchor diverges from the compiled release manifest, the Runner immediately raises `DataContractError: SOVEREIGN_ROOT_ANCHOR_TAMPERED` (Fail-Closed).
+
 ---
 
-## 5. OS-Level Capability Boundary
+## 5. OS-Level Capability & Token Privilege Boundary (Finding R4-4 Resolution)
 
-Application-level absence of write methods is insufficient if process privileges allow filesystem modification. The repair enforces kernel-level OS access controls:
+Application-level absence of write methods is insufficient if OS access controls or process privileges permit modification. The repair enforces both filesystem DACLs and process token restrictions:
 
-### 5.1 Identity & Ownership Separation
+### 5.1 Identity & Ownership Separation (DACL Layer)
 - **Owner Separation:** `trust_store.json`, `trust_anchor_manifest.json`, and `genesis_bootstrap_manifest.json` are owned by the Governance Principal (e.g. Administrator / Auditor), **never by the runner service identity**.
 - **Kernel-Level Deny ACE:** Explicit Win32 Deny Access Control Entry (ACE) is applied to the runner identity:
   - Deny Write Data (`WD`)
@@ -240,21 +226,37 @@ Application-level absence of write methods is insufficient if process privileges
   - Deny Take Ownership (`WRITE_OWNER`)
 - **Anti-Replacement Invariant:** Filesystem atomic replacements (`os.replace`, `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING`) and unlinks (`os.remove`, `DeleteFileW`) fail closed at kernel level with `ERROR_ACCESS_DENIED`.
 
+### 5.2 Windows Token Privilege Boundary (Finding R4-4 Resolution)
+A file-level Deny ACE is bypassed if the running process holds administrative privileges (e.g. `SeTakeOwnershipPrivilege` allows taking ownership despite Deny ACEs; `SeRestorePrivilege` allows bypassing DACL write checks). To guarantee that the kernel boundary cannot be defeated:
+1. **Unprivileged Service Identity:** The Runner MUST execute under a dedicated unprivileged standard user token (`acash_runner_svc`), NOT `Administrator`, NOT member of `BUILTIN\Administrators`, and NOT `NT AUTHORITY\SYSTEM`.
+2. **Restricted Privilege Token:** The Runner process token MUST NOT hold any of the following Windows privileges:
+   - `SeTakeOwnershipPrivilege` (Bans taking ownership of governance files)
+   - `SeRestorePrivilege` (Bans DACL-bypass write operations)
+   - `SeBackupPrivilege` (Bans DACL-bypass read operations)
+   - `SeSecurityPrivilege` (Bans audit policy / SACL manipulation)
+   - `SeDebugPrivilege` (Bans cross-process inspection or memory injection)
+   - `SeTcbPrivilege` (Bans acting as part of the operating system)
+3. **Pre-Flight Token Inspection (Stage 1 Invariant):** At startup, before performing any operation, the Runner inspects its Win32 process token via `GetTokenInformation(TokenPrivileges)` and `GetTokenInformation(TokenElevation)`:
+   - If `TokenIsElevated == True` $\to$ Halt immediately (`GovernanceSecurityError: RUNNER_PROCESS_TOKEN_ELEVATED`).
+   - If any restricted privilege is enabled or present in token $\to$ Halt immediately (`GovernanceSecurityError: RESTRICTED_TOKEN_PRIVILEGES_DETECTED`).
+   - Asserts that attempting `TakeOwnership` or `WRITE_DAC` returns `ERROR_ACCESS_DENIED` or `ERROR_PRIVILEGE_NOT_HELD`.
+
 ---
 
-## 6. Process-Level Separation & Human Presence
+## 6. Process-Level Separation & Authenticated Human Authorization Ceremony
 
 ### 6.1 Process Separation: Mint Tool vs Activation Runner
-To eliminate the possibility of a shared memory space or runtime object reuse between authorization creation and authorization consumption, the two roles are physically decoupled across OS processes:
+To eliminate shared memory space or runtime object reuse between authorization creation and authorization consumption, the two roles are physically decoupled across OS processes:
 
 ```text
 ┌────────────────────────────────────────────────────────┐       ┌────────────────────────────────────────────────────────┐
 │            PROCESS A: INTERACTIVE MINT TOOL            │       │               PROCESS B: VERIFY-ONLY RUNNER            │
 │         (tools/governance/mint_human_go_record.py)     │       │               (src/acash/gate_b/runner.py)             │
 ├────────────────────────────────────────────────────────┤       ├────────────────────────────────────────────────────────┤
-│ • Interactive TTY Execution ONLY (Human Presence)      │       │ • Automated pipeline execution                         │
-│ • Asserts sys.stdin.isatty() == True                   │       │ • Zero private key capability in dependency closure    │
-│ • Interactive Operator Challenge-Token prompt          │       │ • Ingests confirmation token via CLI argument          │
+│ • Interactive TTY Execution ONLY (Anti-Pipe Hygiene)   │       │ • Automated pipeline execution                         │
+│ • Asserts sys.stdin.isatty() == True                   │       │ • Unprivileged Windows Process Token                   │
+│ • Authenticated Human Authorization Ceremony           │       │ • Static Dependency Closure: ZERO signing/keygen code  │
+│ • External Human Factor (Hardware / Out-of-Band Pass)  │       │ • Ingests confirmation token via CLI argument          │
 │ • Loads sovereign private key from secure external path│       │ • Strictly Verify-Only                                 │
 │ • Signs canonical HumanGORecord payload                │       │ • Ingests pre-existing artifact file from disk         │
 │ • Writes human_go_record.json artifact to disk         │       │ • LACKS signing / keygen APIs                          │
@@ -268,38 +270,53 @@ To eliminate the possibility of a shared memory space or runtime object reuse be
                                                  human_go_record.json
 ```
 
-### 6.2 Human-Presence Requirement (Finding R3-4 Resolution)
-To guarantee that the Mint Tool cannot be spawned silently or driven by an automated caller, CI runner, or background daemon:
-1. **Interactive TTY Enforcement:** The Mint Tool explicitly checks:
-   ```python
-   if not (sys.stdin.isatty() and sys.stdout.isatty()):
-       raise GovernanceSecurityError("MINT_TOOL_REQUIRES_INTERACTIVE_TTY_HUMAN_PRESENCE")
-   ```
-2. **Interactive Confirmation Challenge:** The operator must manually input the approved confirmation token (e.g. `P13-GATE-B-EXECUTION-GO-20260905`) interactively. The tool refuses automated piped stdin (`sys.stdin.read()` without TTY) and fails closed if piped.
-3. **External Key Protection:** The sovereign private key is never stored in the repository, never committed to git, and never accessible via default environment variables. It must be provided via a secure offline path, hardware key, or operator-entered decryption passphrase during the interactive ceremony.
-4. **Immediate Exit:** Once the single `human_go_record.json` artifact is written and flushed, Process A exits immediately with code 0.
+### 6.2 Authenticated Human Authorization Ceremony (Blocker R4-1 Resolution)
+Auditing established that interactive TTY checks (`isatty()`) only verify the absence of basic I/O redirection; automated tools can easily allocate a pseudo-terminal (PTY / ConPTY) to satisfy `isatty()`.
 
-### 6.3 Transitive Capability Isolation (Finding R3-3 Resolution)
-The Runner's capability boundary is not merely syntactic (checking AST of `runner.py`). The Runner's **entire transitive dependency closure** must be free of key-generation, signing, or trust-mutation capabilities:
-- **Capability Allowlist:** The runner and its imported modules may only import verification components (`Ed25519Verifier`, schema validation, storage read/commit utilities).
-- **Prohibited Symbol Closure:** No module reachable in `sys.modules` from `acash.gate_b.runner` may export:
-  - `Ed25519Signer`
-  - `generate_key_pair`
-  - `from_private_bytes`
-  - Trust store write or modification functions
-- This invariant is enforced at runtime and verified by automated static and runtime dependency closure tests (`Test B14`).
+Therefore, **TTY presence is classified strictly as anti-pipe hygiene, NOT proof of human presence or authorization**.
+
+True human authorization is established via an **Authenticated Human Authorization Ceremony**:
+1. **Out-of-Band Human Authentication Factor:** The Sovereign Human Private Key is encrypted at rest and can ONLY be decrypted via an out-of-band factor held exclusively by the Human Governance Auditor:
+   - Hardware token PIN (e.g. FIDO2 / YubiKey physical touch), OR
+   - High-entropy cryptographic passphrase entered interactively by the human auditor at the console during the ceremony.
+2. **Zero Automated Availability:** The key material cannot be decrypted by any automated script, background process, or CI runner because the unlocking secret does NOT reside anywhere in environment variables, configuration files, or the host filesystem.
+3. **Anti-Automation Resistance:** The Mint Tool enforces a challenge-response interaction where the auditor must confirm the Gate A digest, target account, and limits before signature emission. An automated process allocating a PTY cannot bypass the requirement for the external physical/passphrase secret.
+4. **Immediate Process Termination:** Once the single `human_go_record.json` artifact is signed and flushed, the process clears all in-memory key buffers and exits immediately with code 0.
+
+### 6.3 Static Recursive Dependency Closure Audit (Blocker R4-2 Resolution)
+Auditing established that inspecting runtime `sys.modules` does NOT prove capability isolation: modules loaded lazily, conditionally (`if condition: import ...`), or via untraversed code paths do not appear in `sys.modules`.
+
+Therefore, runtime `sys.modules` inspection is replaced by an **Authoritative Static Recursive AST Dependency Closure Audit**:
+1. **Static AST Analysis Algorithm:**
+   - Parse the AST of `acash.gate_b.runner` and extract all `ast.Import`, `ast.ImportFrom`, and calls to dynamic import functions (`importlib.import_module`, `__import__`).
+   - Transitively resolve and parse every internal codebase module reachable from the runner's root import graph.
+   - Build the complete static directed dependency graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$.
+2. **Prohibited Capability Ban:**
+   No node in $\mathcal{G}$ reachable from `acash.gate_b.runner` may contain, import, or re-export:
+   - `Ed25519Signer`
+   - `generate_key_pair`
+   - `from_private_bytes`
+   - Private key loading utilities or file decrypters
+   - Trust-store write or modification utilities
+   - File deletion or replacement APIs targeting trust-store paths
+3. **Dynamic Import Prohibition:**
+   The runner codebase strictly prohibits non-literal dynamic imports (`importlib.import_module(variable)`) that could obscure the static dependency graph. Any dynamic import detected in the runner closure triggers an immediate static audit failure.
+4. **Complementary Runtime Verification:**
+   In addition to the static AST audit, the test suite verifies that `Ed25519Signer` and key generation symbols are absent from `acash.gate_b.runner.__dict__` and never instantiated during execution.
 
 ### 6.4 Capability Boundary Matrix
 | Capability | Process A: Interactive Mint Tool | Process B: Verify-Only Runner |
 | :--- | :---: | :---: |
-| **Interactive TTY Required** | **MANDATORY (`isatty() == True`)** | Not Required (Automated / Pipeline) |
-| **Load Sovereign Private Key** | **PERMITTED** (Operator Ceremony) | ⛔ **PROHIBITED (Zero Key Capability)** |
+| **Interactive TTY Required** | **MANDATORY (Anti-Pipe Hygiene)** | Not Required (Automated / Pipeline) |
+| **Out-of-Band Human Factor** | **MANDATORY (Passphrase / Hardware PIN)** | ⛔ **PROHIBITED (Zero Key Material)** |
+| **Load Sovereign Private Key**| **PERMITTED** (Decrypted by Human Factor) | ⛔ **PROHIBITED (Zero Key Capability)** |
 | **Sign `HumanGORecord`** | **PERMITTED** | ⛔ **PROHIBITED (Verify-Only)** |
 | **Generate Keypairs (`generate_key_pair`)**| ⛔ **STRICTLY PROHIBITED** | ⛔ **STRICTLY PROHIBITED** |
 | **Write `trust_store.json`** | ⛔ **STRICTLY PROHIBITED** | ⛔ **STRICTLY PROHIBITED** |
 | **Import Storage Write APIs** | ⛔ **STRICTLY PROHIBITED** | **PERMITTED (Post-Verification 2PC)** |
 | **Advance Ledger Head** | ⛔ **STRICTLY PROHIBITED** | **PERMITTED (Stage 8 2PC Commit)** |
 | **Broker Order Dispatch** | ⛔ **STRICTLY PROHIBITED** | ⛔ **STRICTLY PROHIBITED (Slice 3 Blocked)** |
+| **OS Token Privilege** | Standard Operator Token | **Unprivileged Token (No Admin/Takeover)** |
 
 ---
 
@@ -330,9 +347,9 @@ class HumanGORecordPayload(BaseModel):
 
 ---
 
-## 8. Adversarial Verification Plan (17 Hard Boundary Tests)
+## 8. Adversarial Verification Plan (20 Hard Boundary Tests)
 
-The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`) attacks every capability boundary, cryptographic signature, and environmental invariant:
+The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`) attacks every capability boundary, cryptographic signature, static dependency path, and OS privilege invariant:
 
 | Test Identifier | Adversarial Attack Scenario | Expected Fail-Closed Assertion |
 | :--- | :--- | :--- |
@@ -349,25 +366,28 @@ The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`
 | **Test B11: Genesis Manifest Missing / Tampered**| Delete or tamper `genesis_bootstrap_manifest.json` in fresh root | Fails closed: `DataContractError: GENESIS_ENVIRONMENT_UNVERIFIED` |
 | **Test B12: In-Memory Synthetic Record Bypass**| Pass mock dictionary or in-memory model to runner instead of file | Fails closed: `DataContractError: ARTIFACT_FILE_REQUIRED` |
 | **Test B13: Mint Tool Execution Boundary** | Invoke mint tool with runner arguments or attempted ledger writes | Fails closed; mint tool lacks storage mutation classes |
-| **Test B14: Transitive Dependency Capability Audit** | Inspect entire recursive module closure of runner for signing/keygen | Fails closed if any module in closure exports `Ed25519Signer` or keygen |
+| **Test B14: Full Static Recursive AST Closure Audit** | Parse full recursive import graph of runner; inspect all dependencies | Fails closed if ANY reachable module exports signing/keygen capability |
 | **Test B15: Trust Anchor Sovereign Signature Check** | Mutate manifest or sign with untrusted sovereign root key | Fails closed: `TRUST_STORE_CRYPTOGRAPHIC_AUTHORITY_INVALID` |
 | **Test B16: Genesis Bootstrap Signature Check** | Mutate genesis manifest or sign with untrusted bootstrap key | Fails closed: `GENESIS_ENVIRONMENT_UNVERIFIED` |
-| **Test B17: Mint Tool Human Presence Non-TTY Ban** | Run mint tool in non-TTY pipe / headless subshell | Fails closed: `MINT_TOOL_REQUIRES_INTERACTIVE_TTY_HUMAN_PRESENCE` |
+| **Test B17: Anti-Pipe & PTY Automation Ban** | Run mint tool in non-TTY pipe or automated pseudo-console without human factor | Fails closed: `MINT_TOOL_REQUIRES_AUTHENTICATED_HUMAN_CEREMONY` |
+| **Test B18: Sovereign Root Anchor Tampering Ban** | Mutate compiled root anchor or inject environment override | Fails closed: `DataContractError: SOVEREIGN_ROOT_ANCHOR_TAMPERED` |
+| **Test B19: Runner Windows Process Token Audit**| Run runner under elevated token or with restricted privileges present | Fails closed: `GovernanceSecurityError: RUNNER_PROCESS_TOKEN_PRIVILEGED` |
+| **Test B20: File Owner Takeover & Privilege Escalation** | Attempt to take ownership of trust store or modify security descriptor | Fails closed: `ERROR_ACCESS_DENIED` / `ERROR_PRIVILEGE_NOT_HELD` |
 
 ---
 
 ## 9. Execution Phasing & Acceptance Criteria
 
-The repair proceeds through three strictly gated steps. Advancing between steps requires explicit human auditor sign-off:
+The repair proceeds through four strictly gated steps. Advancing between steps requires explicit human auditor sign-off:
 
 ```text
-Step 1: Formal Audit Approval of this Plan (Rev 4)
+Step 1: Formal Audit Approval of this Plan (Rev 5)
   │
   ▼
 Step 2: Implement Tooling & Architectural Hardening (Zero Activation)
-  ├─ tools/governance/mint_human_go_record.py (Process A with TTY Human Presence)
-  ├─ src/acash/gate_b/runner.py (Process B Verify-Only with Transitive Boundary)
-  ├─ tests/unit/gate_b/test_gate_b_governance_repair.py (17 Adversarial Tests)
+  ├─ tools/governance/mint_human_go_record.py (Process A: Authenticated Human Ceremony)
+  ├─ src/acash/gate_b/runner.py (Process B: Verify-Only with Static Closure Isolation & Token Audit)
+  ├─ tests/unit/gate_b/test_gate_b_governance_repair.py (20 Adversarial Tests)
   └─ Verification Criterion: ALL REPOSITORY TESTS PASS (Pre-repair baseline + new tests clean; MyPy clean)
   │
   ▼
@@ -375,7 +395,7 @@ Step 3: Governance Ceremonies & Storage Re-initialization
   ├─ Archive var/gate_b -> var/gate_b_incident_archive (Option 2)
   ├─ Execute Genesis Bootstrap Ceremony -> Sovereign signs genesis_bootstrap_manifest.json
   ├─ Execute Trust Anchor Ceremony -> Sovereign signs trust_anchor_manifest.json & seals trust_store.json
-  ├─ Execute Process A (Interactive Mint Tool) -> Human Auditor signs human_go_record.json
+  ├─ Execute Authenticated Human Authorization Ceremony -> Auditor signs human_go_record.json
   └─ Human Audit Review of Fresh Activation Pack on GitHub
   │
   ▼
@@ -395,18 +415,20 @@ Step 4: Fresh Authoritative Gate B Activation Execution
 
 ```markdown
 ════════════════════════════════════════════════════════════════════════════════
-    GATE B GOVERNANCE REPAIR PLAN (REV 4) — FORMAL AUDIT APPROVAL
+    GATE B GOVERNANCE REPAIR PLAN (REV 5) — FORMAL AUDIT APPROVAL
 ════════════════════════════════════════════════════════════════════════════════
 
-Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 4)
+Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 5)
 Parent Incident Report:   docs/phase13/gate_b_forensic_reconciliation_report.md
 Storage Resolution Mode:  OPTION 2: FORENSIC ARCHIVE & FRESH GENESIS ROOT
 Incident Archive Path:    var/gate_b_incident_archive/ (Immutable NTFS Deny DACL)
+Root Anchor Governance:   Pinned to Audited Release Identity (Zero Runtime Override)
 Genesis Authority:        genesis_bootstrap_manifest.json (Ed25519 Sovereign Signed)
 Trust Anchor Authority:   trust_anchor_manifest.json (Ed25519 Sovereign Signed)
 OS Capability Contract:   Governance Owner, Non-Elevation, Anti-Replacement DACL
-Transitive Isolation:     Runner Import Closure has ZERO Signing/Keygen Symbols
-Human Presence:           Process A Requires Interactive TTY & Manual Token Entry
+Windows Token Boundary:   Unprivileged Runner Token (No SeTakeOwnership/SeRestore/Admin)
+Static Closure Isolation: Static AST Dependency Graph: ZERO Signing/Keygen/Write Symbols
+Human Authorization:      Authenticated Ceremony with Out-of-Band Human Factor
 Live Capital Authority:   $0.00 (Zero Capital Deployed)
 Broker Execution:         PROHIBITED (Slice 3 Strictly Blocked)
 
