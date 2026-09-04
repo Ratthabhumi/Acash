@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 6)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 7)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 6)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 7)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 6 Audit Adjustments)
+## User Review Required (Rev 7 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,27 +31,28 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 6 (Addressing Audit Findings B21–B24):
+### Key Refinements in Rev 7 (Addressing Audit Findings B25–B29):
 
-1. **[B21 RESOLVED] Accurate Separation of Preventive vs. Detective Capital Controls:**
-   - **Terminological Discipline:** Removed all claims of "guaranteeing that actual broker execution does not breach `max_notional`". ACASH does not control venue order matching engines during extreme market gaps.
-   - **Preventive Control (Pre-Admission):** Prevents the submission of any order whose *bounded executable risk* (derived from conservative worst-case price) exceeds `max_notional`.
-   - **Detective & Containment Control (Post-Fill):** Detects any broker execution that fills outside the authorized capital bound during 6-D reconciliation, immediately transitions adapter to `BLOCKED`, raises `NOTIONAL_BREACH_ANOMALY`, and fail-closes all subsequent execution.
-2. **[B22 RESOLVED] Explicit Semantics of `max_slippage_points`:**
-   - Formally designated as: **ACASH Assumed Adverse Price Movement Bound** (and forwarded as broker request parameter `MqlTradeRequest.deviation` where supported).
-   - Clarified that it constitutes an internal risk-bound ceiling for pre-admission bounding, **NOT** a venue-guaranteed fill ceiling during extreme market illiquidity.
-3. **[B23 RESOLVED] Formal `MT5QuoteSnapshot` Contract & Freshness Bounds:**
-   - Added a dedicated, immutable `MT5QuoteSnapshot` domain contract with strict mathematical assertions:
-     - Strict UTC timestamp: `timestamp_utc`.
-     - Quote freshness ceiling: $\text{quote\_age} \le \text{max\_quote\_age\_ms}$ (Default: $500\text{ ms}$, Zero magic floor).
-     - Symbol alignment: `quote.symbol == intent.symbol`.
-     - Positive and non-inverted spread: $\text{ask} \ge \text{bid} > 0$.
-     - Positive units: $\text{point\_size} > 0 \land \text{contract\_size} > 0$.
-   - **Transactional Observation Boundary:** Both `MT5BrokerRealitySnapshot` and `MT5QuoteSnapshot` are captured under the exclusive `SerialDispatchLock` immediately prior to admission.
-4. **[B24 RESOLVED] Accurate Concurrency Boundary Framing:**
-   - Reframed concurrency boundary:
-     - **ACASH-Internal Races:** Eliminated via `ExecutionCoordinator` exclusive `SerialDispatchLock`.
-     - **External Broker Mutations:** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 terminal, EA); external mutations are handled via **pre-dispatch assertion rejection** and **immediate post-dispatch reconciliation anomaly detection & containment**.
+1. **[BLOCKER B25 RESOLVED] Removal of Operational Default for `max_quote_age_ms`:**
+   - Eliminated the `= 500` default argument from `assert_valid_and_fresh()`. It is now a mandatory keyword-only parameter.
+   - Added `max_quote_age_ms: int` to `LiveAuthorization` as a **MANDATORY HUMAN / EXECUTION POLICY INPUT** with **zero schema default**.
+   - If missing, `None`, or $\le 0$, order admission strictly fails closed with `PreLiveRiskAdmissionError("MAX_QUOTE_AGE_UNDEFINED")`.
+2. **[BLOCKER B26 RESOLVED] Strict UTC-Aware Provenance & Future Timestamp Rejection:**
+   - `MT5QuoteSnapshot.assert_valid_and_fresh()` enforces:
+     - `self.timestamp_utc.tzinfo is not None` and `self.timestamp_utc.utcoffset() == timedelta(0)`.
+     - Non-negative quote age: $0 \le \text{quote\_age\_ms} \le \text{max\_quote\_age\_ms}$.
+     - Any negative age ($\text{age\_ms} < 0$, indicative of future clock skew or forged timestamps) fails closed immediately as `FUTURE_TIMESTAMP_ANOMALY`.
+3. **[BLOCKER B27 RESOLVED] Fail-Closed Guard Against Non-Positive Worst-Case Price:**
+   - In `construct_order_intent()`, added an explicit mathematical assertion:
+     $$\text{worst\_case\_price} > \text{Decimal("0")}$$
+   - If an extreme assumed slippage buffer causes $\text{worst\_case\_price} \le 0$ (e.g. during a SELL with wide buffer), admission immediately raises `PreLiveRiskAdmissionError("INVALID_WORST_CASE_EXECUTION_PRICE")` to prevent negative notional bypassing the ceiling.
+4. **[B28 RESOLVED] Honest Concurrency Statement (Serialized Critical Section):**
+   - Replaced the unprovable claim of "completely race-free" with an exact technical specification:
+     $$\textbf{ACASH order dispatch is serialized through a single ExecutionCoordinator critical section.}$$
+   - Provable properties: $\le 1$ active dispatcher in runtime; lock acquisition failure fails closed immediately; external venue mutations are trapped via post-reconciliation.
+5. **[B29 RESOLVED] Measurable Post-Dispatch Reconciliation SLA Timeout:**
+   - Replaced "immediate reconciliation" with a formal SLA parameter: `post_dispatch_reconciliation_timeout_ms: int` (e.g. $5000\text{ ms}$).
+   - If the broker matching and history visibility cannot be definitively reconciled within the SLA timeout, the state is classified as `UNKNOWN`, the adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.INDETERMINATE_EXECUTION_TIMEOUT`, and all subsequent dispatches are locked.
 
 ---
 
@@ -59,7 +60,7 @@
 
 The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 6, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and tamper-evident audit chain digests.
+Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 7, `ACTIVE` is impossible to reach without a mathematically verified, Ed25519-signed `HumanGORecord` bound to the exact live account, certified Gate A evidence, and tamper-evident audit chain digests.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -189,10 +190,10 @@ If any single condition fails, activation raises `DataContractError` immediately
 
 ---
 
-## 4. Pre-Admission Bounding, Quote Contract & Slippage Semantics (B12, B17, B21, B22, B23)
+## 4. Pre-Admission Bounding, Quote Contract & Slippage Semantics (B12, B17, B21, B22, B23, B25, B26, B27)
 
-### 4.1 Formal `MT5QuoteSnapshot` Contract (B23)
-To eliminate stale-price and unvalidated market quote gaps, admission requires a validated `MT5QuoteSnapshot`:
+### 4.1 Formal `MT5QuoteSnapshot` Contract (B23, B25, B26)
+To eliminate stale-price, non-UTC, and future-timestamped market quotes, admission requires a validated `MT5QuoteSnapshot`:
 
 ```python
 class MT5QuoteSnapshot(BaseModel):
@@ -206,33 +207,64 @@ class MT5QuoteSnapshot(BaseModel):
     contract_size: Decimal = Field(gt=Decimal("0"), description="Units per standard lot.")
     timestamp_utc: datetime = Field(description="Strict UTC timestamp of quote observation.")
 
-    def assert_valid_and_fresh(self, max_quote_age_ms: int = 500) -> None:
-        """Enforce strict quote freshness and sanity bounds."""
-        if self.ask < self.bid:
+    def assert_valid_and_fresh(self, *, max_quote_age_ms: int) -> None:
+        """Enforce strict quote freshness, UTC provenance, and sanity bounds.
+        
+        CRITICAL B25 & B26 INVARIANTS:
+        - max_quote_age_ms is a required keyword argument (ZERO operational default).
+        - timestamp_utc MUST be timezone-aware and set to UTC (offset == 0).
+        - 0 <= quote_age_ms <= max_quote_age_ms (strictly rejects future timestamps).
+        - ask >= bid > 0 (strictly rejects non-positive or inverted spread).
+        """
+        # 1. B25: Enforce positive freshness threshold
+        if max_quote_age_ms is None or max_quote_age_ms <= 0:
             raise PreLiveRiskAdmissionError(
-                f"INVALID_QUOTE: Inverted market spread ask ({self.ask}) < bid ({self.bid})"
+                "MANDATORY_PARAMETER_MISSING: max_quote_age_ms must be a positive int"
             )
+
+        # 2. B26: Enforce timezone-aware UTC provenance
+        if self.timestamp_utc.tzinfo is None or self.timestamp_utc.utcoffset() != timedelta(0):
+            raise PreLiveRiskAdmissionError(
+                f"INVALID_TIMESTAMP_PROVENANCE: Quote timestamp {self.timestamp_utc} must be explicit UTC-aware"
+            )
+
+        # 3. B26: Enforce non-negative and fresh quote age (rejects future timestamps)
         now_utc = datetime.now(timezone.utc)
         age_ms = (now_utc - self.timestamp_utc).total_seconds() * 1000.0
+        if age_ms < 0:
+            raise PreLiveRiskAdmissionError(
+                f"FUTURE_TIMESTAMP_ANOMALY: Quote timestamp {self.timestamp_utc} is in the future "
+                f"relative to local clock {now_utc} (age: {age_ms:.1f}ms)"
+            )
         if age_ms > max_quote_age_ms:
             raise PreLiveRiskAdmissionError(
                 f"STALE_QUOTE: Quote age {age_ms:.1f}ms exceeds maximum allowed {max_quote_age_ms}ms"
             )
+
+        # 4. Spread sanity
+        if self.ask < self.bid:
+            raise PreLiveRiskAdmissionError(
+                f"INVALID_QUOTE: Inverted market spread ask ({self.ask}) < bid ({self.bid})"
+            )
 ```
 
-### 4.2 Pre-Admission Bounding with `max_slippage_points` (B17 & B22)
+### 4.2 Pre-Admission Bounding with `max_slippage_points` (B17, B22, B27)
 In `construct_order_intent()`, ACASH prevents submitting orders whose conservative bounded executable risk exceeds authorized capital:
 
 ```python
-# 1. Enforce explicit governance-defined assumed adverse price movement (ZERO DEFAULT)
+# 1. Enforce explicit governance parameters (ZERO DEFAULTS)
 if authorization.max_slippage_points is None or authorization.max_slippage_points <= 0:
     raise PreLiveRiskAdmissionError(
         "MANDATORY_PARAMETER_MISSING: authorization.max_slippage_points is undefined or non-positive. "
         "Operational defaults (e.g. stops_level_points or magic numbers) are strictly prohibited."
     )
+if authorization.max_quote_age_ms is None or authorization.max_quote_age_ms <= 0:
+    raise PreLiveRiskAdmissionError(
+        "MANDATORY_PARAMETER_MISSING: authorization.max_quote_age_ms is undefined or non-positive."
+    )
 
-# 2. Assert quote validity and freshness (B23)
-quote.assert_valid_and_fresh(max_quote_age_ms=500)
+# 2. Assert quote validity and freshness (B23, B25, B26)
+quote.assert_valid_and_fresh(max_quote_age_ms=authorization.max_quote_age_ms)
 
 # 3. Derive ACASH conservative worst-case executable price bound
 slippage_buffer = Decimal(str(authorization.max_slippage_points)) * quote.point_size
@@ -242,11 +274,19 @@ if side == OrderSide.BUY:
 else:
     worst_case_price = quote.bid - slippage_buffer
 
-# 4. Compute bounded executable notional in account currency
+# 4. CRITICAL B27 INVARIANT: Enforce strictly positive worst-case price
+if worst_case_price <= Decimal("0"):
+    raise PreLiveRiskAdmissionError(
+        f"INVALID_WORST_CASE_EXECUTION_PRICE: Computed worst-case price {worst_case_price} "
+        f"is non-positive (Reference: {quote.ask if side == OrderSide.BUY else quote.bid}, "
+        f"Buffer: {slippage_buffer})"
+    )
+
+# 5. Compute bounded executable notional in account currency
 order_units = quantity * quote.contract_size
 bounded_executable_notional = order_units * worst_case_price
 
-# 5. Machine-Enforce capital ceiling (Preventive Control - B21)
+# 6. Machine-Enforce capital ceiling (Preventive Control - B21)
 if bounded_executable_notional > authorization.max_notional:
     raise PreLiveRiskAdmissionError(
         f"Bounded executable notional {bounded_executable_notional:.2f} exceeds "
@@ -256,11 +296,11 @@ if bounded_executable_notional > authorization.max_notional:
     )
 ```
 
-### 4.3 Post-Fill Detective Anomaly Trap (B21)
+### 4.3 Post-Fill Detective Anomaly Trap & SLA Timeout (B21 & B29)
 ACASH does not control venue order matching engines during extreme market gaps. If an adverse venue gap causes the actual fill price to result in $\text{actual\_notional} > \text{max\_notional}$:
 - The 6-D reconciliation engine detects the discrepancy immediately upon fill confirmation.
 - The adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.NOTIONAL_BREACH_ANOMALY`.
-- All further order submissions and dispatches are fail-closed.
+- **SLA Timeout (B29):** If reconciliation cannot confirm terminal broker deal/position state within `post_dispatch_reconciliation_timeout_ms` (e.g. $5000\text{ ms}$), the adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.INDETERMINATE_EXECUTION_TIMEOUT`. All subsequent dispatches are locked.
 
 ---
 
@@ -273,6 +313,8 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 | `strategy_id` | `str` | Target Live Strategy ID | **Machine-Enforced** per order | Strategy Authority |
 | `max_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Bounded)** (B12, B21) | **Human Auditor** |
 | `max_slippage_points` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Assumed Risk Bound)** (B17, B22) | **Human Auditor / Policy** |
+| `max_quote_age_ms` | `int` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced (Zero Default)** (B25) | **Human Auditor / Policy** |
+| `post_dispatch_reconciliation_timeout_ms` | `int` | **[TBD — REQUIRED GOVERNANCE INPUT]** | **Machine-Enforced SLA** (B29) | **Execution SLA Policy** |
 | `max_position_size` | `Decimal` | `Decimal("0.01")` (Micro-lot) | **Machine-Enforced Per-Order** (`admission.py:685`) | **Plan Rev3 §4.6** |
 | `max_order_rate_per_minute` | `int` | `1` (Throttle limit) | **NOT MACHINE-ENFORCED** (B19 Phase 14 Debt) | **Governance Policy** |
 | `max_daily_loss_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced by RiskEngine** (Binary Reject) | **Human Auditor** |
@@ -287,11 +329,13 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 
 ---
 
-## 6. Closing ACASH-Internal Dispatch Race & Detecting External Broker Mutation (B18 & B24)
+## 6. Serialized Execution Coordinator Critical Section & Anomaly Detection (B18, B24, B28, B29)
 
-### 6.1 Architectural Demarcation of Concurrency Boundaries (B24):
-- **ACASH-Internal Concurrency:** Completely serialized and race-free. Only a single `ExecutionCoordinator` holding an exclusive dispatch mutex executes admission and dispatch.
-- **External Venue Concurrency:** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 GUI, EA, other terminal). External mutations are handled via **pre-dispatch assertion rejection** and **immediate post-dispatch reconciliation anomaly detection & containment**.
+### 6.1 Honest Concurrency Specification (B28):
+ACASH order dispatch is serialized through a single `ExecutionCoordinator` critical section.
+- **Runtime Property:** Exactly $\le 1$ active dispatcher inside the runtime process.
+- **Fail-Closed Mutex:** If lock acquisition fails or times out, dispatch aborts immediately with `PreLiveRiskAdmissionError("DISPATCH_LOCK_ACQUISITION_FAILED")`.
+- **External Venue Concurrency (B24):** ACASH cannot prevent external actions on the broker account (e.g. manual MT5 GUI, EA, other terminal). External mutations are handled via **pre-dispatch assertion rejection** and **post-dispatch reconciliation anomaly detection & containment**.
 
 ### 6.2 Exclusive Serial Dispatch Lock Lifecycle:
 
@@ -299,12 +343,12 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 [DISPATCH INITIATION]
        │
        ▼
-Acquire SerialDispatchLock (Exclusive Mutex)
-       │
+Acquire SerialDispatchLock (Exclusive Mutex with Timeout)
+       │  (If acquisition fails: Fail closed, raise PreLiveRiskAdmissionError)
        ▼
 Capture Unified Transactional Observation under lock:
   - Fresh Broker Reality Snapshot (< 100ms old)
-  - Fresh MT5QuoteSnapshot (< 500ms old, positive & non-inverted spread)
+  - Fresh MT5QuoteSnapshot (UTC-aware, age <= max_quote_age_ms, ask >= bid > 0)
        │
        ▼
 Assert Strict Serial Invariants:
@@ -316,16 +360,18 @@ Assert Strict Serial Invariants:
 Order Admission Evaluation:
   - Authorization ACTIVE and not expired
   - HumanGORecord valid and not expired
+  - worst_case_price > 0 (B27)
   - bounded_executable_notional <= max_notional
        │  (If rejected: Abort, release lock, raise PreLiveRiskAdmissionError)
        ▼
 Atomic Dispatch: adapter.order_send(deviation=max_slippage_points)
        │
        ▼
-Immediate Synchronous Post-Dispatch Reconciliation:
+Synchronous Post-Dispatch Reconciliation (with post_dispatch_reconciliation_timeout_ms SLA):
   - Verify deal execution matches intent
   - Detect concurrent external broker mutation (UNTRACKED_BROKER_POSITION)
   - Detect NOTIONAL_BREACH_ANOMALY if fill breached max_notional
+  - If reconciliation SLA times out -> Transition to BLOCKED (INDETERMINATE_EXECUTION_TIMEOUT)
        │  (If anomaly detected: Transition to BLOCKED, raise CRITICAL alert)
        ▼
 Release SerialDispatchLock
@@ -369,9 +415,9 @@ Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-e
 
 ---
 
-## 9. Comprehensive Automated Test Matrix (25 Tests)
+## 9. Comprehensive Automated Test Matrix (30 Tests)
 
-The implementation of Slice 2 will include the following 25 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
+The implementation of Slice 2 will include the following 30 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
 
 1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema bounds.
 2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks (USD, currency match).
@@ -387,17 +433,22 @@ The implementation of Slice 2 will include the following 25 unit tests in `tests
 12. `test_human_go_rejects_unregistered_or_revoked_key`: Verifies rejection if key is not in TrustStore or is revoked (B14).
 13. `test_human_go_expiry_subordination_at_activation`: Verifies rejection if `go_record.expires_at_utc > auth.expires_at` (B15).
 14. `test_admission_rejects_expired_authorization_or_go`: Verifies double-window expiry check at admission (`now >= min(auth, go)`) (B15).
-15. `test_admission_rejects_stale_or_invalid_price_quote`: Verifies fail-closed when quote age $> 500\text{ ms}$, spread is inverted, or prices non-positive (B23).
-16. `test_worst_case_notional_requires_explicit_max_slippage_points`: Verifies fail-closed when `max_slippage_points` is missing, None, or $\le 0$ (B17 zero-default check).
-17. `test_worst_case_notional_nominal_pass_worst_case_fail`: Verifies B12/B17 boundary: nominal price $\le$ `max_notional`, but Ask + slippage $>$ `max_notional` fails closed.
-18. `test_worst_case_notional_pass_within_boundary`: Verifies B12/B17: worst-case price $\le$ `max_notional` passes admission.
-19. `test_reconciliation_detects_post_fill_notional_breach`: Verifies B12/B21: fill price $>$ worst-case causing notional breach triggers `NOTIONAL_BREACH_ANOMALY` & adapter block.
-20. `test_strict_serial_mode_rejections`: Verifies discrete pre-dispatch snapshot checks (pending $\neq 0$, in-flight $\neq 0$, open $\neq 0$).
-21. `test_strict_serial_toctou_prevention_under_concurrent_mutation`: Verifies that internal concurrent dispatch attempts fail closed under `SerialDispatchLock` and external mutations are trapped (B18/B24).
-22. `test_required_approvals_cannot_default`: Verifies fail-closed when `required_approvals` is omitted.
-23. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is omitted.
-24. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
-25. `test_revocation_event_halts_issuance`: Verifies that a `CertificateRevocationEvent` immediately revokes authorization, transitions to `REVOKED`, and halts order admission (B20).
+15. `test_admission_rejects_stale_or_invalid_price_quote`: Verifies fail-closed when quote age exceeds `max_quote_age_ms`, spread is inverted, or prices non-positive (B23).
+16. `test_quote_snapshot_rejects_naive_or_non_utc_timestamp`: Verifies fail-closed when quote timestamp is naive or non-UTC aware (B26).
+17. `test_quote_snapshot_rejects_future_timestamp`: Verifies fail-closed when quote timestamp is in the future ($\text{age\_ms} < 0$) (B26).
+18. `test_worst_case_notional_requires_explicit_max_slippage_points`: Verifies fail-closed when `max_slippage_points` is missing, None, or $\le 0$ (B17 zero-default check).
+19. `test_worst_case_notional_requires_explicit_max_quote_age_ms`: Verifies fail-closed when `max_quote_age_ms` is missing, None, or $\le 0$ (B25 zero-default check).
+20. `test_worst_case_price_rejects_zero_or_negative_price`: Verifies fail-closed when `worst_case_price <= 0` for both BUY and SELL (B27 boundary check).
+21. `test_worst_case_notional_nominal_pass_worst_case_fail`: Verifies B12/B17 boundary: nominal price $\le$ `max_notional`, but Ask + slippage $>$ `max_notional` fails closed.
+22. `test_worst_case_notional_pass_within_boundary`: Verifies B12/B17: worst-case price $\le$ `max_notional` passes admission.
+23. `test_reconciliation_detects_post_fill_notional_breach`: Verifies B12/B21: fill price $>$ worst-case causing notional breach triggers `NOTIONAL_BREACH_ANOMALY` & adapter block.
+24. `test_post_dispatch_reconciliation_timeout_blocks_adapter`: Verifies B29 SLA: reconciliation exceeding timeout transitions adapter to `BLOCKED` with `INDETERMINATE_EXECUTION_TIMEOUT`.
+25. `test_strict_serial_mode_rejections`: Verifies discrete pre-dispatch snapshot checks (pending $\neq 0$, in-flight $\neq 0$, open $\neq 0$).
+26. `test_strict_serial_lock_failure_and_external_mutation_containment`: Verifies dispatch lock acquisition failure fails closed, and external broker mutations are detected and blocked (B18, B24, B28).
+27. `test_required_approvals_cannot_default`: Verifies fail-closed when `required_approvals` is omitted.
+28. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is omitted.
+29. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
+30. `test_revocation_event_halts_issuance`: Verifies that a `CertificateRevocationEvent` immediately revokes authorization, transitions to `REVOKED`, and halts order admission (B20).
 
 ---
 
@@ -411,8 +462,8 @@ Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
 2. HumanGORecord non-repudiable verification machinery will be fully operational.
 3. Worst-case executable notional machine gate with explicit slippage will be operational.
-4. MT5QuoteSnapshot contract & freshness validation will be fully operational.
-5. SerialDispatchLock with internal race prevention & external anomaly trap operational.
+4. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
+5. Serial critical section with timeout and post-reconciliation SLA operational.
 6. Live Capital remains strictly $0.00.
 7. Zero broker orders will be sent.
 8. Master trading password will NOT be loaded.
