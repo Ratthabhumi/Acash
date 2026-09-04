@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import pytest
 import shutil
+import subprocess
 from typing import Generator
 from uuid import uuid4
 
@@ -234,6 +235,86 @@ def test_two_phase_recoverable_commit_success(
         )
 
 
+def test_win32_flush_file_buffers_durability_contract(tmp_path: Path) -> None:
+    """Test B89/B98: Win32 FlushFileBuffers / POSIX fsync contract with fail-closed error boundaries."""
+    test_file = tmp_path / "barrier_test.bin"
+
+    # 1. Write handle flush must succeed cleanly
+    with open(test_file, "wb") as f:
+        f.write(b"durable_bytes")
+        f.flush()
+        StoragePlatformUtils.flush_file(f.fileno())
+
+    # 2. Read-only handle flush must fail closed with StorageDurabilityError (Win32 Error 5: ERROR_ACCESS_DENIED on Windows)
+    with open(test_file, "rb") as f:
+        if os.name == "nt":
+            with pytest.raises(StorageDurabilityError) as excinfo:
+                StoragePlatformUtils.flush_file(f.fileno())
+            assert "WIN32_FLUSH_FILE_BUFFERS_FAILED" in str(excinfo.value)
+            assert "win_error=5" in str(excinfo.value)
+
+    # 3. Invalid handle must raise StorageDurabilityError
+    with pytest.raises(StorageDurabilityError):
+        StoragePlatformUtils.flush_file(99999)
+
+
+def test_directory_durability_barrier_contract(tmp_path: Path) -> None:
+    """Test B89/B98: Directory flush barrier on Windows (FILE_FLAG_BACKUP_SEMANTICS) and POSIX."""
+    test_dir = tmp_path / "barrier_dir"
+    test_dir.mkdir()
+    child_file = test_dir / "child.txt"
+    child_file.write_text("child_data", encoding="utf-8")
+
+    # Directory barrier must succeed cleanly
+    StoragePlatformUtils.flush_directory(test_dir)
+    # Parent directory barrier must succeed cleanly
+    StoragePlatformUtils.flush_parent_dir(child_file)
+
+
+def test_ntfs_dacl_enforcement_and_permission_isolation(tmp_path: Path) -> None:
+    """Test B75/B83: NTFS DACL enforcement denying Write, Append, Create, and Delete."""
+    test_dir = tmp_path / "dacl_test_dir"
+    test_dir.mkdir()
+    file1 = test_dir / "protected.json"
+    file1.write_text('{"immutable": true}', encoding="utf-8")
+
+    # Apply read-only ACLs
+    StoragePlatformUtils.mark_directory_read_only(test_dir)
+
+    # On Windows: Verify genuine NTFS DACL via icacls inspection
+    if os.name == "nt":
+        res = subprocess.run(["icacls", str(test_dir)], capture_output=True, text=True, check=True)
+        assert "Everyone:(OI)(CI)(DENY)(DE,WD,AD,WEA,DC,WA)" in res.stdout
+
+    # 1. Overwriting existing file must fail with PermissionError
+    with pytest.raises(PermissionError):
+        with open(file1, "wb") as f:
+            f.write(b"tampered")
+
+    # 2. Appending to existing file must fail with PermissionError
+    with pytest.raises(PermissionError):
+        with open(file1, "a", encoding="utf-8") as f:
+            f.write("tampered")
+
+    # 3. Creating new file inside directory must fail with PermissionError
+    with pytest.raises(PermissionError):
+        with open(test_dir / "new_file.txt", "w", encoding="utf-8") as f:
+            f.write("injected")
+
+    # 4. Deleting existing file must fail with PermissionError
+    with pytest.raises(PermissionError):
+        file1.unlink()
+
+    # 5. Reading existing file must succeed (unmodified data intact)
+    content = file1.read_text(encoding="utf-8")
+    assert content == '{"immutable": true}'
+
+    # 6. Restoring writable mode allows cleanup
+    StoragePlatformUtils.mark_directory_writable(test_dir)
+    file1.unlink()
+    test_dir.rmdir()
+
+
 def test_snapshot_directory_read_only_acl_enforcement(
     storage_environment: tuple[Path, Ed25519TrustStore, StorageEngineSigner, str, str],
 ) -> None:
@@ -259,11 +340,35 @@ def test_snapshot_directory_read_only_acl_enforcement(
 
         snap_dir = root / "snapshots" / str(tx_id)
         record_file = snap_dir / "record.json"
+        head_file = snap_dir / "head.json"
+
+        # On Windows: Verify NTFS DACL via icacls inspection on promoted snapshot dir
+        if os.name == "nt":
+            res = subprocess.run(["icacls", str(snap_dir)], capture_output=True, text=True, check=True)
+            assert "Everyone:(OI)(CI)(DENY)(DE,WD,AD,WEA,DC,WA)" in res.stdout
 
         # Attempt to overwrite record.json inside read-only snapshot directory must raise PermissionError
         with pytest.raises(PermissionError):
             with open(record_file, "wb") as f:
                 f.write(b"tampered_bytes")
+
+        # Attempt to append to record.json must raise PermissionError
+        with pytest.raises(PermissionError):
+            with open(record_file, "a", encoding="utf-8") as f:
+                f.write("tampered")
+
+        # Attempt to inject new file inside snapshot directory must raise PermissionError
+        with pytest.raises(PermissionError):
+            with open(snap_dir / "injected.json", "w", encoding="utf-8") as f:
+                f.write("injected")
+
+        # Attempt to delete file inside snapshot directory must raise PermissionError
+        with pytest.raises(PermissionError):
+            head_file.unlink()
+
+        # Files remain readable
+        assert record_file.exists()
+        assert head_file.exists()
 
 
 def test_post_pointer_switch_cas_failure_rolls_back_to_authenticated_previous_pointer(
@@ -306,6 +411,7 @@ def test_post_pointer_switch_cas_failure_rolls_back_to_authenticated_previous_po
         final_block = commit_block.model_copy(update={"mutation_manifest_digest": manifest_digest})
         tx.write_commit_marker_block(tx2_id, final_block)
         tx.promote_staging_to_snapshot_directory_atomically(tx2_id)
+        tx.flush_snapshot_directory_barrier(tx2_id)
         tx.mark_snapshot_directory_read_only(tx2_id)
 
         # Step 5a: create and sign transition record

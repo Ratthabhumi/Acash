@@ -12,11 +12,14 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
+import ctypes
+from ctypes import wintypes
 import json
 import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
 import threading
 from typing import Any, Dict, Generator, Optional, Tuple
 from uuid import UUID, uuid4
@@ -81,7 +84,7 @@ class WALJournal:
         with open(self._path, "a", encoding="utf-8") as f:
             f.write(line)
             f.flush()
-            os.fsync(f.fileno())
+            StoragePlatformUtils.flush_file(f.fileno())
 
     def read_latest_state(self) -> Optional[JournalState]:
         """Read latest logged journal state if present."""
@@ -107,36 +110,162 @@ class WALJournal:
 class StoragePlatformUtils:
     """Platform durability primitives for Windows NTFS/ReFS and Linux ext4/XFS (B89, B98)."""
 
-    @staticmethod
-    def flush_file(fd: int) -> None:
-        """Call FlushFileBuffers on Windows or fsync on Linux."""
-        os.fsync(fd)
+    _win32_initialized: bool = False
+    _get_osfhandle: Any = None
+    _FlushFileBuffers: Any = None
+    _CreateFileW: Any = None
+    _CloseHandle: Any = None
 
-    @staticmethod
-    def flush_parent_dir_if_posix(path: Path) -> None:
-        """Call fsync on directory file descriptor on POSIX systems."""
-        if os.name != "nt":
-            dir_fd = os.open(str(path.parent), os.O_RDONLY)
+    # Win32 Constants
+    GENERIC_READ: int = 0x80000000
+    GENERIC_WRITE: int = 0x40000000
+    FILE_SHARE_READ: int = 0x00000001
+    FILE_SHARE_WRITE: int = 0x00000002
+    FILE_SHARE_DELETE: int = 0x00000004
+    OPEN_EXISTING: int = 3
+    FILE_FLAG_BACKUP_SEMANTICS: int = 0x02000000
+    INVALID_HANDLE_VALUE: int = -1
+
+    @classmethod
+    def _ensure_win32_initialized(cls) -> None:
+        """Initialize 64-bit Win32 C runtime and kernel32 function signatures."""
+        if cls._win32_initialized or os.name != "nt":
+            return
+
+        try:
+            ucrt = ctypes.CDLL("ucrtbase.dll")
+            cls._get_osfhandle = ucrt._get_osfhandle
+        except Exception:
+            import msvcrt
+            cls._get_osfhandle = msvcrt.get_osfhandle
+
+        cls._get_osfhandle.argtypes = [ctypes.c_int]
+        cls._get_osfhandle.restype = ctypes.c_void_p
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        cls._FlushFileBuffers = kernel32.FlushFileBuffers
+        cls._FlushFileBuffers.argtypes = [wintypes.HANDLE]
+        cls._FlushFileBuffers.restype = wintypes.BOOL
+
+        cls._CreateFileW = kernel32.CreateFileW
+        cls._CreateFileW.argtypes = [
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.HANDLE,
+        ]
+        cls._CreateFileW.restype = wintypes.HANDLE
+
+        cls._CloseHandle = kernel32.CloseHandle
+        cls._CloseHandle.argtypes = [wintypes.HANDLE]
+        cls._CloseHandle.restype = wintypes.BOOL
+
+        cls._win32_initialized = True
+
+    @classmethod
+    def flush_file(cls, fd: int) -> None:
+        """Call FlushFileBuffers on Windows or fsync on Linux with strict error propagation."""
+        if os.name == "nt":
             try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
+                os.fstat(fd)
+            except OSError as exc:
+                raise StorageDurabilityError(f"INVALID_FILE_DESCRIPTOR: fd={fd}: {exc}") from exc
 
-    @staticmethod
-    def write_file_durable(path: Path, content_bytes: bytes) -> None:
+            cls._ensure_win32_initialized()
+            handle = cls._get_osfhandle(fd)
+            if not handle or handle == cls.INVALID_HANDLE_VALUE or handle == -1 or handle == ctypes.c_void_p(-1).value:
+                err = ctypes.get_last_error()
+                raise StorageDurabilityError(f"INVALID_WIN32_FILE_HANDLE: fd={fd}, error={err}")
+
+            res = cls._FlushFileBuffers(handle)
+            if not res:
+                err = ctypes.get_last_error()
+                raise StorageDurabilityError(
+                    f"WIN32_FLUSH_FILE_BUFFERS_FAILED: fd={fd}, handle={handle}, win_error={err}"
+                )
+        else:
+            try:
+                os.fsync(fd)
+            except OSError as exc:
+                raise StorageDurabilityError(f"POSIX_FSYNC_FAILED: fd={fd}: {exc}") from exc
+
+    @classmethod
+    def flush_directory(cls, directory: Path) -> None:
+        """Call FlushFileBuffers on directory handle (Windows) or fsync on directory fd (POSIX)."""
+        if not directory.exists():
+            return
+
+        if os.name == "nt":
+            cls._ensure_win32_initialized()
+            handle = cls._CreateFileW(
+                str(directory),
+                cls.GENERIC_READ | cls.GENERIC_WRITE,
+                cls.FILE_SHARE_READ | cls.FILE_SHARE_WRITE | cls.FILE_SHARE_DELETE,
+                None,
+                cls.OPEN_EXISTING,
+                cls.FILE_FLAG_BACKUP_SEMANTICS,
+                None,
+            )
+            if handle and handle != cls.INVALID_HANDLE_VALUE and handle != -1 and handle != ctypes.c_void_p(-1).value:
+                try:
+                    res = cls._FlushFileBuffers(handle)
+                    if not res:
+                        err = ctypes.get_last_error()
+                        raise StorageDurabilityError(
+                            f"WIN32_FLUSH_DIRECTORY_BUFFERS_FAILED: dir={directory}, handle={handle}, win_error={err}"
+                        )
+                finally:
+                    cls._CloseHandle(handle)
+            else:
+                err = ctypes.get_last_error()
+                # If opening with GENERIC_WRITE failed with ERROR_ACCESS_DENIED (5), directory is read-only.
+                # NTFS journals directory entries on atomic move/replace; read-only dirs are immutable.
+                if err != 5:
+                    raise StorageDurabilityError(
+                        f"FAILED_TO_OPEN_DIRECTORY_FOR_FLUSH: dir={directory}, win_error={err}"
+                    )
+        else:
+            try:
+                dir_fd = os.open(str(directory), os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError as exc:
+                raise StorageDurabilityError(f"POSIX_DIR_FSYNC_FAILED: dir={directory}: {exc}") from exc
+
+    @classmethod
+    def flush_parent_dir(cls, path: Path) -> None:
+        """Call durability barrier on parent directory."""
+        cls.flush_directory(path.parent)
+
+    @classmethod
+    def flush_parent_dir_if_posix(cls, path: Path) -> None:
+        """Compatibility wrapper: flushes parent directory on both Windows and POSIX."""
+        cls.flush_parent_dir(path)
+
+    @classmethod
+    def write_file_durable(cls, path: Path, content_bytes: bytes) -> None:
         """Write file atomically using replace semantics and non-volatile barrier."""
         path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_suffix(f".tmp.{uuid4().hex}")
         with open(temp_path, "wb") as f:
             f.write(content_bytes)
             f.flush()
-            os.fsync(f.fileno())
+            cls.flush_file(f.fileno())
         os.replace(temp_path, path)
-        StoragePlatformUtils.flush_parent_dir_if_posix(path)
+        cls.flush_parent_dir(path)
 
-    @staticmethod
-    def mark_directory_read_only(directory: Path) -> None:
+    @classmethod
+    def mark_directory_read_only(cls, directory: Path) -> None:
         """Enforce read-only ACLs on directory and all contained files (B75, B83)."""
+        if not directory.exists():
+            return
+
+        # 1. Set read-only attributes on files and directories (POSIX + Windows file attrs)
         ro_mode = stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH
         for root, dirs, files in os.walk(directory):
             for file_name in files:
@@ -156,9 +285,35 @@ class StoragePlatformUtils:
         except Exception as exc:
             raise StorageDurabilityError(f"FAILED_TO_SET_READ_ONLY_ON_ROOT_DIR: {directory}: {exc}") from exc
 
-    @staticmethod
-    def mark_directory_writable(directory: Path) -> None:
+        # 2. On Windows: Enforce kernel-level NTFS DACL denying Write, Append, Delete, and DeleteChild
+        if os.name == "nt":
+            cmd = [
+                "icacls",
+                str(directory),
+                "/deny",
+                "Everyone:(OI)(CI)(WD,AD,WA,WEA,DE,DC)",
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise StorageDurabilityError(
+                    f"FAILED_TO_SET_NTFS_DACL: dir={directory}, error={res.stderr.strip() or res.stdout.strip()}"
+                )
+
+    @classmethod
+    def mark_directory_writable(cls, directory: Path) -> None:
         """Restore write permissions on directory and contents (for testing cleanup)."""
+        if not directory.exists():
+            return
+
+        # 1. On Windows: Recursively remove the Deny ACE for Everyone across tree
+        if os.name == "nt":
+            subprocess.run(
+                ["icacls", str(directory), "/remove:d", "Everyone", "/t", "/c", "/q"],
+                capture_output=True,
+                text=True,
+            )
+
+        # 2. Restore writable mode
         rw_mode = stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC
         for root, dirs, files in os.walk(directory):
             for file_name in files:
@@ -430,7 +585,7 @@ class LedgerStorageTransaction:
             raise StorageDurabilityError(f"SNAPSHOT_DIRECTORY_ALREADY_EXISTS: {snapshot_dir}")
 
         os.replace(staging_dir, snapshot_dir)
-        StoragePlatformUtils.flush_parent_dir_if_posix(snapshot_dir)
+        StoragePlatformUtils.flush_parent_dir(snapshot_dir)
 
     def mark_snapshot_directory_read_only(self, tx_id: UUID) -> None:
         """Phase 3: Mark promoted snapshot directory and files read-only (B75, B83)."""
@@ -438,9 +593,10 @@ class LedgerStorageTransaction:
         StoragePlatformUtils.mark_directory_read_only(snapshot_dir)
 
     def flush_snapshot_directory_barrier(self, tx_id: UUID) -> None:
-        """Phase 3 fsync_3 barrier on snapshot directory."""
+        """Phase 3 fsync_3 barrier on snapshot directory and parent container."""
         snapshot_dir = self._get_snapshot_tx_dir(tx_id)
-        StoragePlatformUtils.flush_parent_dir_if_posix(snapshot_dir)
+        StoragePlatformUtils.flush_directory(snapshot_dir)
+        StoragePlatformUtils.flush_parent_dir(snapshot_dir)
 
     # Phase 4: Pre-CAS Deep Verification
     def deep_verify_snapshot_manifest(
@@ -737,8 +893,8 @@ class StorageCommitContract:
 
         # Phase 3: Promote to Snapshot Directory & fsync_3 (B75, B83)
         tx.promote_staging_to_snapshot_directory_atomically(tx_id)
-        tx.mark_snapshot_directory_read_only(tx_id)
         tx.flush_snapshot_directory_barrier(tx_id)
+        tx.mark_snapshot_directory_read_only(tx_id)
 
         # Phase 4: Pre-CAS Manifest Re-verification under Exclusive Lock (B75, B86)
         if not tx.deep_verify_snapshot_manifest(tx_id, final_commit_block):
