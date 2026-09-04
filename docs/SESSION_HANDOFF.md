@@ -1,9 +1,9 @@
 # ACASH — Session Handoff
-## Phase 13 Slice 1: Gate A Pre-Live Certification — Home Continuation Handoff
+## Phase 13 Slice 1: Gate A Pre-Live Certification — COMPLETED & CERTIFIED
 
 > **Document:** `docs/SESSION_HANDOFF.md`  
-> **Status:** PHASE 13 SLICE 1 IN PROGRESS — B-1 & B-2 REMEDIATED (LOCAL VERIFICATION PASS); CONSOLIDATED GATE A AUDIT PENDING  
-> **Gate A Status:** 🔴 **NOT CERTIFIED** (Pending Consolidated Gate A Audit & Formal Review)  
+> **Status:** PHASE 13 SLICE 1 COMPLETED — GATE A CERTIFIED (FORMAL HUMAN SIGN-OFF RECORDED)  
+> **Gate A Status:** 🟢 **CERTIFIED** (Human Auditor Sign-Off: 2026-09-04)  
 > **Gate B Status:** 🔒 **STRICTLY LOCKED** ($0.00 Live Capital Authority)  
 > **Operating Environment:** Windows 10/11 x64, Python 3.14.6 (`.venv`), MetaTrader 5 Desktop Terminal (Demo Only)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
@@ -13,31 +13,31 @@
 
 ## 1. Executive Summary & Current Governance State
 
-This document establishes the authoritative state of the ACASH quantitative execution repository at the conclusion of the workstation session on **2026-09-04**, prior to resuming work from the home environment.
+This document establishes the authoritative state of the ACASH quantitative execution repository following the formal completion and human sign-off of **Phase 13 Slice 1 (Gate A Pre-Live Certification)** on **2026-09-04**.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    ACASH CURRENT GOVERNANCE LEDGER                     │
 ├──────────────────────────────────┬─────────────────────────────────────┤
-│  Blocker B-1 Remediation         │  🟢 REMEDIATED — LOCAL PASS         │
-│  Blocker B-2 Remediation         │  🟢 REMEDIATED — LOCAL PASS         │
+│  Gate A Pre-Live Certification   │  🟢 CERTIFIED (Human Signed-Off)    │
+│  Blocker B-1 Remediation         │  🟢 REMEDIATED & VERIFIED           │
+│  Blocker B-2 Remediation         │  🟢 REMEDIATED & VERIFIED           │
 │  Dedicated Regression Tests      │  🟢 4/4 PASSED (test_layer_b_*)    │
 │  MT5 Execution Unit Tests        │  🟢 190/190 PASSED                  │
 │  Layer A Pre-Live Integration    │  🟢 11/11 PASSED                    │
-│  Static Type Checker (MyPy)      │  🟢 CLEAN (266 source files)        │
+│  Static Type Checker (MyPy)      │  🟢 CLEAN (273 source files)        │
 │  Broker Reality (Demo 112040157) │  🟢 100% FLAT (0 Pos, 0 Ord, $0 DD) │
 │  Live Capital Authority          │  🔒 $0.00 (Hard-Locked)             │
 │  Production Codebase (src/)      │  🔒 STRICTLY FROZEN (0 diff)        │
-│  Consolidated Gate A Audit       │  🟡 PENDING                         │
-│  Gate A Certification Status     │  🔴 NOT CERTIFIED                   │
-│  Gate B Authorization Status     │  🔒 LOCKED                          │
+│  Consolidated Gate A Audit       │  🟢 COMPLETE & SIGNED-OFF           │
+│  Gate B Authorization Status     │  🔒 STRICTLY LOCKED                 │
 │  Remote GitHub Push              │  🟢 SYNCED (Verified origin/main)   │
 └──────────────────────────────────┴─────────────────────────────────────┘
 ```
 
-> [!CAUTION]
-> **CRITICAL GOVERNANCE INVARIANT: PUSH $\neq$ GATE A APPROVAL**  
-> Pushing commits to GitHub establishes synchronization of source, tests, and documentation. It **DOES NOT** constitute Gate A certification. Gate A remains **NOT CERTIFIED** until the Consolidated Gate A Audit is formally re-run and approved by the human auditor.
+> [!IMPORTANT]
+> **GATE A CERTIFIED — GATE B STRICTLY LOCKED**  
+> Formal human auditor sign-off has certified Phase 13 Slice 1 Gate A. In accordance with strict governance rules, Gate A certification **DOES NOT** authorize Gate B progression or live capital deployment. Live capital authority remains hard-locked at `$0.00`.
 
 ---
 
@@ -51,13 +51,12 @@ This document establishes the authoritative state of the ACASH quantitative exec
 - **Phase 11 (Strategy Forward Drift & Execution Reality Attribution):** `FROZEN` (`092a2b1`)
 - **Phase 12 (MT5 & Venue Execution Adapters):** `FROZEN` (`1e1d154`, Closeout: `docs/phase12/closeout_report.md`)
 - **Phase 13 (Live Small Capital Deployment):**
-  - **Slice 1 (Gate A Pre-Live Certification):** `IN PROGRESS`
+  - **Slice 1 (Gate A Pre-Live Certification):** `COMPLETED & CERTIFIED`
     - Layer A (Automated Pytest Suite): `✅ 11/11 PASSED`
-    - Layer B (Operational Demo Terminal Rehearsal):
-      - Rehearsal executed on broker (Demo Account `112040157`)
-      - Findings B-1 and B-2 identified during initial Consolidated Audit
-      - B-1 & B-2 successfully remediated and verified locally
-  - **Gate A Certification Status:** `🔴 NOT CERTIFIED` (Awaiting Consolidated Audit)
+    - Layer B (Operational Demo Terminal Rehearsal): `✅ 3/3 PASSED (A-3, A-10, A-11)`
+    - Blockers B-1 and B-2: `✅ REMEDIATED & CLOSED`
+    - Consolidated Gate A Audit: `✅ SIGNED-OFF BY HUMAN AUDITOR`
+  - **Gate A Certification Status:** `🟢 CERTIFIED`
   - **Gate B Authorization Status:** `🔒 STRICTLY LOCKED`
   - **Live Capital Authority:** `🔒 $0.00`
   - **Production Codebase (`src/`):** `🔒 STRICTLY FROZEN` (Zero diff)
@@ -197,9 +196,10 @@ Get-FileHash docs/phase13/layer_b_evidence_*.json, docs/phase13/kill_switch_demo
 ```
 Confirm all hashes match Section 4 of this handoff document exactly.
 
-### Step 5: Next Action — Consolidated Gate A Audit
-1. Perform the formal **Consolidated Gate A Audit** reviewing all 11 Gate A items (A-1 through A-11).
-2. Verify that Blockers B-1 and B-2 are formally recognized as closed.
-3. Check for any remaining non-blocker observations (e.g. NB-1 schema enum in Phase 14).
-4. Prepare the final Consolidated Audit Report for human auditor sign-off.
-5. **DO NOT self-declare Gate A certified.** Await explicit human auditor authorization.
+### Step 5: Completed Action — Consolidated Gate A Audit & Sign-Off
+1. Formal **Consolidated Gate A Audit** executed and recorded at [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
+2. All 11 Gate A items (A-1 through A-11) verified passed.
+3. Blockers B-1 and B-2 verified closed.
+4. Formal Human Sign-Off recorded on 2026-09-04: **Phase 13 Slice 1 Gate A is CERTIFIED**.
+5. **Gate B remains STRICTLY LOCKED.** Live capital authority remains `$0.00`.
+6. Next Phase: Await explicit human instructions for subsequent Phase progression (e.g. Phase 14 Runtime Orchestration).

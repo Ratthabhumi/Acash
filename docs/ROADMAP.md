@@ -335,8 +335,11 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 13: Live Small Capital Deployment [UPCOMING]
+### ⏳ Phase 13: Live Small Capital Deployment [SLICE 1 GATE A CERTIFIED]
 - **Objective:** Real-world execution validation with micro-capital.
+- **Progress:**
+  - **Slice 1 (Gate A Pre-Live Certification):** `✅ CERTIFIED` (Formal Human Sign-Off on 2026-09-04; A-1 through A-11 PASS; B-1/B-2 CLOSED; 0 Active Blockers; Demo `112040157` 100% Flat; Live Capital $0.00). See [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
+  - **Gate B Status:** `🔒 STRICTLY LOCKED` ($0.00 Live Capital Authority).
 - **Deliverables:**
   - Live execution harness with minimum position sizes (micro-lots).
   - Live telemetry dashboard and real-time risk monitor.
