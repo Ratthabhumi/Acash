@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 18)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 19)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 18)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 19)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 18 Audit Adjustments)
+## User Review Required (Rev 19 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,30 +31,31 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 18 (Addressing Audit Findings B82–B87):
+### Key Refinements in Rev 19 (Addressing Final Audit Findings B88–B91):
 
-1. **[BLOCKER B82 RESOLVED] Atomicity Boundary & 2-Phase Recoverable Commit:**
-   - Acknowledged that atomic pointer switch and CAS state transition are two distinct operations with a potential crash window between them.
-   - Formally codified the authoritative committed invariant:
-     $$\mathbf{AUTHORITATIVE\_COMMITTED}(tx) \iff \text{durable\_tx\_state}(tx) == \text{COMMITTED} \land \text{committed\_pointer} == tx \land \text{commit\_record\_valid} \land \text{manifest\_valid}$$
-   - When `committed_pointer == tx` and `durable_tx_state(tx) == COMMITTING`, the state is classified as **Pending Publication (Recoverable Commit Intent)**, NOT yet committed.
-   - Recovery explicitly recognizes this recoverable intent and executes the **Commit-Recovery Path** (CAS `COMMITTING` $\to$ `COMMITTED`), closing the crash window deterministically.
-2. **[B83 RESOLVED] Precise Terminology: Transaction-Addressed Versioned Snapshots:**
-   - Corrected terminology: directories named `/snapshots/<tx_id>/` are **Transaction-Addressed Versioned Immutable Snapshots**, not content-addressed (since they are keyed by transaction UUID, with cryptographic manifest hashes bound internally).
-3. **[BLOCKER B84 RESOLVED] Deterministic Recovery Classification & Domain Vector Rejection:**
-   - Corrected mathematical phrasing: the 18 rows represent the **18 Canonical Reachable Failure/Recovery Classes**.
-   - Explicitly defined the rejection rule: Any input vector $\mathbf{v} \notin \text{CanonicalReachableClasses}$ is an **Unreachable / Contradictory Input Domain Vector** that is strictly rejected and fails closed to **Tier 3 (`QUARANTINE_LOCKED`)**.
-4. **[BLOCKER B85 RESOLVED] Disambiguated Reader API Contracts:**
-   - Eliminated semantic ambiguity in reader APIs by separating into two distinct functions:
-     - `ReadActiveCommittedSnapshot(storage) -> AuthoritativeSnapshotView`: Atomically leases the current `committed_pointer`, asserts `durable_tx_state == COMMITTED`, deep verifies manifest, and returns the active snapshot.
-     - `ReadCommittedSnapshot(storage, tx_id: UUID) -> AuthoritativeSnapshotView`: Requires `durable_tx_state(tx_id) == COMMITTED` and valid manifest to read any specific committed snapshot version (e.g. for historical audits), independent of active pointer status.
-5. **[B86 RESOLVED] Rigorous Immutability Contract (Contract Enforcement + Integrity Detection):**
-   - Clarified that OS write protection/ACLs provide operational write-once hardening, but absolute immutability against privileged corruption is mathematically proven via **Storage Contract Enforcement + Cryptographic Integrity Detection** (pre-CAS manifest re-verification under exclusive publication lock).
-6. **[BLOCKER B87 RESOLVED] Real Filesystem Crash & Fault-Injection Matrix:**
-   - Acknowledged that unit tests alone cannot prove filesystem crash consistency or `fsync` barriers.
-   - Added a dedicated **Fault-Injection Crash Integration Matrix** covering 8 discrete crash boundaries (Crash-01 through Crash-08) running on actual filesystem mounts to verify post-restart state reconstruction across all durability barriers.
-7. **[TEST EXPANSION] Comprehensive Verification Harness (95 Unit Tests + 8 Crash Scenarios):**
-   - Maintained full 95-test unit suite and integrated the 8-scenario fault-injection crash matrix (103 total discrete test assertions).
+1. **[BLOCKER B88 RESOLVED] Durable Previous-Pointer Binding & CAS Failure Recovery:**
+   - Formalized invariant $\mathbf{PREVIOUS\_POINTER\_BINDING}(tx)$:
+     $$\mathbf{PREVIOUS\_POINTER\_BINDING}(tx) \implies \text{previous\_committed\_pointer is durably recorded, cryptographically bound, and authenticated}$$
+   - Established `DurablePointerTransitionRecord` schema (`pointer_version`, `previous_tx_id`, `new_tx_id`, `commit_intent_digest`, `previous_pointer_digest`).
+   - Defined strict CAS Failure Protocol: If persistent CAS `COMMITTING` $\to$ `COMMITTED` fails after pointer switch, the engine **NEVER silently rolls back the pointer**. Rollback to `previous_tx_id` is permitted ONLY if the transition record is durably authenticated against disk state; otherwise, the entire storage engine transitions immediately to **`QUARANTINE_LOCKED`**.
+2. **[BLOCKER B89 RESOLVED] Concrete Storage Backend Durability Contract:**
+   - Defined platform-specific storage backend specifications for Windows (NTFS/ReFS) and Linux (ext4/XFS):
+     - Windows semantics: `FlushFileBuffers` via Python `os.fsync`; atomic pointer switch via `os.replace` (`MoveFileExW(..., MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)`).
+     - Linux semantics: `fsync(fd)` / `fdatasync(fd)` on file descriptors; parent directory `fsync(dir_fd)` following promotion and rename; atomic pointer switch via POSIX `rename(2)`.
+     - Canonical Definition of $\mathbf{DURABLE}(barrier)$: Synchronous non-volatile hardware barrier confirmed by the underlying operating system system call before returning execution to application space.
+3. **[B90 RESOLVED] Formal Rationale for Conservative Quarantine Boundaries (Crash-03 & Crash-04):**
+   - Formalized fail-closed rationale: A transaction that reaches snapshot directory promotion or directory barrier (`fsync_3`) but has NOT durably established the committed snapshot pointer needed for recovery **MUST NOT be auto-aborted**.
+   - Because snapshot files are physically present on disk, automatic rollback risks destroying valid intended mutations or creating observer ambiguity. ACASH enforces an **intentional conservative quarantine policy** to preserve immutable forensic evidence whenever transaction provenance is incomplete.
+4. **[B91 RESOLVED] Accurate Scope of Crash / Fault-Injection Testing:**
+   - Clarified test suite terminology to **Fault-Injection Crash/Restart Tests**.
+   - Explicitly codified Evidence Scope: *Validates process-crash, abnormal termination, and controlled restart semantics; does not constitute physical hardware power-loss or storage controller failure certification.*
+5. **[RECOVERY HIERARCHY] Unidirectional Recovery Input Hierarchy (Zero Circularity):**
+   - Established strict recovery precedence eliminating circular dependency:
+     $$\text{1. tx\_state} \to \text{2. pointer (transition record)} \to \text{3. snapshots/<tx\_id>/} \to \text{4. manifest} \to \text{5. journal}$$
+   - Journal is strictly reconstructible operational metadata, NEVER an independent authority over storage state.
+6. **[TEST EXPANSION] Comprehensive 111-Assertion Verification Harness:**
+   - Unit Test Matrix expanded to **100 Discrete Automated Unit Tests** (Tests 1–98, including 87a, 87b, 87c).
+   - Crash Integration Matrix expanded to **11 Fault-Injection Crash Scenarios** (Crash-01 through Crash-11).
 
 ---
 
@@ -62,7 +63,7 @@
 
 The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-`ACTIVE is reachable only through the authoritative activation transaction path.` Under Rev 18, `ACTIVE` is impossible to reach without an atomic Compare-And-Swap commit binding the verified `LiveAuthorization`, the Ed25519-signed `HumanGORecord`, and the unbroken authoritative ledger head under a unique, durably enforced `activation_transaction_id`:
+`ACTIVE is reachable only through the authoritative activation transaction path.` Under Rev 19, `ACTIVE` is impossible to reach without an atomic Compare-And-Swap commit binding the verified `LiveAuthorization`, the Ed25519-signed `HumanGORecord`, and the unbroken authoritative ledger head under a unique, durably enforced `activation_transaction_id`:
 $$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \land \textbf{Ledger Current Head == Record Digest}$$
 
 ```
@@ -108,9 +109,10 @@ $$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \lan
          │   ├── Phase 2: Write Commit Manifest Block -> fsync_2 (B60, B73)
          │   ├── Phase 3: Promote to Snapshot Dir & Mark Read-Only -> fsync_3 (B75, B83)
          │   ├── Phase 4: Pre-CAS Re-verification under Exclusive Lock (B75, B86)
-         │   ├── Phase 5: Two-Phase Recoverable Commit (B82):
-         │   │   ├── Step 5a: Atomic Pointer Switch (committed_pointer -> snapshots/<tx_id>)
-         │   │   └── Step 5b: Persistent CAS State Transition (COMMITTING -> COMMITTED)
+         │   ├── Phase 5: Two-Phase Recoverable Commit (B82, B88):
+         │   │   ├── Step 5a: Write Durable Pointer Transition Record & Flush (B88)
+         │   │   ├── Step 5b: Atomic Pointer Switch (committed_pointer -> snapshots/<tx_id>)
+         │   │   └── Step 5c: Persistent CAS State Transition (COMMITTING -> COMMITTED)
          │   └── Finalize Journal: COMMITTED with fsync (B44, B56, B61)
          ▼
         ACTIVE          ◄── [Machine-enables admission.py per-order checks]
@@ -129,7 +131,7 @@ $$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \lan
 
 ---
 
-## 3. Cryptographic Schema, Staging Isolation, Atomic Publication & Terminal CAS Contracts (B11, B13, B14, B15, B30, B31, B32, B35, B38, B39, B40, B43, B44, B48, B49, B50, B51, B52, B53, B54, B55, B56, B57, B58, B59, B60, B61, B62, B64, B65, B66, B67, B68, B69, B70, B71, B72, B73, B74, B75, B76, B77, B78, B79, B80, B81, B82, B83, B84, B85, B86, B87)
+## 3. Cryptographic Schema, Staging Isolation, Atomic Publication & Terminal CAS Contracts (B11, B13, B14, B15, B30, B31, B32, B35, B38, B39, B40, B43, B44, B48, B49, B50, B51, B52, B53, B54, B55, B56, B57, B58, B59, B60, B61, B62, B64, B65, B66, B67, B68, B69, B70, B71, B72, B73, B74, B75, B76, B77, B78, B79, B80, B81, B82, B83, B84, B85, B86, B87, B88, B89, B90, B91)
 
 ### 3.1 Domain Schema Specification & Identity Scope (B51, B73, B77)
 ```python
@@ -139,14 +141,6 @@ class HumanGORecord(BaseModel):
     Proves that a designated human authority personally authorized live capital
     deployment for a specific strategy on a specific broker account with verified
     Gate A evidence, explicit zero-default governance inputs, and unbroken audit lineage.
-    
-    CRITICAL B51 SCOPE: activation_transaction_id is transactional storage metadata,
-    NOT a human authorization claim. It is bound by durable storage invariants and
-    ledger transaction headers, NOT by the HumanGORecord Ed25519 digital signature.
-
-    CRITICAL B73 & B77 CANONICAL DISAMBIGUATION: approved_authorization_digest explicitly
-    binds the SHA-256 digest of the pre-activation draft LiveAuthorization artifact (approved by
-    machine quorum), distinct from the post-activation activated_authorization_digest.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -214,33 +208,7 @@ class LiveAuthorization(BaseModel):
     def authorization_digest(self) -> str:
         """Backward-compatibility property alias pointing to canonical approved_authorization_digest."""
         return self.approved_authorization_digest
-
-    def compute_approved_canonical_bytes(self) -> bytes:
-        """Derive canonical bytes for draft authorization state."""
-        payload = {
-            "authorization_id": self.authorization_id,
-            "strategy_id": self.strategy_id,
-            "symbol": self.symbol,
-            "account_id": self.account_id,
-            "max_notional_usd": str(self.max_notional_usd),
-            "max_drawdown_pct": str(self.max_drawdown_pct),
-            "max_slippage_points": self.max_slippage_points,
-            "max_quote_age_ms": self.max_quote_age_ms,
-            "required_approvals": self.required_approvals,
-            "created_at": self.created_at.isoformat(),
-            "expires_at": self.expires_at.isoformat(),
-        }
-        return CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
 ```
-
-**CRITICAL B79 INVARIANT: Cryptographic Derivation Chain (AUTH_CHAIN_VALID)**
-$$\mathbf{AUTH\_CHAIN\_VALID}(tx) := \text{HumanGORecord.approved\_authorization\_digest} == \text{LiveAuthorization.approved\_authorization\_digest} == \text{activated\_authorization.source\_approved\_digest}$$
-1. `activated.authorization_id == approved.authorization_id`
-2. `activated.source_approved_digest == approved.approved_authorization_digest`
-3. `activated.source_approved_digest == go_record.approved_authorization_digest`
-4. `activated.active_go_record_digest == go_record.record_digest`
-5. `activated.activation_transaction_id == tx_id`
-6. All governance/risk fields (`symbol`, `account_id`, `max_notional_usd`, etc.) match bit-for-bit.
 
 ### 3.3 Durable Transaction State Machine & Terminal-State CAS Invariant (B64, B67)
 ```python
@@ -253,24 +221,10 @@ class DurableTransactionState(str, Enum):
     QUARANTINED = "QUARANTINED"
 ```
 
-**CRITICAL B64 INVARIANT: Mutually Exclusive, Irreversible Terminal States**
-- `COMMITTED` and `ABORTED` are strictly **mutually exclusive, durable, atomic, and irreversible terminal states**.
-- $\text{COMMITTED} \nrightarrow \text{ABORTED}$ and $\text{ABORTED} \nrightarrow \text{COMMITTED}$.
-- Transitions from `COMMITTING` are executed exclusively via an atomic Compare-And-Swap operation on persistent storage state:
-  $$\text{compare\_and\_set\_tx\_state}(tx\_id, expected=\text{COMMITTING}, new \in \{\text{COMMITTED}, \text{ABORTED}\}) \to \text{bool}$$
-- **CRITICAL B67 INVARIANT:** If the abort CAS fails:
-  $$\to \textbf{STRICTLY FORBID ROLLBACK}$$
-  $$\to \textbf{Transition to QUARANTINE\_LOCKED}$$
-
 ### 3.4 Authoritative Abort Record Block Schema & Snapshot Binding Contract (B70, B74, B76, B77)
 ```python
 class AuthoritativeAbortRecordBlock(BaseModel):
-    """Cryptographically verifiable on-disk record of an authoritative transaction abort (B70, B76, B77).
-    
-    CRITICAL B70 & B76 BINDING CONTRACT:
-    The abort record is bound directly to the exact pre-transaction snapshot on disk,
-    allowing full reconstruction of uncommitted proof WITHOUT ANY IN-MEMORY STATE.
-    """
+    """Cryptographically verifiable on-disk record of an authoritative transaction abort (B70, B76, B77)."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     activation_transaction_id: UUID = Field(description="Unique transactional identity.")
@@ -325,49 +279,76 @@ class AuthoritativeCommitRecordBlock(BaseModel):
         return hashlib.sha256(canonical_bytes).hexdigest()
 ```
 
-### 3.6 Transaction-Addressed Versioned Snapshot Layout & Immutability Contract (B65, B75, B83, B86)
-**CRITICAL B83 TERMINOLOGY: Transaction-Addressed Versioned Snapshots**
-Snapshots are structured into discrete versioned snapshot directories keyed by transaction identity (`/snapshots/<tx_id>/`). Each directory contains the complete immutable set of operational files, proven by the internal cryptographic manifest:
+### 3.6 Transaction-Addressed Versioned Snapshots & Storage Backend Specification (B65, B75, B83, B86, B88, B89)
 
 ```text
 storage/
 ├── staging/
 │   └── <tx_id>/                  <-- [Phase 1: Write & fsync_1]
-│       ├── record.json
-│       ├── head.json
-│       ├── authorization.json
-│       └── commit_record_block.json
 ├── snapshots/
 │   └── <tx_id>/                  <-- [Phase 3: Atomic directory rename + READ-ONLY ACLs + fsync_3]
 │       ├── record.json
 │       ├── head.json
 │       ├── authorization.json
 │       └── commit_record_block.json
-├── committed_pointer             <-- [Phase 5a: Atomic pointer switch pointing to snapshots/<tx_id>]
+├── pointer/
+│   ├── committed_pointer         <-- [Phase 5b: Atomic pointer switch pointing to snapshots/<tx_id>]
+│   └── transition.json           <-- [Phase 5a: Durable previous-pointer binding record (B88)]
 ├── aborts/
 │   └── <tx_id>.json              <-- [Authoritative abort records]
 └── tx_state/
     └── <tx_id>.state             <-- [Persistent CAS state file]
 ```
 
-**CRITICAL B86 CONTRACT: Operational Hardening + Cryptographic Integrity Detection**
-- OS filesystem write protection / Read-Only ACLs serve as operational hardening to prevent accidental writes or concurrent process contamination.
-- Absolute immutability is mathematically guaranteed via **Cryptographic Integrity Detection**: The storage engine enforces that any mutation or truncation within `/snapshots/<tx_id>/` will immediately fail the pre-CAS and reader manifest checks (`SHA-256 mismatch`), triggering an immediate fail-closed transition to `QUARANTINE_LOCKED`.
+**CRITICAL B89 SPECIFICATION: Concrete Storage Backend Durability Contract**
+The ACASH storage engine formally specifies and binds its durability guarantees to the following platform backends:
 
-### 3.7 Two-Phase Recoverable Commit Protocol & Durability Barriers (B50, B55, B59, B60, B65, B69, B73, B75, B82, B86)
+1. **Target Platforms & Filesystems:**
+   - **Primary Target (Windows):** Windows 10/11 / Windows Server on **NTFS / ReFS**.
+   - **Secondary Target (Linux):** Linux Kernel $\ge 5.15$ on **ext4 / XFS** (POSIX compliant).
+2. **Platform-Specific Primitive Mappings:**
+   - **File Durability Barrier (`fsync`):**
+     - *Windows:* Calls `FlushFileBuffers(HANDLE)` via Python's `os.fsync(fd)`. Guarantees non-volatile medium flush of file contents and file metadata.
+     - *Linux:* Calls `fsync(fd)` / `fdatasync(fd)` ensuring dirty pages are committed to storage device.
+   - **Directory Entry Durability:**
+     - *Windows:* NTFS synchronously commits directory entry modifications upon parent directory flush or synchronous file creation.
+     - *Linux:* Requires explicit `fsync(dir_fd)` on parent directory after file creation, unlink, or rename.
+   - **Atomic Pointer & Directory Promotion (`os.replace`):**
+     - *Windows:* Maps to `MoveFileExW(old, new, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)` providing atomic file/directory replacement on the same volume.
+     - *Linux:* Maps to `rename(2)` / `renameat2(2)` atomic syscall.
+3. **Canonical Definition of $\mathbf{DURABLE}(barrier)$:**
+   $$\mathbf{DURABLE}(barrier) \implies \text{Synchronous non-volatile hardware commit confirmed by OS system call before returning execution.}$$
 
-$$\text{Stage} \xrightarrow{\mathbf{fsync_1}} \text{Verify} \to \text{Marker} \xrightarrow{\mathbf{fsync_2}} \mathbf{Promote} \xrightarrow{\mathbf{fsync_3}} \mathbf{Pre\text{-}CAS\ Re\text{-}verify} \to \mathbf{Pointer\ Switch} \to \mathbf{CAS\ COMMITTING \to COMMITTED}$$
+### 3.7 Durable Pointer Transition Record & 2-Phase Recoverable Commit (B82, B86, B88, B89)
 
-**CRITICAL B82 INVARIANT: Authoritative Committed Invariant & Recoverable Commit Intent**
-Pointer switch and persistent CAS are two distinct operations. ACASH defines:
-$$\mathbf{AUTHORITATIVE\_COMMITTED}(tx) \iff \text{durable\_tx\_state}(tx) == \text{COMMITTED} \land \text{committed\_pointer} == tx \land \text{commit\_record\_valid} \land \text{manifest\_valid}$$
-- If `committed_pointer == tx` but `durable_tx_state(tx) == COMMITTING`, the transaction is strictly **Pending Publication (Recoverable Commit Intent)**, NOT yet committed.
-- Readers will NOT recognize `tx` as authoritative until CAS flips state to `COMMITTED`.
-- In crash recovery, this state enters the **Commit-Recovery Path**, which executes the pending CAS transition.
+```python
+class DurablePointerTransitionRecord(BaseModel):
+    """Cryptographically authenticated durable record of pointer state transition (B88).
+    
+    Prevents silent pointer rollback and binds the transition from previous_tx_id to new_tx_id.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pointer_version: int = Field(description="Monotonically increasing pointer version.")
+    previous_tx_id: Optional[UUID] = Field(description="Previous active transaction ID (None for genesis).")
+    new_tx_id: UUID = Field(description="New transaction ID being published.")
+    transition_timestamp_utc: datetime = Field(description="Strict UTC timestamp of transition.")
+    commit_intent_digest: str = Field(description="SHA-256 of AuthoritativeCommitRecordBlock being published.")
+    previous_pointer_digest: str = Field(description="SHA-256 of previous pointer state file for hash-chain continuity.")
+```
+
+**CRITICAL B88 INVARIANT: Durable Previous-Pointer Binding (PREVIOUS_POINTER_BINDING)**
+$$\mathbf{PREVIOUS\_POINTER\_BINDING}(tx) \iff \text{previous\_tx\_id is durably recorded and bound prior to pointer switch}$$
+- **Protocol on CAS Failure:**
+  If Step 5c (CAS `COMMITTING` $\to$ `COMMITTED`) fails after Step 5b (pointer switch):
+  1. The engine **STRICTLY FORBIDS silent or unauthenticated pointer rollback**.
+  2. Rollback of `committed_pointer` to `previous_tx_id` is permitted **IF AND ONLY IF** the on-disk `DurablePointerTransitionRecord` is durably present, valid, and authenticates `previous_tx_id` against the durable ledger head.
+  3. The uncommitted transaction `new_tx_id` transitions immediately to **`QUARANTINE_LOCKED`**.
+  4. If transition record is missing, corrupted, or contradictory $\to$ **FREEZE SYSTEM IN QUARANTINE_LOCKED**.
 
 ```python
 class StorageCommitContract:
-    """Enforces 2-phase recoverable commit, immutability barriers, pre-CAS verification, and versioned pointer switch (B75, B82, B86)."""
+    """Enforces 2-phase recoverable commit with durable previous-pointer binding (B75, B82, B86, B88, B89)."""
 
     @staticmethod
     def execute_durable_commit(
@@ -377,17 +358,13 @@ class StorageCommitContract:
         approved_auth: LiveAuthorization,
         activated_auth: LiveAuthorization,
     ) -> AuthoritativeCommitRecordBlock:
-        # -------------------------------------------------------------
-        # PHASE 1: STAGED MUTATION DATA DURABILITY BARRIER (fsync_1)
-        # -------------------------------------------------------------
+        # Phase 1: Staged Mutation Data Durability Barrier (fsync_1)
         tx.write_staged_mutation_data(tx_id, go_record, activated_auth)
         tx.flush_staged_mutation_data_barrier(tx_id)
         if not tx.verify_staged_mutation_data_durable(tx_id, go_record.record_digest, activated_auth):
             raise DataContractError("STAGED_MUTATION_DATA_DURABILITY_VERIFICATION_FAILED")
 
-        # -------------------------------------------------------------
-        # PHASE 2: COMMIT MANIFEST DURABILITY BARRIER (fsync_2) (B60, B73)
-        # -------------------------------------------------------------
+        # Phase 2: Commit Manifest Durability Barrier (fsync_2)
         commit_block = AuthoritativeCommitRecordBlock(
             activation_transaction_id=tx_id,
             commit_timestamp_utc=datetime.now(timezone.utc),
@@ -405,35 +382,46 @@ class StorageCommitContract:
         if not tx.verify_commit_marker_durable(tx_id, manifest_digest):
             raise DataContractError("COMMIT_MARKER_DURABILITY_VERIFICATION_FAILED")
 
-        # -------------------------------------------------------------
-        # PHASE 3: PROMOTE TO IMMUTABLE SNAPSHOT DIRECTORY & fsync_3 (B75, B83)
-        # -------------------------------------------------------------
+        # Phase 3: Promote to Snapshot Directory & fsync_3 (B75, B83)
         tx.promote_staging_to_snapshot_directory_atomically(tx_id)
         tx.mark_snapshot_directory_read_only(tx_id)
         tx.flush_snapshot_directory_barrier(tx_id)
 
-        # -------------------------------------------------------------
-        # PHASE 4: PRE-CAS MANIFEST RE-VERIFICATION UNDER EXCLUSIVE LOCK (B75, B86)
-        # -------------------------------------------------------------
+        # Phase 4: Pre-CAS Manifest Re-verification under Exclusive Lock (B75, B86)
         if not tx.deep_verify_snapshot_manifest(tx_id, final_commit_block):
             raise DataContractError("POST_BARRIER_TAMPERING_DETECTED_PRE_CAS")
 
-        # -------------------------------------------------------------
-        # PHASE 5: TWO-PHASE RECOVERABLE COMMIT (B82)
-        # -------------------------------------------------------------
-        # Step 5a: Atomic pointer switch updates committed_pointer -> snapshots/<tx_id>
-        # (Crash here = Recoverable Commit Intent; readers still blocked by COMMITTING state)
+        # Phase 5: Two-Phase Recoverable Commit with Durable Pointer Transition (B82, B88)
+        # Step 5a: Record and fsync durable pointer transition binding (B88)
+        transition_record = DurablePointerTransitionRecord(
+            pointer_version=tx.get_next_pointer_version(),
+            previous_tx_id=tx.get_current_active_transaction_id(),
+            new_tx_id=tx_id,
+            transition_timestamp_utc=datetime.now(timezone.utc),
+            commit_intent_digest=manifest_digest,
+            previous_pointer_digest=tx.get_current_pointer_digest(),
+        )
+        tx.write_durable_pointer_transition_record(transition_record)
+        tx.flush_pointer_transition_barrier()
+
+        # Step 5b: Atomic pointer switch (committed_pointer -> snapshots/<tx_id>)
         tx.switch_committed_snapshot_pointer_atomically(tx_id)
-        
-        # Step 5b: Atomic persistent CAS transition: COMMITTING -> COMMITTED
-        # (This completes the authoritative commit; readers now observe committed state)
-        if not tx.compare_and_set_tx_state(tx_id, expected=DurableTransactionState.COMMITTING, new=DurableTransactionState.COMMITTED):
+
+        # Step 5c: Persistent CAS transition: COMMITTING -> COMMITTED
+        cas_success = tx.compare_and_set_tx_state(
+            tx_id,
+            expected=DurableTransactionState.COMMITTING,
+            new=DurableTransactionState.COMMITTED,
+        )
+        if not cas_success:
+            # B88 CAS Failure Recovery: Do NOT silently rollback pointer!
+            tx.handle_post_pointer_switch_cas_failure(tx_id, transition_record)
             raise DataContractError("COMMIT_CAS_TRANSITION_FAILED")
 
         return final_commit_block
 ```
 
-### 3.8 Atomic Activation Transaction Manager (B38, B54, B56, B61, B64, B65, B67, B69, B70, B73, B75, B76, B77, B79, B82)
+### 3.8 Atomic Activation Transaction Manager (B38, B54, B56, B61, B64, B65, B67, B69, B70, B73, B75, B76, B77, B79, B82, B88)
 
 ```python
 class ActivationTransactionManager:
@@ -446,7 +434,6 @@ class ActivationTransactionManager:
         trust_store: Ed25519TrustStore,
         ledger: AuthoritativeGOLedger,
     ) -> LiveAuthorization:
-        # Phase 1: Pre-Commit Validation & Derivation Invariant (B79)
         verify_human_go_record_integrity(go_record, trust_store, ledger)
         ActivationValidator.assert_activation_preconditions(auth, go_record, trust_store)
 
@@ -458,7 +445,6 @@ class ActivationTransactionManager:
 
         tx_id = uuid4()
 
-        # Phase 2: Exclusive Critical Section (B38, B54)
         with ledger.exclusive_lock() as tx:
             if tx.has_transaction_id(tx_id):
                 raise DataContractError(f"DUPLICATE_TRANSACTION_ID_REJECTED: {tx_id} already exists in storage")
@@ -484,7 +470,6 @@ class ActivationTransactionManager:
                     raise DataContractError("STATE_TRANSITION_FAILED: Could not transition to COMMITTING")
                 journal.write_state_durable(JournalState.COMMITTING)
 
-                # Prepare in-memory active authorization with explicit derivation bindings (B73, B79)
                 activated_auth = auth.model_copy(update={
                     "status": LiveAuthorizationStatus.ACTIVE,
                     "activated_at": datetime.now(timezone.utc),
@@ -498,10 +483,8 @@ class ActivationTransactionManager:
                 ).hexdigest()
                 activated_auth = activated_auth.model_copy(update={"activated_authorization_digest": activated_digest})
 
-                # Two-Phase Durability Execution with Publication Protocol (B75, B82)
                 StorageCommitContract.execute_durable_commit(tx, tx_id, go_record, auth, activated_auth)
 
-                # Post-Commit Journal Finalization (B56, B61)
                 try:
                     journal.write_state_durable(JournalState.COMMITTED)
                 except Exception as journal_exc:
@@ -514,7 +497,6 @@ class ActivationTransactionManager:
                     tx.log_post_commit_anomaly(exc)
                     return activated_auth
 
-                # Attempt atomic CAS transition to ABORTED (B64, B67)
                 cas_aborted = tx.compare_and_set_tx_state(
                     tx_id,
                     expected=DurableTransactionState.COMMITTING,
@@ -528,7 +510,6 @@ class ActivationTransactionManager:
                         f"Automatic rollback strictly prohibited. Forensic audit required. Error: {exc}"
                     ) from exc
 
-                # Write authoritative on-disk abort record bound to exact snapshot (B70, B76, B77)
                 try:
                     abort_block = AuthoritativeAbortRecordBlock(
                         activation_transaction_id=tx_id,
@@ -549,7 +530,6 @@ class ActivationTransactionManager:
                 except Exception as abort_exc:
                     tx.log_abort_failure_anomaly(abort_exc)
 
-                # Determine if state is provably uncommitted from durable disk records (B76, B80)
                 if is_provably_uncommitted(tx, tx_id):
                     tx.rollback_staging(tx_id)
                     raise DataContractError(f"ACTIVATION_PRE_COMMIT_ABORTED: {exc}") from exc
@@ -563,8 +543,6 @@ class ActivationTransactionManager:
 ```
 
 ### 3.9 Disk-Authoritative Proof of Pre-Commit State (`is_provably_uncommitted()`) (B76, B80)
-**CRITICAL B76 INVARIANT: Zero RAM Dependency**
-Abort proof MUST be derivable entirely from durable on-disk storage after a complete host/process crash restart:
 
 ```python
 def is_provably_uncommitted(
@@ -572,19 +550,8 @@ def is_provably_uncommitted(
     tx_id: UUID,
     optional_in_memory_auth: Optional[LiveAuthorization] = None,
 ) -> bool:
-    """Assert DISK-AUTHORITATIVE persistent proof that storage entered terminal ABORTED state (B76, B80).
-    
-    CRITICAL INVARIANTS:
-    1. Primary proof: Authoritative on-disk ABORT_RECORD in storage/aborts/<tx_id>.json.
-    2. Zero RAM dependency: Reconstructs pre-tx head and draft auth from durable storage alone (B76).
-    3. Storage Contract Invariant (B80): Terminal ABORTED state guarantees no transaction-owned
-       committed snapshot may become authoritative.
-    4. Absence verification: Zero published snapshot pointer references this tx_id.
-    5. Secondary consistency: Head pointer unchanged, no commit marker.
-    If ANY condition fails or I/O read error occurs -> returns False -> QUARANTINE_LOCKED (NO ROLLBACK).
-    """
+    """Assert DISK-AUTHORITATIVE persistent proof that storage entered terminal ABORTED state (B76, B80)."""
     try:
-        # 1. PRIMARY DISK PROOF: Read and parse durable abort record from disk
         abort_record = tx.read_durable_abort_record(tx_id)
         if abort_record is None or not abort_record.is_valid():
             return False
@@ -595,7 +562,6 @@ def is_provably_uncommitted(
         if abort_record.activation_transaction_id != tx_id:
             return False
 
-        # 2. DISK-RECONSTRUCTED BINDING VALIDATION (Zero RAM Dependency - B76)
         durable_pre_head = tx.get_pre_transaction_head_digest_from_disk(tx_id)
         if abort_record.pre_transaction_head_digest != durable_pre_head:
             return False
@@ -607,13 +573,11 @@ def is_provably_uncommitted(
         if abort_record.terminal_state != DurableTransactionState.ABORTED:
             return False
 
-        # 3. PRIMARY CAS PROOF: Storage engine confirms terminal state == ABORTED
         if tx.get_durable_tx_state(tx_id) != DurableTransactionState.ABORTED:
             return False
         if not tx.assert_abort_is_terminal(tx_id):
             return False
 
-        # 4. STORAGE CONTRACT & ABSENCE VERIFICATION (B80)
         if tx.committed_pointer_references_transaction(tx_id):
             tx.log_consistency_violation(f"Committed pointer references aborted tx {tx_id}")
             return False
@@ -622,7 +586,6 @@ def is_provably_uncommitted(
             tx.log_consistency_violation(f"Authoritative snapshot exists for aborted tx {tx_id}")
             return False
 
-        # 5. SECONDARY CONSISTENCY VALIDATION
         if tx.has_durable_commit_marker(tx_id):
             tx.log_consistency_violation(f"Commit marker present on aborted tx {tx_id}")
             return False
@@ -649,17 +612,13 @@ class SnapshotReaderService:
 
     @staticmethod
     def read_active_committed_snapshot(storage: LedgerStorage) -> AuthoritativeSnapshotView:
-        """Read the single current active snapshot referenced by committed_pointer (B85)."""
-        # Step 1: Read active snapshot pointer atomically
         active_tx_id = storage.read_committed_snapshot_pointer_atomically()
         if active_tx_id is None:
             raise DataContractError("NO_ACTIVE_COMMITTED_SNAPSHOT_AVAILABLE")
 
-        # Step 2: Assert durable transaction state is strictly COMMITTED (B82)
         if storage.get_durable_tx_state(active_tx_id) != DurableTransactionState.COMMITTED:
             raise DataContractError(f"ACTIVE_SNAPSHOT_TX_NOT_COMMITTED: {active_tx_id}")
 
-        # Step 3: Open immutable snapshot directory storage/snapshots/<active_tx_id>/
         commit_block = storage.read_commit_record_block_from_snapshot(active_tx_id)
         if not storage.deep_verify_snapshot_manifest(active_tx_id, commit_block):
             storage.transition_to_quarantine_locked(active_tx_id, Exception("CORRUPTED_ACTIVE_SNAPSHOT_DETECTED"))
@@ -675,12 +634,9 @@ class SnapshotReaderService:
 
     @staticmethod
     def read_committed_snapshot(storage: LedgerStorage, tx_id: UUID) -> AuthoritativeSnapshotView:
-        """Read a specific historical committed snapshot version for audits (B85)."""
-        # Step 1: Assert targeted transaction state is strictly COMMITTED
         if storage.get_durable_tx_state(tx_id) != DurableTransactionState.COMMITTED:
             raise DataContractError(f"CANNOT_READ_UNCOMMITTED_SNAPSHOT: {tx_id}")
 
-        # Step 2: Open snapshot directory storage/snapshots/<tx_id>/
         if not storage.has_snapshot_directory(tx_id):
             raise DataContractError(f"SNAPSHOT_DIRECTORY_MISSING: {tx_id}")
 
@@ -698,20 +654,38 @@ class SnapshotReaderService:
         )
 ```
 
-### 3.11 Canonical Authority Hierarchy & 18 Canonical Reachable Recovery Classes (B71, B72, B78, B82, B84)
+### 3.11 Canonical Authority Hierarchy & Unidirectional Recovery Precedence (B71, B72, B78, B82, B84, B88)
 
-| Layer | Canonical Primitive | Authority Domain | Role & Invariants |
-| :--- | :--- | :--- | :--- |
-| **Layer 1** | `DurableTransactionState` | **Lifecycle State Authority** | Single source of truth for transaction lifecycle (`PREPARED`, `COMMITTING`, `COMMITTED`, `ABORTED`, `QUARANTINED`). |
-| **Layer 2** | `AuthoritativeCommitRecordBlock` | **Cryptographic Evidence Authority** | Immutable manifest proving snapshot completeness, digests, and derivation lineage. |
-| **Layer 3** | Persisted Entities in Snapshot Dir | **Committed Payload** | Operational artifacts protected by read-only ACLs in `storage/snapshots/<tx_id>/`. |
+To eliminate any potential circular recovery dependencies, the storage engine defines a strict **Unidirectional Precedence Model**:
 
-#### Complete Deterministic Recovery Classification: 18 Canonical Reachable Classes (B84):
-Every input vector $\mathbf{Inputs} = (\text{TxState}, \text{CommitMarker}, \text{Manifest}, \text{AbortRecord}, \text{SnapshotPointer}, \text{CASResult})$ that belongs to the canonical reachable domain maps deterministically to exactly one recovery action.
+```text
+┌────────────────────────────────────────────────────────┐
+│ 1. tx_state (DurableTransactionState)                  │  <-- Single authority for lifecycle state
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 2. pointer (committed_pointer + transition.json)       │  <-- Primary active version authority (B88)
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 3. snapshots/<tx_id>/ (Immutable operational entities) │  <-- Committed payload
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 4. AuthoritativeCommitRecordBlock (Manifest)           │  <-- Cryptographic evidence authority
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│ 5. WAL Journal (reconstructible operational metadata)  │  <-- Rebuilt from storage; NEVER an authority
+└────────────────────────────────────────────────────────┘
+```
 
-> [!IMPORTANT]
-> **Domain Vector Rejection Rule (B84):**  
-> Any combination $\mathbf{v} \notin \text{CanonicalReachableClasses}$ is an **Unreachable / Contradictory Input Domain Vector** that is explicitly rejected as an invalid state space and transitions immediately to **Tier 3 (`QUARANTINE_LOCKED`)**.
+#### 18 Canonical Reachable Classes & Rejection Policy (B84):
+Any input vector $\mathbf{v} \notin \text{CanonicalReachableClasses}$ is an **Unreachable / Contradictory Input Domain Vector** that fails closed immediately to **Tier 3 (`QUARANTINE_LOCKED`)**:
 
 | Class | `TxState` | `CommitMarker` | `Manifest` | `AbortRecord` | `SnapshotPointer` | `CASResult` | Authoritative Recovery Action | Resulting Tier |
 | :---: | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -722,9 +696,9 @@ Every input vector $\mathbf{Inputs} = (\text{TxState}, \text{CommitMarker}, \tex
 | **5** | `COMMITTING` | `CORRUPT` | Any | Any | Any | `N/A` | Corrupted commit marker on disk; indeterminate intent | **Tier 3 (`QUARANTINE_LOCKED`)** |
 | **6** | `COMMITTING` | `VALID` | `INVALID` | Any | Any | `N/A` | Marker valid but entity hash mismatch / corrupt entity | **Tier 3 (`QUARANTINE_LOCKED`)** |
 | **7** | `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `SUCCESS` | **Commit-Recovery Path (B82):** Recoverable commit intent; CAS succeeds; finalize journal | **Tier 2 (`COMMITTED`)** |
-| **8** | `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `CAS_CONFLICT`| State conflict: CAS failed (competing writer modified state) | **Tier 3 (`QUARANTINE_LOCKED`)** |
-| **9** | `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `STORAGE_IO`  | Storage I/O failure during CAS transition | **Tier 3 (`QUARANTINE_LOCKED`)** |
-| **10**| `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ABSENT` | `N/A` | Crash before snapshot pointer switch; pointer missing | **Tier 3 (`QUARANTINE_LOCKED`)** |
+| **8** | `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `CAS_CONFLICT`| State conflict: CAS failed; restore authenticated previous pointer (B88) | **Tier 3 (`QUARANTINE_LOCKED`)** |
+| **9** | `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `STORAGE_IO`  | Storage I/O failure during CAS transition; quarantine | **Tier 3 (`QUARANTINE_LOCKED`)** |
+| **10**| `COMMITTING` | `VALID` | `VALID` | `ABSENT` | `ABSENT` | `N/A` | Crash before snapshot pointer switch (Crash-04); conservative quarantine (B90) | **Tier 3 (`QUARANTINE_LOCKED`)** |
 | **11**| `COMMITTED` | `VALID` | `VALID` | `ABSENT` | `ACTIVE` | `N/A` | Completely consistent committed transaction; idempotent no-op | **Tier 2 (`COMMITTED`)** |
 | **12**| `COMMITTED` | `ABSENT` | Any | Any | Any | `N/A` | Fatal state corruption: state is `COMMITTED` but marker absent | **Tier 3 (`QUARANTINE_LOCKED`)** |
 | **13**| `COMMITTED` | `CORRUPT` | Any | Any | Any | `N/A` | Fatal state corruption: state is `COMMITTED` but marker corrupted | **Tier 3 (`QUARANTINE_LOCKED`)** |
@@ -734,7 +708,13 @@ Every input vector $\mathbf{Inputs} = (\text{TxState}, \text{CommitMarker}, \tex
 | **17**| `ABORTED` | Any | Any | `CORRUPT` | Any | `N/A` | Aborted state but abort record corrupted | **Tier 3 (`QUARANTINE_LOCKED`)** |
 | **18**| `QUARANTINED`| Any | Any | Any | Any | `N/A` | System quarantined; refuse all mutations, forensic audit required | **Tier 3 (`QUARANTINE_LOCKED`)** |
 
-### 3.12 Three-Tier Recovery Decision Tree & Forensic Uncertainty States (B44, B49, B58, B61, B62, B66, B71, B76, B78, B82)
+### 3.12 Three-Tier Recovery Decision Tree & Formal Rationale for Conservative Quarantine (B90)
+
+**CRITICAL B90 RATIONALE: Conservative Quarantine Policy for Crash-03 & Crash-04**
+- **Crash-03 (Promotion complete, fsync_3 interrupted):** Directory exists in `/snapshots/<tx_id>/`, but physical metadata commit is unproven.
+- **Crash-04 (fsync_3 complete, pointer switch pending):** Snapshot is durable, but committed pointer switch was not reached.
+- **Formal Invariant:** A transaction that reaches snapshot promotion but has NOT durably established the committed pointer needed for recovery **MUST NOT be auto-aborted**.
+  Because physical entity mutations exist on disk, auto-rollback risks destroying legitimate state intent or creating partial-observer divergence. ACASH deliberately chooses **intentional conservative quarantine** over heuristic guessing, freezing the system to preserve all physical evidence for forensic audit.
 
 ```
                        [PENDING WAL JOURNAL FOUND]
@@ -757,12 +737,12 @@ Is durable_tx_state == COMMITTED? (B71, B82)     Does Disk-Authoritative Abort P
         │                                        ┌─────────────────┴─────────────────┐
         ▼                                       [YES]                               [NO]
   COMMIT-RECOVERY PATH (B71, B82):               │                                   │
-  (Recoverable Commit Intent Recognized)  TIER 1: PRE-COMMIT                 TIER 3: QUARANTINE (B78, B84)
+  (Recoverable Commit Intent Recognized)  TIER 1: PRE-COMMIT                 TIER 3: QUARANTINE (B78, B84, B90)
   Attempt CAS: COMMITTING -> COMMITTED    Durable abort proven!              State ambiguous/corrupted!
   ├── SUCCESS ──► TIER 2: COMMITTED       Rollback staging mutations         STRICTLY NO ROLLBACK!
   └── FAILURE ──► TIER 3: QUARANTINE      Tuple: (APPROVED_PENDING_GO,       Set QUARANTINE_LOCKED
-                                                  Head=OldHead,              Tuple: (QUARANTINED,
-                                                  Record=Absent,                     Head=UNCERTAIN,
+                  (Restore auth prev              Head=OldHead,              Tuple: (QUARANTINED,
+                   pointer if valid - B88)        Record=Absent,                     Head=UNCERTAIN,
                                                   ABORTED)                           Record=UNCERTAIN,
                                                                                      QUARANTINED)
 ```
@@ -934,8 +914,8 @@ class StrictSerialExecutionGate:
    When a `CertificateRevocationEvent` is ingested, any key marked `is_revoked = True` immediately causes all subsequent `LiveAuthorization` validations to fail closed.
 2. **Circuit Breaker Trip (B19):**
    If drawdown breaches `max_drawdown_pct` or slippage exceeds `max_slippage_points`, the adapter transitions to `BLOCKED`.
-3. **Forensic Quarantine Protocol (`QUARANTINE_LOCKED`) (B49, B58, B62):**
-   If transaction commit or recovery encounters any ambiguity, missing entity, digest mismatch, or CAS conflict, the storage engine transitions directly to `QUARANTINE_LOCKED`. Automatic rollback is strictly forbidden.
+3. **Forensic Quarantine Protocol (`QUARANTINE_LOCKED`) (B49, B58, B62, B88, B90):**
+   If transaction commit or recovery encounters any ambiguity, missing entity, digest mismatch, pointer corruption, or CAS conflict, the storage engine transitions directly to `QUARANTINE_LOCKED`. Automatic rollback is strictly forbidden.
 
 ---
 
@@ -957,20 +937,21 @@ class StrictSerialExecutionGate:
 - [ ] All 10 domain schema classes implemented with Pydantic `frozen=True, extra="forbid"`.
 - [ ] `HumanGORecord` canonical serializer and Ed25519 verification implemented.
 - [ ] `AuthoritativeGOLedger` head verification with CAS atomic append implemented.
-- [ ] `StorageCommitContract` with 2-phase recoverable commit (B82) and pre-CAS re-verification implemented.
+- [ ] `StorageCommitContract` with 2-phase recoverable commit (B82) and durable pointer transition record (B88) implemented.
+- [ ] Platform-specific storage backend durability contract implemented and validated (B89).
 - [ ] `is_provably_uncommitted()` implemented with strictly disk-authoritative proof (zero RAM dependency).
 - [ ] `SnapshotReaderService` with disambiguated reader APIs implemented (`ReadActiveCommittedSnapshot` vs `ReadCommittedSnapshot`).
 - [ ] 18 Canonical Reachable Recovery Classes and unreachable domain rejection implemented.
 - [ ] `MT5QuoteSnapshot` contract with explicit UTC-awareness and freshness implemented.
-- [ ] All 95 automated unit tests passing locally.
-- [ ] All 8 fault-injection crash scenarios verified on physical filesystem test runner.
+- [ ] All 100 automated unit tests passing locally.
+- [ ] All 11 fault-injection crash scenarios verified on physical filesystem test runner.
 - [ ] MyPy zero errors in `src/` and `tests/`.
 
 ---
 
-## 9. Comprehensive Verification Harness (95 Unit Tests + 8 Crash Fault-Injection Scenarios)
+## 9. Comprehensive Verification Harness (100 Unit Tests + 11 Crash Fault-Injection Scenarios)
 
-### 9.1 Unit Test Suite (95 Discrete Automated Unit Tests)
+### 9.1 Unit Test Suite (100 Discrete Automated Unit Tests)
 
 1. `test_human_go_record_schema_immutability`: Verifies `HumanGORecord` is frozen and rejects extra fields.
 2. `test_human_go_record_forbids_defaults`: Verifies omitting any mandatory field raises `ValidationError`.
@@ -1069,20 +1050,30 @@ class StrictSerialExecutionGate:
 93. `test_aborted_with_any_published_entity_enters_quarantine`: Verifies `ABORTED` transaction possessing any published entity/pointer fails closed to `QUARANTINE_LOCKED` (B80).
 94. `test_read_active_committed_snapshot_requires_committed_state`: Verifies `ReadActiveCommittedSnapshot` rejects snapshot if state is not `COMMITTED` (B82, B85).
 95. `test_read_committed_snapshot_by_id_allows_historical_audit`: Verifies `ReadCommittedSnapshot(tx_id)` allows reading historical committed snapshot even if not active (B85).
+96. `test_failed_commit_cas_preserves_authenticated_previous_pointer`: Verifies that if CAS fails after pointer switch, pointer is rolled back to authenticated previous_tx_id, or system freezes in quarantine (B88).
+97. `test_pointer_transition_record_survives_restart`: Verifies `DurablePointerTransitionRecord` is completely readable and authenticated from disk after full host restart (B88).
+98. `test_storage_backend_satisfies_declared_durability_contract`: Verifies that filesystem backend satisfies FlushFileBuffers/fsync durability barriers and atomic directory replace semantics (B89).
+99. `test_commit_recovery_uses_state_pointer_snapshot_consistently`: Verifies recovery strictly adheres to unidirectional authority precedence (state -> pointer -> snapshot -> manifest -> journal) without circularity (B88).
+100. `test_unrecoverable_prepublication_state_quarantines`: Verifies that Crash-03 and Crash-04 fail closed to quarantine preserving physical evidence (B90).
 
-### 9.2 Crash Fault-Injection Integration Matrix (Real Filesystem Mounts) (B87)
-Executed on physical temporary filesystem trees simulating sudden power loss / process crashes:
+### 9.2 Fault-Injection Crash/Restart Integration Matrix (B87, B89, B90, B91)
+> [!NOTE]
+> **Evidence Scope (B91):**  
+> This matrix validates process-crash, abnormal execution termination, and controlled process restart semantics on real physical filesystem mounts; it does **not** constitute physical hardware power-loss or storage controller failure certification.
 
 | Crash ID | Fault Injection Point | Injected State at Crash | Recovery Action Expected | Expected Final 6-Tuple $\mathbf{\Sigma}$ `(state, pointer, snapshot, manifest, journal, auth)` |
 | :---: | :--- | :--- | :--- | :--- |
 | **Crash-01** | Post-`fsync_1` (Staged mutation data durable) | Staged files on disk; marker absent | Tier 1: Execute abort CAS, write abort record, discard staging | `(ABORTED, OldPointer, Discarded, N/A, ABORTED, APPROVED_PENDING_GO)` |
 | **Crash-02** | Post-`fsync_2` (Commit marker block durable) | Staged files + marker on disk; promotion pending | Tier 1: Staging not promoted; pointer unchanged; abort cleanly | `(ABORTED, OldPointer, Discarded, N/A, ABORTED, APPROVED_PENDING_GO)` |
-| **Crash-03** | Post-Promotion (Directory promoted to snapshots) | Directory promoted; `fsync_3` interrupted | Tier 3: Promotion unproven or partial; fail closed to quarantine | `(QUARANTINED, OldPointer, UNCERTAIN, UNCERTAIN, QUARANTINED, QUARANTINED)` |
-| **Crash-04** | Post-`fsync_3` (Snapshot directory durable) | Snapshot durable; pointer switch pending | Tier 3: Pointer switch absent; cannot promote; quarantine | `(QUARANTINED, OldPointer, Valid, Valid, QUARANTINED, QUARANTINED)` |
+| **Crash-03** | Post-Promotion (Directory promoted to snapshots) | Directory promoted; `fsync_3` interrupted | Tier 3: Promotion unproven; conservative quarantine (B90) | `(QUARANTINED, OldPointer, UNCERTAIN, UNCERTAIN, QUARANTINED, QUARANTINED)` |
+| **Crash-04** | Post-`fsync_3` (Snapshot directory durable) | Snapshot durable; pointer transition pending | Tier 3: Pointer transition absent; conservative quarantine (B90) | `(QUARANTINED, OldPointer, Valid, Valid, QUARANTINED, QUARANTINED)` |
 | **Crash-05** | Post-Pointer Switch (Pointer switched to `<tx_id>`) | Pointer active; state is `COMMITTING` | **Commit-Recovery Path (B82):** Recoverable intent recognized; CAS `COMMITTED` | `(COMMITTED, NewPointer, Valid, Valid, COMMITTED, ACTIVE)` |
 | **Crash-06** | Pre-CAS Transition (State still `COMMITTING`) | Pointer active; CAS not reached | **Commit-Recovery Path (B82):** CAS executed during recovery | `(COMMITTED, NewPointer, Valid, Valid, COMMITTED, ACTIVE)` |
 | **Crash-07** | Post-CAS Transition (State `COMMITTED`) | Storage committed; journal finalization pending | Tier 2: Storage proven committed; journal finalized to `COMMITTED` | `(COMMITTED, NewPointer, Valid, Valid, COMMITTED, ACTIVE)` |
 | **Crash-08** | Full Host Restart + Process Recovery | Total RAM wipe; disk-authoritative recovery | Assert complete reconstructibility from disk with zero RAM | Matches expected Tier 1, Tier 2, or Tier 3 outcome |
+| **Crash-09** | Post-Pointer Switch CAS Failure (B88) | Pointer is `tx_new`; CAS fails (state conflict) | Rollback pointer to authenticated `previous_tx_id`; quarantine `tx_new` | `(QUARANTINED, OldPointer, Valid, Valid, QUARANTINED, QUARANTINED)` |
+| **Crash-10** | Restart Following Post-Pointer CAS Failure (B88) | System restarted after CAS failure | Detect uncommitted pointer + authenticated transition record | `(QUARANTINED, OldPointer, Valid, Valid, QUARANTINED, QUARANTINED)` |
+| **Crash-11** | Corrupted Previous-Pointer Transition Record (B88) | Pointer switch uncommitted; transition record corrupt | Freeze entire storage engine; strictly NO silent rollback | `(QUARANTINED, UNCERTAIN, UNCERTAIN, UNCERTAIN, QUARANTINED, QUARANTINED)` |
 
 ---
 
@@ -1090,7 +1081,7 @@ Executed on physical temporary filesystem trees simulating sudden power loss / p
 
 ```text
 ================================================================================
-                    PHASE 13 SLICE 2 EXACT STOP GATE (REV 18)
+                    PHASE 13 SLICE 2 EXACT STOP GATE (REV 19)
 ================================================================================
 Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
@@ -1098,21 +1089,24 @@ Upon completion of Slice 2 Implementation:
 3. Authoritative ledger head continuity with CAS commit guard operational.
 4. Two-Phase Recoverable Commit Protocol with transaction-addressed snapshots,
    read-only ACLs, and atomic pointer switch (B75, B82, B83, B86) operational.
-5. Disk-Authoritative Abort Proof with zero RAM dependency (B76) operational.
-6. Canonical authorization digest naming with zero ambiguity (B77) operational.
-7. 18 Canonical Reachable Recovery Classes with unreachable domain rejection (B78, B84) operational.
-8. Cryptographic derivation chain AUTH_CHAIN_VALID(tx) (B79) operational.
-9. Formal ABORTED semantic contract guarantee (B80) operational.
-10. Disambiguated Reader APIs ReadActiveCommittedSnapshot & ReadCommittedSnapshot (B81, B85) operational.
-11. Real filesystem crash fault-injection harness (Crash-01 through Crash-08) (B87) operational.
-12. Worst-case executable notional machine gate with explicit slippage operational.
-13. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
-14. Serial critical section with timeout and post-reconciliation SLA operational.
-15. Live Capital remains strictly $0.00.
-16. Zero broker orders will be sent.
-17. Master trading password will NOT be loaded.
-18. All execution will STOP completely.
-19. Progression to Slice 3 (First Live Order) requires explicit, independent
+5. Durable Previous-Pointer Binding with authenticated CAS failure rollback (B88) operational.
+6. Storage Backend Durability Contract (Windows NTFS/ReFS & Linux ext4/XFS) (B89) operational.
+7. Conservative Quarantine Boundaries for incomplete provenance (B90) operational.
+8. Disk-Authoritative Abort Proof with zero RAM dependency (B76) operational.
+9. Canonical authorization digest naming with zero ambiguity (B77) operational.
+10. 18 Canonical Reachable Recovery Classes with unreachable domain rejection (B78, B84) operational.
+11. Cryptographic derivation chain AUTH_CHAIN_VALID(tx) (B79) operational.
+12. Formal ABORTED semantic contract guarantee (B80) operational.
+13. Disambiguated Reader APIs ReadActiveCommittedSnapshot & ReadCommittedSnapshot (B81, B85) operational.
+14. Real filesystem fault-injection harness (Crash-01 through Crash-11) (B87, B91) operational.
+15. Worst-case executable notional machine gate with explicit slippage operational.
+16. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
+17. Serial critical section with timeout and post-reconciliation SLA operational.
+18. Live Capital remains strictly $0.00.
+19. Zero broker orders will be sent.
+20. Master trading password will NOT be loaded.
+21. All execution will STOP completely.
+22. Progression to Slice 3 (First Live Order) requires explicit, independent
     Human Sign-Off.
 ================================================================================
 ```
