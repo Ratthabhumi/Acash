@@ -24,7 +24,7 @@ This Evidence Pack documents the formal verification of **Stage 3.5: Final Verif
 │ Physical NTFS Storage      │ ✅ VERIFIED (Win32 & OS Telemetry Proven) │
 │ Stage 3.5 Test Suite       │ ✅ 24/24 PASSED (19 Readiness + 5 E2E)    │
 │ Gate B Unit Test Suite     │ ✅ 124/124 PASSED (Stages 1, 2, 3.1-3.5)  │
-│ Full Regression Suite      │ ✅ 1407/1407 PASSED (0 Failures)          │
+│ Full Regression Suite      │ ✅ 1408/1408 PASSED (0 Failures)          │
 │ Type Safety (MyPy)         │ ✅ 291/291 Source Files Clean (0 Errors)  │
 │ MT5 Demo Terminal Probe    │ ✅ 100% FLAT (0 Positions, 0 Orders)      │
 └────────────────────────────┴───────────────────────────────────────────┘
@@ -232,14 +232,17 @@ Domain 2 asserts that required active keys (Auditor, Storage Engine, Governance 
 - **Duration:** 13.74s
 
 ### B. Full Repository Regression Suite (`tests/`)
-- **Total Tests:** 1,407
-- **Passed:** 1,407 (100%)
+- **Total Tests:** 1,408
+- **Passed:** 1,408 (100%)
 - **Failed:** 0
-- **Duration:** 25.67s
+- **Duration:** 26.00s
 
 ### C. Static Type Checker (`mypy src/ tests/`)
 - **Source Files Checked:** 291
 - **Issues Found:** 0 (Clean)
+
+### D. Audit Trail Note: Remediation of Storage Substrate Verification
+In commit `9fe3002`, `src/acash/gate_b/storage.py` was extended to expose `get_volume_info()` and `get_filesystem_type()` using Win32 `kernel32.GetVolumeInformationW`. This addition is classified as an **evidence remediation for physical filesystem provenance verification**, not an architectural drift, and preserves all Revision 20 specification invariants.
 
 ---
 
@@ -248,7 +251,7 @@ Domain 2 asserts that required active keys (Auditor, Storage Engine, Governance 
 With the completion, NTFS provenance verification, and full regression testing of Stage 3.5:
 1. **Physical NTFS storage provenance is proven via authoritative Win32 and OS telemetry.**
 2. **All Stage 3.5 deliverables are complete, verified, and backed by automated test assertions.**
-3. **Zero regressions exist across the 124 Gate B tests and 1,407 repository tests.**
+3. **Zero regressions exist across the 124 Gate B tests and 1,408 repository tests.**
 4. **Mypy passes cleanly across 291 source files.**
 5. **The MT5 Demo terminal `112040157` is verified 100% FLAT.**
 6. **Gate B remains STRICTLY LOCKED.**
