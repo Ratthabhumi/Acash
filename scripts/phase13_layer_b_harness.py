@@ -63,11 +63,13 @@ from acash.execution.mt5.reconciliation import (
     HistoricalDealCoverage,
     HistoricalDealScopeKind,
     MT5BrokerRealitySnapshot,
+    MT5DealCategory,
     MT5ReconciliationEngine,
     ReconciliationCaptureContext,
     ReconciliationStatus,
     ShadowDealRecord,
     ShadowPosition,
+    categorize_deal,
     compute_payload_digest,
 )
 from acash.execution.mt5.schemas import (
@@ -109,6 +111,10 @@ class LayerBDemoMT5Transport(NativeMT5Transport):
 
     Preserves src/ frozen baseline while faithfully communicating with the desktop terminal.
     """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_deal_audit: Dict[str, Any] = {}
 
     def symbol_info(self, symbol: str) -> Optional[BrokerSymbolSpec]:
         m = self._get_mt5()
@@ -176,9 +182,15 @@ class LayerBDemoMT5Transport(NativeMT5Transport):
             spec_digest=digest,
         )
 
-    def _parse_deal(self, d: Any) -> MT5DealReality:
+    def _parse_deal(self, d: Any, deal_type: Optional[MT5DealType] = None) -> MT5DealReality:
         raw_deal_type = int(d.type)
-        deal_type = decode_mt5_deal_type(raw_deal_type)
+        resolved_deal_type = deal_type or decode_mt5_deal_type(raw_deal_type)
+        category = categorize_deal(resolved_deal_type)
+        if category != MT5DealCategory.TRADE_EXECUTION_DEAL:
+            raise MT5ValidationError(
+                f"NON_TRADE_DEAL_TYPE: deal {d.ticket} has category {category.value} (type={resolved_deal_type.value}), "
+                f"which cannot be converted to MT5DealReality"
+            )
         raw_entry = getattr(d, "entry", None)
         if raw_entry is None:
             raise MT5ValidationError(f"MISSING_DEAL_ENTRY: deal {d.ticket} missing required entry property")
@@ -189,7 +201,7 @@ class LayerBDemoMT5Transport(NativeMT5Transport):
             order_ticket=int(d.order),
             position_ticket=int(d.position_id),
             symbol=str(d.symbol),
-            deal_type=deal_type,
+            deal_type=resolved_deal_type,
             volume=Decimal(str(d.volume)),
             price=Decimal(str(d.price)),
             commission=Decimal(str(d.commission)),
@@ -225,7 +237,42 @@ class LayerBDemoMT5Transport(NativeMT5Transport):
             err_desc = str(last_err[1]) if last_err else "history_deals_get returned None"
             raise MT5TransportError(f"NATIVE_HISTORY_DEALS_GET_FAILED: {err_desc} (API error code {err_code})")
 
-        return tuple(self._parse_deal(d) for d in raw_deals)
+        raw_count = len(raw_deals)
+        trade_deals: List[MT5DealReality] = []
+        non_trade_count = 0
+        non_trade_summary: Dict[str, int] = {}
+        non_trade_records: List[Dict[str, Any]] = []
+
+        for d in raw_deals:
+            raw_deal_type = int(d.type)
+            deal_type = decode_mt5_deal_type(raw_deal_type)
+            category = categorize_deal(deal_type)
+            if category == MT5DealCategory.TRADE_EXECUTION_DEAL:
+                trade_deals.append(self._parse_deal(d, deal_type=deal_type))
+            else:
+                non_trade_count += 1
+                non_trade_summary[deal_type.value] = non_trade_summary.get(deal_type.value, 0) + 1
+                non_trade_records.append({
+                    "ticket": int(getattr(d, "ticket", 0)),
+                    "order": int(getattr(d, "order", 0)),
+                    "deal_type": deal_type.value,
+                    "category": category.value,
+                    "comment": str(getattr(d, "comment", "")),
+                    "profit": str(getattr(d, "profit", "0.0")),
+                })
+
+        trade_count = len(trade_deals)
+        self.last_deal_audit = {
+            "raw_deals_count": raw_count,
+            "trade_execution_deals_count": trade_count,
+            "non_trade_deals_count": non_trade_count,
+            "non_trade_breakdown": non_trade_summary,
+            "non_trade_records": non_trade_records,
+        }
+        if non_trade_count > 0:
+            print(f"  [DEAL AUDIT] Raw History Deals={raw_count} | Trade Execution Deals={trade_count} | Non-Trade Deals (Accounting/Other)={non_trade_count}: {non_trade_summary}")
+
+        return tuple(trade_deals)
 
     def history_orders_get(
         self,
@@ -617,6 +664,7 @@ def run_a3_demo_order(transport: LayerBDemoMT5Transport) -> None:
         "reconciliation_clean": report.is_clean,
         "reconciliation_status": report.status.value,
         "discrepancies_count": len(report.discrepancies),
+        "deal_audit": transport.last_deal_audit,
     }
 
     out_path = Path("docs/phase13/layer_b_evidence_a3.json")
