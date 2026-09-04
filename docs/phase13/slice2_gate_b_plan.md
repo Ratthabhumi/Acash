@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 9)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 10)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 9)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 10)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 9 Audit Adjustments)
+## User Review Required (Rev 10 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,29 +31,31 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 9 (Addressing Audit Findings B35–B37):
+### Key Refinements in Rev 10 (Addressing Audit Findings B38–B42):
 
-1. **[BLOCKER B35 RESOLVED] Atomic Activation Transaction & Crash-Recovery Protocol:**
-   - Addressed the state-consistency gap where a mid-transaction crash could produce `ACTIVE` without a committed ledger record, or an advanced ledger head without an `ACTIVE` authorization.
-   - **Transaction Invariant:**
-     $$\text{LiveAuthorization.status} == \text{ACTIVE} \iff \text{Committed HumanGORecord} \iff \text{Advanced Ledger Head}$$
-   - Defined an **Atomic Activation Unit-of-Work Protocol**:
-     $$\text{BEGIN TRANSACTION} \to \text{Verify Invariants} \to \text{Stage Write-Ahead Journal} \to \text{Atomic Commit} \to \text{Complete}$$
-   - If an unexpected crash occurs mid-flight, the system either rolls back cleanly on recovery or completes the journaled commit idempotently. Order admission strictly checks both states simultaneously; partial commits fail closed.
-2. **[BLOCKER B36 RESOLVED] Strict Boundary Tests for Reconciliation Timeout:**
-   - Established explicit tests for all boundaries of $0 < \text{timeout\_ms} \le 30000$:
-     - Negative and zero values ($0, -1$) $\to$ fail closed.
-     - Exact upper bound ($30000\text{ ms}$) $\to$ valid / accepted.
-     - Above upper bound ($30001\text{ ms}$) $\to$ fail closed.
-3. **[BLOCKER B37 RESOLVED] Formal Parameter Taxonomy (Disclosing Fixed Constants vs Zero-Default Inputs):**
-   - Renamed and restructured Section 5 into **"Parameter Taxonomy & Governance Ownership Matrix"**.
-   - Explicitly categorized parameters into four distinct classes:
-     1. *Cryptographic Protocol Constants* (e.g. `signature_algorithm = "Ed25519"`).
-     2. *Fixed Slice-3 Safety Policy Invariants* (e.g. `max_position_size = Decimal("0.01")` — non-configurable safety constraint, not a default).
-     3. *Mandatory Human Governance Inputs (Strict Zero Defaults)* (e.g. `max_notional`, `max_slippage_points`, `max_quote_age_ms`, `decision`, `approver_role`).
-     4. *Technical Debt / Governance Baseline* (e.g. `max_order_rate_per_minute = 1` — not machine-enforced; Phase 14 debt).
-4. **[TEST EXPANSION] Comprehensive 45-Test Matrix:**
-   - Expanded the automated test matrix to **45 discrete unit tests** incorporating transaction atomicity, crash recovery, and upper/lower SLA boundary checks.
+1. **[BLOCKER B38 RESOLVED] Concurrency Commit Guard (CAS on Ledger Head):**
+   - Added an atomic Compare-And-Swap (CAS) guard *inside* the exclusive transaction critical section:
+     $$\text{expected\_head} == \text{tx.current\_head\_digest}$$
+   - Prevents race conditions where two concurrent activations read the same head and attempt to commit competing branches. If the head has advanced, activation fails closed with `STALE_LEDGER_HEAD_CONFLICT`.
+2. **[BLOCKER B39 RESOLVED] Durable Write-Ahead Journal (WAL) Crash-Recovery Protocol:**
+   - Designed a formal 3-state write-ahead journal (`PREPARED` $\to$ `COMMITTING` $\to$ `COMMITTED`) with persistent storage checkpoints.
+   - Modeled discrete crash points across the activation pipeline with explicit recovery behaviors (discarding incomplete stages, idempotently completing verified commits).
+3. **[BLOCKER B40 RESOLVED] Commit-Point Safety (Prevention of Post-Commit Rollbacks):**
+   - Formalized transaction state boundaries (`OPEN` vs `COMMITTED`).
+   - If an error occurs post-commit (e.g. during notification or return), the transaction manager strictly **forbids rollback** of the already-durable ledger records and instead executes an idempotent post-commit finalizer.
+4. **[B41 RESOLVED] Deep Admission Verification of Bound Ledger Record Content:**
+   - Upgraded `admission.py` beyond simple digest membership to perform deep field verification of the bound record:
+     - `record.record_digest == auth.active_go_record_digest`
+     - `record.authorization_id == auth.authorization_id`
+     - `record.decision == "GO"`
+     - `record.approver_role == ApproverRole.HUMAN_AUDITOR`
+     - `not trust_store.is_key_revoked(record.approver_public_key_id)`
+     - `record.issued_at_utc <= now_utc < record.expires_at_utc`
+     - `ledger.current_head_digest == record.record_digest`
+5. **[REFINED B35 INVARIANT] Exact State Equivalence:**
+   $$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \land \textbf{Ledger Current Head == Record Digest}$$
+6. **[B42 RESOLVED] Comprehensive 53-Test Matrix:**
+   - Expanded the test matrix to **53 discrete unit tests** covering CAS head conflicts, each discrete crash recovery point, post-commit safety, and deep admission verification.
 
 ---
 
@@ -61,7 +63,8 @@
 
 The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 9, `ACTIVE` is impossible to reach without an atomic, transactional state commit binding the verified `LiveAuthorization`, the Ed25519-signed `HumanGORecord`, and the unbroken authoritative ledger head.
+Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 10, `ACTIVE` is impossible to reach without a transactional Compare-And-Swap commit binding the verified `LiveAuthorization`, the Ed25519-signed `HumanGORecord`, and the unbroken authoritative ledger head:
+$$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \land \textbf{Ledger Current Head == Record Digest}$$
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -97,6 +100,11 @@ Gate B is the sole authoritative mechanism in ACASH capable of transitioning `Li
          │ G-4: HumanGORecord Verified Against Authoritative Ledger Head
          │
          │ execute_atomic_activation_transaction(auth, go_record, trust_store, ledger)
+         │   ├── Acquire Exclusive Ledger Mutex
+         │   ├── CAS Check: expected_head == tx.current_head_digest (B38)
+         │   ├── Stage WAL Journal: PREPARED -> COMMITTING (B39)
+         │   ├── Commit Atomic Mutations (tx.is_committed = True)
+         │   └── Finalize Journal: COMMITTED (B40)
          ▼
         ACTIVE          ◄── [Machine-enables admission.py per-order checks]
          │
@@ -112,7 +120,7 @@ Gate B is the sole authoritative mechanism in ACASH capable of transitioning `Li
 
 ---
 
-## 3. Cryptographic `HumanGORecord` & Atomic Activation Protocol (B11, B13, B14, B15, B30, B31, B32, B35)
+## 3. Cryptographic `HumanGORecord` & Atomic Activation Protocol (B11, B13, B14, B15, B30, B31, B32, B35, B38, B39, B40)
 
 ### 3.1 Domain Schema Specification
 ```python
@@ -164,12 +172,17 @@ class HumanGORecord(BaseModel):
         return CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
 ```
 
-### 3.2 Atomic Activation Transaction Boundary (B35)
-To eliminate state-divergence between `LiveAuthorization.status` and `AuthoritativeGOLedger`:
+### 3.2 Atomic Activation Transaction with CAS & WAL Protocol (B35, B38, B39, B40)
 
 ```python
+class JournalState(str, Enum):
+    PREPARED = "PREPARED"
+    COMMITTING = "COMMITTING"
+    COMMITTED = "COMMITTED"
+    ABORTED = "ABORTED"
+
 class ActivationTransactionManager:
-    """Coordinates atomic two-phase transition of LiveAuthorization and AuthoritativeGOLedger."""
+    """Coordinates atomic CAS commit and durable WAL recovery for LiveAuthorization."""
 
     @staticmethod
     def execute_atomic_activation(
@@ -178,48 +191,68 @@ class ActivationTransactionManager:
         trust_store: Ed25519TrustStore,
         ledger: AuthoritativeGOLedger,
     ) -> LiveAuthorization:
-        # Phase 1: Pre-Commit Validation (Fail-Closed)
-        ActivationValidator.assert_activation_preconditions(auth, go_record, trust_store, ledger)
+        # Phase 1: Pre-Commit Validation
+        ActivationValidator.assert_activation_preconditions(auth, go_record, trust_store)
 
-        # Phase 2: Atomic Unit-of-Work Commit
-        # Transaction Invariant: ACTIVE <=> Committed Record <=> Advanced Ledger Head
-        try:
-            with ledger.begin_transaction() as tx:
-                # 1. Append record to persistent ledger
+        # Phase 2: Exclusive Critical Section with Compare-And-Swap (B38)
+        with ledger.exclusive_lock() as tx:
+            # B38 CAS Invariant: Verify head inside locked section
+            if tx.current_head_digest != go_record.previous_record_digest:
+                raise DataContractError(
+                    f"STALE_LEDGER_HEAD_CONFLICT: Expected head {go_record.previous_record_digest}, "
+                    f"but current head is {tx.current_head_digest}. Concurrent activation rejected."
+                )
+
+            # B39: Stage Durable Write-Ahead Journal (PREPARED)
+            journal = tx.create_wal_journal(auth.authorization_id, go_record)
+            journal.write_state(JournalState.PREPARED)
+
+            try:
+                # Transition WAL to COMMITTING
+                journal.write_state(JournalState.COMMITTING)
+
+                # Storage mutations
                 tx.append_go_record(go_record)
-                # 2. Advance authoritative ledger head
                 tx.set_head_digest(go_record.record_digest)
-                # 3. Transition authorization status to ACTIVE
                 activated_auth = auth.model_copy(update={
                     "status": LiveAuthorizationStatus.ACTIVE,
                     "activated_at": datetime.now(timezone.utc),
                     "active_go_record_digest": go_record.record_digest,
                 })
                 tx.persist_activated_authorization(activated_auth)
+
+                # Storage Commit Point
                 tx.commit()
-            return activated_auth
-        except Exception as exc:
-            # Automatic rollback on any failure or crash
-            ledger.rollback_pending_transaction()
-            raise DataContractError(f"ACTIVATION_TRANSACTION_FAILED: {exc}") from exc
+                tx.is_committed = True  # B40: Explicit commit marker
+                journal.write_state(JournalState.COMMITTED)
+                return activated_auth
+
+            except Exception as exc:
+                # B40 Safety: Only rollback if commit point was NOT reached
+                if not getattr(tx, "is_committed", False):
+                    tx.rollback()
+                    journal.write_state(JournalState.ABORTED)
+                    raise DataContractError(f"ACTIVATION_TRANSACTION_FAILED: {exc}") from exc
+                else:
+                    # Post-commit exception: Storage is already durable. DO NOT ROLLBACK!
+                    tx.log_post_commit_finalization_anomaly(exc)
+                    return activated_auth
 ```
 
-### 3.3 Admission Double-Verification Invariant (B35):
-In `admission.py:construct_order_intent()`, the engine enforces:
-$$\boxed{\begin{aligned}
-&\text{auth.status} == \text{ACTIVE} \quad \land \\
-&\text{ledger.contains}(\text{auth.active\_go\_record\_digest}) \quad \land \\
-&\text{ledger.current\_head\_digest} == \text{auth.active\_go\_record\_digest}
-\end{aligned}}$$
-If any single condition diverges (indicating a partial commit or ledger desynchronization), admission strictly fails closed.
+### 3.3 Crash-Recovery Protocol Matrix (B39):
+| Crash Point | Failure Mode | Recovery Protocol on Startup |
+| :--- | :--- | :--- |
+| **Crash 1 (Before Append)** | WAL in `PREPARED` | Discard journal, purge staging, state remains `APPROVED_PENDING_GO`. |
+| **Crash 2 (After Append, Before Head)** | WAL in `COMMITTING`, head stale | Storage rolls back uncommitted append, journal marked `ABORTED`. |
+| **Crash 3 (After Head, Before Auth Persist)** | WAL in `COMMITTING`, auth stale | Storage rolls back uncommitted changes, journal marked `ABORTED`. |
+| **Crash 4 (After Auth Persist, Before Return)** | WAL in `COMMITTED` or `COMMITTING` with durable records | Recovery manager verifies all 3 durable items exist, idempotently finalizes `COMMITTED`. |
+| **Recovery of Committed State** | Redundant recovery call | Idempotent no-op; preserves `ACTIVE` and ledger head. |
 
 ---
 
-## 4. Pre-Admission Bounding, Quote Contract & Slippage Semantics (B12, B17, B21, B22, B23, B25, B26, B27, B36)
+## 4. Pre-Admission Bounding, Quote Contract & Deep Admission Verification (B12, B17, B21, B22, B23, B25, B26, B27, B36, B41)
 
 ### 4.1 Formal `MT5QuoteSnapshot` Contract (B23, B25, B26)
-To eliminate stale-price, non-UTC, and future-timestamped market quotes, admission requires a validated `MT5QuoteSnapshot`:
-
 ```python
 class MT5QuoteSnapshot(BaseModel):
     """Authoritative market price observation bound to transaction window."""
@@ -241,19 +274,14 @@ class MT5QuoteSnapshot(BaseModel):
         - 0 <= quote_age_ms <= max_quote_age_ms (strictly rejects future timestamps).
         - ask >= bid > 0 (strictly rejects non-positive or inverted spread).
         """
-        # 1. B25: Enforce positive freshness threshold
         if max_quote_age_ms is None or max_quote_age_ms <= 0:
-            raise PreLiveRiskAdmissionError(
-                "MANDATORY_PARAMETER_MISSING: max_quote_age_ms must be a positive int"
-            )
+            raise PreLiveRiskAdmissionError("MANDATORY_PARAMETER_MISSING: max_quote_age_ms must be positive int")
 
-        # 2. B26: Enforce timezone-aware UTC provenance
         if self.timestamp_utc.tzinfo is None or self.timestamp_utc.utcoffset() != timedelta(0):
             raise PreLiveRiskAdmissionError(
                 f"INVALID_TIMESTAMP_PROVENANCE: Quote timestamp {self.timestamp_utc} must be explicit UTC-aware"
             )
 
-        # 3. B26: Enforce non-negative and fresh quote age (rejects future timestamps)
         now_utc = datetime.now(timezone.utc)
         age_ms = (now_utc - self.timestamp_utc).total_seconds() * 1000.0
         if age_ms < 0:
@@ -266,26 +294,54 @@ class MT5QuoteSnapshot(BaseModel):
                 f"STALE_QUOTE: Quote age {age_ms:.1f}ms exceeds maximum allowed {max_quote_age_ms}ms"
             )
 
-        # 4. Spread sanity
         if self.ask < self.bid:
             raise PreLiveRiskAdmissionError(
                 f"INVALID_QUOTE: Inverted market spread ask ({self.ask}) < bid ({self.bid})"
             )
 ```
 
-### 4.2 Pre-Admission Bounding with `max_slippage_points` (B17, B22, B27)
-In `construct_order_intent()`, ACASH prevents submitting orders whose conservative bounded executable risk exceeds authorized capital:
+### 4.2 Deep Admission Verification of Bound Ledger Record (B41)
+In `admission.py:construct_order_intent()`, the engine performs deep content verification of the bound ledger record:
 
+```python
+# 1. Verify Authorization Status
+if authorization.status != LiveAuthorizationStatus.ACTIVE:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_INACTIVE")
+
+# 2. Fetch Bound HumanGORecord from Persistent Ledger
+bound_record = ledger.get_record(authorization.active_go_record_digest)
+if bound_record is None:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Active GO record not found in ledger")
+
+# 3. B41 Deep Field Verification
+if bound_record.record_digest != authorization.active_go_record_digest:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Ledger record digest mismatch")
+if bound_record.authorization_id != authorization.authorization_id:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Ledger record authorization_id mismatch")
+if bound_record.decision != "GO":
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Ledger record decision is not GO")
+if bound_record.approver_role != ApproverRole.HUMAN_AUDITOR:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Ledger record approver_role is not HUMAN_AUDITOR")
+if trust_store.is_key_revoked(bound_record.approver_public_key_id):
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Approver key has been revoked")
+if ledger.current_head_digest != bound_record.record_digest:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_DESYNC: Ledger head advanced beyond active record")
+
+# 4. Double Validity Window Check
+now_utc = datetime.now(timezone.utc)
+if not (bound_record.issued_at_utc <= now_utc < bound_record.expires_at_utc):
+    raise PreLiveRiskAdmissionError("HUMAN_GO_EXPIRED")
+if now_utc >= authorization.expires_at:
+    raise PreLiveRiskAdmissionError("AUTHORIZATION_EXPIRED")
+```
+
+### 4.3 Pre-Admission Bounding with `max_slippage_points` (B17, B22, B27)
 ```python
 # 1. Enforce explicit governance parameters (ZERO DEFAULTS)
 if authorization.max_slippage_points is None or authorization.max_slippage_points <= 0:
-    raise PreLiveRiskAdmissionError(
-        "MANDATORY_PARAMETER_MISSING: authorization.max_slippage_points is undefined or non-positive."
-    )
+    raise PreLiveRiskAdmissionError("MANDATORY_PARAMETER_MISSING: max_slippage_points undefined or non-positive")
 if authorization.max_quote_age_ms is None or authorization.max_quote_age_ms <= 0:
-    raise PreLiveRiskAdmissionError(
-        "MANDATORY_PARAMETER_MISSING: authorization.max_quote_age_ms is undefined or non-positive."
-    )
+    raise PreLiveRiskAdmissionError("MANDATORY_PARAMETER_MISSING: max_quote_age_ms undefined or non-positive")
 
 # 2. Assert quote validity and freshness (B23, B25, B26)
 quote.assert_valid_and_fresh(max_quote_age_ms=authorization.max_quote_age_ms)
@@ -320,7 +376,7 @@ if bounded_executable_notional > authorization.max_notional:
     )
 ```
 
-### 4.3 Post-Fill Detective Anomaly Trap & SLA Timeout (B21, B29, B33, B34, B36)
+### 4.4 Post-Fill Detective Anomaly Trap & SLA Timeout (B21, B29, B33, B34, B36)
 ACASH does not control venue order matching engines during extreme market gaps. If an adverse venue gap causes the actual fill price to result in $\text{actual\_notional} > \text{max\_notional}$:
 - The 6-D reconciliation engine detects the discrepancy immediately upon fill confirmation.
 - The adapter transitions to `BLOCKED` with `MT5DiscrepancyKind.NOTIONAL_BREACH_ANOMALY`.
@@ -334,8 +390,6 @@ ACASH does not control venue order matching engines during extreme market gaps. 
 ---
 
 ## 5. Parameter Taxonomy & Governance Ownership Matrix (B37)
-
-To eliminate ambiguity between configurable runtime inputs and immutable safety constraints, parameters are strictly categorized:
 
 | Parameter Name | Schema Type | Value / Constraint | Classification | Authority / Owner |
 | :--- | :--- | :--- | :--- | :--- |
@@ -391,6 +445,7 @@ Assert Strict Serial Invariants:
        │  (If any != 0: Abort, release lock, raise PreLiveRiskAdmissionError)
        ▼
 Order Admission Evaluation:
+  - Deep Ledger Verification (B41)
   - Authorization ACTIVE and not expired
   - HumanGORecord valid and not expired
   - worst_case_price > 0 (B27)
@@ -449,9 +504,9 @@ Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-e
 
 ---
 
-## 9. Comprehensive Automated Test Matrix (45 Tests)
+## 9. Comprehensive Automated Test Matrix (53 Tests)
 
-The implementation of Slice 2 will include the following 45 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
+The implementation of Slice 2 will include the following 53 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
 
 1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema bounds.
 2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks (USD, currency match).
@@ -498,6 +553,14 @@ The implementation of Slice 2 will include the following 45 unit tests in `tests
 43. `test_activation_recovery_after_crash`: Verifies that restart/recovery detects partial write journal and restores consistent pre-activation state (B35).
 44. `test_no_active_without_ledger_record`: Verifies that admission rejects orders if authorization is marked `ACTIVE` but record is missing from ledger (B35).
 45. `test_no_ledger_head_advance_without_active`: Verifies that admission rejects orders if ledger head advanced but authorization status is not `ACTIVE` (B35).
+46. `test_concurrent_activation_cannot_fork_ledger`: Verifies CAS head check rejects competing activation with stale previous digest under concurrent writer attempts (B38).
+47. `test_crash_before_record_append`: Verifies crash in WAL `PREPARED` state purges staging journal and preserves `APPROVED_PENDING_GO` on restart (B39).
+48. `test_crash_after_record_append`: Verifies crash during storage mutation before head update triggers automatic rollback to pre-activation state (B39).
+49. `test_crash_after_head_update`: Verifies crash before authorization persist triggers rollback or abort of inconsistent stage (B39).
+50. `test_crash_after_authorization_persist`: Verifies crash after storage mutations completed allows recovery manager to idempotently finalize `COMMITTED` state (B39).
+51. `test_recovery_of_committed_transaction_is_idempotent`: Verifies recovery manager called on an already-committed transaction performs a safe no-op (B39).
+52. `test_post_commit_exception_does_not_rollback_committed_state`: Verifies that an exception during post-commit finalization does NOT attempt to rollback durable ledger state (B40).
+53. `test_admission_validates_bound_ledger_record_content`: Verifies admission deeply validates bound ledger record digest, authorization_id, decision, role, and head alignment (B41).
 
 ---
 
@@ -510,16 +573,17 @@ The implementation of Slice 2 will include the following 45 unit tests in `tests
 Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
 2. HumanGORecord non-repudiable verification machinery will be fully operational.
-3. Authoritative ledger head continuity verification will be fully operational.
-4. Atomic Activation Transaction Manager will guarantee state-ledger consistency.
-5. Worst-case executable notional machine gate with explicit slippage will be operational.
-6. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
-7. Serial critical section with timeout and post-reconciliation SLA operational.
-8. Live Capital remains strictly $0.00.
-9. Zero broker orders will be sent.
-10. Master trading password will NOT be loaded.
-11. All execution will STOP completely.
-12. Progression to Slice 3 (First Live Order) requires explicit, independent
+3. Authoritative ledger head continuity with CAS commit guard operational.
+4. Atomic Activation Transaction Manager with WAL crash recovery operational.
+5. Deep admission verification of bound ledger records fully operational.
+6. Worst-case executable notional machine gate with explicit slippage will be operational.
+7. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
+8. Serial critical section with timeout and post-reconciliation SLA operational.
+9. Live Capital remains strictly $0.00.
+10. Zero broker orders will be sent.
+11. Master trading password will NOT be loaded.
+12. All execution will STOP completely.
+13. Progression to Slice 3 (First Live Order) requires explicit, independent
     Human Sign-Off.
 ================================================================================
 ```
