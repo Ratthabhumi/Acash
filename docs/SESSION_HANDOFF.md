@@ -181,9 +181,12 @@ Broker (live, micro-lots)
 - **Recovery Runbook:** `docs/phase13/recovery_runbook.md`
 - **Gate A Evidence Pack:** `docs/phase13/gate_a_evidence_pack.md`
 - **Gate A Test Suite:** `tests/integration/test_phase13_slice1_gate_a.py`
-- **Layer A Contract Evidence:** ✅ 11/11 PASSED
-- **Full Test Suite Status:** ✅ 1251/1251 PASSED (0 failures, 3 expected warnings)
+- **Layer A Contract Evidence:** ✅ 11/11 PASSED (Audited & Approved)
+- **Full Test Suite Status:** ✅ 1251/1251 PASSED (Local verification: 0 failures, 3 expected warnings; Remote CI not configured)
 - **Type Checker (MyPy):** ✅ 264 source files clean (0 errors)
+- **Layer B Operational Demo:** ⏳ PENDING ACTUAL MT5 DEMO EXECUTION (A-3, A-10, A-11)
 - **Live Capital Authority:** 🔒 STRICT $0.00 (Frozen Invariant)
-- **Gate Status:** 🟡 Gate A Layer A VERIFIED / Layer B Protocol Ready / STOPPED FOR HUMAN AUDIT. Strictly blocked from Gate B.
+- **Gate A Final Status:** 🟡 CONDITIONAL PASS (NOT CERTIFIED YET)
+- **Gate B Transition:** 🚫 STRICTLY LOCKED
+
 

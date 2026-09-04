@@ -15,20 +15,20 @@ This Evidence Pack documents the formal verification of **Gate A (Pre-Live Certi
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        GATE A CERTIFICATION STATE                       │
+│                   GATE A DUAL-LAYER CERTIFICATION STATE                │
 ├────────────────────────────┬───────────────────────────────────────────┤
 │ Live Capital Authority     │ $0.00 (STRICT INVARIANT ENFORCED)         │
-│ Layer A Contract Evidence  │ ✅ 11/11 PASSED (Automated Pytest Suite)  │
-│ Full Regression Suite      │ ✅ 1251/1251 PASSED                       │
+│ Layer A Contract Evidence  │ ✅ 11/11 PASSED (Audited & Approved)      │
+│ Full Regression Suite      │ ✅ 1251/1251 PASSED (Local Verification)  │
 │ Type Safety (MyPy)         │ ✅ 264/264 Source Files Clean             │
-│ Layer B Operational Demo   │ 📋 PROTOCOL DOCUMENTED & READY            │
-│ Overall Gate A Verdict     │ 🟡 CONDITIONAL PASS (Pending Layer B Demo)│
-│ Gate B Transition          │ ⛔ STRICTLY BLOCKED                       │
+│ Layer B Operational Demo   │ ⏳ PENDING ACTUAL MT5 DEMO TERMINAL RUN   │
+│ Gate A Final Status        │ 🟡 CONDITIONAL PASS (NOT CERTIFIED YET)   │
+│ Gate B Transition          │ ⛔ STRICTLY LOCKED                        │
 └────────────────────────────┴───────────────────────────────────────────┘
 ```
 
 > [!IMPORTANT]
-> **Strict Capital Lock:** Live capital authority remains strictly `$0.00`. Under no circumstances does Gate A certification authorize live deployment, real funds allocation, or Gate B progression. Gate A certifies pre-live technical and operational readiness only.
+> **Strict Capital Lock:** Live capital authority remains strictly `$0.00`. Gate A is **NOT CERTIFIED** until Layer B (actual MT5 Demo Terminal rehearsal for A-3, A-10, and A-11) is executed and verified by human audit. Under no circumstances does this state authorize live deployment, real funds allocation, or Gate B progression.
 
 ---
 
