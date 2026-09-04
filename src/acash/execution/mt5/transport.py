@@ -754,7 +754,7 @@ class NativeMT5Transport:
             "type_time": time_map[req.type_time],
             "comment": req.comment,
         }
-        if req.order != 0:
+        if req.order is not None and req.order != 0:
             req_dict["order"] = req.order
         if req.position is not None and req.position != 0:
             req_dict["position"] = req.position

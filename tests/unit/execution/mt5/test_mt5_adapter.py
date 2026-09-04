@@ -1777,6 +1777,150 @@ def test_native_transport_symbol_info_execution_mode_compatibility(
         transport_3.symbol_info("EURUSD")
 
 
+def test_native_transport_order_send_request_serialization_semantics() -> None:
+    """Verify NativeMT5Transport.order_send() dictionary serialization semantics:
+    1. order=None -> 'order' key strictly OMITTED from req_dict
+    2. order=0 -> 'order' key strictly OMITTED from req_dict
+    3. order=123456 -> req_dict['order'] == 123456
+    4. position=None/0 -> 'position' key strictly OMITTED from req_dict
+    5. position=999 -> req_dict['position'] == 999
+    6. position_by=None/0 -> 'position_by' key strictly OMITTED from req_dict
+    7. position_by=888 -> req_dict['position_by'] == 888
+    """
+    from acash.execution.mt5.transport import NativeMT5Transport, MT5TransportCommand
+    from acash.execution.mt5.schemas import MT5TradeRequest, MT5ExecutionLineage
+    from acash.execution.mt5.enums import MT5TradeAction, MT5OrderType, MT5FillingMode, MT5OrderTime
+
+    captured_reqs: List[Dict[str, Any]] = []
+
+    class DummyNamedTuple:
+        def __init__(self, **kwargs: Any) -> None:
+            self.__dict__.update(kwargs)
+
+    mock_res = DummyNamedTuple(
+        retcode=10009,
+        deal=1001,
+        order=2001,
+        volume=0.01,
+        price=1.16280,
+        bid=1.16279,
+        ask=1.16280,
+        comment="Done",
+        request_id=1,
+        retcode_external=0,
+    )
+
+    class MockMT5SendModule:
+        @staticmethod
+        def order_send(req: Dict[str, Any]) -> object:
+            captured_reqs.append(dict(req))
+            return mock_res
+
+    transport = NativeMT5Transport()
+    transport._mt5 = MockMT5SendModule
+
+    lineage = MT5ExecutionLineage(
+        broker_id="DEMO_BROKER",
+        account_id="112040157",
+        terminal_instance_id="TERM_DEMO_01",
+        strategy_id="STRAT_TEST",
+        cycle_id="CYCLE_1",
+        intent_id="INT_1",
+    )
+
+    # Case 1: order=None, position=None, position_by=None (standard market deal)
+    cmd_none = MT5TransportCommand(
+        request=MT5TradeRequest(
+            action=MT5TradeAction.TRADE_ACTION_DEAL,
+            symbol="EURUSD",
+            volume=Decimal("0.01"),
+            type=MT5OrderType.BUY,
+            price=Decimal("1.16280"),
+            type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+            order=None,
+            position=None,
+            position_by=None,
+        ),
+        lineage=lineage,
+    )
+    transport.order_send(cmd_none)
+    assert len(captured_reqs) == 1
+    req_dict_none = captured_reqs[-1]
+    assert "order" not in req_dict_none, f"Expected 'order' omitted when None, got {req_dict_none.get('order')}"
+    assert "position" not in req_dict_none, f"Expected 'position' omitted when None, got {req_dict_none.get('position')}"
+    assert "position_by" not in req_dict_none, f"Expected 'position_by' omitted when None, got {req_dict_none.get('position_by')}"
+
+    # Case 2: order with positive integer ticket (e.g. modify/cancel pending)
+    cmd_with_order = MT5TransportCommand(
+        request=MT5TradeRequest(
+            action=MT5TradeAction.TRADE_ACTION_REMOVE,
+            order=123456,
+            symbol="EURUSD",
+            volume=Decimal("0.01"),
+            type=MT5OrderType.BUY,
+            type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+        ),
+        lineage=lineage,
+    )
+    transport.order_send(cmd_with_order)
+    assert len(captured_reqs) == 2
+    req_dict_order = captured_reqs[-1]
+    assert req_dict_order["order"] == 123456
+
+    # Case 3: position and position_by populated with tickets
+    cmd_with_pos = MT5TransportCommand(
+        request=MT5TradeRequest(
+            action=MT5TradeAction.TRADE_ACTION_CLOSE_BY,
+            symbol="EURUSD",
+            volume=Decimal("0.01"),
+            type=MT5OrderType.CLOSE_BY,
+            position=999,
+            position_by=888,
+            type_filling=MT5FillingMode.ORDER_FILLING_FOK,
+        ),
+        lineage=lineage,
+    )
+    transport.order_send(cmd_with_pos)
+    assert len(captured_reqs) == 3
+    req_dict_pos = captured_reqs[-1]
+    assert req_dict_pos["position"] == 999
+    assert req_dict_pos["position_by"] == 888
+    assert "order" not in req_dict_pos
+
+    # Case 4: order=0, position=0, position_by=0 (test transport guard directly)
+    class MockRequestWithZeroOrder:
+        action = MT5TradeAction.TRADE_ACTION_DEAL
+        magic = 0
+        symbol = "EURUSD"
+        volume = Decimal("0.01")
+        price = Decimal("1.16280")
+        sl = Decimal("0.0")
+        tp = Decimal("0.0")
+        deviation = 0
+        type = MT5OrderType.BUY
+        type_filling = MT5FillingMode.ORDER_FILLING_FOK
+        type_time = MT5OrderTime.ORDER_TIME_GTC
+        comment = ""
+        order = 0
+        position = 0
+        position_by = 0
+        stoplimit = None
+        expiration = None
+
+    class MockCommandWithZero:
+        def __init__(self, req: Any, lin: Any) -> None:
+            self.request = req
+            self.lineage = lin
+
+    transport.order_send(MockCommandWithZero(MockRequestWithZeroOrder(), lineage))  # type: ignore[arg-type]
+    assert len(captured_reqs) == 4
+    req_dict_zero = captured_reqs[-1]
+    assert "order" not in req_dict_zero, f"Expected 'order' omitted when 0, got {req_dict_zero.get('order')}"
+    assert "position" not in req_dict_zero, f"Expected 'position' omitted when 0, got {req_dict_zero.get('position')}"
+    assert "position_by" not in req_dict_zero, f"Expected 'position_by' omitted when 0, got {req_dict_zero.get('position_by')}"
+
+
+
 
 
 
