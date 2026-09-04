@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 2)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 2)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -14,10 +14,11 @@
 > - Slice 3 (First Live Order): `⛔ BLOCKED`
 > - Live Capital Authority: `💰 $0.00`
 > - Broker Reality (Demo 112040157): `🟢 100% FLAT`
+> - Phase 17: `✅ PARKED / FROZEN`
 
 ---
 
-## User Review Required
+## User Review Required (Rev 2 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -29,18 +30,37 @@
 > 5. Sign any `AuthorizationApproval` with live keys.
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
-> 
-> All capital values currently marked **TBD** require explicit human determination.
+
+### Key Refinements in Rev 2 (Addressing Audit Findings B3–B9):
+1. **[BLOCKER B3 RESOLVED] Sovereign Human GO Precedes Machine ACTIVE:**
+   - The sequence has been fundamentally inverted: `M-6 ACTIVE` can NEVER occur before `G-3 Human GO` and `G-4 GO Archival`.
+   - Introduced intermediate lifecycle state: `APPROVED_PENDING_GO`.
+   - `ACTIVE` transition requires BOTH complete cryptographic quorum AND a verified, digest-bound `HumanGORecord`.
+2. **[B4 RESOLVED] No Operational Default for `required_approvals`:**
+   - Removed `required_approvals = 1` default.
+   - Formally designated as `[REQUIRED GOVERNANCE INPUT / TBD]` (schema invariant: $\ge 1$).
+3. **[B5 RESOLVED] No Operational Default for `max_drawdown_pct`:**
+   - Removed `5.0%` placeholder.
+   - Formally designated as `[REQUIRED HUMAN INPUT / TBD]` (schema invariant: $(0, 100]$).
+4. **[B6 RESOLVED] Formalized `STRICT_SERIAL_MODE = TRUE`:**
+   - Established strict runtime constraints for Slice 3 to contain risk during un-enforced cumulative exposure:
+     $$\text{In-Flight Orders} \le 1 \quad \land \quad \text{Open Positions} \le 1 \quad \land \quad \text{Pending Orders} = 0$$
+   - Explicitly documented as a temporary containment control, NOT equivalent to cumulative exposure enforcement.
+5. **[B7 RESOLVED] Capital Boundary Declared `PARTIALLY ENFORCED`:**
+   - Per-order bound is machine-enforced; cumulative exposure remains acknowledged P1 debt deferred to Phase 14.
+6. **[B8 RESOLVED] Multi-Dimensional Valuation & Unit Contract (M-2):**
+   - M-2 validates account currency, monetary unit, valuation basis, and FX conversion formula.
+7. **[B9 RESOLVED] Strict Separation of Read-Only Preflight vs Trade Permission:**
+   - Live preflight is restricted to Read-Only inspection (Login, Server, Balance, Leverage, Currency).
+   - Master trading password / trade execution permission is strictly quarantined to Slice 3 under explicit human control.
 
 ---
 
-## 1. Executive Summary & Objective
+## 1. Executive Summary & Progression Topology
 
-The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to safely evaluate Gate B. 
+The objective of Phase 13 Slice 2 is to build the formal, dual-layer authorization harness (**Machine Gate + Governance Gate**) required to evaluate Gate B. 
 
-Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`, which machine-enables order construction in `admission.py:650`. 
-
-Slice 2 does NOT execute live trades (Slice 3); it establishes the cryptographic lineage, parameter validation, key custody, and human sign-off records that must exist before any live micro-capital can be considered.
+Gate B is the sole authoritative mechanism in ACASH capable of transitioning `LiveAuthorization.status` to `ACTIVE`. Under Rev 2, `ACTIVE` is strictly unachievable without an immutable, cryptographically bound Human "GO" record on disk.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -55,158 +75,209 @@ Slice 2 does NOT execute live trades (Slice 3); it establishes the cryptographic
 
 ---
 
-## 2. Machine Gate vs Governance Gate Matrix
+## 2. Updated Authorization State Machine (Resolving Blocker B3)
 
-Gate B enforces a strict separation of concerns between cryptographic machine verification and organizational human governance. Neither gate replaces the other.
+```
+       DRAFT (M-1)
+         │
+         │ submit_for_approval()
+         ▼
+   PENDING_APPROVAL
+         │
+         │ Ed25519 Quorum Verified (M-3, M-4, M-5)
+         │ Kill Switch ARMED (M-7)
+         ▼
+   APPROVED_PENDING_GO  ◄── [Machine Quorum Met; Orders Still BLOCKED]
+         │
+         │ G-1: Gate A Evidence Reviewed
+         │ G-2: Live Broker Account Verified (Read-Only)
+         │ G-3: Explicit Human GO Issued
+         │ G-4: HumanGORecord Written & Archived
+         ▼
+        ACTIVE          ◄── [ONLY Here: admission.py construct_order_intent() enabled]
+         │
+         ├─ Suspended (Kill switch trip / anomaly)
+         ├─ Expired (now_utc > expires_at)
+         └─ Revoked (CertificateRevocationEvent)
+```
 
-| Gate Component | Sub-Item | Invariant & Contract Description | Enforcement Mechanism | Substrate |
-| :--- | :--- | :--- | :--- | :--- |
-| **Machine Gate** | **M-1** | `LiveAuthorization` DRAFT artifact constructed with valid parameters | Pydantic V2 schema validation (`schema.py:252`) | Memory / JSON |
-| **Machine Gate** | **M-2** | Explicit confirmation of monetary fields & `MT5AccountReality.currency` | Fail-closed comparison check against broker account | Broker IPC |
-| **Machine Gate** | **M-3** | Ed25519 digital signature generated for each approver | `Ed25519Signer` / KMS over canonical approval bytes | Ed25519 (RFC 8032) |
-| **Machine Gate** | **M-4** | Quorum check: `\|verified approvals\| >= required_approvals` | `_collect_verified_approvals()` (`admission.py:402`) | In-memory crypto |
-| **Machine Gate** | **M-5** | `authorization_digest` covers all 15 params + sorted approvals | `compute_authorization_digest()` (`schema.py:349`) | SHA-256 |
-| **Machine Gate** | **M-6** | Status transition: `status -> ACTIVE` | `issue_live_authorization()` (`admission.py:409`) | Domain State |
-| **Machine Gate** | **M-7** | Sovereign Kill Switch Ed25519 quorum keys loaded | `SovereignKillSwitchController(trust_store=...)` | Risk State |
-| **Governance Gate** | **G-1** | Formal audit review of Gate A Evidence Pack | Human verification of `consolidated_gate_a_audit.md` | Human Auditor |
-| **Governance Gate** | **G-2** | Live broker account identity verification | Written confirmation of account login, server, owner | Human Auditor |
-| **Governance Gate** | **G-3** | Explicit human "GO" authorization command | Non-repudiable written sign-off statement | Human Auditor |
-| **Governance Gate** | **G-4** | Archival of GO decision and authorization artifact | Committed immutable markdown/JSON record in repo | Git Versioning |
+> [!IMPORTANT]
+> **State Machine Invariant:**  
+> In `APPROVED_PENDING_GO`, all cryptographic signatures and digests are 100% valid, but `admission.py:650` strictly rejects order construction with `PreLiveRiskAdmissionError("AUTHORIZATION_PENDING_HUMAN_GO")`.  
+> `ACTIVE` can ONLY be emitted by passing a valid `HumanGORecord` whose digest is bound into the activation transition.
 
 ---
 
-## 3. Parameter Ownership Matrix & Enforcement Classification
+## 3. Revised Machine Gate vs Governance Gate Sequence
 
-Every parameter in `LiveAuthorization` must be categorized into its exact technical enforcement state. No parameter may be silently defaulted or assumed.
+The execution sequence is strictly ordered so that Machine Verification prepares the authorization, Human Governance authorizes the deployment, and Machine Activation executes last:
+
+```
+[MACHINE PREPARATION]
+M-1: Construct LiveAuthorization [DRAFT]
+M-2: Verify Live Account Parameters, Currency & Valuation Basis (Read-Only)
+M-3: Collect Ed25519 AuthorizationApproval Signatures
+M-4: Verify Quorum (|approvals| >= required_approvals)
+M-5: Verify authorization_digest Integrity
+M-7: Verify Sovereign Kill Switch ARMED & Quorum Keys Loaded
+      ↓
+State: APPROVED_PENDING_GO
+      ↓
+[SOVEREIGN GOVERNANCE GATE]
+G-1: Human Reviews Gate A Certified Evidence Pack
+G-2: Human Confirms Live Broker Identity & Ownership
+G-3: Human Issues Explicit "GO" Decision (Non-Repudiable)
+G-4: System Archives HumanGORecord with Digest Chaining
+      ↓
+[FINAL MACHINE ACTIVATION]
+M-6: Transition LiveAuthorization to ACTIVE (Bound to HumanGORecord digest)
+      ↓
+STOP (Gate B Complete — Slice 3 Awaits Separate Human Authorization)
+```
+
+| Gate Step | Invariant & Contract Description | Enforcement Mechanism | Substrate |
+| :---: | :--- | :--- | :--- |
+| **M-1** | `LiveAuthorization` DRAFT artifact constructed with valid schema | Pydantic V2 immutable validation (`schema.py:252`) | In-Memory / JSON |
+| **M-2** | Multi-dimensional verification of currency, unit, and valuation basis | Fail-closed comparison against live broker terminal | MT5 IPC (Read-Only) |
+| **M-3** | Ed25519 digital signature generated for each approver | `Ed25519Signer` / KMS over canonical approval bytes | Ed25519 (RFC 8032) |
+| **M-4** | Quorum check: `\|verified approvals\| >= required_approvals` | `_collect_verified_approvals()` (`admission.py:402`) | In-Memory TrustStore |
+| **M-5** | `authorization_digest` covers all 15 params + sorted approvals | `compute_authorization_digest()` (`schema.py:349`) | SHA-256 Digest |
+| **M-7** | Sovereign Kill Switch Ed25519 quorum keys loaded and ARMED | `SovereignKillSwitchController(trust_store=...)` | Risk Controller |
+| **G-1** | Formal audit review of Gate A Evidence Pack | Verification of `docs/phase13/consolidated_gate_a_audit.md` | Human Auditor |
+| **G-2** | Live broker account identity verification (Read-Only) | Written confirmation of login, server, owner, leverage | Human Auditor |
+| **G-3** | Explicit human "GO" authorization command | Signed, non-repudiable written sign-off statement | Human Auditor |
+| **G-4** | Archival of GO decision and digest binding | Committed immutable JSON/Markdown record in repository | Git Versioning |
+| **M-6** | Status transition: `APPROVED_PENDING_GO -> ACTIVE` | `activate_live_authorization(auth, human_go_record)` | Domain State Machine |
+
+---
+
+## 4. Parameter Ownership Matrix (Rev 2 — Zero Operational Defaults)
 
 | Parameter Name | Schema Type | Proposed Constraint | Enforcement State | Authority / Owner |
 | :--- | :--- | :--- | :--- | :--- |
 | `authorization_id` | `str` | `AUTH_P13_LIVE_001` | **Cryptographically Bound** | Machine / Unique |
-| `certificate_id` | `str` | Linked Phase 6/8.5 Certificate | **Cryptographically Bound** | Statistical Gate |
+| `certificate_id` | `str` | Linked Phase 6/8.5 Certificate | **Cryptographically Bound** | Statistical Authority |
 | `strategy_id` | `str` | Target Live Strategy ID | **Machine-Enforced** per order | Strategy Authority |
 | `max_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Cryptographically Bound** (Cumulative NOT enforced) | **Human Auditor** |
 | `max_position_size` | `Decimal` | `Decimal("0.01")` (Micro-lot) | **Machine-Enforced** per order (`admission.py:685`) | **Plan Rev3 §4.6** |
-| `max_order_rate_per_minute` | `int` | `1` (Strict throttle) | **Cryptographically Bound** | **Human Auditor** |
+| `max_order_rate_per_minute` | `int` | `1` (Throttle: 1 order/min) | **Cryptographically Bound** | **Human Auditor** |
 | `max_daily_loss_notional` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Cryptographically Bound** (RiskEngine enforces) | **Human Auditor** |
-| `max_drawdown_pct` | `Decimal` | `Decimal("5.0")` (5.0%) | **Machine-Enforced** by RiskEngine (Binary Reject) | **Human Auditor** |
+| `max_drawdown_pct` | `Decimal` | **[TBD — REQUIRED HUMAN INPUT]** | **Machine-Enforced** by RiskEngine (Binary Reject) | **Human Auditor** |
 | `allowed_venues` | `Tuple[str]` | `("LIVE_MT5",)` | **Machine-Enforced** per order (`admission.py:674`) | **Human Auditor** |
 | `allowed_symbols` | `Tuple[str]` | `("EURUSD",)` | **Machine-Enforced** per order (`admission.py:679`) | **Human Auditor** |
-| `risk_policy_version` | `str` | `v1.0.0-p13` | **Cryptographically Bound** | Risk Policy |
-| `required_approvals` | `int` | `1` (or multi-sig quorum) | **Machine-Enforced** (`admission.py:400`) | Governance Policy |
-| `authorized_at` | `datetime` | UTC timestamp of issuance | **Cryptographically Bound** | Machine Clock |
-| `expires_at` | `datetime` | Time-boxed (e.g. +24h or +7d) | **Machine-Enforced** per order (`admission.py:668`) | **Human Auditor** |
-| `currency` | `str` | `MT5AccountReality.currency` | **Operational Convention** (Schema has NO currency) | **Human Auditor** |
+| `risk_policy_version` | `str` | `v1.0.0-p13` | **Cryptographically Bound** | Risk Policy Registry |
+| `required_approvals` | `int` | **[TBD — REQUIRED GOVERNANCE INPUT]** | **Machine-Enforced** ($\ge 1$, no default) | **Governance Policy** |
+| `authorized_at` | `datetime` | UTC timestamp of issuance | **Cryptographically Bound** | Machine System Clock |
+| `expires_at` | `datetime` | Time-boxed window (e.g. +24h) | **Machine-Enforced** per order (`admission.py:668`) | **Human Auditor** |
+| `currency` | `str` | `MT5AccountReality.currency` | **Operational Convention** (Verified at M-2) | **Human Auditor** |
 
 ---
 
-## 4. Critical Safety Review & Technical Debt Analysis
+## 5. Capital Boundary Assessment & Temporary Safety Locks
 
-### 4.1 Debt NB-1: Cumulative Exposure Enforcement Gap
-- **Finding:** `construct_order_intent()` enforces `quantity <= max_position_size` per order, but does **NOT** enforce `current_total_exposure + new_order_notional <= max_notional`.
-- **Live Safety Implication:** If the execution coordinator or strategy dispatches multiple concurrent orders rapidly, the gross portfolio exposure could breach `max_notional` before 6-D reconciliation trips.
-- **Slice 2 Pre-Condition:**
-  - In Slice 2, we must formally document that **Slice 3 execution is restricted to strictly SERIAL execution**:
-    $$\text{Orders in flight} \le 1 \quad \land \quad \text{Open positions} \le 1$$
-  - Alternatively, if Phase 14 is deferred, a lightweight single-flight lock or Phase 14 cumulative exposure check must be scheduled before multi-order live execution.
+### 5.1 Capital Boundary Status: PARTIALLY ENFORCED
+- **Per-Order Sizing:** ✅ **MACHINE-ENFORCED** (`quantity <= max_position_size` checked at `admission.py:685`).
+- **Cumulative Exposure:** ❌ **NOT IMPLEMENTED** (`current_exposure + new_order_notional <= max_notional` is acknowledged P1 architectural debt deferred to Phase 14).
+- **Declaration:** ACASH does **NOT** claim full capital boundary enforcement in Slice 2/3.
 
-### 4.2 Currency Denomination Ambiguity
-- **Finding:** `LiveAuthorization.max_notional` and `max_daily_loss_notional` are raw `Decimal` numbers without a currency field.
-- **Contract:** M-2 strictly mandates that the human auditor verify that `max_notional` is denominated in the exact deposit currency of the live account (`MT5AccountReality.currency`). If account currency is USD, `max_notional = 500` means $500 USD.
+### 5.2 Formalization of `STRICT_SERIAL_MODE = TRUE`
+To prevent the cumulative exposure gap from causing risk breach during Slice 3 live testing, ACASH formalizes `STRICT_SERIAL_MODE` as an explicit safety lock:
 
-### 4.3 MT5 C-Extension History Deals Date Parameter Quirk (NB-3)
-- **Finding:** Direct C-extension calls to `history_deals_get` fail with `API error code -2` if date parameters are passed via keyword arguments rather than positional arguments `(date_from, date_to)`.
-- **Remediation in Slice 2:** Verified that `NativeMT5Transport` in `src/acash/execution/mt5/transport.py` handles positional date filtering cleanly or uses `LayerBDemoMT5Transport` convention.
-
-### 4.4 Account Credential Ownership & Master Password
-- **Finding:** MetaTrader 5 supports two passwords: Investor (Read-Only) and Master (Trade-Enabled).
-- **Contract:** Live execution in Slice 3 requires Master password permissions (`trade_allowed = True`). For Gate B preflight (Slice 2), read-only inspection (`trade_mode == 2`, balance, currency) must be validated first before granting trade rights.
-
----
-
-## 5. Cryptographic Authorization Flow (Ed25519 Quorum)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Human as Human Auditor
-    participant Preflight as Gate B Preflight Harness
-    participant TrustStore as Ed25519TrustStore
-    participant Admission as Execution Admission Service
-    participant Controller as Sovereign Kill Switch
-
-    Human->>Preflight: Provide Live Account ID & Parameters (M-2)
-    Preflight->>Preflight: Inspect live account reality (currency, leverage, balance)
-    Preflight->>Admission: create_draft_live_authorization()
-    Admission-->>Preflight: LiveAuthorization [DRAFT]
+```python
+class StrictSerialExecutionLock:
+    """Temporary containment control for Slice 3 micro-capital deployment.
     
-    Human->>Preflight: Sign with Ed25519 Private Key (M-3)
-    Preflight->>TrustStore: Verify signature against public_key_id (M-4)
-    TrustStore-->>Preflight: Signature Valid
-    
-    Preflight->>Admission: issue_live_authorization(approvals, required_approvals)
-    Admission->>Admission: compute_authorization_digest() (M-5)
-    Admission->>Admission: Transition status -> ACTIVE (M-6)
-    Admission-->>Preflight: LiveAuthorization [ACTIVE]
-    
-    Preflight->>Controller: Verify kill-switch keys loaded (M-7)
-    Controller-->>Preflight: Sovereign Kill Switch ARMED
-    
-    Human->>Preflight: Record Written "GO" Command (G-3)
-    Preflight->>Preflight: Archive Authorization Evidence Pack (G-4)
-    Preflight-->>Human: Gate B Complete -> STOP (Await Slice 3 authorization)
+    Enforces:
+    1. In-flight orders count == 0 before any dispatch.
+    2. Open positions count == 0 before any new entry.
+    3. Pending broker orders count == 0 at all times.
+    4. Reserved exposure ambiguity == 0 (no concurrent allocations).
+    Fails closed immediately if any condition is breached.
+    """
 ```
+- **Governance Status:** Temporary Slice 3 containment control; does NOT replace Phase 14 cumulative exposure engine.
 
 ---
 
-## 6. Failure, Revocation & Rollback Semantics
+## 6. M-2 Currency, Monetary Unit & Valuation Basis Contract
 
-1. **Signature Failure (Fail-Closed):** Any signature verification mismatch immediately raises `DomainValidationError`, leaving `LiveAuthorization` in `DRAFT` or `PENDING_APPROVAL`.
-2. **Digest Mismatch:** Any mutation of parameters after signing changes `authorization_digest`, causing `_validate_sha256` or digest verification to fail closed.
-3. **Emergency Revocation:** If a `CertificateRevocationEvent` is ingested, `issue_live_authorization()` immediately raises `PreLiveRiskAdmissionError`.
-4. **Kill Switch Veto:** Even if `LiveAuthorization.status == ACTIVE`, if `SovereignKillSwitchController.state != ARMED`, `construct_order_intent()` raises `DataContractError("EXECUTION_ADMISSION_BLOCKED")`.
+To eliminate currency and valuation ambiguity (Finding B8), Item M-2 requires explicit validation across four dimensions:
 
----
-
-## 7. Required Human Inputs (TBD Schedule)
-
-The human auditor must provide the following concrete values prior to Gate B issuance:
-
-1. **Target Live Broker Name / Venue ID:** (e.g. `PEPPERSTONE_LIVE_01`, `METAQUOTES_LIVE`)
-2. **Target Live Account Login ID:** (e.g. `12345678`)
-3. **Authorized `max_notional`:** (e.g. `Decimal("500.00")` account currency)
-4. **Authorized `max_daily_loss_notional`:** (e.g. `Decimal("50.00")` account currency)
-5. **Authorized `expires_at` window:** (e.g. `2026-09-05T23:59:59Z`)
-6. **Approver Public Key & Key ID:** (Ed25519 Public Key for TrustStore entry)
-7. **Target Symbol:** (e.g. `EURUSD`)
+1. **Account Currency:** Must match `MT5AccountReality.currency` (e.g. `"USD"`).
+2. **Monetary Unit:** Stated in base units of account currency (e.g. 1.0 = 1.00 USD).
+3. **Asset Valuation Basis:** For EURUSD:
+   $$\text{Base Currency} = \text{EUR}, \quad \text{Quote Currency} = \text{USD}$$
+4. **Notional Calculation Formula:**
+   $$\text{Notional USD} = \text{Volume (lots)} \times \text{Contract Size} \times \text{Execution Price}$$
+   $$\text{Example: } 0.01 \text{ lot} \times 100,000 \times 1.16282 = 1,162.82 \text{ USD Notional}$$
+   The human auditor must verify that `max_notional` accommodates the asset's contract notional in account currency.
 
 ---
 
-## 8. Verification Plan & Test Matrix (Slice 2 Preflight)
+## 7. Operational Demarcation: Read-Only Preflight vs Trading Session
 
-### Automated Test Suite (To be executed upon implementation approval):
-- `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
-  - `test_draft_creation_with_valid_parameters()`: Verifies M-1 schema bounds.
-  - `test_currency_denomination_validation()`: Verifies M-2 contract.
-  - `test_ed25519_quorum_signing_and_verification()`: Verifies M-3 and M-4.
-  - `test_authorization_digest_tamper_proofing()`: Verifies M-5.
-  - `test_active_status_transition_semantics()`: Verifies M-6.
-  - `test_kill_switch_quorum_loading()`: Verifies M-7.
-  - `test_expired_authorization_fails_closed()`: Verifies expiration boundary.
-  - `test_revocation_event_halts_issuance()`: Verifies rollback.
+To prevent unintended privilege escalation (Finding B9):
+
+```
+┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐
+│   SLICE 2: READ-ONLY PREFLIGHT       │     │   SLICE 3: TRADE-ENABLED SESSION     │
+├──────────────────────────────────────┤     ├──────────────────────────────────────┤
+│ - Connect using Investor Password    │     │ - Connect using Master Password      │
+│ - Trade Permission: DISABLED (Read)  │     │ - Trade Permission: ENABLED (Trade)  │
+│ - Queries: account_info, symbols     │     │ - Order Dispatch: Micro-lot 0.01     │
+│ - Zero order_send possible           │     │ - Explicit Human Sign-Off Required   │
+│ - Fails closed if trade_allowed=True │     │ - Strictly Serial Execution Lock     │
+└──────────────────────────────────────┘     └──────────────────────────────────────┘
+```
+Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-enabled connectivity cannot occur as an automated side-effect.
 
 ---
 
-## 9. Exact Stop Gate
+## 8. Failure, Revocation & Rollback Semantics
+
+1. **Signature Mismatch:** `DomainValidationError` raised; status remains `DRAFT` / `PENDING_APPROVAL`.
+2. **Digest Mismatch:** Any parameter tampering fails canonical SHA-256 verification.
+3. **Missing Human GO:** If `HumanGORecord` is absent, corrupted, or does not match `authorization_id`, transition to `ACTIVE` raises `DataContractError`.
+4. **Emergency Revocation:** `CertificateRevocationEvent` immediately transitions authorization to `REVOKED` (`admission.py` halts fail-closed).
+5. **Kill Switch Veto:** If `SovereignKillSwitchController.state != ARMED`, order admission raises `DataContractError("EXECUTION_ADMISSION_BLOCKED")`.
+
+---
+
+## 9. Updated Automated Test Matrix
+
+The implementation of Slice 2 will include the following unit test suite (`tests/unit/execution/test_gate_b_authorization_lifecycle.py`):
+
+1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema.
+2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks.
+3. `test_ed25519_quorum_signing_and_verification`: Verifies M-3 and M-4.
+4. `test_authorization_digest_tamper_proofing`: Verifies M-5.
+5. `test_kill_switch_quorum_loading`: Verifies M-7.
+6. `test_active_cannot_occur_before_human_go`: Verifies that `APPROVED_PENDING_GO` cannot construct orders.
+7. `test_active_transition_binds_human_go_digest`: Verifies M-6 requires valid `HumanGORecord`.
+8. `test_required_approvals_cannot_default`: Verifies fail-closed when `required_approvals` is missing.
+9. `test_max_drawdown_pct_cannot_default`: Verifies fail-closed when `max_drawdown_pct` is missing.
+10. `test_strict_serial_mode_rejections`:
+    - Rejects 2nd in-flight order.
+    - Rejects 2nd open position.
+    - Rejects unexpected pending order.
+11. `test_read_only_preflight_cannot_escalate_trading`: Verifies preflight rejects trade-enabled session.
+12. `test_revocation_event_halts_issuance`: Verifies rollback.
+
+---
+
+## 10. Exact Stop Gate
 
 ```text
 ================================================================================
-                       PHASE 13 SLICE 2 STOP GATE
+                    PHASE 13 SLICE 2 EXACT STOP GATE
 ================================================================================
-Upon completion of Slice 2:
-1. LiveAuthorization will be generated and signed [ACTIVE].
+Upon completion of Slice 2 Implementation:
+1. LiveAuthorization will exist in APPROVED_PENDING_GO (or ACTIVE only if GO signed).
 2. Live Capital remains strictly $0.00.
 3. Zero broker orders will be sent.
-4. Execution will STOP completely.
-5. Slice 3 (First Live Order) will require a separate, explicit Human Sign-Off.
+4. Master trading password will NOT be loaded.
+5. All execution will STOP completely.
+6. Progression to Slice 3 (First Live Order) requires explicit, independent
+   Human Sign-Off.
 ================================================================================
 ```
