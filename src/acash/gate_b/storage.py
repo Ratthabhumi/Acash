@@ -221,12 +221,9 @@ class StoragePlatformUtils:
                     cls._CloseHandle(handle)
             else:
                 err = ctypes.get_last_error()
-                # If opening with GENERIC_WRITE failed with ERROR_ACCESS_DENIED (5), directory is read-only.
-                # NTFS journals directory entries on atomic move/replace; read-only dirs are immutable.
-                if err != 5:
-                    raise StorageDurabilityError(
-                        f"FAILED_TO_OPEN_DIRECTORY_FOR_FLUSH: dir={directory}, win_error={err}"
-                    )
+                raise StorageDurabilityError(
+                    f"FAILED_TO_OPEN_DIRECTORY_FOR_FLUSH: dir={directory}, win_error={err}"
+                )
         else:
             try:
                 dir_fd = os.open(str(directory), os.O_RDONLY)
@@ -593,9 +590,8 @@ class LedgerStorageTransaction:
         StoragePlatformUtils.mark_directory_read_only(snapshot_dir)
 
     def flush_snapshot_directory_barrier(self, tx_id: UUID) -> None:
-        """Phase 3 fsync_3 barrier on snapshot directory and parent container."""
+        """Phase 3 fsync_3 barrier committing promoted directory entry to snapshots parent container (B75, B83, B89, B98)."""
         snapshot_dir = self._get_snapshot_tx_dir(tx_id)
-        StoragePlatformUtils.flush_directory(snapshot_dir)
         StoragePlatformUtils.flush_parent_dir(snapshot_dir)
 
     # Phase 4: Pre-CAS Deep Verification
@@ -893,8 +889,8 @@ class StorageCommitContract:
 
         # Phase 3: Promote to Snapshot Directory & fsync_3 (B75, B83)
         tx.promote_staging_to_snapshot_directory_atomically(tx_id)
-        tx.flush_snapshot_directory_barrier(tx_id)
         tx.mark_snapshot_directory_read_only(tx_id)
+        tx.flush_snapshot_directory_barrier(tx_id)
 
         # Phase 4: Pre-CAS Manifest Re-verification under Exclusive Lock (B75, B86)
         if not tx.deep_verify_snapshot_manifest(tx_id, final_commit_block):

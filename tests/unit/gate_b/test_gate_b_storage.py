@@ -271,6 +271,27 @@ def test_directory_durability_barrier_contract(tmp_path: Path) -> None:
     StoragePlatformUtils.flush_parent_dir(child_file)
 
 
+def test_directory_flush_on_read_only_directory_fails_closed(tmp_path: Path) -> None:
+    """Test B89/B98: Directory flush on read-only directory MUST fail closed with StorageDurabilityError (never swallowed)."""
+    test_dir = tmp_path / "ro_barrier_dir"
+    test_dir.mkdir()
+    child_file = test_dir / "child.txt"
+    child_file.write_text("child_data", encoding="utf-8")
+
+    # Apply read-only NTFS DACL
+    StoragePlatformUtils.mark_directory_read_only(test_dir)
+
+    # Calling flush_directory on read-only directory MUST raise StorageDurabilityError
+    with pytest.raises(StorageDurabilityError) as excinfo:
+        StoragePlatformUtils.flush_directory(test_dir)
+
+    if os.name == "nt":
+        assert "win_error=5" in str(excinfo.value) or "FAILED_TO_OPEN_DIRECTORY_FOR_FLUSH" in str(excinfo.value)
+
+    # Cleanup permissions
+    StoragePlatformUtils.mark_directory_writable(test_dir)
+
+
 def test_ntfs_dacl_enforcement_and_permission_isolation(tmp_path: Path) -> None:
     """Test B75/B83: NTFS DACL enforcement denying Write, Append, Create, and Delete."""
     test_dir = tmp_path / "dacl_test_dir"
@@ -411,8 +432,8 @@ def test_post_pointer_switch_cas_failure_rolls_back_to_authenticated_previous_po
         final_block = commit_block.model_copy(update={"mutation_manifest_digest": manifest_digest})
         tx.write_commit_marker_block(tx2_id, final_block)
         tx.promote_staging_to_snapshot_directory_atomically(tx2_id)
-        tx.flush_snapshot_directory_barrier(tx2_id)
         tx.mark_snapshot_directory_read_only(tx2_id)
+        tx.flush_snapshot_directory_barrier(tx2_id)
 
         # Step 5a: create and sign transition record
         trans_draft = DurablePointerTransitionRecord(
