@@ -2,11 +2,11 @@
 
 > **Document:** `docs/PROJECT_STATUS.md`  
 > **Project Name:** ACASH (Automated Capital Allocation System)  
-> **Status:** Phases 0–12 Complete & Frozen (`1e1d154`); Phase 12 Slice 6 Freeze Gate CLOSED  
-> **Date:** 2026-09-03  
-> **Operating Environment:** Windows 10/11 (AIO workstation)  
-> **Runtime:** Python 3.14.6 64-bit, Git 2.55.0  
-> **Baseline Verification:** 1240 collected tests (1158 unit + 82 integration; 1240 passed, 0 failed, 3 skipped optional); MyPy clean across 263 source files  
+> **Status:** Phases 0–12 Complete & Frozen (`1e1d154`); Phase 13 Slice 1 (Gate A Pre-Live Certification) In Progress (`2f01841`)  
+> **Date:** 2026-09-04  
+> **Operating Environment:** Windows 10/11 x64  
+> **Runtime:** Python 3.14.3/3.14.6 64-bit (`.venv`), Git 2.55.0  
+> **Baseline Verification:** 1251 collected tests (11/11 Phase 13 Slice 1 Gate A Layer A passed; 1251 passed, 0 failed, 3 skipped optional); MyPy clean across 264 source files  
 
 ---
 
@@ -59,6 +59,7 @@ Phases 0 through 10 are completely implemented, verified, and frozen. Phase 11 C
 | **Phase 10** | Runtime Orchestration & Continuous Paper Operations | **FROZEN** | 5-stage supervisor, dual-clock scheduler, ledger. Commit: `3955bf6`. |
 | **Phase 11** | Forward Drift Detection & Execution Attribution | **FROZEN** | 107 unit + 26 red-team + 9 integration tests. Commit: `86bff0d` → `092a2b1`. |
 | **Phase 12** | MT5 & Venue Execution Adapters | **FROZEN** | 6-D RECON, `MT5BrokerAdapter`, Gate 6 Two-Phase Routing, intent_id routing. Commit: `1e1d154`. Closeout: `docs/phase12/closeout_report.md`. |
+| **Phase 13** | Live Small Capital Deployment (Gate A Pre-Live Certification) | **IN PROGRESS** | Layer A verified (11/11); Layer B rehearsal harness refactored (`2f01841`); Gate A conditional. Live Capital: $0.00. |
 
 ---
 
