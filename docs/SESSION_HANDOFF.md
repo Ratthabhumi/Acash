@@ -1,16 +1,47 @@
 # ACASH — Session Handoff
-## Phase 13 Slice 1: Gate A Pre-Live Certification — Layer B Workstation Handoff
+## Phase 13 Slice 1: Gate A Pre-Live Certification — Home Continuation Handoff
 
-> **Document:** `docs/SESSION_HANDOFF.md`
-> **Status:** PHASE 13 SLICE 1 IN PROGRESS — LAYER A PASSED (11/11); LAYER B HARNESS REFACTORED (`2f01841`); READY FOR LIVE MT5 DEMO REHEARSAL AT WORK
-> **Current Head Commit:** `2f01841` (Enforce authentic 6-D recon, exact lineage, and broker-derived flat portfolio in Layer B harness)
-> **Operating Environment:** Windows 10/11 x64, Python 3.14.3/3.14.6 (`.venv`), MetaTrader 5 Desktop Terminal (Demo Only)
-> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)
-> **Date:** 2026-09-04
+> **Document:** `docs/SESSION_HANDOFF.md`  
+> **Status:** PHASE 13 SLICE 1 IN PROGRESS — B-1 & B-2 REMEDIATED (LOCAL VERIFICATION PASS); CONSOLIDATED GATE A AUDIT PENDING  
+> **Gate A Status:** 🔴 **NOT CERTIFIED** (Pending Consolidated Gate A Audit & Formal Review)  
+> **Gate B Status:** 🔒 **STRICTLY LOCKED** ($0.00 Live Capital Authority)  
+> **Operating Environment:** Windows 10/11 x64, Python 3.14.6 (`.venv`), MetaTrader 5 Desktop Terminal (Demo Only)  
+> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
+> **Date:** 2026-09-04  
 
 ---
 
-## 1. Immutable Frozen Baselines & Progression
+## 1. Executive Summary & Current Governance State
+
+This document establishes the authoritative state of the ACASH quantitative execution repository at the conclusion of the workstation session on **2026-09-04**, prior to resuming work from the home environment.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    ACASH CURRENT GOVERNANCE LEDGER                     │
+├──────────────────────────────────┬─────────────────────────────────────┤
+│  Blocker B-1 Remediation         │  🟢 REMEDIATED — LOCAL PASS         │
+│  Blocker B-2 Remediation         │  🟢 REMEDIATED — LOCAL PASS         │
+│  Dedicated Regression Tests      │  🟢 4/4 PASSED (test_layer_b_*)    │
+│  MT5 Execution Unit Tests        │  🟢 190/190 PASSED                  │
+│  Layer A Pre-Live Integration    │  🟢 11/11 PASSED                    │
+│  Static Type Checker (MyPy)      │  🟢 CLEAN (266 source files)        │
+│  Broker Reality (Demo 112040157) │  🟢 100% FLAT (0 Pos, 0 Ord, $0 DD) │
+│  Live Capital Authority          │  🔒 $0.00 (Hard-Locked)             │
+│  Production Codebase (src/)      │  🔒 STRICTLY FROZEN (0 diff)        │
+│  Consolidated Gate A Audit       │  🟡 PENDING                         │
+│  Gate A Certification Status     │  🔴 NOT CERTIFIED                   │
+│  Gate B Authorization Status     │  🔒 LOCKED                          │
+│  Remote GitHub Push              │  🟢 SYNCED (Verified origin/main)   │
+└──────────────────────────────────┴─────────────────────────────────────┘
+```
+
+> [!CAUTION]
+> **CRITICAL GOVERNANCE INVARIANT: PUSH $\neq$ GATE A APPROVAL**  
+> Pushing commits to GitHub establishes synchronization of source, tests, and documentation. It **DOES NOT** constitute Gate A certification. Gate A remains **NOT CERTIFIED** until the Consolidated Gate A Audit is formally re-run and approved by the human auditor.
+
+---
+
+## 2. Immutable Frozen Baselines & Progression
 
 - **Phase 7 (Live Execution Reality):** `FROZEN`
 - **Phase 8 (Portfolio Allocation & Tournament):** `FROZEN` (`e6f1d04`)
@@ -18,216 +49,157 @@
 - **Phase 9 (Deterministic Risk Engine & Kill Switch):** `FROZEN` (`6bd40d8`)
 - **Phase 10 (Runtime Orchestration & Continuous Paper Operations):** `FROZEN` (`3955bf6`)
 - **Phase 11 (Strategy Forward Drift & Execution Reality Attribution):** `FROZEN` (`092a2b1`)
-- **Phase 12 (MT5 & Venue Execution Adapters):** `FROZEN` (`1e1d154`, Closeout Report: `docs/phase12/closeout_report.md`)
+- **Phase 12 (MT5 & Venue Execution Adapters):** `FROZEN` (`1e1d154`, Closeout: `docs/phase12/closeout_report.md`)
 - **Phase 13 (Live Small Capital Deployment):**
   - **Slice 1 (Gate A Pre-Live Certification):** `IN PROGRESS`
-    - Layer A (Automated Pytest Suite): `✅ 11/11 PASSED` (Audited & Approved)
-    - Layer B (Operational Demo Terminal Rehearsal): `🟡 IN PROGRESS` (Harness refactored @ `2f01841`; Preflight passed; Pending execution of A-3, A-10, A-11)
-  - **Gate A Certification Status:** `🔒 NOT CERTIFIED` (Pending Layer B evidence)
-  - **Gate B Authorization Status:** `🚫 STRICTLY LOCKED`
-  - **Live Capital Authority:** `🔒 $0.00` (Strict Frozen Invariant)
-  - **Production Codebase (`src/`):** `🔒 STRICTLY FROZEN` (Zero edits permitted)
+    - Layer A (Automated Pytest Suite): `✅ 11/11 PASSED`
+    - Layer B (Operational Demo Terminal Rehearsal):
+      - Rehearsal executed on broker (Demo Account `112040157`)
+      - Findings B-1 and B-2 identified during initial Consolidated Audit
+      - B-1 & B-2 successfully remediated and verified locally
+  - **Gate A Certification Status:** `🔴 NOT CERTIFIED` (Awaiting Consolidated Audit)
+  - **Gate B Authorization Status:** `🔒 STRICTLY LOCKED`
+  - **Live Capital Authority:** `🔒 $0.00`
+  - **Production Codebase (`src/`):** `🔒 STRICTLY FROZEN` (Zero diff)
 
 ---
 
-## 2. Phase 12 Slice 6 — Freeze & Exit Gate (Reference)
+## 3. Remediated Blockers B-1 and B-2 (Detailed Audit Findings)
 
-Phase 12 is officially closed and frozen at `1e1d154`. Full inventory is documented in `docs/phase12/closeout_report.md`.
-Baseline regression: 1240 passed (1158 unit + 82 integration).
+### Finding B-1: Intent Lineage Mismatch & 4-Tier Lifecycle Cross-Identity
+- **Original Defect:** The A-11 harness previously bound the entry deal to an off-by-one intent `INT_DEMO_A3_1788516517`, whereas frozen A-3 evidence recorded `INT_DEMO_A3_1788516518`.
+- **Remediation Implemented:**
+  1. Defined canonical immutable A-3 constants in [`scripts/phase13_layer_b_harness.py`](../scripts/phase13_layer_b_harness.py):
+     - `CANONICAL_A3_INTENT = "INT_DEMO_A3_1788516518"`
+     - `CANONICAL_A3_DEAL_TICKET = 10071863196`
+     - `CANONICAL_A3_ORDER_TICKET = 10355518139`
+     - `CANONICAL_A3_POSITION_TICKET = 10355518139`
+  2. Implemented `validate_a3_lifecycle_binding()`, enforcing fail-closed `DataContractError` if any tier diverges:
+     $$\text{intent\_id} \to \text{deal\_ticket} \to \text{order\_ticket} \to \text{position\_ticket}$$
+  3. Regenerated `docs/phase13/layer_b_evidence_a11.json` with exact string equality:
+     `a3["intent_id"] == a11["entry_deal_intent_id"] == "INT_DEMO_A3_1788516518"`.
+  4. Both entry and exit 4-tier identifiers are now explicitly reported in the A-11 evidence artifact.
+- **Audit Classification:** `Exact Identifier Equality + 4-Tier Lifecycle Validation` (distinct from cryptographic lineage).
+- **Status:** **REMEDIATED — LOCAL VERIFICATION PASS ✅**
 
----
-
-## 3. Frozen Contract Inventory (Critical Boundary)
-
-| Contract | Frozen Invariant |
-|----------|-----------------|
-| State Machine Authority | `transition_order()` in `state_machine.py` — sole authority |
-| Coordinator Authority | `ExecutionCoordinator` — sole shadow-state owner |
-| Gate 6 Routing Key | `c.intent_id` exclusively; `c.execution_id` strictly FORBIDDEN |
-| Dispatch Gate | `can_dispatch() == True` iff `READY AND is_reconciled` |
-| UNKNOWN Semantics | Non-absorbing; blocks dispatch; resolved by RECON only |
-| ACK ≠ FILLED | retcode 10009 → ACK; FILLED requires `MT5DealReality` evidence |
-| BLOCKED State | Absorbing; requires operator intervention |
-| Live Capital | $0.00; no live credential path exists in codebase |
-| Admission Gate | All 5 conditions required (risk/calc/restriction/auth/venue) |
-
----
-
-## 4. Deferred Backlog
-
-| Item | Reason for Deferral | Priority |
-|------|---------------------|----------|
-| **TradingView Ingress Gateway** | Signal ingress concern, not execution authority. | Post-Gate B |
-| **Phase-B Transactional Mutation** | Sequential apply is P1 debt acknowledged in Slice 5 Plan Rev5. | Post-Phase 13 |
-
----
-
-## 5. Phase 13 Slice 1 Architecture & Gate A Two-Layer Model
-
-Phase 13 Slice 1 establishes **Gate A: Pre-Live Certification** across two distinct layers:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                      GATE A: TWO-LAYER MODEL                           │
-├──────────────────────────────────┬─────────────────────────────────────┤
-│  LAYER A: Automated Pytest       │  LAYER B: Operational Demo Terminal │
-│  - MockMT5Transport & simulation │  - Real MetaTrader 5 Desktop GUI    │
-│  - 11/11 tests passing           │  - Operator-assisted harness        │
-│  - Cryptographic & logic gates   │  - Real MT5 Demo account (0) only   │
-│  - Status: ✅ 11/11 PASSED        │  - Status: 🟡 IN PROGRESS           │
-└──────────────────────────────────┴─────────────────────────────────────┘
-```
+### Finding B-2: Non-Deterministic Exit Deal Binding & Shadowing Regression
+- **Original Defect:** The fallback branch in A-11 (`if not positions:`) previously selected `exit_deals[-1]` by filtering only `deal_type == SELL and symbol == EURUSD`, allowing exit deals from subsequent position lifecycles to be erroneously bound to Position A.
+- **Remediation Implemented:**
+  1. Implemented `select_authoritative_exit_deal(entry_deal, all_deals)` with strict relational binding:
+     $$\text{d.deal\_type} == \text{SELL} \land \text{d.symbol} == \text{entry.symbol} \land \text{d.position\_ticket} == \text{entry.position\_ticket}$$
+  2. Deterministic tie-breaking: sorts matches by `(int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket)` ascending, returning the latest authoritative exit deal for THIS specific position lifecycle.
+  3. Fails closed (`DataContractError`) if no matching exit deal exists.
+- **Regression Test Coverage:**
+  - `tests/unit/execution/mt5/test_layer_b_harness_rehearsal_binding.py` proves that in a multi-position history (Position A older, Position B newer), querying Position A strictly returns Exit A (`10073606868`), never Exit B (`20000000003`).
+- **Status:** **REMEDIATED — LOCAL VERIFICATION PASS ✅**
 
 ---
 
-## 6. Audit Verdict on Initial Harness (`4d367af`) & Remediation (`2f01841`)
+## 4. Authoritative Artifact SHA-256 Hashes
 
-The human auditor rejected commit `4d367af` for Layer B certification due to P0 integrity gaps:
-1. **A-11 P0 Gap:** Previously did not execute real 6-D RECON post-manual close; did not prove `UNTRACKED_TRADE_DEAL` / `MISSING_POSITION`; did not prove adapter transitioned to `BLOCKED`; did not simulate process restart; created synthetic `flat_portfolio` in memory to bypass tracker.
-2. **A-3 Gap:** Used placeholder `"0" * 64` digests instead of authentic SHA-256; `intent_id` lineage mismatched.
-3. **Preflight Gap:** Checked `volume_min <= 0.01` instead of exact micro-lot contract (`volume_min == 0.01` and `volume_step == 0.01`).
-4. **A-10 Gap:** Required authentic SHA-256 artifact hashing on recorded human SLA evidence.
+All artifact hashes have been computed and verified directly from the local filesystem using standard SHA-256 (`Get-FileHash`):
 
-### Remediation Implemented in Commit `2f01841`:
-- **Production `src/` FROZEN:** Zero lines of code modified in `src/`.
-- **Preflight:** Enforces `spec.volume_min == Decimal("0.01")` and `spec.volume_step == Decimal("0.01")`. Detects MT5 GUI Algo Trading button status. Written to `docs/phase13/layer_b_evidence_preflight.json` (SHA-256: `6e95c750...`).
-- **A-3 Exact Lineage & Real RECON:** Computes authentic SHA-256 digests via `compute_payload_digest()`. Lineage matches dispatch `intent_id` (`INT_DEMO_A3_<timestamp>`) to broker deal. Runs real 6-D RECON.
-- **A-10 SLA Timing:** Interactive `input()` records operator reaction time ($\le 900$s SLA) and hashes artifact with SHA-256.
-- **A-11 Full E2E Recovery Lifecycle:**
-  - **Zero automated close commands:** Prompt instructs human operator to close position via MT5 GUI.
-  - **Real Post-Close 6-D RECON:** Detects `MISSING_POSITION` & `UNTRACKED_TRADE_DEAL`. Calls `adapter.mark_blocked()`; asserts `adapter.safety_state == BLOCKED` and `can_dispatch() == False`.
-  - **Simulated Restart:** Instantiates `restarted_adapter`. Captures fresh broker reality, confirms 0 open positions. Synchronizes shadow deals, runs fresh 6-D RECON clean (`report_flat.is_clean == True`), confirms adapter reconciled (`can_dispatch() == True`).
-  - **Broker-Derived Flat Portfolio:** Calls `derive_portfolio_from_broker(broker_snap_flat)` to derive `PortfolioState` directly from broker reality. Passes to `EmergencyFlattenTracker`, verifying `FLATTEN_COMPLETED`.
-  - Hashed evidence written to `docs/phase13/layer_b_evidence_a11.json`.
+| File Path | Full 64-Character SHA-256 Digest | Status |
+|---|---|---|
+| `docs/phase13/layer_b_evidence_a3.json` | `d9d3cbe976b94b007bd1a64f0d32daba570cdd282ae57a5ad8b47a10606f3ab0` | **FROZEN / UNTOUCHED** |
+| `docs/phase13/layer_b_evidence_a10.json` | `18cefed3b338e553c752bbb2a94fb59b7446233bfb8699313449472f254ad012` | **FROZEN / UNTOUCHED** |
+| `docs/phase13/layer_b_evidence_a11.json` | `883de6ca4d5b0bdb6475d05f8123258114bef650e9b017c21e9f0e7275ff38e9` | **REGENERATED (B-1/B-2 FIX)** |
+| `docs/phase13/kill_switch_demo.jsonl` | `ab48377b101a301ae1e7c186f2bf274d431e3bc1341bdecf603e47a4da3848cb` | **PERSISTED** |
+| `docs/phase13/layer_b_evidence_preflight.json` | `5aec7837b22ec1765ee52c616d0bf61d1e862ddc47fd4ff18b16aeb9ca96c7a3` | **RESTORED / CLEAN** |
 
 ---
 
-## 7. Workstation Handoff Runbook: Step-by-Step Execution at Work
+## 5. Broker Reality Verification (MetaTrader 5 Demo)
 
-Follow these exact steps when resuming work on your work computer:
+Direct API query executed against the connected MetaTrader 5 Terminal:
+- **Broker Login:** `112040157`
+- **Account Mode:** `DEMO (0)`
+- **Account Balance:** `2,999.65 USD`
+- **Account Equity:** `2,999.65 USD`
+- **Open Positions Count:** `0` (**100% FLAT**)
+- **Active Orders Count:** `0` (**100% FLAT**)
+- **Rehearsal `order_send` Calls:** `0` (Strictly zero broker mutations during remediation)
+- **Operational Demarcation:**
+  - **Broker State:** `READ-ONLY`
+  - **Filesystem Evidence:** `WRITE`
 
-### Step 1: Environment & Repository Sync
+---
+
+## 6. Architecture & Governance Documents Added
+
+Three foundational architecture and governance specifications have been recorded in `docs/`:
+
+1. **ADR-021: Multi-Broker & Multi-Asset Architecture Decision** ([`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md))
+   - Establishes asset-agnostic Core decoupled from MT5/Forex.
+   - Decouples opportunity discovery from connected execution venues.
+   - Defines policy-driven instrument and venue routing layer.
+2. **ADR-022: Market-Adaptive, Strategy-Agnostic & Event-Aware Trading Governance** ([`docs/architecture/market_adaptive_strategy_governance.md`](architecture/market_adaptive_strategy_governance.md))
+   - Core paradigm: Flexible Decision Making + Fixed Safety Guardrails.
+   - Strategy neutrality: Anti-bias governance; rejects "Grid = bad" / "AI = better".
+   - Strategy $\times$ Regime evaluation and graduated event policies.
+   - Committed and verified on GitHub at commit `14bcc04`.
+3. **Strategy Forensic Evaluation & Risk Analysis Framework** ([`docs/architecture/strategy_forensic_evaluation_framework.md`](architecture/strategy_forensic_evaluation_framework.md))
+   - Formal 12-layer strategy evaluation methodology (Performance, Basket Forensics, Sizing/Grid Mechanics, Hedge Forensics, Capital/Margin, Tail Risk Stress Testing, Near-Death Analysis, Capital Injection Audit, Robustness, Regime Analysis, Event-Aware Analysis, Execution Microstructure).
+   - Uniform cost model (Gross P/L $\neq$ Net P/L).
+   - Epistemic evidence hierarchy (`PROVEN`, `REPORTED`, `UNVERIFIED`, `INFERRED`, `UNKNOWN`).
+   - Fair Strategy Tournament with frozen prior rules.
+   - Illustrative case study on EA Alice (classified as `UNVERIFIED` hypothesis).
+
+---
+
+## 7. Step-by-Step Runbook: Resuming at Home
+
+When continuing this work on your home workstation, follow these exact verification steps:
+
+### Step 1: Pull and Verify Clean Synchronization
 ```powershell
-# 1. Pull latest commit from origin/main
+# 1. Fetch and pull latest commits
+git fetch origin
 git pull origin main
 
-# 2. Verify HEAD is 2f01841 or later
-git log -1 --oneline
+# 2. Verify git status is completely clean
+git status
 
-# 3. Ensure virtual environment is up to date
+# 3. Verify HEAD commit and sync with origin/main
+git log -3 --oneline
+git rev-parse HEAD
+git rev-parse origin/main
+```
+
+### Step 2: Virtual Environment Verification
+```powershell
+# 1. Ensure Python 3.14 venv is active and packages synced
 uv sync
 
-# 4. Ensure MetaTrader 5 Python library is present on Windows x64
-uv pip install metatrader5==5.0.6162
-
-# 5. Verify static types & regression test suite
-uv run mypy scripts/phase13_layer_b_harness.py
-uv run pytest tests/integration/test_phase13_slice1_gate_a.py
+# 2. Run type checker across codebase
+uv run mypy src/ tests/
+# Expected: Success: no issues found in 266 source files
 ```
 
-### Step 2: MetaTrader 5 Terminal Preparation
-1. Launch the **MetaTrader 5 Desktop Terminal** on your work computer.
-2. Login to your **Demo Account** (Account `trade_mode` must be `0`).
-   - *Strict Fail-Closed:* Connecting a live account (`trade_mode == 2`) will immediately trigger an uncatchable fatal halt.
-3. Ensure the symbol **`EURUSD`** is visible in Market Watch and supports 0.01 micro-lots (`volume_min=0.01`, `volume_step=0.01`).
-4. **Enable Algo Trading:** Click the **"Algo Trading"** button on the MT5 top toolbar so that the icon turns green. (If disabled, MT5 rejects Python orders with retcode 10027).
-
----
-
-### Step 3: Layer B Interactive Execution Sequence
-
-Execute the rehearsal procedures in the following strict sequential order:
-
-#### 3.1 Preflight Demarcation Audit
+### Step 3: Execute Regression Test Suites
 ```powershell
-uv run python scripts/phase13_layer_b_harness.py --mode preflight
-```
-- **Expected Outcome:** Terminal connected, Account trade_mode=0 (DEMO), EURUSD micro-lot spec verified.
-- **Artifact Generated:** `docs/phase13/layer_b_evidence_preflight.json`.
+# 1. Run dedicated B-1 / B-2 harness regression suite
+uv run pytest tests/unit/execution/mt5/test_layer_b_harness_rehearsal_binding.py -v
+# Expected: 4 passed
 
-#### 3.2 Procedure A-3: MT5 Demo Order & Real 6-D RECON
+# 2. Run full MT5 execution unit suite
+uv run pytest tests/unit/execution/mt5/ -v
+# Expected: 190 passed
+
+# 3. Run Layer A Gate A pre-live certification suite
+uv run pytest tests/integration/test_phase13_slice1_gate_a.py -v
+# Expected: 11 passed
+```
+
+### Step 4: Verify Artifact Hashes
 ```powershell
-uv run python scripts/phase13_layer_b_harness.py --mode a3
+Get-FileHash docs/phase13/layer_b_evidence_*.json, docs/phase13/kill_switch_demo.jsonl -Algorithm SHA256 | Format-Table -AutoSize
 ```
-- **Operator Action:** The harness will display order details (BUY 0.01 EURUSD) and prompt:
-  ```text
-  Confirm order submission to Demo Terminal? (type 'YES' to proceed):
-  ```
-  Type `YES` and press ENTER.
-- **Expected Outcome:** Retcode 10009 (`DONE`), Order & Deal tickets captured, authentic digests computed, 6-D RECON returns `CLEAN` (`is_clean == True`).
-- **Artifact Generated:** `docs/phase13/layer_b_evidence_a3.json`.
+Confirm all hashes match Section 4 of this handoff document exactly.
 
-#### 3.3 Procedure A-10: Degraded Warning & Human SLA Rehearsal
-```powershell
-uv run python scripts/phase13_layer_b_harness.py --mode a10
-```
-- **Operator Action:** The console displays a structured `STRATEGY_DEGRADED` warning alert with timestamp.
-- Press **ENTER** immediately to acknowledge the alert.
-- **Expected Outcome:** Measures elapsed time, confirms `elapsed_seconds <= 900.0` (SLA PASS).
-- **Artifact Generated:** `docs/phase13/layer_b_evidence_a10.json`.
-
-#### 3.4 Procedure A-11: Emergency Manual Close & 6-D Discrepancy Recovery
-```powershell
-uv run python scripts/phase13_layer_b_harness.py --mode a11
-```
-- **Workflow & Operator Actions:**
-  1. Harness identifies (or opens) an open EURUSD 0.01 position and verifies baseline clean state.
-  2. Trips Sovereign Kill Switch; verifies automated execution dispatch is blocked.
-  3. **MANDATORY HUMAN OPERATOR ACTION:** The harness pauses and displays:
-     ```text
-     ------------------------------------------------------------
-       🚨 MANDATORY OPERATOR ACTION REQUIRED
-     ------------------------------------------------------------
-     1. Switch to your MetaTrader 5 Desktop Terminal window.
-     2. In the 'Trade' tab at the bottom, locate Position Ticket #<TICKET>.
-     3. Right-click the position and click 'Close Position' (or click 'X').
-     4. Confirm the position has disappeared from the Trade tab.
-     ------------------------------------------------------------
-     👉 Once you have MANUALLY closed the position in MT5 GUI, press ENTER...
-     ```
-  4. Switch to the MT5 window, manually close the position in GUI, return to console, and press **ENTER**.
-  5. Harness executes real 6-D RECON post-close $\to$ detects `MISSING_POSITION` & `UNTRACKED_TRADE_DEAL` $\to$ verifies adapter transitions to `BLOCKED`.
-  6. Simulates clean restart $\to$ confirms broker is flat $\to$ synchronizes shadow ledger $\to$ runs fresh 6-D RECON clean $\to$ adapter confirmed reconciled.
-  7. Derives flat `PortfolioState` directly from broker reality $\to$ `EmergencyFlattenTracker` confirms `FLATTEN_COMPLETED`.
-- **Artifact Generated:** `docs/phase13/layer_b_evidence_a11.json`.
-
----
-
-### Step 4: Evidence Pack Compilation & Gate A Certification
-
-Once all three evidence JSON files are generated:
-1. Verify evidence files exist and inspect their contents:
-   - `docs/phase13/layer_b_evidence_preflight.json`
-   - `docs/phase13/layer_b_evidence_a3.json`
-   - `docs/phase13/layer_b_evidence_a10.json`
-   - `docs/phase13/layer_b_evidence_a11.json`
-2. Update `docs/phase13/gate_a_evidence_pack.md` to transition Layer B items from `PENDING` to `PASS` with the authentic SHA-256 hashes.
-3. Commit and push the evidence to `origin/main`:
-   ```powershell
-   git add docs/phase13/layer_b_evidence_*.json docs/phase13/gate_a_evidence_pack.md
-   git commit -m "docs(phase13): record authentic Layer B rehearsal evidence for A-3, A-10, A-11"
-   git push origin main
-   ```
-4. **STOP AND WAIT:** Present the complete evidence pack to the user/auditor for formal Gate A certification.
-   - **DO NOT proceed to Gate B.**
-   - **Live capital remains strictly $0.00 until explicit human authorization.**
-
----
-
-## 8. Verification Ledger (Current Handoff State)
-
-```markdown
-### Verification Ledger
-- Implementation Status: COMPLETE (Layer B Rehearsal Harness Refactored to Strict Fail-Closed Standard)
-- Contract Enforcement: STRICT FAIL-CLOSED (Preflight contract equality, exact lineage, zero synthetic portfolios, authentic digests)
-- Mathematical Authority: CANONICAL SPEC (MT5ReconciliationEngine 6-D spec, SHA-256 digest validation, EmergencyFlattenTracker)
-- Local Test Suite: VERIFIED (11/11 Layer A passed, 1251 full suite passed, preflight live probe passed)
-- Type Checker (MyPy): VERIFIED (264 source files in src/ + tests/ clean, harness clean)
-- Production Codebase (src/): STRICTLY FROZEN (Zero edits)
-- Gate A Status: 🟡 IN PROGRESS / NOT CERTIFIED (Harness ready, awaiting operator execution of A-3, A-10, A-11)
-- Gate B Status: 🚫 STRICTLY LOCKED
-- Live Capital Authority: 🔒 $0.00 (Strict Invariant)
-```
-
-
-
+### Step 5: Next Action — Consolidated Gate A Audit
+1. Perform the formal **Consolidated Gate A Audit** reviewing all 11 Gate A items (A-1 through A-11).
+2. Verify that Blockers B-1 and B-2 are formally recognized as closed.
+3. Check for any remaining non-blocker observations (e.g. NB-1 schema enum in Phase 14).
+4. Prepare the final Consolidated Audit Report for human auditor sign-off.
+5. **DO NOT self-declare Gate A certified.** Await explicit human auditor authorization.

@@ -312,5 +312,6 @@
   5. **Explainable Dynamic Capital Allocation:** Capital scales dynamically with empirical evidence and regime suitability, but remains strictly bounded by hard, non-negotiable risk limits. Every allocation decision must answer 9 explicit audit questions.
   6. **Anti-Bias Code of Conduct:** Epistemic claims must distinguish `PROVEN`, `REPORTED`, `UNVERIFIED`, `INFERRED`, and `UNKNOWN`. Evaluation rules, test periods, and hurdle rates must be frozen prior to tournaments to prevent retrospective goalpost shifting.
   7. **Full Specification:** Detailed in [`docs/architecture/market_adaptive_strategy_governance.md`](architecture/market_adaptive_strategy_governance.md).
+  8. **Research & Strategy Evaluation Extension:** The formal 12-layer strategy evaluation methodology, cost models, near-death analysis, and fair tournament framework are detailed in [`docs/architecture/strategy_forensic_evaluation_framework.md`](architecture/strategy_forensic_evaluation_framework.md).
 - **Consequences:** Permanently protects ACASH against self-deception, model overfitting, and architectural dogmatism. Establishes a permanent culture of intellectual honesty where capital allocation decisions are guided strictly by empirical evidence rather than ownership.
 
