@@ -16,7 +16,7 @@ import hashlib
 import json
 from pathlib import Path
 import pytest
-from typing import Generator
+from typing import Generator, Optional
 from uuid import UUID, uuid4
 
 from acash.execution.crypto import (
@@ -160,6 +160,28 @@ def _make_dummy_artifacts(
     return draft, activated_auth, go_rec
 
 
+def _has_staging(tx: LedgerStorageTransaction, tx_id: UUID) -> bool:
+    return (tx._root / "staging" / str(tx_id)).exists()
+
+
+def _read_authorization_from_snapshot(tx: LedgerStorageTransaction, tx_id: UUID) -> Optional[LiveAuthorization]:
+    auth_file = tx._root / "snapshots" / str(tx_id) / "authorization.json"
+    if not auth_file.exists():
+        return None
+    try:
+        with open(auth_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            normalized = {}
+            for k, v in data.items():
+                if isinstance(v, dict) and "value" in v:
+                    normalized[k] = v["value"]
+                else:
+                    normalized[k] = v
+            return LiveAuthorization.model_validate(normalized)
+    except Exception:
+        return None
+
+
 # ==============================================================================
 # BLOCKER 1 TESTS: Missing tx_state Requires Commit Evidence Inspection
 # ==============================================================================
@@ -174,7 +196,7 @@ def test_recovery_missing_tx_state_with_no_commit_evidence(recovery_env: Recover
         stg = tx._get_staging_tx_dir(tx_id)
         stg.mkdir(parents=True, exist_ok=True)
         (stg / "scratch.tmp").write_text("uncommitted work", encoding="utf-8")
-        assert tx.has_staging_directory(tx_id)
+        assert _has_staging(tx, tx_id)
 
         # Assert no tx_state exists
         assert tx.get_durable_tx_state(tx_id) is None
@@ -186,7 +208,7 @@ def test_recovery_missing_tx_state_with_no_commit_evidence(recovery_env: Recover
         assert result.final_state == DurableTransactionState.ABORTED
         assert result.system_mode == SystemSafetyMode.NORMAL
         # Staging is discarded
-        assert not tx.has_staging_directory(tx_id)
+        assert not _has_staging(tx, tx_id)
         assert tx.get_system_safety_mode() == SystemSafetyMode.NORMAL
 
 
@@ -315,7 +337,7 @@ def test_transaction_manager_pre_commit_failure_clean_aborts(
         assert abort_record.is_valid()
         assert abort_record.terminal_state == DurableTransactionState.ABORTED
         # Staging discarded
-        assert not tx.has_staging_directory(active_tx_id)
+        assert not _has_staging(tx, active_tx_id)
         # System safety mode remains NORMAL
         assert tx.get_system_safety_mode() == SystemSafetyMode.NORMAL
 
@@ -483,7 +505,7 @@ def test_recovery_tier1_clean_abort_discards_staging(recovery_env: RecoveryEnvTy
         assert result.tier == 1
         assert result.final_state == DurableTransactionState.ABORTED
         assert result.system_mode == SystemSafetyMode.NORMAL
-        assert not tx.has_staging_directory(tx_id)
+        assert not _has_staging(tx, tx_id)
 
 
 def test_recovery_tier2_committed_idempotent_noop(recovery_env: RecoveryEnvType) -> None:
@@ -738,7 +760,7 @@ def test_transaction_manager_activation_success_path(recovery_env: RecoveryEnvTy
         # Snapshot read-only verification
         snap_dir = tx._get_snapshot_tx_dir(committed_tx_id)
         assert snap_dir.exists()
-        auth_from_snap = tx.read_authorization_from_snapshot(committed_tx_id)
+        auth_from_snap = _read_authorization_from_snapshot(tx, committed_tx_id)
         assert auth_from_snap is not None
         assert auth_from_snap.status == LiveAuthorizationStatus.ACTIVE
         assert auth_from_snap.activated_authorization_digest == activated_auth.activated_authorization_digest
@@ -776,5 +798,5 @@ def test_recovery_coordinator_startup_scan(recovery_env: RecoveryEnvType) -> Non
     assert results[tx2_id].final_state == DurableTransactionState.ABORTED
 
     with ledger.exclusive_lock() as tx:
-        assert not tx.has_staging_directory(tx2_id)
+        assert not _has_staging(tx, tx2_id)
         assert tx.get_system_safety_mode() == SystemSafetyMode.NORMAL

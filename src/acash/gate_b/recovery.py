@@ -151,6 +151,27 @@ def is_provably_uncommitted(
         return False
 
 
+def read_commit_record_block_from_snapshot(
+    tx: LedgerStorageTransaction, tx_id: UUID
+) -> Optional[AuthoritativeCommitRecordBlock]:
+    """Read and validate AuthoritativeCommitRecordBlock from snapshot directory."""
+    marker_file = tx._snapshots_dir / str(tx_id) / "commit_record_block.json"
+    if not marker_file.exists():
+        return None
+    try:
+        with open(marker_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            normalized: Dict[str, Any] = {}
+            for k, v in data.items():
+                if isinstance(v, dict) and "value" in v:
+                    normalized[k] = v["value"]
+                else:
+                    normalized[k] = v
+            return AuthoritativeCommitRecordBlock.model_validate(normalized)
+    except Exception:
+        return None
+
+
 class RecoveryDecisionTreeEngine:
     """Implements Unidirectional Three-Tier Recovery starting strictly from durable tx_state (B92, B95)."""
 
@@ -203,7 +224,7 @@ class RecoveryDecisionTreeEngine:
                     details="COMMITTED state but pointer does not reference tx_id (fatal contradiction)",
                 )
 
-            commit_block = tx.read_commit_record_block_from_snapshot(tx_id)
+            commit_block = read_commit_record_block_from_snapshot(tx, tx_id)
             if commit_block is None:
                 tx.log_consistency_violation(f"COMMITTED state but commit marker block missing for {tx_id}")
                 tx.set_tx_state_durable(tx_id, DurableTransactionState.QUARANTINED)
@@ -256,7 +277,7 @@ class RecoveryDecisionTreeEngine:
                     expected_manifest_digest=transition_record.commit_intent_digest,
                     trust_store=trust_store,
                 )
-                commit_block = tx.read_commit_record_block_from_snapshot(tx_id)
+                commit_block = read_commit_record_block_from_snapshot(tx, tx_id)
                 manifest_valid = (
                     commit_block is not None
                     and commit_block.mutation_manifest_digest == transition_record.commit_intent_digest
