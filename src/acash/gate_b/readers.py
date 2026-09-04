@@ -141,10 +141,12 @@ def _escalate_quarantine(
 ) -> None:
     """Escalate a detected snapshot integrity violation to persistent quarantine (Invariant 2).
 
+    Persistent quarantine state (tx_state=QUARANTINED and system_mode=QUARANTINE_LOCKED)
+    is the safety boundary and is executed first.
     If attempting to write quarantine state to storage fails, executes fatal safety halt.
+    Forensic logging is best-effort and cannot impede or prevent quarantine escalation.
     """
     try:
-        tx.log_consistency_violation(violation_message)
         tx.set_tx_state_durable(tx_id, DurableTransactionState.QUARANTINED)
         tx.set_system_safety_mode(SystemSafetyMode.QUARANTINE_LOCKED)
     except Exception as esc_exc:
@@ -156,6 +158,16 @@ def _escalate_quarantine(
         raise QuarantineError(
             f"QUARANTINE_ESCALATION_FAILED_FATAL_SAFETY_HALT: Could not persist quarantine state for tx {tx_id}: {esc_exc}"
         ) from esc_exc
+
+    # Forensic logging is strictly best-effort and must not impede safety escalation
+    try:
+        tx.log_consistency_violation(violation_message)
+    except Exception as log_exc:
+        logger.error(
+            "Failed to append forensic consistency violation log for tx %s: %s",
+            tx_id,
+            log_exc,
+        )
 
     raise QuarantineError(
         f"ACTIVE_SNAPSHOT_CORRUPTED_ENTERING_QUARANTINE: {violation_message}"
@@ -171,7 +183,8 @@ class SnapshotReaderService:
     ) -> AuthoritativeSnapshotView:
         """Fetch current active committed snapshot via disambiguated reader API (B81, B85).
 
-        Operates under an atomic consistent lock boundary (Invariant 1).
+        Operates under an atomic consistent lock boundary (Invariant 1) and asserts
+        full 4-point identity alignment (Invariant 3).
         """
         with _resolve_transaction_context(storage) as tx:
             # 1. Read committed pointer atomically
@@ -186,7 +199,7 @@ class SnapshotReaderService:
                     f"ACTIVE_SNAPSHOT_TX_NOT_COMMITTED: Active tx {active_tx_id} state is {state}"
                 )
 
-            # 3. Verify snapshot directory exists
+            # 3. Verify snapshot directory exists (directory_tx_id == active_tx_id)
             if not tx.has_snapshot_directory(active_tx_id):
                 raise DataContractError(
                     f"SNAPSHOT_DIRECTORY_MISSING: Snapshot directory for active tx {active_tx_id} does not exist"
@@ -201,7 +214,7 @@ class SnapshotReaderService:
                     f"Commit marker block missing in active snapshot directory for tx {active_tx_id}",
                 )
 
-            # 5. Invariant 3: Explicit Cross-Transaction Identity Binding
+            # 5. Invariant 3: Explicit Cross-Transaction Identity Binding (Commit Block)
             assert commit_block is not None
             if commit_block.activation_transaction_id != active_tx_id:
                 _escalate_quarantine(
@@ -227,9 +240,39 @@ class SnapshotReaderService:
                     f"Deep manifest verification failed for active snapshot tx {active_tx_id} (tampering detected)",
                 )
 
-            # 8. Read operational entities from snapshot
+            # 8. Read operational entities and enforce Manifest Identity Binding
             record = _read_record_from_snapshot(tx, active_tx_id)
+            if record is None:
+                _escalate_quarantine(
+                    tx,
+                    active_tx_id,
+                    f"Ledger record missing or corrupted in active snapshot directory for tx {active_tx_id}",
+                )
+            assert record is not None
+            if record.record_digest != commit_block.ledger_record_digest:
+                _escalate_quarantine(
+                    tx,
+                    active_tx_id,
+                    f"Ledger record digest mismatch in active snapshot tx {active_tx_id}",
+                )
+
             auth = _read_authorization_from_snapshot(tx, active_tx_id)
+            if auth is None:
+                _escalate_quarantine(
+                    tx,
+                    active_tx_id,
+                    f"Authorization manifest missing or corrupted in active snapshot directory for tx {active_tx_id}",
+                )
+            assert auth is not None
+            # Invariant 3 (Manifest Identity Binding):
+            # active_tx_id == directory_tx_id == commit_block.activation_transaction_id == manifest.activation_transaction_id
+            if auth.activation_transaction_id != active_tx_id:
+                _escalate_quarantine(
+                    tx,
+                    active_tx_id,
+                    f"CROSS_TRANSACTION_MANIFEST_IDENTITY_MISMATCH: Active tx {active_tx_id} "
+                    f"!= manifest.activation_transaction_id {auth.activation_transaction_id}",
+                )
 
             return AuthoritativeSnapshotView(
                 transaction_id=active_tx_id,
@@ -246,7 +289,9 @@ class SnapshotReaderService:
     ) -> AuthoritativeSnapshotView:
         """Read historical committed snapshot by transaction ID without relying on active pointer (B85).
 
-        Operates under an atomic consistent lock boundary (Invariant 1).
+        Operates under an atomic consistent lock boundary (Invariant 1) and asserts
+        full 4-point identity alignment (Invariant 3):
+        requested_tx_id == directory_tx_id == commit_block.activation_transaction_id == manifest.activation_transaction_id
         """
         with _resolve_transaction_context(storage) as tx:
             # 1. Verify durable transaction state is COMMITTED
@@ -256,7 +301,7 @@ class SnapshotReaderService:
                     f"CANNOT_READ_UNCOMMITTED_SNAPSHOT: Transaction {tx_id} state is {state}"
                 )
 
-            # 2. Verify snapshot directory exists
+            # 2. Verify snapshot directory exists (directory_tx_id == requested_tx_id)
             if not tx.has_snapshot_directory(tx_id):
                 raise DataContractError(
                     f"SNAPSHOT_DIRECTORY_MISSING: Snapshot directory for tx {tx_id} does not exist"
@@ -271,7 +316,7 @@ class SnapshotReaderService:
                     f"Commit marker block missing in snapshot directory for tx {tx_id}",
                 )
 
-            # 4. Invariant 3: Explicit Cross-Transaction Identity Binding
+            # 4. Invariant 3: Explicit Cross-Transaction Identity Binding (Commit Block)
             assert commit_block is not None
             if commit_block.activation_transaction_id != tx_id:
                 _escalate_quarantine(
@@ -297,9 +342,39 @@ class SnapshotReaderService:
                     f"Deep manifest verification failed for snapshot tx {tx_id} (tampering detected)",
                 )
 
-            # 7. Read operational entities from snapshot
+            # 7. Read operational entities and enforce Manifest Identity Binding
             record = _read_record_from_snapshot(tx, tx_id)
+            if record is None:
+                _escalate_quarantine(
+                    tx,
+                    tx_id,
+                    f"Ledger record missing or corrupted in snapshot directory for tx {tx_id}",
+                )
+            assert record is not None
+            if record.record_digest != commit_block.ledger_record_digest:
+                _escalate_quarantine(
+                    tx,
+                    tx_id,
+                    f"Ledger record digest mismatch in snapshot tx {tx_id}",
+                )
+
             auth = _read_authorization_from_snapshot(tx, tx_id)
+            if auth is None:
+                _escalate_quarantine(
+                    tx,
+                    tx_id,
+                    f"Authorization manifest missing or corrupted in snapshot directory for tx {tx_id}",
+                )
+            assert auth is not None
+            # Invariant 3 (Manifest Identity Binding):
+            # requested_tx_id == directory_tx_id == commit_block.activation_transaction_id == manifest.activation_transaction_id
+            if auth.activation_transaction_id != tx_id:
+                _escalate_quarantine(
+                    tx,
+                    tx_id,
+                    f"CROSS_TRANSACTION_MANIFEST_IDENTITY_MISMATCH: Directory tx_id {tx_id} "
+                    f"!= manifest.activation_transaction_id {auth.activation_transaction_id}",
+                )
 
             return AuthoritativeSnapshotView(
                 transaction_id=tx_id,

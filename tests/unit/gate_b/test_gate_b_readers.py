@@ -399,6 +399,142 @@ def test_read_committed_snapshot_rejects_cross_transaction_identity_mismatch(rea
         assert tx.get_system_safety_mode() == SystemSafetyMode.QUARANTINE_LOCKED
 
 
+def test_read_committed_snapshot_rejects_manifest_cross_transaction_identity_mismatch(
+    readers_env: ReadersEnvType,
+) -> None:
+    """Invariant 3 (4-Point Identity Alignment): Directory=tx_A, CommitBlock=tx_A, but Manifest=tx_B.
+
+    Even if commit_block claims tx_A and deep manifest verification passes entity hashes,
+    the reader MUST detect manifest.activation_transaction_id == tx_B != tx_A and quarantine.
+    """
+    root, trust_store, signer, app_key_id, app_priv, ledger = readers_env
+    tx_a = uuid4()
+    tx_b = uuid4()
+    draft_b, act_b, go_b = _make_dummy_artifacts(app_key_id, app_priv, tx_b)
+
+    with ledger.exclusive_lock() as tx:
+        tx.set_tx_state_durable(tx_a, DurableTransactionState.COMMITTED)
+        snap_a = tx._get_snapshot_tx_dir(tx_a)
+        snap_a.mkdir(parents=True, exist_ok=True)
+
+        # Commit block claims tx_A and computes matching digest over act_b and go_b
+        commit_block = AuthoritativeCommitRecordBlock(
+            activation_transaction_id=tx_a,  # Claims tx_A!
+            commit_timestamp_utc=datetime.now(timezone.utc),
+            ledger_record_digest=go_b.record_digest,
+            advanced_head_digest=go_b.record_digest,
+            approved_authorization_digest=draft_b.approved_authorization_digest,
+            activated_authorization_digest=act_b.activated_authorization_digest or "",
+            mutation_manifest_digest="placeholder",
+        )
+        digest = commit_block.compute_manifest_digest()
+        commit_block_valid = commit_block.model_copy(update={"mutation_manifest_digest": digest})
+
+        (snap_a / "commit_record_block.json").write_text(
+            commit_block_valid.model_dump_json(), encoding="utf-8"
+        )
+        (snap_a / "record.json").write_text(go_b.model_dump_json(), encoding="utf-8")
+        (snap_a / "head.json").write_text(
+            json.dumps({"head_digest": go_b.record_digest}), encoding="utf-8"
+        )
+        # Manifest artifact (authorization.json) explicitly contains activation_transaction_id = tx_b!
+        (snap_a / "authorization.json").write_text(act_b.model_dump_json(), encoding="utf-8")
+        StoragePlatformUtils.mark_directory_read_only(snap_a)
+
+    with pytest.raises(QuarantineError) as exc_info:
+        SnapshotReaderService.read_committed_snapshot(ledger, tx_a)
+
+    assert "CROSS_TRANSACTION_MANIFEST_IDENTITY_MISMATCH" in str(exc_info.value)
+
+    with ledger.exclusive_lock() as tx:
+        assert tx.get_durable_tx_state(tx_a) == DurableTransactionState.QUARANTINED
+        assert tx.get_system_safety_mode() == SystemSafetyMode.QUARANTINE_LOCKED
+
+
+def test_read_active_committed_snapshot_rejects_manifest_cross_transaction_identity_mismatch(
+    readers_env: ReadersEnvType,
+) -> None:
+    """Invariant 3 (Active Reader): Pointer=tx_A, CommitBlock=tx_A, but Manifest=tx_B."""
+    root, trust_store, signer, app_key_id, app_priv, ledger = readers_env
+    tx_a = uuid4()
+    tx_b = uuid4()
+    draft_b, act_b, go_b = _make_dummy_artifacts(app_key_id, app_priv, tx_b)
+
+    with ledger.exclusive_lock() as tx:
+        tx.set_tx_state_durable(tx_a, DurableTransactionState.COMMITTED)
+        tx.switch_committed_snapshot_pointer_atomically(tx_a)
+        snap_a = tx._get_snapshot_tx_dir(tx_a)
+        snap_a.mkdir(parents=True, exist_ok=True)
+
+        commit_block = AuthoritativeCommitRecordBlock(
+            activation_transaction_id=tx_a,
+            commit_timestamp_utc=datetime.now(timezone.utc),
+            ledger_record_digest=go_b.record_digest,
+            advanced_head_digest=go_b.record_digest,
+            approved_authorization_digest=draft_b.approved_authorization_digest,
+            activated_authorization_digest=act_b.activated_authorization_digest or "",
+            mutation_manifest_digest="placeholder",
+        )
+        digest = commit_block.compute_manifest_digest()
+        commit_block_valid = commit_block.model_copy(update={"mutation_manifest_digest": digest})
+
+        (snap_a / "commit_record_block.json").write_text(
+            commit_block_valid.model_dump_json(), encoding="utf-8"
+        )
+        (snap_a / "record.json").write_text(go_b.model_dump_json(), encoding="utf-8")
+        (snap_a / "head.json").write_text(
+            json.dumps({"head_digest": go_b.record_digest}), encoding="utf-8"
+        )
+        (snap_a / "authorization.json").write_text(act_b.model_dump_json(), encoding="utf-8")
+        StoragePlatformUtils.mark_directory_read_only(snap_a)
+
+    with pytest.raises(QuarantineError) as exc_info:
+        SnapshotReaderService.read_active_committed_snapshot(ledger)
+
+    assert "CROSS_TRANSACTION_MANIFEST_IDENTITY_MISMATCH" in str(exc_info.value)
+
+    with ledger.exclusive_lock() as tx:
+        assert tx.get_durable_tx_state(tx_a) == DurableTransactionState.QUARANTINED
+        assert tx.get_system_safety_mode() == SystemSafetyMode.QUARANTINE_LOCKED
+
+
+def test_reader_quarantine_succeeds_even_if_forensic_logging_fails(
+    readers_env: ReadersEnvType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invariant 2 (Hardening): Failure of forensic audit logging does not impede quarantine escalation."""
+    root, trust_store, signer, app_key_id, app_priv, ledger = readers_env
+    tx_id = uuid4()
+    draft, act_auth, go_rec = _make_dummy_artifacts(app_key_id, app_priv, tx_id)
+
+    with ledger.exclusive_lock() as tx:
+        tx.save_draft_authorization(draft)
+        tx.set_tx_state_durable(tx_id, DurableTransactionState.COMMITTING)
+        StorageCommitContract.execute_durable_commit(tx, tx_id, go_rec, draft, act_auth, signer)
+
+        # Tamper snapshot record to trigger quarantine escalation
+        snap_dir = tx._get_snapshot_tx_dir(tx_id)
+        StoragePlatformUtils.mark_directory_writable(snap_dir)
+        (snap_dir / "record.json").write_text("{\"corrupted\": true}", encoding="utf-8")
+        StoragePlatformUtils.mark_directory_read_only(snap_dir)
+
+    # Monkeypatch log_consistency_violation to simulate logging disk write error
+    def failing_log(self: LedgerStorageTransaction, msg: str) -> None:
+        raise OSError("SIMULATED_LOG_FILE_IO_FAILURE")
+
+    monkeypatch.setattr(LedgerStorageTransaction, "log_consistency_violation", failing_log)
+
+    with pytest.raises(QuarantineError) as exc_info:
+        SnapshotReaderService.read_active_committed_snapshot(ledger)
+
+    assert "ACTIVE_SNAPSHOT_CORRUPTED_ENTERING_QUARANTINE" in str(exc_info.value)
+
+    # Quarantine state must still be durably locked despite logging failure
+    with ledger.exclusive_lock() as tx:
+        assert tx.get_durable_tx_state(tx_id) == DurableTransactionState.QUARANTINED
+        assert tx.get_system_safety_mode() == SystemSafetyMode.QUARANTINE_LOCKED
+
+
 def test_reader_quarantine_escalation_failure_fails_closed(
     readers_env: ReadersEnvType,
     monkeypatch: pytest.MonkeyPatch,
