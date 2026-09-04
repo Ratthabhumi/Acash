@@ -1,8 +1,8 @@
-# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 14)
+# Phase 13 Slice 2: Gate B Mandatory Human Authorization Plan (Rev 15)
 ## Preflight & Implementation Plan (Plan Only — Zero Execution)
 
 > **Document:** `docs/phase13/slice2_gate_b_plan.md`  
-> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 14)  
+> **Status:** PROPOSED — PENDING HUMAN AUDITOR APPROVAL (REV 15)  
 > **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
 > **Governing Specifications:**
 > - `docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md` (§3, §4, §14, §15, §16, §18)
@@ -18,7 +18,7 @@
 
 ---
 
-## User Review Required (Rev 14 Audit Adjustments)
+## User Review Required (Rev 15 Audit Adjustments)
 
 > [!CAUTION]
 > **CRITICAL GOVERNANCE BOUNDARY: PLAN ONLY — ZERO EXECUTION**  
@@ -31,32 +31,40 @@
 > 6. Issue any "GO" decision.
 > 7. Unlock Gate B or authorize Slice 3.
 
-### Key Refinements in Rev 14 (Addressing Audit Findings B58–B63):
+### Key Refinements in Rev 15 (Addressing Audit Findings B64–B68):
 
-1. **[BLOCKER B58 RESOLVED] Positive Durable Abort Proof (`is_provably_uncommitted()`):**
-   - Eliminated reliance on negative predicates ("not exists", "absence of marker").
-   - Rollback is permitted **ONLY** upon positive verification of an authoritative on-disk `ABORT_RECORD`:
-     $$\text{PROVABLY\_UNCOMMITTED} \iff \text{DURABLE\_TX\_STATE} == \text{ABORTED} \land \text{Storage Guarantees Terminal State}$$
-   - Any absence of records, I/O read error, or corrupt block is classified as **UNCERTAIN**, strictly **FORBIDDING ROLLBACK** and triggering `QUARANTINE_LOCKED`.
-2. **[BLOCKER B59 RESOLVED] Strict Two-Phase Durability Ordering:**
-   - Established the strict write ordering and non-volatile barrier sequence:
-     $$\text{Stage} \to \text{Write Data} \to \mathbf{fsync_{1}(\text{Data})} \to \text{Verify Data} \to \text{Write Commit Marker} \to \mathbf{fsync_{2}(\text{Marker})}$$
-   - Guarantees that the commit marker is written and fsynced *only after* all mutation payloads (`HumanGORecord`, head, authorization) are confirmed durable on physical media.
-3. **[BLOCKER B60 RESOLVED] Semantic Proof via Commit Record Block:**
-   - Upgraded `AuthoritativeCommitRecordBlock` from a simple timestamp to a cryptographic manifest binding:
-     - `activation_transaction_id`
-     - `ledger_record_digest`
-     - `advanced_head_digest`
-     - `authorization_digest`
-     - `mutation_manifest_digest` ($\text{SHA-256}$ of the unified canonical payload)
-4. **[BLOCKER B61 RESOLVED] Journal Corruption Recovery (No Rollback on Post-Commit Flaws):**
-   - Formalized handling for cases where storage commit succeeded ($\text{fsync}_2$ confirmed) but subsequent journal transition to `COMMITTED` was corrupted by power loss:
-   - System strictly preserves durable committed storage, forbids rollback, and reconstructs the journal entry from the authoritative commit marker.
-5. **[B62 RESOLVED] Uncertainty-State Forensic Model (Tier 3):**
-   - Replaced assumptions of `Record = Present` in Tier 3 with explicit forensic states:
-     $$\mathbf{\Sigma}_{\text{final}}^{\text{Tier 3}} = \Big(\text{QUARANTINED},\, \text{head} \in \{\text{OLD}, \text{NEW}, \text{UNCERTAIN}\},\, \text{record} \in \{\text{PRESENT}, \text{ABSENT}, \text{CORRUPTED}, \text{PARTIAL}\},\, \text{QUARANTINED}\Big)$$
-6. **[TEST EXPANSION] Comprehensive 76-Test Matrix (B63):**
-   - Expanded test suite to **76 discrete unit tests**, adding 8 adversarial recovery tests covering missing records, corrupt markers, read failures, ordering barriers, and journal partial writes.
+1. **[BLOCKER B64 RESOLVED] Durable Terminal-State CAS Invariant:**
+   - Established storage-layer transaction lifecycle:
+     $$\text{PREPARED} \to \text{COMMITTING} \to (\text{COMMITTED} \oplus \text{ABORTED})$$
+   - `COMMITTED` and `ABORTED` are strictly **mutually exclusive, durable, atomic, and irreversible terminal states**.
+   - Transitions from `COMMITTING` are executed exclusively via atomic persistent Compare-And-Swap: `compare_and_set_tx_state(tx_id, expected=COMMITTING, new=ABORTED)`.
+2. **[BLOCKER B65 RESOLVED] Mutation Visibility & Staging Isolation Contract:**
+   - Enforced physical staging isolation: uncommitted mutations are written and fsynced ($\mathbf{fsync_1}$) inside `/staging/<tx_id>/`.
+   - Authoritative readers query ONLY the committed namespace. Staged mutations are completely invisible until `CommitRecordBlock` is published ($\mathbf{fsync_2}$) and CAS transitions to `COMMITTED`.
+   - Explicitly codified: $\mathbf{fsync} \neq \mathbf{visibility}$.
+3. **[BLOCKER B66 RESOLVED] Complete Recovery Manifest Deep Entity Verification:**
+   - Upgraded Tier 2 Recovery: Presence of `CommitRecordBlock` alone is insufficient.
+   - Recovery MUST read, hash, and verify the *actual on-disk entities*:
+     - Actual `HumanGORecord` $\text{SHA-256} \equiv \text{ledger\_record\_digest}$
+     - Actual Head $\equiv \text{advanced\_head\_digest}$
+     - Actual `LiveAuthorization` $\text{SHA-256} \equiv \text{authorization\_digest}$
+     - Recomputed $\text{manifest\_digest} \equiv \text{mutation\_manifest\_digest}$
+   - If any bound entity digest mismatches or is corrupted $\to$ **QUARANTINE_LOCKED** (strictly no rollback).
+4. **[BLOCKER B67 RESOLVED] Abort CAS Failure $\to$ QUARANTINE:**
+   - If `compare_and_set_tx_state(tx_id, expected=COMMITTING, new=ABORTED)` fails:
+     $$\to \textbf{STRICTLY FORBID ROLLBACK}$$
+     $$\to \textbf{Transition to QUARANTINE\_LOCKED}$$
+5. **[B58 REFINEMENT] Clean Semantics for `is_provably_uncommitted()`:**
+   - Restructured function: Primary Proof is positive on-disk `ABORT_RECORD` + terminal CAS `ABORTED` state.
+   - Secondary checks (no commit marker, old head, auth not active) serve as consistency validations; any mismatch flags corruption $\to$ fails closed to `False` (Quarantine).
+6. **[WORDING REFINEMENT] Durability Barrier Precision:**
+   - Clarified that `fsync` / `FlushFileBuffers` completion represents the storage backend's synchronous durability barrier under the OS/filesystem fail-closed contract (eliminating unqualified hardware guarantees).
+7. **[TEST EXPANSION B68] Comprehensive 80-Test Matrix:**
+   - Expanded test suite from 76 to **80 discrete unit tests**, adding:
+     - 77: `test_abort_and_commit_terminal_states_are_mutually_exclusive`
+     - 78: `test_uncommitted_mutations_are_invisible_to_authoritative_reads`
+     - 79: `test_recovery_validates_actual_entities_against_commit_manifest`
+     - 80: `test_failed_abort_cas_causes_quarantine`
 
 ---
 
@@ -125,7 +133,7 @@ $$\textbf{ACTIVE Authorization} \iff \textbf{Bound HumanGORecord Committed} \lan
 
 ---
 
-## 3. Cryptographic Schema, Two-Phase Durability Contract & Positive Abort Invariants (B11, B13, B14, B15, B30, B31, B32, B35, B38, B39, B40, B43, B44, B48, B49, B50, B51, B52, B53, B54, B55, B56, B57, B58, B59, B60, B61, B62)
+## 3. Cryptographic Schema, Staging Isolation, Two-Phase Durability & Terminal CAS Contracts (B11, B13, B14, B15, B30, B31, B32, B35, B38, B39, B40, B43, B44, B48, B49, B50, B51, B52, B53, B54, B55, B56, B57, B58, B59, B60, B61, B62, B64, B65, B66, B67, B68)
 
 ### 3.1 Domain Schema Specification & Identity Scope (B51)
 ```python
@@ -216,7 +224,29 @@ def verify_human_go_record_integrity(
         raise DataContractError(f"CRYPTOGRAPHIC_SIGNATURE_INVALID: {exc}") from exc
 ```
 
-### 3.3 Authoritative Commit Record Block Schema (B60)
+### 3.3 Durable Transaction State Machine & Terminal-State CAS Invariant (B64, B67)
+To eliminate any ambiguity between commit and abort states, the storage engine defines an explicit transactional lifecycle:
+
+```python
+class DurableTransactionState(str, Enum):
+    """Storage-layer transactional lifecycle states."""
+    PREPARED = "PREPARED"
+    COMMITTING = "COMMITTING"
+    COMMITTED = "COMMITTED"
+    ABORTED = "ABORTED"
+    QUARANTINED = "QUARANTINED"
+```
+
+**CRITICAL B64 INVARIANT: Mutually Exclusive, Irreversible Terminal States**
+- `COMMITTED` and `ABORTED` are strictly **mutually exclusive, durable, atomic, and irreversible terminal states**.
+- $\text{COMMITTED} \nrightarrow \text{ABORTED}$ and $\text{ABORTED} \nrightarrow \text{COMMITTED}$.
+- Transitions from `COMMITTING` are executed exclusively via an atomic Compare-And-Swap operation on persistent storage state:
+  $$\text{compare\_and\_set\_tx\_state}(tx\_id, expected=\text{COMMITTING}, new \in \{\text{COMMITTED}, \text{ABORTED}\}) \to \text{bool}$$
+- **CRITICAL B67 INVARIANT:** If the abort CAS fails (e.g. state was already `COMMITTED`, storage experienced a write race, or state is unreadable):
+  $$\to \textbf{STRICTLY FORBID ROLLBACK}$$
+  $$\to \textbf{Transition to QUARANTINE\_LOCKED}$$
+
+### 3.4 Authoritative Commit Record Block Schema (B60)
 ```python
 class AuthoritativeCommitRecordBlock(BaseModel):
     """Cryptographic manifest proving durable persistence of all transaction mutations."""
@@ -241,10 +271,30 @@ class AuthoritativeCommitRecordBlock(BaseModel):
         return hashlib.sha256(canonical_bytes).hexdigest()
 ```
 
-### 3.4 Strict Two-Phase Durability Ordering Contract (B50, B55, B59, B60)
+### 3.5 Mutation Visibility & Staging Isolation Contract (B65)
+**CRITICAL B65 INVARIANT: $\text{fsync} \neq \text{visibility}$**
+Persisting mutation payloads prior to the commit marker must NOT make uncommitted mutations visible to authoritative readers. The storage architecture enforces strict **Staging Isolation + Versioned Visibility**:
+
+1. **Isolated Transactional Staging Namespace:**
+   All mutations are initially staged in an isolated transaction directory (`storage/staging/<tx_id>/`):
+   - Staged `HumanGORecord` payload
+   - Staged advanced head pointer
+   - Staged activated `LiveAuthorization` payload
+2. **Authoritative Reader Isolation:**
+   Authoritative reader APIs (`AuthoritativeGOLedger.get_record()`, `AuthoritativeGOLedger.current_head_digest`, `LiveAuthorizationStore.get_authorization()`) query **ONLY** the committed root namespace (`storage/committed/`).
+   $$\text{visible}(E) \iff \text{exists}(E) \land \text{durable\_tx\_state}(E.\text{tx\_id}) == \text{COMMITTED}$$
+3. **Atomic Publication upon Durable Commit Barrier:**
+   Only after the `CommitRecordBlock` is written and flushed via $\mathbf{fsync_2}$, and the CAS transitions to `COMMITTED`:
+   - Staged mutations are atomically linked/published into the authoritative namespace under the ledger exclusive lock.
+   - If a crash occurs before $\mathbf{fsync_2}$, authoritative readers continue to see the pre-transaction state (`old_head`, pre-transaction records), and uncommitted staged mutations remain completely invisible.
+
+### 3.6 Strict Two-Phase Durability Ordering Contract (B50, B55, B59, B60, B65)
+> [!NOTE]
+> **Durability Barrier Semantics:** `fsync` / `FlushFileBuffers` completion represents the storage backend's synchronous durability barrier under the operating system / filesystem fail-closed contract.
+
 ```python
 class StorageCommitContract:
-    """Enforces strict two-phase write ordering and non-volatile barrier semantics."""
+    """Enforces strict two-phase write ordering, staging isolation, and durability barriers."""
 
     @staticmethod
     def execute_durable_commit(
@@ -254,20 +304,20 @@ class StorageCommitContract:
         activated_auth: LiveAuthorization,
     ) -> AuthoritativeCommitRecordBlock:
         # -------------------------------------------------------------
-        # PHASE 1: MUTATION DATA DURABILITY BARRIER (fsync_1)
+        # PHASE 1: STAGED MUTATION DATA DURABILITY BARRIER (fsync_1)
         # -------------------------------------------------------------
-        # Step 1: Write mutation data payloads (record, head, auth) to disk
-        tx.write_mutation_data(go_record, activated_auth)
+        # Step 1: Write mutation data payloads into isolated staging area (B65)
+        tx.write_staged_mutation_data(tx_id, go_record, activated_auth)
         
-        # Step 2: Flush mutation data files to non-volatile storage
-        tx.flush_mutation_data_barrier()  # Synchronous fsync_1
+        # Step 2: Synchronous durability barrier for staged data (fsync_1)
+        tx.flush_staged_mutation_data_barrier(tx_id)
         
-        # Step 3: Verify mutation data is durably readable and digests match
-        if not tx.verify_mutation_data_durable(go_record.record_digest, activated_auth):
-            raise DataContractError("MUTATION_DATA_DURABILITY_VERIFICATION_FAILED")
+        # Step 3: Verify staged mutation data is readable and digests match
+        if not tx.verify_staged_mutation_data_durable(tx_id, go_record.record_digest, activated_auth):
+            raise DataContractError("STAGED_MUTATION_DATA_DURABILITY_VERIFICATION_FAILED")
 
         # -------------------------------------------------------------
-        # PHASE 2: COMMIT MARKER DURABILITY BARRIER (fsync_2)
+        # PHASE 2: COMMIT MARKER DURABILITY BARRIER & PUBLICATION (fsync_2)
         # -------------------------------------------------------------
         # Step 4: Construct cryptographic Commit Record Block manifest (B60)
         commit_block = AuthoritativeCommitRecordBlock(
@@ -281,20 +331,27 @@ class StorageCommitContract:
         manifest_digest = commit_block.compute_manifest_digest()
         final_commit_block = commit_block.model_copy(update={"mutation_manifest_digest": manifest_digest})
 
-        # Step 5: Write immutable commit marker to disk
+        # Step 5: Write immutable commit marker block to staging
         tx.write_commit_marker_block(final_commit_block)
         
-        # Step 6: Flush commit marker to non-volatile storage
-        tx.flush_commit_marker_barrier()  # Synchronous fsync_2
+        # Step 6: Synchronous durability barrier for commit marker (fsync_2)
+        tx.flush_commit_marker_barrier(tx_id)
         
-        # Step 7: Final verification of authoritative commit marker
+        # Step 7: Verify commit marker on disk
         if not tx.verify_commit_marker_durable(tx_id, manifest_digest):
             raise DataContractError("COMMIT_MARKER_DURABILITY_VERIFICATION_FAILED")
+
+        # Step 8: Atomic CAS state transition to COMMITTED (B64)
+        if not tx.compare_and_set_tx_state(tx_id, expected=DurableTransactionState.COMMITTING, new=DurableTransactionState.COMMITTED):
+            raise DataContractError("COMMIT_CAS_TRANSITION_FAILED")
+
+        # Step 9: Atomic publication of staged mutations to authoritative namespace (B65)
+        tx.publish_staged_mutations_atomically(tx_id)
 
         return final_commit_block
 ```
 
-### 3.5 Atomic Activation Transaction Manager (B38, B48, B49, B54, B56, B58, B61)
+### 3.7 Atomic Activation Transaction Manager (B38, B54, B56, B61, B64, B65, B67)
 
 ```python
 class ActivationTransactionManager:
@@ -327,6 +384,9 @@ class ActivationTransactionManager:
                     f"but current head is {tx.current_head_digest}. Concurrent activation rejected."
                 )
 
+            # Initialize durable transaction state machine (B64)
+            tx.set_tx_state_durable(tx_id, DurableTransactionState.PREPARED)
+
             # Stage Durable Write-Ahead Journal (fsync - B50)
             journal = tx.create_wal_journal(
                 activation_transaction_id=tx_id,
@@ -336,7 +396,9 @@ class ActivationTransactionManager:
             journal.write_state_durable(JournalState.PREPARED)
 
             try:
-                # Transition WAL to COMMITTING (durable fsync)
+                # Transition transaction state to COMMITTING (B64)
+                if not tx.compare_and_set_tx_state(tx_id, expected=DurableTransactionState.PREPARED, new=DurableTransactionState.COMMITTING):
+                    raise DataContractError("STATE_TRANSITION_FAILED: Could not transition to COMMITTING")
                 journal.write_state_durable(JournalState.COMMITTING)
 
                 # Prepare in-memory active authorization
@@ -347,7 +409,7 @@ class ActivationTransactionManager:
                     "activation_transaction_id": tx_id,
                 })
 
-                # Two-Phase Durability Execution (Data fsync_1 -> Marker fsync_2) (B59, B60)
+                # Two-Phase Durability Execution with Staging Isolation (B59, B60, B65)
                 StorageCommitContract.execute_durable_commit(tx, tx_id, go_record, activated_auth)
 
                 # Post-Commit Journal Finalization (B56, B61)
@@ -361,12 +423,28 @@ class ActivationTransactionManager:
 
             except Exception as exc:
                 # Evaluate durable commit status on disk
-                if tx.has_durable_commit_marker(tx_id):
+                if tx.get_durable_tx_state(tx_id) == DurableTransactionState.COMMITTED:
                     # B56: Storage is already committed! STRICTLY NEVER ROLLBACK!
                     tx.log_post_commit_anomaly(exc)
                     return activated_auth
 
-                # Attempt durable abort publication (B58)
+                # Attempt atomic CAS transition to ABORTED (B64, B67)
+                cas_aborted = tx.compare_and_set_tx_state(
+                    tx_id,
+                    expected=DurableTransactionState.COMMITTING,
+                    new=DurableTransactionState.ABORTED,
+                )
+                if not cas_aborted:
+                    # B64 & B67: Abort CAS failed! State transition unproven!
+                    # STRICTLY FORBID ROLLBACK -> Enter QUARANTINE_LOCKED
+                    tx.transition_to_quarantine_locked(tx_id, exc)
+                    journal.write_state_durable(JournalState.QUARANTINED)
+                    raise DataContractError(
+                        f"ACTIVATION_COMMIT_UNCERTAIN: Abort CAS failed. Transitioned to QUARANTINE_LOCKED. "
+                        f"Automatic rollback strictly prohibited. Forensic audit required. Error: {exc}"
+                    ) from exc
+
+                # Write authoritative on-disk abort record (B58)
                 try:
                     tx.write_durable_abort_record(tx_id, exc)
                     journal.write_state_durable(JournalState.ABORTED)
@@ -375,7 +453,7 @@ class ActivationTransactionManager:
 
                 # Determine if state is provably uncommitted or ambiguous
                 if is_provably_uncommitted(tx, tx_id):
-                    tx.rollback_staging()
+                    tx.rollback_staging(tx_id)
                     raise DataContractError(f"ACTIVATION_PRE_COMMIT_ABORTED: {exc}") from exc
                 else:
                     # B49, B58: Any ambiguity enters quarantine; NO AUTOMATIC ROLLBACK!
@@ -387,39 +465,95 @@ class ActivationTransactionManager:
                     ) from exc
 ```
 
-### 3.6 Positive Proof of Pre-Commit State (`is_provably_uncommitted()`) (B58)
+### 3.8 Positive Proof of Pre-Commit State (`is_provably_uncommitted()`) (B58, B64)
 Rollback is permitted if and only if **positive durable abort evidence** exists on disk:
 
 ```python
 def is_provably_uncommitted(tx: LedgerStorageTransaction, tx_id: UUID) -> bool:
     """Assert POSITIVE persistent proof that storage entered terminal ABORTED state.
     
-    CRITICAL B58 INVARIANT: Absence of evidence != Evidence of absence.
-    Rollback requires positive evidence of an authoritative on-disk ABORT_RECORD.
-    If read errors occur or abort record is missing, returns False (Quarantine).
+    CRITICAL B58 & B64 INVARIANTS:
+    - Primary proof is positive on-disk ABORT_RECORD + terminal CAS ABORTED state.
+    - Secondary checks validate consistency; if secondary check fails, state is
+      flagged as inconsistent -> Quarantine (NOT uncommitted).
+    - If read errors occur or abort record is missing, returns False (Quarantine).
     """
     try:
-        # 1. POSITIVE PROOF: Authoritative abort record exists and is valid
+        # 1. PRIMARY POSITIVE PROOF: Authoritative abort record exists and is valid
         abort_record = tx.read_durable_abort_record(tx_id)
         if abort_record is None or not abort_record.is_valid():
             return False
 
-        # 2. Terminal State Invariant: Engine guarantees ABORTED is terminal for this tx_id
+        # 2. PRIMARY CAS PROOF: Storage engine confirms terminal state == ABORTED (B64)
+        if tx.get_durable_tx_state(tx_id) != DurableTransactionState.ABORTED:
+            return False
         if not tx.assert_abort_is_terminal(tx_id):
             return False
 
-        # 3. Secondary Consistency Checks
-        commit_marker_exists = tx.has_durable_commit_marker(tx_id)
-        head_is_old = (tx.get_durable_head_digest() == tx.get_pre_transaction_head_digest())
-        auth_not_active = (tx.get_authorization_status_on_disk(tx_id) != LiveAuthorizationStatus.ACTIVE)
+        # 3. SECONDARY CONSISTENCY VALIDATION
+        # Mismatch here means state corruption/inconsistency -> Quarantine, NOT rollback
+        if tx.has_durable_commit_marker(tx_id):
+            tx.log_consistency_violation(f"Commit marker present on aborted tx {tx_id}")
+            return False
+        if tx.get_durable_head_digest() != tx.get_pre_transaction_head_digest():
+            tx.log_consistency_violation(f"Head digest advanced on aborted tx {tx_id}")
+            return False
+        if tx.get_authorization_status_on_disk(tx_id) == LiveAuthorizationStatus.ACTIVE:
+            tx.log_consistency_violation(f"Authorization ACTIVE on aborted tx {tx_id}")
+            return False
 
-        return (not commit_marker_exists) and head_is_old and auth_not_active
+        return True
     except Exception:
-        # Any I/O or decode error => Ambiguous => Quarantine
+        # Any I/O or decode error => Ambiguous => Quarantine (NO ROLLBACK)
         return False
 ```
 
-### 3.7 Three-Tier Recovery Decision Table & Uncertainty States (B44, B49, B58, B61, B62)
+### 3.9 Complete Recovery Manifest Verification & Uncertainty States (B44, B49, B58, B61, B62, B66)
+
+```python
+def verify_complete_recovery_manifest(
+    tx: LedgerStorageTransaction,
+    tx_id: UUID,
+    block: AuthoritativeCommitRecordBlock,
+) -> bool:
+    """Recompute and deeply verify actual on-disk entities against the CommitRecordBlock (B66).
+    
+    CRITICAL B66 INVARIANT:
+    Commit marker presence alone is insufficient. Recovery MUST read, hash, and verify:
+    1. Actual HumanGORecord bytes on disk -> SHA-256 == block.ledger_record_digest
+    2. Actual Head digest on disk -> matches block.advanced_head_digest
+    3. Actual LiveAuthorization bytes on disk -> SHA-256 == block.authorization_digest
+    4. Recomputed mutation_manifest_digest -> matches block.mutation_manifest_digest
+    If ANY entity is corrupt, missing, or mismatched -> returns False (Triggers Quarantine).
+    """
+    try:
+        # 1. Read actual HumanGORecord from disk and verify SHA-256
+        actual_record_payload = tx.read_raw_ledger_record_bytes(block.ledger_record_digest)
+        if actual_record_payload is None:
+            return False
+        if hashlib.sha256(actual_record_payload).hexdigest() != block.ledger_record_digest:
+            return False
+
+        # 2. Read actual Head from disk and verify digest
+        if tx.get_durable_head_digest() != block.advanced_head_digest:
+            return False
+
+        # 3. Read actual LiveAuthorization from disk and verify SHA-256
+        actual_auth_payload = tx.read_raw_authorization_bytes(block.authorization_digest)
+        if actual_auth_payload is None:
+            return False
+        if hashlib.sha256(actual_auth_payload).hexdigest() != block.authorization_digest:
+            return False
+
+        # 4. Recompute mutation_manifest_digest from verified fields
+        recomputed_manifest = block.compute_manifest_digest()
+        if recomputed_manifest != block.mutation_manifest_digest:
+            return False
+
+        return True
+    except Exception:
+        return False
+```
 
 ```
                        [PENDING WAL JOURNAL FOUND]
@@ -430,18 +564,22 @@ def is_provably_uncommitted(tx: LedgerStorageTransaction, tx_id: UUID) -> bool:
                           │
           Evaluate Durable Storage State on Disk:
           1. Does AuthoritativeCommitRecordBlock exist for tx_id?
-          2. Does mutation_manifest_digest match durable record, head, and auth?
+          2. verify_complete_recovery_manifest(tx, tx_id, block) == True? (B66)
+             - Actual Record SHA-256 == block.ledger_record_digest
+             - Actual Head == block.advanced_head_digest
+             - Actual Auth SHA-256 == block.authorization_digest
+             - Recomputed manifest digest == block.mutation_manifest_digest
                                     │
        ┌────────────────────────────┴────────────────────────────┐
     [YES]                                                       [NO]
        │                                                         │
-TIER 2: COMMITTED (B61)                        Does Positive Durable Abort Record Exist?
-Storage commit is proven durable!              (is_provably_uncommitted() == True - B58)
+TIER 2: COMMITTED (B61, B66)                   Does Positive Durable Abort Record Exist?
+Storage commit is proven durable!              (is_provably_uncommitted() == True - B58, B64)
 Even if journal is corrupted/partial:                            │
   - Rebuild journal to COMMITTED               ┌─────────────────┴─────────────────┐
   - Preserve ACTIVE status                    [YES]                               [NO]
   - Tuple: (ACTIVE, Head=R,                    │                                   │
-            Record=R, COMMITTED)        TIER 1: PRE-COMMIT                 TIER 3: QUARANTINE (B62)
+            Record=R, COMMITTED)        TIER 1: PRE-COMMIT                 TIER 3: QUARANTINE (B62, B66)
                                         Durable abort proven!              State ambiguous/corrupted!
                                         Rollback staging mutations         STRICTLY NO ROLLBACK!
                                         Tuple: (APPROVED_PENDING_GO,       Set QUARANTINE_LOCKED
@@ -453,9 +591,9 @@ Even if journal is corrupted/partial:                            │
 
 | Recovery Tier | Classification | Storage Evidence | Authoritative Action | Resulting 4-Tuple $\mathbf{\Sigma}_{\text{final}}$ |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1 (Crash 1-3)** | **Pre-Commit Failure** | Authoritative on-disk `ABORT_RECORD` confirmed (B58) | Rollback staging, mark `ABORTED` | `(APPROVED_PENDING_GO, OldHead, Absent, ABORTED)` |
-| **Tier 2 (Crash 4-5)** | **Provably Committed** | Valid `CommitRecordBlock` and matching data digests (B59, B60, B61) | Rebuild journal to `COMMITTED`, preserve `ACTIVE` | `(ACTIVE, RecordDigest, Present, COMMITTED)` |
-| **Tier 3 (Ambiguity)** | **Commit Uncertain** | No abort record and commit manifest unproven / corrupt blocks (B62) | **QUARANTINE_LOCKED** (STRICTLY NO ROLLBACK) | `(QUARANTINED, UNCERTAIN, UNCERTAIN, QUARANTINED)` |
+| **Tier 1 (Crash 1-3)** | **Pre-Commit Failure** | Authoritative on-disk `ABORT_RECORD` + CAS `ABORTED` confirmed (B58, B64) | Rollback staging, mark `ABORTED` | `(APPROVED_PENDING_GO, OldHead, Absent, ABORTED)` |
+| **Tier 2 (Crash 4-5)** | **Provably Committed** | Valid `CommitRecordBlock` AND all bound on-disk entities verified (B59, B60, B61, B66) | Rebuild journal to `COMMITTED`, preserve `ACTIVE` | `(ACTIVE, RecordDigest, Present, COMMITTED)` |
+| **Tier 3 (Ambiguity)** | **Commit Uncertain** | No abort record OR entity digest mismatch OR corrupt blocks (B62, B66, B67) | **QUARANTINE_LOCKED** (STRICTLY NO ROLLBACK) | `(QUARANTINED, UNCERTAIN, UNCERTAIN, QUARANTINED)` |
 
 ---
 
@@ -713,9 +851,9 @@ Slice 2 is strictly quarantined to Read-Only connectivity. Transition to trade-e
 
 ---
 
-## 9. Comprehensive Automated Test Matrix (76 Tests)
+## 9. Comprehensive Automated Test Matrix (80 Tests)
 
-The implementation of Slice 2 will include the following 76 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
+The implementation of Slice 2 will include the following 80 unit tests in `tests/unit/execution/test_gate_b_authorization_lifecycle.py`:
 
 1. `test_draft_creation_with_valid_parameters`: Verifies M-1 schema bounds.
 2. `test_currency_and_valuation_basis_contract`: Verifies M-2 multi-dimensional checks (USD, currency match).
@@ -793,6 +931,10 @@ The implementation of Slice 2 will include the following 76 unit tests in `tests
 74. `test_tier3_uncertainty_state_models_ambiguous_record_and_head`: Verifies Tier 3 represents record and head as UNCERTAIN rather than fabricating clean states (B62).
 75. `test_power_loss_before_marker_fsync_quarantines_or_aborts_cleanly`: Verifies power loss between `fsync_1` and `fsync_2` triggers quarantine/abort without corrupted state (B59, B62).
 76. `test_no_alternate_path_can_activate_authorization`: Verifies that no constructor, helper, or direct assignment outside `execute_atomic_activation` can set `status = ACTIVE` (B57).
+77. `test_abort_and_commit_terminal_states_are_mutually_exclusive`: Verifies that once a transaction enters `COMMITTED`, it cannot transition to `ABORTED`, and vice-versa (B64).
+78. `test_uncommitted_mutations_are_invisible_to_authoritative_reads`: Verifies that staged mutations prior to commit marker `fsync_2` are completely invisible to ledger and authorization readers (B65).
+79. `test_recovery_validates_actual_entities_against_commit_manifest`: Verifies recovery recomputes SHA-256 digests of actual on-disk record, head, and authorization files against `AuthoritativeCommitRecordBlock` and quarantines on any mismatch (B66).
+80. `test_failed_abort_cas_causes_quarantine`: Verifies that if `compare_and_set_tx_state(expected=COMMITTING, new=ABORTED)` fails, the system enters `QUARANTINE_LOCKED` and strictly forbids rollback (B64, B67).
 
 ---
 
@@ -806,9 +948,10 @@ Upon completion of Slice 2 Implementation:
 1. LiveAuthorization will exist in APPROVED_PENDING_GO.
 2. HumanGORecord non-repudiable verification machinery will be fully operational.
 3. Authoritative ledger head continuity with CAS commit guard operational.
-4. Atomic Activation Transaction Manager with positive abort proofs (B58),
-   strict two-phase durability barriers (B59), cryptographic manifest blocks (B60),
-   journal corruption recovery (B61), and uncertainty state modeling (B62) operational.
+4. Atomic Activation Transaction Manager with durable terminal-state CAS (B64),
+   staging isolation & versioned visibility (B65), complete recovery manifest
+   verification (B66), positive abort proofs (B58), and uncertainty states (B62)
+   operational.
 5. Deep admission verification with full cryptographic re-verification operational.
 6. Worst-case executable notional machine gate with explicit slippage operational.
 7. MT5QuoteSnapshot contract with UTC and non-negative age validation operational.
