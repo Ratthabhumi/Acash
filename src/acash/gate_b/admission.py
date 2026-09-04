@@ -37,6 +37,8 @@ from acash.gate_b.exceptions import (
 )
 from acash.gate_b.readers import SnapshotReaderService, _resolve_transaction_context
 from acash.gate_b.schema import (
+    HumanGORecord,
+    LiveAuthorization,
     LiveAuthorizationStatus,
     MT5QuoteSnapshot,
     SystemSafetyMode,
@@ -52,6 +54,7 @@ __all__ = [
     "GateBOrderAdmissionRequest",
     "PreLiveRiskAdmissionDecision",
     "PreLiveRiskAdmissionService",
+    "verify_human_go_record_integrity",
 ]
 
 
@@ -138,9 +141,19 @@ class PreLiveRiskAdmissionService:
             raise DataContractError(f"Current time {current_time} must be explicit UTC-aware")
 
         with _resolve_transaction_context(storage) as tx:
-            # =================================================================
-            # STAGE 1: Safety Mode Guard
-            # =================================================================
+            # If an external ledger instance was supplied, enforce that it binds to the exact
+            # same physical root and identical state generation as the active transaction context (tx).
+            if ledger is not None:
+                if ledger.root.resolve() != tx.root.resolve():
+                    raise PreLiveRiskAdmissionError(
+                        f"TRANSACTION_OBSERVATION_DESYNC: Storage transaction root '{tx.root}' "
+                        f"does not match ledger root '{ledger.root}'"
+                    )
+                if ledger.current_head_digest != tx.current_head_digest:
+                    raise PreLiveRiskAdmissionError(
+                        f"TRANSACTION_OBSERVATION_DESYNC: Ledger instance head '{ledger.current_head_digest}' "
+                        f"diverges from transaction context head '{tx.current_head_digest}'"
+                    )
             safety_mode = tx.get_system_safety_mode()
             if safety_mode == SystemSafetyMode.QUARANTINE_LOCKED:
                 raise PreLiveRiskAdmissionError(
@@ -272,7 +285,7 @@ class PreLiveRiskAdmissionService:
                 )
 
             # =================================================================
-            # STAGE 5: HumanGO Cryptographic Re-Verification
+            # STAGE 5: HumanGO Cryptographic Re-Verification (bound to tx context)
             # =================================================================
             bound_record = active_view.record
             if bound_record is None:
@@ -280,61 +293,12 @@ class PreLiveRiskAdmissionService:
                     "AUTHORIZATION_DESYNC: Active HumanGORecord missing from snapshot"
                 )
 
-            # 5.1 Self-digest validation
-            calc_digest = bound_record.compute_canonical_digest()
-            if calc_digest != bound_record.record_digest:
-                raise CryptographicVerificationError(
-                    f"GO_RECORD_DIGEST_CORRUPTED: Calculated {calc_digest} != Recorded {bound_record.record_digest}"
-                )
-
-            # 5.2 Approver key trust store resolution and status
-            try:
-                entry = trust_store.resolve(
-                    bound_record.approver_public_key_id,
-                    at_time=bound_record.record_timestamp_utc,
-                )
-            except Exception as res_exc:
-                raise CryptographicVerificationError(
-                    f"APPROVER_KEY_REVOKED_OR_UNRESOLVED: Key ID '{bound_record.approver_public_key_id}': {res_exc}"
-                ) from res_exc
-
-            if entry is None or entry.status != TrustStoreEntryStatus.ACTIVE:
-                raise CryptographicVerificationError(
-                    f"APPROVER_KEY_REVOKED_OR_UNRESOLVED: Key ID '{bound_record.approver_public_key_id}'"
-                )
-
-            # 5.3 Signature re-verification
-            try:
-                bound_record.verify_signature(trust_store)
-            except Exception as sig_exc:
-                raise CryptographicVerificationError(
-                    f"HUMAN_GO_SIGNATURE_INVALID: {sig_exc}"
-                ) from sig_exc
-
-            # 5.4 Lineage and digest bindings
-            if bound_record.record_digest != auth.active_go_record_digest:
-                raise PreLiveRiskAdmissionError(
-                    f"AUTHORIZATION_DESYNC: Ledger record digest {bound_record.record_digest} "
-                    f"!= auth.active_go_record_digest {auth.active_go_record_digest}"
-                )
-
-            if bound_record.authorization_id != auth.authorization_id:
-                raise PreLiveRiskAdmissionError(
-                    f"AUTHORIZATION_DESYNC: Ledger record authorization_id {bound_record.authorization_id} "
-                    f"!= auth.authorization_id {auth.authorization_id}"
-                )
-
-            if bound_record.approved_authorization_digest != auth.approved_authorization_digest:
-                raise PreLiveRiskAdmissionError(
-                    f"AUTHORIZATION_DESYNC: Ledger record approved_authorization_digest "
-                    f"{bound_record.approved_authorization_digest} != auth.approved_authorization_digest {auth.approved_authorization_digest}"
-                )
-
-            if auth.source_approved_digest != bound_record.approved_authorization_digest:
-                raise PreLiveRiskAdmissionError(
-                    f"AUTHORIZATION_DESYNC: Active authorization source_approved_digest "
-                    f"{auth.source_approved_digest} != bound_record.approved_authorization_digest {bound_record.approved_authorization_digest}"
-                )
+            PreLiveRiskAdmissionService.verify_human_go_record_integrity(
+                bound_record=bound_record,
+                trust_store=trust_store,
+                tx=tx,
+                auth=auth,
+            )
 
             # =================================================================
             # STAGE 6: Ledger-Head Continuity Assertion
@@ -465,3 +429,75 @@ class PreLiveRiskAdmissionService:
                 head_digest=current_head,
                 decision_digest=decision_digest,
             )
+
+    @staticmethod
+    def verify_human_go_record_integrity(
+        bound_record: HumanGORecord,
+        trust_store: Ed25519TrustStore,
+        tx: LedgerStorageTransaction,
+        auth: LiveAuthorization,
+    ) -> None:
+        """Cryptographically re-verify HumanGORecord bound to active transaction context (Stage 5).
+
+        Operates strictly on the exact same transactional observation as tx,
+        eliminating any possibility of mixed-generation state evaluation.
+        """
+        # 5.1 Self-digest validation
+        calc_digest = bound_record.compute_canonical_digest()
+        if calc_digest != bound_record.record_digest:
+            raise CryptographicVerificationError(
+                f"GO_RECORD_DIGEST_CORRUPTED: Calculated {calc_digest} != Recorded {bound_record.record_digest}"
+            )
+
+        # 5.2 Approver key trust store resolution and status
+        try:
+            entry = trust_store.resolve(
+                bound_record.approver_public_key_id,
+                at_time=bound_record.record_timestamp_utc,
+            )
+        except Exception as res_exc:
+            raise CryptographicVerificationError(
+                f"APPROVER_KEY_REVOKED_OR_UNRESOLVED: Key ID '{bound_record.approver_public_key_id}': {res_exc}"
+            ) from res_exc
+
+        if entry is None or entry.status != TrustStoreEntryStatus.ACTIVE:
+            raise CryptographicVerificationError(
+                f"APPROVER_KEY_REVOKED_OR_UNRESOLVED: Key ID '{bound_record.approver_public_key_id}'"
+            )
+
+        # 5.3 Signature re-verification
+        try:
+            bound_record.verify_signature(trust_store)
+        except Exception as sig_exc:
+            raise CryptographicVerificationError(
+                f"HUMAN_GO_SIGNATURE_INVALID: {sig_exc}"
+            ) from sig_exc
+
+        # 5.4 Lineage and digest bindings against authorization
+        if bound_record.record_digest != auth.active_go_record_digest:
+            raise PreLiveRiskAdmissionError(
+                f"AUTHORIZATION_DESYNC: Ledger record digest {bound_record.record_digest} "
+                f"!= auth.active_go_record_digest {auth.active_go_record_digest}"
+            )
+
+        if bound_record.authorization_id != auth.authorization_id:
+            raise PreLiveRiskAdmissionError(
+                f"AUTHORIZATION_DESYNC: Ledger record authorization_id {bound_record.authorization_id} "
+                f"!= auth.authorization_id {auth.authorization_id}"
+            )
+
+        if bound_record.approved_authorization_digest != auth.approved_authorization_digest:
+            raise PreLiveRiskAdmissionError(
+                f"AUTHORIZATION_DESYNC: Ledger record approved_authorization_digest "
+                f"{bound_record.approved_authorization_digest} != auth.approved_authorization_digest {auth.approved_authorization_digest}"
+            )
+
+        if auth.source_approved_digest != bound_record.approved_authorization_digest:
+            raise PreLiveRiskAdmissionError(
+                f"AUTHORIZATION_DESYNC: Active authorization source_approved_digest "
+                f"{auth.source_approved_digest} != bound_record.approved_authorization_digest {bound_record.approved_authorization_digest}"
+            )
+
+
+verify_human_go_record_integrity = PreLiveRiskAdmissionService.verify_human_go_record_integrity
+

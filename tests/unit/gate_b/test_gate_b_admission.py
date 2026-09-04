@@ -22,7 +22,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Generator, Optional
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
@@ -39,6 +39,7 @@ from acash.gate_b.admission import (
     GateBOrderAdmissionRequest,
     PreLiveRiskAdmissionDecision,
     PreLiveRiskAdmissionService,
+    verify_human_go_record_integrity,
 )
 from acash.gate_b.exceptions import (
     CryptographicVerificationError,
@@ -945,3 +946,89 @@ def test_admission_decision_immutability_and_extra_forbid(admission_env: Admissi
     decision_dict["extra_injected"] = "tamper"
     with pytest.raises(ValidationError):
         PreLiveRiskAdmissionDecision(**decision_dict)
+
+
+# ==============================================================================
+# 27. SAME TRANSACTION OBSERVATION BOUNDARY (INVARIANT 1 & AUDIT REVISION)
+# ==============================================================================
+
+def test_admission_humango_verification_uses_same_transaction_observation(
+    admission_env: AdmissionEnvType,
+) -> None:
+    """Assert HumanGO verification and admission pipeline enforce identical transaction observation.
+
+    If storage transaction context (tx) and ledger object belong to different generations
+    or different roots, evaluation strictly fails closed with TRANSACTION_OBSERVATION_DESYNC
+    and cannot produce an admitted decision.
+    """
+    root, trust_store, signer, app_key_id, app_priv, ledger = admission_env
+    # Setup initial valid active state (Generation A)
+    _, _, draft, activated_auth, go_rec, _ = _setup_active_ledger_environment(admission_env)
+    quote = _make_quote()
+    request = GateBOrderAdmissionRequest(
+        request_id="REQ_SAME_OBS_001",
+        strategy_id="STRAT_MOMENTUM_01",
+        symbol="EURUSD",
+        side=OrderSide.BUY,
+        quantity=Decimal("0.001"),
+        quote=quote,
+    )
+
+    # 1. Within an open transaction context on Generation A, force ledger to Generation B
+    with ledger.exclusive_lock() as tx_gen_a:
+        assert tx_gen_a.current_head_digest == go_rec.record_digest
+
+        with patch.object(
+            AuthoritativeGOLedger,
+            "current_head_digest",
+            new_callable=PropertyMock,
+            return_value="b" * 64,
+        ):
+            with pytest.raises(
+                PreLiveRiskAdmissionError,
+                match="TRANSACTION_OBSERVATION_DESYNC.*diverges from transaction context head",
+            ):
+                PreLiveRiskAdmissionService.evaluate_admission(
+                    tx_gen_a,
+                    request,
+                    trust_store,
+                    ledger=ledger,
+                    max_position_size=Decimal("0.5"),
+                )
+
+    # 2. Test foreign ledger with different root
+    foreign_root = root.parent / "foreign_ledger_root"
+    foreign_ledger = AuthoritativeGOLedger(foreign_root, trust_store)
+    with ledger.exclusive_lock() as tx:
+        with pytest.raises(
+            PreLiveRiskAdmissionError,
+            match="TRANSACTION_OBSERVATION_DESYNC.*does not match ledger root",
+        ):
+            PreLiveRiskAdmissionService.evaluate_admission(
+                tx,
+                request,
+                trust_store,
+                ledger=foreign_ledger,
+                max_position_size=Decimal("0.5"),
+            )
+
+    # 3. Direct verification of verify_human_go_record_integrity using tx
+    with ledger.exclusive_lock() as tx:
+        # Calling with matching tx succeeds
+        verify_human_go_record_integrity(
+            bound_record=go_rec,
+            trust_store=trust_store,
+            tx=tx,
+            auth=activated_auth,
+        )
+
+        # Mutating active_go_record_digest causes failure
+        desync_auth = activated_auth.model_copy(update={"active_go_record_digest": "0" * 64})
+        with pytest.raises(PreLiveRiskAdmissionError, match="AUTHORIZATION_DESYNC"):
+            verify_human_go_record_integrity(
+                bound_record=go_rec,
+                trust_store=trust_store,
+                tx=tx,
+                auth=desync_auth,
+            )
+
