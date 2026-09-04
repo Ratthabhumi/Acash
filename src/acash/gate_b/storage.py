@@ -842,6 +842,64 @@ class LedgerStorageTransaction:
         if stg.exists():
             shutil.rmtree(stg, ignore_errors=True)
 
+    def has_staging_directory(self, tx_id: UUID) -> bool:
+        """True if /staging/<tx_id>/ exists."""
+        return self._get_staging_tx_dir(tx_id).exists()
+
+    def read_commit_record_block_from_snapshot(self, tx_id: UUID) -> Optional[AuthoritativeCommitRecordBlock]:
+        """Read and validate AuthoritativeCommitRecordBlock from snapshot directory."""
+        marker_file = self._get_snapshot_tx_dir(tx_id) / "commit_record_block.json"
+        if not marker_file.exists():
+            return None
+        try:
+            with open(marker_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                normalized: Dict[str, Any] = {}
+                for k, v in data.items():
+                    if isinstance(v, dict) and "value" in v:
+                        normalized[k] = v["value"]
+                    else:
+                        normalized[k] = v
+                return AuthoritativeCommitRecordBlock.model_validate(normalized)
+        except Exception:
+            return None
+
+    def read_record_from_snapshot(self, tx_id: UUID) -> Optional[HumanGORecord]:
+        """Read and validate HumanGORecord from snapshot directory."""
+        rec_file = self._get_snapshot_tx_dir(tx_id) / "record.json"
+        if not rec_file.exists():
+            return None
+        try:
+            with open(rec_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                normalized: Dict[str, Any] = {}
+                for k, v in data.items():
+                    if isinstance(v, dict) and "value" in v:
+                        normalized[k] = v["value"]
+                    else:
+                        normalized[k] = v
+                return HumanGORecord.model_validate(normalized)
+        except Exception:
+            return None
+
+    def read_authorization_from_snapshot(self, tx_id: UUID) -> Optional[LiveAuthorization]:
+        """Read and validate LiveAuthorization from snapshot directory."""
+        auth_file = self._get_snapshot_tx_dir(tx_id) / "authorization.json"
+        if not auth_file.exists():
+            return None
+        try:
+            with open(auth_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                normalized: Dict[str, Any] = {}
+                for k, v in data.items():
+                    if isinstance(v, dict) and "value" in v:
+                        normalized[k] = v["value"]
+                    else:
+                        normalized[k] = v
+                return LiveAuthorization.model_validate(normalized)
+        except Exception:
+            return None
+
     def log_consistency_violation(self, message: str) -> None:
         """Log safety violation to audit log."""
         log_file = self._root / "consistency_violations.log"
