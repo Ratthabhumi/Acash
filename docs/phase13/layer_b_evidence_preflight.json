@@ -1,11 +1,12 @@
 {
   "status": "PASS",
-  "timestamp_utc": "2026-09-04T01:27:15.131543+00:00",
+  "timestamp_utc": "2026-09-04T01:32:31.566132+00:00",
   "login": 112040157,
   "trade_mode": "DEMO (0)",
   "currency": "USD",
   "balance": "3000.0",
   "equity": "3000.0",
   "symbol": "EURUSD",
-  "volume_min": "0.01"
+  "volume_min": "0.01",
+  "volume_step": "0.01"
 }
