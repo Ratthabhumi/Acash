@@ -27,6 +27,7 @@ from acash.gate_b.exceptions import (
 )
 from acash.gate_b.recovery import (
     RecoveryDecisionTreeEngine,
+    RecoveryInspectionResult,
     RecoveryResult,
     has_any_durable_commit_evidence,
     is_provably_uncommitted,
@@ -303,3 +304,60 @@ class GateBRecoveryCoordinator:
                 results[tx_id] = res
 
         return results
+
+    def inspect_recovery_state(self) -> Dict[UUID, RecoveryInspectionResult]:
+        """Scan storage substrate for transactions and evaluate recovery state strictly read-only (Stage 3.5).
+
+        GUARANTEE: Performs zero file writes, zero rename operations, and zero state alterations.
+        """
+        results: Dict[UUID, RecoveryInspectionResult] = {}
+        with self._ledger.exclusive_lock() as tx:
+            discovered_tx_ids: Set[UUID] = set()
+
+            # 1. Discover from tx_state/
+            tx_state_dir = tx._root / "tx_state"
+            if tx_state_dir.exists():
+                for f in tx_state_dir.glob("*.state"):
+                    try:
+                        discovered_tx_ids.add(UUID(f.stem))
+                    except ValueError:
+                        pass
+
+            # 2. Discover from staging/
+            staging_dir = tx._root / "staging"
+            if staging_dir.exists():
+                for p in staging_dir.iterdir():
+                    if p.is_dir():
+                        try:
+                            discovered_tx_ids.add(UUID(p.name))
+                        except ValueError:
+                            pass
+
+            # 3. Discover from snapshots/
+            snapshots_dir = tx._root / "snapshots"
+            if snapshots_dir.exists():
+                for p in snapshots_dir.iterdir():
+                    if p.is_dir():
+                        try:
+                            discovered_tx_ids.add(UUID(p.name))
+                        except ValueError:
+                            pass
+
+            # 4. Discover from committed_pointer
+            active_tx_id = tx.get_current_active_transaction_id()
+            if active_tx_id is not None:
+                discovered_tx_ids.add(active_tx_id)
+
+            # Process in deterministic order
+            sorted_tx_ids = sorted(discovered_tx_ids, key=lambda u: str(u))
+
+            for tx_id in sorted_tx_ids:
+                res = RecoveryDecisionTreeEngine.inspect_transaction_state(
+                    tx=tx,
+                    tx_id=tx_id,
+                    trust_store=self._trust_store,
+                )
+                results[tx_id] = res
+
+        return results
+

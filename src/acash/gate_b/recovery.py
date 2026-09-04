@@ -49,6 +49,18 @@ class RecoveryResult:
     details: str
 
 
+@dataclass(frozen=True)
+class RecoveryInspectionResult:
+    """Read-only assessment of transaction state and recovery readiness (Stage 3.5)."""
+
+    tx_id: UUID
+    durable_state: Optional[DurableTransactionState]
+    requires_recovery: bool
+    expected_tier: Optional[int]
+    quarantine_risk: bool
+    summary: str
+
+
 def has_any_durable_commit_evidence(tx: LedgerStorageTransaction, tx_id: UUID) -> bool:
     """Inspect whether any durable filesystem evidence exists for transaction (Blocker 1 resolution).
 
@@ -394,3 +406,196 @@ class RecoveryDecisionTreeEngine:
             system_mode=SystemSafetyMode.QUARANTINE_LOCKED,
             details="Transaction explicitly in QUARANTINED state; system safety mode locked",
         )
+
+    @staticmethod
+    def inspect_transaction_state(
+        tx: LedgerStorageTransaction,
+        tx_id: UUID,
+        trust_store: Ed25519TrustStore,
+    ) -> RecoveryInspectionResult:
+        """Evaluate transaction recovery requirements in a strictly read-only manner (Stage 3.5).
+
+        GUARANTEE: Performs zero file writes, zero state modifications, zero renames,
+        and zero journal updates.
+        """
+        tx_state = tx.get_durable_tx_state(tx_id)
+        journal = tx.create_wal_journal(tx_id, "", None)
+        journal_state = journal.read_latest_state()
+
+        # B92: Journal marked COMMITTED while tx_state != COMMITTED
+        if journal_state == JournalState.COMMITTED and tx_state != DurableTransactionState.COMMITTED:
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=True,
+                expected_tier=3,
+                quarantine_risk=True,
+                summary=f"B92 divergence: Journal marked COMMITTED while tx_state is {tx_state}",
+            )
+
+        if tx_state == DurableTransactionState.COMMITTED:
+            trans = tx.read_pointer_transition_record()
+            is_active_or_prev = (
+                tx.committed_pointer_references_transaction(tx_id)
+                or (trans is not None and trans.previous_tx_id == tx_id)
+            )
+            if not is_active_or_prev:
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"COMMITTED state but pointer does not reference tx {tx_id}",
+                )
+
+            commit_block = read_commit_record_block_from_snapshot(tx, tx_id)
+            if commit_block is None:
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"COMMITTED state but commit marker block missing in snapshot",
+                )
+
+            if not tx.deep_verify_snapshot_manifest(tx_id, commit_block):
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"COMMITTED state but deep manifest verification failed (tampering detected)",
+                )
+
+            # Check if journal requires idempotent reconciliation
+            if journal_state != JournalState.COMMITTED:
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=2,
+                    quarantine_risk=False,
+                    summary=f"Storage proven committed; journal requires reconciliation to COMMITTED",
+                )
+
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=False,
+                expected_tier=2,
+                quarantine_risk=False,
+                summary=f"Fully settled committed transaction",
+            )
+
+        if tx_state == DurableTransactionState.ABORTED:
+            # Fatal contradiction: snapshot dir exists
+            if tx.has_snapshot_directory(tx_id):
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"Fatal B94 contradiction: ABORTED tx has snapshot directory",
+                )
+            # Check staging
+            if (tx._staging_dir / str(tx_id)).exists():
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=1,
+                    quarantine_risk=False,
+                    summary=f"Staging directory exists for aborted tx; discard required",
+                )
+            # Check provably uncommitted
+            if not is_provably_uncommitted(tx, tx_id):
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"ABORTED state cannot be proven by on-disk abort records",
+                )
+
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=False,
+                expected_tier=1,
+                quarantine_risk=False,
+                summary=f"Fully settled provably uncommitted abort",
+            )
+
+        if tx_state == DurableTransactionState.COMMITTING:
+            if tx.committed_pointer_references_transaction(tx_id):
+                trans = tx.read_pointer_transition_record()
+                commit_block = read_commit_record_block_from_snapshot(tx, tx_id)
+                manifest_digest = commit_block.mutation_manifest_digest if commit_block else ""
+                if trans is not None and trans.is_valid_transition(
+                    expected_tx_id=tx_id,
+                    expected_prev_tx_id=trans.previous_tx_id,
+                    expected_manifest_digest=manifest_digest,
+                    trust_store=trust_store,
+                ):
+                    return RecoveryInspectionResult(
+                        tx_id=tx_id,
+                        durable_state=tx_state,
+                        requires_recovery=True,
+                        expected_tier=2,
+                        quarantine_risk=False,
+                        summary=f"Recoverable commit intent; CAS to COMMITTED pending",
+                    )
+                else:
+                    return RecoveryInspectionResult(
+                        tx_id=tx_id,
+                        durable_state=tx_state,
+                        requires_recovery=True,
+                        expected_tier=3,
+                        quarantine_risk=True,
+                        summary=f"COMMITTING with active pointer but invalid transition record",
+                    )
+            else:
+                return RecoveryInspectionResult(
+                    tx_id=tx_id,
+                    durable_state=tx_state,
+                    requires_recovery=True,
+                    expected_tier=3,
+                    quarantine_risk=True,
+                    summary=f"COMMITTING before pointer switch; conservative quarantine required",
+                )
+
+        if tx_state == DurableTransactionState.QUARANTINED:
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=True,
+                expected_tier=3,
+                quarantine_risk=True,
+                summary=f"Transaction explicitly QUARANTINED",
+            )
+
+        # Missing or PREPARED
+        if has_any_durable_commit_evidence(tx, tx_id):
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=True,
+                expected_tier=3,
+                quarantine_risk=True,
+                summary=f"Missing or PREPARED tx_state with conflicting durable commit evidence",
+            )
+        else:
+            return RecoveryInspectionResult(
+                tx_id=tx_id,
+                durable_state=tx_state,
+                requires_recovery=True,
+                expected_tier=1,
+                quarantine_risk=False,
+                summary=f"Clean pre-commit state; rollback staging pending",
+            )
+
