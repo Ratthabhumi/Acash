@@ -1,9 +1,9 @@
-# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 7)
+# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 8)
 
-**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV7`  
+**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV8`  
 **Parent Incident Report:** `docs/phase13/gate_b_forensic_reconciliation_report.md` (Commit `affc5ce`)  
 **Governing Specification Baseline:** `docs/phase13/slice2_gate_b_plan.md` (Rev 20 Frozen Baseline, Spec Commit `647ba75`)  
-**Auditor Review Baseline:** Human Auditor Review of Rev 6 (Resolving Blockers R6-1, R6-2, and Finding R6-3)  
+**Auditor Review Baseline:** Human Auditor Review of Rev 7 (Resolving Blockers R7-1, R7-2, and Finding R7-3)  
 **Current System State:**  
 - Transaction Persistence: `COMMITTED` (Incident transaction `339ce2fd-a215-4569-9bf4-84a6812175d1` on physical NTFS)  
 - Authorization Provenance: `INVALID` (Self-authorizing runtime runner loop)  
@@ -12,7 +12,7 @@
 - Live Capital Deployed: `$0.00`  
 - Live Orders Transmitted: `0`  
 - Broker Connection: `DISCONNECTED`  
-**Document Status:** REVISION 7 — SUBMITTED FOR FORMAL AUDIT APPROVAL (ZERO EXECUTION / ZERO CODE MUTATION)
+**Document Status:** REVISION 8 — SUBMITTED FOR FORMAL AUDIT APPROVAL (ZERO EXECUTION / ZERO CODE MUTATION)
 
 ---
 
@@ -22,53 +22,60 @@ During the Gate B activation attempt on 2026-09-05, the runner script committed 
 
 While the physical storage mechanics (two-phase commit, fsync barriers, CAS elevations, pointer transitions, NTFS DACL) executed correctly as software code, the **governance provenance is mathematically and organizationally invalid**.
 
-In Revision 6, the architecture established a signed release manifest, non-circular bootstrap, and hardware user presence. However, deep root-of-trust audit identified three final gaps required for complete mathematical and cryptographic closure:
-1. **Pre-Execution Verifier Authenticity (Blocker R6-1):** A signed manifest verifies files, but does not prevent an attacker from modifying the Runner executable itself to skip manifest checks. Trust must anchor in a pre-execution launch verifier outside the Runner.
-2. **Deterministic Tree Digest Specification (Blocker R6-2):** `executable_tree_digest` lacked a formal byte-for-byte canonical algorithm, domain separation, and exclusion set, risking divergence between Release Authority hashing and Runner verification, as well as circular manifest hashing.
-3. **Precise Hardware Signing Protocol (Finding R6-3):** Replaced generic "FIDO2" references with the exact cryptographic hardware protocol: **YubiKey PIV Ed25519 with PIN Policy = Always and Touch Policy = Always**.
+In Revision 7, the architecture established pre-execution verification, a deterministic tree digest algorithm (`ACASH-RELEASE-TREE-V1`), and YubiKey PIV hardware touch signing. However, audit review of Revision 7 identified three final root-of-trust boundaries required for absolute closure:
+1. **External Authentication of the Launch Layer (Blocker R7-1):** If `launch_runner.py` resides inside the mutable repository tree it is adjudicating, an attacker modifying the launcher could force all checks to return `True`. The launcher must be authenticated externally and bound by an external release authority signature before execution.
+2. **Execution Environment & Runtime Attestation (Blocker R7-2):** "Source integrity $\neq$ Execution environment integrity". Authenticating Python source files does not prevent attacks modifying `python.exe`, installed third-party dependencies in `.venv/`, or native DLLs. The `ReleaseManifest` must cryptographically bind the Python interpreter, dependency lockfile, and runtime dependency tree.
+3. **Python Runtime Isolation & Anti-Hijacking Contract (Finding R7-3):** Static AST analysis only verifies import statements, not runtime module resolution. The runner must execute in Python Isolated Mode (`-I`), with absolute binary and script paths, empty `PYTHONPATH`, disabled user site-packages, and strict `sys.path` sanitization.
 
-This Revision 7 Governance Repair Plan establishes an **unbroken, pre-execution authenticated trust hierarchy**:
+This Revision 8 Governance Repair Plan permanently closes the final root-of-trust bootstrap chain:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                   CANONICAL ROOT-OF-ROOT TRUST BOOTSTRAP HIERARCHY                     │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. PRE-EXECUTION VERIFIER & LAUNCH BOUNDARY (Blocker R6-1 Resolution):                 │
-│    - External Pre-Execution Launcher: tools/governance/launch_runner.py               │
-│    - Verifies signed release_manifest.json via RELEASE_AUTHORITY_ROOT_PUBLIC_KEY       │
-│    - Computes deterministic executable_tree_digest (Algorithm ACASH-RELEASE-TREE-V1)  │
-│    - Asserts Runner executable integrity BEFORE spawning or executing Runner process   │
+│ 1. EXTERNAL RELEASE AUTHORITY ROOT ANCHOR (Compiled OS Trust Anchor):                  │
+│    - Immutable compiled key: RELEASE_AUTHORITY_ROOT_PUBLIC_KEY                         │
 │                                │                                                       │
-│                                ▼ spawns authenticated process                          │
+│                                ▼ verifies signature                                    │
 │ 2. SIGNED RELEASE MANIFEST (release_manifest.json):                                    │
 │    - Signed via Ed25519 by External Release Authority                                  │
-│    - Cryptographically binds: commit SHA, tree digest, root anchor digest              │
+│    - Binds: release_commit_sha, launcher_sha256, executable_tree_digest,                │
+│             python_interpreter_sha256, dependency_lock_digest, runtime_env_digest,     │
+│             sovereign_root_anchor_digest                                               │
 │                                │                                                       │
-│                                ▼ validates authentic anchor                            │
-│ 3. PINNED SOVEREIGN ROOT ANCHOR (sovereign_root_anchor.json):                          │
-│    - Validated against signed release_manifest.sovereign_root_anchor_digest            │
-│    - Contains SOVEREIGN_ROOT_PUBLIC_KEY and BOOTSTRAP_AUTHORITY_PUBLIC_KEY             │
+│                                ▼ verifies launcher, interpreter, env, & codebase       │
+│ 3. PRE-EXECUTION BOOTSTRAP LAUNCHER (tools/governance/launch_runner.py):               │
+│    - Verified against manifest.launcher_artifact_sha256 before invocation              │
+│    - Asserts sha256(python.exe) == manifest.python_interpreter_sha256                  │
+│    - Asserts sha256(uv.lock) == manifest.dependency_lock_digest                        │
+│    - Asserts computed_runtime_env_digest == manifest.runtime_dependencies_tree_digest  │
+│    - Asserts ACASH-RELEASE-TREE-V1(codebase) == manifest.executable_tree_digest        │
+│                                │                                                       │
+│                                ▼ spawns under Python Isolated Mode (-I, absolute paths)│
+│ 4. VERIFY-ONLY RUNNER (src/acash/gate_b/runner.py):                                    │
+│    - Real Unprivileged Windows Token (No SeTakeOwnership, No SeRestore, No Admin)      │
+│    - Sanitized sys.path: No CWD, no user site-packages, no PYTHONPATH injection        │
+│    - Static AST Dependency Closure: ZERO signing/keygen/trust-write symbols            │
+│    - Validates sovereign_root_anchor.json against manifest.sovereign_root_anchor_digest│
 │                                │                                                       │
 │             ┌──────────────────┴──────────────────┐                                    │
 │             ▼ verifies signature                  ▼ verifies signature                 │
-│ 4. TRUST ANCHOR MANIFEST:             5. GENESIS BOOTSTRAP MANIFEST:                   │
+│ 5. TRUST ANCHOR MANIFEST:             6. GENESIS BOOTSTRAP MANIFEST:                   │
 │    - Signed by Sovereign Root             - Signed by Bootstrap Authority              │
 │    - Binds SHA-256 of trust_store.json    - Binds Genesis head & incident archive tree │
 │             │                                     │                                    │
 │             ▼ references digest                   ▼ validates fresh storage root       │
-│ 6. SEALED TRUST STORE (trust_store.json) 7. FRESH GENESIS ROOT (var/gate_b/)           │
+│ 7. SEALED TRUST STORE (trust_store.json) 8. FRESH GENESIS ROOT (var/gate_b/)           │
 │    - Registered Approver Public Keys      - Head digest: "00000...00000"               │
 │             │                                                                          │
 │             ▼ verifies signature                                                       │
-│ 8. AUTHENTICATED HUMAN GO RECORD (human_go_record.json):                               │
+│ 9. AUTHENTICATED HUMAN GO RECORD (human_go_record.json):                               │
 │    - Signed via YubiKey PIV Ed25519 (Slot 9c, PIN=Always, Touch=Always)                │
 │    - Bound to Gate A digest, account, limits, and fresh Genesis head                   │
 │                                │                                                       │
-│                                ▼ ingested & verified by                                │
-│ 9. VERIFY-ONLY RUNNER (Process B):                                                     │
-│    - Real Unprivileged Windows Token (No SeTakeOwnership, No SeRestore, No Admin)      │
-│    - Static AST Dependency Closure: ZERO signing/keygen/trust-write symbols            │
-│    - Single uninterrupted exclusive transactional lock (Stages 6–8) ──> 2PC Commit     │
+│                                ▼ executes under single continuous lock                 │
+│ 10. 2PC GATE B ACTIVATION COMMIT (Stages 6–8 Single Exclusive Lock):                   │
+│    - Advances ledger head from GENESIS_HEAD_DIGEST to Activation Transaction           │
 │    - Immediate Halt: STOP AGAIN (Live capital remains $0.00; Live orders = 0)          │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -90,23 +97,52 @@ Prior to any fresh activation attempt, the incident storage environment will be 
 
 ---
 
-## 3. Pre-Execution Verifier Authenticity & Canonical Release Manifest (Blockers R6-1 & R6-2 Resolution)
+## 3. Pre-Execution Verifier, Execution Environment Attestation, & Runtime Isolation (Blockers R7-1, R7-2, & R7-3 Resolution)
 
-### 3.1 Pre-Execution Verifier & Launch Boundary (Blocker R6-1 Resolution)
-To eliminate the vulnerability where an attacker modifies `runner.py` to bypass verification checks, verification is decoupled into a **Pre-Execution Bootstrap Launcher** (`tools/governance/launch_runner.py`):
-1. **Out-of-Process Attestation:** Before invoking Python runtime on `acash.gate_b.runner`, the launcher:
-   - Reads `release_manifest.json`.
-   - Cryptographically verifies `release_authority_signature_ed25519` against `RELEASE_AUTHORITY_ROOT_PUBLIC_KEY`.
-   - Computes the canonical `executable_tree_digest` across the codebase using algorithm `ACASH-RELEASE-TREE-V1`.
-   - Asserts `computed_tree_digest == manifest.executable_tree_digest`.
-   - Asserts `sha256(src/acash/gate_b/runner.py)` matches the recorded hash.
-2. **Fail-Closed Pre-Execution Gate:** If any file in `src/` has been modified or patched, the launcher halts immediately (`PreExecutionIntegrityError: RUNNER_EXECUTABLE_AUTHENTICITY_FAILED`). The Runner process is never started.
-3. **Adversarial Test B22:** Verifies that modifying a single byte in `runner.py` causes the pre-execution verifier to reject execution before Gate B Stage 1 begins.
+### 3.1 External Authentication of the Launch Layer (Blocker R7-1 Resolution)
+To eliminate the Verifier's Paradox where a launcher could be modified inside the software tree it adjudicates:
+1. **Cryptographic Launcher Binding:** The Pre-Execution Bootstrap Launcher (`tools/governance/launch_runner.py`) is bound by exact cryptographic hash in `ReleaseManifest`:
+   $$\text{launcher\_artifact\_sha256} = \text{hex}(\text{SHA256}(\text{read\_bytes}(\text{tools/governance/launch\_runner.py})))$$
+2. **OS / Administrative DACL Boundary:** The launcher artifact is owned by the Governance Principal / Administrator with explicit Deny Write ACE for the runner service identity.
+3. **External Pre-Execution Self-Attestation:** When invoked, the launcher reads its own source file, computes its SHA-256 digest, and verifies that it matches `release_manifest.launcher_artifact_sha256` signed by the External Release Authority before executing any evaluation logic. If the launcher has been modified, it aborts immediately.
+4. **Zero Derivation from Mutable State:** The launcher never derives its authority from mutable repository files or unverified runtime environment variables.
 
-### 3.2 Canonical Tree Digest Algorithm `ACASH-RELEASE-TREE-V1` (Blocker R6-2 Resolution)
+### 3.2 Execution Environment Attestation (Blocker R7-2 Resolution)
+To guarantee that source integrity is backed by identical runtime environment integrity:
+1. **Interpreter Integrity:** The `ReleaseManifest` binds the exact SHA-256 of the authoritative Python binary:
+   $$\text{python\_interpreter\_sha256} = \text{hex}(\text{SHA256}(\text{read\_bytes}(\text{sys.executable})))$$
+2. **Dependency Lockfile Integrity:** The `ReleaseManifest` binds the exact SHA-256 of `uv.lock`:
+   $$\text{dependency\_lock_digest} = \text{hex}(\text{SHA256}(\text{read\_bytes}(\text{"uv.lock"})))$$
+3. **Runtime Dependencies Tree Digest (`ACASH-RUNTIME-ENV-V1`):** The `ReleaseManifest` binds a deterministic SHA-256 tree digest computed across all installed packages in `.venv/Lib/site-packages`:
+   - Normalizes all paths relative to `.venv/Lib/site-packages`.
+   - Excludes `.pyc`, `__pycache__`, and temporary metadata.
+   - Sorts paths lexicographically in UTF-8 byte order.
+   - Hashes leaf contents and combines with canonical prefix `ACASH-RUNTIME-ENV-V1\0`.
+4. **Pre-Execution Attestation Check:** The launcher verifies all three digests before spawning the Runner. If any third-party wheel, native DLL (`python312.dll`, `vcruntime140.dll`), or Python interpreter binary diverges, the launcher halts immediately (`ExecutionEnvironmentIntegrityError: RUNTIME_ENVIRONMENT_COMPROMISED`).
+
+### 3.3 Python Runtime Isolation & Anti-Hijacking Contract (Finding R7-3 Resolution)
+To guarantee that static AST analysis cannot be bypassed by runtime import/path hijacking:
+1. **Isolated Mode Execution:** The Launcher spawns the Python runner using strict isolated mode flags:
+   ```bash
+   python.exe -I -s -E src/acash/gate_b/runner.py --activation-transaction-id ...
+   ```
+   - `-I` (Isolated mode): Implies `-E` and `-s`. Python ignores all `PYTHON*` environment variables (`PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE`, etc.) and completely disables adding the current working directory (`""`) or script directory to `sys.path`.
+   - `-s`: Disables importing user site-packages (`%APPDATA%\Python`).
+   - `-E`: Completely ignores environment variables affecting Python runtime.
+2. **Absolute Path Binding:**
+   - The interpreter is invoked via an absolute, verified path: `C:\Users\MewMew\Desktop\Co-op\Acash\.venv\Scripts\python.exe`.
+   - The runner entrypoint is invoked via canonical absolute path: `C:\Users\MewMew\Desktop\Co-op\Acash\src\acash\gate_b\runner.py`.
+   - Working directory is explicitly bound to repository root.
+3. **Runner Startup `sys.path` Sanitization:**
+   At Stage 1 pre-flight, the Runner inspects `sys.path`:
+   - Asserts that neither `""` nor `"."` exists in `sys.path`.
+   - Asserts that every path entry in `sys.path` is an absolute canonical path within either the authenticated standard library or the authenticated `.venv/Lib/site-packages`.
+   - If any unauthorized or relative directory is detected in `sys.path` $\to$ Halt immediately (`GovernanceSecurityError: UNTRUSTED_MODULE_SEARCH_PATH_DETECTED`).
+
+### 3.4 Canonical Tree Digest Algorithm `ACASH-RELEASE-TREE-V1`
 To guarantee deterministic, byte-for-byte identical hashing between the External Release Authority and local verifiers with zero circularity:
 
-#### 3.2.1 Domain Separation & Strict Exclusion Set
+#### 3.4.1 Strict Exclusion Set
 The following paths are **STRICTLY EXCLUDED** from `executable_tree_digest`:
 - `release_manifest.json` (avoids circular manifest self-hashing)
 - `*.sig`, `*.signature`, `*.sha256`
@@ -118,13 +154,13 @@ The following paths are **STRICTLY EXCLUDED** from `executable_tree_digest`:
 - `docs/` (non-executable markdown artifacts)
 - Temporary, scratch, or log files
 
-#### 3.2.2 Strict Inclusion Set
+#### 3.4.2 Strict Inclusion Set
 All release-critical production codebase and governance tooling files:
 - `src/**` (all production engine modules)
 - `tools/governance/**` (all sovereign governance tools)
 - `pyproject.toml`, `uv.lock` (frozen package dependencies)
 
-#### 3.2.3 Canonical Tree Digest Formulation
+#### 3.4.3 Canonical Tree Digest Formulation
 1. Discover all files matching Inclusion Set that are not excluded.
 2. Normalize every file path to POSIX relative format (`/`) relative to repository root (e.g. `src/acash/gate_b/runner.py`).
 3. Read raw file bytes verbatim (`rb`).
@@ -136,7 +172,7 @@ All release-critical production codebase and governance tooling files:
 7. Compute final digest:
    $$\text{executable\_tree\_digest} = \text{hex}(\text{SHA256}(\text{TreePayload}))$$
 
-### 3.3 `ReleaseManifest` Schema
+### 3.5 `ReleaseManifest` Schema
 ```python
 class ReleaseManifest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -144,8 +180,20 @@ class ReleaseManifest(BaseModel):
     manifest_version: int = Field(default=1, description="Schema version.")
     release_tag: str = Field(description="Audited release tag, e.g. v1.0.0-gate-b.")
     release_commit_sha: str = Field(description="Exact Git commit SHA of frozen release baseline.")
+    launcher_artifact_sha256: str = Field(
+        description="Exact SHA-256 of tools/governance/launch_runner.py."
+    )
     executable_tree_digest: str = Field(
         description="Canonical SHA-256 tree digest using ACASH-RELEASE-TREE-V1."
+    )
+    python_interpreter_sha256: str = Field(
+        description="Exact SHA-256 of authoritative python.exe binary."
+    )
+    dependency_lock_digest: str = Field(
+        description="Exact SHA-256 of uv.lock."
+    )
+    runtime_dependencies_tree_digest: str = Field(
+        description="Deterministic SHA-256 tree digest of installed runtime dependencies."
     )
     sovereign_root_anchor_digest: str = Field(
         description="Exact SHA-256 digest of sovereign_root_anchor.json."
@@ -164,7 +212,11 @@ class ReleaseManifest(BaseModel):
             "manifest_version": self.manifest_version,
             "release_tag": self.release_tag,
             "release_commit_sha": self.release_commit_sha,
+            "launcher_artifact_sha256": self.launcher_artifact_sha256,
             "executable_tree_digest": self.executable_tree_digest,
+            "python_interpreter_sha256": self.python_interpreter_sha256,
+            "dependency_lock_digest": self.dependency_lock_digest,
+            "runtime_dependencies_tree_digest": self.runtime_dependencies_tree_digest,
             "sovereign_root_anchor_digest": self.sovereign_root_anchor_digest,
             "release_timestamp_utc": self.release_timestamp_utc.isoformat(),
             "release_authority_key_id": self.release_authority_key_id,
@@ -281,7 +333,7 @@ Before reading any key entry or initializing `Ed25519TrustStore`:
 
 ---
 
-## 6. OS-Level Capability & Windows Token Privilege Boundary (Finding R5-3 Resolution)
+## 6. OS-Level Capability & Windows Token Privilege Boundary
 
 ### 6.1 Identity & Ownership Separation (DACL Layer)
 - **Owner Separation:** `trust_store.json`, `trust_anchor_manifest.json`, and `genesis_bootstrap_manifest.json` are owned by the Governance Principal (e.g. Administrator / Auditor), **never by the runner service identity**.
@@ -322,16 +374,16 @@ To eliminate shared memory space or runtime object reuse between authorization c
 │            PROCESS A: INTERACTIVE MINT TOOL            │       │               PROCESS B: VERIFY-ONLY RUNNER            │
 │         (tools/governance/mint_human_go_record.py)     │       │               (src/acash/gate_b/runner.py)             │
 ├────────────────────────────────────────────────────────┤       ├────────────────────────────────────────────────────────┤
-│ • Interactive TTY Execution ONLY (Anti-Pipe Hygiene)   │       │ • Automated pipeline execution                         │
-│ • Asserts sys.stdin.isatty() == True                   │       │ • Unprivileged Windows Process Token (Real Win32 Token)│
-│ • Hardware-Backed User Presence: YubiKey PIV Ed25519   │       │ • Static Dependency Closure: ZERO signing/keygen code  │
-│ • PIN Policy = Always, Touch Policy = Always           │       │ • Ingests confirmation token via CLI argument          │
-│ • Hardware Secure Element Generates Ed25519 Signature  │       │ • Strictly Verify-Only                                 │
-│ • Signs canonical HumanGORecord payload                │       │ • Ingests pre-existing artifact file from disk         │
-│ • Writes human_go_record.json artifact to disk         │       │ • LACKS signing / keygen APIs                          │
-│ • LACKS ledger mutation APIs                           │       │ • Ingests sealed trust store (Read-Only)               │
-│ • LACKS trust-store write APIs                         │       │ • Executes 2PC commit under single continuous lock     │
-│ • PROCESS EXITS IMMEDIATELY                            │       │ • Immediate Halt: STOP AGAIN (Live capital = $0.00)    │
+│ • Interactive TTY Execution ONLY (Anti-Pipe Hygiene)   │       │ • Spawner: tools/governance/launch_runner.py           │
+│ • Asserts sys.stdin.isatty() == True                   │       │ • Python Isolated Mode: -I -s -E                       │
+│ • Hardware-Backed User Presence: YubiKey PIV Ed25519   │       │ • Unprivileged Windows Process Token (Real Win32 Token)│
+│ • PIN Policy = Always, Touch Policy = Always           │       │ • Sanitized sys.path: No CWD, no injection             │
+│ • Hardware Secure Element Generates Ed25519 Signature  │       │ • Static Dependency Closure: ZERO signing/keygen code  │
+│ • Signs canonical HumanGORecord payload                │       │ • Ingests confirmation token via CLI argument          │
+│ • Writes human_go_record.json artifact to disk         │       │ • Strictly Verify-Only                                 │
+│ • LACKS ledger mutation APIs                           │       │ • Ingests pre-existing artifact file from disk         │
+│ • LACKS trust-store write APIs                         │       │ • Ingests sealed trust store (Read-Only)               │
+│ • PROCESS EXITS IMMEDIATELY                            │       │ • Executes 2PC commit under single continuous lock     │
 └────────────────────────────────────────────────────────┘       └────────────────────────────────────────────────────────┘
                             │                                                                 ▲
                             │                    PERSISTED ARTIFACT ONLY                      │
@@ -339,10 +391,7 @@ To eliminate shared memory space or runtime object reuse between authorization c
                                                  human_go_record.json
 ```
 
-### 7.2 Hardware-Backed User Presence: YubiKey PIV Ed25519 Protocol (Finding R6-3 Resolution)
-Auditing established that generic "FIDO2" references are ambiguous for arbitrary artifact signing, and console passphrases can be automated by local scripts.
-
-Therefore, the authoritative human ceremony enforces the exact cryptographic hardware protocol:
+### 7.2 Hardware-Backed User Presence: YubiKey PIV Ed25519 Protocol
 1. **Authoritative Signing Mechanism:** **YubiKey PIV (Personal Identity Verification) / PKCS#11 with Ed25519**:
    - **Key Slot:** Slot `9c` (Digital Signature) or Slot `9a` (Authentication)
    - **Algorithm:** `Ed25519` (supported in YubiKey 5 Series firmware $\ge$ 5.7)
@@ -356,7 +405,7 @@ Therefore, the authoritative human ceremony enforces the exact cryptographic har
    - Auditor physically touches the YubiKey contact.
    - The YubiKey internal cryptographic coprocessor generates the Ed25519 signature and returns signature bytes. The private key never leaves the hardware secure element.
    - Process A formats `human_go_record.json`, writes to disk, flushes buffers, and exits immediately.
-3. **Anti-Automation Resistance:** Software automation, PTY allocations, background scripts, or remote callers cannot simulate physical capacitive touch on the hardware key sensor. Absence of physical touch causes the hardware token to abort with `SW_SECURITY_STATUS_NOT_SATISFIED` or timeout.
+3. **Anti-Automation Guarantee:** Software automation, PTY allocations, background scripts, or remote callers cannot simulate physical capacitive touch on the hardware key sensor. Absence of physical touch causes the hardware token to abort with `SW_SECURITY_STATUS_NOT_SATISFIED` or timeout.
 4. **Host Passphrase Insufficiency:** A console passphrase alone is strictly secondary and explicitly **INSUFFICIENT** to authorize artifact generation without the hardware-backed physical user-presence factor.
 
 ### 7.3 Full Static Recursive Dependency Closure Audit
@@ -393,6 +442,7 @@ Therefore, the authoritative human ceremony enforces the exact cryptographic har
 | **Advance Ledger Head** | ⛔ **STRICTLY PROHIBITED** | **PERMITTED (Stage 8 2PC Commit)** |
 | **Broker Order Dispatch** | ⛔ **STRICTLY PROHIBITED** | ⛔ **STRICTLY PROHIBITED (Slice 3 Blocked)** |
 | **OS Token Privilege** | Standard Operator Token | **Unprivileged Token (No Admin/Takeover)** |
+| **Python Execution Mode** | Interactive Standard Python | **Python Isolated Mode (`-I -s -E`)** |
 
 ---
 
@@ -450,7 +500,7 @@ The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`
 | **Test B19: Real Windows Token Privilege Audit**| Execute on actual Win32 token; verify unprivileged status and no elevation | Fails closed: `GovernanceSecurityError: RUNNER_PROCESS_TOKEN_PRIVILEGED` |
 | **Test B20: Real NTFS Owner Takeover & DACL Ban**| Attempt Win32 takeover or DACL write on actual host NTFS substrate | Fails closed: `ERROR_ACCESS_DENIED` / `ERROR_PRIVILEGE_NOT_HELD` |
 | **Test B21: Signed Release Manifest Verification**| Mutate release manifest or sign with untrusted release authority key | Fails closed: `DataContractError: RELEASE_MANIFEST_SIGNATURE_INVALID` |
-| **Test B22: Pre-Execution Runner Integrity Check**| Mutate 1 byte in `runner.py`; launcher verifies `ACASH-RELEASE-TREE-V1` | Fails closed: `PreExecutionIntegrityError: RUNNER_EXECUTABLE_AUTHENTICITY_FAILED` |
+| **Test B22: Pre-Execution Full Artifact Attestation**| Mutate launcher, python.exe, dependencies, or inject PYTHONPATH/CWD | Fails closed: `PreExecutionIntegrityError` / launcher abort |
 
 ---
 
@@ -459,20 +509,20 @@ The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`
 The repair proceeds through four strictly gated steps. Advancing between steps requires explicit human auditor sign-off:
 
 ```text
-Step 1: Formal Audit Approval of this Plan (Rev 7)
+Step 1: Formal Audit Approval of this Plan (Rev 8)
   │
   ▼
 Step 2: Implement Tooling & Architectural Hardening (Zero Activation)
-  ├─ tools/governance/launch_runner.py (Pre-Execution Bootstrap Launcher: Blocker R6-1)
+  ├─ tools/governance/launch_runner.py (Pre-Execution Attestation & Python Isolated Mode Launcher)
   ├─ tools/governance/mint_human_go_record.py (Process A: YubiKey PIV Ed25519 Hardware Touch)
-  ├─ src/acash/gate_b/runner.py (Process B: Verify-Only with Static Closure Isolation & Real Token Audit)
+  ├─ src/acash/gate_b/runner.py (Process B: Verify-Only with Static Closure, sys.path Sanitization & Token Audit)
   ├─ tests/unit/gate_b/test_gate_b_governance_repair.py (22 Adversarial Tests)
   └─ Verification Criterion: ALL REPOSITORY TESTS PASS (Pre-repair baseline + new tests clean; MyPy clean)
   │
   ▼
 Step 3: Governance Ceremonies & Storage Re-initialization
   ├─ Archive var/gate_b -> var/gate_b_incident_archive (Option 2)
-  ├─ External Release Authority signs release_manifest.json (Commit SHA & ACASH-RELEASE-TREE-V1)
+  ├─ External Release Authority signs release_manifest.json (Commit SHA, Launcher, Python, Dependencies, Codebase)
   ├─ Execute Genesis Bootstrap Ceremony -> Sovereign signs genesis_bootstrap_manifest.json
   ├─ Execute Trust Anchor Ceremony -> Sovereign signs trust_anchor_manifest.json & seals trust_store.json
   ├─ Execute Hardware-Backed Human Authorization Ceremony -> Auditor signs human_go_record.json via YubiKey PIV
@@ -480,7 +530,7 @@ Step 3: Governance Ceremonies & Storage Re-initialization
   │
   ▼
 Step 4: Fresh Authoritative Gate B Activation Execution
-  ├─ Pre-Execution Launcher verifies runner authenticity -> launches Process B
+  ├─ Pre-Execution Launcher verifies full artifact attestation -> launches Process B in Isolated Mode (-I)
   ├─ Process B (Verify-Only Runner) executes Stages 1–9 under single continuous lock
   ├─ Verify COMMITTED on fresh root
   └─ Immediate Halt: STOP AGAIN (Live capital = $0.00; Live orders = 0)
@@ -488,7 +538,7 @@ Step 4: Fresh Authoritative Gate B Activation Execution
 
 > [!NOTE]
 > **Acceptance Criterion Language:**  
-> "All repository tests pass; exact count reported from actual execution. No regression from pre-repair baseline. Static type checker (MyPy) reports 0 errors across all source files. Tests B19 and B20 verified against actual Win32 host tokens and physical NTFS filesystem. Test B22 verified by mutating runner bytecode and asserting pre-execution launcher abort."
+> "All repository tests pass; exact count reported from actual execution. No regression from pre-repair baseline. Static type checker (MyPy) reports 0 errors across all source files. Tests B19 and B20 verified against actual Win32 host tokens and physical NTFS filesystem. Test B22 verified by asserting pre-execution launcher abort under launcher tampering, interpreter tampering, dependency mutation, and PYTHONPATH injection."
 
 ---
 
@@ -496,14 +546,16 @@ Step 4: Fresh Authoritative Gate B Activation Execution
 
 ```markdown
 ════════════════════════════════════════════════════════════════════════════════
-    GATE B GOVERNANCE REPAIR PLAN (REV 7) — FORMAL AUDIT APPROVAL
+    GATE B GOVERNANCE REPAIR PLAN (REV 8) — FORMAL AUDIT APPROVAL
 ════════════════════════════════════════════════════════════════════════════════
 
-Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 7)
+Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 8)
 Parent Incident Report:   docs/phase13/gate_b_forensic_reconciliation_report.md
 Storage Resolution Mode:  OPTION 2: FORENSIC ARCHIVE & FRESH GENESIS ROOT
 Incident Archive Path:    var/gate_b_incident_archive/ (Immutable NTFS Deny DACL)
-Pre-Execution Boundary:   tools/governance/launch_runner.py (Authenticates Runner Before Execution)
+Pre-Execution Attestation:tools/governance/launch_runner.py (Attested by Release Manifest)
+Runtime Environment:      Binds python.exe, uv.lock, and runtime dependency tree
+Python Isolation:         Strict Isolated Mode (-I -s -E), Canonical Absolute Paths
 Canonical Tree Digest:    ACASH-RELEASE-TREE-V1 (Strict Exclusion Set & Lexicographical Ordering)
 Release Authority:        release_manifest.json (Ed25519 Signed by External Release Authority)
 Root Anchor Governance:   Pinned via Signed Release Manifest (Zero Runtime Override)
