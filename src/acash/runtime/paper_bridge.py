@@ -278,6 +278,7 @@ class PaperExecutionBridge:
             point_size=Decimal("0.00001"),
             tick_size=Decimal("0.00001"),
             trade_execution_mode=MT5TradeExecutionMode.SYMBOL_TRADE_EXECUTION_MARKET,
+            allowed_filling_flags=("SYMBOL_FILLING_FOK", "SYMBOL_FILLING_IOC"),
             margin_currency="EUR",
             profit_currency="USD",
             spec_digest="0" * 64,
@@ -448,7 +449,11 @@ class PaperExecutionBridge:
         elif self.venue_type == PaperExecutionVenueType.MT5_DEMO:
             if self.mt5_adapter is None:
                 raise DataContractError("MT5_DEMO venue requires an initialized MT5BrokerAdapter.")
-            obs = self.mt5_adapter.submit_order(order_intent, symbol_spec)
+            # MT5BrokerAdapter.submit_order expects target_units (units = lots * contract_size)
+            mt5_intent = order_intent.model_copy(
+                update={"quantity": order_intent.quantity * symbol_spec.contract_size}
+            )
+            obs = self.mt5_adapter.submit_order(mt5_intent, symbol_spec)
             raw_events = [
                 BrokerRawEvent(
                     broker_order_id=obs.broker_order_id,
