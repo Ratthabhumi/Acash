@@ -35,6 +35,7 @@ The target machine MUST be an authoritative **Designated Governance Host** satis
 ## 3. Package Contents
 
 - `validate_b23_2_enforcement.ps1`: Automated 5-step PowerShell validation harness.
+- `template_08_final_b23_2_verdict.json`: Canonical baseline unexecuted verdict schema.
 - Output directory: `var/governance/b23_2_dossier/` (8-part structured evidence dossier).
 
 ---
@@ -51,7 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\governance\b23_2_hos
 1. **Step 1:** Inspects host policy state. If neither WDAC (UMCI == 2) nor AppLocker (Enforce rules) is active, halts immediately with `ENVIRONMENT NOT SUFFICIENT`.
 2. **Step 2:** Copies `acash-bootstrapper.exe` and mutates a byte to create an unauthorized test artifact.
 3. **Step 3:** Attempts execution; asserts that the host Application-Control policy rejected execution (Win32 Error `1260` `ERROR_ACCESS_DISABLED_BY_POLICY` or NTSTATUS `0xC0000428`).
-4. **Step 4:** Extracts the applicable Block event (Event ID `3077` for WDAC or Event ID `8004` for AppLocker).
+4. **Step 4:** Extracts the applicable Block event (Event ID `3077` for WDAC or Event ID `8004` for AppLocker) and corroborating Event ID `3089` (Signature Information) via ActivityId correlation.
 5. **Step 5:** Emits the complete 8-part cryptographic evidence dossier to `var/governance/b23_2_dossier/`.
 
 ---
@@ -67,14 +68,42 @@ Upon execution on the Designated Governance Host, the package creates 8 discrete
 | `03_valid_artifact.json` | Source valid binary path, size, and SHA-256 digest |
 | `04_tampered_artifact.json` | Tampered test artifact path, mutation offset, and SHA-256 digest |
 | `05_execution_attempt.json` | Execution parameters, invocation timestamp, and OS rejection error code |
-| `06_block_event.json` | Raw XML and structured fields of Event 3077 (WDAC) or 8004 (AppLocker) |
+| `06_block_event.json` | Raw XML and structured fields of Event 3077 (WDAC) or 8004 (AppLocker) + Event 3089 correlation |
 | `07_hash_correlation.json` | Cryptographic correlation matching artifact SHA-256 and execution time window |
-| `08_final_b23_2_verdict.json` | Master signed evaluation verdict (PASS if all 7 checks succeed) |
+| `08_final_b23_2_verdict.json` | Master evaluation verdict (emitted as PASS only upon full execution) |
 
-### Canonical Schema for `08_final_b23_2_verdict.json`:
+### Baseline Unexecuted Schema (`template_08_final_b23_2_verdict.json`):
+To prevent automated parsers or auditors from mistakenly interpreting documentation examples as completed physical proof, the baseline unexecuted artifact explicitly records `NOT_PROVEN`:
+
 ```json
 {
   "test_id": "B23.2",
+  "status": "TEMPLATE_UNEXECUTED",
+  "verdict": "NOT_PROVEN",
+  "policy_mode": "UNKNOWN",
+  "policy_engine": "UNKNOWN",
+  "policy_identity": "UNASSIGNED",
+  "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "attempt_timestamp_utc": null,
+  "execution_result": "NOT_EXECUTED",
+  "process_started": null,
+  "os_error_code": null,
+  "os_error_message": null,
+  "event_id": null,
+  "event_log": null,
+  "event_artifact_match": false,
+  "corroborating_event_3089_found": false,
+  "certified_at_utc": null
+}
+```
+
+### Authoritative Post-Execution Verdict Schema (Emitted on Designated Host):
+Only when executed on the Designated Governance Host with active policy enforcement (`UMCI == 2` or AppLocker Enforced) does `validate_b23_2_enforcement.ps1` dynamically emit the verified verdict:
+
+```json
+{
+  "test_id": "B23.2",
+  "status": "AUTHORITATIVE_RESULT",
   "verdict": "PASS",
   "policy_mode": "ENFORCED",
   "policy_engine": "WDAC",
@@ -88,9 +117,11 @@ Upon execution on the Designated Governance Host, the package creates 8 discrete
   "event_id": 3077,
   "event_log": "Microsoft-Windows-CodeIntegrity/Operational",
   "event_artifact_match": true,
+  "corroborating_event_3089_found": true,
   "certified_at_utc": "2026-09-05T12:00:02.000000Z"
 }
 ```
 
-This dossier serves as the definitive physical evidence required to promote Assertion B23.2 from **NOT PROVEN** to **PASS**.
+This 8-part dossier serves as the definitive physical evidence required to promote Assertion B23.2 from **NOT PROVEN** to **PASS**.
+
 

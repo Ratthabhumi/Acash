@@ -206,15 +206,43 @@ var/governance/b23_2_dossier/
 ├── 03_valid_artifact.json       # Signed release artifact hash, path, and Authenticode details
 ├── 04_tampered_artifact.json    # Test unauthorized artifact path, size, and SHA-256 digest
 ├── 05_execution_attempt.json    # Execution invocation parameters, timestamp, and OS error code
-├── 06_block_event.json          # Raw XML and structured fields of Event 3077 (WDAC) or 8004 (AppLocker)
+├── 06_block_event.json          # Raw XML and structured fields of Event 3077 (WDAC) or 8004 (AppLocker) + Event 3089 correlation
 ├── 07_hash_correlation.json     # Cryptographic proof matching artifact digest to event payload
-└── 08_final_b23_2_verdict.json  # Master signed evaluation verdict
+└── 08_final_b23_2_verdict.json  # Master evaluation verdict (emitted as PASS only upon full execution)
 ```
 
-#### Canonical `08_final_b23_2_verdict.json` Schema:
+#### Baseline Unexecuted Schema (`template_08_final_b23_2_verdict.json`):
+To prevent automated parsers or auditors from mistakenly interpreting documentation examples as completed physical proof, the baseline unexecuted artifact explicitly records `NOT_PROVEN`:
+
 ```json
 {
   "test_id": "B23.2",
+  "status": "TEMPLATE_UNEXECUTED",
+  "verdict": "NOT_PROVEN",
+  "policy_mode": "UNKNOWN",
+  "policy_engine": "UNKNOWN",
+  "policy_identity": "UNASSIGNED",
+  "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "attempt_timestamp_utc": null,
+  "execution_result": "NOT_EXECUTED",
+  "process_started": null,
+  "os_error_code": null,
+  "os_error_message": null,
+  "event_id": null,
+  "event_log": null,
+  "event_artifact_match": false,
+  "corroborating_event_3089_found": false,
+  "certified_at_utc": null
+}
+```
+
+#### Authoritative Post-Execution Verdict Schema (Emitted on Designated Host):
+Only when executed on the Designated Governance Host with active policy enforcement (`UMCI == 2` or AppLocker Enforced) does `validate_b23_2_enforcement.ps1` dynamically emit the verified verdict with corroborating Event 3089 signature information:
+
+```json
+{
+  "test_id": "B23.2",
+  "status": "AUTHORITATIVE_RESULT",
   "verdict": "PASS",
   "policy_mode": "ENFORCED",
   "policy_engine": "WDAC",
@@ -228,6 +256,7 @@ var/governance/b23_2_dossier/
   "event_id": 3077,
   "event_log": "Microsoft-Windows-CodeIntegrity/Operational",
   "event_artifact_match": true,
+  "corroborating_event_3089_found": true,
   "certified_at_utc": "2026-09-05T12:00:02.000000Z"
 }
 ```

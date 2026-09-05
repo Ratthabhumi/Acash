@@ -202,6 +202,21 @@ Write-Host "  [OK] Found Block Event ID $($matchingEvent.Id) in $targetLogName:"
 Write-Host "    TimeCreated: $($matchingEvent.TimeCreated)"
 Write-Host "    Provider:    $($matchingEvent.ProviderName)"
 
+# Query Corroborating Event 3089 (Signature Information) if WDAC
+$corroboratingEvent3089 = $null
+if ($detectedEngine -eq "WDAC" -and $matchingEvent.ActivityId) {
+    $actId = $matchingEvent.ActivityId
+    $e3089 = Get-WinEvent -FilterHashtable @{
+        LogName = $targetLogName
+        Id = 3089
+        StartTime = $timeFilter
+    } -ErrorAction SilentlyContinue | Where-Object { $_.ActivityId -eq $actId } | Select-Object -First 1
+    if ($e3089) {
+        $corroboratingEvent3089 = $e3089
+        Write-Host "  [OK] Found Corroborating Signature Event ID 3089 (Correlation ActivityId: $actId)" -ForegroundColor Green
+    }
+}
+
 # ------------------------------------------------------------------------------
 # STEP 5: Generate 8-Part Evidence Dossier
 # ------------------------------------------------------------------------------
@@ -266,7 +281,10 @@ $doc06 = [ordered]@{
     event_id = $matchingEvent.Id
     event_timestamp_utc = $matchingEvent.TimeCreated.ToUniversalTime().ToString("o")
     provider_name = $matchingEvent.ProviderName
+    correlation_activity_id = if ($matchingEvent.ActivityId) { $matchingEvent.ActivityId.ToString() } else { $null }
     event_xml = $matchingEvent.ToXml()
+    corroborating_event_3089_found = ($null -ne $corroboratingEvent3089)
+    corroborating_event_3089_xml = if ($corroboratingEvent3089) { $corroboratingEvent3089.ToXml() } else { $null }
 }
 $doc06 | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $DossierOutputDir "06_block_event.json") -Encoding UTF8
 
@@ -283,6 +301,7 @@ $doc07 | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $DossierOutputDir "07_
 # 08_final_b23_2_verdict.json
 $doc08 = [ordered]@{
     test_id = "B23.2"
+    status = "AUTHORITATIVE_RESULT"
     verdict = "PASS"
     policy_mode = "ENFORCED"
     policy_engine = $detectedEngine
@@ -296,6 +315,7 @@ $doc08 = [ordered]@{
     event_id = $matchingEvent.Id
     event_log = $targetLogName
     event_artifact_match = $true
+    corroborating_event_3089_found = ($null -ne $corroboratingEvent3089)
     certified_at_utc = (Get-Date).ToUniversalTime().ToString("o")
 }
 $doc08 | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $DossierOutputDir "08_final_b23_2_verdict.json") -Encoding UTF8
