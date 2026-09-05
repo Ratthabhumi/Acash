@@ -1,9 +1,10 @@
 # ACASH Implementation Plan — Paper Trading Runtime Architecture (Rev 2.1)
 # Formal Specification & Verification Contract
+## Incorporating the Weekend Paper Track Architecture Amendment
 
 > **Document ID:** `docs/phase13/implementation_plan.md`  
-> **Version:** 2.1.0 (Audited Implementation Specification Edition)  
-> **Date:** 2026-09-05  
+> **Version:** 2.1.0 (Audited Implementation Specification & Weekend Architecture Edition)  
+> **Date:** 2026-09-05 (Saturday)  
 > **Governing Baseline:** `docs/phase13/paper_trading_readiness_audit.md` (Rev 2, Commit `284c36e`)  
 > **Status:** PLAN REVISION ONLY — STRICT IMPLEMENTATION HALT  
 > **Authority State:** `LOCKED — AWAITING EXPLICIT HUMAN PLAN APPROVAL`
@@ -12,7 +13,7 @@
 
 ## 1. Status / Governance Boundary
 
-This document establishes the formal, non-negotiable **Implementation Contract Rev 2.1** for the ACASH continuous 3-month Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Plan Review.
+This document establishes the formal, non-negotiable **Implementation Contract Rev 2.1** for the ACASH continuous Paper Trading Runtime on the Windows development host. It formally incorporates all resolutions from the Human Auditor Plan Review (Rev 2) and defines the **Weekend Paper Track Architecture Amendment**.
 
 ### 1.1 Non-Negotiable Governance Invariants
 - **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo flat).
@@ -20,7 +21,7 @@ This document establishes the formal, non-negotiable **Implementation Contract R
 - **Assertion B23.2:** `NOT PROVEN / DEFERRED` to future dedicated cloud/VM infrastructure.
 - **Step 3 Ceremony / Step 4 Activation / Slice 3:** `STRICTLY BLOCKED / LOCKED`.
 - **Live Capital Authority:** `$0.00` | **Live Orders:** `0` | **Live Broker Connection:** `DISCONNECTED`.
-- **Execution Authority:** This directive authorizes **ONLY the revision of this implementation plan specification**. It strictly forbids creating or modifying runtime source code, modifying tests, modifying frozen core contracts, or connecting to live broker environments.
+- **Execution Authority:** This directive authorizes **ONLY the revision of this implementation plan specification**. It strictly forbids creating or modifying runtime source code, modifying tests, modifying frozen core contracts, connecting to live brokers, or implementing crypto execution logic.
 
 ---
 
@@ -48,7 +49,7 @@ Zero additional runtime files may be added.
 1. **NO Live Trading or Capital Deployment:** Zero live orders; live capital remains strictly `$0.00`.
 2. **NO Synthetic Dossiers:** Zero artificial `AlphaQualificationDossier` or `baseline_momentum_dossier.json` creation.
 3. **NO Scope Expansion to Future Phases:** Phases 14, 17, 18, 19, 20, 21, 22, and 23 (Microstructure implementation) remain strictly frozen.
-4. **NO Crypto Execution Implementation:** Weekend Crypto execution is an architectural concept only; zero crypto exchange APIs, zero credentials, zero network sockets, and zero crypto code in Rev 2.1.
+4. **NO Crypto Execution Implementation:** Weekend Crypto execution is an architectural concept only; zero crypto exchange APIs, zero exchange credentials, zero crypto broker implementation, zero crypto `OrderIntent` dispatch, and zero crypto network sockets in Rev 2.1.
 5. **NO Modification of Frozen Core Contracts:** Phases 1–12 domain models, state machines, risk gates, and reconciliation engines remain 100% untouched.
 
 ---
@@ -398,23 +399,27 @@ class ExecutionManifest(BaseModel):
 
 ## 10. Paper Trading Session Identity Specification
 
-Lineage metadata is strictly bound via `PaperTradingSessionIdentity`:
+Lineage metadata is strictly bound via `PaperTradingSessionIdentity`. Every continuous session requires complete, unambiguous lineage metadata identifying market and venue context:
 
 ```python
 class PaperTradingSessionIdentity(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    paper_run_id: str = Field(description="Unique deterministic session ID (e.g. PAPER-RUN-20260905-001).")
+    paper_run_id: str = Field(description="Unique deterministic session ID (e.g. PAPER-RUN-20260905-MT5-001).")
     strategy_id: str = Field(description="Canonical strategy identifier.")
     strategy_version: str = Field(description="Semantic version of strategy code.")
+    market: str = Field(description="Target market identifier (TRADITIONAL_FX, DIGITAL_ASSET).")
+    venue: str = Field(description="Execution venue identifier (METAQUOTES_MT5_DEMO, IN_MEMORY_SIMULATOR).")
+    data_source: FeedSourceType = Field(description="MT5_FORWARD or STREAMING_PARQUET_PUMP.")
+    execution_mode: PaperExecutionVenueType = Field(description="MT5_DEMO or LOCAL_SIMULATOR.")
     start_time_utc: datetime = Field(description="Session initialization timestamp.")
     planned_end_time_utc: datetime = Field(description="Scheduled session end time (e.g. start + 90 days).")
     actual_end_time_utc: Optional[datetime] = Field(default=None, description="Recorded session termination time.")
     config_digest: str = Field(description="Canonical SHA-256 of RuntimePolicyConfig + ExecutionCostModel.")
     dossier_digest: str = Field(description="Canonical SHA-256 of AlphaQualificationDossier.")
-    data_source: FeedSourceType = Field(description="MT5_FORWARD or STREAMING_PARQUET_PUMP.")
-    execution_mode: PaperExecutionVenueType = Field(description="MT5_DEMO or LOCAL_SIMULATOR.")
 ```
+
+> **Note on Identifiers:** Example IDs such as `PAPER-RUN-20260905-MT5-001` (Weekday) and `PAPER-RUN-20260905-CRYPTO-WEEKEND-001` (Weekend) illustrate deterministic naming conventions; they are not hardcoded into runtime source.
 
 ---
 
@@ -568,37 +573,92 @@ The 90-day continuous paper run clock MUST NOT start automatically upon code com
 
 ---
 
-## 16. Weekday / Weekend Market Track Architecture (Future Roadmap Note)
+## 16. Weekday / Weekend Market Track Architecture (Formal Specification)
 
-> [!NOTE]
-> **Architecture Concept Only — Strictly Non-Operational in Rev 2.1:**  
-> The weekday MT5 Demo FX market closes on Saturday and Sunday. To enable continuous 24/7 validation without pausing execution loops, future architecture conceptually decouples market tracks:
->
-> ```text
-> ACASH Paper Runtime
->     ├── Weekday Track (Primary Phase 13 Validation)
->     │      └── MT5 Demo (FX / EURUSD)
->     │
->     └── Future Weekend Track (Exploratory / Deferred)
->            └── Crypto 24/7
->                  ├── Separate venue adapter
->                  ├── Separate strategy qualification
->                  ├── Separate execution model
->                  └── Separate metrics ledger
-> ```
->
-> **Strict Non-Operational Invariants:**
-> 1. Crypto execution is **NOT IMPLEMENTED** in Rev 2.1 (0 code, 0 exchange APIs, 0 credentials, 0 network sockets).
-> 2. Crypto MUST NOT be mixed into the 90-day MT5/EURUSD experiment.
-> 3. Crypto performance MUST NOT be aggregated into the same experimental dataset.
-> 4. Crypto requires completely independent `paper_run_id`, `strategy_id`, `strategy_version`, `market`, `venue`, `data_source`, `execution_mode`, `config_digest`, and `dossier_digest`.
-> 5. Future Crypto Weekend Track requires its own independent strategy qualification.
-> 6. Future Crypto execution cost model must be independently validated.
-> 7. This note is **ARCHITECTURE ONLY** and represents zero implementation commitment in Phase 13.
+### 16.1 Operational Rationale & Market Context
+Traditional financial markets traded via the primary Phase 13 MT5 Demo venue are closed through the Saturday/Sunday period. Under a strict single-track weekday architecture, the ACASH host, runtime scheduler, and network infrastructure would remain idle for ~48 hours every weekend. 
+
+Conversely, digital-asset markets operate on a continuous 24/7/365 basis. In institutional market infrastructure, this paradigm was further consolidated when CME introduced 24/7 trading for cryptocurrency futures and options on May 29, 2026 (subject to a scheduled weekly maintenance window of at least 2 hours).
+
+> [!IMPORTANT]
+> **Market Context Citation Only:** Mention of CME 24/7 trading serves solely as empirical market evidence. It MUST NOT be construed as an implementation requirement or commitment to connect to CME infrastructure.
+
+### 16.2 Conceptual Track Architecture
+ACASH decouples continuous paper operations into two logically and experimentally isolated tracks:
+
+```text
+                           ACASH Paper Runtime
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+              WEEKDAY TRACK                   WEEKEND TRACK
+                    │                               │
+                MT5 Demo                       Crypto 24/7
+                    │                               │
+              Forward Paper                   Future Paper
+                    │                               │
+              Primary 90-Day               Separate Experiment
+                 Dataset                         Dataset
+```
+
+### 16.3 Logical Separation of Tracks
+| Dimension | Weekday Paper Track | Weekend Paper Track |
+|---|---|---|
+| **Market Type** | Traditional Financial Markets (FX / EURUSD) | 24/7 Digital Asset Markets (Crypto Spot / Derivatives) |
+| **Primary Venue** | `METAQUOTES_MT5_DEMO` | Candidate Future Crypto Venue / Test Double |
+| **Operational Purpose** | Primary Phase 13 canonical 90-day forward paper validation | Weekend forward-operation, 24/7 soak, infrastructure validation |
+| **Operating Window** | Monday 00:00 UTC through Friday 21:59 UTC | Friday 22:00 UTC through Sunday 23:59 UTC |
+| **Experimental Dataset** | **Experiment A** (`PAPER-RUN-WEEKDAY-...`) | **Experiment B** (`PAPER-RUN-WEEKEND-...`) |
+| **Phase 13 Status** | **ACTIVE SPECIFICATION** (5-file locked scope) | **ARCHITECTURAL EXTENSION ONLY** (Deferred implementation) |
+
+### 16.4 Strict Experimental & Statistical Isolation
+The runtime strictly enforces complete experimental isolation between Experiment A and Experiment B. Under no circumstances may metrics or statistical distributions be aggregated across tracks:
+
+$$\mathcal{D}_{\text{Weekday}} \cap \mathcal{D}_{\text{Weekend}} = \emptyset$$
+
+The runtime monitoring, telemetry, and reporting subsystems MUST NOT combine:
+- Realized / Unrealized PnL
+- Sharpe / Sortino / Information Ratios
+- Maximum Drawdown & Drawdown Duration
+- Win Rate & Trade Count
+- Expectancy & Profit Factor
+- Execution Latency & Network Round-Trip
+- Fill Rates & Rejection Frequencies
+- Realized Slippage & Market Impact
+- Strategy Performance Attribution
+- Market Regime Classifications
+
+### 16.5 Strategy Separation & Independent Qualification
+A strategy qualified for the traditional FX market MUST NOT be assumed to transfer to digital assets:
+$$\text{Qualified}_{\text{FX}} \not\implies \text{Qualified}_{\text{Crypto}} \quad \text{and} \quad \text{Qualified}_{\text{Crypto}} \not\implies \text{Qualified}_{\text{FX}}$$
+
+- The Weekend Track requires its own independent research hypothesis, backtesting, walk-forward analysis, Deflated Sharpe Ratio calculation, Bailey CSCV PBO estimation, and formal Phase 8.5 `AlphaQualificationGate` review.
+- No synthetic dossiers will be created for crypto strategies.
+- Each track binds its own distinct `strategy_id`, `strategy_version`, and `dossier_digest` in its session identity.
+
+### 16.6 Execution Model Separation
+The runtime architecture acknowledges that execution microstructure differs fundamentally between MT5 and digital asset venues:
+- **MT5 Model:** Retail/institutional broker bridge, fixed contract lot sizing (0.01 lot step), broker quote-driven execution, single-account margin.
+- **Crypto Model:** Centralized order book (CLOB) / AMM, fractional sizing ($10^{-8}$ satoshi precision), maker/taker tiered fees, funding rate payments (perpetual futures), maintenance windows (e.g. CME $\ge 2$h weekly maintenance), API key / signature authentication, websocket order-book feeds.
+
+None of these crypto execution models are implemented in Rev 2.1.
+
+### 16.7 Strict Scope Boundaries for Rev 2.1
+| Permitted in Rev 2.1 (Architecture Only) | Strictly Forbidden in Rev 2.1 (No Implementation) |
+|---|---|
+| Architecture model definition | Implementing crypto exchange REST/Websocket APIs |
+| Lifecycle state definition | Storing or configuring crypto exchange API credentials |
+| Session identity schema definition | Implementing crypto broker adapters or venues |
+| Experimental dataset isolation rules | Implementing crypto `OrderIntent` dispatch |
+| Future interface and boundary specifications | Connecting to live crypto exchange endpoints |
+| Independent qualification criteria | Executing crypto orders or simulated crypto trades |
+| Operational scheduler segmentation rules | Altering runtime source code to add crypto logic |
 
 ---
 
 ## 17. File-Level Change Matrix
+
+The implementation scope remains strictly locked to **4 runtime files and 1 unit test file**:
 
 | Target File Path | Purpose | Allowed Classes & Functions | Consumed Contracts | Contracts NOT Allowed to Change | Test Coverage | Operational Risk | Rollback Impact |
 |---|---|---|---|---|---|---|---|
@@ -620,29 +680,34 @@ The ACASH core architecture (Phases 1–12) is formally **FROZEN**. The implemen
 - Phase 12 MT5 Authoritative Reconciler (`src/acash/execution/mt5/reconciliation.py`).
 - Phase 8.5 Alpha Qualification Gate contracts (`src/acash/research/qualification.py`).
 
-If any implementation requirement appears to necessitate modifying frozen core files, work MUST halt immediately for architectural escalation (`BLOCKED / ESCALATION`).
+If any implementation requirement appears to necessitate modifying frozen core files, work MUST halt immediately for architectural escalation (`BLOCKED / ESCALATION REQUIRED`).
 
 ---
 
-## 19. Acceptance Criteria Checklist (Rev 2.1 Contract)
+## 19. Mandatory Acceptance Checklist (Rev 2.1 Contract)
 
-- [ ] Zero synthetic dossiers; candidate strategy remains explicitly marked `BLOCKED (QUALIFICATION PENDING)`.
-- [ ] `PaperExecutionBridge` is strictly translation and dispatch; zero secondary risk logic.
-- [ ] Risk and allocation ownership chain is unambiguous.
-- [ ] `ExecutionCostModel` formally specified with spread, slippage, and commission components.
-- [ ] Zero magic numbers; all simulator cost parameters contribute to `config_digest`.
-- [ ] Rehydration authority schema-grounded; recovery fields classified with `DISCREPANCY_HALT`.
-- [ ] Frozen `UNKNOWN` / `TIMEOUT` semantics preserved; zero fabricated terminal states.
-- [ ] `MT5_FORWARD` data source strictly separated from offline `STREAMING_PARQUET_PUMP`.
-- [ ] `PaperStrategyAdapter` is strictly read/verify; zero lifecycle promotion authority.
-- [ ] Complete `ExecutionManifest` schema and digest rules specified.
-- [ ] Complete `PaperTradingSessionIdentity` metadata specified (including planned and actual end timestamps).
-- [ ] Adversarial test matrix expanded to 20 comprehensive failure vectors.
-- [ ] Weekend Crypto Track isolated as a future architecture note (zero code in Rev 2.1).
-- [ ] Pre-90-Day Progressive Validation Ladder established (including 24–72h soak test).
-- [ ] Live capital remains strictly `$0.00`; live orders remain `0`.
-- [ ] Zero frozen core modifications permitted.
-- [ ] Zero runtime source implementation performed during plan revision.
+- [ ] Rev2 findings #1–#9 addressed
+- [ ] No synthetic dossier
+- [ ] Strategy remains qualification-blocked
+- [ ] Bridge is translation/dispatch only
+- [ ] Execution cost assumptions explicit
+- [ ] `config_digest` binds execution-cost parameters
+- [ ] Rehydration authority is schema-grounded
+- [ ] Timeout semantics preserve `UNKNOWN`
+- [ ] MT5 forward feed separated from Parquet pump
+- [ ] Lifecycle authority preserved
+- [ ] `ExecutionManifest` defined
+- [ ] Session identity complete
+- [ ] Adversarial matrix expanded
+- [ ] Weekday track defined
+- [ ] Weekend track defined
+- [ ] Weekend track experimentally isolated
+- [ ] Crypto NOT implemented
+- [ ] No crypto credentials
+- [ ] No crypto connectivity
+- [ ] No frozen-core changes
+- [ ] Live capital remains `$0.00`
+- [ ] Live orders remain `0`
 
 ---
 
@@ -672,3 +737,4 @@ GO IMPLEMENTATION
 2. Approval of this plan does NOT constitute an assertion that `MultiHorizonMomentumStrategy` has positive empirical alpha.
 3. Passing unit tests on `test_paper_bridge.py` does NOT constitute completion of the 90-day paper trading validation.
 4. Local simulator results under `SimulatedMarketMatcher` do NOT prove real-world MT5 execution quality.
+5. Specification of the Weekend Paper Track does NOT constitute implementation or deployment of crypto trading capabilities.
