@@ -410,6 +410,18 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
+### 🏛️ Phase 23: Adaptive Multi-Horizon Strategy & Market-Regime Architecture [ARCHITECTURAL RECORD]
+- **Objective:** Establish the foundational architectural principle that ACASH is a strategy-agnostic, risk-controlled trading infrastructure rather than a fixed-style bot (scalping, intraday, swing, long-term).
+- **Core Governance & Decoupling:**
+  - Decouple ACASH Core (Risk, Execution, Reconciliation, Governance) from Strategy Layer (Alpha models, horizons, styles).
+  - Strategy $\neq$ Authority; Signal $\neq$ Order; Target Position $\neq$ Execution.
+  - Rejection of global fixed slice allocations (e.g. 30/30/40) in favor of Target Position, Risk Budget, Entry Schedule, and Dynamic Recalculation.
+  - Confirmation-driven pyramiding default; strict rejection of blind averaging down as core default.
+  - Dynamic risk recalculation per entry tranche; position size strictly bounded by stop distance.
+  - Formally specified in ADR-024 and [`docs/architecture/adaptive_multi_horizon_strategy_architecture.md`](architecture/adaptive_multi_horizon_strategy_architecture.md).
+
+---
+
 ## Reality Gap Analysis & Execution Deviation
 
 The core empirical objective of ACASH is measuring:

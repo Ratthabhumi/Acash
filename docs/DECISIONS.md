@@ -339,4 +339,24 @@
   13. **Strict Boundaries:** Live capital remains hard-locked at $0.00. Zero mutations to `src/acash/execution/`. MetaTrader 5 demo terminal remains 100% flat.
 - **Consequences:** Permanently protects ACASH against performance chasing, selection bias, and unearned capital allocation. Establishes a reproducible, institutional standard for strategy research and qualification.
 
+---
+
+## ADR-024: Adaptive Multi-Horizon Strategy & Market-Regime Architecture (ACASH is Strategy-Agnostic and Market-Regime-Aware)
+
+- **Status:** **Approved (Architecture Decision & Design Record — Phase 23 Baseline)**
+- **Date:** 2026-09-05
+- **Context:** ACASH is frequently misconstrued through traditional algorithmic trading archetypes (e.g. "Scalping Bot", "Intraday EA", "Swing System", or "Grid Trader"). Furthermore, traders often treat position scaling as fixed capital percentages (e.g. "3 fixed tranches of 30/30/40") or conflate signal generation with immediate trade execution. A foundational architectural boundary must be established: ACASH is an autonomous risk-controlled trading infrastructure; trading style, holding period, and entry mechanics are strategy-level properties, not platform identities.
+- **Decision:**
+  1. **Core Platform Identity:** ACASH Core is risk-controlled trading infrastructure (Execution, Risk, Reconciliation, Governance). Scalping, Intraday, Swing, Long-term, Trend Following, and Mean Reversion belong exclusively to the Strategy Layer.
+  2. **Strategy != Authority:** Strategies propose; the Deterministic Risk Engine admits or vetoes; the Execution Engine performs only admitted actions; Governance authorizes operational parameters. A strategy signal is never an order.
+  3. **Rejection of Fixed Capital Slicing:** The core engine strictly rejects hardcoded slice rules (e.g. 30/30/40). Position sizing is decoupled into Target Position, Risk Budget, Entry Schedule, and Dynamic Recalculation.
+  4. **Risk-First Position Sizing:** Position size is derived from allowable currency Risk Budget divided by Stop Distance, never from percentage of capital alone.
+  5. **Scale-In Philosophy:** Confirmation-driven pyramiding is the default ACASH philosophy. Blind averaging down is strictly rejected as a core engine default and permitted only in specialized, risk-bounded strategies admitted under Phase 17 standards.
+  6. **Dynamic Risk Recalculation:** Every individual entry tranche requires an independent, fresh evaluation by the Risk Engine. Earlier approvals confer zero automatic authorization for future tranches.
+  7. **Market-Regime Context:** Market regimes inform strategy eligibility and scoring, but never directly override Risk Engine limits. In uncertain or unclassified regimes, the system defaults fail-closed to `Cash = 100% (NO_TRADE)`.
+  8. **Strategy Tournament Pathway:** Empirical evidence across backtesting, walk-forward validation, paper trading, and multi-model tournaments determines strategy viability under each regime. Current system alignment with Swing/Medium horizon is an initial baseline, not an architectural lock-in.
+  9. **Full Specification:** Formally documented in [`docs/architecture/adaptive_multi_horizon_strategy_architecture.md`](architecture/adaptive_multi_horizon_strategy_architecture.md).
+- **Consequences:** Permanently protects ACASH against premature horizon or style lock-in, guarantees risk-first sizing across all strategy types, enforces confirmation-driven scaling discipline, and provides a clear architectural foundation for future Strategy Tournament (Phase 18) and Dynamic Allocation (Phase 21) implementations.
+
+
 
