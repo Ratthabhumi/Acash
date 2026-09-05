@@ -1,9 +1,9 @@
-# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 9)
+# Phase 13: Gate B Governance Repair Plan (Formal Specification — Revision 10)
 
-**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV9`  
+**Document ID:** `ACASH-DOC-P13-GATE-B-GOVERNANCE-REPAIR-PLAN-REV10`  
 **Parent Incident Report:** `docs/phase13/gate_b_forensic_reconciliation_report.md` (Commit `affc5ce`)  
 **Governing Specification Baseline:** `docs/phase13/slice2_gate_b_plan.md` (Rev 20 Frozen Baseline, Spec Commit `647ba75`)  
-**Auditor Review Baseline:** Human Auditor Review of Rev 8 (Resolving Blockers R8-1, R8-2, and Finding R8-3)  
+**Auditor Review Baseline:** Human Auditor Review of Rev 9 (Resolving Blockers R9-1, R9-2, and Findings R9-3, R9-4)  
 **Current System State:**  
 - Transaction Persistence: `COMMITTED` (Incident transaction `339ce2fd-a215-4569-9bf4-84a6812175d1` on physical NTFS)  
 - Authorization Provenance: `INVALID` (Self-authorizing runtime runner loop)  
@@ -12,7 +12,7 @@
 - Live Capital Deployed: `$0.00`  
 - Live Orders Transmitted: `0`  
 - Broker Connection: `DISCONNECTED`  
-**Document Status:** REVISION 9 — SUBMITTED FOR FORMAL AUDIT APPROVAL (ZERO EXECUTION / ZERO CODE MUTATION)
+**Document Status:** REVISION 10 — SUBMITTED FOR FORMAL AUDIT APPROVAL (STEP 2 CONDITIONAL APPROVAL BASELINE; ZERO SOURCE EXECUTION / ZERO CODE MUTATION)
 
 ---
 
@@ -22,30 +22,32 @@ During the Gate B activation attempt on 2026-09-05, the runner script committed 
 
 While the physical storage mechanics (two-phase commit, fsync barriers, CAS elevations, pointer transitions, NTFS DACL) executed correctly as software code, the **governance provenance is mathematically and organizationally invalid**.
 
-In Revision 8, the architecture introduced release manifests binding the launcher, interpreter, and dependency tree. However, deep root-of-trust audit identified that **the Verifier's Paradox had merely shifted from the Runner to the Launcher**:
-1. **Launcher Self-Attestation Paradox (Blocker R8-1):** `launch_runner.py` was tasked with reading its own SHA-256 and verifying its own integrity. If an attacker patches `launch_runner.py` to return `True`, self-attestation collapses. A verifier cannot derive its authority from the mutable software tree it is adjudicating.
-2. **Mutable Root Anchor in Python Source (Blocker R8-2):** `RELEASE_AUTHORITY_ROOT_PUBLIC_KEY` resided in Python code, which could be patched alongside the launcher. The root anchor must be pinned outside the Python software stack.
-3. **Ambiguous Runtime Environment Digest (Finding R8-3):** `runtime_dependencies_tree_digest` required a formal, deterministic canonical algorithm (`ACASH-RUNTIME-ENV-V1`) with explicit exclusion sets, path normalizations, and byte-level formulations.
+In Revision 9, the architecture broke circularity by introducing an External OS-Enforced Trust Boundary and a native bootstrapper. However, deep root-of-trust audit identified four remaining security boundaries required prior to implementing Step 2:
+1. **Deployed Host-Level OS Enforcement (Blocker R9-1):** Authenticode code signing must not be a mere descriptive document; host-level enforcement requires an active Windows Defender Application Control (WDAC) / AppLocker policy in Enforce mode, proving that execution of an unsigned or modified bootstrapper is actively denied by the OS kernel.
+2. **Sovereign Root-of-Root Provenance (Blocker R9-2):** The Authenticode certificate authority and `RELEASE_AUTHORITY_ROOT_PUBLIC_KEY` belong strictly to the air-gapped External Release Authority. The ACASH repository and local workstation cannot create or alter either root.
+3. **Fully Frozen Canonical Release Tree Algorithm (Finding R9-3):** `ACASH-RELEASE-TREE-V1` is fully frozen against Windows filesystem semantics, including Git-index casing preservation, Unicode NFC normalization, reparse-point/symlink ban, line ending invariance, and case collision rejection.
+4. **Modern x64 Security Mitigations (Finding R9-4):** Removed inapplicable x86 `SafeSEH` references; mandated 64-bit High-Entropy ASLR, DEP/NX, Control Flow Guard (CFG), and non-writable `.rdata` PE section flags.
 
-This Revision 9 Governance Repair Plan resolves the Verifier's Paradox by introducing an **External OS-Enforced Trust Boundary & Native Signed Bootstrapper**:
+This Revision 10 Governance Repair Plan resolves all four conditions:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                   CANONICAL ROOT-OF-ROOT TRUST BOOTSTRAP HIERARCHY                     │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 1. TIER 0: OS-ENFORCED TRUST & CODE INTEGRITY POLICY (Blocker R8-1 Resolution):        │
-│    - Windows Defender Application Control (WDAC) / Authenticode Code Signing Policy     │
-│    - Only binaries signed by External Release Authority Authenticode Cert may execute  │
+│ 1. TIER 0: DEPLOYED OS CODE INTEGRITY ENFORCEMENT (Blockers R8-1 & R9-1 Resolution):   │
+│    - Windows Defender Application Control (WDAC) / AppLocker in Enforce Mode            │
+│    - OS kernel blocks execution of unsigned / tampered binaries (0x800711c7)           │
+│    - Authenticode Cert owned strictly by External Release Authority (Blocker R9-2)     │
 │                                │                                                       │
-│                                ▼ OS verifies Authenticode signature before execution   │
+│                                ▼ OS kernel verifies Authenticode before execution      │
 │ 2. TIER 1: NATIVE SIGNED BOOTSTRAPPER (tools/governance/bin/acash-bootstrapper.exe):   │
-│    - Standalone compiled native binary (ASLR, DEP, SafeSEH, read-only .rdata)          │
+│    - x86_64 native binary (High-Entropy ASLR, DEP, CFG, read-only .rdata) (R9-4)       │
 │    - RELEASE_AUTHORITY_ROOT_PUBLIC_KEY compiled immutably into PE read-only section    │
 │    - Verifies release_manifest.json signature via embedded Root Key (Blocker R8-2)     │
 │    - Asserts sha256(tools/governance/launch_runner.py) == manifest.launcher_sha256     │
 │    - Asserts sha256(python.exe) == manifest.python_interpreter_sha256                  │
 │    - Evaluates ACASH-RUNTIME-ENV-V1(.venv) == manifest.runtime_env_digest (R8-3)      │
-│    - Evaluates ACASH-RELEASE-TREE-V1(codebase) == manifest.executable_tree_digest      │
+│    - Evaluates ACASH-RELEASE-TREE-V1(codebase) == manifest.executable_tree_digest (R9-3)│
 │                                │                                                       │
 │                                ▼ launches authenticated launcher                       │
 │ 3. TIER 2: AUTHENTICATED PRE-EXECUTION LAUNCHER (tools/governance/launch_runner.py):   │
@@ -97,25 +99,61 @@ Prior to any fresh activation attempt, the incident storage environment will be 
 
 ---
 
-## 3. Pre-Execution Verifier, Native Bootstrapper, & Canonical Environment Attestation (Blockers R8-1, R8-2, & R8-3 Resolution)
+## 3. Pre-Execution Verifier, Native Bootstrapper, & Canonical Environment Attestation (Blockers R8-1, R8-2, R9-1, R9-2 & Findings R8-3, R9-4 Resolution)
 
-### 3.1 External OS Trust & Native Signed Bootstrapper (Blockers R8-1 & R8-2 Resolution)
-To eliminate the Verifier's Paradox and remove the root anchor from Python source code:
-1. **Tier 0 OS Application Control:** The host Windows operating system enforces execution integrity via Windows Defender Application Control (WDAC) or Authenticode Code Signing policies. Only native binaries signed with the **External Release Authority Authenticode Certificate** are permitted to execute.
-2. **Tier 1 Native Signed Bootstrapper (`tools/governance/bin/acash-bootstrapper.exe`):**
-   - Standalone native binary compiled from audited source with stack protection (`/GS`), Control Flow Guard (`/guard:cf`), ASLR (`/DYNAMICBASE`), and DEP (`/NXCOMPAT`).
-   - Authenticode digitally signed by the External Release Authority.
-   - **Immutable Root Anchor:** The `RELEASE_AUTHORITY_ROOT_PUBLIC_KEY` is compiled into the PE `.rdata` (read-only data) section of `acash-bootstrapper.exe`. It does NOT exist as a mutable Python variable.
-   - **Administrative DACL:** The bootstrapper binary is owned by Administrator with explicit Deny Write ACEs for standard users.
-3. **Bootstrapper Attestation Sequence:**
-   When `acash-bootstrapper.exe` executes:
-   a. Loads `release_manifest.json`.
-   b. Verifies `release_authority_signature_ed25519` using its embedded read-only root public key.
-   c. Reads raw bytes of `tools/governance/launch_runner.py`, computes SHA-256, and asserts `== manifest.launcher_artifact_sha256`.
-   d. Reads raw bytes of `sys.executable` (`python.exe`), computes SHA-256, and asserts `== manifest.python_interpreter_sha256`.
-   e. Computes `ACASH-RUNTIME-ENV-V1` across `.venv/Lib/site-packages` and asserts `== manifest.runtime_dependencies_tree_digest`.
-   f. Computes `ACASH-RELEASE-TREE-V1` across codebase and asserts `== manifest.executable_tree_digest`.
-   g. Only if all verifications succeed: invokes `python.exe -I -s -E tools/governance/launch_runner.py`.
+### 3.1 External OS Trust & Native Signed Bootstrapper (Blockers R8-1, R8-2, R9-1, R9-2 & Finding R9-4 Resolution)
+
+#### 3.1.1 Tier 0 Deployed OS Code Integrity Enforcement (Blocker R9-1 Resolution)
+To guarantee that Authenticode code-signing is an active runtime barrier rather than an architectural aspiration:
+1. **Host-Level OS Enforcement Mechanism:**
+   The host Windows operating system enforces execution integrity at the kernel level via **Windows Defender Application Control (WDAC)** or **AppLocker Publisher Rules** operating strictly in **Enforcement Mode** (Audit Mode is strictly prohibited for Gate B):
+   - **Policy Rule Definition:** Binary execution within `tools/governance/bin/` is restricted by rule:
+     - `RuleType`: `Publisher` / `FilePublisher`
+     - `Publisher`: `CN=ACASH Sovereign External Release Authority`
+     - `CertificateThumbprint`: Bound to the authoritative SHA-256 thumbprint of the External Release Authority Code Signing Certificate.
+   - **Kernel-Level Interception:** When `acash-bootstrapper.exe` is invoked, the Windows NT Kernel Code Integrity subsystem (`ci.dll` / `ntoskrnl.exe`) intercepts process section creation (`NtCreateSection` with `SEC_IMAGE` and `PAGE_EXECUTE`).
+   - **Enforcement Semantics:**
+     - **Authenticode Valid:** If the binary possesses a valid Authenticode signature chaining to the trusted certificate $\to$ Process execution proceeds.
+     - **Unsigned or Tampered:** If a single byte in the binary (PE header, `.text`, or `.rdata`) is mutated, the Authenticode digital signature becomes cryptographically invalid. The OS kernel actively denies process creation, returning NTSTATUS `STATUS_IMAGE_CERT_REVOKED` / Win32 `ERROR_ACCESS_DISABLED_BY_POLICY` (`0x800711c7`) or `TRUST_E_BAD_DIGEST` (`0x80096010`).
+2. **Host Telemetry & Test Verification:**
+   Adversarial Test B23 MUST execute against the live host OS, asserting that mutating 1 byte of `acash-bootstrapper.exe` causes the Windows kernel to abort execution, generating verified audit telemetry in Windows Event Log (`Microsoft-Windows-CodeIntegrity/Operational` Event ID 3076/3077 or `Microsoft-Windows-AppLocker/EXE and DLL` Event ID 8004).
+
+#### 3.1.2 Sovereign Root-of-Root External Provenance Model (Blocker R9-2 Resolution)
+To prevent circular trust regeneration at the meta-level:
+```text
+External Release Authority (Air-Gapped Sovereign Hardware Security Module)
+├── Owns Authenticode Code Signing Private Key (Slot 9c, PIN=Always, Touch=Always)
+├── Owns RELEASE_AUTHORITY_ROOT_PUBLIC_KEY (Ed25519)
+└── Compiles and signs tools/governance/bin/acash-bootstrapper.exe in an isolated build runner
+
+ACASH Repository & Local Host (Untrusted Execution Substrate)
+├── Holds ONLY the pre-compiled, Authenticode-signed acash-bootstrapper.exe
+├── CANNOT issue or forge Authenticode certificates
+├── CANNOT sign or re-sign native PE executables
+└── CANNOT mutate embedded RELEASE_AUTHORITY_ROOT_PUBLIC_KEY without voiding Authenticode signature
+```
+- **Provenance Ceremony:** Prior to Step 4 activation, the External Release Authority executes an isolated, clean build of `acash-bootstrapper.exe`, embeds the sovereign Ed25519 root public key into `.rdata`, signs with the Authenticode private key, and commits only the signed binary. Its binary SHA-256 and Authenticode thumbprint are immutably sealed into `release_manifest.json`.
+
+#### 3.1.3 Native Bootstrapper Architecture & Modern x64 Mitigations (Finding R9-4 Resolution)
+The native bootstrapper binary (`tools/governance/bin/acash-bootstrapper.exe`) is compiled exclusively for **x86_64 (AMD64)** with modern exploit mitigations:
+- **Target Architecture:** `x86_64 (AMD64)`. (x86 32-bit `SafeSEH` is recognized as inapplicable to 64-bit table unwinding and is formally removed).
+- **High-Entropy ASLR:** `/DYNAMICBASE` and `/HIGHENTROPYVA` (64-bit address space layout randomization across 64-bit virtual memory space).
+- **Hardware DEP / NX:** `/NXCOMPAT` (Hardware Data Execution Prevention; marks stack and heap non-executable).
+- **Control Flow Guard (CFG):** `/guard:cf` (Compiler-generated bitmap checks preventing call-target hijacking).
+- **Stack & Buffer Protection:** `/GS` and `/sdl` (Stack canary verification and enhanced security development lifecycle enforcement).
+- **PE Section Protection:** `.rdata` section containing the root anchor is flagged `IMAGE_SCN_MEM_READ` and strictly lacks `IMAGE_SCN_MEM_WRITE`, enforced by the OS Memory Manager.
+- **Deterministic Build:** `/Brepro` (Reproducible PE timestamp and checksum generation).
+
+#### 3.1.4 Bootstrapper Pre-Execution Attestation Sequence
+When `acash-bootstrapper.exe` executes:
+1. Loads `release_manifest.json`.
+2. Verifies `release_authority_signature_ed25519` using its embedded read-only root public key.
+3. Reads raw bytes of `tools/governance/bin/acash-bootstrapper.exe`, computes SHA-256, and asserts `== manifest.bootstrapper_artifact_sha256`.
+4. Reads raw bytes of `tools/governance/launch_runner.py`, computes SHA-256, and asserts `== manifest.launcher_artifact_sha256`.
+5. Reads raw bytes of `sys.executable` (`python.exe`), computes SHA-256, and asserts `== manifest.python_interpreter_sha256`.
+6. Computes `ACASH-RUNTIME-ENV-V1` across `.venv/Lib/site-packages` and asserts `== manifest.runtime_dependencies_tree_digest`.
+7. Computes `ACASH-RELEASE-TREE-V1` across codebase and asserts `== manifest.executable_tree_digest`.
+8. Only if all verifications succeed: invokes `python.exe -I -s -E tools/governance/launch_runner.py`.
 
 ### 3.2 Canonical Runtime Environment Digest Algorithm `ACASH-RUNTIME-ENV-V1` (Finding R8-3 Resolution)
 To eliminate ambiguity in runtime environment attestation, `ACASH-RUNTIME-ENV-V1` specifies a deterministic, byte-for-byte canonical hashing standard:
@@ -170,37 +208,52 @@ To guarantee that static AST analysis cannot be bypassed by runtime import/path 
    - Asserts that every path entry in `sys.path` is an absolute canonical path within either the authenticated standard library or the authenticated `.venv/Lib/site-packages`.
    - If any unauthorized or relative directory is detected in `sys.path` $\to$ Halt immediately (`GovernanceSecurityError: UNTRUSTED_MODULE_SEARCH_PATH_DETECTED`).
 
-### 3.4 Canonical Tree Digest Algorithm `ACASH-RELEASE-TREE-V1`
-To guarantee deterministic, byte-for-byte identical hashing between the External Release Authority and local verifiers with zero circularity:
+### 3.4 Canonical Tree Digest Algorithm `ACASH-RELEASE-TREE-V1` (Finding R9-3 Resolution)
+To guarantee deterministic, byte-for-byte identical hashing across identical Git repository states on Windows without ambiguity or platform discrepancy:
 
 #### 3.4.1 Strict Exclusion Set
 The following paths are **STRICTLY EXCLUDED** from `executable_tree_digest`:
 - `release_manifest.json` (avoids circular manifest self-hashing)
 - `*.sig`, `*.signature`, `*.sha256`
+- `tools/governance/bin/` (native bootstrapper binaries; verified at Tier 0 by OS Authenticode and bound by `bootstrapper_artifact_sha256`)
 - `var/` (runtime storage, locks, journals, state databases)
 - `var/gate_b_incident_archive/` (historical forensic archive)
-- `.git/`, `.gitignore`, `.github/`
+- `.git/`, `.gitignore`, `.gitattributes`, `.github/`
 - `__pycache__/`, `*.pyc`, `*.pyo`, `*.pyd`
 - `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.venv/`, `*.egg-info/`
 - `docs/` (non-executable markdown artifacts)
-- Temporary, scratch, or log files
+- Temporary, scratch, or log files (`*.tmp`, `*.log`, `*.bak`)
 
 #### 3.4.2 Strict Inclusion Set
 All release-critical production codebase and governance tooling files:
 - `src/**` (all production engine modules)
-- `tools/governance/**` (all sovereign governance tools, excluding binaries in `bin/`)
+- `tools/governance/**` (all sovereign governance tools, excluding `bin/`)
 - `pyproject.toml`, `uv.lock` (frozen package dependencies)
 
-#### 3.4.3 Canonical Tree Digest Formulation
+#### 3.4.3 Windows Filesystem Determinism & Normalization Standard
+To guarantee that the exact same repository files on any Windows system yield the exact same digest:
+1. **Reparse Point & Symlink Ban:**
+   NTFS junctions, directory reparse points, and symbolic links within the source tree are **STRICTLY BANNED**. If any candidate file or directory has the `FILE_ATTRIBUTE_REPARSE_POINT` flag set, the algorithm aborts immediately (`DataContractError: REPARSE_POINT_DETECTED`).
+2. **Canonical Path Normalization & Git Index Casing:**
+   - Every file path is normalized relative to repository root using forward slash (`/`) as separator (e.g. `src/acash/gate_b/runner.py`).
+   - Casing is preserved verbatim from the authoritative Git index.
+   - Unicode normalization to **NFC** (Normalization Form C per Unicode Standard Annex #15) is enforced on all path characters.
+3. **Case-Insensitive Collision Detection:**
+   If two discovered files collide under case-insensitive comparison (e.g. `src/Foo.py` and `src/foo.py`), the algorithm halts immediately (`DataContractError: CASE_COLLISION_DETECTED`).
+4. **Line-Ending & Raw Binary Invariance:**
+   Files are read verbatim as raw binary bytes (`open(path, "rb")`) with zero CRLF/LF line-ending conversion. The repository `.gitattributes` mandates consistent LF normalization (`* text=auto eol=lf`) for all text files.
+5. **Binary UTF-8 Lexicographical Sorting:**
+   All normalized relative paths are sorted in ascending lexicographical order based on raw UTF-8 byte values:
+   $$\text{canonical\_rel\_path}_1 < \text{canonical\_rel\_path}_2 < \dots < \text{canonical\_rel\_path}_N$$
+
+#### 3.4.4 Canonical Tree Digest Formulation
 1. Discover all files matching Inclusion Set that are not excluded.
-2. Normalize every file path to POSIX relative format (`/`) relative to repository root (e.g. `src/acash/gate_b/runner.py`).
-3. Read raw file bytes verbatim (`rb`).
-4. Compute leaf SHA-256:
+2. Verify absence of reparse points, symlinks, and case collisions.
+3. Compute leaf SHA-256 for each file:
    $$H_{\text{leaf}} = \text{hex}(\text{SHA256}(\text{raw\_bytes}))$$
-5. Sort all entries lexicographically by `canonical_rel_path` in UTF-8 byte order.
-6. Assemble canonical tree payload:
-   $$\text{TreePayload} = \text{"ACASH-RELEASE-TREE-V1}\backslash 0\text{"} \parallel \sum_{i} \left( \text{canonical\_rel\_path}_i \parallel \text{"}\backslash 0\text{"} \parallel H_{\text{leaf}, i} \parallel \text{"}\backslash n\text{"} \right)$$
-7. Compute final digest:
+4. Assemble canonical tree payload with domain separator:
+   $$\text{TreePayload} = \text{"ACASH-RELEASE-TREE-V1}\backslash 0\text{"} \parallel \sum_{i=1}^N \left( \text{canonical\_rel\_path}_i \parallel \text{"}\backslash 0\text{"} \parallel H_{\text{leaf}, i} \parallel \text{"}\backslash n\text{"} \right)$$
+5. Compute final digest:
    $$\text{executable\_tree\_digest} = \text{hex}(\text{SHA256}(\text{TreePayload}))$$
 
 ### 3.5 `ReleaseManifest` Schema
@@ -211,6 +264,12 @@ class ReleaseManifest(BaseModel):
     manifest_version: int = Field(default=1, description="Schema version.")
     release_tag: str = Field(description="Audited release tag, e.g. v1.0.0-gate-b.")
     release_commit_sha: str = Field(description="Exact Git commit SHA of frozen release baseline.")
+    bootstrapper_artifact_sha256: str = Field(
+        description="Exact SHA-256 of tools/governance/bin/acash-bootstrapper.exe."
+    )
+    bootstrapper_authenticode_thumbprint: str = Field(
+        description="Authoritative SHA-256 thumbprint of External Release Authority Authenticode certificate."
+    )
     launcher_artifact_sha256: str = Field(
         description="Exact SHA-256 of tools/governance/launch_runner.py."
     )
@@ -243,6 +302,8 @@ class ReleaseManifest(BaseModel):
             "manifest_version": self.manifest_version,
             "release_tag": self.release_tag,
             "release_commit_sha": self.release_commit_sha,
+            "bootstrapper_artifact_sha256": self.bootstrapper_artifact_sha256,
+            "bootstrapper_authenticode_thumbprint": self.bootstrapper_authenticode_thumbprint,
             "launcher_artifact_sha256": self.launcher_artifact_sha256,
             "executable_tree_digest": self.executable_tree_digest,
             "python_interpreter_sha256": self.python_interpreter_sha256,
@@ -532,7 +593,7 @@ The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`
 | **Test B20: Real NTFS Owner Takeover & DACL Ban**| Attempt Win32 takeover or DACL write on actual host NTFS substrate | Fails closed: `ERROR_ACCESS_DENIED` / `ERROR_PRIVILEGE_NOT_HELD` |
 | **Test B21: Signed Release Manifest Verification**| Mutate release manifest or sign with untrusted release authority key | Fails closed: `DataContractError: RELEASE_MANIFEST_SIGNATURE_INVALID` |
 | **Test B22: Pre-Execution Full Artifact Attestation**| Mutate launcher, python.exe, dependencies, or inject PYTHONPATH/CWD | Fails closed: `PreExecutionIntegrityError` / launcher abort |
-| **Test B23: Native Bootstrapper Authenticode & Root Tampering Ban**| Mutate native bootstrapper binary or embedded root key | Fails closed: OS Authenticode invalid / bootstrapper abort |
+| **Test B23: Native Bootstrapper Host-Level Authenticode & Root Tampering Enforcement**| Mutate native bootstrapper binary or embedded root key; assert host OS rejects execution (`ERROR_ACCESS_DISABLED_BY_POLICY` / `TRUST_E_BAD_DIGEST`) and capture Code Integrity telemetry | Fails closed: OS Authenticode invalid / execution blocked by kernel |
 
 ---
 
@@ -541,21 +602,21 @@ The adversarial test suite (`tests/unit/gate_b/test_gate_b_governance_repair.py`
 The repair proceeds through four strictly gated steps. Advancing between steps requires explicit human auditor sign-off:
 
 ```text
-Step 1: Formal Audit Approval of this Plan (Rev 9)
+Step 1: Formal Audit Approval of this Plan (Rev 10)
   │
   ▼
 Step 2: Implement Tooling & Architectural Hardening (Zero Activation)
-  ├─ tools/governance/bin/acash-bootstrapper.exe (Native Authenticode Signed Bootstrapper: R8-1 & R8-2)
+  ├─ tools/governance/bin/acash-bootstrapper.exe (Native Authenticode Signed Bootstrapper: R8-1, R8-2, R9-1, R9-2, R9-4)
   ├─ tools/governance/launch_runner.py (Pre-Execution Attestation & Python Isolated Mode Launcher)
   ├─ tools/governance/mint_human_go_record.py (Process A: YubiKey PIV Ed25519 Hardware Touch)
   ├─ src/acash/gate_b/runner.py (Process B: Verify-Only with Static Closure, sys.path Sanitization & Token Audit)
   ├─ tests/unit/gate_b/test_gate_b_governance_repair.py (23 Adversarial Tests)
-  └─ Verification Criterion: ALL REPOSITORY TESTS PASS (Pre-repair baseline + new tests clean; MyPy clean)
+  └─ Verification Criterion: ALL REPOSITORY TESTS PASS (Pre-repair baseline + new tests clean; MyPy clean; OS telemetry verified)
   │
   ▼
 Step 3: Governance Ceremonies & Storage Re-initialization
   ├─ Archive var/gate_b -> var/gate_b_incident_archive (Option 2)
-  ├─ External Release Authority signs release_manifest.json (Commit SHA, Launcher, Python, Dependencies, Codebase)
+  ├─ External Release Authority signs release_manifest.json (Commit SHA, Bootstrapper, Launcher, Python, Dependencies, Codebase)
   ├─ Execute Genesis Bootstrap Ceremony -> Sovereign signs genesis_bootstrap_manifest.json
   ├─ Execute Trust Anchor Ceremony -> Sovereign signs trust_anchor_manifest.json & seals trust_store.json
   ├─ Execute Hardware-Backed Human Authorization Ceremony -> Auditor signs human_go_record.json via YubiKey PIV
@@ -572,7 +633,7 @@ Step 4: Fresh Authoritative Gate B Activation Execution
 
 > [!NOTE]
 > **Acceptance Criterion Language:**  
-> "All repository tests pass; exact count reported from actual execution. No regression from pre-repair baseline. Static type checker (MyPy) reports 0 errors across all source files. Tests B19 and B20 verified against actual Win32 host tokens and physical NTFS filesystem. Test B22 verified by asserting pre-execution launcher abort under launcher tampering, interpreter tampering, dependency mutation, and PYTHONPATH injection. Test B23 verified by asserting native bootstrapper Authenticode/PE root rejection upon binary mutation."
+> "All repository tests pass; exact count reported from actual execution. No regression from pre-repair baseline. Static type checker (MyPy) reports 0 errors across all source files. Tests B19 and B20 verified against actual Win32 host tokens and physical NTFS filesystem. Test B22 verified by asserting pre-execution launcher abort under launcher tampering, interpreter tampering, dependency mutation, and PYTHONPATH injection. Test B23 verified by asserting host-level OS execution rejection (ERROR_ACCESS_DISABLED_BY_POLICY / Authenticode failure) upon binary mutation with Windows Code Integrity telemetry captured."
 
 ---
 
@@ -580,21 +641,21 @@ Step 4: Fresh Authoritative Gate B Activation Execution
 
 ```markdown
 ════════════════════════════════════════════════════════════════════════════════
-    GATE B GOVERNANCE REPAIR PLAN (REV 9) — FORMAL AUDIT APPROVAL
+    GATE B GOVERNANCE REPAIR PLAN (REV 10) — FORMAL AUDIT APPROVAL
 ════════════════════════════════════════════════════════════════════════════════
 
-Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 9)
+Governing Document:       docs/phase13/gate_b_governance_repair_plan.md (Rev 10)
 Parent Incident Report:   docs/phase13/gate_b_forensic_reconciliation_report.md
 Storage Resolution Mode:  OPTION 2: FORENSIC ARCHIVE & FRESH GENESIS ROOT
 Incident Archive Path:    var/gate_b_incident_archive/ (Immutable NTFS Deny DACL)
-Tier 0 OS Policy:         Windows Authenticode & WDAC Code Signing Enforcement
-Tier 1 Bootstrapper:      acash-bootstrapper.exe (Authenticode Signed, PE .rdata Root Anchor)
+Tier 0 OS Policy:         Windows WDAC / AppLocker in Enforce Mode (Active Host Enforcement)
+Tier 1 Bootstrapper:      acash-bootstrapper.exe (Authenticode Signed x86_64, PE .rdata Root Anchor)
 Pre-Execution Launcher:   tools/governance/launch_runner.py (Attested by Release Manifest)
 Runtime Environment:      Binds python.exe, uv.lock, and ACASH-RUNTIME-ENV-V1
 Python Isolation:         Strict Isolated Mode (-I -s -E), Canonical Absolute Paths
-Canonical Tree Digest:    ACASH-RELEASE-TREE-V1 (Strict Exclusion Set & Lexicographical Ordering)
+Canonical Tree Digest:    ACASH-RELEASE-TREE-V1 (Fully Frozen Windows Invariance Standard)
 Release Authority:        release_manifest.json (Ed25519 Signed by External Release Authority)
-Root Anchor Governance:   PE .rdata Section of Native Bootstrapper (Zero Runtime Override)
+Root Anchor Governance:   PE .rdata Section of Native Bootstrapper (Air-Gapped Sovereign Ownership)
 Genesis Authority:        genesis_bootstrap_manifest.json (Ed25519 Sovereign Signed)
 Trust Anchor Authority:   trust_anchor_manifest.json (Ed25519 Sovereign Signed)
 OS Capability Contract:   Governance Owner, Non-Elevation, Anti-Replacement DACL
