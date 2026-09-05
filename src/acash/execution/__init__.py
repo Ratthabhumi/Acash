@@ -38,10 +38,13 @@ from acash.execution.coordinator import (
     ExecutionCoordinator,
 )
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
+)
+from acash.execution.signing import (
+    Ed25519Signer,
+    StorageEngineSigner,
 )
 from acash.execution.mock import MockExecutionEngine
 from acash.execution.mock_broker import (

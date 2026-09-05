@@ -20,10 +20,13 @@ from typing import Generator, Optional
 from uuid import UUID, uuid4
 
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
+)
+from acash.execution.signing import (
+    Ed25519Signer,
+    StorageEngineSigner,
 )
 from acash.gate_b.exceptions import DataContractError, QuarantineError
 from acash.gate_b.readers import (
@@ -43,7 +46,6 @@ from acash.gate_b.storage import (
     GENESIS_HEAD_DIGEST,
     LedgerStorageTransaction,
     StorageCommitContract,
-    StorageEngineSigner,
     StoragePlatformUtils,
 )
 

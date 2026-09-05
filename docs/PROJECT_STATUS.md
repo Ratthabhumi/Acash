@@ -59,7 +59,7 @@ Phases 0 through 10 are completely implemented, verified, and frozen. Phase 11 C
 | **Phase 10** | Runtime Orchestration & Continuous Paper Operations | **FROZEN** | 5-stage supervisor, dual-clock scheduler, ledger. Commit: `3955bf6`. |
 | **Phase 11** | Forward Drift Detection & Execution Attribution | **FROZEN** | 107 unit + 26 red-team + 9 integration tests. Commit: `86bff0d` → `092a2b1`. |
 | **Phase 12** | MT5 & Venue Execution Adapters | **FROZEN** | 6-D RECON, `MT5BrokerAdapter`, Gate 6 Two-Phase Routing, intent_id routing. Commit: `1e1d154`. Closeout: `docs/phase12/closeout_report.md`. |
-| **Phase 13** | Live Small Capital Deployment (Gate A Pre-Live Certification) | **IN PROGRESS** | Layer A verified (11/11); Layer B rehearsal harness refactored (`2f01841`); Gate A conditional. Live Capital: $0.00. |
+| **Phase 13** | Live Small Capital Deployment (Gate B Governance Repair Rev 10) | **IN PROGRESS** | Gate A Certified; Gate B Rev 10 Step 2 Implementation & B1–B23 Adversarial Verification COMPLETE. Step 3 Ceremony & Step 4 Activation LOCKED. Live Capital: $0.00, Orders: 0. |
 
 ---
 

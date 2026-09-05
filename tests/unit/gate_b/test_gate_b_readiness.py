@@ -21,10 +21,13 @@ from uuid import uuid4
 import pytest
 
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
+)
+from acash.execution.signing import (
+    Ed25519Signer,
+    StorageEngineSigner,
 )
 from acash.gate_b.readiness import (
     BrokerProbeSnapshot,
@@ -46,7 +49,6 @@ from acash.gate_b.storage import (
     AuthoritativeGOLedger,
     GENESIS_HEAD_DIGEST,
     StorageCommitContract,
-    StorageEngineSigner,
     StoragePlatformUtils,
 )
 

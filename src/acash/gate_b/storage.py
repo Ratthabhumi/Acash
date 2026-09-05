@@ -21,11 +21,11 @@ import shutil
 import stat
 import subprocess
 import threading
-from typing import Any, Dict, Generator, Optional, Tuple
+from typing import Any, Dict, Generator, Optional, Protocol, Tuple
 from uuid import UUID, uuid4
 
 from acash.core.serialization import CanonicalConfigSerializer
-from acash.execution.crypto import Ed25519Signer, Ed25519TrustStore
+from acash.execution.crypto import Ed25519TrustStore
 from acash.gate_b.exceptions import (
     CryptographicVerificationError,
     DataContractError,
@@ -49,15 +49,13 @@ from acash.gate_b.schema import (
 GENESIS_HEAD_DIGEST: str = "0" * 64
 
 
-class StorageEngineSigner:
-    """Storage engine trust anchor for signing pointer transition records (B88, B93)."""
+class StorageEngineSignerProtocol(Protocol):
+    """Storage engine trust anchor protocol for signing pointer transition records (B88, B93)."""
 
-    def __init__(self, key_id: str, private_key_b64: str) -> None:
-        self.key_id = key_id
-        self._private_key_b64 = private_key_b64
+    key_id: str
 
     def sign(self, payload_bytes: bytes) -> str:
-        return Ed25519Signer.sign(self._private_key_b64, payload_bytes)
+        ...
 
 
 class WALJournal:
@@ -930,7 +928,7 @@ class StorageCommitContract:
         go_record: HumanGORecord,
         approved_auth: LiveAuthorization,
         activated_auth: LiveAuthorization,
-        engine_signer: StorageEngineSigner,
+        engine_signer: StorageEngineSignerProtocol,
     ) -> AuthoritativeCommitRecordBlock:
         # Phase 1: Staged Mutation Data Durability Barrier (fsync_1)
         tx.write_staged_mutation_data(tx_id, go_record, activated_auth)

@@ -49,7 +49,7 @@ from acash.gate_b.storage import (
     AuthoritativeGOLedger,
     LedgerStorageTransaction,
     StorageCommitContract,
-    StorageEngineSigner,
+    StorageEngineSignerProtocol,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ class AtomicActivationTransactionManager:
         self,
         ledger: AuthoritativeGOLedger,
         trust_store: Ed25519TrustStore,
-        engine_signer: StorageEngineSigner,
+        engine_signer: StorageEngineSignerProtocol,
     ) -> None:
         self._ledger = ledger
         self._trust_store = trust_store
@@ -99,7 +99,7 @@ class AtomicActivationTransactionManager:
         go_record: HumanGORecord,
         trust_store: Ed25519TrustStore,
         ledger: AuthoritativeGOLedger,
-        engine_signer: StorageEngineSigner,
+        engine_signer: StorageEngineSignerProtocol,
     ) -> LiveAuthorization:
         """Execute atomic strategy activation lifecycle."""
         with ledger.exclusive_lock() as tx:
@@ -245,7 +245,7 @@ class GateBRecoveryCoordinator:
         self,
         ledger: AuthoritativeGOLedger,
         trust_store: Ed25519TrustStore,
-        engine_signer: StorageEngineSigner,
+        engine_signer: StorageEngineSignerProtocol,
     ) -> None:
         self._ledger = ledger
         self._trust_store = trust_store

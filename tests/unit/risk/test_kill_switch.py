@@ -23,11 +23,11 @@ import pytest
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
 )
+from acash.execution.signing import Ed25519Signer
 from acash.execution.schema import ApproverRole, AuthorizationApproval
 from acash.risk.kill_switch import (
     ALLOWED_KILL_SWITCH_TRANSITIONS,

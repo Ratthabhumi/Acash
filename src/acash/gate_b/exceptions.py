@@ -30,12 +30,23 @@ class QuarantineError(GateBError, DataContractError):
     """Raised when consistency violations, unproven commits, or corrupted states enter quarantine."""
 
 
+class GovernanceSecurityError(GateBError, DataContractError):
+    """Raised when process tokens, OS privileges, or module search paths violate governance boundaries."""
+
+
+class PreExecutionIntegrityError(GateBError, DataContractError):
+    """Raised when pre-execution manifests, dependencies, or runtime environments fail attestation."""
+
+
 __all__ = [
     "CryptographicVerificationError",
     "DataContractError",
     "DomainValidationError",
     "GateBError",
+    "GovernanceSecurityError",
+    "PreExecutionIntegrityError",
     "PreLiveRiskAdmissionError",
     "QuarantineError",
     "StorageDurabilityError",
 ]
+

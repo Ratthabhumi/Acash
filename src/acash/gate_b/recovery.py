@@ -33,7 +33,7 @@ from acash.gate_b.schema import (
 from acash.gate_b.storage import (
     GENESIS_HEAD_DIGEST,
     LedgerStorageTransaction,
-    StorageEngineSigner,
+    StorageEngineSignerProtocol,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ class RecoveryDecisionTreeEngine:
         tx: LedgerStorageTransaction,
         tx_id: UUID,
         trust_store: Ed25519TrustStore,
-        engine_signer: StorageEngineSigner,
+        engine_signer: StorageEngineSignerProtocol,
     ) -> RecoveryResult:
         """Execute recovery decision tree starting strictly from tx_state (B92)."""
         tx_state = tx.get_durable_tx_state(tx_id)

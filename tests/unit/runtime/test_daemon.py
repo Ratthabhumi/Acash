@@ -20,11 +20,11 @@ import pytest
 from acash.core.domain.exceptions import DataContractError
 from acash.core.domain.portfolio import AccountState, PortfolioState
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
 )
+from acash.execution.signing import Ed25519Signer
 from acash.portfolio.schema import AllocationDecision
 from acash.research.alpha_schema import (
     AlphaEconomicDecomposition,

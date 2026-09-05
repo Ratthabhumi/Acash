@@ -13,11 +13,11 @@ from uuid import uuid4
 import pytest
 
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
 )
+from acash.execution.signing import Ed25519Signer
 from acash.gate_b.exceptions import (
     CryptographicVerificationError,
     DataContractError,

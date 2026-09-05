@@ -39,7 +39,7 @@ from acash.gate_b.storage import (
     AuthoritativeGOLedger,
     LedgerStorageTransaction,
     StorageCommitContract,
-    StorageEngineSigner,
+    StorageEngineSignerProtocol,
     StoragePlatformUtils,
     WALJournal,
 )
@@ -69,7 +69,7 @@ __all__ = [
     "QuarantineError",
     "StorageCommitContract",
     "StorageDurabilityError",
-    "StorageEngineSigner",
+    "StorageEngineSignerProtocol",
     "StoragePlatformUtils",
     "SystemSafetyMode",
     "WALJournal",

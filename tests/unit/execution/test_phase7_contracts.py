@@ -25,8 +25,8 @@ from acash.execution.admission import (
 from acash.execution.coordinator import (
     ExecutionCoordinator,
 )
+from acash.execution.signing import Ed25519Signer
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,

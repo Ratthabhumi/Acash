@@ -25,7 +25,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     TrustStoreEntryStatus,
 )
@@ -43,7 +42,7 @@ from acash.gate_b.service import GateBRecoveryCoordinator
 from acash.gate_b.storage import (
     AuthoritativeGOLedger,
     GENESIS_HEAD_DIGEST,
-    StorageEngineSigner,
+    StorageEngineSignerProtocol,
     StoragePlatformUtils,
 )
 
@@ -157,7 +156,7 @@ class GateBReadinessChecker:
         self,
         storage_root: Path,
         trust_store: Ed25519TrustStore,
-        auditor_signer: StorageEngineSigner,
+        auditor_signer: StorageEngineSignerProtocol,
         effective_max_position_size: Optional[Decimal] = Decimal("0.01"),
         max_quote_age_ms: int = 5000,
         broker_probe_override: Optional[BrokerProbeSnapshot] = None,

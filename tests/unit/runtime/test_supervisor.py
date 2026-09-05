@@ -23,11 +23,11 @@ from acash.core.domain.portfolio import AccountState, PortfolioState
 from acash.core.domain.position import Position
 from acash.core.domain.signal import TargetAllocation
 from acash.execution.crypto import (
-    Ed25519Signer,
     Ed25519TrustStore,
     Ed25519TrustStoreEntry,
     TrustStoreEntryStatus,
 )
+from acash.execution.signing import Ed25519Signer
 from acash.portfolio.schema import AllocationDecision
 from acash.research.alpha_schema import (
     AlphaEconomicDecomposition,
