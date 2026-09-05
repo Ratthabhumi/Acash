@@ -124,12 +124,16 @@ tools\governance\bin\acash-bootstrapper.exe --help
    - **Status:** **VERIFIED (PASS)**
    - Unsigned PE Binary: Returned `0x800B0100` (`TRUST_E_NOSIGNATURE`).
    - Tampered PE Binary: Returned `0x800B0100` / `0x80096010` (`TRUST_E_BAD_DIGEST`).
-   - Assertion holds: Any tampering or missing signature is strictly caught by `WinVerifyTrust`.
-2. **B23.2 — OS Kernel-Level Process Creation Interception (WDAC / AppLocker):**
-   - **Status:** **NOT YET PROVEN ON LOCAL HOST (ENVIRONMENT INCAPABLE)**
-   - Windows 11 Home does not support AppLocker, and WDAC User-Mode Code Integrity is not active (`UsermodeCodeIntegrityPolicyEnforcementStatus: 0`).
-   - Furthermore, the current shell runs at Medium Integrity (`TokenIsElevated = 0`), which lacks administrative privileges to modify system CI policies.
-   - **Governance Boundary:** True host-level WDAC Enforce Mode execution blocking must be demonstrated on a dedicated Windows Enterprise/Server production environment where AppLocker/WDAC is deployed under enterprise policy.
+   - **Critical Semantic Boundary:** `WinVerifyTrust` proves PE file and signature trust state via user-mode WinTrust API; it is **NOT** by itself proof of OS kernel-level process-creation denial.
+2. **B23.2 — Host Application-Control Execution Enforcement (WDAC / AppLocker):**
+   - **Status:** **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)**
+   - Telemetry from development host:
+     - `Win32_DeviceGuard.UsermodeCodeIntegrityPolicyEnforcementStatus: 0` (User-Mode Code Integrity is NOT enforced).
+     - `AppIDSvc` (Application Identity Service): `Stopped`.
+     - Live execution test: unsigned `acash-bootstrapper.exe` executed past the OS kernel loader and was only stopped by application-level invariant (`RELEASE_MANIFEST_MISSING`).
+   - **Engineering Separation:**
+     - **Development Host:** Build, unit testing, integration testing, B1–B22, B23.1.
+     - **Designated Governance Host:** Authoritative execution substrate with active OS Code Integrity enforcement (WDAC/AppLocker in Enforce mode), signed release artifact, and physical B23.2 proof.
 
 ---
 
@@ -175,9 +179,11 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 | **B20** | `test_b20_real_ntfs_owner_takeover_and_dacl_ban` | Host NTFS owner and DACL tamper resistance test | **PASSED** |
 | **B21** | `test_b21_signed_release_manifest_verification` | Mutate release manifest fields; signature verification fails closed | **PASSED** |
 | **B22** | `test_b22_pre_execution_full_artifact_attestation` | Injected `PYTHONPATH` or tampered artifact detected by launcher before runner invocation | **PASSED** |
-| **B23** | `test_b23_native_bootstrapper_host_level_authenticode_enforcement` | WinVerifyTrust cryptographic rejection of unsigned/tampered binary; OS execution block deferred to Enterprise host | **CONDITIONAL PASS** |
+| **B23.1** | `test_b23_1_native_bootstrapper_authenticode_trust_verification` | WinVerifyTrust cryptographic rejection of unsigned/tampered binary | **PASSED** |
+| **B23.2** | `test_b23_2_host_application_control_enforcement` | Host OS Application Control (WDAC/AppLocker) kernel process execution block | **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)** |
 
-**Summary:** **22 PASSED, 1 CONDITIONAL PASS (B23)**
+**Summary:** **23 PASSED, 1 NOT PROVEN (B23.2 Deferred to Designated Governance Host)**
+
 
 ---
 
@@ -208,8 +214,8 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 In accordance with Rev 10 Step 2 Governance requirements and Auditor Review verdict:
 
 ```text
-[STATUS] STEP 2 IMPLEMENTATION: COMPLETE (CONDITIONAL PASS ON B23 OS ENFORCEMENT)
-[MANDATORY HALT] HALTED FOR AUDITOR REVIEW
+[STATUS] STEP 2 IMPLEMENTATION: COMPLETE (B23.1 PASS, B23.2 NOT PROVEN / DEFERRED TO DESIGNATED GOVERNANCE HOST)
+[MANDATORY HALT] HALTED FOR AUDITOR REVIEW & DESIGNATED ENFORCEMENT HOST SOURCING
 [STEP 3 CEREMONY] BLOCKED
 [STEP 4 ACTIVATION] BLOCKED
 [SLICE 3 FIRST LIVE ORDER] BLOCKED

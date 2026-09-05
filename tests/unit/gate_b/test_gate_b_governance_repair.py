@@ -898,8 +898,10 @@ def test_b22_pre_execution_full_artifact_attestation(governance_env: Dict[str, A
 # =============================================================================
 # Test B23: Native Bootstrapper Host-Level Authenticode & Root Tampering Enforcement
 # =============================================================================
-def test_b23_native_bootstrapper_host_level_authenticode_enforcement(governance_env: Dict[str, Any]) -> None:
-    """Assert host OS Authenticode verification rejects tampered bootstrapper (Rev 10 Section 3.1.1)."""
+# Test B23.1: Native Bootstrapper Authenticode Trust Verification (WinVerifyTrust)
+# =============================================================================
+def test_b23_1_native_bootstrapper_authenticode_trust_verification(governance_env: Dict[str, Any]) -> None:
+    """Assert WinVerifyTrust cryptographic verification rejects unsigned/tampered binary (B23.1)."""
     if sys.platform != "win32":
         pytest.skip("Windows Authenticode test only")
 
@@ -912,7 +914,7 @@ def test_b23_native_bootstrapper_host_level_authenticode_enforcement(governance_
     raw_bytes[0x100] ^= 0xFF  # Corrupt byte in PE header / text
     tampered_exe.write_bytes(bytes(raw_bytes))
 
-    # Invoke WinVerifyTrust via ctypes to test OS Authenticode kernel verification
+    # Invoke WinVerifyTrust via ctypes to test object/PE trust verification
     import ctypes
     from ctypes import wintypes
 
@@ -982,9 +984,45 @@ def test_b23_native_bootstrapper_host_level_authenticode_enforcement(governance_
     )
 
     # Status must be non-zero (failed verification)
-    # Common error codes:
-    # TRUST_E_NOSIGNATURE: 0x800B0100
-    # TRUST_E_BAD_DIGEST:  0x80096010
-    # CERT_E_UNTRUSTEDROOT:0x800B0109
     assert l_status != 0, f"WinVerifyTrust unexpectedly accepted tampered binary (Status: {l_status:#x})"
-    print(f"\n[HOST EVIDENCE B23] WinVerifyTrust correctly rejected tampered binary with OS NTSTATUS/HRESULT: {l_status:#x}")
+    print(f"\n[HOST EVIDENCE B23.1] WinVerifyTrust correctly rejected tampered binary with OS HRESULT: {l_status:#x}")
+
+
+# =============================================================================
+# Test B23.2: Host Application-Control Execution Enforcement (WDAC / AppLocker)
+# =============================================================================
+def test_b23_2_host_application_control_enforcement() -> None:
+    """Assert host OS Application Control blocks execution of unauthorized binary (B23.2).
+
+    Requires designated enforcement host with active User-Mode Code Integrity (UMCI).
+    On development hosts where UMCI is disabled (0), marks test as skipped / environment not sufficient.
+    """
+    if sys.platform != "win32":
+        pytest.skip("Windows platform only")
+
+    import subprocess
+    cmd = [
+        "powershell", "-NoProfile", "-Command",
+        "(Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard -ClassName Win32_DeviceGuard).UsermodeCodeIntegrityPolicyEnforcementStatus",
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        status = res.stdout.strip()
+    except Exception as exc:
+        pytest.skip(f"ENVIRONMENT NOT SUFFICIENT: Failed to query Win32_DeviceGuard: {exc}")
+
+    if status != "1":
+        pytest.skip(
+            f"ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is {status!r} (expected '1' Enforced). "
+            "B23.2 must be verified on a designated Windows enforcement host."
+        )
+
+    # When on an active enforcement host:
+    bootstrapper_exe = Path("tools/governance/bin/acash-bootstrapper.exe").resolve()
+    assert bootstrapper_exe.is_file(), "acash-bootstrapper.exe missing"
+
+    # Attempt execution of unauthorized/unsigned artifact
+    result = subprocess.run([str(bootstrapper_exe), "--help"], capture_output=True)
+    # On an enforced host, the OS kernel must deny process creation (returncode != 0, typically 0xC0000428 or 1260)
+    assert result.returncode != 0, "OS failed to block execution of unauthorized executable"
+

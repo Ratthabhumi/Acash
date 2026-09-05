@@ -1,0 +1,249 @@
+# ACASH Gate B Governance Repair: B23.2 Host Application-Control Enforcement Remediation Report
+
+> **Document ID:** `ACASH-REPORT-GATEB-B23-REMEDIATION-v1.0`  
+> **Related Documents:** [`docs/phase13/gate_b_step2_evidence_pack.md`](gate_b_step2_evidence_pack.md), [`docs/phase13/gate_b_activation_plan.md`](gate_b_activation_plan.md) (Rev 10 Baseline)  
+> **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Evidence > Belief)  
+> **Directive:** Auditor Directive — B23.2 Remediation Only (2026-09-05)  
+> **Status:** **MANDATORY HALT — B23.1 PASSED, B23.2 NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)**  
+
+---
+
+## 1. Executive Summary & Governance Status
+
+In accordance with the Auditor Directive concerning Phase 13 / Gate B Governance Repair (Rev 10 Step 2):
+1. **Implementation State Preserved:** The current Step 2 code implementation, native x64 MSVC bootstrapper (`tools/governance/bin/acash-bootstrapper.exe`), launcher, Process A minting tool, and tests B1–B22 remain intact and verified.
+2. **B23 Formally Decoupled:** B23 is split into two distinct, independent assertions:
+   - **B23.1 — Authenticode Trust Verification:** **PASS** (Cryptographic verification via `WinVerifyTrust` strictly rejects unsigned and tampered binaries).
+   - **B23.2 — Host Application-Control Execution Enforcement:** **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)** (The current development machine does not have an active User-Mode Code Integrity or AppLocker policy in Enforce mode).
+3. **No False Equivalence:** ACASH explicitly recognizes that `WinVerifyTrust` is a user-mode API for object/PE trust verification; it is **NOT** by itself evidence of operating system kernel-level process-creation denial.
+4. **Strict Operational Boundaries Maintained:**
+   - **Step 3 Ceremony:** **STRICTLY BLOCKED**
+   - **Step 4 Activation:** **STRICTLY BLOCKED**
+   - **Gate B Activation:** **STRICTLY BLOCKED**
+   - **Slice 3:** **STRICTLY BLOCKED**
+   - **Live Capital:** **$0.00 (HARD-LOCKED)**
+   - **Live Orders:** **0**
+   - **Broker Connectivity:** **DISCONNECTED**
+   - **Live Credentials:** **NONE INTRODUCED / ZERO ACCESS**
+
+---
+
+## 2. Technical Distinction: B23.1 vs B23.2
+
+To uphold institutional epistemic discipline (`Implementation Correctness` $\ne$ `Contract Correctness` $\ne$ `Host Enforcement`), the two layers are separated:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             B23.1: AUTHENTICODE OBJECT TRUST VERIFICATION                   │
+│   • Evaluator: WinVerifyTrust API (wintrust.dll)                            │
+│   • Mechanism: Parses PE header, validates PKCS#7 / Authenticode signature,│
+│     and verifies PE hash against catalog/embedded signature.                │
+│   • Purpose: Proves artifact integrity and cryptographic lineage.           │
+│   • Scope: In-process programmatic verification.                            │
+│   • Status: PASSED (Unsigned -> 0x800B0100; Tampered -> 0x800B0100/digest)  │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             B23.2: HOST APPLICATION-CONTROL EXECUTION ENFORCEMENT           │
+│   • Evaluator: Windows OS Kernel Loader (ntoskrnl / CI.dll / AppLocker)     │
+│   • Mechanism: Intercepts NtCreateUserProcess / NtCreateSection; enforces   │
+│     App Control for Business / WDAC / AppLocker policy before execution.    │
+│   • Purpose: Proves OS prevents process creation of unauthorized binaries.  │
+│   • Scope: Machine-wide host kernel enforcement boundary.                   │
+│   • Status: NOT PROVEN ON CURRENT HOST (ENVIRONMENT NOT SUFFICIENT)         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+> [!CAUTION]
+> **GOVERNANCE INVARIANT:**  
+> A passing `WinVerifyTrust` result proves only that the cryptographic verification logic correctly detects invalid signatures. It does **NOT** prove that the underlying operating system kernel will intercept and refuse to execute an unauthorized executable when an operator or script invokes it.
+
+---
+
+## 3. Physical Telemetry of Current Development Host
+
+Direct, non-destructive telemetry was gathered from the local development host:
+
+### 3.1 DeviceGuard & Code Integrity Query
+```powershell
+Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard | Select-Object -Property *
+```
+**Telemetry Output:**
+- `CodeIntegrityPolicyEnforcementStatus`: **`2`** (Kernel-mode HVCI/KMCI is active)
+- `UsermodeCodeIntegrityPolicyEnforcementStatus`: **`0`** (**DISABLED / NOT ENFORCED**)
+- `VirtualizationBasedSecurityStatus`: `2` (VBS running)
+- `SecurityServicesRunning`: `{2}` (Credential Guard / HVCI)
+
+### 3.2 AppLocker Service Status Query
+```powershell
+Get-Service AppIDSvc, AppID
+```
+**Telemetry Output:**
+- `AppIDSvc` (Application Identity): **`Stopped`**
+- `AppID` (AppID Driver): **`Stopped`**
+- `Get-AppLockerPolicy`: Cmdlet not recognized on this host management surface.
+
+### 3.3 Live Execution Trial
+An execution attempt was performed using the newly compiled, unsigned native bootstrapper:
+```powershell
+tools\governance\bin\acash-bootstrapper.exe --help
+```
+**Observed Execution Result:**
+- The process was created and executed by the Windows kernel loader.
+- The process executed application initialization logic and exited with:
+  ```text
+  [CRITICAL BOOTSTRAP FAILURE] RELEASE_MANIFEST_MISSING: Release manifest not found: var\governance\release\acash_release_manifest.json
+  ```
+- **Forensic Finding:** The fact that the process executed and reached application-level error handling is **direct empirical proof** that the host OS did **not** block process creation at the kernel loader boundary.
+
+### 3.4 Host Assessment Verdict
+$$\boxed{\mathbf{CURRENT\ HOST\ VERDICT:\ ENVIRONMENT\ NOT\ SUFFICIENT\ FOR\ B23.2}}$$
+
+The local development host does not enforce User-Mode Code Integrity (`UMCI = 0`) and does not run an active AppLocker service. Therefore, B23.2 cannot be legitimately proven on this workstation in its current state.
+
+---
+
+## 4. Architectural Separation: Dev Host vs Designated Governance Host
+
+Attempting to enforce machine-wide Windows Defender Application Control (WDAC) or AppLocker policies on an active developer laptop risks rendering the developer environment unusable, disrupting compilation tools, IDEs, or Python runtimes, and conflates distinct operational roles.
+
+ACASH adopts a clean engineering separation:
+
+```text
+┌────────────────────────────────────────┐       ┌────────────────────────────────────────┐
+│            DEVELOPMENT HOST            │       │      DESIGNATED GOVERNANCE HOST        │
+├────────────────────────────────────────┤       ├────────────────────────────────────────┤
+│ • Native Compilation (MSVC x64)        │       │ • Authoritative Execution Substrate    │
+│ • Python Virtualenv & Dependencies     │  ──►  │ • Deployed WDAC / App Control Policy   │
+│ • Unit & Integration Tests (B1–B22)    │       │   in ENFORCE Mode (UMCI = 1)           │
+│ • Authenticode Trust Check (B23.1)     │       │ • Authenticode-Signed Release Artifact │
+│ • Git Repository Management            │       │ • Physical B23.2 Kernel Denial Proof   │
+└────────────────────────────────────────┘       └────────────────────────────────────────┘
+```
+
+> **Invariant:** Development and unit testing are performed on the Development Host. Authoritative OS-level application-control enforcement (B23.2) is demonstrated on the **Designated Governance Host**.
+
+---
+
+## 5. Formal Host-Validation Procedure for B23.2
+
+When validating B23.2 on the Designated Governance Host, the following 5-step verification protocol must be executed and recorded:
+
+```text
+Step 1: Verify Host Policy State (Enforce Mode)
+               │
+               ▼
+Step 2: Attempt Execution of Unauthorized / Unsigned Artifact
+               │
+               ▼
+Step 3: Verify Kernel Denies Process Creation (Error Code Captured)
+               │
+               ▼
+Step 4: Capture Host Code Integrity / AppLocker Event Log
+               │
+               ▼
+Step 5: Cryptographic Correlation (Hash, Path, Timestamp)
+```
+
+### Step 1: Verify Host Policy State
+Confirm that User-Mode Code Integrity or AppLocker is active in **Enforce Mode**:
+```powershell
+$ci = Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard
+if ($ci.UsermodeCodeIntegrityPolicyEnforcementStatus -ne 1) {
+    throw "Host policy is NOT in Enforce mode (Current status: $($ci.UsermodeCodeIntegrityPolicyEnforcementStatus))"
+}
+```
+- **Required Assertion:** `UsermodeCodeIntegrityPolicyEnforcementStatus == 1`.
+
+### Step 2: Attempt Execution of Unauthorized Artifact
+Attempt to launch an unsigned, untrusted, or tampered executable artifact (`acash-bootstrapper.exe`):
+```powershell
+$targetExe = "C:\ACASH\governance\bin\unauthorized-bootstrapper.exe"
+$process = Start-Process -FilePath $targetExe -ArgumentList "--help" -PassThru -ErrorAction SilentlyContinue
+```
+
+### Step 3: Verify OS Kernel Denies Process Creation
+Assert that process creation is rejected directly by the OS:
+- **Expected Return:** Process fails to launch (`$process` is `$null` or throws Win32 exception).
+- **Expected Win32 / NTSTATUS Error Codes:**
+  - `0xC0000428` (`STATUS_ACCESS_DISABLED_BY_POLICY_DEFAULT`)
+  - `1260` (`ERROR_ACCESS_DISABLED_BY_POLICY`: *"This program is blocked by group policy."*)
+  - Zero application bytes executed (zero stdout/stderr from application).
+
+### Step 4: Capture Host Code Integrity / AppLocker Event
+Query the host security event log channels:
+```powershell
+# Query Code Integrity Operational Log for Block Event (Event ID 3077)
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3077
+} -MaxEvents 1 | Format-List TimeCreated, Id, Message
+```
+- **Expected Event:** Event ID `3077` (Code Integrity blocked an executable from loading) or Event ID `8004` (AppLocker blocked executable).
+
+### Step 5: Cryptographic Correlation
+Verify that the blocked event directly corresponds to the target test artifact:
+1. **File Path:** Matches the exact execution path of the test binary.
+2. **SHA-256 Hash:** Matches the SHA-256 digest of the test binary.
+3. **Timestamp:** Correlates with the execution attempt (within $\pm 2$ seconds).
+
+---
+
+## 6. Current Test Suite Alignment
+
+The adversarial test suite has been updated to truthfully reflect this decoupled state:
+
+```powershell
+# Command:
+uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -k "test_b23" -v
+```
+**Current Execution Result:**
+- `test_b23_1_native_bootstrapper_authenticode_trust_verification`: **`PASSED`**  
+  *(Proves WinVerifyTrust rejects unsigned and tampered binaries fail-closed).*
+- `test_b23_2_host_application_control_enforcement`: **`SKIPPED`**  
+  *(Reason: `ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is '0' (expected '1' Enforced). B23.2 must be verified on a designated Windows enforcement host.`)*
+
+**Full Gate B Regression Suite:**
+- **23 passed, 1 skipped in 4.10s** (100% clean, zero failures).
+
+---
+
+## 7. Mandatory Halt & State Verification
+
+```text
+════════════════════════════════════════════════════════════════════════════════
+                        MANDATORY GOVERNANCE HALT
+════════════════════════════════════════════════════════════════════════════════
+[STATUS] STEP 2 IMPLEMENTATION: COMPLETE
+[ASSERTION B1–B22] ALL PASSED (22/22)
+[ASSERTION B23.1] PASSED (WinVerifyTrust Fail-Closed)
+[ASSERTION B23.2] NOT PROVEN (DEVELOPMENT ENVIRONMENT NOT SUFFICIENT)
+[MANDATORY HALT] HALTED FOR DESIGNATED ENFORCEMENT HOST ASSIGNMENT
+[STEP 3 CEREMONY] STRICTLY BLOCKED (Awaiting B23.2 Resolution & Signed Release)
+[STEP 4 ACTIVATION] STRICTLY BLOCKED
+[SLICE 3 FIRST LIVE ORDER] STRICTLY BLOCKED
+[LIVE CAPITAL] $0.00 (HARD-LOCKED)
+[LIVE ORDERS] 0
+[BROKER CONNECTION] STRICTLY DISCONNECTED
+[CREDENTIAL BOUNDARY] ZERO LIVE CREDENTIALS INTRODUCED
+════════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 8. Verification Ledger
+
+```markdown
+### Verification Ledger
+- Implementation Status: COMPLETE (Step 2 Implementation Locked)
+- B23.1 Status: VERIFIED (WinVerifyTrust Fail-Closed Authenticode Check Passed)
+- B23.2 Status: NOT PROVEN (Deferred to Designated Governance Enforcement Host)
+- Contract Enforcement: STRICT FAIL-CLOSED (Zero Unverified Claims)
+- Local Test Suite: VERIFIED (23 passed, 1 skipped in 4.10s)
+- Full Repository Suite: VERIFIED (1431 passed, baseline clean)
+- Type Checker (MyPy): VERIFIED (295 files clean, zero errors)
+- Live Capital Authority: STRICTLY HARD-LOCKED ($0.00 Live Capital; Live Orders = 0)
+- Remote CI Status: Ready to push documentation update
+- Methodological Invariant: Developer Host != Designated Governance Host; WinVerifyTrust != Kernel Process Denial.
+```
