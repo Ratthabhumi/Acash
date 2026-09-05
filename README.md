@@ -2,7 +2,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 11 Frozen (1,020 tests)](https://img.shields.io/badge/status-Phase%2011%20Frozen%20(1,020%20tests)-green.svg)](docs/ROADMAP.md)
+[![Status: Phase 13 Step 5 Active (24h Soak)](https://img.shields.io/badge/status-Phase%2013%20Step%205%20Active%20(24h%20Soak)-yellow.svg)](docs/ROADMAP.md)
+[![Phase 14: Plan Approved (Impl Locked)](https://img.shields.io/badge/Phase%2014-Plan%20Approved%20(Impl%20Locked)-blue.svg)](docs/phase14/phase14_master_research_architecture_plan.md)
 
 ---
 
@@ -73,6 +74,18 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
                                         ▼
                     11. FORWARD MONITORING & REALITY GAP
                      (Phase 11 Strategy Drift & Drag Attribution)
+                                        │
+                                        ▼
+                    12. VENUE EXECUTION ADAPTERS
+                     (Phase 12 MT5 BMAP & 6-D Reconciliation)
+                                        │
+                                        ▼
+                    13. FORWARD PAPER VALIDATION
+                     (Phase 13 Small Capital & Soak Harness)
+                                        │
+                                        ▼
+                    14. AI RESEARCH & EVIDENCE LAYER
+                     (Phase 14 Plan Approved — Impl Locked)
 ```
 
 ### Sovereign Layer Responsibilities
@@ -87,6 +100,9 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
 9. **Execution Engine & Broker Mapping (Phase 7):** Sovereign `ExecutionCoordinator`, vendor-agnostic broker semantic mapping (BMAP), and venue-pinned Alpaca Paper adapter.
 10. **Operational Ledger (Phase 10):** Cryptographic SHA-256 chained disk ledger (`OperationalLedger`) with full crash recovery and tamper detection.
 11. **Forward Monitoring & Execution Reality (Phase 11):** Independent observational plane tracking online strategy decay (`StrategyForwardDriftEvidence`) and empirical execution drag decomposition (`ExecutionCostEvidence`).
+12. **Venue Execution Adapters (Phase 12):** Thin broker IPC adapters (`NativeMT5Transport`, `MT5BrokerAdapter`) with authoritative 6-D reconciliation and atomic preflight routing.
+13. **Forward Paper Validation & Small Capital (Phase 13):** Real-world execution verification under strict $0.00 capital authority and 24-hour unattended soak monitoring.
+14. **AI Quantitative Research Layer (Phase 14):** Evidence-bound hypothesis assistant and Section 33 report generator with causal AST validation and strict unvalidated proposal status.
 
 ---
 
@@ -138,7 +154,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 
 ---
 
-## 4. Completed Milestones & Quality Gates (Phases 0–11)
+## 4. Completed Milestones & Quality Gates (Phases 0–14)
 
 ```
 ✅ Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
@@ -151,26 +167,17 @@ ACASH explicitly decouples state management from decision and execution flows:
 ✅ Phase 4: Alpha Research Engine & Hypothesis Contract ──► [GATE 4 PASSED — 139/139 Tests, mypy clean]
 ✅ Phase 5: Backtesting Substrate & Simulation Engine ──► [GATE 5 PASSED — 200/200 Tests, mypy clean]
 ✅ Phase 6: Statistical Validation & Overfitting Controls ──► [GATE 6 PASSED — CPCV, DSR, MinTRL, PBO, Search Ledger, OOS Hard Gate]
-✅ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [FROZEN — E-verified code path, P = 0]
+✅ Phase 7: Live Execution & Broker Mapping ──► Gate 7 [PASSED — E-verified code path, P-001 accepted]
 ✅ Phase 8: Portfolio Engine (Native HRP/ERC Optimizers vs Baselines & Tournament) ──► Gate 8 [FROZEN @ e6f1d04]
 ✅ Phase 8.5: Alpha Research & Economic Evidence Engine (Dossier Gate & Lineage DTOs) ──► Gate 8.5 [FROZEN @ 9ce1365]
 ✅ Phase 9: Deterministic Risk Engine & Sovereign Kill Switch ──► Gate 9 [FROZEN @ 6bd40d8]
 ✅ Phase 10: Runtime Orchestration & Continuous Paper Operations (Supervisor + Scheduler + Ledger) ──► Gate 10 [FROZEN @ 3955bf6]
-🟡 Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [CONTRACT SPEC v1.0 LOCKED @ e2534dc]
-⏳ Phase 12: MT5 & Multi-Venue Execution Adapters ──► Gate 12
-⏳ Phase 13: Live Small Capital Deployment ──► Gate 13 (MANDATORY HUMAN APPROVAL)
-⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
-⏳ Phase 15: Strategy Lifecycle Management ──► Gate 15
-⏳ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
-```es) ──► Gate 8
-⏳ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9
-⏳ Phase 10: Transaction Cost & Slippage Modeling ──► Gate 10
-⏳ Phase 11: Paper Trading Subsystem ──► Gate 11
-⏳ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12
-⏳ Phase 13: Live Small Capital Deployment ──► Gate 13 (MANDATORY HUMAN APPROVAL)
-⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
-⏳ Phase 15: Strategy Lifecycle State Machine ──► Gate 15
-⏳ Phase 16: Performance Degradation & Learning Flywheel ──► Ongoing
+✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [FROZEN @ 092a2b1]
+✅ Phase 12: MT5 & Multi-Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN @ 1e1d154]
+🟡 Phase 13: Live Small Capital Deployment ──► Gate 13 [ACTIVE — Step 5 24h Soak In Progress, Capital $0.00]
+📐 Phase 14: AI Quantitative Research Layer ──► Gate 14 [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
+⏳ Phase 15–22: Strategy Admission Standard & Lifecycle Sequence [HARMONIZED — ADR-023]
+🏛️ Phase 23: Adaptive Multi-Horizon Strategy Architecture [ARCHITECTURAL RECORD — ADR-024/025]
 ```
 
 
@@ -220,13 +227,19 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Multiple Testing Corrections (`multiple_testing.py`): Holm-Bonferroni (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
    - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]$ grids, and component-wise friction stress decay monotonicity.
    - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
-10. **Phase 7 — Live Execution & Broker Mapping (IN PROGRESS — 588 Unit Tests Passed, BMAP E-Reviewed, P = 0):**
+10. **Phase 7 — Live Execution & Broker Mapping (COMPLETED — P-001 Accepted, Gate 7 PASSED):**
     - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E Execution Coordinator & Reconciliation Boundary, Operational Restriction, Real Broker Contract, and Vendor-Agnostic Broker Semantic Mapping Framework: **LOCKED**.
-    - **Implementation & Local Test Verification:** Complete (588/588 unit tests passing across entire repository).
     - **Broker Semantic Evidence (BMAP):** E-reviewed against official broker API documentation (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
     - **Concrete Components:** Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`, R0 read-only harness, R1 lifecycle harness, and local Windows DPAPI vault launcher.
-    - **Defect Fixes Committed:** `4a92348` (connect-before-submit) and `8e92188` (paper-only transport injection guard).
-    - **Paper Runtime Evidence:** **P = 0.** No real Paper order has been executed; no live/paper telemetry collected; Live trading NOT ready.
+    - **Paper Runtime Evidence:** Checkpoint `P-001` officially accepted with verified real-time fill parity.
+11. **Phases 8–11 — Portfolio, Research Qualification, Risk, Orchestration & Monitoring:**
+    - Completed, hardened, and frozen under sequential governance (Gates 8, 8.5, 9, 10, 11 passed).
+12. **Phase 12 — MT5 & Multi-Venue Execution Adapters (COMPLETED & FROZEN @ `1e1d154`):**
+    - High-integrity broker connectivity for MetaTrader 5 with immutable symbol specs, Decimal volume quantization, tick-grid price alignment, Windows Local IPC transport, and authoritative 6-D reconciliation engine.
+13. **Phase 13 — Live Small Capital Deployment (ACTIVE & IN PROGRESS):**
+    - Forward execution validation with micro-capital. Steps 1–4 passed; Step 5 24-hour unattended soak test actively executing in background (PID 41844); Steps 6–9 locked. Live capital hard-locked at $0.00; live orders 0; broker disconnected.
+14. **Phase 14 — AI Quantitative Research Layer (PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED):**
+    - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor. AI outputs strictly classified as unvalidated proposals; implementation locked until Phase 13 Steps 5–9 are certified.
 
 ---
 
@@ -271,40 +284,51 @@ The complete canonical documentation suite is organized systematically in [`docs
 - **[`docs/phase7/r1_paper_run_runbook.md`](docs/phase7/r1_paper_run_runbook.md)**: R1 Paper-run operational runbook.
 - **[`docs/phase7/execution_state_machine.md`](docs/phase7/execution_state_machine.md)**: Sovereign order & fill execution state machine.
 
+### 🔌 Phase 12: MT5 & Multi-Venue Adapters (`docs/phase12/`)
+- **[`docs/phase12/closeout_report.md`](docs/phase12/closeout_report.md)**: Phase 12 Closeout Report & Frozen Contract Inventory.
+- **[`docs/architecture/multi_broker_multi_asset_decision.md`](docs/architecture/multi_broker_multi_asset_decision.md)**: ADR-021 Multi-Broker Multi-Asset Architectural Specification.
+
+### 🧪 Phase 13: Live Small Capital & Soak (`docs/phase13/`)
+- **[`docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md`](docs/phase13/PHASE13-LIVE-SMALL-CAPITAL-PLAN-REV3.md)**: Master Operational Plan for Phase 13.
+- **[`docs/phase13/consolidated_gate_a_audit.md`](docs/phase13/consolidated_gate_a_audit.md)**: Gate A Pre-Live Readiness Certification Pack.
+- **[`docs/phase13/recovery_runbook.md`](docs/phase13/recovery_runbook.md)**: Step 4 Rehydration and Crash Recovery Runbook.
+
+### 🤖 Phase 14: AI Quantitative Research Layer (`docs/phase14/`)
+- **[`docs/phase14/phase14_master_research_architecture_plan.md`](docs/phase14/phase14_master_research_architecture_plan.md)**: Phase 14 Master Research Architecture & Governance Plan (Rev 1.2 — Approved at Plan Level).
+
 ### 🌐 Project Atlas Knowledge Graph (`docs/atlas/`)
 - **[`docs/atlas/CONTEXT_MAP.md`](docs/atlas/CONTEXT_MAP.md)**: Project Atlas Master Architecture & Microstructure Ontology.
 
 ---
 
-## 5.5 CURRENT STATUS / NEXT STEP — Phase 11 Approved & Frozen ──► Phase 12 MT5 & Venue Execution Adapters
+## 5.5 CURRENT STATUS / NEXT STEP — Phase 13 Step 5 Active (24h Soak) ──► Step 6 Telemetry Audit
 
-> **As of Code Freeze `092a2b1` (pushed to `origin/main`).** This is the authoritative resume point
-> for the current session — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
-> [`Cheatsheet.md`](Cheatsheet.md) for the synchronized status block.
+> **As of Active 24-Hour Soak Test (PID `41844`).** This is the authoritative current status
+> for the repository — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
+> [`Cheatsheet.md`](Cheatsheet.md) for the synchronized status blocks.
 
 ### Where the project is
-- **Phases 0–11 complete, hardened, and frozen** (Gates 1–11 passed).
-- **Phase 11 (Forward Monitoring, Online Drift Detection & Execution Reality Attribution): OFFICIALLY FROZEN.**
-  - Full decoupled pipeline: Forward telemetry stream ingestion, deterministic window metrics (discrete simple returns), asymmetric health state machine (anti-whipsaw hysteresis), taker-only execution attribution engine, forensic evidence ledger adapter.
-  - **1,020 collected tests across repository (1,017 passed, 3 skipped, 0 failed)** (100% clean regression).
-  - **26/26 Red-Team Adversarial Vectors PASSED** ([`docs/phase11/red_team_review.md`](docs/phase11/red_team_review.md)).
-  - **9/9 Cross-Phase Integration Pipeline Tests PASSED**.
-  - **107/107 Monitoring Unit Tests PASSED**.
-  - **MyPy Static Type Checker:** 0 errors across 40 source files.
-  - **Authority Decoupling:** Phase 11 contains zero methods or fields to mutate Phase 10 census, modify Phase 8 friction, or submit live orders.
-- **Key Phase 11 Commits Trail:** `86bff0d` (Contract & Red-Team Spec) · `ca74d49` (Slice 1) · `2b69464` (Slice 2) · `23a7e32` (Slice 3) · `2f42a69` (Slice 4) · `82273f9` (Slice 5) · `092a2b1` (Slice 6 & Freeze).
+- **Phases 0–12 complete, hardened, and frozen** (Gates 1–12 certified).
+- **Phase 13 (Live Small Capital / Forward Paper Validation): ACTIVE & IN PROGRESS**
+  - Steps 1–4: **PASSED** (Implementation, Unit Audit, Integration Testing, Recovery/Restart).
+  - Step 5 (24-Hour Unattended Soak Test): **ACTIVE / IN PROGRESS** running in background under PID `41844` (`pythonw.exe`).
+  - Steps 6–9: **STRICTLY LOCKED** pending 24.0 wall-clock hours completion and formal evidence audit.
+- **Phase 14 (AI Quantitative Research Layer): PLAN APPROVED AT PLAN LEVEL**
+  - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor ([`docs/phase14/phase14_master_research_architecture_plan.md`](docs/phase14/phase14_master_research_architecture_plan.md)).
+  - **Implementation is STRICTLY LOCKED / FORBIDDEN** until Phase 13 Steps 5–9 are certified.
 
-### Sovereign Separation of Concerns
-$$\boxed{\mathbf{Research\ (8.5)} \neq \mathbf{Forward\ Monitoring\ (11)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (7)} \neq \mathbf{Broker}}$$
+### Sovereign Separation of Concerns & Safety Invariants
+$$\boxed{\mathbf{Research\ (14)} \neq \mathbf{Qualification\ (8.5)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (12)} \neq \mathbf{Broker}}$$
 
-- Phase 11 is strictly an observational and advisory engine.
-- Phase 10 Stage 2 Census maintains sovereign authority over strategy tournament eligibility.
-- **Live capital trading remains HARD-LOCKED.** Phase 13 gate requires explicit human approval.
+- **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**.
+- **Live Order Emission:** Strictly **0 Orders**.
+- **Broker Connection:** Strictly **DISCONNECTED**.
+- **Strategy Admission:** Strictly **`QUALIFICATION_BLOCKED`**.
 
-### Next milestones
-- ⏳ Phase 12: MT5 & Venue Execution Adapters ── Gate 12.
-- ⏳ Phase 13: Live Small Capital Deployment (MANDATORY HUMAN APPROVAL).
-- ⏳ Phases 14–16: AI quantitative research layer, strategy lifecycle flywheel.
+### Immediate Next Milestone
+- Allow Phase 13 Step 5 soak process (PID 41844) to complete the 24.0-hour wall-clock run without interruption.
+- Perform evidence-based Step 5 completion audit (telemetry continuity, memory trend, ledger integrity, crash recovery validation).
+- Proceed sequentially to Step 6 only upon formal certification of Step 5 evidence.
 
 ---
 

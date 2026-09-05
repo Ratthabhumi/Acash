@@ -1,11 +1,11 @@
 # ACASH — Developer & Quant Quick Reference Cheatsheet
 
 **Project:** ACASH (Automated Capital Allocation System)  
-**Version:** 1.12.0 (Phases 0–11 Frozen & Hardened | Gate 11 Approved)  
-**Test Suite:** 1,020 Collected | 1,017 Passed, 3 Skipped, 0 Failed | MyPy: 0 Errors (40 files) | HEAD: `origin/main`  
+**Version:** 1.14.0 (Phase 12 Frozen | Phase 13 Step 5 Active | Phase 14 Plan Approved)  
+**Test Suite:** Strict Multi-Tier Gate Discipline (Phase-specific regression suites verified at gate checkpoints) | MyPy: Strict mode clean | HEAD: `origin/main`  
 **Operating Philosophy:** *"DO NOT ASSUME AN EDGE. PROVE IT."*
 
-$$\boxed{\mathbf{Research\ (8.5)} \longrightarrow \mathbf{Allocation\ (8)} \longrightarrow \mathbf{Supervisor\ (10)} \longrightarrow \mathbf{Risk\ (9)} \longrightarrow \mathbf{Execution\ (7)} \longrightarrow \mathbf{Ledger\ (10)} \quad \Big\vert \quad \mathbf{Monitoring\ (11)}}$$
+$$\boxed{\mathbf{Research\ (14/8.5)} \longrightarrow \mathbf{Allocation\ (8)} \longrightarrow \mathbf{Supervisor\ (10)} \longrightarrow \mathbf{Risk\ (9)} \longrightarrow \mathbf{Execution\ (12/7)} \longrightarrow \mathbf{Ledger\ (10)} \quad \Big\vert \quad \mathbf{Monitoring\ (11)} \quad \Big\vert \quad \mathbf{Soak\ (13)}}$$
 
 ---
 
@@ -23,6 +23,22 @@ $$\boxed{\mathbf{Research\ (8.5)} \longrightarrow \mathbf{Allocation\ (8)} \long
 5. **No Speculative AI Trading Bots & Zero Direct Broker Wires:**
    - AI is strictly an analytical component, never an execution authority.
    - Zero direct broker sockets in research, portfolio, supervisor, risk, or monitoring layers.
+
+---
+
+## 1.5 Current Governance & Operational State (2026-09-05)
+
+- **Phase 12 (MT5 & Multi-Venue Execution Adapters):** COMPLETED & FROZEN (`1e1d154`).
+- **Phase 13 (Live Small Capital / Forward Paper Validation):** ACTIVE & IN PROGRESS.
+  - Steps 1–4: **PASSED** (Implementation, Code Audit, Integration, Recovery).
+  - Step 5 (24-Hour Unattended Soak): **ACTIVE / IN PROGRESS** (PID `41844`, `pythonw.exe`).
+  - Steps 6–9: **STRICTLY LOCKED** pending Step 5 wall-clock completion & evidence audit.
+- **Phase 14 (AI Quantitative Research Layer):** PLAN APPROVED AT PLAN LEVEL (`docs/phase14/phase14_master_research_architecture_plan.md`).
+  - Implementation: **STRICTLY LOCKED / NOT AUTHORIZED**.
+- **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**.
+- **Live Order Emission:** Strictly **0 Orders**.
+- **Broker Connection:** Strictly **DISCONNECTED**.
+- **Strategy Admission:** Strictly **`QUALIFICATION_BLOCKED`**.
 
 ---
 
@@ -69,10 +85,22 @@ $$\boxed{\mathbf{Research\ (8.5)} \longrightarrow \mathbf{Allocation\ (8)} \long
                                        ▼
                     10. APPEND-ONLY OPERATIONAL LEDGER
                       (Phase 10 SHA-256 Chained Disk Events)
-                                       │
-                                       ▼
+                                        │
+                                        ▼
                     11. FORWARD MONITORING & REALITY GAP
                      (Phase 11 Strategy Drift & Drag Attribution)
+                                        │
+                                        ▼
+                    12. VENUE EXECUTION ADAPTERS
+                     (Phase 12 MT5 BMAP & 6-D Reconciliation)
+                                        │
+                                        ▼
+                    13. FORWARD PAPER VALIDATION
+                     (Phase 13 Small Capital & Soak Harness)
+                                        │
+                                        ▼
+                    14. AI RESEARCH & EVIDENCE LAYER
+                     (Phase 14 Plan Approved — Impl Locked)
 ```
 
 ### Technology Decision Matrix
@@ -421,22 +449,47 @@ $$\text{Stage 1: Data Check} \longrightarrow \text{Stage 2: Strategy Census} \lo
 
 ---
 
-## 13. Canonical Developer Commands
+## 13. Phase 12: MT5 & Multi-Venue Execution Adapters [COMPLETED & FROZEN]
+- **Thin Broker Connectivity:** `NativeMT5Transport` Windows Local IPC driver with strict Decimal volume quantization and tick-grid price alignment.
+- **Authoritative 6-D Reconciliation:** `MT5BrokerAdapter` enforces fail-closed order lifecycle, UNKNOWN reconciliation, and recovery idempotency.
+- **Two-Phase Preflight Routing:** Exclusive `intent_id` routing key with duplicate prevention. Commit: `1e1d154`.
+
+---
+
+## 14. Phase 13: Live Small Capital Deployment [ACTIVE — STEP 5 SOAK IN PROGRESS]
+- **Execution Envelope:** Micro-capital live execution validation with micro-lots under strict $0.00 capital authority.
+- **Current Step Progress:**
+  - Steps 1–4: **PASSED** (Implementation, Code Audit, Integration, Recovery).
+  - Step 5: **ACTIVE / IN PROGRESS** (24-hour unattended soak runner under PID `41844`, Local Simulator).
+  - Steps 6–9: **STRICTLY LOCKED** pending Step 5 wall-clock completion and evidence audit.
+- **Strict Invariant:** Zero live capital authority ($0.00), zero live orders, broker disconnected, strategy blocked.
+
+---
+
+## 15. Phase 14: AI Quantitative Research & Evidence Layer [PLAN APPROVED — IMPL LOCKED]
+- **Governing Specification:** [`docs/phase14/phase14_master_research_architecture_plan.md`](docs/phase14/phase14_master_research_architecture_plan.md) (Revision 1.2 — Approved at Plan Level).
+- **Core Invariant:** $\boxed{\text{AI Output} \equiv \text{Unvalidated Proposal}}$ (Never trading authority, never alpha qualification).
+- **Sequential Pipeline:** AI Proposal $\to$ Phase 4 Pre-Registration $\to$ Phase 5 Backtest $\to$ Phase 6 ValidationGate $\to$ Phase 8.5 Alpha Dossier.
+- **Type-Level Evidence Firewall:** $\boxed{\text{ExternalBackendResult} \not\equiv \text{ValidationReport}}$ (VectorBT/HFTBacktest results cannot masquerade as canonical validation).
+- **Causal AST Validation:** Causal inspection of all proposed feature expressions; 100% rejection of lookahead/lead operators.
+- **Status:** **Implementation is strictly locked / not authorized** until Phase 13 Steps 5–9 are certified.
+
+---
+
+## 16. Canonical Developer Commands
 
 ```powershell
-# 1. Run Full Regression Test Suite (1,020 collected | 1,017 passed, 3 skipped, 0 failed)
-uv run pytest -q
+# 1. Run Targeted Phase Test Suites (uv runner)
+uv run pytest tests/unit/ -v
+uv run pytest tests/integration/ -v
 
-# 2. Run Phase 11 Monitoring Suite (107 unit tests)
-uv run pytest tests/unit/monitoring/ -v
+# 2. Run Static Type Checker (MyPy - strict mode)
+uv run mypy src/ tests/
 
-# 3. Run Phase 11 Integration & Red-Team Adversarial Suites (35 tests)
-uv run pytest tests/integration/test_phase11_monitoring_pipeline.py tests/unit/monitoring/test_phase11_red_team_adversarial.py -v
+# 3. Check Phase 13 Step 5 Soak Status
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\status_phase13_soak.ps1
 
-# 4. Run Static Type Checker (MyPy - 40 source files clean)
-uv run mypy src/acash/monitoring/ tests/unit/monitoring/ tests/integration/ src/acash/runtime/ src/acash/research/ src/acash/risk/
-
-# 5. Check Git Status & Branch Lineage
+# 4. Check Git Status & Lineage
 git status --short
 git branch -vv
 git log -3 --oneline --decorate

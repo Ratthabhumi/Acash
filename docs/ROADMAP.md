@@ -1,8 +1,8 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.3.0  
-**Date:** 2026-08-28  
+**Version:** 3.4.0  
+**Date:** 2026-09-05  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
 > **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
@@ -61,59 +61,61 @@
 ✅ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN — 1240/1240 Tests, 1e1d154]
    │
    ▼
-⏳ Phase 13: Live Small Capital (MANDATORY HUMAN APPROVAL) ──► Gate 13
+🟡 Phase 13: Live Small Capital Deployment ──► Gate 13 [ACTIVE — Step 5 24h Soak In Progress, Capital $0.00]
+   ├─ ✅ Step 1: Implementation & Safety Envelopes [PASSED]
+   ├─ ✅ Step 2: Code & Unit Audit [PASSED]
+   ├─ ✅ Step 3: Integration Testing & Local Simulator [PASSED]
+   ├─ ✅ Step 4: Restart, Recovery & Rehydration [PASSED]
+   ├─ 🟡 Step 5: 24-Hour Unattended Soak Test [ACTIVE / IN PROGRESS]
+   ├─ 🔒 Step 6: Telemetry, Reconciliation & Forensic Audit [LOCKED]
+   ├─ 🔒 Step 7: Continuous Paper Readiness Certification [LOCKED]
+   ├─ 🔒 Step 8: Explicit Human GO Checkpoint [LOCKED]
+   └─ 🔒 Step 9: 90-Day Continuous Paper Forward Run [LOCKED]
    │
    ▼
-⏳ Phase 14: AI Quantitative Research Layer ──► Gate 14
+📐 Phase 14: AI Quantitative Research Layer ──► Gate 14 [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
    │
    ▼
-⏳ Phase 15: Strategy Lifecycle State Machine ──► Gate 15
+⏳ Phase 15–22: Strategy Admission Standard & Lifecycle Sequence [HARMONIZED — ADR-023]
    │
    ▼
-⏳ Phase 16: Performance Degradation & Data Flywheel ──► Ongoing
+🏛️ Phase 23: Adaptive Multi-Horizon Strategy & Microstructure Architecture [ARCHITECTURAL RECORD — ADR-024/025]
 ```
 
 ---
 
-## CURRENT STATUS / NEXT STEP — Phase 7 Passed (P = 1) ──► Phase 8 Portfolio Engine
+## CURRENT STATE / NEXT STEP — Phase 13 Step 5 Active (24-Hour Soak) ──► Step 6 Telemetry Audit
 
-> **As of Checkpoint `P-001` (Order 003).**
-> Gate 7 is officially verified and accepted. Live execution remains **HARD-LOCKED (OFF)**.
+> **Current Repository Milestone:** Phase 13 Step 5 (24-Hour Soak Test).  
+> **Soak Status:** ACTIVE / IN PROGRESS under PID `41844` (`pythonw.exe`).  
+> **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**. Live Orders: **0**. Broker: **DISCONNECTED**.  
 
-### Completed milestones
-- ✅ Phases 0–6: Gates 1–6 passed (validated statistical governance FROZEN).
-- ✅ Phase 7 design/contract layer: Admission LOCKED; Step 8 / 8B / 8C / 8D / 8E
-  LOCKED; Operational Restriction LOCKED; Real Broker Contract LOCKED; BMAP
-  framework LOCKED.
-- ✅ Alpaca concrete BMAP: Conformance Matrix 100% PASS (`P = 1`).
-- ✅ Concrete Alpaca Paper Transport, Paper Credential Boundary (`ALPACA_PAPER`),
-  `AlpacaPaperAdapter`, DPAPI User Vault & Secure Launcher.
-- ✅ R1-REAL Broker Observation Driver: Dual-channel observation (SSE Primary + REST Polling Recovery), strict BMAP-07 cancellation reconciliation, fail-closed timeout to `UNKNOWN`, and live quote benchmark derivation.
-- ✅ **First Accepted Paper Evidence Checkpoint (P-001):**
-  - Order 003 (`acash-r1-paper-20260901-003`, Broker UUID `99a989f8-969d-4640-9598-4d8a3911a1d7`).
-  - Terminal `FILLED`, 1 share SPY @ `765.26` (Benchmark Mid `765.24`, Slippage `+0.2614 bps`).
-  - Strict Conjunctive P Audit **PASSED** (TerminalVerified, EvidenceLineageComplete, ReconciliationVerified, NoDispute, BrokerSnapshotBound).
-  - **Status:** $$\boxed{P = 1}$$
+### Current Canonical Execution State:
+- ✅ **Phases 0–12:** COMPLETED & FROZEN (Gates 1–12 certified, frozen contract baseline sealed).
+- 🟡 **Phase 13 (Live Small Capital / Forward Paper Validation): ACTIVE & IN PROGRESS**
+  - ✅ **Step 1 (Implementation & Safety Envelopes):** PASSED.
+  - ✅ **Step 2 (Code & Unit Audit):** PASSED.
+  - ✅ **Step 3 (Integration Testing & Local Simulator):** PASSED.
+  - ✅ **Step 4 (Restart, Recovery & Rehydration):** PASSED.
+  - 🟡 **Step 5 (24-Hour Unattended Soak Test):** **ACTIVE / IN PROGRESS** (Launched 2026-09-05T10:20:43Z, PID 41844, continuous telemetry recording).
+  - 🔒 **Step 6 (Telemetry, Reconciliation & Forensic Audit):** STRICTLY LOCKED pending 24.0 wall-clock hours completion and evidence audit.
+  - 🔒 **Step 7 (Continuous Paper Readiness Certification):** STRICTLY LOCKED.
+  - 🔒 **Step 8 (Explicit Human GO Checkpoint):** STRICTLY LOCKED.
+  - 🔒 **Step 9 (90-Day Continuous Paper Forward Run):** STRICTLY LOCKED (Clock has not started).
+- 📐 **Phase 14 (AI Quantitative Research Layer): PLAN APPROVED AT PLAN LEVEL**
+  - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor.
+  - **Implementation is STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–9 are certified.
+  - Zero runtime code implemented; capital and broker execution remain completely decoupled.
 
-### Tri-Partite Evidence Architecture ($\text{Unit Tests} \neq E \neq P$)
-- **Local Unit Tests:** 610/610 tests passing (100% clean implementation & invariant verification).
-- **E (Broker Semantic Evidence):** Independently verified against Alpaca API/documentation.
-- **P (Paper Runtime Observation):** **P = 1** (Checkpoint `P-001` officially accepted).
+### Repository Synchronization State:
+- **Current Branch:** `main`
+- **Documentation Synchronization Date:** 2026-09-05
+- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 runtime telemetry (`var/phase13_soak/`), and Phase 14 governance documents ([`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md)).
 
-$$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P \text{ (Empirical Paper Execution P-001)} \implies \text{Gate 7 PASSED}}$$
-
-### Paper Order Forensic History
-- `acash-r1-paper-20260831-001`: Real Paper POST succeeded $\to$ rested in `accepted` $\to$ verified `CANCELED` via REST ($P = 0$).
-- `acash-r1-paper-20260831-002`: Real Paper POST succeeded $\to$ filled post-session $\to$ flattened via incident cleanup ($P = 0$).
-- `acash-r1-paper-20260901-003` (**P-001**): Real Paper POST $\to$ real-time fill observed @ 765.26 $\to$ parity verified ($\mathbf{P = 1}$).
-
-### Next milestones
-- ⏳ Operational cleanup of +1 SPY paper position (isolated operational step, distinct from P-001).
-- ⏳ Phase 8: Portfolio Engine (skfolio vs transparent baselines) ── Gate 8.
-- ⏳ Phases 9–16: Risk/Kill Switch, friction, Paper subsystem, MT5 adapters, Live
-  (MANDATORY HUMAN APPROVAL), AI research layer, strategy lifecycle, flywheel.
-- ❌ **Live readiness is NOT implied anywhere in this phase.** Phase 13 gate
-  requires explicit human approval.
+### Immediate Next Action:
+- Allow active Phase 13 Step 5 soak process (PID 41844) to complete the 24.0-hour wall-clock run without interruption.
+- Perform evidence-based Step 5 completion audit (telemetry continuity, memory trend, ledger integrity, crash recovery validation).
+- Proceed sequentially to Step 6 only upon formal certification of Step 5 evidence.
 
 ---
 
@@ -335,27 +337,41 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
 
 ---
 
-### ⏳ Phase 13: Live Small Capital Deployment [SLICE 1 GATE A CERTIFIED]
-- **Objective:** Real-world execution validation with micro-capital.
-- **Progress:**
+### 🟡 Phase 13: Live Small Capital Deployment [ACTIVE — STEP 5 SOAK IN PROGRESS]
+- **Objective:** Real-world execution validation with micro-capital and strict fail-closed telemetry.
+- **Current Step Progress:**
   - **Slice 1 (Gate A Pre-Live Certification):** `✅ CERTIFIED` (Formal Human Sign-Off on 2026-09-04; A-1 through A-11 PASS; B-1/B-2 CLOSED; 0 Active Blockers; Demo `112040157` 100% Flat; Live Capital $0.00). See [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
-  - **Gate B Status:** `🔒 STRICTLY LOCKED` ($0.00 Live Capital Authority).
-- **Deliverables:**
-  - Live execution harness with minimum position sizes (micro-lots).
-  - Live telemetry dashboard and real-time risk monitor.
-  - Reconciliation between expected vs broker execution prices.
-- **Gate 13 Criteria:** **EXPLICIT HUMAN APPROVAL REQUIRED (Section 37)**; all safety gates, kill switches, and alerts verified operational.
+  - **Step 1 (Implementation & Safety Envelopes):** `✅ PASS` (Bounded position limits, fail-closed kill switch).
+  - **Step 2 (Code & Unit Audit):** `✅ PASS` (Full unit audit clean).
+  - **Step 3 (Integration Testing):** `✅ PASS` (Integration pipeline verified).
+  - **Step 4 (Restart & Recovery):** `✅ PASS` (Rehydration semantics and state reconstruction verified).
+  - **Step 5 (24-Hour Unattended Soak):** `🟡 ACTIVE / IN PROGRESS` (Running under PID 41844 in background; Capital $0.00; Local Simulator).
+  - **Step 6 (Telemetry Audit):** `🔒 LOCKED` (Awaiting Step 5 24h completion and evidence verification).
+  - **Step 7 (Continuous Paper Readiness):** `🔒 LOCKED`.
+  - **Step 8 (Human GO Checkpoint):** `🔒 LOCKED`.
+  - **Step 9 (90-Day Continuous Paper Run):** `🔒 LOCKED` (Clock has not started).
+- **Core Invariants:**
+  - Live Capital Authority: **$0.00 (Hard-Locked)**.
+  - Live Order Emission: **0 Orders**.
+  - Strategy STRAT-MOM-MULTI-HORIZON-V1: **QUALIFICATION_BLOCKED**.
+  - Broker Wire: **DISCONNECTED**.
+- **Gate 13 Criteria:** **EXPLICIT HUMAN APPROVAL REQUIRED**; all safety gates, kill switches, and alerts verified operational; full completion of 24h soak evidence audit and subsequent steps.
 - **Multi-Broker / Multi-Asset Roadmap (ADR-021):** While Phase 13 currently executes against the active MetaQuotes MT5 Demo baseline under Gate A, the long-term architecture is established as Asset-Agnostic and Multi-Venue (Pepperstone MT5 candidate, Alpaca US Equities/ETF candidate, OANDA API candidate, IBKR multi-asset candidate). See [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
 
 ---
 
-### ⏳ Phase 14: AI Quantitative Research Layer [UPCOMING]
-- **Objective:** Augment quant research with AI-driven hypothesis generation and reporting.
+### 📐 Phase 14: AI Quantitative Research Layer [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
+- **Objective:** Augment quant research with AI-driven hypothesis formulation, feature discovery, and automated research reporting conforming to Section 33.
+- **Current Status:**
+  - Master Research Architecture Revision 1.2: **APPROVED AT PLAN LEVEL** by Human Auditor.
+  - Implementation Status: **STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–9 are certified.
+  - Governing Specification: [`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md).
 - **Deliverables:**
-  - LLM hypothesis formulation assistant (`acash.research.ai`).
-  - Automated research report generator conforming to Section 33.
-  - Exploratory feature discovery tools.
-- **Gate 14 Criteria:** AI outputs are treated strictly as unvalidated proposals; must pass full backtesting and statistical validation gates.
+  - LLM hypothesis formulation assistant (`acash.research.ai.hypothesis`).
+  - Automated research report generator conforming to Section 33 (`acash.research.ai.reporting`).
+  - Exploratory feature discovery tools with causal AST validation (`acash.research.ai.features`).
+  - Research corpus ingestion with tri-axial source epistemic metadata (`acash.research.ai.corpus`).
+- **Gate 14 Criteria:** AI outputs are strictly unvalidated proposals; must pass full backtesting, statistical validation, and alpha qualification gates. Zero capital or broker authority.
 
 ---
 
