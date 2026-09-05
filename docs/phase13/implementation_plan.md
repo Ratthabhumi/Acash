@@ -1,9 +1,9 @@
 # ACASH Implementation Plan — Paper Trading Runtime Architecture (Rev 2.2)
 # Formal Specification & Verification Contract
-## Incorporating Auditor Review 2.1 & Weekend Track Architecture Amendment
+## Incorporating Auditor Review 2.2 Amendments & Weekend Track Architecture
 
 > **Document ID:** `docs/phase13/implementation_plan.md`  
-> **Version:** 2.2.0 (Audited Specification & Canonical Alignment Edition)  
+> **Version:** 2.2.1 (Audited Specification Edition — Partial Fill & Quantization Amendment)  
 > **Date:** 2026-09-05 (Saturday)  
 > **Governing Baseline:** `docs/phase13/paper_trading_readiness_audit.md` (Rev 2, Commit `284c36e`)  
 > **Status:** PLAN REVISION ONLY — STRICT IMPLEMENTATION HALT  
@@ -13,7 +13,13 @@
 
 ## 1. Status / Governance Boundary
 
-This document establishes the formal, non-negotiable **Implementation Contract Rev 2.2** for the ACASH continuous Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Rev 2.1 Plan Review, guarantees canonical schema integrity, eliminates circular hash dependencies, formally defines deterministic simulation semantics, and specifies the **Weekend Paper Track Architecture Amendment**.
+This document establishes the formal, non-negotiable **Implementation Contract Rev 2.2** for the ACASH continuous Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Rev 2.1 and Rev 2.2 reviews:
+1. Formally specifies the **multi-stage partial-fill lifecycle** (`ACK` $\to$ `PARTIAL_FILL` $\to$ working residual $\to$ `FILLED`).
+2. Formally specifies the **deterministic volume_step quantization pipeline** using `ROUND_DOWN`, residual drop, and minimum-lot boundary validation.
+3. Unifies execution-cost parameter provenance strictly under **`DETERMINISTIC_TEST_CONFIGURATION`**.
+4. Eliminates circular hash dependencies in `ExecutionManifest`.
+5. Enforces single canonical schema ownership (`ExecutionManifest` consumed from Phase 7 core).
+6. Preserves the **Weekend Paper Track Architecture Amendment** (`ARCHITECTURALLY DEFINED / NOT IMPLEMENTED / NOT OPERATIONAL`).
 
 ### 1.1 Non-Negotiable Governance Invariants
 - **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo flat).
@@ -103,7 +109,7 @@ The Paper Trading Runtime operates as an unattended, forward-evaluating daemon e
 ## 5. Component 1 — `paper_bridge.py`
 
 ### 5.1 Purpose & Authority Boundaries
-`PaperExecutionBridge` serves exclusively as a mechanical translation and dispatch seam. It receives an admitted `AllocationDecision` from Stage 5, translates target weights into discrete unit share/lot deltas ($\Delta q_i$), verifies structural completeness, constructs canonical `OrderIntent` objects, dispatches them to the selected venue, and routes resulting `BrokerRawEvent` observations to the `ExecutionCoordinator`.
+`PaperExecutionBridge` serves exclusively as a mechanical translation and dispatch seam. It receives an admitted `AllocationDecision` from Stage 5, translates target weights into discrete unit share/lot deltas ($\Delta q_i$), verifies structural completeness, quantizes volume against venue step boundaries, constructs canonical `OrderIntent` objects, dispatches them to the selected venue, and routes resulting `BrokerRawEvent` observations to the `ExecutionCoordinator`.
 
 ### 5.2 Strict Risk and Allocation Authority Chain
 `PaperExecutionBridge` MUST NOT become a secondary risk engine. Sizing, risk budgeting, and governance authority are decoupled across strict boundaries:
@@ -117,6 +123,8 @@ Existing Stage 5 / Canonical Allocation Authority
                     ↓
       mechanical target-delta translation
                     ↓
+     volume_step Quantization (ROUND_DOWN)
+                    ↓
                OrderIntent
                     ↓
              Execution Venue
@@ -129,12 +137,55 @@ Existing Stage 5 / Canonical Allocation Authority
 | **Position-Sizing Authority** | Stage 3 (`AllocationTournamentRunner`) | Canonical sizing rules based on capital and volatility |
 | **Exposure Authority** | Stage 4 (`DeterministicRiskEngine` + Kill Switch) | Phase 9 Risk Bounds (`MaxGrossExposure`, `MaxNetExposure`) |
 | **Min-Lot Authority** | Venue / Account Specification | `BrokerSymbolSpec.min_volume` (`src/acash/execution/mt5/adapter.py`) |
-| **Venue Constraint Authority** | Venue Adapter & Account Limits | `BrokerSymbolSpec.volume_step`, `margin_initial` |
+| **Venue Constraint Authority** | Venue Adapter & Account Limits | `BrokerSymbolSpec.volume_step`, `BrokerSymbolSpec.volume_max` |
+
+#### 5.2.1 Canonical Volume Quantization Pipeline
+To resolve Blocker 2 from the auditor review, the bridge enforces an explicit, deterministic quantization pipeline grounded in `src/acash/execution/mt5/normalizer.py:normalize_volume`:
+
+```text
+raw_delta (Δq = q_target - q_current)
+          │
+          ▼
+Direction Determination:
+  - If Δq > 0: OrderSide.BUY
+  - If Δq < 0: OrderSide.SELL
+  - If Δq == 0: ZERO DELTA -> Suppress Dispatch (0 orders emitted)
+          │
+          ▼
+Magnitude Extraction: q_mag = |Δq|
+          │
+          ▼
+volume_step Quantization (Policy: ROUND_DOWN / Floor towards zero):
+  steps = floor(q_mag / symbol_spec.volume_step)
+  quantized_lots = steps * symbol_spec.volume_step
+  residual = q_mag - quantized_lots
+          │
+          ├──> Residual Handling: The fractional residual r < volume_step
+          │    cannot be represented by the venue step grid. It is dropped
+          │    and retained as unallocated cash portfolio balance.
+          │
+          ▼
+Minimum-Volume Boundary Validation:
+  - If quantized_lots < symbol_spec.min_volume:
+      Suppress dispatch cleanly (no-op; 0 orders emitted; no broker error).
+          │
+          ▼
+Maximum-Volume Boundary Validation:
+  - If quantized_lots > symbol_spec.volume_max:
+      Raise DataContractError (fail-closed venue constraint breach).
+          │
+          ▼
+Exponent Normalization:
+  quantized_lots = quantized_lots.quantize(symbol_spec.volume_step, rounding=ROUND_DOWN)
+          │
+          ▼
+Construct Canonical OrderIntent(volume=quantized_lots, side=direction, ...)
+```
 
 #### Permitted Actions for `PaperExecutionBridge`:
 - Translate target weight vector $w^*$ into discrete share/contract delta: $\Delta q_i = q_{\text{target}, i} - q_{\text{current}, i}$.
-- Validate structural completeness and schema correctness of `AllocationDecision`.
-- Suppress mathematically zero/no-op deltas ($\|\Delta q_i\| < \text{min\_lot\_size} \implies \text{no dispatch}$).
+- Quantize magnitude using the canonical `ROUND_DOWN` pipeline.
+- Suppress sub-minimum or zero deltas ($\Delta q_{\text{quantized}} < \text{min\_volume} \implies \text{no dispatch}$).
 - Construct and dispatch canonical `OrderIntent` DTOs.
 - Forward raw broker events (`BrokerRawEvent`) into `ExecutionCoordinator`.
 
@@ -170,18 +221,42 @@ class PaperExecutionBridge:
         session_identity: PaperTradingSessionIdentity,
     ) -> Sequence[CoordinatorOutcome]: ...
 
-    def _calculate_target_delta(
+    def _quantize_target_delta(
         self,
         target_allocation: AllocationDecision,
         current_portfolio: PortfolioState,
         symbol_spec: BrokerSymbolSpec,
-    ) -> Decimal: ...
+    ) -> Optional[Tuple[Decimal, OrderSide]]: ...
 ```
 
-### 5.4 Local Simulator Seam & Seeded Deterministic Matcher
-- `SimulatedMarketMatcher` is an offline test double consuming an explicit, deterministic `ExecutionCostModel` (Section 13).
+### 5.4 Local Simulator Seam & Deterministic Matcher (Partial-Fill Lifecycle)
+To resolve Blocker 1 from the auditor review, `SimulatedMarketMatcher` implements explicit, canonical multi-stage fill semantics matching `src/acash/execution/state_machine.py`:
+
+```text
+[OrderIntent Received]
+          │
+          ▼
+[BrokerEventKind.ACK] ──► Coordinator State: ACKNOWLEDGED
+          │
+          ├───► FULL_FILL_MODE:
+          │       Emits BrokerEventKind.FILLED (filled_qty = requested_qty)
+          │       Coordinator State: FILLED (Terminal)
+          │       Emits canonical ExecutionManifest.
+          │
+          ├───► PARTIAL_FILL_MODE (Multi-Stage Lifecycle for V-03):
+          │       Pulse 1: Emits BrokerEventKind.PARTIAL_FILL (filled_qty = requested_qty * 0.50)
+          │                Coordinator State: PARTIALLY_FILLED
+          │                Residual quantity (50%) remains active on simulated venue.
+          │       Pulse 2: Emits BrokerEventKind.FILLED (filled_qty = requested_qty)
+          │                Coordinator State: FILLED (Terminal)
+          │                Emits canonical ExecutionManifest.
+          │
+          └───► REJECT_MODE:
+                  Emits BrokerEventKind.REJECTED (or ACK -> REJECTED)
+                  Coordinator State: REJECTED (Terminal)
+```
+
 - Uses an explicit PRNG seed (`prng_seed: int`) bound into `config_digest` to ensure 100% mathematical reproducibility across all unit and soak test runs.
-- Emits canonical `BrokerRawEvent` sequences (`ACK` $\to$ `FILLED` or `REJECTED`).
 - Operates purely in-memory with zero network connectivity.
 
 ---
@@ -470,7 +545,7 @@ class SlippageModelConfig(BaseModel):
 
 class CommissionModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    commission_per_lot_usd: Decimal = Decimal("7.00")  # Standard institutional round-turn
+    commission_per_lot_usd: Decimal = Decimal("7.00")  # Deterministic test-model fee parameter
 
 class ExecutionCostModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -481,14 +556,16 @@ class ExecutionCostModel(BaseModel):
 ```
 
 #### Parameter Provenance & Lineage Table:
+All simulator parameters are classified strictly under **`DETERMINISTIC_TEST_CONFIGURATION`** to avoid unsupported assertions regarding empirical broker contracts:
+
 | Parameter | Default Value | Authority Source | Ingested in `config_digest`? | Real-Market Representation |
 |---|---|---|---|---|
-| `base_spread_pips` | `1.2` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 uses live broker spread) |
-| `volatility_expansion_factor`| `1.0` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only |
-| `fixed_slippage_bps` | `0.20` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 experiences broker slippage) |
-| `prng_seed` | `42` | Deterministic Test Configuration | **YES** (Mandatory) | Seed for deterministic pseudorandom slippage generation |
-| `dispersion_slippage_std_bps`| `0.00` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (0.00 = pure deterministic fixed drag) |
-| `commission_per_lot_usd` | `7.00` | Account Fee Specification | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 uses account commission deal ledger) |
+| `base_spread_pips` | `1.2` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 uses live broker spread) |
+| `volatility_expansion_factor`| `1.0` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Local Simulator Estimate Only |
+| `fixed_slippage_bps` | `0.20` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 experiences broker slippage) |
+| `prng_seed` | `42` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Seed for deterministic pseudorandom slippage generation |
+| `dispersion_slippage_std_bps`| `0.00` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Local Simulator Estimate Only (0.00 = pure deterministic fixed drag) |
+| `commission_per_lot_usd` | `7.00` | `DETERMINISTIC_TEST_CONFIGURATION` | **YES** (Mandatory) | Local Simulator Estimate Only (default $7.00/lot is a deterministic model parameter; NOT an asserted broker contract) |
 
 ### 13.2 Rules:
 1. Every execution-cost parameter MUST be explicit. No unexplained magic constants in simulation code.
@@ -513,7 +590,7 @@ class ExecutionCostModel(BaseModel):
 |---|---|---|---|
 | **V-01** | Zero Delta | Target allocation equals current position ($\Delta q \equiv 0$) | Emits 0 orders; dispatch suppressed cleanly. |
 | **V-02** | Vetoed Allocation | Stage 4 risk engine returns `RiskVerdict.REJECTED` | Emits 0 orders; cycle outcome `RISK_REJECTED`. |
-| **V-03** | Matcher Partial/Full Fill | Local matcher fills 50% / 100% of volume deterministically | Coordinator records fill; emits valid canonical `ExecutionManifest`. |
+| **V-03** | Matcher Partial/Full Fill | Local matcher emits deterministic multi-stage fill: `ACK` $\to$ `PARTIAL_FILL` (50% volume, order in `PARTIALLY_FILLED`, residual working) $\to$ subsequent pulse emits `FILLED` (100% volume, order in `FILLED`). | Coordinator transitions `ACKNOWLEDGED` $\to$ `PARTIALLY_FILLED` $\to$ `FILLED`; emits canonical `ExecutionManifest`. |
 | **V-04** | Rejected Order | Venue rejects order (e.g. invalid symbol/volume) | Coordinator transitions to `REJECTED`; incident logged. |
 | **V-05** | Fresh Tick | Tick received with age 50ms | Stage 1 passes; `data_age_ms` recorded. |
 | **V-06** | Stale Data | Tick received with age 2500ms (> 1500ms threshold) | Stage 1 halts pulse; emits `CycleOutcome.DATA_STALE`. |
@@ -651,7 +728,7 @@ The implementation scope remains strictly locked to **4 runtime files and 1 unit
 
 | Target File Path | Purpose | Allowed Classes & Functions | Consumed Contracts | Contracts NOT Allowed to Change | Test Coverage | Operational Risk | Rollback Impact |
 |---|---|---|---|---|---|---|---|
-| `src/acash/runtime/paper_bridge.py` | Order translation & dispatch seam | `PaperExecutionBridge`, `SimulatedMarketMatcher`, `PaperExecutionVenueType`, `ExecutionCostModel` | `AllocationDecision`, `OrderIntent`, `BrokerRawEvent`, `ExecutionCoordinator`, canonical `ExecutionManifest` | Zero secondary risk logic; zero sizing alterations; zero frozen core edits. | V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20 | Low (isolated translation layer) | Clean deletion; zero core regressions |
+| `src/acash/runtime/paper_bridge.py` | Order translation, volume quantization & dispatch seam | `PaperExecutionBridge`, `SimulatedMarketMatcher`, `PaperExecutionVenueType`, `ExecutionCostModel` | `AllocationDecision`, `OrderIntent`, `BrokerRawEvent`, `ExecutionCoordinator`, canonical `ExecutionManifest` | Zero secondary risk logic; zero sizing alterations; zero frozen core edits. | V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20 | Low (isolated translation layer) | Clean deletion; zero core regressions |
 | `src/acash/runtime/feeder.py` | Market data feed pump & freshness | `ForwardMarketDataFeeder`, `MarketFeedStatus`, `FeedSourceType` | `IMarketDataProvider`, `Bar`, `MarketDataSnapshot`, `NativeMT5Transport` | Zero synthetic bar imputation; zero silent fallback on stale ticks. | V-05, V-06, V-15 | Low (read-only polling adapter) | Clean deletion; zero core regressions |
 | `src/acash/runtime/rehydration.py` | Crash/restart recovery & reconciliation | `PortfolioStateRehydrator`, `RehydrationStatus`, `PortfolioSnapshotStore` | `OperationalLedger`, `OperationalCycleEvent`, `PortfolioState`, `MT5BrokerAdapter`, `MT5AuthoritativeReconciler` | Zero position fabrication; zero recovery on broken ledger hash. | V-07, V-08, V-09, V-10, V-13, V-14, V-16 | Medium (state reconstruction) | Revert to clean empty genesis |
 | `src/acash/runtime/strategy_adapter.py` | Read/verify strategy adapter & session identity | `PaperStrategyAdapter`, `PaperTradingSessionIdentity` (new runtime contract) | `MultiHorizonMomentumStrategy`, `AlphaQualificationDossier`, `AlphaLifecycleState` | Zero lifecycle promotion; zero synthetic dossier creation. | V-17, V-18 | Low (read/verify wrapper) | Clean deletion; strategy stays blocked |
@@ -680,7 +757,10 @@ If any implementation requirement appears to necessitate modifying frozen core f
 - [ ] No synthetic dossier
 - [ ] Strategy remains qualification-blocked (`STRAT-MOM-MULTI-HORIZON-V1`)
 - [ ] Bridge is translation/dispatch only
+- [ ] Multi-stage partial-fill lifecycle explicitly specified (`ACK` $\to$ `PARTIAL_FILL` $\to$ residual working $\to$ `FILLED`)
+- [ ] Venue `volume_step` quantization pipeline formally specified with `ROUND_DOWN`, residual drop, and min-lot suppression
 - [ ] Execution cost assumptions explicit and seeded deterministic
+- [ ] Commission cost provenance explicitly classified as `DETERMINISTIC_TEST_CONFIGURATION`
 - [ ] `config_digest` binds execution-cost parameters (including `prng_seed`)
 - [ ] Rehydration authority is schema-grounded
 - [ ] Local Simulator equity follows explicit simulator accounting model
