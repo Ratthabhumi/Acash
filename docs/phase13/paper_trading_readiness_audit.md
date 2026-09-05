@@ -1,42 +1,37 @@
-# ACASH Phase 13 — Paper Trading Readiness Audit & Gap Analysis
-# 3-Month Continuous Forward Operation Feasibility Assessment
+# ACASH Phase 13 — Paper Trading Readiness Audit & Implementation Contract
+# 3-Month Continuous Forward Operation Specification (Revision 2)
 
 > **Document ID:** `docs/phase13/paper_trading_readiness_audit.md`  
-> **Status:** AUDIT COMPLETE — IMPLEMENTATION LOCKED  
+> **Version:** 2.0.0 (Implementation Contract Edition)  
+> **Date:** 2026-09-05  
+> **Status:** AUDIT PASSED — IMPLEMENTATION LOCKED AWAITING HUMAN GO  
 > **Governance Authority:** Phase 13 Gate A (Certified), Gate B Rev 10 Step 2 (Conditional Pass), B23.2 (Not Proven / Deferred)  
-> **Objective:** Determine exact requirements for continuous 3-month Paper Trading validation on the current development host using existing ACASH architecture.  
-> **Rule Enforcement:** Zero unverified claims; zero code changes in audit phase; zero live execution authority.
+> **Rule Enforcement:** Zero unverified claims; zero synthetic dossiers; zero code modifications prior to explicit approval.
 
 ---
 
 ## 1. Executive Summary & Governance Boundary
 
-This audit evaluates the codebase at commit `e733d53` to determine whether ACASH can execute a **continuous 3-month Paper Trading validation program** on the current Windows development host without requiring physical enterprise OS enforcement (`WDAC UMCI=2` / `B23.2`), without deploying live capital, and without premature implementation of future phases (Phases 14–28).
+This document establishes the definitive, audited **Implementation Contract** required for ACASH to execute a reliable, continuous **3-month Paper Trading validation program** on the current Windows development host.
 
-### 1.1 Active Governance Boundary (Immutable)
-- **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo `112040157` 100% flat).
+### 1.1 Governance Boundary (Immutable)
+- **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo `112040157` flat).
 - **Phase 13 Gate B (Rev 10 Step 2):** `CONDITIONAL PASS` (B1–B22 PASS, B23.1 PASS, B23.2 NOT PROVEN / DEFERRED).
-- **Assertion B23.2:** `NOT PROVEN / DEFERRED` to future dedicated 24/7 cloud/VM infrastructure.
+- **Assertion B23.2 (Host Kernel Enforcement):** `NOT PROVEN / DEFERRED` to future dedicated 24/7 cloud/VM infrastructure.
 - **Step 3 Ceremony:** `STRICTLY BLOCKED / LOCKED`.
 - **Step 4 Activation:** `STRICTLY BLOCKED / LOCKED`.
 - **Slice 3 (First Live Order):** `STRICTLY BLOCKED / LOCKED`.
-- **Live Capital:** `$0.00` | **Live Orders:** `0` | **Live Broker Connection:** `DISCONNECTED`.
+- **Live Capital Authority:** `$0.00` | **Live Orders Dispatched:** `0` | **Live Broker Connection:** `DISCONNECTED`.
 
-### 1.2 Core Audit Finding
-ACASH possesses **extensive, production-grade foundational components** across Phase 7 (Broker Abstraction & Alpaca Paper P-001), Phase 8 (Portfolio Tournament), Phase 9 (Sovereign Risk Engine & Kill Switch), Phase 10 (Runtime Supervisor, Scheduler & Operational Ledger), Phase 11 (Forward Tracking, Drift Detection & Realized Drag Attribution), and Phase 12 (MT5 Broker Adapter & 6-D Reconciliation).
-
-However, **there is currently an architectural seam gap** between the upstream 5-stage supervisor (`RuntimeSupervisor`) and the downstream execution/fill simulator:
-1. `RuntimeSupervisor` stops at Stage 5 (`admission_hook_fn`), outputting `admitted_for_execution=True/False` without an automated order-dispatch and fill-monitoring runner.
-2. The system has two operational fill simulation options:
-   - *Option 1 (Simulated Local Broker):* `MockBroker` exists and supports partial/full fills and cancellation races, but operates in-memory without background limit-order matching against incoming bars.
-   - *Option 2 (Real Paper Broker):* `AlpacaPaperAdapter` (US Equities) and `MT5BrokerAdapter` (Demo MetaQuotes) exist and have passed order exercise tests, but lack an unattended 24/7 continuous event loop with automated reconnection and state recovery.
-3. Persistent portfolio state rehydration across process restarts is incomplete (the `OperationalLedger` recovers historical cycle digests, but does not reconstruct active in-memory open positions upon boot).
+### 1.2 Core Architectural Principles for Paper Trading
+1. **Paper $\neq$ Backtest:** Paper trading is continuous forward operation consuming market data arriving in real time; replaying historical data is backtesting, never paper trading.
+2. **Zero Synthetic Qualification:** We strictly forbid manufacturing a fake `AlphaQualificationDossier` merely to make upstream checks pass. Strategy qualification must be earned through the legitimate Phase 8.5 / Phase 17 mathematical contract.
+3. **Core Gaps vs. Deployment Hardening:** Exactly **4 Core Architectural Gaps** are recognized. External process supervision (watchdogs, restart daemons) is classified as an OS-level deployment concern, keeping ACASH core pure and unbloated.
+4. **Execution Realism:** The MetaQuotes MT5 Demo environment serves as the primary paper execution environment (leveraging existing frozen Phase 12 adapters and 6-D reconciliation), with an offline `SimulatedMarketMatcher` serving as a deterministic test double.
 
 ---
 
-## 2. Repository Fact Audit (Evidence-Grounded Inventory)
-
-Every item below has been directly verified against active code at HEAD.
+## 2. Repository Fact Audit (Verified Baseline at Commit `e733d53`)
 
 | Domain / Capability | Exact Source File | Exact Class / Function | Status | Proving Tests | Known Limitations |
 |---|---|---|---|---|---|
@@ -59,273 +54,182 @@ Every item below has been directly verified against active code at HEAD.
 
 ---
 
-## 3. Paper Trading Capability Matrix
+## 3. The 4 Core Architectural Gaps (Detailed Seam Specifications)
 
-Requirements evaluated against the strict classification standard:
+In accordance with auditor guidance (Option A), exactly **4 Core Architectural Gaps** are established. All external process monitoring is decoupled into an operational deployment concern.
 
-| Requirement Category | Specific Capability | Classification | Justification / Grounding |
-|---|---|---|---|
-| **Pipeline Core** | 5-Stage Fail-Closed Supervisor | `EXISTS_AND_VERIFIED` | `RuntimeSupervisor` in `src/acash/runtime/supervisor.py` (tested in `test_supervisor.py`). |
-| **Pipeline Core** | Concurrency Lock & Dual-Clock | `EXISTS_AND_VERIFIED` | `OperationalScheduler` enforces `as_of_utc != wall_clock_utc` and busy locks. |
-| **Pipeline Core** | Execution Admission Bridge | `MISSING` | Seam connecting Stage 5 output to `OrderIntent` generation and dispatch. |
-| **Execution Simulation** | In-Memory Exchange Reality | `EXISTS_AND_VERIFIED` | `MockBroker` simulates ACK, partial fill, full fill, reject, and cancel races. |
-| **Execution Simulation** | Autonomous Tick-Matching Engine | `MISSING` | `MockBroker` cannot autonomously match resting orders against incoming bars/ticks. |
-| **Execution Simulation** | Real Paper Broker Transport | `EXISTS_AND_VERIFIED` | `AlpacaPaperAdapter` and `MT5BrokerAdapter` verified on real paper/demo venues. |
-| **Risk Enforcement** | Multi-Tier Boundary Checks | `EXISTS_AND_VERIFIED` | `DeterministicRiskEngine` checks gross leverage, concentration, cash floor, drawdown. |
-| **Risk Enforcement** | Sovereign Kill Switch | `EXISTS_AND_VERIFIED` | `SovereignKillSwitchController` with disk persistence and quorum recovery. |
-| **Risk Enforcement** | Monotonic Derisking | `EXISTS_AND_VERIFIED` | `DeriskEngine` implements `EXACT_SCALE_DOWN` and `BINARY_REJECT`. |
-| **State & Persistence** | Operational Cycle Event Ledger | `EXISTS_AND_VERIFIED` | `OperationalLedger` with append-only JSONL and SHA-256 chain verification. |
-| **State & Persistence** | Forensic Monitoring Ledger | `EXISTS_AND_VERIFIED` | `MonitoringEvidenceLedger` adapts `OperationalLedger` for drift/cost evidence. |
-| **State & Persistence** | Portfolio State Rehydration | `MISSING` | Process restart reloads ledger hashes but does not rebuild in-memory positions. |
-| **State & Persistence** | Decision Ledger Disk Persistence | `EXISTS_BUT_INCOMPLETE` | `InMemoryDecisionLedger` is memory-only; needs persistence adapter. |
-| **Market Data** | Historical Parquet & Integrity | `EXISTS_AND_VERIFIED` | `IngestionPipeline` + `ParquetStorageEngine` + `DataIntegrityValidator`. |
-| **Market Data** | Forward Market Data Feed Pump | `MISSING` | No live streaming/polling pump delivering fresh market snapshots to daemon. |
-| **Strategy Layer** | Baseline Research Strategies | `EXISTS_AND_VERIFIED` | OBI Imbalance, Session VWAP, and Multi-Horizon Momentum implemented. |
-| **Strategy Layer** | Strategy Execution Wrapper | `MISSING` | Adapter translating research signals into candidate allocation for Stage 2/3. |
-| **Strategy Layer** | Research-Qualified Dossier File | `MISSING` | No pre-computed, canonical `.json` dossier stored on disk for baseline strategy. |
-| **Attribution & Metrics** | 8 Econometric Estimators | `EXISTS_AND_VERIFIED` | `ForwardMetricsCalculator` computes return, vol, Sharpe, MDD, HWM, hit rate, TE, t-stat. |
-| **Attribution & Metrics** | Execution Drag Decomposition | `EXISTS_AND_VERIFIED` | `ExecutionAttributionEngine` computes spread, timing, slippage, fee, and rebate drag. |
-| **Attribution & Metrics** | Drift State Machine | `EXISTS_AND_VERIFIED` | `ForwardHealthStateMachine` with 5 states and anti-whipsaw hysteresis. |
-| **Operations** | Long-Running Daemon Loop | `EXISTS_BUT_INCOMPLETE` | `ContinuousPaperDaemon` exists but requires external iterator driver. |
-| **Operations** | Windows Process Watchdog | `MISSING` | No external script/service monitoring daemon process liveness and restarting. |
+### Gap 1: Paper Execution Bridge & Order Dispatch Seam
+- **Existing Foundation:** `RuntimeSupervisor` (Stage 5 admission hook), `ExecutionCoordinator` (shadow state authority), `MT5BrokerAdapter` (Phase 12), `MockBroker` (Phase 7).
+- **Exact Missing Seam:** A deterministic adapter that takes the admitted `AllocationDecision` from Stage 5, evaluates the target delta ($\Delta q_i = q_{\text{target}, i} - q_{\text{current}, i}$), constructs canonical `OrderIntent` DTOs, dispatches them to the selected venue (`MT5BrokerAdapter` or `SimulatedMarketMatcher`), and passes raw events to `ExecutionCoordinator`.
+- **Exact New Files:** `src/acash/runtime/paper_bridge.py`
+- **Interfaces Reused:** `IExecutionEngine`, `to_coordinator_event()`, `transition_order()`, `AllocationDecision`, `OrderIntent`.
+- **Tests Required:**
+  - Net zero delta produces zero orders.
+  - Vetoed allocation in Stage 4/5 produces zero orders.
+  - Partial fill updates shadow state without double accumulation.
+  - Rejected paper order routes to coordinator incident log without raising unhandled crash.
+- **Failure Semantics:** Strict fail-closed. If venue is unreachable or returns timeout, order transitions to `UNKNOWN`, triggering reconciliation rather than assuming a fill.
 
----
+### Gap 2: Forward Market Data Feeder (Real-Time Tick/Bar Pump)
+- **Existing Foundation:** `IMarketDataProvider` (`src/acash/core/interfaces/market_data.py`), `NativeMT5Transport` (Phase 12), `ParquetStorageEngine` (Phase 2).
+- **Exact Missing Seam:** A continuous background feed pump that polls or streams live market prices as they arrive in real time, updates the active `IMarketDataProvider` cache, and tracks `data_age_ms` to feed Stage 1 freshness checks.
+- **Exact New Files:** `src/acash/runtime/feeder.py`
+- **Interfaces Reused:** `IMarketDataProvider`, `Bar`, `MarketDataSnapshot`, `NativeMT5Transport.get_latest_tick()`.
+- **Tests Required:**
+  - Fresh tick updates provider and resets `data_age_ms`.
+  - Feed drop exceeding `max_market_data_age_ms` (1500ms) causes Stage 1 to halt with `DATA_STALE`.
+  - Clock jump or negative timestamp raises `DataContractError`.
+- **Failure Semantics:** Strict fail-closed. Zero synthetic data imputation; missing data halts rebalance pulse.
 
-## 4. Reusable Existing Components (Zero Reinvention)
+### Gap 3: Portfolio State Rehydration & Crash Recovery Seam
+- **Existing Foundation:** `OperationalLedger` (JSONL + SHA-256 chain verification), `SovereignKillSwitchController._recover_state_from_disk()`.
+- **Exact Missing Seam:** A startup rehydration routine that reads the most recent valid `OperationalCycleEvent` from the sealed ledger, reconstitutes in-memory `PortfolioState` (cash balance, open positions, realized PnL), and cross-checks with the broker reality before the first new pulse runs.
+- **Exact New Files:** `src/acash/runtime/rehydration.py`
+- **Interfaces Reused:** `OperationalLedger`, `OperationalCycleEvent`, `PortfolioState`, `AccountState`, `RiskStateBridge`.
+- **Tests Required:**
+  - Corrupted ledger line halts rehydration fail-closed.
+  - Clean restart restores exact position quantities, cash, and equity.
+  - Reconciles recovered state against broker open positions; raises discrepancy incident if mismatched.
+- **Failure Semantics:** If ledger digest is broken or broker positions disagree with recovered state, daemon enters `RUNTIME_HALTED` and refuses to dispatch orders.
 
-The following components MUST be reused as-is without rewriting or duplicating:
-
-1. **`RuntimeSupervisor` (`src/acash/runtime/supervisor.py`):** The authoritative 5-stage orchestrator. Must remain the central pipeline authority.
-2. **`OperationalScheduler` (`src/acash/runtime/scheduler.py`):** Authoritative cadence, dual-clock verification, and concurrency lock.
-3. **`OperationalLedger` (`src/acash/runtime/ledger.py`):** Append-only disk ledger with SHA-256 chaining.
-4. **`DeterministicRiskEngine` (`src/acash/risk/risk_engine.py`):** Sovereign risk boundaries and allocation evaluation.
-5. **`SovereignKillSwitchController` (`src/acash/risk/kill_switch.py`):** Emergency trip, disk persistence, and quorum reset.
-6. **`ExecutionCoordinator` (`src/acash/execution/coordinator.py`):** Shadow order state machine, event deduplication, and reconciliation.
-7. **`ForwardMetricsCalculator` (`src/acash/monitoring/metrics.py`):** Pure Decimal econometric performance calculations.
-8. **`ExecutionAttributionEngine` (`src/acash/monitoring/attribution.py`):** Spread, slippage, timing, and fee drag decomposition.
-9. **`MonitoringEvidenceLedger` (`src/acash/monitoring/ledger.py`):** Forensic evidence adapter for Phase 10 ledger.
-10. **`ForwardHealthStateMachine` (`src/acash/monitoring/state_machine.py`):** Health transitions and governance recommendations.
-11. **`AllocationTournamentRunner` (`src/acash/portfolio/tournament.py`):** Out-of-sample portfolio tournament.
-12. **`MockBroker` (`src/acash/execution/mock_broker.py`):** Reality simulator for simulated broker fills.
-
----
-
-## 5. Missing-Component / Gap Analysis
-
-To run a reliable, continuous 3-month paper trading validation, exactly **4 architectural gaps** must be addressed:
-
-### Gap 1: Paper Execution Bridge & Autonomous Fill Matcher
-- **Defect:** `RuntimeSupervisor` stops at Stage 5 (`admission_hook_fn`). It does not convert an admitted `AllocationDecision` / `RiskEvaluationReport` into concrete `OrderIntent` objects and dispatch them to `ExecutionCoordinator`. Furthermore, if running fully offline on the Dev Host without external broker connectivity, `MockBroker` requires manual function calls to fill orders.
-- **Requirement:** A lightweight, deterministic `PaperExecutionBridge`:
-  1. Takes Stage 5 admitted allocation.
-  2. Generates `OrderIntent` (target delta quantity = target - current).
-  3. Dispatches intent to `ExecutionCoordinator`.
-  4. Feeds order to either:
-     - *Local Mode:* An autonomous `SimulatedMarketMatcher` that executes simulated fills against the latest bar/quote with realistic spread and fee assumptions.
-     - *Venue Mode:* `AlpacaPaperAdapter` or `MT5BrokerAdapter` (when paper/demo connection is available).
-
-### Gap 2: Forward Market Data Feeder (Feed Pump)
-- **Defect:** ACASH has batch ingestion (`IngestionPipeline`) and in-memory mock (`MockMarketDataProvider`), but lacks a forward tick/bar pump that feeds fresh market data at scheduled intervals.
-- **Requirement:** A `ForwardMarketDataFeeder`:
-  - In *Offline Simulation Mode:* Streams historical bars forward sequentially in real time (e.g. 1 bar per minute or accelerated 1 pulse per 5 seconds), updating `IMarketDataProvider` and tracking `data_age_ms`.
-  - In *Online Demo Mode:* Polls MT5 Demo or Alpaca Paper market quotes at 1-minute cadence.
-
-### Gap 3: State Rehydration on Startup (Crash/Restart Survival)
-- **Defect:** If the daemon or host machine restarts, `OperationalLedger` audits the historical hash chain, but in-memory `PortfolioState` (cash, positions, equity) starts from default blank values.
-- **Requirement:** A `PortfolioStateRehydrator`:
-  - Inspects the last valid `OperationalCycleEvent` from `OperationalLedger`.
-  - Reconstitutes the exact portfolio positions, cash balance, and active strategy state as of the last cycle before the shutdown.
-
-### Gap 4: Canonical Baseline Strategy Qualification Dossier
-- **Defect:** Stage 2 of `RuntimeSupervisor` (`Strategy Census`) strictly filters for `AlphaLifecycleState.RESEARCH_QUALIFIED`. If zero qualified dossiers are passed, the supervisor executes the governed 100% Cash fallback (`GOVERNANCE_FALLBACK`).
-- **Requirement:** Seal a canonical, verifiable `AlphaQualificationDossier` file for at least one baseline strategy (e.g. `MultiHorizonMomentumStrategy` or `MicrostructureImbalanceStrategy`) grounded in Phase 8.5 schema, and store it on disk so the supervisor can load and trade it.
+### Gap 4: Legitimate Strategy Qualification & Paper Eligibility
+- **Existing Foundation:**
+  - Baseline Strategies: `MultiHorizonMomentumStrategy`, `SessionVwapMeanReversionStrategy`, `MicrostructureImbalanceStrategy` (`src/acash/research/strategies.py`).
+  - Master Qualification Gate: `AlphaQualificationGate` (`src/acash/research/qualification.py`).
+  - Lifecycle States: `AlphaLifecycleState.FORWARD_PAPER_MONITORED`, `RESEARCH_QUALIFIED` (`src/acash/research/alpha_schema.py`).
+- **Exact Missing Seam:**
+  - Zero strategies currently hold a legitimately sealed `AlphaQualificationDossier` file on disk.
+  - We strictly **FORBID** fabricating a fake `baseline_momentum_dossier.json`.
+  - Stage 2 of `RuntimeSupervisor` currently filters strictly for `lifecycle_state == AlphaLifecycleState.RESEARCH_QUALIFIED`. Under the canonical lifecycle state graph, an alpha entering forward paper testing holds state `FORWARD_PAPER_MONITORED`.
+  - The seam requires either:
+    1. Executing an authentic Phase 6 / 8.5 qualification run on historical data to earn `RESEARCH_QUALIFIED`, OR
+    2. Extending `RuntimeSupervisor` Stage 2 census to legitimately admit dossiers in `FORWARD_PAPER_MONITORED` state for forward paper tracking (governed by Phase 11).
+- **Exact New Files:** `src/acash/runtime/strategy_adapter.py` (wraps baseline strategy into allocation candidate).
+- **Status:** **`BLOCKED (QUALIFICATION PENDING)`**.
 
 ---
 
-## 6. Proposed Paper Runtime Architecture
+## 4. Candidate Strategy & Paper Eligibility Audit
 
-The proposed Paper Trading architecture strictly honors the Sovereign Separation of Concerns and has **ZERO live broker wire access**:
+### 4.1 Strategy Candidate Identification
+The primary candidate for the 3-month paper validation is:
+- **Strategy ID:** `STRAT-MOM-MULTI-HORIZON-V1`
+- **Class:** `MultiHorizonMomentumStrategy` (`src/acash/research/strategies.py`)
+- **Mechanism:** Time-Series Momentum (TSMOM) evaluating multi-horizon return signs across lookback bars.
+- **Style:** Systematic Trend-Following (Taker execution, zero maker-rebate reliance).
+- **Target Instrument:** EURUSD / SPY (liquid baseline).
+
+### 4.2 Current Qualification Status: BLOCKED
+- **Audit Finding:** The strategy code exists and executes unit tests cleanly, but **no authentic Phase 6 ValidationReport, no sealed SearchTrialLedger, and no Phase 8.5 AlphaQualificationDossier exist on disk**.
+- **Governance Constraint:** We refuse to synthesize artificial evidence. Prior to starting the 3-month paper trading run, the candidate strategy must execute the canonical qualification pipeline:
+  $$\text{HypothesisSpec} \longrightarrow \text{SearchTrialLedger (Sealed)} \longrightarrow \text{ValidationReport (PASS)} \longrightarrow \text{AlphaQualificationGate} \longrightarrow \text{Dossier}$$
+  Only when this pipeline succeeds with net positive trading alpha after friction may the strategy be admitted to paper trading.
+
+---
+
+## 5. Paper Trading Session Identity Specification
+
+To guarantee that 3 months of forward paper execution data remains forensically auditable, unpolluted, and traceable, every paper run MUST be initialized with an immutable **Paper Trading Session Identity**:
+
+```json
+{
+  "paper_run_id": "PAPER-RUN-20260905-001",
+  "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+  "strategy_version": "1.0.0",
+  "start_time_utc": "2026-09-05T14:00:00Z",
+  "end_time_utc": null,
+  "config_digest": "4a7b9c... (SHA-256 of RuntimePolicyConfig)",
+  "dossier_digest": "8f2e1a... (SHA-256 of AlphaQualificationDossier)",
+  "data_source": "METAQUOTES_MT5_DEMO",
+  "execution_mode": "MT5_DEMO_VENUE",
+  "ledger_path": "var/paper/PAPER-RUN-20260905-001/operational_ledger.jsonl"
+}
+```
+
+This identity is embedded in every `OperationalCycleEvent` and every `MonitoringEvidenceLedger` record, preventing data cross-contamination across restarts or strategy iterations.
+
+---
+
+## 6. Execution Environment Architecture: MT5 Demo Primary vs. Local Simulator
+
+The Paper Execution Bridge supports two distinct execution backends behind a unified interface:
 
 ```text
-                     FORWARD MARKET DATA FEEDER
-               (Real Demo Feed or Historical Tick Pump)
-                                 │
-                                 ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                      CONTINUOUS PAPER DAEMON                           │
-│                                                                        │
-│   STAGE 1: Freshness Check (data_age_ms <= max_market_data_age_ms)    │
-│                                │                                       │
-│   STAGE 2: Strategy Census (Load RESEARCH_QUALIFIED Dossier)          │
-│                                │                                       │
-│   STAGE 3: Allocation Tournament (AllocationTournamentRunner)          │
-│                                │                                       │
-│   STAGE 4: Sovereign Risk Gate (DeterministicRiskEngine + Kill Switch) │
-│                                │                                       │
-│   STAGE 5: Execution Admission Verification                            │
-└────────────────────────────────┬───────────────────────────────────────┘
-                                 │ Admitted Allocation
-                                 ▼
-                     PAPER EXECUTION BRIDGE
-                                 │
-                 ┌───────────────┴───────────────┐
-                 ▼                               ▼
-       [Local Dev Mode]                  [Online Demo Mode]
-    Simulated Market Matcher             MT5 Demo / Alpaca Paper
-    (Spread + Slippage Model)            (Zero Real Capital)
-                 │                               │
-                 └───────────────┬───────────────┘
-                                 │ Raw Broker Event
-                                 ▼
-                     EXECUTION COORDINATOR
-           (transition_order() Sole State Authority)
-                                 │
-                                 ▼
-                     6-DIMENSIONAL RECONCILIATION
-                                 │
-                                 ▼
-                 FORENSIC PERSISTENCE & MONITORING
-                 ├── OperationalLedger (JSONL + SHA-256)
-                 ├── MonitoringEvidenceLedger (Drift & Drag)
-                 └── ForwardMetricsCalculator (Rolling Econometrics)
+                           PAPER EXECUTION BRIDGE
+                                     │
+                 ┌───────────────────┴───────────────────┐
+                 ▼                                       ▼
+       PRIMARY EXECUTION VENUE                 DETERMINISTIC FALLBACK
+          [MT5 Demo Account]                  [Simulated Market Matcher]
+    ├── Real broker terminal connection      ├── 100% offline, zero network
+    ├── MetaQuotes-Demo Server               ├── Spread + slippage + fee model
+    ├── Authoritative 6-D Reconciliation     ├── Instant local execution
+    └── Real broker fills & latency          └── Ideal for soak tests & unit tests
 ```
 
+- **Primary Path (MT5 Demo):** Used for the 90-day forward validation program. Leverages existing `MT5BrokerAdapter` and `MT5AuthoritativeReconciler` verified under Gate A and Phase 12 (`1e1d154`).
+- **Fallback Path (Local Simulator):** Used for unit tests, offline continuous integration, and initial recovery tests.
+
 ---
 
-## 7. 3-Month Validation Program Design
+## 7. Mandatory Pre-90-Day Progressive Validation Sequence
 
-The 3-month paper validation program is structured into three progressive operational categories:
+A continuous 90-day forward run represents a significant operational commitment. The system MUST progress through a strict, multi-stage verification ladder before the 90-day run commences:
 
 ```
-Month 1: SYSTEM STABILITY ──► Month 2: STRATEGY BEHAVIOR ──► Month 3: ROBUSTNESS
+[1. Minimal Implementation]
+        ↓
+[2. Unit Tests (Pytest 100% clean)]
+        ↓
+[3. Integration Tests (Bridge + Rehydration + Feeder)]
+        ↓
+[4. Restart / Recovery Tests (FR-01 through FR-08)]
+        ↓
+[5. Short Soak Test (24–72 Hours Unattended)]
+        ↓
+[6. Soak Test Telemetry & Reconciliation Audit]
+        ↓
+[7. Paper Run Readiness Review]
+        ↓
+[8. EXPLICIT HUMAN GO AUTHORIZATION]
+        ↓
+[9. 90-Day Continuous Paper Trading Operation]
+        ↓
+[10. 3-Month Formal Econometric & Reality Gap Review]
 ```
 
-### Month 1 — System Stability & Operational Invariants
-- **Primary Goal:** Prove runtime survival, data integrity, and crash recovery.
-- **Validation Categories:**
-  - *Process Uptime:* Measure uptime ratio, cycle dispatch punctuality, and scheduler lockouts.
-  - *Restart & Recovery:* Execute planned process restarts; assert 100% fidelity of portfolio state rehydration and zero ledger hash corruption.
-  - *Data Freshness Discipline:* Verify that stale market data (>1500ms or missed bar) cleanly triggers `CycleOutcome.DATA_STALE` and blocks order generation.
-  - *Reconciliation Health:* Verify that 100% of paper fills reconcile cleanly across all 6 dimensions (Intent, Symbol, Volume, Price, State, Fill History) with zero unresolved incidents.
-  - *Risk Gate Integrity:* Assert zero risk boundary breaches; verify sovereign kill switch trip/recovery semantics.
-
-### Month 2 — Strategy Behavior & Realized Execution Drag
-- **Primary Goal:** Evaluate strategy signal behavior and quantify reality gap in paper execution.
-- **Validation Categories:**
-  - *Expectancy & Sharpe:* Track rolling annualized return, volatility, and Sharpe ratio via `ForwardMetricsCalculator`.
-  - *Realized Execution Drag:* Decompose execution frictions via `ExecutionAttributionEngine`:
-    - Spread drag vs benchmark midpoint
-    - Timing drag between decision and arrival
-    - Slippage drag from arrival quote to fill price
-    - Simulated broker commission drag
-  - *Regime Tracking:* Monitor strategy performance across distinct market regimes (trending vs ranging, high-vol vs low-vol).
-  - *Shadow Decisions:* Record rejected orders and derisked allocations for counterfactual evaluation.
-  - *Drawdown Control:* Verify peak-to-trough drawdown behavior against theoretical backtest limits.
-
-### Month 3 — Robustness & Degraded Environment Endurance
-- **Primary Goal:** Prove resilience against market turbulence, anomalies, and infrastructure disruptions.
-- **Validation Categories:**
-  - *Volatility Spike Endurance:* Replay high-volatility sessions (e.g. CPI/NFP release or market flash events) through the paper harness; assert proper derisking.
-  - *Data Interruption Handling:* Inject synthetic feed drops and delayed ticks; verify fail-closed transition to `RUNTIME_DEGRADED` / `MONITORING_BLOCKED` without spurious strategy demotions.
-  - *Adversarial Cancellation Races:* Subject paper orders to simultaneous fill-and-cancel events; assert `ExecutionCoordinator` correctly handles late events and duplicates.
-  - *Long-Term Drift Evaluation:* Evaluate `ForwardHealthStateMachine` over the cumulative 90-day window; check for structural alpha degradation.
+Under no circumstances will a 90-day run be initiated immediately following unit test completion. The **24–72h Soak Test** is a mandatory prerequisite to prove memory stability, socket resilience, and scheduler punctuality.
 
 ---
 
-## 8. Failure & Recovery Test Plan
+## 8. Operational Hardening: External Process Supervision
 
-To guarantee the system survives real-world development host disruptions, the following adversarial test scenarios must be executed and verified before launching the 3-month validation:
+In alignment with auditor guidance, process supervision is decoupled from the core Python codebase:
 
-| Scenario ID | Disruption Type | Injection Method | Expected Fail-Closed Behavior |
-|---|---|---|---|
-| **FR-01** | Process Crash | `kill -9` / unhandled kill during active cycle | Next startup detects incomplete cycle, audits ledger chain, rehydrates state from last committed event, and resumes without duplicate cycle ID. |
-| **FR-02** | Machine Reboot | Sudden host restart | Ledger integrity verified on boot via `verify_ledger_integrity()`; kill switch state verified; portfolio balance and positions reconstituted. |
-| **FR-03** | Stale Data Feed | Disconnect feed or freeze clock for 5,000ms | Supervisor Stage 1 detects `data_age_ms > 1500ms`, emits `CycleOutcome.DATA_STALE`, and blocks order generation. |
-| **FR-04** | Corrupted Ledger Line | Bit-flip a single byte in `operational_ledger.jsonl` | Daemon startup halts immediately with `DataContractError("Ledger Corrupted")`; refuses to operate on corrupted evidence chain. |
-| **FR-05** | Duplicate Event Replay | Re-send previously committed `broker_event_id` | `ExecutionCoordinator` detects duplicate event identity, ignores fill re-application, and records `DUPLICATE_EVENT` incident. |
-| **FR-06** | Late Fill After Cancel | Deliver fill event after order reached `CANCELLED` | `transition_order()` raises terminal absorbing error; coordinator records `LATE_EVENT` incident; fill quantity not credited. |
-| **FR-07** | Kill Switch Trip | Invoke `kill_switch.trip()` mid-operation | Next cycle immediately rejected at Stage 4 (`CycleOutcome.RISK_REJECTED`); status report shows `is_kill_switch_blocked=True`. |
-| **FR-08** | Clock Inversion | Inject negative time delta ($t_{\text{current}} < t_{\text{last}}$) | `OperationalScheduler` detects temporal inversion and raises `DataContractError`. |
+- **Classification:** Deployment & Infrastructure Concern (NOT ACASH Core).
+- **Host OS Mechanism:** Windows Task Scheduler or Windows Service (NSSM).
+- **Policy:** If `python -m acash.runtime.daemon` terminates unexpectedly, the Windows service manager automatically restarts the process after a 10-second backoff.
+- **Contract Preservation:** The daemon startup routine immediately invokes `OperationalLedger.verify_ledger_integrity()` and `PortfolioStateRehydrator.rehydrate()`, ensuring that any crash-restart safely resumes without operator intervention.
 
 ---
 
-## 9. Metrics Availability Matrix
+## 9. Minimal Implementation File List (Scope for Human Approval)
 
-Auditing all desired paper trading measurements against current implementation capability:
+When approved by human governance, implementation is strictly bounded to **4 new production files and 1 test file**:
 
-| Metric Category | Desired Metric | Implemented Class / Function | Status | Supported Units / Notes |
-|---|---|---|---|---|
-| **Performance** | PnL (Realized / Unrealized) | `PortfolioState.realized_pnl`, `unrealized_pnl` | `EXISTS_AND_VERIFIED` | Decimal USD |
-| **Performance** | Drawdown (Rolling Window) | `ForwardMetricsCalculator.calculate_window_metrics` | `EXISTS_AND_VERIFIED` | Decimal percentage (peak-to-trough) |
-| **Performance** | Drawdown (Inception HWM) | `ForwardMetricsCalculator.calculate_window_metrics` | `EXISTS_AND_VERIFIED` | Decimal percentage (HWM) |
-| **Performance** | Expectancy | `StrategyRegimeObservation.expectancy_bps` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Performance** | Win Rate / Hit Rate | `ForwardMetricsCalculator._calculate_hit_rate` | `EXISTS_AND_VERIFIED` | Decimal fraction [0.0, 1.0] |
-| **Performance** | Annualized Return | `ForwardMetricsCalculator._calculate_mean_return` | `EXISTS_AND_VERIFIED` | Decimal annualized return |
-| **Performance** | Annualized Volatility | `ForwardMetricsCalculator._calculate_volatility` | `EXISTS_AND_VERIFIED` | Decimal sample standard deviation |
-| **Performance** | Annualized Sharpe Ratio | `ForwardMetricsCalculator._calculate_sharpe_ratio` | `EXISTS_AND_VERIFIED` | Decimal Sharpe (fail-closed on zero var) |
-| **Performance** | Tracking Error & t-Stat | `ForwardMetricsCalculator.calculate_window_metrics` | `EXISTS_AND_VERIFIED` | Decimal |
-| **Performance** | Profit Factor | N/A | `MISSING` | Derivable from gross wins / gross losses. |
-| **Performance** | Turnover | N/A | `MISSING` | Derivable from traded notional / equity. |
-| **Execution** | Spread Drag | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Timing Drag | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Slippage Drag | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Commission Fee Drag | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Rebate Benefit | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Gross & Net Realized Drag | `ExecutionAttributionEngine.decompose_execution_drag` | `EXISTS_AND_VERIFIED` | Basis points (bps) |
-| **Execution** | Partial Fills | `MockBroker.apply_partial_fill`, `ExecutionCoordinator` | `EXISTS_AND_VERIFIED` | Decimal quantity |
-| **Execution** | Missed Fills / Rejections | `MockBroker.reject`, `ExecutionCoordinator` | `EXISTS_AND_VERIFIED` | Count and incident record |
-| **Risk** | Gross / Net Exposure | `PortfolioState.gross_exposure`, `net_exposure` | `EXISTS_AND_VERIFIED` | Decimal USD |
-| **Risk** | Margin Utilization | `RiskEvaluationReport.metrics["margin_utilization"]` | `EXISTS_AND_VERIFIED` | Decimal percentage |
-| **Risk** | Risk Breaches / Vetoes | `RiskEvaluationReport.verdict`, `rejection_reason` | `EXISTS_AND_VERIFIED` | Enum (`RiskVerdict.REJECTED`) |
-| **Risk** | Derisking Adjustments | `DeriskEngine.calculate_derisk_adjustment` | `EXISTS_AND_VERIFIED` | Exact scale-down weights |
-| **Research** | Strategy ID / Version | `StrategyDefinition.strategy_id`, `strategy_version` | `EXISTS_AND_VERIFIED` | String |
-| **Research** | Market Regime Label | `RuntimeRegime`, `StrategyRegimeObservation` | `EXISTS_AND_VERIFIED` | Enum |
-| **Research** | Accepted / Rejected Trades | `CycleExecutionSummary.admitted_for_execution` | `EXISTS_AND_VERIFIED` | Boolean + Ledger digest |
-| **Research** | Shadow Decisions | `AllocationDecision.unselected_candidates` | `EXISTS_AND_VERIFIED` | Cryptographic digests |
-| **Operational** | Uptime & Cycle Count | `DaemonStatusReport.total_cycles_executed` | `EXISTS_AND_VERIFIED` | Integer count |
-| **Operational** | Data Stale Incidents | `CycleOutcome.DATA_STALE` | `EXISTS_AND_VERIFIED` | Count in ledger |
-| **Operational** | Reconciliation Mismatches | `CoordinatorIncidentKind.RECONCILIATION_CONFLICT` | `EXISTS_AND_VERIFIED` | Forensic incident records |
-| **Operational** | Ledger Event Count & Digest | `OperationalLedger.event_count`, `last_event_digest` | `EXISTS_AND_VERIFIED` | Monotonic int + SHA-256 string |
+| File Path | Component | Responsibility |
+|---|---|---|
+| `src/acash/runtime/paper_bridge.py` | `PaperExecutionBridge`<br>`SimulatedMarketMatcher` | Translates Stage 5 allocation into `OrderIntent`, routes to MT5 Demo or Local Matcher, and updates `ExecutionCoordinator`. |
+| `src/acash/runtime/feeder.py` | `ForwardMarketDataFeeder` | Continuous market-data pump for live ticks/bars; updates `IMarketDataProvider` and tracks `data_age_ms`. |
+| `src/acash/runtime/rehydration.py` | `PortfolioStateRehydrator` | Rebuilds `PortfolioState` from last `OperationalCycleEvent` on boot and cross-checks broker reality. |
+| `src/acash/runtime/strategy_adapter.py` | `PaperStrategyAdapter` | Wraps baseline strategy into allocation candidate with `PaperTradingSessionIdentity`. |
+| `tests/unit/runtime/test_paper_bridge.py` | Adversarial Test Suite | Tests all 4 seams, recovery paths, stale data drops, and order life cycles. |
+
+*Zero modifications to frozen core contracts (Phases 1–12). Zero live broker wire access.*
 
 ---
 
-## 10. Explicit Blockers & Non-Blockers
-
-### 10.1 Explicit Blockers (Must be resolved before starting 3-month paper trading)
-1. **Paper Execution Bridge:** Missing adapter connecting `RuntimeSupervisor` Stage 5 to `ExecutionCoordinator` and order dispatch.
-2. **Autonomous Fill Matching (for offline mode):** `MockBroker` does not match orders against incoming bars automatically.
-3. **State Rehydration:** Need a startup routine to reload open portfolio positions from `OperationalLedger`.
-4. **Qualified Strategy Dossier:** Need a serialized, verifiable `AlphaQualificationDossier` file on disk for a baseline strategy so Stage 2 census admits it.
-
-### 10.2 Explicit Non-Blockers (DO NOT block paper trading)
-1. **Assertion B23.2 (WDAC Enforce Mode):** Non-blocker. B23.2 is an enterprise production live-governance requirement for live capital. It has zero bearing on paper trading on the development host.
-2. **Phase 13 Gate B Step 3 Ceremony / Step 4 Activation:** Non-blocker. These are live-capital release gates and remain strictly locked ($0.00 capital).
-3. **Phase 14–28 Roadmap Items:** Non-blocker. Future phases (AI quant layer, L3 microstructure replay, strategy state machine) are not required for baseline paper validation.
-4. **Hardware HSM / Key Ceremony:** Non-blocker. Paper trading does not sign live broker wires.
-5. **Maker Attribution:** Non-blocker. Paper execution uses taker-style market/limit fills; maker attribution is explicitly deferred.
-
----
-
-## 11. Minimal Required Implementation Scope (For Human Approval)
-
-To make ACASH fully paper-trading ready on the development host, the minimal necessary changes are confined to **4 new lightweight files and 0 modifications to frozen core contracts**:
-
-1. `src/acash/runtime/paper_bridge.py`:
-   - `PaperExecutionBridge`: Connects Stage 5 admitted allocation to `ExecutionCoordinator`.
-   - `SimulatedMarketMatcher`: Matches resting orders against incoming bars/ticks using spread and fee models.
-2. `src/acash/runtime/feeder.py`:
-   - `ForwardMarketDataFeeder`: Feeds market data bars/ticks at configured cadences (historical replay or demo feed).
-3. `src/acash/runtime/rehydration.py`:
-   - `PortfolioStateRehydrator`: Rebuilds in-memory `PortfolioState` from the latest `OperationalCycleEvent`.
-4. `var/governance/dossiers/baseline_momentum_dossier.json`:
-   - Sealed canonical `AlphaQualificationDossier` for `MultiHorizonMomentumStrategy` to satisfy Stage 2 census.
-5. Accompanying adversarial unit tests in `tests/unit/runtime/test_paper_bridge.py`.
-
-*All implementation will be executed strictly on the current development host. Zero live credentials, zero live capital.*
-
----
-
-## 12. Final Governance Status Ledger
+## 10. Final Governance Status Ledger
 
 ```text
 ================================================================================
@@ -336,7 +240,9 @@ Phase 13 Gate B (Governance Repair Rev 10):    CONDITIONAL PASS (Step 2 Complete
 Assertion B1–B22 (Adversarial Suite):          PASS (22/22 Verified)
 Assertion B23.1 (WinVerifyTrust):              PASS (Cryptographically Verified)
 Assertion B23.2 (Host Kernel Enforcement):     NOT PROVEN / DEFERRED
-Paper Trading Readiness:                      EXISTS_BUT_INCOMPLETE (4 Gaps Identified)
+Paper Trading Readiness Audit:                PASS (Contract Formalized)
+Candidate Strategy Qualification:              BLOCKED (Qualification Run Pending)
+Paper Runtime Implementation:                 LOCKED (Awaiting Explicit Human GO)
 Step 3 Ceremony:                               BLOCKED (LOCKED)
 Step 4 Activation:                             BLOCKED (LOCKED)
 Slice 3 First Live Order:                      BLOCKED (LOCKED)
@@ -347,6 +253,6 @@ Live Broker Wire:                              DISCONNECTED
 ```
 
 > **Mandatory Boundary Statement:**  
-> `PASS` on unit tests $\neq$ `LIVE AUTHORIZATION`.  
+> `PASS` on Audit $\neq$ `IMPLEMENTATION APPROVAL`.  
 > `PAPER READY` $\neq$ `LIVE READY`.  
-> Implementation remains on hold awaiting explicit human approval.
+> Implementation remains strictly halted awaiting explicit human approval.
