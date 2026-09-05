@@ -139,7 +139,7 @@ class SyntheticContinuousMarketDataProvider(IMarketDataProvider):
     def get_latest_snapshot(self, symbol: str) -> MarketDataSnapshot:
         return self.generate_tick(datetime.now(timezone.utc))
 
-    def get_historical_bars(self, *args: Any, **kwargs: Any) -> list:
+    def get_historical_bars(self, *args: Any, **kwargs: Any) -> List[Any]:
         return []
 
 
