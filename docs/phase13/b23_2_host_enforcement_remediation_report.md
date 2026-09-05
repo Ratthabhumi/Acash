@@ -46,18 +46,20 @@ To uphold institutional epistemic discipline (`Implementation Correctness` $\ne$
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │             B23.2: HOST APPLICATION-CONTROL EXECUTION ENFORCEMENT           │
-│   • Evaluator: Windows OS Kernel Loader (ntoskrnl / CI.dll / AppLocker)     │
-│   • Mechanism: Intercepts NtCreateUserProcess / NtCreateSection; enforces   │
-│     App Control for Business / WDAC / AppLocker policy before execution.    │
-│   • Purpose: Proves OS prevents process creation of unauthorized binaries.  │
-│   • Scope: Machine-wide host kernel enforcement boundary.                   │
+│   • Evaluator: Host Application-Control Engine (WDAC CI.dll or AppLocker)   │
+│   • Universal Policy Assertion: Host Application-Control policy rejected    │
+│     execution (Never a blanket 'kernel block' without identifying engine)   │
+│   • Mechanism Distinction:                                                  │
+│     - WDAC: Kernel CI driver (ci.dll) blocks execution at section creation  │
+│     - AppLocker: AppID.sys driver / AppIDSvc blocks execution on launch     │
+│   • Purpose: Proves host policy prevents execution of unauthorized binaries.│
 │   • Status: NOT PROVEN ON CURRENT HOST (ENVIRONMENT NOT SUFFICIENT)         │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 > [!CAUTION]
 > **GOVERNANCE INVARIANT:**  
-> A passing `WinVerifyTrust` result proves only that the cryptographic verification logic correctly detects invalid signatures. It does **NOT** prove that the underlying operating system kernel will intercept and refuse to execute an unauthorized executable when an operator or script invokes it.
+> A passing `WinVerifyTrust` result proves only that the cryptographic verification logic correctly detects invalid signatures. It does **NOT** prove that the host Application-Control policy will intercept and refuse to execute an unauthorized executable when an operator or script invokes it.
 
 ---
 
@@ -164,24 +166,26 @@ $targetExe = "C:\ACASH\governance\bin\unauthorized-bootstrapper.exe"
 $process = Start-Process -FilePath $targetExe -ArgumentList "--help" -PassThru -ErrorAction SilentlyContinue
 ```
 
-### Step 3: Verify OS Kernel Denies Process Creation
-Assert that process creation is rejected directly by the OS:
+### Step 3: Verify Host Application-Control Policy Rejects Execution
+Assert that process creation is rejected directly by the active policy engine:
 - **Expected Return:** Process fails to launch (`$process` is `$null` or throws Win32 exception).
 - **Expected Win32 / NTSTATUS Error Codes:**
   - `0xC0000428` (`STATUS_ACCESS_DISABLED_BY_POLICY_DEFAULT`)
   - `1260` (`ERROR_ACCESS_DISABLED_BY_POLICY`: *"This program is blocked by group policy."*)
   - Zero application bytes executed (zero stdout/stderr from application).
 
-### Step 4: Capture Host Code Integrity / AppLocker Event
-Query the host security event log channels:
+### Step 4: Capture Host Security Event Log
+Query the security event log channel corresponding to the active policy engine:
+- **For WDAC / App Control for Business:** Query `Microsoft-Windows-CodeIntegrity/Operational` for Event ID **`3077`** (Block event; note that `3076` is Audit Mode only).
+- **For AppLocker:** Query `Microsoft-Windows-AppLocker/EXE and DLL` for Event ID **`8004`** (Block event; note that `8003` is Audit Mode only).
+
 ```powershell
-# Query Code Integrity Operational Log for Block Event (Event ID 3077)
+# Query WDAC Operational Log for Block Event (Event ID 3077)
 Get-WinEvent -FilterHashtable @{
     LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
     Id = 3077
 } -MaxEvents 1 | Format-List TimeCreated, Id, Message
 ```
-- **Expected Event:** Event ID `3077` (Code Integrity blocked an executable from loading) or Event ID `8004` (AppLocker blocked executable).
 
 ### Step 5: Cryptographic Correlation
 Verify that the blocked event directly corresponds to the target test artifact:
@@ -191,22 +195,60 @@ Verify that the blocked event directly corresponds to the target test artifact:
 
 ---
 
-## 6. Current Test Suite Alignment
+### 5.1 Required 8-Part Evidence Dossier Specification
+
+When executed on the Designated Governance Host, the validation harness generates an authoritative 8-part JSON dossier:
+
+```text
+var/governance/b23_2_dossier/
+├── 01_policy_state.json        # Host policy engine, KMCI/UMCI status, AppIDSvc status
+├── 02_policy_identity.json     # Active policy GUID, friendly name, version
+├── 03_valid_artifact.json       # Signed release artifact hash, path, and Authenticode details
+├── 04_tampered_artifact.json    # Test unauthorized artifact path, size, and SHA-256 digest
+├── 05_execution_attempt.json    # Execution invocation parameters, timestamp, and OS error code
+├── 06_block_event.json          # Raw XML and structured fields of Event 3077 (WDAC) or 8004 (AppLocker)
+├── 07_hash_correlation.json     # Cryptographic proof matching artifact digest to event payload
+└── 08_final_b23_2_verdict.json  # Master signed evaluation verdict
+```
+
+#### Canonical `08_final_b23_2_verdict.json` Schema:
+```json
+{
+  "test_id": "B23.2",
+  "verdict": "PASS",
+  "policy_mode": "ENFORCED",
+  "policy_engine": "WDAC",
+  "policy_identity": "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}",
+  "artifact_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "attempt_timestamp_utc": "2026-09-05T12:00:00.000000Z",
+  "execution_result": "BLOCKED",
+  "process_started": false,
+  "os_error_code": 1260,
+  "os_error_message": "This program is blocked by group policy.",
+  "event_id": 3077,
+  "event_log": "Microsoft-Windows-CodeIntegrity/Operational",
+  "event_artifact_match": true,
+  "certified_at_utc": "2026-09-05T12:00:02.000000Z"
+}
+```
+
+---
+
+## 6. Adversarial Assertion Results (24 Assertions: B1–B22, B23.1, B23.2)
 
 The adversarial test suite has been updated to truthfully reflect this decoupled state:
 
 ```powershell
 # Command:
-uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -k "test_b23" -v
+uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 ```
-**Current Execution Result:**
-- `test_b23_1_native_bootstrapper_authenticode_trust_verification`: **`PASSED`**  
-  *(Proves WinVerifyTrust rejects unsigned and tampered binaries fail-closed).*
-- `test_b23_2_host_application_control_enforcement`: **`SKIPPED`**  
-  *(Reason: `ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is '0' (expected '2' Enforced; 0=Off, 1=Audit, 2=Enforced). B23.2 must be verified on a designated Windows enforcement host.`)*
+**Assertion Breakdown:**
+- **B1–B22 (22 Assertions):** **`22 PASSED`** (AST bans, DACL protections, key revocations, genesis manifests, token privilege checks).
+- **B23.1 (1 Assertion):** **`1 PASSED`** (`test_b23_1_native_bootstrapper_authenticode_trust_verification` proves WinVerifyTrust fail-closed).
+- **B23.2 (1 Assertion):** **`1 SKIPPED / NOT PROVEN`** (`test_b23_2_host_application_control_enforcement` skipped on dev host due to `UMCI == 0`).
 
-**Full Gate B Regression Suite:**
-- **23 passed, 1 skipped in 4.10s** (100% clean, zero failures).
+**Summary:** **24 Assertions Total: 23 PASSED, 1 SKIPPED / NOT PROVEN (B23.2)**
+
 
 ---
 

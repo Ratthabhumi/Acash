@@ -127,13 +127,17 @@ tools\governance\bin\acash-bootstrapper.exe --help
    - **Critical Semantic Boundary:** `WinVerifyTrust` proves PE file and signature trust state via user-mode WinTrust API; it is **NOT** by itself proof of OS kernel-level process-creation denial.
 2. **B23.2 — Host Application-Control Execution Enforcement (WDAC / AppLocker):**
    - **Status:** **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)**
+   - **Mechanism Distinction:**
+     - **App Control for Business (WDAC):** Kernel-level Code Integrity driver (`ci.dll`), event ID `3077` (Block) in `Microsoft-Windows-CodeIntegrity/Operational`.
+     - **AppLocker:** Application Identity driver/service (`AppID.sys` / `AppIDSvc`), event ID `8004` (Block) in `Microsoft-Windows-AppLocker/EXE and DLL`.
+     - **Universal Policy Statement:** *Host Application-Control policy rejected execution* (identifying the specific active engine rather than making a blanket 'kernel block' claim).
    - Telemetry from development host:
-     - `Win32_DeviceGuard.UsermodeCodeIntegrityPolicyEnforcementStatus: 0` (User-Mode Code Integrity is NOT enforced).
+     - `Win32_DeviceGuard.UsermodeCodeIntegrityPolicyEnforcementStatus: 0` (User-Mode Code Integrity is NOT enforced; Microsoft status values: `0 = Off`, `1 = Audit`, `2 = Enforced`).
      - `AppIDSvc` (Application Identity Service): `Stopped`.
-     - Live execution test: unsigned `acash-bootstrapper.exe` executed past the OS kernel loader and was only stopped by application-level invariant (`RELEASE_MANIFEST_MISSING`).
+     - Live execution test: unsigned `acash-bootstrapper.exe` executed past the OS loader and was only stopped by application-level invariant (`RELEASE_MANIFEST_MISSING`).
    - **Engineering Separation:**
      - **Development Host:** Build, unit testing, integration testing, B1–B22, B23.1.
-     - **Designated Governance Host:** Authoritative execution substrate with active OS Code Integrity enforcement (WDAC/AppLocker in Enforce mode), signed release artifact, and physical B23.2 proof.
+     - **Designated Governance Host:** Authoritative execution substrate with active Host Application-Control policy in Enforce mode (`UMCI == 2` or AppLocker Enforced), signed release artifact, and physical B23.2 proof.
 
 ---
 
@@ -147,14 +151,14 @@ Execution of `verify_runner_process_token()` directly against the live runner ho
 
 ---
 
-## 6. Adversarial Test Suite Results (B1–B23)
+## 6. Adversarial Assertion Results (B1–B22, B23.1, B23.2 — 24 Assertions)
 
 Test execution command:
 ```powershell
 uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 ```
 
-### 6.1 Test Execution Matrix
+### 6.1 Test Execution Matrix (24 Assertions)
 | Test ID | Test Name | Assertion / Invariant | Result |
 |---|---|---|---|
 | **B1** | `test_b1_runner_direct_ast_ban` | Inspect `runner.py` AST for prohibited keygen / private key primitives | **PASSED** |
@@ -180,9 +184,10 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 | **B21** | `test_b21_signed_release_manifest_verification` | Mutate release manifest fields; signature verification fails closed | **PASSED** |
 | **B22** | `test_b22_pre_execution_full_artifact_attestation` | Injected `PYTHONPATH` or tampered artifact detected by launcher before runner invocation | **PASSED** |
 | **B23.1** | `test_b23_1_native_bootstrapper_authenticode_trust_verification` | WinVerifyTrust cryptographic rejection of unsigned/tampered binary | **PASSED** |
-| **B23.2** | `test_b23_2_host_application_control_enforcement` | Host OS Application Control (WDAC/AppLocker) kernel process execution block | **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)** |
+| **B23.2** | `test_b23_2_host_application_control_enforcement` | Host Application-Control policy (WDAC/AppLocker) rejected execution | **NOT PROVEN (ENVIRONMENT NOT SUFFICIENT)** |
 
-**Summary:** **23 PASSED, 1 NOT PROVEN (B23.2 Deferred to Designated Governance Host)**
+**Summary:** **24 Assertions Total: 23 PASSED, 1 NOT PROVEN (B23.2 Deferred to Designated Governance Host)**
+
 
 
 ---
