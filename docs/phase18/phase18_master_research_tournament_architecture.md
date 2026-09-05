@@ -1,12 +1,12 @@
 # ACASH Phase 18 — Strategy Research & Tournament Pipeline
 ## Master Research Architecture, Governance Specification & Adversarial Audit
 
-> **Document ID:** `ACASH-SPEC-PHASE18-TOURNAMENT-v1.0`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — HUMAN APPROVAL PENDING (Phase 18 Rev 1.0)  
+> **Document ID:** `ACASH-SPEC-PHASE18-TOURNAMENT-v1.1`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — HUMAN APPROVAL PENDING (Phase 18 Rev 1.1)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-023 (`docs/architecture/strategy_admission_standard.md`)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.0.0  
+> **Version:** 1.1.0 (Auditor Remediation & Epistemic Hardening)  
 
 ---
 
@@ -31,9 +31,9 @@ Phase 18 establishes the **Strategy Research & Tournament Pipeline** for ACASH. 
 ### 1.1 The Core Research Objective
 The fundamental goal of Phase 18 is to solve the **Discovery-to-Validation Bottleneck** without compromising statistical or economic integrity:
 1. Provide a high-throughput, reproducible tournament harness that can evaluate dozens of strategy variants and parameter spaces concurrently.
-2. Fairly benchmark every candidate against non-trivial transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE, and Microstructure baselines).
+2. Fairly benchmark every candidate against non-trivial transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE, and declared cohort-appropriate baselines).
 3. Systematically capture **Negative Knowledge** (failed, overfit, or fragile models) rather than discarding them.
-4. Bound and record **Search Intensity ($K$)** so that multiple testing can be canonically corrected in Phase 6.
+4. Bound and record **Search Intensity Contributions ($\Delta K$)** so that multiple testing can be canonically corrected in Phase 6.
 
 ### 1.2 The Sovereign Authority Invariant
 A strategy winning a Phase 18 tournament confers **zero** statistical certification, **zero** economic qualification, **zero** admission status, and **zero** capital authority:
@@ -65,13 +65,13 @@ Phase 18 sits strictly downstream of research hypothesis formulation and strictl
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                 PHASE 18: STRATEGY RESEARCH & TOURNAMENT                     │
 │  ├── Research Candidate Registry                                            │
-│  ├── Experiment Manifest Engine (SHA-256 Bitwise Sealing)                   │
+│  ├── Experiment Manifest Engine (Declared-Environment Deterministic Sealing) │
 │  ├── Point-in-Time Universe & Feature Matrix (Dual-Temporal PIT)            │
 │  ├── Two-Tier Execution (Tier-1 Vectorized Screening ──► Tier-2 Event-Driven)│
-│  ├── Transparent Baseline Benchmarking (Cash, EW, InvVol, VWAP)             │
+│  ├── Cohort-Declared Baseline Benchmarking (Cash, EW, InvVol, Cohort-Spec)  │
 │  ├── Tournament Brackets, Cohorts & Relative Scoring                        │
 │  ├── Negative Knowledge Ledger (Preserved Failures & Overfit Runs)          │
-│  └── Search Intensity Emission (Trial Count Delta ΔK)                       │
+│  └── Trial Candidate Contribution (Emits ΔK Events to Phase 6)              │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │ Candidate Falsification Records & ΔK
                                        ▼
@@ -105,7 +105,8 @@ Phase 18 sits strictly downstream of research hypothesis formulation and strictl
 | :--- | :--- | :--- | :--- |
 | **Hypothesis Formulation** | Phase 4 / Phase 14 | Ingests pre-registered `HypothesisSpecification`. | Phase 18 cannot alter hypothesis falsification criteria post-run. |
 | **Simulation Mechanics** | Phase 5 Substrate | Ingests event-driven backtesting execution engine. | Phase 18 cannot bypass the double-entry accounting ledger. |
-| **Statistical Validation** | **Phase 6 (Sole Authority)** | Emits candidate trials ($\Delta K$) and evaluation paths. Consumes validation receipts. | **Phase 18 CANNOT compute DSR, MinTRL, PBO, or claim statistical pass.** |
+| **Statistical Validation** | **Phase 6 (Sole Authority)** | Emits candidate trial events ($\Delta K$). Consumes validation receipts. | **Phase 18 CANNOT compute DSR, MinTRL, PBO, or claim statistical pass.** |
+| **Search Intensity / K** | **Phase 6 (Sole Authority)** | Emits raw trial candidate counts to `SearchTrialLedger`. | **Phase 18 CANNOT interpret or compute effective K.** |
 | **Economic Qualification**| **Phase 8.5 (Sole Authority)**| Submits candidate for Net Alpha qualification. | **Phase 18 CANNOT certify economic edge.** |
 | **Runtime Monitoring** | **Phase 11 (Sole Authority)**| Provides baseline expectations for drift detection. | **Phase 18 CANNOT emit or modify `ForwardHealthState`.** |
 | **Strategy Admission** | **Phase 17 (Sole Authority)**| Submits tournament winners as candidates for Gate 0. | **Phase 18 CANNOT admit strategies to catalog.** |
@@ -123,12 +124,12 @@ Phase 18 is composed of seven decoupled sovereign subsystems:
        ┌────────────────────┬───────────────┴───────────────┬──────────────────┐
        ▼                    ▼                               ▼                  ▼
 1. CANDIDATE REGISTRY  2. MANIFEST ENGINE             3. PIT SUBSTRATE    4. EXECUTION HARNESS
-  (Specs & Lineage)      (Cryptographic Identity)       (Zero Lookahead)   (Tier-1 / Tier-2)
+  (Specs & Lineage)      (Environment Sealing)          (Zero Lookahead)   (Tier-1 / Tier-2)
                                                                                │
        ┌───────────────────────────────────────────────────────────────────────┘
        ▼
 5. TOURNAMENT ENGINE ──► 6. SCORING & BENCHMARKING ──► 7. NEGATIVE KNOWLEDGE LEDGER
-  (Cohorts & Brackets)     (Relative Heuristic)             (Failed Trials & ΔK Emission)
+  (Cohorts & Brackets)     (Relative Heuristic)             (Failed Trials & ΔK Events)
 ```
 
 ### 3.1 Subsystem 1: Research Candidate Registry (`ResearchCandidateRegistry`)
@@ -141,10 +142,22 @@ Phase 18 is composed of seven decoupled sovereign subsystems:
   - Explicit declaration of source: `HUMAN_RESEARCH`, `PHASE14_AI_PROPOSAL`, or `SYSTEMATIC_MUTATION`.
 
 ### 3.2 Subsystem 2: Experiment Manifest Engine (`ExperimentManifestEngine`)
-- **Responsibility:** Enforces bitwise reproducibility across all tournament evaluations.
+- **Responsibility:** Enforces deterministic reproducibility across all tournament evaluations under declared environments.
+- **Epistemic Standard: Environment-Sealed Determinism:**
+  Rather than making unverified claims of universal bitwise reproducibility across disparate platforms, Phase 18 enforces **deterministic reproducibility under a declared execution environment**.
+- **Declared Execution Environment Specification (`DeclaredExecutionEnvironment`):**
+  1. Python runtime and micro-version (e.g. `CPython 3.12.x`)
+  2. OS and platform architecture (e.g. `Windows-11-AMD64`)
+  3. Dependency lockfile digest (cryptographic hash of `uv.lock`)
+  4. Core numerical library versions (`numpy`, `scipy`, `pandas`, `vectorbt`)
+  5. Phase 5 simulation engine version digest
+  6. CPU floating-point / BLAS runtime characteristics where material
+  7. Canonical pseudo-random seed
+  8. Git commit SHA of the research engine
+  9. Dataset and universe SHA-256 digests
 - **Manifest Cryptographic Digest:**
-  $$\text{experiment\_digest} = \text{SHA256}(\text{dataset\_sha256} + \text{universe\_hash} + \text{candidate\_manifests} + \text{code\_git\_sha} + \text{config\_digest})$$
-- **Invariance Guarantee:** Re-executing an experiment manifest on an identical dataset must produce mathematically identical trade logs, drawdowns, and rank orderings ($|\text{Discrepancy}| = 0$).
+  $$\text{experiment\_digest} = \text{SHA256}(\text{dataset\_sha256} + \text{universe\_hash} + \text{candidate\_manifests} + \text{env\_digest} + \text{seed})$$
+- **Invariance Guarantee:** Re-executing an experiment manifest on an identical dataset within the declared execution environment must produce identical trade logs, drawdowns, and rank orderings.
 
 ### 3.3 Subsystem 3: Point-in-Time Universe Substrate (`PointInTimeUniverseSubstrate`)
 - **Responsibility:** Enforces strict temporal data partitioning preventing information leakage across competing tournament candidates.
@@ -158,21 +171,23 @@ To balance computational throughput with microstructural realism, Phase 18 imple
 ```
 [Candidate Batch] ──► TIER 1: Vectorized Screening ──► Falsified? ──► YES ──► [Negative Knowledge Ledger]
                                   │
-                                  ▼ NO (Passed Prescreen)
+                                  ▼ NO (Survives Screening)
                       TIER 2: Event-Driven Simulation ──► Falsified? ──► YES ──► [Negative Knowledge Ledger]
                                   │
-                                  ▼ NO (Passed Reality Check)
+                                  ▼ NO (Survives Simulation)
                       [Tournament Bracket & Benchmarking]
 ```
 
-1. **Tier 1: Vectorized Screening (`Tier1ScreeningEngine`):**
-   - Implemented via array operations (`NumPy`, `pandas`, `vectorbt`).
-   - Purpose: Rapid screening across broad parameter grids ($\pm 20\%$) to discard obviously non-viable candidates.
-   - **Epistemic Firewall:** Tier-1 results are strictly exploratory heuristics. **NO candidate may advance to Phase 6 statistical validation based solely on Tier-1 screening.**
-2. **Tier 2: Event-Driven Simulation (`Tier2SimulationEngine`):**
-   - Implemented using the canonical Phase 5 event-driven simulation substrate (`BacktestSubstrate`).
-   - Purpose: High-fidelity order lifecycle (`CREATED` $\to$ `SUBMITTED` $\to$ `ACCEPTED` $\to$ `FILLED`), tick-level queue priority, bid-ask spread crossing, and transaction friction waterfalls.
-   - Requirement: Only candidates surviving Tier-2 simulation are eligible for tournament cohort inclusion and subsequent Phase 6 submission.
+#### Strict Separation of Tier Roles:
+1. **Tier 1 (Vectorized Screening):**
+   - **Role:** Fast exploratory parameter filtering using vectorized array operations (`NumPy`, `pandas`, `vectorbt`).
+   - **Epistemic Classification:** *Exploratory screening evidence only.*
+   - **Multiple Testing Contribution:** Tier-1 trials count as candidate search attempts and **MAY contribute to the search ledger** to preserve multiple-testing accounting.
+   - **Absolute Restriction:** **Tier-1 results MUST NOT become a ValidationReport or enter Phase 6 statistical validation directly.**
+2. **Tier 2 (Event-Driven Simulation):**
+   - **Role:** Full microstructural execution via canonical Phase 5 `BacktestSubstrate` (order lifecycle, queue priority, bid-ask spread crossing, transaction friction waterfalls).
+   - **Epistemic Classification:** *High-fidelity simulation evidence.*
+   - **Requirement:** Only candidates surviving Tier-2 simulation are eligible for tournament cohort benchmarking and subsequent Phase 6 submission.
 
 ### 3.5 Subsystem 5: Tournament Cohort & Bracket Manager (`TournamentCohortManager`)
 - **Responsibility:** Groups candidates into fair, apples-to-apples evaluation brackets based on asset class, timeframe, and market mechanism.
@@ -185,18 +200,16 @@ To balance computational throughput with microstructural realism, Phase 18 imple
 
 ### 3.6 Subsystem 6: Scoring & Relative Benchmarking Engine (`TournamentScoringEngine`)
 - **Responsibility:** Measures candidate performance relative to transparent passive baselines.
-- **Mandatory Baseline Benchmark Suite:**
-  Every tournament bracket must evaluate the candidate against four mandatory baseline actors:
-  1. `BASELINE-0 (CASH)`: Zero return, zero risk ($0.00 PnL$).
-  2. `BASELINE-1 (EQUAL_WEIGHT)`: Passive buy-and-hold across the cohort asset universe.
-  3. `BASELINE-2 (INVERSE_VOLATILITY)`: Risk-parity passive allocation.
-  4. `BASELINE-3 (VWAP_REVERSION)`: Transparent, parameter-free microstructure baseline.
-- **Relative Edge Requirement:**
-  A candidate strategy must outperform `BASELINE-1` and `BASELINE-2` net of costs to achieve a positive relative tournament score.
-- **Scoring Formulation:**
-  Multi-dimensional metric vector: Information Ratio vs Baseline, Calmar Ratio, Tail Gain-to-Pain Ratio, Maximum Adverse Excursion, and Friction Decay Slope.
+- **Cohort-Dependent Baseline Specification:**
+  Every tournament bracket must evaluate the candidate against declared, relevant baseline actors:
+  1. `BASELINE-0 (CASH)`: Zero return, zero risk ($0.00 PnL$). Mandatory for all cohorts.
+  2. `BASELINE-1 (EQUAL_WEIGHT)`: Passive buy-and-hold across the cohort asset universe. Mandatory for asset-selection cohorts.
+  3. `BASELINE-2 (INVERSE_VOLATILITY)`: Risk-parity passive allocation. Mandatory for multi-asset cohorts.
+  4. `BASELINE-3 (COHORT_SPECIFIC_BENCHMARK)`: Declared in `ExperimentManifest`. For continuous intraday markets with centralized or reliable volume, Session VWAP Reversion is standard; for 24/7 OTC or multi-week swing cohorts, an appropriate transparent baseline (e.g. Rolling Moving Average or Naive Carry) must be declared and justified.
+- **Epistemic Status of Tournament Scores:**
+  Tournament scores are strictly internal research ranking heuristics. They do not constitute empirical proof of alpha or replace Phase 6 validation.
 
-### 3.7 Subsystem 7: Negative Knowledge Ledger & Search Intensity Emitter (`NegativeKnowledgeLedger`)
+### 3.7 Subsystem 7: Negative Knowledge Ledger & Search Intensity Emission (`NegativeKnowledgeLedger`)
 - **Responsibility:** Immutably records every candidate evaluation, parameter trial, and failed experiment.
 - **Anti-Survivorship Principle:** Failed strategies are never deleted. They are permanently recorded with their failure classification:
   - `FAILED_TIER1_SCREENING`: Negative gross edge in vectorized pass.
@@ -204,121 +217,129 @@ To balance computational throughput with microstructural realism, Phase 18 imple
   - `FAILED_STRESS_PERTURBATION`: Margin failure under canonical stress.
   - `FAILED_PARAMETER_CLIFF`: Edge collapses under $\pm 10\%$ neighborhood perturbation.
   - `FAILED_BENCHMARK_ALPHA`: Underperformed simple Equal-Weight baseline.
-- **Trial Count Emission ($\Delta K$):**
-  Phase 18 records the exact count of all evaluated candidates and emits $\Delta K$ directly to the canonical Phase 6 `SearchTrialLedger`.
+- **Single Authority for Search Intensity ($K$):**
+  $$\boxed{\text{Phase 18 emits raw trial candidate events; Phase 6 exclusively determines SearchTrialLedger state and } K \text{ semantics.}}$$
+  - Phase 18 tracks the raw count of evaluated parameter sets and strategy variants ($\Delta K_{\text{trials}}$).
+  - It emits these counts as structured event contributions to Phase 6.
+  - Phase 18 does **NOT** calculate effective $K$, does **NOT** compute multiple-testing penalty thresholds, and does **NOT** maintain a competing trial ledger.
 
 ---
 
-## 4. Adversarial Self-Audit (12 Audit Dimensions)
+## 4. Adversarial Self-Audit (12 Audit Dimensions — Remediated)
 
-To uphold the strict standards of `AGENTS.md`, this specification undergoes a comprehensive 12-dimension adversarial audit before presentation for human review.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    PHASE 18 ADVERSARIAL AUDIT MATRIX                        │
-│ 1. Authority Boundaries        5. Survivorship Bias    9. Ranking Semantics │
-│ 2. Selection / Tournament Bias 6. Reproducibility     10. Compute Governance│
-│ 3. Multiple Testing & K        7. Candidate Lineage   11. AI Firewall       │
-│ 4. Lookahead & Data Leakage    8. Negative Knowledge  12. Phase 17 Boundary │
-└─────────────────────────────────────────────────────────────────────────────┘
+```text
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                      PHASE 18 ADVERSARIAL AUDIT MATRIX (REV 1.1)                 │
+├──────────────────────────────────────┬───────────────────────────────────────────┤
+│ Audit Dimension                      │ Enforced Fail-Closed Remediation          │
+├──────────────────────────────────────┼───────────────────────────────────────────┤
+│ 1. Authority Boundaries              │ PASS — Phase 18 emits raw trial events;   │
+│                                      │ Phase 6 maintains sole statistical state. │
+│ 2. Selection / Tournament Bias       │ PASS — Winner's curse discount is tagged  │
+│                                      │ strictly as research ranking heuristic.   │
+│ 3. Multiple Testing & Search K       │ PASS — Full trial contributions emitted;  │
+│                                      │ Phase 6 exclusively governs K semantics.  │
+│ 4. Lookahead & Data Leakage          │ PASS — Isolated candidate execution; zero │
+│                                      │ cross-candidate feature interaction.      │
+│ 5. Survivorship Bias Mitigation      │ PASS — Append-only registry; zero pruning │
+│                                      │ of failed runs; cohorts report failure %. │
+│ 6. Reproducibility & Determinism     │ PASS — Manifest-sealed determinism under  │
+│                                      │ declared environment (DeclaredExecutionEnv)│
+│ 7. Candidate Lineage Tracking        │ PASS — Cryptographic chain from Phase 4   │
+│                                      │ hypothesis to experiment run record.      │
+│ 8. Negative Knowledge & Leakage      │ PASS — Negative data stored for audit; no │
+│                                      │ unrecorded algorithmic cross-leakage.     │
+│ 9. Ranking Semantics Discipline      │ PASS — Relative rank is ordinal research  │
+│                                      │ heuristic; overlapping CIs = tie flag.    │
+│ 10. Host Compute & Resource Gov      │ PASS — Concurrency <= Cores-2; low process│
+│                                      │ priority; 2.0 GB RSS fail-closed watchdog.│
+│ 11. Phase 14 AI Epistemic Firewall   │ PASS — AI outputs strictly unvalidated    │
+│                                      │ proposals; zero autonomous self-admission.│
+│ 12. Phase 17 Admission Boundary      │ PASS — Tournament winner still has zero   │
+│                                      │ admission status; must pass Gates 0–10.   │
+└──────────────────────────────────────┴───────────────────────────────────────────┘
 ```
 
 ### Audit Dimension 1: Authority Boundary & Separation of Concerns
-- **Adversarial Vector:** *Does Phase 18 inadvertently replicate Phase 6 validation, Phase 8.5 qualification, Phase 11 monitoring, or Phase 17 admission?*
-- **Audit Findings:** In early draft concepts, tournaments generated "composite scores" that could be mistaken for qualification certificates.
-- **Enforced Remediation:**
+- **Adversarial Vector:** *Does Phase 18 act as a secondary statistical or qualification authority?*
+- **Remediation in Rev 1.1:**
   1. Phase 18 is strictly prohibited from calculating DSR, MinTRL, PBO, or emitting `ValidationReport`.
-  2. Phase 18 is strictly prohibited from generating `AlphaQualificationDossier` or asserting Net Alpha legitimacy.
-  3. Phase 18 is strictly prohibited from granting catalog admission (`StrategyAdmissionStatus` remains exclusively owned by Phase 17).
-  4. Phase 18 outputs are labeled exclusively as `TournamentCandidateEvaluationRecord`.
+  2. Phase 18 emits raw trial candidate events; Phase 6 exclusively determines `SearchTrialLedger` state and multiple-testing penalization.
+  3. Phase 18 outputs are labeled exclusively as `TournamentCandidateEvaluationRecord`.
 
-### Audit Dimension 2: Selection Bias & Tournament Bias (Winner's Curse)
-- **Adversarial Vector:** *Does ranking 100 noisy strategies and selecting the winner produce severe selection bias and inflated expectations?*
-- **Audit Findings:** Yes. In a tournament of $M$ candidates with true Sharpe $= 0$, the maximum sample Sharpe follows the Gumbel extreme-value distribution:
-  $$\mathbb{E}[\max_{i=1\dots M} \widehat{SR}_i] \approx \sqrt{2 \ln M} + \frac{\gamma_E}{\sqrt{2 \ln M}} > 0$$
-- **Enforced Remediation:**
-  1. Phase 18 explicitly acknowledges that the tournament winner's reported Sharpe is **maximally biased upward**.
-  2. The tournament winner's performance metrics are tagged with a mandatory `WinnerCurseDiscountFactor`:
-     $$\text{Discounted\_SR} = \widehat{SR} - \sqrt{\frac{2 \ln M}{T}}$$
-  3. The full trial count $M$ is transmitted to Phase 6 so that DSR inflates the null hypothesis threshold accordingly.
+### Audit Dimension 2: Selection Bias & Winner's Curse
+- **Adversarial Vector:** *Does the WinnerCurseDiscountFactor masquerade as a canonical statistical correction?*
+- **Remediation in Rev 1.1:**
+  1. `WinnerCurseDiscountFactor` is explicitly classified as an **internal research ranking heuristic**.
+  2. It possesses **zero statistical authority** and is strictly prohibited from flowing into or substituting for Phase 6 DSR / PBO.
+  3. The raw, undiscounted data along with trial count contributions are transmitted to Phase 6 so that canonical statistical adjustments can occur under Phase 6 authority.
 
 ### Audit Dimension 3: Multiple Testing & Search Intensity Accounting ($K$)
-- **Adversarial Vector:** *Can an algorithm test 10,000 parameter permutations in Tier 1 and only report the 5 tournament finalists to Phase 6, concealing $K = 9,995$?*
-- **Audit Findings:** This would constitute catastrophic data snooping and destroy the mathematical validity of Phase 6 DSR and Holm-Bonferroni corrections.
-- **Enforced Remediation:**
-  1. Every single parameter trial executed in Tier 1 and Tier 2 increments the local atomic counter $\Delta K_{\text{tournament}}$.
-  2. Phase 18 requires cryptographic batch reporting: an experiment cannot yield a valid candidate receipt for Phase 6 without sealing the complete ledger of all $K$ discarded trials.
-  3. Single Canonical Authority invariant: $K_{\text{Phase6}} \equiv K_{\text{Phase6\_prior}} + \Delta K_{\text{tournament}}$.
+- **Adversarial Vector:** *Can Phase 18 conceal failed Tier-1 trials or redefine how K is counted?*
+- **Remediation in Rev 1.1:**
+  1. Every Tier-1 parameter permutation and Tier-2 simulation run is recorded as an evaluated candidate trial.
+  2. Phase 18 transmits these trial events to Phase 6 without attempting to compress, deflate, or alter their multiple-testing interpretation.
+  3. Phase 6 retains sole sovereign authority over $K$ semantics and ledger validation.
 
 ### Audit Dimension 4: Data Leakage & Lookahead Prevention
 - **Adversarial Vector:** *Can cross-sectional normalization across tournament candidates leak information from future bars or rival strategies?*
-- **Audit Findings:** If candidates are ranked bar-by-bar using cross-sectional statistics (e.g. cross-sectional z-score of returns), an execution error or lookahead bug in Strategy A could leak into Strategy B's input features.
-- **Enforced Remediation:**
-  1. Candidate simulation runs are executed in strictly isolated sandboxes with frozen read-only access to historical feature Parquet partitions.
-  2. Cross-candidate interactions during simulation are mathematically impossible: ranking is computed exclusively post-hoc on sealed performance arrays.
-  3. Dual-temporal point-in-time boundaries ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$) are enforced at the data catalog layer.
+- **Remediation:**
+  1. Candidate simulation runs execute in isolated sandboxes with frozen read-only access to historical feature Parquet partitions.
+  2. Ranking is computed exclusively post-hoc on sealed performance arrays.
+  3. Dual-temporal point-in-time boundaries ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$) are strictly enforced.
 
 ### Audit Dimension 5: Survivorship Bias Mitigation
-- **Adversarial Vector:** *Are failed or discarded tournament candidates pruned from the database, leaving only surviving high-performing strategies visible to researchers?*
-- **Audit Findings:** Deleting failed runs distorts historical records, prevents institutional memory, and induces survivorship bias in meta-research.
-- **Enforced Remediation:**
-  1. Zero deletion policy: `ResearchCandidateRegistry` is append-only.
-  2. Failed runs are permanently stored with exact failure signatures (`FAILED_TIER1`, `COST_EXHAUSTION`, `STRESS_COLLAPSE`).
-  3. Research queries by default return the entire cohort distribution, displaying failure rates alongside finalist metrics.
+- **Adversarial Vector:** *Are failed tournament candidates discarded, distorting historical performance records?*
+- **Remediation:**
+  1. Append-only `ResearchCandidateRegistry`: zero deletion policy.
+  2. Negative runs are cataloged permanently with specific failure signatures.
+  3. Cohort evaluation summaries report overall failure rates alongside finalist metrics.
 
-### Audit Dimension 6: Reproducibility & Bitwise Determinism
-- **Adversarial Vector:** *Can a tournament run produce different rankings on different days due to multi-threading race conditions, non-deterministic random seeds, or dependency version updates?*
-- **Audit Findings:** Multi-threaded parallel backtests often exhibit non-deterministic tie-breaking or out-of-order execution, producing shifting Sharpe ratios.
-- **Enforced Remediation:**
-  1. Fixed pseudo-random seed policy: Every stochastic resampling process must derive its seed canonically from $\text{seed} = \text{uint32}(\text{SHA256}(\text{manifest\_id})[:4])$.
-  2. Deterministic total ordering: All event processing and tie-breaking must use canonical 5-tuples $(T_{\text{event}}, \text{source\_key}, \text{rank}, \text{stream\_id}, \text{sub\_index})$.
-  3. Manifest sealing: An experiment cannot be registered without recording the exact Git commit SHA and Python environment package hash.
+### Audit Dimension 6: Reproducibility & Environment Sealing
+- **Adversarial Vector:** *Does Phase 18 claim unverified bitwise reproducibility across disparate hardware and software builds?*
+- **Remediation in Rev 1.1:**
+  1. Replaced "Bitwise-reproducible experiment sealing" with **manifest-sealed deterministic reproducibility under a declared execution environment**.
+  2. Defined `DeclaredExecutionEnvironment` schema capturing Python version, OS architecture, dependency lockfile digest (`uv.lock`), numerical library builds, simulation engine version, and random seeds.
+  3. Acknowledged that execution across differing CPU microarchitectures or BLAS implementations may introduce floating-point discrepancies; determinism is guaranteed within the declared environment digest.
 
 ### Audit Dimension 7: Candidate Provenance & Lineage Tracking
-- **Adversarial Vector:** *Can a candidate strategy be submitted to Phase 6 without proof of its origin, generating 'orphan' models?*
-- **Audit Findings:** In quantitative shops, models often get tweaked informally without tracking which hypothesis prompted the change.
-- **Enforced Remediation:**
-  1. Mandatory lineage chain: Every candidate must provide cryptographic links:
-     $$\text{HypothesisSpecification (Phase 4)} \longrightarrow \text{ExperimentManifest (Phase 18)} \longrightarrow \text{CandidateRunRecord (Phase 18)}$$
-  2. Missing lineage fails closed immediately; Phase 6 validation gates reject any submission missing a valid upstream manifest digest.
+- **Adversarial Vector:** *Can an unanchored candidate strategy enter the tournament without hypothesis lineage?*
+- **Remediation:**
+  1. Mandatory lineage chain: $\text{Phase 4 Hypothesis} \to \text{Phase 18 ExperimentManifest} \to \text{Phase 18 RunRecord}$.
+  2. Missing lineage fails closed immediately; unanchored strategies cannot be registered.
 
-### Audit Dimension 8: Negative Knowledge Preservation & Falsification
-- **Adversarial Vector:** *Does the tournament system discard negative results, causing future researchers to repeat the same failed experiments?*
-- **Audit Findings:** Repeating failed experiments wastes compute and repeatedly inflates implicit multiple testing.
-- **Enforced Remediation:**
-  1. `NegativeKnowledgeLedger` indexes failed hypotheses and parameter regions.
-  2. Before launching a new tournament, the system runs a preflight check against the negative ledger to alert researchers if a proposed parameter grid has already been definitively falsified.
+### Audit Dimension 8: Negative Knowledge & Path-Dependency Leakage
+- **Adversarial Vector:** *Does negative knowledge from Experiment A automatically prune search spaces in Experiment B, creating hidden selection leakage?*
+- **Remediation in Rev 1.1:**
+  1. Negative knowledge serves strictly for **institutional memory, post-hoc audit, and search intensity accounting**.
+  2. Automatic algorithmic pruning across independent hypotheses is strictly forbidden.
+  3. If a researcher chooses to constrain a parameter space based on prior negative knowledge, this constraint must be explicitly declared in the pre-registered Phase 4 `HypothesisSpecification` and accounted for in Phase 6 search history.
 
-### Audit Dimension 9: Ranking Semantics & Epistemic Discipline
-- **Adversarial Vector:** *Is the 'Rank #1' tournament candidate treated as superior to 'Rank #2' when the difference is within statistical noise?*
-- **Audit Findings:** Minor differences in Sharpe (e.g. 1.45 vs 1.42) over 500 trades have overlapping $95\%$ confidence intervals, making strict rank order scientifically meaningless.
-- **Enforced Remediation:**
-  1. Ranking is explicitly documented as an ordinal screening convenience, *not* an epistemic proof of superiority.
-  2. The scoring engine calculates pairwise HAC confidence intervals on return differentials: if $\text{diff} = R_A - R_B$ is not statistically distinguishable from zero, strategies $A$ and $B$ are flagged as a statistical tie.
+### Audit Dimension 9: Ranking Semantics Discipline
+- **Adversarial Vector:** *Is tournament rank #1 treated as empirical proof of superiority over rank #2?*
+- **Remediation:**
+  1. Ranking is strictly an ordinal research convenience, not proof of alpha.
+  2. Pairwise HAC confidence intervals are calculated; overlapping intervals are explicitly flagged as statistical ties.
 
 ### Audit Dimension 10: Compute & Resource Governance
-- **Adversarial Vector:** *Can an unconstrained grid search spin out of control, consuming hundreds of gigabytes of RAM, starving the Phase 13 soak test, or causing workstation thrashing?*
-- **Audit Findings:** Unbounded parallel research processes can easily exhaust system RAM or CPU cores, threatening the host OS and concurrent background processes.
-- **Enforced Remediation:**
-  1. Strict resource bounds: Tournament batches must enforce max worker concurrency ($\le \text{LogicalCores} - 2$).
-  2. Process isolation: Research batch runners must execute under low OS process priority (`BELOW_NORMAL_PRIORITY_CLASS`) so they never starve PID 41844 or critical runtime services.
-  3. Hard memory ceiling: Any worker exceeding 2.0 GB RSS is automatically halted via fail-closed memory watchdogs.
+- **Adversarial Vector:** *Can high-throughput tournaments starve background processes (e.g. Phase 13 soak) or exhaust host RAM?*
+- **Remediation:**
+  1. Concurrency limit: $\le \text{LogicalCores} - 2$.
+  2. Process priority: `BELOW_NORMAL_PRIORITY_CLASS` (preventing CPU starvation of PID 41844).
+  3. Memory ceiling: 2.0 GB RSS per worker with fail-closed watchdogs.
 
 ### Audit Dimension 11: Phase 14 AI Epistemic Firewall
-- **Adversarial Vector:** *Can an LLM or generative AI agent use Phase 18 to run autonomous search loops, declare its own strategies successful, and promote them directly to the catalog?*
-- **Audit Findings:** Generative agents optimize for specified metrics and will ruthlessly exploit simulator edge cases or overfit backtests if given unmonitored execution loops.
-- **Enforced Remediation:**
+- **Adversarial Vector:** *Can generative AI self-promote candidates through Phase 18 directly to the catalog?*
+- **Remediation:**
   1. AI outputs remain strictly classified as `UNVALIDATED_PROPOSAL`.
-  2. AI agents are prohibited from modifying tournament scoring weights, altering baseline benchmarks, or overriding falsification criteria.
-  3. Promotion from Phase 18 to Phase 6 requires human quantitative authorization or an immutable pre-registered workflow.
+  2. AI agents cannot modify tournament scoring weights or baseline definitions.
+  3. Advancing a candidate from Phase 18 to Phase 6 requires human quantitative authorization.
 
 ### Audit Dimension 12: Phase 17 Admission Boundary
-- **Adversarial Vector:** *Does passing a Phase 18 tournament allow a strategy to enter the Phase 17 catalog directly?*
-- **Audit Findings:** Conflating tournament survival with admission destroys the Gate 0–10 institutional standard.
-- **Enforced Remediation:**
-  1. Tournament survival merely qualifies a candidate to be submitted to Phase 6 (Validation).
-  2. It must subsequently satisfy Phase 8.5 (Economic Qualification Dossier) and Phase 11 (Forward Monitoring).
-  3. Phase 17 Gate 10 sovereign review by the Human Sovereign Committee is mandatory before catalog entry is permitted.
+- **Adversarial Vector:** *Can winning a tournament bypass Phase 17 admission gates?*
+- **Remediation:**
+  1. Tournament survival merely qualifies a candidate for Phase 6 submission.
+  2. The candidate must subsequently pass Phase 8.5 (Economic Qualification), Phase 11 (Forward Monitoring), and Phase 17 (Gates 0–10).
 
 ---
 
@@ -328,16 +349,16 @@ All numerical thresholds and evaluation parameters in Phase 18 are classified in
 
 | Parameter / Threshold | Subsystem | Classification | Owning Authority / Provenance | Epistemic Description |
 | :--- | :--- | :--- | :--- | :--- |
-| $\text{Seed} = \text{uint32}(\text{SHA256}[:4])$ | Manifest Engine | **Class A: Canonical ACASH Invariant** | Phase 1/5 Deterministic Seed Standard | Exact bitwise reproducibility requirement |
+| $\text{Seed} = \text{uint32}(\text{SHA256}[:4])$ | Manifest Engine | **Class A: Canonical ACASH Invariant** | Phase 1/5 Deterministic Seed Standard | Exact environment-sealed reproducibility |
 | $K_{\text{Phase6}} \equiv K_{\text{prior}} + \Delta K$ | Negative Ledger | **Class A: Canonical ACASH Invariant** | Phase 6 Multiple Testing Contract | Strict fail-closed search intensity accounting |
 | $\text{Capital Allocation} = \$0.00$ | System-Wide | **Class A: Canonical ACASH Invariant** | ADR-023 / Project-Wide Governance | Hard-locked system invariant |
-| $\text{Tier-1 Parameter Sweep} \pm 20\%$ | Two-Tier Harness | **Class B: Governance-Defined Threshold** | Phase 18 Research Governance | Standard screening neighborhood boundary |
+| $\text{Tier-1 Parameter Sweep} \pm 20\%$ | Two-Tier Harness | **Class B: Governance-Defined Threshold** | Phase 18 Research Governance | Standard exploratory screening boundary |
 | $\text{Worker Concurrency} \le \text{Cores} - 2$ | Resource Substrate | **Class B: Governance-Defined Threshold** | Phase 18 Host Protection Policy | CPU starvation prevention policy |
 | $\text{Max Worker Memory} \le 2.0\text{ GB}$ | Resource Substrate | **Class B: Governance-Defined Threshold** | Phase 18 Host Protection Policy | Memory thrashing prevention policy |
 | $\text{Minimum Cohort Size} \ge 5$ | Cohort Manager | **Class C: Research Heuristic** | Quantitative Tournament Best Practice | Minimum cross-sectional diversity heuristic |
 | $\text{Tie-Breaking Alpha Band } p > 0.05$ | Scoring Engine | **Class C: Research Heuristic** | Econometric Hypothesis Testing Standard | Pairwise statistical tie detection heuristic |
-| Winner's Curse Formula $\sqrt{\frac{2 \ln M}{T}}$ | Scoring Engine | **Class C: Research Heuristic** | Extreme Value Theory (López de Prado 2018) | Heuristic selection bias discount |
-| 4 Mandatory Baselines (Cash, EW, InvVol, VWAP) | Benchmarking Engine | **Class B: Governance-Defined Threshold** | Phase 18 Benchmarking Standard | Mandatory relative hurdle baseline |
+| Winner's Curse Heuristic $\sqrt{\frac{2 \ln M}{T}}$| Scoring Engine | **Class C: Research Heuristic** | Extreme Value Theory (López de Prado 2018) | Heuristic ranking selection discount |
+| 4 Declared Baseline Hurdles | Benchmarking Engine | **Class B: Governance-Defined Threshold** | Phase 18 Benchmarking Standard | Mandatory relative hurdle baseline suite |
 
 ---
 
@@ -352,11 +373,11 @@ When Phase 18 implementation is formally authorized by the Human Auditor followi
 4. **Typing & Linting:** 100% clean under `mypy --strict`.
 
 ### 6.2 Acceptance Criteria for Implementation Authorization
-- [ ] Unit test suite verifying exact bitwise reproducibility of tournament manifests across repeated runs.
-- [ ] Unit test verifying that every parameter trial correctly increments the local $\Delta K$ counter and updates the negative knowledge ledger.
+- [ ] Unit test suite verifying exact deterministic reproducibility of tournament manifests within a declared execution environment.
+- [ ] Unit test verifying that every parameter trial correctly logs candidate trial events for Phase 6 search ledger ingestion.
 - [ ] Integration test verifying that a tournament winner cannot bypass Phase 6 or Phase 8.5 to gain catalog admission.
-- [ ] Adversarial test demonstrating that injecting a lookahead bias into one strategy candidate is quarantined and does not leak to rival candidates.
-- [ ] Host safety test verifying that worker concurrency strictly respects the `LogicalCores - 2` ceiling and does not affect background processes.
+- [ ] Adversarial test demonstrating that injecting lookahead bias into one candidate does not leak to rival candidates.
+- [ ] Host safety test verifying worker concurrency respects `LogicalCores - 2` ceiling and does not impact concurrent background tasks.
 
 ---
 
@@ -377,13 +398,21 @@ When Phase 18 implementation is formally authorized by the Human Auditor followi
 ACASH STRATEGY RESEARCH & TOURNAMENT PIPELINE (PHASE 18) — SPECIFICATION PROVENANCE
 ================================================================================
 Specification Document: docs/phase18/phase18_master_research_tournament_architecture.md
-Document Revision     : Phase 18 Rev 1.0 (v1.0.0)
+Document Revision     : Phase 18 Rev 1.1 (v1.1.0)
 Current Status        : PROPOSED / HUMAN APPROVAL PENDING
 Parent Governance     : docs/ROADMAP.md (v3.4.0), AGENTS.md, ADR-023
-Adversarial Audit     : COMPLETE (12 / 12 Dimensions PASS)
+Adversarial Audit     : COMPLETE (12 / 12 Dimensions PASS — Remediated)
+
+Remediation Highlights (Rev 1.1):
+  [x] K Semantics: Phase 18 emits raw trial events; Phase 6 exclusively determines K semantics.
+  [x] Tier-1 Clarification: Exploratory screening only; contributes to trials; cannot become ValidationReport.
+  [x] Reproducibility: Toned down from 'bitwise' to 'manifest-sealed under declared environment'.
+  [x] Winner's Curse: Tagged strictly as internal research ranking heuristic (zero statistical authority).
+  [x] Baseline-3: Caveated as cohort-dependent; declared and justified in ExperimentManifest.
+  [x] Negative Knowledge: Preserved for audit/lineage; forbidden from unrecorded cross-hypothesis pruning.
 
 Authority Invariants:
-  [x] Phase 6 Statistical Authority Preserved (Strict Consumer Only; ΔK emitted to sealed ledger)
+  [x] Phase 6 Statistical Authority Preserved (Strict Consumer Only; trial events emitted)
   [x] Phase 8.5 Economic Qualification Authority Preserved (Strict Consumer Only)
   [x] Phase 11 Forward Monitoring Authority Preserved (Strict Consumer Only)
   [x] Phase 17 Strategy Admission Authority Preserved (Gate 0–10 Mandatory)
