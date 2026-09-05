@@ -103,9 +103,21 @@ if (Test-Path -Path $pidFile) {
         $existingPid = [int]$existingPidRaw
         $existingProc = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
         if ($null -ne $existingProc) {
-            Write-Error "[FAIL-CLOSED] A soak runner process is ALREADY RUNNING with PID $existingPid."
-            exit 1
+            Write-Host ""
+            Write-Host "================================================================================" -ForegroundColor Yellow
+            Write-Host " [MUTEX LOCK] SOAK RUNNER DAEMON IS ALREADY ACTIVE" -ForegroundColor Yellow
+            Write-Host "================================================================================" -ForegroundColor Yellow
+            Write-Host ("  Active Process PID   : " + $existingPid) -ForegroundColor White
+            Write-Host ("  Process Name         : " + $existingProc.ProcessName) -ForegroundColor White
+            Write-Host ("  Start Time           : " + $existingProc.StartTime) -ForegroundColor White
+            Write-Host "  Governance Status    : 24-HOUR SOAK TEST IN PROGRESS" -ForegroundColor Green
+            Write-Host "--------------------------------------------------------------------------------" -ForegroundColor Gray
+            Write-Host "  To view live progress, run:" -ForegroundColor Cyan
+            Write-Host "    powershell -File .\scripts\status_phase13_soak.ps1" -ForegroundColor Cyan
+            Write-Host "================================================================================" -ForegroundColor Yellow
+            exit 0
         }
+
     }
 }
 
