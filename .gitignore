@@ -43,3 +43,7 @@ Thumbs.db
 # Local agent / IDE sessions
 .omc/
 
+# Local runtime data & soak test output
+var/
+
+

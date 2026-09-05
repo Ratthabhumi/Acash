@@ -44,26 +44,26 @@ class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
 class FILETIME(ctypes.Structure):
     _fields_ = [("dwLowDateTime", wintypes.DWORD), ("dwHighDateTime", wintypes.DWORD)]
 
+_kernel32 = ctypes.windll.kernel32
+_psapi = ctypes.windll.psapi
+_kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+_psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+_psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+
 def get_process_memory_mb() -> Tuple[float, float, float]:
     """Return (RSS_MB, Peak_RSS_MB, VMS_MB) for current Windows process."""
     try:
-        PROCESS_QUERY_INFORMATION = 0x0400
-        PROCESS_VM_READ = 0x0010
-        handle = ctypes.windll.kernel32.OpenProcess(
-            PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, os.getpid()
-        )
-        if not handle:
-            return 0.0, 0.0, 0.0
         pmc = PROCESS_MEMORY_COUNTERS()
         pmc.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
-        ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb)
-        ctypes.windll.kernel32.CloseHandle(handle)
+        if not _psapi.GetProcessMemoryInfo(_kernel32.GetCurrentProcess(), ctypes.byref(pmc), pmc.cb):
+            return 0.0, 0.0, 0.0
         rss = pmc.WorkingSetSize / (1024.0 * 1024.0)
         peak_rss = pmc.PeakWorkingSetSize / (1024.0 * 1024.0)
         vms = pmc.PagefileUsage / (1024.0 * 1024.0)
         return round(rss, 2), round(peak_rss, 2), round(vms, 2)
     except Exception:
         return 0.0, 0.0, 0.0
+
 
 
 # Imports from ACASH
@@ -181,6 +181,13 @@ class Phase13SoakHarness:
         self.manifest_count = 0
         self.exceptions_count = 0
 
+        # Attach file log handler for persistent non-buffered disk logging
+        self.stdout_log = self.output_dir / "soak_stdout.log"
+        file_handler = logging.FileHandler(self.stdout_log, encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        logger.addHandler(file_handler)
+
+
         # Setup graceful termination handlers
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
@@ -270,9 +277,13 @@ class Phase13SoakHarness:
         current_portfolio, _, rehydration_status = rehydrator.rehydrate(as_of_utc=start_time_utc)
         logger.info(f"Startup Rehydration Status: {rehydration_status.value} (Balance: ${current_portfolio.cash_balance})")
 
+        # Monotonic pulse continuity: start from existing ledger events to prevent cycle_id collisions
+        self.pulse_count = ledger.event_count
+
         last_telemetry_flush = time.time()
         initial_rss, _, _ = get_process_memory_mb()
         logger.info(f"Initial Process Memory: {initial_rss:.2f} MB RSS")
+
 
         # 2. Main Sustained Pulse Loop
         try:

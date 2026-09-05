@@ -109,20 +109,44 @@ if (Test-Path -Path $pidFile) {
     }
 }
 
-# 6. Construct Command Arguments
+# 6. Archive Stale Run Artifacts from Inactive/Aborted Previous Runs
+if (-not $PreflightOnly) {
+    $archiveDirRoot = Join-Path -Path $outputDirAbs -ChildPath "archive"
+    $staleItems = Get-ChildItem -Path $outputDirAbs -Exclude "archive" -ErrorAction SilentlyContinue
+    if ($null -ne $staleItems -and $staleItems.Count -gt 0) {
+        $archiveTime = (Get-Date).ToUniversalTime().ToString("yyyyMMdd_HHmmss")
+        $archiveDir = Join-Path -Path $archiveDirRoot -ChildPath ("aborted_" + $archiveTime)
+        New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
+        foreach ($item in $staleItems) {
+            Move-Item -Path $item.FullName -Destination $archiveDir -Force
+        }
+        Write-Host ("[MAINT] Cleaned previous run artifacts (archived to: " + $archiveDir + ")") -ForegroundColor Yellow
+    }
+}
+
+# 7. Locate Python Executable in Virtual Environment
+$pythonw = Join-Path -Path $repoRoot -ChildPath ".venv\Scripts\pythonw.exe"
+if (-not (Test-Path -Path $pythonw)) {
+    $pythonw = Join-Path -Path $repoRoot -ChildPath ".venv\Scripts\python.exe"
+}
+if (-not (Test-Path -Path $pythonw)) {
+    Write-Error "[FAIL-CLOSED] Python executable not found in virtual environment (.venv)."
+    exit 1
+}
+
+# 8. Construct Command Arguments
 $argList = @(
-    "run",
-    "python",
-    "scripts/phase13_soak_runner.py",
+    "-u",
+    $runnerScript,
     "--duration-hours", "24.0",
     "--pulse-interval-sec", "1.0",
     "--telemetry-interval-sec", "10.0",
     "--output-dir", "var/phase13_soak",
     "--venue", "LOCAL_SIMULATOR"
 )
-$exactCmd = "uv run python scripts/phase13_soak_runner.py --duration-hours 24.0 --pulse-interval-sec 1.0 --telemetry-interval-sec 10.0 --output-dir var/phase13_soak --venue LOCAL_SIMULATOR"
+$exactCmd = "$pythonw -u scripts/phase13_soak_runner.py --duration-hours 24.0 --pulse-interval-sec 1.0 --telemetry-interval-sec 10.0 --output-dir var/phase13_soak --venue LOCAL_SIMULATOR"
 
-# 7. Handle PreflightOnly Switch
+# 9. Handle PreflightOnly Switch
 if ($PreflightOnly) {
     Write-Host ""
     Write-Host "[PREFLIGHT SUCCESS] All preconditions satisfied. Launcher is ready." -ForegroundColor Green
@@ -132,7 +156,7 @@ if ($PreflightOnly) {
     exit 0
 }
 
-# 8. Launch Background Process using Splatting
+# 10. Launch Background Process using Splatting
 Write-Host ""
 Write-Host "[LAUNCH] Spawning background 24-hour soak daemon..." -ForegroundColor Cyan
 $launchTimeUtc = (Get-Date).ToUniversalTime().ToString("o")
@@ -141,7 +165,7 @@ $stdoutPath = Join-Path -Path $outputDirAbs -ChildPath "soak_stdout.log"
 $stderrPath = Join-Path -Path $outputDirAbs -ChildPath "soak_stderr.log"
 
 $processParams = @{
-    FilePath               = "uv"
+    FilePath               = $pythonw
     ArgumentList           = $argList
     WorkingDirectory       = $repoRoot
     RedirectStandardOutput = $stdoutPath
@@ -151,15 +175,23 @@ $processParams = @{
 
 $process = Start-Process @processParams
 
+# Brief pause to verify startup stability
+Start-Sleep -Milliseconds 500
+
 if ($null -eq $process -or $process.HasExited) {
-    Write-Error "[FAIL-CLOSED] Failed to start soak runner background process."
+    $errDetail = ""
+    if (Test-Path -Path $stderrPath) {
+        $errDetail = (Get-Content -Path $stderrPath -Raw).Trim()
+    }
+    Write-Error "[FAIL-CLOSED] Failed to start soak runner background process. $errDetail"
     exit 1
 }
 
 $soakPid = $process.Id
 Set-Content -Path $pidFile -Value $soakPid -Force
 
-# 9. Record Launch Metadata
+
+# 11. Record Launch Metadata
 $launchMetadata = [ordered]@{
     "pid"                     = $soakPid
     "launch_timestamp_utc"    = $launchTimeUtc
@@ -180,7 +212,7 @@ $launchMetadata = [ordered]@{
 $metadataPath = Join-Path -Path $outputDirAbs -ChildPath "soak_launch.json"
 $launchMetadata | ConvertTo-Json -Depth 4 | Set-Content -Path $metadataPath -Force
 
-# 10. Display Confirmation and Monitoring Guidance
+# 12. Display Confirmation and Monitoring Guidance
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host " ACASH PHASE 13 -- STEP 5 SOAK RUNNER ACTIVATED" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green

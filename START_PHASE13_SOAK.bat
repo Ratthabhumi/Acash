@@ -28,6 +28,8 @@ echo.
 echo ================================================================================
 if %EXIT_CODE% equ 0 (
     echo [INFO] Launcher script completed successfully (Exit Code: 0).
+    echo [NOTE] The 24-hour soak daemon is active in the background.
+    echo        You may close this console window at any time.
 ) else (
     echo [ERROR] Launcher script exited with error code %EXIT_CODE%.
 )
