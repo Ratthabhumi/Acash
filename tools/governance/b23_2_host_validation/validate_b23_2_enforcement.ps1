@@ -198,7 +198,7 @@ if ($null -eq $events -or $events.Count -eq 0) {
 }
 
 $matchingEvent = $events[0]
-Write-Host "  [OK] Found Block Event ID $($matchingEvent.Id) in $targetLogName:" -ForegroundColor Green
+Write-Host "  [OK] Found Block Event ID $($matchingEvent.Id) in $($targetLogName):" -ForegroundColor Green
 Write-Host "    TimeCreated: $($matchingEvent.TimeCreated)"
 Write-Host "    Provider:    $($matchingEvent.ProviderName)"
 
