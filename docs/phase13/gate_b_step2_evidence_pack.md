@@ -5,11 +5,15 @@
 
 ## 1. Executive Summary & Governance State
 
-This document compiles the exhaustive physical verification, compilation telemetry, cryptographic audit logs, and adversarial test results for **Step 2 (Implementation Only)** of the **Phase 13 Gate B Governance Repair under Revision 10** (`docs/phase13/gate_b_governance_repair_plan.md`).
+This document compiles the physical verification, compilation telemetry, cryptographic audit logs, and adversarial test results for **Step 2 (Implementation Only)** of the **Phase 13 Gate B Governance Repair under Revision 10** (`docs/phase13/gate_b_governance_repair_plan.md`).
 
 - **Human Governance Authorization:** Explicit Human Approval `HUMAN GOVERNANCE AUTHORIZATION: GO STEP 2` granted.
+- **Audit Review Status:** **CONDITIONAL PASS** (Auditor Review 2026-09-05).
+  - Implementation & Regression (B1–B22, Gate B 147 tests, Full 1,431 tests, MyPy 295 files, B19 token): **ACCEPTED**.
+  - B23 Authenticode signature verification: **ACCEPTED (PARTIAL)**.
+  - B23 OS kernel execution enforcement: **NOT YET PROVEN / DEFERRED TO ENTERPRISE HOST** (Windows 11 Home lacks AppLocker / WDAC Enforce Mode).
 - **Scope Boundary:** Step 2 (Implementation & Verification Only).
-- **Ceremony & Activation Status:** **STRICTLY BLOCKED / LOCKED** (Step 3 Ceremony, Step 4 Activation, Gate B Live Activation, and Slice 3 are strictly prohibited without a separate subsequent explicit human authorization).
+- **Ceremony & Activation Status:** **STRICTLY BLOCKED / LOCKED** (Step 3 Ceremony, Step 4 Activation, Gate B Live Activation, and Slice 3 are strictly prohibited without separate subsequent explicit human authorization).
 - **Trading & Operational Invariants (Preserved):**
   - Live Capital: **$0.00**
   - Live Orders: **0**
@@ -18,16 +22,21 @@ This document compiles the exhaustive physical verification, compilation telemet
 
 ---
 
-## 2. Component Implementation Ledger
+## 2. Component Implementation & Artifact Lifecycle Ledger
 
-| Tier / Component | Path | Invariant Enforced | Status |
-|---|---|---|---|
-| **Tier 1: Native Bootstrapper** | `tools/governance/bin/acash-bootstrapper.exe`<br>`tools/governance/src/bootstrapper.c` | x64 MSVC Native binary, WDAC/Authenticode root of trust, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`, `/NXCOMPAT`, `/Brepro`, read-only `.rdata` | **COMPILED & VERIFIED** |
-| **Tier 2: Authenticated Launcher** | `tools/governance/launch_runner.py` | Pre-execution attestation, `ACASH-RELEASE-TREE-V1`, `ACASH-RUNTIME-ENV-V1`, anti-hijacking (`PYTHONPATH` ban), Isolated Mode (`-I -s -E`) | **IMPLEMENTED & VERIFIED** |
-| **Process A: Interactive Mint Tool** | `tools/governance/mint_human_go_record.py` | Interactive TTY hygiene (`sys.stdin.isatty()`), operator presence confirmation, decoupled execution, zero ledger mutation APIs, zero trust store write APIs | **IMPLEMENTED & VERIFIED** |
-| **Tier 3: Verify-Only Runner** | `src/acash/gate_b/runner.py` | Win32 unprivileged token audit, `sys.path` sanitization, multi-manifest verification (Root Anchor, Trust Anchor, Genesis Bootstrap, Sealed Trust Store, Human GO Record), 2PC commit under exclusive lock, STOP AGAIN immediate halt | **IMPLEMENTED & VERIFIED** |
-| **Architectural Signing Decoupling** | `src/acash/execution/signing.py` | Isolated private key primitives and signing routines (`Ed25519Signer`, `StorageEngineSigner`). Purged all private key symbols from `src/acash/execution/crypto.py`. | **SEPARATED & VERIFIED** |
-| **Canonical Manifest Schemas** | `src/acash/gate_b/manifest.py` | `ReleaseManifest`, `GenesisBootstrapManifest`, `TrustAnchorManifest`, `SovereignRootAnchor`, `HumanGORecordPayload` | **IMPLEMENTED & VERIFIED** |
+To eliminate ambiguity across the trust boundary, artifacts are classified into three distinct lifecycle tiers:
+- **Tier A (Build Artifact):** Compiled PE binary from source (`cl.exe`), un-signed, residing in developer working tree.
+- **Tier B (Signed Release Artifact):** Air-gapped / HSM Authenticode-signed binary bound to `release_manifest.json` (Deliverable of **Step 3 Ceremony**).
+- **Tier C (OS-Enforced Release Artifact):** Deployed binary protected by active OS kernel WDAC/AppLocker Enforce Mode policy on dedicated production infrastructure.
+
+| Tier / Component | Path | Invariant Enforced | Lifecycle State | Status |
+|---|---|---|---|---|
+| **Tier 1: Native Bootstrapper** | `tools/governance/bin/acash-bootstrapper.exe`<br>`tools/governance/src/bootstrapper.c` | x64 MSVC Native binary, `/guard:cf`, `/DYNAMICBASE`, `/HIGHENTROPYVA`, `/NXCOMPAT`, `/Brepro`, read-only `.rdata` | Build Artifact (Unsigned Pre-Ceremony) | **COMPILED & VERIFIED (BUILD)** |
+| **Tier 2: Authenticated Launcher** | `tools/governance/launch_runner.py` | Pre-execution attestation, `ACASH-RELEASE-TREE-V1`, `ACASH-RUNTIME-ENV-V1`, anti-hijacking (`PYTHONPATH` ban), Isolated Mode (`-I -s -E`) | Production Script | **IMPLEMENTED & VERIFIED** |
+| **Process A: Interactive Mint Tool** | `tools/governance/mint_human_go_record.py` | Interactive TTY hygiene (`sys.stdin.isatty()`), operator presence confirmation, decoupled execution, zero ledger mutation APIs, zero trust store write APIs | Production Tool | **IMPLEMENTED & VERIFIED** |
+| **Tier 3: Verify-Only Runner** | `src/acash/gate_b/runner.py` | Win32 unprivileged token audit, `sys.path` sanitization, multi-manifest verification (Root Anchor, Trust Anchor, Genesis Bootstrap, Sealed Trust Store, Human GO Record), 2PC commit under exclusive lock, STOP AGAIN immediate halt | Production Service | **IMPLEMENTED & VERIFIED** |
+| **Architectural Signing Decoupling** | `src/acash/execution/signing.py` | Isolated private key primitives and signing routines (`Ed25519Signer`, `StorageEngineSigner`). Purged all private key symbols from `src/acash/execution/crypto.py`. | Production Library | **SEPARATED & VERIFIED** |
+| **Canonical Manifest Schemas** | `src/acash/gate_b/manifest.py` | `ReleaseManifest`, `GenesisBootstrapManifest`, `TrustAnchorManifest`, `SovereignRootAnchor`, `HumanGORecordPayload` | Schema Definitions | **IMPLEMENTED & VERIFIED** |
 
 ---
 
@@ -75,18 +84,52 @@ SECTION HEADER #2
 
 ---
 
-## 4. Host OS Security Enforcement Verification (Test B23)
+## 4. Host OS Security Enforcement Verification & Physical Limits (Test B23)
 
-Test B23 executes direct Win32 `WinVerifyTrust` API calls via `wintrust.dll` on the host operating system against the compiled binary and a mutated payload to verify real kernel/OS trust boundary enforcement.
+### 4.1 Principle: WinVerifyTrust $\neq$ OS Execution Block
+As established in the Auditor Review of 2026-09-05:
+- **`wintrust.WinVerifyTrust()`** verifies whether a PE file's Authenticode digital signature chains cryptographically to a trusted certificate. It is a static verification query.
+- **WDAC / AppLocker Enforcement** is an active operating system kernel policy intercepting process creation (`NtCreateSection`) and physically denying process execution.
 
-### 4.1 Host Telemetry
-```text
-[HOST EVIDENCE B23] Executing WinVerifyTrust against tools/governance/bin/acash-bootstrapper.exe
-- Unsigned Pre-Ceremony State: Status = -0x7ff4ff00 (0x800B0100 TRUST_E_NOSIGNATURE)
-  Result: OS WinVerifyTrust strictly fails closed when unsigned.
-- Tampered Binary Verification: Status = -0x7ff4ff00 (0x800B0100 / 0x80096010 TRUST_E_BAD_DIGEST)
-  Result: OS WinVerifyTrust strictly rejects tampered binary at the kernel trust boundary.
+### 4.2 Physical Host Environment Telemetry
+Empirical inspection of the host system reveals the precise boundary conditions:
+```powershell
+# 1. OS Edition Inspection
+Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version
+# Result: Microsoft Windows 11 Home Single Language (Version 10.0.26200)
+
+# 2. User-Mode Code Integrity (UMCI / WDAC) Status
+Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard
+# Result: UsermodeCodeIntegrityPolicyEnforcementStatus : 0 (DISABLED)
+#         CodeIntegrityPolicyEnforcementStatus : 2 (Kernel HVCI Driver CI Only)
+
+# 3. AppLocker Service Status
+Get-Service AppIDSvc
+# Result: Status = Stopped (Cannot start: Access Denied / AppLocker unsupported on Home Edition)
+#         Get-AppLockerPolicy cmdlet does not exist on Windows 11 Home.
+
+# 4. Process Token Privilege Level
+whoami /groups
+# Result: Mandatory Label\Medium Mandatory Level (BUILTIN\Administrators is Deny-Only)
+CiTool.exe --list-policies
+# Result: An error occurred: 0x80070005 (Access Denied: Standard user cannot deploy CI policies)
+
+# 5. Live Process Creation Attempt
+tools\governance\bin\acash-bootstrapper.exe --help
+# Result: Executed (OS did not block process creation at kernel level)
 ```
+
+### 4.3 Test B23 Physical Finding Matrix
+1. **B23.1 — Cryptographic Authenticode Signature Validation (`WinVerifyTrust`):**
+   - **Status:** **VERIFIED (PASS)**
+   - Unsigned PE Binary: Returned `0x800B0100` (`TRUST_E_NOSIGNATURE`).
+   - Tampered PE Binary: Returned `0x800B0100` / `0x80096010` (`TRUST_E_BAD_DIGEST`).
+   - Assertion holds: Any tampering or missing signature is strictly caught by `WinVerifyTrust`.
+2. **B23.2 — OS Kernel-Level Process Creation Interception (WDAC / AppLocker):**
+   - **Status:** **NOT YET PROVEN ON LOCAL HOST (ENVIRONMENT INCAPABLE)**
+   - Windows 11 Home does not support AppLocker, and WDAC User-Mode Code Integrity is not active (`UsermodeCodeIntegrityPolicyEnforcementStatus: 0`).
+   - Furthermore, the current shell runs at Medium Integrity (`TokenIsElevated = 0`), which lacks administrative privileges to modify system CI policies.
+   - **Governance Boundary:** True host-level WDAC Enforce Mode execution blocking must be demonstrated on a dedicated Windows Enterprise/Server production environment where AppLocker/WDAC is deployed under enterprise policy.
 
 ---
 
@@ -132,9 +175,9 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 | **B20** | `test_b20_real_ntfs_owner_takeover_and_dacl_ban` | Host NTFS owner and DACL tamper resistance test | **PASSED** |
 | **B21** | `test_b21_signed_release_manifest_verification` | Mutate release manifest fields; signature verification fails closed | **PASSED** |
 | **B22** | `test_b22_pre_execution_full_artifact_attestation` | Injected `PYTHONPATH` or tampered artifact detected by launcher before runner invocation | **PASSED** |
-| **B23** | `test_b23_native_bootstrapper_host_level_authenticode_enforcement` | Real host OS `WinVerifyTrust` rejection of unsigned/tampered binary | **PASSED** |
+| **B23** | `test_b23_native_bootstrapper_host_level_authenticode_enforcement` | WinVerifyTrust cryptographic rejection of unsigned/tampered binary; OS execution block deferred to Enterprise host | **CONDITIONAL PASS** |
 
-**Summary:** **23 / 23 PASSED (100%)**
+**Summary:** **22 PASSED, 1 CONDITIONAL PASS (B23)**
 
 ---
 
@@ -162,13 +205,14 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -v
 
 ## 8. Mandatory Halt & State Verification
 
-In accordance with Rev 10 Step 2 Governance requirements, execution is halted immediately:
+In accordance with Rev 10 Step 2 Governance requirements and Auditor Review verdict:
 
 ```text
-[STATUS] STEP 2 IMPLEMENTATION & EVIDENCE COLLECTION: COMPLETE
+[STATUS] STEP 2 IMPLEMENTATION: COMPLETE (CONDITIONAL PASS ON B23 OS ENFORCEMENT)
 [MANDATORY HALT] HALTED FOR AUDITOR REVIEW
 [STEP 3 CEREMONY] BLOCKED
 [STEP 4 ACTIVATION] BLOCKED
+[SLICE 3 FIRST LIVE ORDER] BLOCKED
 [LIVE CAPITAL] $0.00
 [LIVE ORDERS] 0
 [BROKER CONNECTION] DISCONNECTED
