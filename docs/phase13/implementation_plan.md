@@ -1,9 +1,9 @@
-# ACASH Implementation Plan — Paper Trading Runtime Architecture (Rev 2.1)
+# ACASH Implementation Plan — Paper Trading Runtime Architecture (Rev 2.2)
 # Formal Specification & Verification Contract
-## Incorporating the Weekend Paper Track Architecture Amendment
+## Incorporating Auditor Review 2.1 & Weekend Track Architecture Amendment
 
 > **Document ID:** `docs/phase13/implementation_plan.md`  
-> **Version:** 2.1.0 (Audited Implementation Specification & Weekend Architecture Edition)  
+> **Version:** 2.2.0 (Audited Specification & Canonical Alignment Edition)  
 > **Date:** 2026-09-05 (Saturday)  
 > **Governing Baseline:** `docs/phase13/paper_trading_readiness_audit.md` (Rev 2, Commit `284c36e`)  
 > **Status:** PLAN REVISION ONLY — STRICT IMPLEMENTATION HALT  
@@ -13,7 +13,7 @@
 
 ## 1. Status / Governance Boundary
 
-This document establishes the formal, non-negotiable **Implementation Contract Rev 2.1** for the ACASH continuous Paper Trading Runtime on the Windows development host. It formally incorporates all resolutions from the Human Auditor Plan Review (Rev 2) and defines the **Weekend Paper Track Architecture Amendment**.
+This document establishes the formal, non-negotiable **Implementation Contract Rev 2.2** for the ACASH continuous Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Rev 2.1 Plan Review, guarantees canonical schema integrity, eliminates circular hash dependencies, formally defines deterministic simulation semantics, and specifies the **Weekend Paper Track Architecture Amendment**.
 
 ### 1.1 Non-Negotiable Governance Invariants
 - **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo flat).
@@ -49,7 +49,7 @@ Zero additional runtime files may be added.
 1. **NO Live Trading or Capital Deployment:** Zero live orders; live capital remains strictly `$0.00`.
 2. **NO Synthetic Dossiers:** Zero artificial `AlphaQualificationDossier` or `baseline_momentum_dossier.json` creation.
 3. **NO Scope Expansion to Future Phases:** Phases 14, 17, 18, 19, 20, 21, 22, and 23 (Microstructure implementation) remain strictly frozen.
-4. **NO Crypto Execution Implementation:** Weekend Crypto execution is an architectural concept only; zero crypto exchange APIs, zero exchange credentials, zero crypto broker implementation, zero crypto `OrderIntent` dispatch, and zero crypto network sockets in Rev 2.1.
+4. **NO Crypto Execution Implementation:** Weekend Crypto execution is an architectural concept only; zero crypto exchange APIs, zero exchange credentials, zero crypto broker implementation, zero crypto `OrderIntent` dispatch, and zero crypto network sockets in Rev 2.2.
 5. **NO Modification of Frozen Core Contracts:** Phases 1–12 domain models, state machines, risk gates, and reconciliation engines remain 100% untouched.
 
 ---
@@ -81,7 +81,7 @@ The Paper Trading Runtime operates as an unattended, forward-evaluating daemon e
                  ▼                               ▼
        PRIMARY EXECUTION VENUE         DETERMINISTIC TEST DOUBLE
          [MT5 Demo Account]           [Simulated Market Matcher]
-    ├── Real Broker Execution         ├── 100% Offline / Deterministic
+    ├── Real Broker Execution         ├── 100% Offline / Seeded Deterministic
     ├── Terminal 6-D Reconciliation   ├── Explicit ExecutionCostModel
     └── Live Spread & Broker Fills    └── Unit & Soak Test Double
                  │                               │
@@ -95,7 +95,7 @@ The Paper Trading Runtime operates as an unattended, forward-evaluating daemon e
                  FORENSIC PERSISTENCE & MONITORING
                  ├── OperationalLedger (Append-Only JSONL + SHA-256)
                  ├── MonitoringEvidenceLedger (Drift & Drag Evidence)
-                 └── ExecutionManifest (Per-Order Forensic Lineage)
+                 └── ExecutionManifest (Canonical Phase 7 Forensic Contract)
 ```
 
 ---
@@ -178,8 +178,9 @@ class PaperExecutionBridge:
     ) -> Decimal: ...
 ```
 
-### 5.4 Local Simulator Seam & Deterministic Matcher
-- `SimulatedMarketMatcher` is an offline test double that consumes an explicit `ExecutionCostModel` (Section 13).
+### 5.4 Local Simulator Seam & Seeded Deterministic Matcher
+- `SimulatedMarketMatcher` is an offline test double consuming an explicit, deterministic `ExecutionCostModel` (Section 13).
+- Uses an explicit PRNG seed (`prng_seed: int`) bound into `config_digest` to ensure 100% mathematical reproducibility across all unit and soak test runs.
 - Emits canonical `BrokerRawEvent` sequences (`ACK` $\to$ `FILLED` or `REJECTED`).
 - Operates purely in-memory with zero network connectivity.
 
@@ -263,11 +264,14 @@ class ForwardMarketDataFeeder:
 |---|---|---|---|
 | `cash_balance` | **Broker Authoritative** (MT5) / **Snapshot Authoritative** (Local) | Queried from `AccountInfo.balance` (MT5) or deserialized from snapshot JSON (Local) | `HALT` if snapshot digest $\neq$ `portfolio_state_digest` |
 | `positions` | **Broker Authoritative** (MT5) / **Snapshot Authoritative** (Local) | Queried from `get_open_positions()` (MT5) or deserialized from snapshot JSON (Local) | `HALT` if live broker position $\neq$ local snapshot |
-| `realized_pnl` | **Broker Authoritative** (MT5) / **Snapshot Authoritative** (Local) | Sum of terminal closed deals from broker deal history / snapshot | `HALT` on corruption |
+| `realized_pnl` | **Broker Authoritative** (MT5) / **Snapshot Authoritative** (Local) | Sum of terminal closed deals from broker deal history / snapshot store | `HALT` on corruption |
 | `unrealized_pnl` | **Deterministically Derived** | Calculated as $\sum q_i \cdot (\text{mark\_price}_i - \text{entry\_price}_i)$ using exact `Decimal` arithmetic | `HALT` on arithmetic discrepancy |
-| `total_equity` | **Broker Authoritative** (MT5) / **Deterministically Derived** (Local) | Queried from `AccountInfo.equity` (MT5) or computed as $\text{cash} + \text{unrealized}$ | `HALT` if accounting identity $\text{equity} \equiv \text{cash} + \text{unrealized}$ violated |
+| `total_equity` | **Broker Authoritative** (MT5) / **Explicit Simulator Accounting Model** (Local) | Queried from `AccountInfo.equity` (MT5). In Local Simulator, derived via explicit simulator accounting model: $\text{equity} = \text{cash} + \text{realized\_pnl} + \text{unrealized\_pnl} - \text{commissions}$ | `HALT` if accounting invariant violated |
 | `gross_exposure`| **Deterministically Derived** | $\sum \|q_i \cdot \text{mark\_price}_i\|$ derived via canonical `PortfolioState` validator | `HALT` on validation failure |
 | `net_exposure`  | **Deterministically Derived** | $\sum q_i \cdot \text{mark\_price}_i$ derived via canonical `PortfolioState` validator | `HALT` on validation failure |
+
+> [!IMPORTANT]
+> **No Universal Accounting Fallacy:** The formula $\text{equity} = \text{cash} + \text{realized\_pnl} + \text{unrealized\_pnl} - \text{commissions}$ is strictly an explicit invariant of the Local Simulator accounting store. It is NOT assumed to represent live broker margin/financing rules. In MT5 mode, `AccountInfo.equity` is the sole broker-authoritative source of truth.
 
 #### Mismatch Policy:
 $$\text{Live Broker State} \neq \text{Snapshot State} \implies \mathbf{DISCREPANCY\_HALT}$$
@@ -342,64 +346,36 @@ class PaperStrategyAdapter:
 
 ---
 
-## 9. ExecutionManifest Schema Specification
+## 9. ExecutionManifest Contract & Non-Circular Digest Specification
 
-Every executed paper order emits an immutable, cryptographically sealed `ExecutionManifest` matching the canonical Phase 7 schema:
+### 9.1 Canonical Schema Authority
+To prevent the creation of a duplicate source of truth, **the runtime DOES NOT define a new `ExecutionManifest` class**.
 
-### 9.1 Schema Definition
+`PaperExecutionBridge` directly imports and instantiates the **existing frozen Phase 7 canonical contract**:
 ```python
-class ExecutionManifest(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    # Identifiers
-    execution_id: str = Field(description="Unique deterministic execution identifier (EXEC-...).")
-    paper_run_id: str = Field(description="Associated paper trading session identifier.")
-    cycle_id: str = Field(description="Operational cycle identifier (CYCLE-...).")
-    intent_id: str = Field(description="Originating OrderIntent identifier.")
-    client_order_id: str = Field(description="Unique client order identifier sent to venue.")
-    broker_order_id: Optional[str] = Field(default=None, description="Venue-assigned ticket/order identifier.")
-
-    # Venue & Mode
-    venue: str = Field(description="Execution venue identifier (METAQUOTES_MT5_DEMO, IN_MEMORY_SIMULATOR).")
-    execution_mode: str = Field(description="MT5_DEMO_VENUE or LOCAL_SIMULATOR.")
-    symbol: str = Field(description="Traded symbol (e.g. EURUSD).")
-    order_side: str = Field(description="BUY or SELL.")
-    order_type: str = Field(description="MARKET or LIMIT.")
-
-    # Cryptographic Lineage & Digests
-    input_digest: str = Field(description="SHA-256 digest of input OrderIntent and MarketDataSnapshot.")
-    events_digest: str = Field(description="Canonical SHA-256 digest of observed BrokerRawEvent sequence.")
-    execution_digest: str = Field(description="Canonical SHA-256 digest of complete serialized manifest.")
-
-    # Timestamps (UTC)
-    created_at: datetime = Field(description="Intent generation timestamp.")
-    submitted_at: Optional[datetime] = Field(default=None, description="Venue dispatch timestamp.")
-    acknowledged_at: Optional[datetime] = Field(default=None, description="Venue ACK timestamp.")
-    closed_at: Optional[datetime] = Field(default=None, description="Terminal execution timestamp.")
-    network_latency_ms: Optional[float] = Field(default=None, description="Round-trip network latency.")
-
-    # Volumes & Prices (Decimal)
-    requested_qty: Decimal = Field(description="Originally requested volume in lots/shares.")
-    filled_qty: Decimal = Field(description="Cumulatively executed volume in lots/shares.")
-    benchmark_mid_price: Decimal = Field(description="Arrival mid-price at dispatch time.")
-    average_fill_price: Optional[Decimal] = Field(default=None, description="Volume-weighted average fill price.")
-    realized_slippage_bps: Optional[Decimal] = Field(default=None, description="Realized execution slippage in bps.")
-    total_commission_paid: Decimal = Field(default=Decimal("0.00"), description="Total commission incurred.")
-
-    # Terminal State
-    terminal_state: Optional[str] = Field(default=None, description="FILLED, REJECTED, CANCELLED, or null/UNKNOWN.")
+from acash.execution.schema import ExecutionManifest
 ```
+All fields, field validators, and typing constraints match the authoritative contract in `src/acash/execution/schema.py:609`.
 
-### 9.2 Digest Rules & UNKNOWN Handling
-- **Canonical Serialization:** All digests are computed using canonical JSON serialization (sorted keys, no extraneous whitespace, ISO-8601 UTC timestamps).
-- **UNKNOWN Broker State:** If an order times out or broker status is pending, `terminal_state` MUST remain `null` or `"UNKNOWN"`.
-- **Zero Invented Terminal States:** Under no circumstances will a timeout cause `terminal_state` to be populated with `"FILLED"` or `"CANCELLED"` without authoritative broker confirmation.
+### 9.2 Non-Circular Digest Preimage Specification
+`ExecutionManifest.execution_digest` is a 64-character lowercase hexadecimal SHA-256 hash. To eliminate the circular definition identified in the auditor review, the digest is computed over a strictly non-self-referential preimage, matching the existing repository standard in `src/acash/monitoring/schema.py:596` and `src/acash/execution/alpaca/order_exercise.py:252`:
+
+$$\text{execution\_digest} = \text{SHA-256}\left(\text{CanonicalConfigSerializer.serialize}(\mathcal{P}_{\text{manifest}})\right)$$
+
+where the preimage dictionary $\mathcal{P}_{\text{manifest}}$ contains all fields of the execution manifest **strictly excluding the `execution_digest` field itself**:
+
+$$\mathcal{P}_{\text{manifest}} = \{ k: v \mid (k, v) \in \text{manifest\_dict.items()} \land k \neq \text{"execution\_digest"} \}$$
+
+### 9.3 UNKNOWN Broker Handling
+- If an order times out or broker status is pending, `closed_at` MUST remain `None` and `terminal_state` is unassigned.
+- **Zero Invented Terminal States:** Under no circumstances will a timeout cause an order to be manufactured as `"FILLED"` or `"CANCELLED"` without authoritative broker deal evidence or 6-D reconciliation.
 
 ---
 
 ## 10. Paper Trading Session Identity Specification
 
-Lineage metadata is strictly bound via `PaperTradingSessionIdentity`. Every continuous session requires complete, unambiguous lineage metadata identifying market and venue context:
+### 10.1 Schema Authority
+Unlike `ExecutionManifest` (which is an existing Phase 7 contract), `PaperTradingSessionIdentity` is a **NEW Phase 13 runtime contract** defined in `src/acash/runtime/strategy_adapter.py`. It establishes cryptographic session lineage for paper trading:
 
 ```python
 class PaperTradingSessionIdentity(BaseModel):
@@ -465,14 +441,14 @@ Emits Terminal Manifest  DISCREPANCY_HALT & Operational Restriction
 
 ---
 
-## 13. Execution Cost Model Specification
+## 13. Deterministic Execution Cost Model Specification
 
-To eliminate arbitrary hard-coded numbers (magic constants) in the local simulator, all execution costs are explicitly modeled:
+To eliminate arbitrary hard-coded numbers (magic constants) in the local simulator, all execution costs are explicitly modeled. To satisfy strict reproducibility, dispersion is explicitly seeded:
 
 ```text
 ExecutionCostModel
     ├── SpreadModelConfig (base spread + volatility expansion)
-    ├── SlippageModelConfig (fixed drag + random dispersion)
+    ├── SlippageModelConfig (deterministic fixed drag + seeded PRNG dispersion)
     └── CommissionModelConfig (round-turn commission per lot)
 ```
 
@@ -485,8 +461,12 @@ class SpreadModelConfig(BaseModel):
 
 class SlippageModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    fixed_slippage_bps: Decimal = Decimal("0.20")
-    random_slippage_std_bps: Decimal = Decimal("0.10")
+    fixed_slippage_bps: Decimal = Decimal("0.20")  # Deterministic base drag
+    prng_seed: int = Field(default=42, description="Explicit deterministic PRNG seed for reproducible dispersion.")
+    dispersion_slippage_std_bps: Decimal = Field(
+        default=Decimal("0.00"),
+        description="Set to 0.00 for pure deterministic drag; non-zero uses deterministic seeded PRNG.",
+    )
 
 class CommissionModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -506,29 +486,38 @@ class ExecutionCostModel(BaseModel):
 | `base_spread_pips` | `1.2` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 uses live broker spread) |
 | `volatility_expansion_factor`| `1.0` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only |
 | `fixed_slippage_bps` | `0.20` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 experiences broker slippage) |
-| `random_slippage_std_bps` | `0.10` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only |
+| `prng_seed` | `42` | Deterministic Test Configuration | **YES** (Mandatory) | Seed for deterministic pseudorandom slippage generation |
+| `dispersion_slippage_std_bps`| `0.00` | Deterministic Test Configuration | **YES** (Mandatory) | Local Simulator Estimate Only (0.00 = pure deterministic fixed drag) |
 | `commission_per_lot_usd` | `7.00` | Account Fee Specification | **YES** (Mandatory) | Local Simulator Estimate Only (MT5 uses account commission deal ledger) |
 
 ### 13.2 Rules:
 1. Every execution-cost parameter MUST be explicit. No unexplained magic constants in simulation code.
-2. All configurable execution-cost parameters MUST contribute directly to `session_identity.config_digest`.
+2. All configurable execution-cost parameters (including `prng_seed`) MUST contribute directly to `session_identity.config_digest`.
 3. Simulator results generated by `LOCAL_SIMULATOR` MUST be explicitly tagged as `LOCAL_SIMULATOR_ESTIMATE`. They must never be represented as empirical facts about MT5 broker execution.
 
 ---
 
 ## 14. Test Plan / 20-Vector Adversarial Matrix
 
-The accompanying unit test suite (`tests/unit/runtime/test_paper_bridge.py`) implements exactly 20 planned adversarial vectors:
+### 14.1 Single-File Constraint & Architecture Alignment
+> [!NOTE]
+> **Single-File Test Suite Constraint (`tests/unit/runtime/test_paper_bridge.py`):**  
+> The consolidation of 20 adversarial vectors into a single test file is a **governance constraint bounded by the locked 5-file implementation scope**, NOT a conflation of component boundaries. The test file is partitioned into 4 distinct, hermetic test suites:
+> 1. `TestPaperExecutionBridge` (Vectors V-01 to V-04, V-11, V-12, V-19, V-20)
+> 2. `TestForwardMarketDataFeeder` (Vectors V-05, V-06, V-15)
+> 3. `TestPortfolioStateRehydrator` (Vectors V-07 to V-09, V-10, V-13, V-14, V-16)
+> 4. `TestPaperStrategyAdapter` (Vectors V-17, V-18)
 
+### 14.2 Adversarial Vector Specification
 | Vector ID | Target Invariant | Scenario Description | Expected Fail-Closed Behavior |
 |---|---|---|---|
 | **V-01** | Zero Delta | Target allocation equals current position ($\Delta q \equiv 0$) | Emits 0 orders; dispatch suppressed cleanly. |
 | **V-02** | Vetoed Allocation | Stage 4 risk engine returns `RiskVerdict.REJECTED` | Emits 0 orders; cycle outcome `RISK_REJECTED`. |
-| **V-03** | Matcher Partial/Full Fill | Local matcher fills 50% / 100% of volume | Coordinator records fill; emits valid `ExecutionManifest`. |
+| **V-03** | Matcher Partial/Full Fill | Local matcher fills 50% / 100% of volume deterministically | Coordinator records fill; emits valid canonical `ExecutionManifest`. |
 | **V-04** | Rejected Order | Venue rejects order (e.g. invalid symbol/volume) | Coordinator transitions to `REJECTED`; incident logged. |
 | **V-05** | Fresh Tick | Tick received with age 50ms | Stage 1 passes; `data_age_ms` recorded. |
 | **V-06** | Stale Data | Tick received with age 2500ms (> 1500ms threshold) | Stage 1 halts pulse; emits `CycleOutcome.DATA_STALE`. |
-| **V-07** | Clean Rehydration | Process restarts with valid ledger & snapshot | Rehydrates exact cash, positions, and equity. |
+| **V-07** | Clean Rehydration | Process restarts with valid ledger & snapshot | Rehydrates exact cash, positions, and equity from verified sources. |
 | **V-08** | Corrupted Ledger | Single byte mutated in `operational_ledger.jsonl` | Rehydration raises `DataContractError`; startup halted. |
 | **V-09** | Broker Discrepancy | Live MT5 position differs from local snapshot | Rehydration emits `DISCREPANCY_HALT`; refuses cycles. |
 | **V-10** | Session Identity Lineage | Verify complete session identity serialization | All fields present; `config_digest` validated. |
@@ -536,8 +525,8 @@ The accompanying unit test suite (`tests/unit/runtime/test_paper_bridge.py`) imp
 | **V-12** | Duplicate Client Order ID | Re-using `client_order_id` across cycles | Rejected by coordinator deduplication check. |
 | **V-13** | Restart during UNKNOWN | Process killed while order in `UNKNOWN` state | Startup forces 6-D reconciliation before new cycles. |
 | **V-14** | Restart after ACK before FILL | Process killed after ACK before fill event | Rehydrates pending status; awaits fill or queries broker. |
-| **V-15** | Stale Feed with Open Position | Data feed drops while position is held | Rebalance halted; existing position held under stop. |
-| **V-16** | Broker/Ledger Divergence | Deal occurs outside ACASH daemon control | Reconciler flags unexpected deal; triggers `DISCREPANCY_HALT`. |
+| **V-15** | Stale Feed with Open Position | Data feed drops while position exists | Suppresses rebalance / new dispatch; preserves current state; invokes existing Phase 9 risk/reconciliation policy. Runtime bridge never invents secondary stop-loss orders. |
+| **V-16** | Broker/Ledger Divergence | Position or deal exists on broker without corresponding ACASH `intent_id` / `client_order_id` in ledger | Reconciler flags unmanaged external divergence via `MT5AuthoritativeReconciler` $\implies$ `DISCREPANCY_HALT`. (Legitimate asynchronous broker events matching open intents continue normal 6-D reconciliation). |
 | **V-17** | Session Identity Tampering | Changing session start time or run ID mid-flight | Startup validation detects tamper; halts daemon. |
 | **V-18** | Dossier Digest Mismatch | Providing dossier with altered cryptographic hash | Stage 2 census rejects dossier as unverified. |
 | **V-19** | Wrong Strategy Version | Strategy code version differs from session identity | Startup validation rejects mismatch; halts execution. |
@@ -606,10 +595,10 @@ ACASH decouples continuous paper operations into two logically and experimentall
 |---|---|---|
 | **Market Type** | Traditional Financial Markets (FX / EURUSD) | 24/7 Digital Asset Markets (Crypto Spot / Derivatives) |
 | **Primary Venue** | `METAQUOTES_MT5_DEMO` | Candidate Future Crypto Venue / Test Double |
-| **Operational Purpose** | Primary Phase 13 canonical 90-day forward paper validation | Weekend forward-operation, 24/7 soak, infrastructure validation |
+| **Operational Purpose** | Primary Phase 13 canonical 90-day forward paper validation | Weekend forward-operation, soak, infrastructure validation |
 | **Operating Window** | Monday 00:00 UTC through Friday 21:59 UTC | Friday 22:00 UTC through Sunday 23:59 UTC |
 | **Experimental Dataset** | **Experiment A** (`PAPER-RUN-WEEKDAY-...`) | **Experiment B** (`PAPER-RUN-WEEKEND-...`) |
-| **Phase 13 Status** | **ACTIVE SPECIFICATION** (5-file locked scope) | **ARCHITECTURAL EXTENSION ONLY** (Deferred implementation) |
+| **Phase 13 Status** | **ACTIVE SPECIFICATION** (5-file locked scope) | **ARCHITECTURALLY DEFINED / NOT IMPLEMENTED / NOT OPERATIONAL** |
 
 ### 16.4 Strict Experimental & Statistical Isolation
 The runtime strictly enforces complete experimental isolation between Experiment A and Experiment B. Under no circumstances may metrics or statistical distributions be aggregated across tracks:
@@ -641,10 +630,10 @@ The runtime architecture acknowledges that execution microstructure differs fund
 - **MT5 Model:** Retail/institutional broker bridge, fixed contract lot sizing (0.01 lot step), broker quote-driven execution, single-account margin.
 - **Crypto Model:** Centralized order book (CLOB) / AMM, fractional sizing ($10^{-8}$ satoshi precision), maker/taker tiered fees, funding rate payments (perpetual futures), maintenance windows (e.g. CME $\ge 2$h weekly maintenance), API key / signature authentication, websocket order-book feeds.
 
-None of these crypto execution models are implemented in Rev 2.1.
+None of these crypto execution models are implemented in Rev 2.2.
 
-### 16.7 Strict Scope Boundaries for Rev 2.1
-| Permitted in Rev 2.1 (Architecture Only) | Strictly Forbidden in Rev 2.1 (No Implementation) |
+### 16.7 Strict Scope Boundaries for Rev 2.2
+| Permitted in Rev 2.2 (Architecture Only) | Strictly Forbidden in Rev 2.2 (No Implementation) |
 |---|---|
 | Architecture model definition | Implementing crypto exchange REST/Websocket APIs |
 | Lifecycle state definition | Storing or configuring crypto exchange API credentials |
@@ -662,19 +651,20 @@ The implementation scope remains strictly locked to **4 runtime files and 1 unit
 
 | Target File Path | Purpose | Allowed Classes & Functions | Consumed Contracts | Contracts NOT Allowed to Change | Test Coverage | Operational Risk | Rollback Impact |
 |---|---|---|---|---|---|---|---|
-| `src/acash/runtime/paper_bridge.py` | Order translation & dispatch seam | `PaperExecutionBridge`, `SimulatedMarketMatcher`, `PaperExecutionVenueType`, `ExecutionCostModel` | `AllocationDecision`, `OrderIntent`, `BrokerRawEvent`, `ExecutionCoordinator` | Zero secondary risk logic; zero sizing alterations; zero frozen core edits. | V-01, V-02, V-03, V-04, V-11, V-12, V-20 | Low (isolated translation layer) | Clean deletion; zero core regressions |
+| `src/acash/runtime/paper_bridge.py` | Order translation & dispatch seam | `PaperExecutionBridge`, `SimulatedMarketMatcher`, `PaperExecutionVenueType`, `ExecutionCostModel` | `AllocationDecision`, `OrderIntent`, `BrokerRawEvent`, `ExecutionCoordinator`, canonical `ExecutionManifest` | Zero secondary risk logic; zero sizing alterations; zero frozen core edits. | V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20 | Low (isolated translation layer) | Clean deletion; zero core regressions |
 | `src/acash/runtime/feeder.py` | Market data feed pump & freshness | `ForwardMarketDataFeeder`, `MarketFeedStatus`, `FeedSourceType` | `IMarketDataProvider`, `Bar`, `MarketDataSnapshot`, `NativeMT5Transport` | Zero synthetic bar imputation; zero silent fallback on stale ticks. | V-05, V-06, V-15 | Low (read-only polling adapter) | Clean deletion; zero core regressions |
-| `src/acash/runtime/rehydration.py` | Crash/restart recovery & reconciliation | `PortfolioStateRehydrator`, `RehydrationStatus`, `PortfolioSnapshotStore` | `OperationalLedger`, `OperationalCycleEvent`, `PortfolioState`, `MT5BrokerAdapter` | Zero position fabrication; zero recovery on broken ledger hash. | V-07, V-08, V-09, V-13, V-14, V-16 | Medium (state reconstruction) | Revert to clean empty genesis |
-| `src/acash/runtime/strategy_adapter.py` | Read/verify strategy adapter | `PaperStrategyAdapter`, `PaperTradingSessionIdentity` | `MultiHorizonMomentumStrategy`, `AlphaQualificationDossier`, `AlphaLifecycleState` | Zero lifecycle promotion; zero synthetic dossier creation. | V-10, V-17, V-18, V-19 | Low (read/verify wrapper) | Clean deletion; strategy stays blocked |
-| `tests/unit/runtime/test_paper_bridge.py` | Adversarial test suite | 20 test functions matching V-01 through V-20 | Pytest fixtures, mock adapters, temporary file fixtures | No skipped tests; no assertions claiming unverified behavior. | V-01 through V-20 | None (test suite only) | Deletion of test file |
+| `src/acash/runtime/rehydration.py` | Crash/restart recovery & reconciliation | `PortfolioStateRehydrator`, `RehydrationStatus`, `PortfolioSnapshotStore` | `OperationalLedger`, `OperationalCycleEvent`, `PortfolioState`, `MT5BrokerAdapter`, `MT5AuthoritativeReconciler` | Zero position fabrication; zero recovery on broken ledger hash. | V-07, V-08, V-09, V-10, V-13, V-14, V-16 | Medium (state reconstruction) | Revert to clean empty genesis |
+| `src/acash/runtime/strategy_adapter.py` | Read/verify strategy adapter & session identity | `PaperStrategyAdapter`, `PaperTradingSessionIdentity` (new runtime contract) | `MultiHorizonMomentumStrategy`, `AlphaQualificationDossier`, `AlphaLifecycleState` | Zero lifecycle promotion; zero synthetic dossier creation. | V-17, V-18 | Low (read/verify wrapper) | Clean deletion; strategy stays blocked |
+| `tests/unit/runtime/test_paper_bridge.py` | 4 hermetic test suites in 1 file | `TestPaperExecutionBridge`, `TestForwardMarketDataFeeder`, `TestPortfolioStateRehydrator`, `TestPaperStrategyAdapter` | Pytest fixtures, mock adapters, temporary file fixtures | No skipped tests; no assertions claiming unverified behavior. | V-01 through V-20 | None (test suite only) | Deletion of test file |
 
 ---
 
 ## 18. Frozen-Core Protection
 
-The ACASH core architecture (Phases 1–12) is formally **FROZEN**. The implementation of Rev 2.1 MUST NOT modify:
+The ACASH core architecture (Phases 1–12) is formally **FROZEN**. The implementation of Rev 2.2 MUST NOT modify:
 - `ExecutionCoordinator` state machine or transition semantics (`src/acash/execution/coordinator.py`).
 - `transition_order()` sole state authority (`src/acash/execution/state_machine.py`).
+- `ExecutionManifest` canonical schema (`src/acash/execution/schema.py`).
 - Phase 9 Sovereign Risk Engine contracts (`src/acash/risk/risk_engine.py`).
 - Sovereign Kill Switch controller or persistence (`src/acash/risk/kill_switch.py`).
 - Phase 12 MT5 Authoritative Reconciler (`src/acash/execution/mt5/reconciliation.py`).
@@ -684,24 +674,28 @@ If any implementation requirement appears to necessitate modifying frozen core f
 
 ---
 
-## 19. Mandatory Acceptance Checklist (Rev 2.1 Contract)
+## 19. Mandatory Acceptance Checklist (Rev 2.2 Contract)
 
 - [ ] Rev2 findings #1–#9 addressed
 - [ ] No synthetic dossier
-- [ ] Strategy remains qualification-blocked
+- [ ] Strategy remains qualification-blocked (`STRAT-MOM-MULTI-HORIZON-V1`)
 - [ ] Bridge is translation/dispatch only
-- [ ] Execution cost assumptions explicit
-- [ ] `config_digest` binds execution-cost parameters
+- [ ] Execution cost assumptions explicit and seeded deterministic
+- [ ] `config_digest` binds execution-cost parameters (including `prng_seed`)
 - [ ] Rehydration authority is schema-grounded
+- [ ] Local Simulator equity follows explicit simulator accounting model
 - [ ] Timeout semantics preserve `UNKNOWN`
 - [ ] MT5 forward feed separated from Parquet pump
 - [ ] Lifecycle authority preserved
-- [ ] `ExecutionManifest` defined
-- [ ] Session identity complete
-- [ ] Adversarial matrix expanded
-- [ ] Weekday track defined
-- [ ] Weekend track defined
-- [ ] Weekend track experimentally isolated
+- [ ] `ExecutionManifest` consumes existing canonical Phase 7 contract
+- [ ] `ExecutionManifest.execution_digest` uses non-circular preimage excluding itself
+- [ ] Session identity complete (new Phase 13 runtime contract)
+- [ ] Adversarial matrix expanded (20 vectors partitioned into 4 test suites)
+- [ ] V-15 invokes existing risk policy without inventing secondary stop orders
+- [ ] V-16 grounds divergence in `MT5AuthoritativeReconciler`
+- [ ] Weekday track defined (MT5 Demo forward paper)
+- [ ] Weekend track defined (architecturally defined, not implemented, not operational)
+- [ ] Weekend track experimentally isolated (zero statistical mixing)
 - [ ] Crypto NOT implemented
 - [ ] No crypto credentials
 - [ ] No crypto connectivity
@@ -720,13 +714,9 @@ CURRENT GATE: IMPLEMENTATION PLANNING GATE
 STATUS:       LOCKED — AWAITING EXPLICIT HUMAN PLAN APPROVAL
 ```
 
-Execution of source code implementation remains strictly blocked until the Human Auditor responds with explicit authorization:
+Execution of source code implementation remains strictly blocked until the Human Auditor responds with the single, unambiguous authorization command:
 ```text
-APPROVED IMPLEMENTATION PLAN REV2.1
-```
-or
-```text
-GO IMPLEMENTATION
+GO IMPLEMENTATION REV2.2
 ```
 
 ---
