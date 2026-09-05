@@ -1,9 +1,9 @@
 # ACASH Implementation Plan — Paper Trading Runtime Architecture (Rev 2.2)
 # Formal Specification & Verification Contract
-## Incorporating Auditor Review 2.2 Amendments & Weekend Track Architecture
+## Incorporating Auditor Review 2.2.1 Amendments & Weekend Track Architecture
 
 > **Document ID:** `docs/phase13/implementation_plan.md`  
-> **Version:** 2.2.1 (Audited Specification Edition — Partial Fill & Quantization Amendment)  
+> **Version:** 2.2.2 (Audited Specification Edition — Residual Semantics & Startup Ownership Resolution)  
 > **Date:** 2026-09-05 (Saturday)  
 > **Governing Baseline:** `docs/phase13/paper_trading_readiness_audit.md` (Rev 2, Commit `284c36e`)  
 > **Status:** PLAN REVISION ONLY — STRICT IMPLEMENTATION HALT  
@@ -13,13 +13,14 @@
 
 ## 1. Status / Governance Boundary
 
-This document establishes the formal, non-negotiable **Implementation Contract Rev 2.2** for the ACASH continuous Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Rev 2.1 and Rev 2.2 reviews:
+This document establishes the formal, non-negotiable **Implementation Contract Rev 2.2** for the ACASH continuous Paper Trading Runtime on the Windows development host. It incorporates all resolutions from the Human Auditor Rev 2.1, 2.2, and 2.2.1 reviews:
 1. Formally specifies the **multi-stage partial-fill lifecycle** (`ACK` $\to$ `PARTIAL_FILL` $\to$ working residual $\to$ `FILLED`).
-2. Formally specifies the **deterministic volume_step quantization pipeline** using `ROUND_DOWN`, residual drop, and minimum-lot boundary validation.
-3. Unifies execution-cost parameter provenance strictly under **`DETERMINISTIC_TEST_CONFIGURATION`**.
-4. Eliminates circular hash dependencies in `ExecutionManifest`.
-5. Enforces single canonical schema ownership (`ExecutionManifest` consumed from Phase 7 core).
-6. Preserves the **Weekend Paper Track Architecture Amendment** (`ARCHITECTURALLY DEFINED / NOT IMPLEMENTED / NOT OPERATIONAL`).
+2. Formally specifies the **deterministic volume_step quantization pipeline** using `ROUND_DOWN`, with quantity residual discarded from dispatch without unsupported cash conversions.
+3. Explicitly assigns **startup mode-compatibility invariant ownership** to `PaperTradingSessionIdentity` and `ForwardMarketDataFeeder` within the locked 5-file scope.
+4. Unifies execution-cost parameter provenance strictly under **`DETERMINISTIC_TEST_CONFIGURATION`**.
+5. Eliminates circular hash dependencies in `ExecutionManifest`.
+6. Enforces single canonical schema ownership (`ExecutionManifest` consumed from Phase 7 core).
+7. Preserves the **Weekend Paper Track Architecture Amendment** (`ARCHITECTURALLY DEFINED / NOT IMPLEMENTED / NOT OPERATIONAL`).
 
 ### 1.1 Non-Negotiable Governance Invariants
 - **Phase 13 Gate A:** `CERTIFIED` (Formal Human Sign-off 2026-09-04; MT5 Demo flat).
@@ -139,8 +140,8 @@ Existing Stage 5 / Canonical Allocation Authority
 | **Min-Lot Authority** | Venue / Account Specification | `BrokerSymbolSpec.min_volume` (`src/acash/execution/mt5/adapter.py`) |
 | **Venue Constraint Authority** | Venue Adapter & Account Limits | `BrokerSymbolSpec.volume_step`, `BrokerSymbolSpec.volume_max` |
 
-#### 5.2.1 Canonical Volume Quantization Pipeline
-To resolve Blocker 2 from the auditor review, the bridge enforces an explicit, deterministic quantization pipeline grounded in `src/acash/execution/mt5/normalizer.py:normalize_volume`:
+#### 5.2.1 Canonical Volume Quantization Pipeline & Residual Semantics
+To resolve Blocker 2 (Rev 2.2) and Blocker 1 (Rev 2.2.1), the bridge enforces an explicit, deterministic quantization pipeline grounded in `src/acash/execution/mt5/normalizer.py:normalize_volume`:
 
 ```text
 raw_delta (Δq = q_target - q_current)
@@ -160,9 +161,13 @@ volume_step Quantization (Policy: ROUND_DOWN / Floor towards zero):
   quantized_lots = steps * symbol_spec.volume_step
   residual = q_mag - quantized_lots
           │
-          ├──> Residual Handling: The fractional residual r < volume_step
-          │    cannot be represented by the venue step grid. It is dropped
-          │    and retained as unallocated cash portfolio balance.
+          ├──> Strict Residual Semantics: The fractional residual r < volume_step
+          │    is unrepresentable on the discrete broker volume grid. The bridge
+          │    discards this residual quantity from the executable order delta and
+          │    passes forward strictly quantized_lots. The bridge DOES NOT convert
+          │    quantity residuals into cash or perform portfolio accounting operations;
+          │    any capital consequences of the unexecuted residual remain strictly
+          │    under the authority of the canonical portfolio state and risk engine.
           │
           ▼
 Minimum-Volume Boundary Validation:
@@ -185,6 +190,7 @@ Construct Canonical OrderIntent(volume=quantized_lots, side=direction, ...)
 #### Permitted Actions for `PaperExecutionBridge`:
 - Translate target weight vector $w^*$ into discrete share/contract delta: $\Delta q_i = q_{\text{target}, i} - q_{\text{current}, i}$.
 - Quantize magnitude using the canonical `ROUND_DOWN` pipeline.
+- Discard unrepresentable fractional step residuals from dispatch without converting them into cash.
 - Suppress sub-minimum or zero deltas ($\Delta q_{\text{quantized}} < \text{min\_volume} \implies \text{no dispatch}$).
 - Construct and dispatch canonical `OrderIntent` DTOs.
 - Forward raw broker events (`BrokerRawEvent`) into `ExecutionCoordinator`.
@@ -192,6 +198,7 @@ Construct Canonical OrderIntent(volume=quantized_lots, side=direction, ...)
 #### Strictly Prohibited Actions for `PaperExecutionBridge`:
 - Inventing secondary portfolio risk rules or stop-loss mechanisms.
 - Inventing secondary allocation or capital policies.
+- Performing portfolio accounting conversions (e.g. converting quantity residuals to USD cash).
 - Inventing secondary leverage, gross exposure, or net exposure caps.
 - Computing secondary volatility models or beta estimations.
 - Modifying strategy decision weights or generating autonomous trading signals.
@@ -279,7 +286,23 @@ Production-like paper trading and offline test harnesses are fundamentally diffe
 | **90-Day Qualification** | **ELIGIBLE** (Satisfies forward requirement) | **INELIGIBLE** (Strictly test double) |
 
 > [!CRITICAL]
-> `STREAMING_PARQUET_PUMP` is NOT real-time market data. It MUST NOT qualify a session as the 90-day forward paper run. The runtime supervisor MUST abort startup if a session claims `FORWARD_PAPER_RUN` classification while configured with `STREAMING_PARQUET_PUMP`.
+> `STREAMING_PARQUET_PUMP` is NOT real-time market data. It MUST NOT qualify a session as the 90-day forward paper run.
+
+#### 6.2.1 Invariant Ownership & Startup Validation Boundary
+To resolve Blocker 2 (Rev 2.2.1), the session-level classification and feed compatibility invariant is explicitly assigned to components within the locked 5-file implementation scope:
+1. **Primary Structural Authority (`strategy_adapter.py`):**
+   `PaperTradingSessionIdentity` defines a canonical Pydantic model validator (`@model_validator(mode="after")`). If `self.data_source == FeedSourceType.STREAMING_PARQUET_PUMP` and `self.execution_mode == PaperExecutionVenueType.MT5_DEMO` (or if it claims `market == "TRADITIONAL_FX"` in a forward paper run), it raises `DataContractError` immediately upon model creation:
+   ```python
+   if self.data_source == FeedSourceType.STREAMING_PARQUET_PUMP and self.execution_mode == PaperExecutionVenueType.MT5_DEMO:
+       raise DataContractError(
+           "INVALID_SESSION_CONFIGURATION: STREAMING_PARQUET_PUMP is strictly an offline test double "
+           "and cannot be paired with MT5_DEMO or qualify as a FORWARD_PAPER_RUN."
+       )
+   ```
+2. **Operational Enforcement Seam (`feeder.py`):**
+   `ForwardMarketDataFeeder.__init__` accepts the authoritative `session_identity: PaperTradingSessionIdentity`. It asserts that `self.source_type` matches `session_identity.data_source`. If an offline pump is provided to a forward paper session, it raises `DataContractError` and halts startup before any operational cycle can execute.
+3. **Supervisor Consumption:**
+   The existing frozen `RuntimeSupervisor` in `src/acash/runtime/supervisor.py` consumes this contract during its pre-flight initialization and aborts daemon startup upon catching `DataContractError`.
 
 #### Permitted vs. Forbidden Combinations
 - **Allowed A (Production-Like Paper):** `data_source = MT5_FORWARD` + `execution_mode = MT5_DEMO_VENUE`.
@@ -305,6 +328,7 @@ class ForwardMarketDataFeeder:
         self,
         provider: IMarketDataProvider,
         source_type: FeedSourceType,
+        session_identity: PaperTradingSessionIdentity,
         mt5_transport: Optional[NativeMT5Transport] = None,
         historical_iterator: Optional[Iterator[Bar]] = None,
         max_market_data_age_ms: int = 1500,
@@ -450,7 +474,7 @@ $$\mathcal{P}_{\text{manifest}} = \{ k: v \mid (k, v) \in \text{manifest\_dict.i
 ## 10. Paper Trading Session Identity Specification
 
 ### 10.1 Schema Authority
-Unlike `ExecutionManifest` (which is an existing Phase 7 contract), `PaperTradingSessionIdentity` is a **NEW Phase 13 runtime contract** defined in `src/acash/runtime/strategy_adapter.py`. It establishes cryptographic session lineage for paper trading:
+Unlike `ExecutionManifest` (which is an existing Phase 7 contract), `PaperTradingSessionIdentity` is a **NEW Phase 13 runtime contract** defined in `src/acash/runtime/strategy_adapter.py`. It establishes cryptographic session lineage for paper trading and explicitly enforces feed/mode compatibility:
 
 ```python
 class PaperTradingSessionIdentity(BaseModel):
@@ -468,6 +492,15 @@ class PaperTradingSessionIdentity(BaseModel):
     actual_end_time_utc: Optional[datetime] = Field(default=None, description="Recorded session termination time.")
     config_digest: str = Field(description="Canonical SHA-256 of RuntimePolicyConfig + ExecutionCostModel.")
     dossier_digest: str = Field(description="Canonical SHA-256 of AlphaQualificationDossier.")
+
+    @model_validator(mode="after")
+    def validate_feed_and_mode_compatibility(self) -> "PaperTradingSessionIdentity":
+        if self.data_source == FeedSourceType.STREAMING_PARQUET_PUMP and self.execution_mode == PaperExecutionVenueType.MT5_DEMO:
+            raise DataContractError(
+                "INVALID_SESSION_CONFIGURATION: STREAMING_PARQUET_PUMP is strictly an offline test double "
+                "and cannot be paired with MT5_DEMO or qualify as a FORWARD_PAPER_RUN."
+            )
+        return self
 ```
 
 > **Note on Identifiers:** Example IDs such as `PAPER-RUN-20260905-MT5-001` (Weekday) and `PAPER-RUN-20260905-CRYPTO-WEEKEND-001` (Weekend) illustrate deterministic naming conventions; they are not hardcoded into runtime source.
@@ -552,11 +585,11 @@ class ExecutionCostModel(BaseModel):
     spread_model: SpreadModelConfig
     slippage_model: SlippageModelConfig
     commission_model: CommissionModelConfig
-    provenance: str = Field(default="DETERMINISTIC_TEST_MODEL")
+    provenance: str = Field(default="DETERMINISTIC_TEST_CONFIGURATION")
 ```
 
 #### Parameter Provenance & Lineage Table:
-All simulator parameters are classified strictly under **`DETERMINISTIC_TEST_CONFIGURATION`** to avoid unsupported assertions regarding empirical broker contracts:
+All simulator parameters are classified strictly under the unified provenance **`DETERMINISTIC_TEST_CONFIGURATION`** to avoid unsupported assertions regarding empirical broker contracts:
 
 | Parameter | Default Value | Authority Source | Ingested in `config_digest`? | Real-Market Representation |
 |---|---|---|---|---|
@@ -729,7 +762,7 @@ The implementation scope remains strictly locked to **4 runtime files and 1 unit
 | Target File Path | Purpose | Allowed Classes & Functions | Consumed Contracts | Contracts NOT Allowed to Change | Test Coverage | Operational Risk | Rollback Impact |
 |---|---|---|---|---|---|---|---|
 | `src/acash/runtime/paper_bridge.py` | Order translation, volume quantization & dispatch seam | `PaperExecutionBridge`, `SimulatedMarketMatcher`, `PaperExecutionVenueType`, `ExecutionCostModel` | `AllocationDecision`, `OrderIntent`, `BrokerRawEvent`, `ExecutionCoordinator`, canonical `ExecutionManifest` | Zero secondary risk logic; zero sizing alterations; zero frozen core edits. | V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20 | Low (isolated translation layer) | Clean deletion; zero core regressions |
-| `src/acash/runtime/feeder.py` | Market data feed pump & freshness | `ForwardMarketDataFeeder`, `MarketFeedStatus`, `FeedSourceType` | `IMarketDataProvider`, `Bar`, `MarketDataSnapshot`, `NativeMT5Transport` | Zero synthetic bar imputation; zero silent fallback on stale ticks. | V-05, V-06, V-15 | Low (read-only polling adapter) | Clean deletion; zero core regressions |
+| `src/acash/runtime/feeder.py` | Market data feed pump, session validation & freshness | `ForwardMarketDataFeeder`, `MarketFeedStatus`, `FeedSourceType` | `IMarketDataProvider`, `Bar`, `MarketDataSnapshot`, `NativeMT5Transport`, `PaperTradingSessionIdentity` | Zero synthetic bar imputation; zero silent fallback on stale ticks. | V-05, V-06, V-15 | Low (read-only polling adapter) | Clean deletion; zero core regressions |
 | `src/acash/runtime/rehydration.py` | Crash/restart recovery & reconciliation | `PortfolioStateRehydrator`, `RehydrationStatus`, `PortfolioSnapshotStore` | `OperationalLedger`, `OperationalCycleEvent`, `PortfolioState`, `MT5BrokerAdapter`, `MT5AuthoritativeReconciler` | Zero position fabrication; zero recovery on broken ledger hash. | V-07, V-08, V-09, V-10, V-13, V-14, V-16 | Medium (state reconstruction) | Revert to clean empty genesis |
 | `src/acash/runtime/strategy_adapter.py` | Read/verify strategy adapter & session identity | `PaperStrategyAdapter`, `PaperTradingSessionIdentity` (new runtime contract) | `MultiHorizonMomentumStrategy`, `AlphaQualificationDossier`, `AlphaLifecycleState` | Zero lifecycle promotion; zero synthetic dossier creation. | V-17, V-18 | Low (read/verify wrapper) | Clean deletion; strategy stays blocked |
 | `tests/unit/runtime/test_paper_bridge.py` | 4 hermetic test suites in 1 file | `TestPaperExecutionBridge`, `TestForwardMarketDataFeeder`, `TestPortfolioStateRehydrator`, `TestPaperStrategyAdapter` | Pytest fixtures, mock adapters, temporary file fixtures | No skipped tests; no assertions claiming unverified behavior. | V-01 through V-20 | None (test suite only) | Deletion of test file |
@@ -759,13 +792,16 @@ If any implementation requirement appears to necessitate modifying frozen core f
 - [ ] Bridge is translation/dispatch only
 - [ ] Multi-stage partial-fill lifecycle explicitly specified (`ACK` $\to$ `PARTIAL_FILL` $\to$ residual working $\to$ `FILLED`)
 - [ ] Venue `volume_step` quantization pipeline formally specified with `ROUND_DOWN`, residual drop, and min-lot suppression
+- [ ] Residual quantity discarded without converting to cash (bridge remains translation/dispatch only)
 - [ ] Execution cost assumptions explicit and seeded deterministic
 - [ ] Commission cost provenance explicitly classified as `DETERMINISTIC_TEST_CONFIGURATION`
+- [ ] Parameter provenance naming unified strictly as `DETERMINISTIC_TEST_CONFIGURATION`
 - [ ] `config_digest` binds execution-cost parameters (including `prng_seed`)
 - [ ] Rehydration authority is schema-grounded
 - [ ] Local Simulator equity follows explicit simulator accounting model
 - [ ] Timeout semantics preserve `UNKNOWN`
 - [ ] MT5 forward feed separated from Parquet pump
+- [ ] Startup feed/venue compatibility invariant explicitly assigned to `PaperTradingSessionIdentity` & `ForwardMarketDataFeeder`
 - [ ] Lifecycle authority preserved
 - [ ] `ExecutionManifest` consumes existing canonical Phase 7 contract
 - [ ] `ExecutionManifest.execution_digest` uses non-circular preimage excluding itself
