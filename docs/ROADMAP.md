@@ -419,6 +419,15 @@ $$\boxed{\text{610 Unit Tests} \land E \text{ (Broker Semantic Review)} \land P 
   - Confirmation-driven pyramiding default; strict rejection of blind averaging down as core default.
   - Dynamic risk recalculation per entry tranche; position size strictly bounded by stop distance.
   - Formally specified in ADR-024 and [`docs/architecture/adaptive_multi_horizon_strategy_architecture.md`](architecture/adaptive_multi_horizon_strategy_architecture.md).
+- **Phase 23 Amendment (Market Microstructure, Order-Book Intelligence & Shadow Decision Learning):**
+  - Formally extends Phase 23 to incorporate Level 3 order-book event streams, temporal microstructure analysis, liquidity anomaly research, and shadow decision evaluation (ADR-025).
+  - Documented in [`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](architecture/phase23_amendment_microstructure_and_shadow_decisions.md).
+  - Proposed future implementation phases (pending audit and roadmap approval):
+    - *Phase 24 [Proposed]:* Market Microstructure Data Layer & L3 Event Normalization
+    - *Phase 25 [Proposed]:* Deterministic Microstructure Replay Engine
+    - *Phase 26 [Proposed]:* Temporal Microstructure Feature & Anomaly Research Engine
+    - *Phase 27 [Proposed]:* Shadow Decision Evaluation & Counterfactual Learning System
+    - *Phase 28 [Proposed]:* Adaptive Strategy Tournament & Multi-Horizon Integration
 
 ---
 

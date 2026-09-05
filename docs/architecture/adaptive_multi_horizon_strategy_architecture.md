@@ -3,6 +3,7 @@
 
 > **Document ID:** `ACASH-SPEC-PHASE23-ADAPTIVE-STRATEGY-v1.0`  
 > **Related ADR:** `ADR-024` in [`docs/DECISIONS.md`](../DECISIONS.md)  
+> **Phase 23 Amendment:** [`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](phase23_amendment_microstructure_and_shadow_decisions.md) (Market Microstructure, Order-Book Event Intelligence & Decision Learning)  
 > **Status:** Approved Architectural Specification & Design Record (Phase 23 Baseline)  
 > **Parent Governance:** `ADR-003` (Deterministic Hard Risk Engine), `ADR-022` (Market-Adaptive Governance), `ADR-023` (Strategy Admission Standard)  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Evidence > Belief)  
@@ -481,3 +482,20 @@ When Phase 23 advances from Architectural Specification to Implementation:
    tournament evaluation, and risk admission have been formally completed.
 ════════════════════════════════════════════════════════════════════════════════
 ```
+
+---
+
+## 16. Phase 23 Amendment: Microstructure & Decision Learning Extension
+
+This baseline specification is officially extended by:
+> **[`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](phase23_amendment_microstructure_and_shadow_decisions.md)**  
+> *ACASH Phase 23 — Amendment: Market Microstructure, Order-Book Event Intelligence & Decision Learning*
+
+The amendment formalizes:
+1. Fundamental limitations of conventional OHLCV/trade backtesting regarding non-executed orders.
+2. Information hierarchy: Level 1 (OHLCV) $\to$ Level 2 (Trade Tape) $\to$ Level 3 (Order-Book Events).
+3. Canonical Order-Book Event Model (`OrderAdd`, `OrderModify`, `OrderCancel`, `OrderExecute`).
+4. Temporal microstructure feature space (imbalance persistence, cancel/add velocity, pull/stack ratios).
+5. Microstructure anomaly detection and trust adjustments (without making unvalidated spoofing claims).
+6. Shadow Decision Evaluation (tracking counterfactual outcomes for filtered/rejected trade proposals).
+7. Complete updated 12-stage pipeline and Architectural Delta Report auditing existing components.

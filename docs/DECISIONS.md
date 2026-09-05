@@ -357,6 +357,25 @@
   8. **Strategy Tournament Pathway:** Empirical evidence across backtesting, walk-forward validation, paper trading, and multi-model tournaments determines strategy viability under each regime. Current system alignment with Swing/Medium horizon is an initial baseline, not an architectural lock-in.
   9. **Full Specification:** Formally documented in [`docs/architecture/adaptive_multi_horizon_strategy_architecture.md`](architecture/adaptive_multi_horizon_strategy_architecture.md).
 - **Consequences:** Permanently protects ACASH against premature horizon or style lock-in, guarantees risk-first sizing across all strategy types, enforces confirmation-driven scaling discipline, and provides a clear architectural foundation for future Strategy Tournament (Phase 18) and Dynamic Allocation (Phase 21) implementations.
+  10. **Phase 23 Amendment:** Formally extended by ADR-025 and [`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](architecture/phase23_amendment_microstructure_and_shadow_decisions.md).
+
+---
+
+## ADR-025: Market Microstructure, Order-Book Event Intelligence & Shadow Decision Evaluation (Phase 23 Amendment)
+
+- **Status:** **Approved (Phase 23 Architectural Amendment — Documentation & Design Only)**
+- **Date:** 2026-09-05
+- **Context:** Conventional OHLCV and trade-tape backtesting cannot reconstruct non-executed order dynamics (such as phantom depth, quote-stuffing, or rapid add/cancel bursts) because non-executed orders are absent from bar and tick datasets. Furthermore, evaluating trading performance based solely on executed trades introduces severe survivorship and filter bias: systems cannot determine whether a risk or regime filter was beneficial (prevented a disaster) or harmful (destroyed profitable alpha) without tracking counterfactual market outcomes for rejected decisions.
+- **Decision:**
+  1. **Research Data Hierarchy:** Formally define three research tiers: Level 1 (OHLCV bars), Level 2 (Trade tape / tick prints), and Level 3 (Order-book event stream: MBO/MBP with Add, Modify, Cancel, Execute).
+  2. **Order-Book Intelligence:** Codify the invariant that *Order Book Snapshot $\neq$ Order Book Intelligence*. Real microstructure research requires time-ordered order-book event streams plus temporal analysis.
+  3. **Microstructure Anomaly Detection (No Unverified Claims):** Potential spoofing-like patterns are treated as statistical liquidity fragility signals that reduce confidence or scale down position size (`MICROSTRUCTURE_NORMAL`, `MICROSTRUCTURE_CAUTION`, `MICROSTRUCTURE_ANOMALOUS`, `SUSPICIOUS_LIQUIDITY`). ACASH strictly prohibits claiming automated proof of illegal market manipulation or spoofing without formal empirical validation.
+  4. **Strict Enforcement Boundaries:** Microstructure analysis is purely observational and contextual. It inserts into the strategy pipeline before the Risk Engine: `Signal Proposal` $\to$ `Microstructure Check` $\to$ `Deterministic Risk Engine` $\to$ `ALLOW / REDUCE / REJECT`. Microstructure signals CANNOT bypass the Risk Engine or transmit broker orders directly.
+  5. **Shadow Decision System:** Every rejected, suppressed, or haircut candidate trade proposal generates an immutable `ShadowDecisionRecord`. The system tracks subsequent market path (MFE, MAE, counterfactual PnL) over the strategy's expected horizon to measure filter efficiency and calculate false-positive filtering costs. Actual trading equity is strictly partitioned from shadow/hypothetical PnL.
+  6. **External System & Reference Discipline:** Commercial references (e.g. Phantom Trader / GhostBot) are classified strictly as external conceptual inspiration, NOT validated benchmarks or proven detectors. External samples (such as public 44-trade runs) are observable reference data, NOT ground-truth training or validation data.
+  7. **Full Specification:** Detailed in [`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](architecture/phase23_amendment_microstructure_and_shadow_decisions.md).
+- **Consequences:** Provides the formal data contract, feature space, and decision-learning infrastructure required for ACASH to evolve into a full temporal microstructure intelligence platform while preserving deterministic risk safety, fail-closed data quality handling, and strict governance boundaries.
+
 
 
 
