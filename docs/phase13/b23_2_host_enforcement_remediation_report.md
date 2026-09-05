@@ -71,7 +71,7 @@ Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_D
 ```
 **Telemetry Output:**
 - `CodeIntegrityPolicyEnforcementStatus`: **`2`** (Kernel-mode HVCI/KMCI is active)
-- `UsermodeCodeIntegrityPolicyEnforcementStatus`: **`0`** (**DISABLED / NOT ENFORCED**)
+- `UsermodeCodeIntegrityPolicyEnforcementStatus`: **`0`** (**DISABLED / NOT ENFORCED**; Microsoft values: `0 = Off`, `1 = Audit`, `2 = Enforced`)
 - `VirtualizationBasedSecurityStatus`: `2` (VBS running)
 - `SecurityServicesRunning`: `{2}` (Credential Guard / HVCI)
 
@@ -147,14 +147,15 @@ Step 5: Cryptographic Correlation (Hash, Path, Timestamp)
 ```
 
 ### Step 1: Verify Host Policy State
-Confirm that User-Mode Code Integrity or AppLocker is active in **Enforce Mode**:
+Confirm that User-Mode Code Integrity or AppLocker is active in **Enforce Mode** (`UsermodeCodeIntegrityPolicyEnforcementStatus == 2`):
 ```powershell
 $ci = Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard
-if ($ci.UsermodeCodeIntegrityPolicyEnforcementStatus -ne 1) {
-    throw "Host policy is NOT in Enforce mode (Current status: $($ci.UsermodeCodeIntegrityPolicyEnforcementStatus))"
+# UsermodeCodeIntegrityPolicyEnforcementStatus: 0 = Off, 1 = Audit, 2 = Enforced
+if ($ci.UsermodeCodeIntegrityPolicyEnforcementStatus -ne 2) {
+    throw "Host policy is NOT in Enforce mode (Current status: $($ci.UsermodeCodeIntegrityPolicyEnforcementStatus); Expected: 2 [Enforced])"
 }
 ```
-- **Required Assertion:** `UsermodeCodeIntegrityPolicyEnforcementStatus == 1`.
+- **Required Assertion:** `UsermodeCodeIntegrityPolicyEnforcementStatus == 2` (Enforced Mode; note that `1` is Audit Mode only).
 
 ### Step 2: Attempt Execution of Unauthorized Artifact
 Attempt to launch an unsigned, untrusted, or tampered executable artifact (`acash-bootstrapper.exe`):
@@ -202,7 +203,7 @@ uv run pytest tests/unit/gate_b/test_gate_b_governance_repair.py -k "test_b23" -
 - `test_b23_1_native_bootstrapper_authenticode_trust_verification`: **`PASSED`**  
   *(Proves WinVerifyTrust rejects unsigned and tampered binaries fail-closed).*
 - `test_b23_2_host_application_control_enforcement`: **`SKIPPED`**  
-  *(Reason: `ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is '0' (expected '1' Enforced). B23.2 must be verified on a designated Windows enforcement host.`)*
+  *(Reason: `ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is '0' (expected '2' Enforced; 0=Off, 1=Audit, 2=Enforced). B23.2 must be verified on a designated Windows enforcement host.`)*
 
 **Full Gate B Regression Suite:**
 - **23 passed, 1 skipped in 4.10s** (100% clean, zero failures).

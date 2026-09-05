@@ -1011,9 +1011,11 @@ def test_b23_2_host_application_control_enforcement() -> None:
     except Exception as exc:
         pytest.skip(f"ENVIRONMENT NOT SUFFICIENT: Failed to query Win32_DeviceGuard: {exc}")
 
-    if status != "1":
+    # UsermodeCodeIntegrityPolicyEnforcementStatus values: 0 = Off, 1 = Audit, 2 = Enforced
+    if status != "2":
         pytest.skip(
-            f"ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is {status!r} (expected '1' Enforced). "
+            f"ENVIRONMENT NOT SUFFICIENT: UsermodeCodeIntegrityPolicyEnforcementStatus is {status!r} "
+            "(expected '2' Enforced; 0=Off, 1=Audit, 2=Enforced). "
             "B23.2 must be verified on a designated Windows enforcement host."
         )
 
