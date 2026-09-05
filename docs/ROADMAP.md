@@ -76,7 +76,28 @@
 📐 Phase 14: AI Quantitative Research Layer ──► Gate 14 [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
    │
    ▼
-⏳ Phase 15–22: Strategy Admission Standard & Lifecycle Sequence [HARMONIZED — ADR-023]
+⏳ Phase 15: Strategy Lifecycle Management [HARMONIZED INTO PHASE 17]
+   │
+   ▼
+⏳ Phase 16: Performance Degradation & Data Flywheel [HARMONIZED INTO PHASE 17–22]
+   │
+   ▼
+✅ Phase 17: Strategy Admission Standard & Regime-Aware Capital Allocation Framework [SPECIFIED — ADR-023]
+   │
+   ▼
+⏳ Phase 18: Strategy Research & Tournament Pipeline [UPCOMING]
+   │
+   ▼
+⏳ Phase 19: Empirical Regime Detection Engine [UPCOMING]
+   │
+   ▼
+⏳ Phase 20: Regime × Strategy Selection & Decision Engine [UPCOMING]
+   │
+   ▼
+⏳ Phase 21: Risk-Based Capital Allocation Solvers [UPCOMING]
+   │
+   ▼
+⏳ Phase 22: Portfolio / Multi-Strategy Orchestration & Memory Flywheel [UPCOMING]
    │
    ▼
 🏛️ Phase 23: Adaptive Multi-Horizon Strategy & Microstructure Architecture [ARCHITECTURAL RECORD — ADR-024/025]
@@ -375,12 +396,28 @@
 
 ---
 
-### ⏳ Phase 15: Strategy Lifecycle Management & Phase 16: Performance Degradation (Harmonized)
-- **Harmonization Notice:** The early conceptual drafts of Phase 15 (Strategy Lifecycle Management) and Phase 16 (Performance Degradation & Memory Flywheel) have been formally extracted, preserved, and structured into the institutional **Phase 17–22 Architecture Sequence** (ADR-023).
-  - *Lifecycle State Machine & Rolling Monitors:* Merged into **Phase 17** (`StrategyAdmissionStatus` + `StrategyLifecycleState` + Gate 9).
-  - *Statistical Degradation Detection:* Preserved in **Phase 17** Gate 9 and Phase 11 `ForwardTelemetryIngestor`.
-  - *Decision Outcome Recording & Memory Ledger:* Deferred to **Phase 20** (Strategy Selection) and **Phase 22** (Organizational Memory Ledger).
-  - *Zero Requirements Deleted:* Complete traceability preserved in [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md).
+### ⏳ Phase 15: Strategy Lifecycle Management [HARMONIZED INTO PHASE 17]
+- **Harmonization Notice:** The original conceptual Phase 15 scope has been preserved and incorporated into the institutional Phase 17 Strategy Admission Standard and Lifecycle Architecture (ADR-023).
+- **Preserved Scope:**
+  - Strategy Lifecycle State Machine
+  - Strategy admission status transitions (`StrategyAdmissionStatus`, `StrategyLifecycleState`)
+  - Lifecycle gates and transition authority
+  - Rolling strategy health / lifecycle monitoring
+- **Canonical Home:** Phase 17 (`StrategyAdmissionStatus`, `StrategyLifecycleState`, ADR-023).
+- **No Requirements Deleted:** All original Phase 15 requirements remain traceable in [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md).
+- **Implementation Status:** `HARMONIZED / NOT A SEPARATE IMPLEMENTATION STEP`
+
+---
+
+### ⏳ Phase 16: Performance Degradation & Data Flywheel [HARMONIZED INTO PHASE 17–22]
+- **Harmonization Notice:** The original conceptual Phase 16 scope has been redistributed across the institutional Phase 17–22 architecture sequence.
+- **Preserved Scope:**
+  - Statistical performance degradation detection → Phase 17 + Phase 11
+  - Strategy selection and decision outcomes → Phase 20
+  - Organizational memory / learning ledger → Phase 22
+- **Canonical Traceability:** [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md) and ADR-023.
+- **No Requirements Deleted:** Original Phase 16 concepts remain preserved and traceable.
+- **Implementation Status:** `HARMONIZED / NOT A SEPARATE IMPLEMENTATION STEP`
 
 ---
 
