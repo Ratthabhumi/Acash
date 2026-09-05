@@ -1,8 +1,8 @@
 # ACASH Phase 14: AI Quantitative Research & Evidence Layer
 ## Master Research Architecture, Governance Contract & Implementation Plan
-### Revision 1.1 — Human Audit Remediation
+### Revision 1.2 — Final Governance Polish
 
-> **Document ID:** `ACASH-SPEC-PHASE14-MASTER-PLAN-v1.1`  
+> **Document ID:** `ACASH-SPEC-PHASE14-MASTER-PLAN-v1.2`  
 > **Status:** PROPOSED MASTER RESEARCH ARCHITECTURE — HUMAN APPROVAL PENDING  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Single Canonical Authority), `docs/ROADMAP.md` (Phase 14)  
 > **Date:** 2026-09-05  
@@ -58,7 +58,7 @@ Phase 14 will **never duplicate or invent divergent schemas**. It builds directl
 
 ## 3. Epistemic Source Metadata Model (Tri-Axial Separation)
 
-In Revision 1.1, the previous overloaded trust model is decomposed into **three orthogonal axes** plus strict licensing/provenance metadata:
+Revision 1.2 maintains the strict decomposition into **three orthogonal axes** plus explicit licensing and provenance safeguards:
 
 ### 3.1 Tri-Axial Taxonomy
 1. **`source_type` (Origin Media & Format):**
@@ -126,14 +126,14 @@ To prevent invalid inflation or distortion of the multiple-testing penalty, Phas
 │ 3. TRIAL_REGISTERED                                         │
 │    - Formally registered in Phase 6 SearchTrialLedger       │
 │    - Bound to HypothesisSpecification & SimulationManifest  │
-│    - Statistical Trial Count Impact: K_delta = +1           │
+│    - Statistical Trial Count Impact: Inherited from Phase 6 │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 4. EXPERIMENT                                               │
 │    - Executed on Phase 5 BacktestEngine (or VectorBT sweep) │
-│    - Sweep of M parameters: K_delta = +M registered trials  │
+│    - Trial accounting governed strictly by Phase 6 semantics│
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
@@ -144,26 +144,33 @@ To prevent invalid inflation or distortion of the multiple-testing penalty, Phas
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Authoritative $K$-Counting Rule
-$$\boxed{\text{Phase 14 MUST reuse canonical Phase 6 / SearchTrialLedger semantics and MUST NOT invent a new } K \text{ definition.}}$$
+### 4.2 Authoritative $K$-Counting & Multiple-Testing Semantics
+$$\boxed{\text{The exact trial-counting unit and multiple-testing budget consumption MUST be inherited from the canonical Phase 6 / SearchTrialLedger implementation and governing specification.}}$$
 
-1. **Rejected / Duplicate Proposals (Pre-Data):** If an `AIHypothesisProposal` is rejected during qualitative screening or AST parsing prior to data evaluation, **it does NOT increment $K$**.
-2. **Exploratory Screening (Post-Data):** The instant a proposal evaluates prices/returns on historical data (even in VectorBT), every tested parameter permutation represents an empirical trial that **must be registered in `SearchTrialLedger` and included in $K$**.
-3. **Census Preservation:** The trial count $K$ passed to Phase 6 `DeflatedSharpeCalculator` is derived strictly from `SearchTrialLedger.total_trials_count`, guaranteeing uncompromised multiple-testing governance.
+$$\boxed{\text{Phase 14 MUST NOT prescribe an alternative } K \text{ definition.}}$$
+
+Where ambiguity exists, Phase 14 **MUST defer to the canonical Phase 6 authority** rather than infer or redefine trial-count semantics.
+
+Explicitly preserved lifecycle distinctions:
+$$\boxed{\text{AI\_PROPOSAL} \neq \text{REGISTERED\_TRIAL} \neq \text{EXPERIMENT} \neq \text{VALIDATION\_RESULT}}$$
+
+- **Qualitative Pre-Data Decisions:** Proposals rejected during qualitative screening or AST inspection prior to data evaluation do not constitute registered trials ($K_{\Delta} = 0$).
+- **Parameter Sweeps & Exploratory Screens:** Any proposal regarding parameter sweeps, repeated trials, exploratory screens, or grouped experiments is explicitly **implementation-dependent until reconciled with the canonical Phase 6 semantics**. Phase 14 will record raw exploratory runs but defers trial consolidation or census grouping strictly to `SearchTrialLedger`.
+- **Census Authority:** The trial count $K$ passed to Phase 6 `DeflatedSharpeCalculator` is derived strictly by Phase 6 from `SearchTrialLedger`, guaranteeing that Phase 14 never dilutes, inflates, or manufactures trial statistics independently.
 
 ---
 
 ## 5. Novelty & Duplication: Multi-Signal Heuristics
 
-Rather than treating a single correlation threshold ($|\rho| > 0.85$) as mathematical proof of duplication, Revision 1.1 defines `DUPLICATE_CANDIDATE` as a multi-evidence hypothesis:
+Phase 14 avoids arbitrary hard thresholds or pseudo-mathematical laws. It defines `DUPLICATE_CANDIDATE` as a multi-evidence heuristic:
 
 ### Multi-Signal Evaluation Framework:
 $$\text{DuplicationEvidence} = \left\langle \text{AST Similarity}, \ \text{Operator Grammar}, \ \text{Parameter Topology}, \ \text{Rank Correlation } \rho, \ \text{Residual Alpha } \alpha_{\text{incremental}} \right\rangle$$
 
-1. **Rank Correlation ($\rho$):** Spearman rank correlation $|\rho| > 0.85$ triggers `DUPLICATE_CANDIDATE` status, initiating deep factor review.
-2. **Residual Incremental Explanatory Power:** If regressing the proposed signal $S_{\text{new}}$ against known factors $F$ yields an incremental information coefficient $IC_{\text{incremental}} \approx 0$ ($t < 2.0$), the proposal is flagged as redundant.
+1. **Rank Correlation ($\rho$):** Spearman rank correlation $|\rho| > 0.85$ is a heuristic flag that triggers `DUPLICATE_CANDIDATE` status, initiating deep multi-signal review. It does not constitute proof of duplication.
+2. **Residual Incremental Explanatory Evidence:** Incremental explanatory evidence (e.g. residual regression or incremental information coefficient relative to known factors) is one input to the duplication decision and **MUST NOT be interpreted as an automatic acceptance or preservation threshold**. No arbitrary statistical threshold (such as $t > 2.0$) is treated as a universal mathematical law.
 3. **Operator Equivalence:** Normalizes symbolic expressions (e.g. `ema(x, 10) - ema(x, 50)` $\equiv$ `macd(x, 10, 50)`).
-4. **Resolution Policy:** Flags as `DUPLICATE_CANDIDATE` with explicit lineage link to parent factor; requires researcher or sovereign justification to promote to registered trial.
+4. **Resolution Policy:** Flags as `DUPLICATE_CANDIDATE` with explicit lineage link to parent factor; requires researcher or sovereign review rather than relying on automated hard thresholds.
 
 ---
 
@@ -231,7 +238,7 @@ The Research Knowledge Graph explicitly incorporates negative edges:
 
 ## 9. The ResearchManifest Contract
 
-Lineage is elevated from an informal chain of digests into a concrete, immutable cryptographic artifact:
+Lineage is elevated into a concrete, immutable cryptographic artifact:
 
 ```python
 class ResearchManifest(BaseModel):
@@ -267,6 +274,10 @@ class ResearchManifest(BaseModel):
     lifecycle_state_reached: str
 ```
 
+> [!NOTE]
+> **Bounded Reproducibility Scope:**
+> The `ResearchManifest` **provides end-to-end reproducibility metadata and audit lineage sufficient to reconstruct the research execution context, subject to availability and stability of the underlying provider, data, backend, and environment**. It does not guarantee bitwise-identical LLM provider behavior across arbitrary future environments.
+
 ---
 
 ## 10. Evidence Grounding Verifier (`EvidenceGroundingVerifier`)
@@ -282,7 +293,7 @@ Replacing the absolute moniker "ZeroHallucinationVerifier", the **`EvidenceGroun
 
 ## 11. External Backend Evidence Firewall
 
-To prevent external tools from corrupting ACASH canonical governance, Revision 1.1 establishes a **type-level evidence firewall**:
+To prevent external tools from corrupting ACASH canonical governance, Revision 1.2 maintains a **strict type-level evidence firewall**:
 
 $$\boxed{\text{ExternalBackendResult} \not\equiv \text{ValidationReport} \quad (\text{No type compatibility, no shared constructors})}$$
 
@@ -314,7 +325,7 @@ $$\boxed{\text{ExternalBackendResult} \not\equiv \text{ValidationReport} \quad (
 
 ## 12. Determinism, Provenance & Reproducibility Semantics
 
-Revision 1.1 eliminates misleading assertions of "deterministic LLMs" and replaces them with a precise engineering specification:
+Revision 1.2 eliminates misleading assertions of "deterministic LLMs" and replaces them with a precise engineering specification:
 
 1. **Deterministic Orchestration:** The Python workflow, prompt assembly, AST parsing, and state transitions are 100% deterministic and unit-tested with seed controls.
 2. **Bounded Model Interaction:** Calls to external LLM providers pin temperature, max tokens, top-$p$, and random seed.
@@ -323,16 +334,22 @@ Revision 1.1 eliminates misleading assertions of "deterministic LLMs" and replac
 
 ---
 
-## 13. Prompt Injection Defense-in-Depth
+## 13. Prompt Injection Defense-in-Depth & Execution Permission Boundaries
 
 > [!CAUTION]
 > **UNTRUSTED RESEARCH CONTENT $\neq$ CONTROL PLANE $\neq$ SYSTEM INSTRUCTIONS**
 
-Revision 1.1 reclassifies keyword stripping as **defense-in-depth** and grounds security in structural boundary isolation:
+Keyword sanitization and XML containment (e.g. `<research_context_data>`) are strictly **defense-in-depth** heuristics. Markup containers do **not** constitute an authoritative security boundary on their own.
 
-1. **Architectural Isolation:** Retrieved research content (web pages, PDFs, EA source code) is encapsulated strictly as passive string data inside `<research_context_data>` containers.
-2. **No Tool or Execution Authority:** The AI research agent has **zero tools** that execute shell commands, touch the filesystem outside `var/research_corpus/`, or access network resources outside read-only HTTPX retrieval.
-3. **Instruction Disregard Invariant:** System prompts strictly establish that tokens inside data containers cannot modify policy, alter falsification thresholds, or grant trading permissions.
+$$\boxed{\text{Tool permissions MUST be enforced by the execution layer independently of model-visible markup, prompt instructions, or research-content labels.}}$$
+
+Research documents, web content, PDFs, GitHub text, forum threads, and retrieved corpus material must not gain tool execution authority merely because an LLM interprets them as instructions.
+
+### Enforced Execution-Layer Tool Invariants:
+1. **Zero Execution Authority from Research Data:** The tool runner / permission boundary independently enforces that research context cannot trigger arbitrary shell commands or code execution.
+2. **Zero Broker / Capital Access:** The AI research environment has no network routes, import paths, or tool definitions connecting to `acash.execution` or broker connectors.
+3. **No Canonical Validation Construction:** The tool runner prohibits external inputs or AI tools from instantiating or writing canonical `ValidationReport` or `AlphaQualificationDossier` artifacts.
+4. **No System Policy Modification:** System prompts, falsification criteria, and gate configurations are immutable files in version control; no AI tool has write permissions to governance assets.
 
 ---
 
@@ -350,7 +367,7 @@ To avoid optimizing for raw volume of low-quality hypotheses, Phase 14 introduce
 
 ## 15. Dependency Policy & PyDerivatives Clarification
 
-Revision 1.1 clarifies the status of all external research dependencies:
+Revision 1.2 clarifies the status of all external research dependencies:
 
 1. **Core Runtime Dependencies:** Pure Python, `pydantic>=2.0.0`, and `httpx>=0.27.0`. Zero vendor SDKs in core.
 2. **Optional Research Backends (`pyproject.toml`):**
@@ -371,7 +388,7 @@ Revision 1.1 clarifies the status of all external research dependencies:
 
 ## 16. Implementation Policy: Interface-First Architecture
 
-To prevent architectural overfitting and rigid file explosion during planning, Revision 1.1 replaces the premature 20-file listing with **8 canonical protocol interfaces**:
+To prevent architectural overfitting and rigid file explosion during planning, Revision 1.2 maintains **8 canonical protocol interfaces**:
 
 ```python
 class IResearchCorpus(Protocol): ...
