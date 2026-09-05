@@ -1,10 +1,10 @@
 """Phase 13: Paper Trading Runtime Adversarial Test Suite.
 
-Contains 20 formal adversarial test vectors partitioned into 4 hermetic suites:
-1. TestPaperExecutionBridge (V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20)
-2. TestForwardMarketDataFeeder (V-05, V-06, V-15)
+Contains 20 formal adversarial test vectors (V-01 through V-20) partitioned into 4 hermetic suites:
+1. TestPaperExecutionBridge (V-01, V-02, V-03, V-04, V-11, V-12, Quantization & Residual Invariants)
+2. TestForwardMarketDataFeeder (V-05, V-06, V-15, Feed Compatibility Invariant)
 3. TestPortfolioStateRehydrator (V-07, V-08, V-09, V-10, V-13, V-14, V-16)
-4. TestPaperStrategyAdapter (V-17, V-18, V-19, V-20, Candidate BLOCKED)
+4. TestPaperStrategyAdapter (V-17, V-18, V-19, V-20, Candidate BLOCKED Invariant)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -195,7 +195,7 @@ def approved_allocation(now_utc: datetime) -> AllocationDecision:
 
 
 class TestPaperExecutionBridge:
-    """Vectors V-01, V-02, V-03, V-04, V-11, V-12, V-19, V-20."""
+    """Vectors V-01, V-02, V-03, V-04, V-11, V-12, and Quantization/Residual Invariants."""
 
     def test_v01_zero_delta(
         self,
@@ -419,12 +419,12 @@ class TestPaperExecutionBridge:
         assert outcome_2.was_duplicate is True
         assert len(outcome_2.incidents) == 1
 
-    def test_v19_quantization_round_down(
+    def test_quantization_round_down(
         self,
         sample_portfolio: PortfolioState,
         standard_symbol_spec: BrokerSymbolSpec,
     ) -> None:
-        """V-19: Sizing delta quantizes with ROUND_DOWN towards zero."""
+        """Invariant: Sizing delta quantizes with ROUND_DOWN towards zero (Specification Sec 4.3)."""
         bridge = PaperExecutionBridge(
             coordinator=ExecutionCoordinator(execution_id="EXEC-QUANT", requested_qty=Decimal("1.0")),
             venue_type=PaperExecutionVenueType.LOCAL_SIMULATOR,
@@ -449,12 +449,12 @@ class TestPaperExecutionBridge:
         assert quantized_lots == Decimal("0.05")
         assert direction == OrderSide.BUY
 
-    def test_v20_unrepresentable_residual_discarded(
+    def test_unrepresentable_residual_discarded(
         self,
         sample_portfolio: PortfolioState,
         standard_symbol_spec: BrokerSymbolSpec,
     ) -> None:
-        """V-20: Unrepresentable residual r < volume_step discarded without cash conversion (B1)."""
+        """Invariant (B1): Unrepresentable residual r < volume_step discarded without cash conversion (Specification Sec 4.3)."""
         bridge = PaperExecutionBridge(
             coordinator=ExecutionCoordinator(execution_id="EXEC-RES", requested_qty=Decimal("1.0")),
             venue_type=PaperExecutionVenueType.LOCAL_SIMULATOR,
