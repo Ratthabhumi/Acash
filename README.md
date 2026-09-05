@@ -85,7 +85,7 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
                                         │
                                         ▼
                     14. AI RESEARCH & EVIDENCE LAYER
-                     (Phase 14 Plan Approved — Impl Locked)
+                     [PLANNED — PLAN APPROVED / IMPLEMENTATION LOCKED]
 ```
 
 ### Sovereign Layer Responsibilities
@@ -102,7 +102,7 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
 11. **Forward Monitoring & Execution Reality (Phase 11):** Independent observational plane tracking online strategy decay (`StrategyForwardDriftEvidence`) and empirical execution drag decomposition (`ExecutionCostEvidence`).
 12. **Venue Execution Adapters (Phase 12):** Thin broker IPC adapters (`NativeMT5Transport`, `MT5BrokerAdapter`) with authoritative 6-D reconciliation and atomic preflight routing.
 13. **Forward Paper Validation & Small Capital (Phase 13):** Real-world execution verification under strict $0.00 capital authority and 24-hour unattended soak monitoring.
-14. **AI Quantitative Research Layer (Phase 14):** Evidence-bound hypothesis assistant and Section 33 report generator with causal AST validation and strict unvalidated proposal status.
+14. **AI Quantitative Research Layer (PLANNED):** Evidence-bound research architecture ([`docs/phase14/phase14_master_research_architecture_plan.md`](docs/phase14/phase14_master_research_architecture_plan.md)). Approved at plan level; implementation strictly locked; not an execution or capital authority; all outputs are strictly unvalidated research proposals.
 
 ---
 
@@ -154,7 +154,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 
 ---
 
-## 4. Completed Milestones & Quality Gates (Phases 0–14)
+## 4. Milestones & Quality Gates (Phases 0–14)
 
 ```
 ✅ Phase 0: Discovery & Architecture ──► [PASSED — Architecture & Decision Records Approved]
