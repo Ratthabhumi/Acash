@@ -60,7 +60,7 @@ The baseline operational state of the ACASH repository is strictly recorded:
 - **Phase 18 (Strategy Research & Tournament Pipeline):** APPROVED AT PLAN LEVEL | FROZEN | IMPLEMENTATION LOCKED (Rev 1.1, `ce69243`).
 - **Phase 19 (Empirical Regime Detection Engine):** APPROVED AT PLAN LEVEL | FROZEN | IMPLEMENTATION LOCKED (Rev 1.1, `3b9910a`).
 - **Phase 20 (Strategy Selection & Decision Engine):** APPROVED AT PLAN LEVEL | FROZEN | IMPLEMENTATION LOCKED (Rev 1.2, `2ad7c38`).
-- **Phase 21 (Capital Allocation Solvers):** PROPOSED SPECIFICATION — IMPLEMENTATION STRICTLY LOCKED.
+- **Phase 21 (Capital Allocation Solvers):** APPROVED AT PLAN LEVEL | FROZEN | IMPLEMENTATION LOCKED (Rev 1.3).
 - **Phase 22 (Portfolio Orchestration):** NOT STARTED.
 - **Live Capital Authority:** `$0.00` (GLOBAL HARD-LOCK).
 - **Live Order Authority:** `0` (GLOBAL HARD-LOCK).
