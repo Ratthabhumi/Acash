@@ -1,12 +1,12 @@
 # ACASH Phase 20 — Strategy Selection & Decision Engine
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE20-SELECTION-v1.0`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — HUMAN APPROVAL PENDING (Phase 20 Rev 1.0)  
+> **Document ID:** `ACASH-SPEC-PHASE20-SELECTION-v1.1`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — READY FOR HUMAN APPROVAL (Phase 20 Rev 1.1 — Auditor Remediation & Authority Hardening)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.0.0 (Initial Master Specification)  
+> **Version:** 1.1.0 (Auditor Remediation & Authority Hardening)  
 
 ---
 
@@ -284,13 +284,14 @@ class EligibleStrategyCandidateInput(BaseModel):
 class ValidationEvidenceInput(BaseModel):
     strategy_id: str
     validation_report_digest: str           # SHA-256 of canonical Phase 6 report
-    dsr_p_value: Decimal                    # Deflated Sharpe Ratio p-value (<= 0.05)
-    pbo_probability: Decimal                # Probability of Backtest Overfitting (<= 0.30)
-    min_trl_bars: int                       # Minimum Track Record Length required
-    observed_bars: int                      # Effective independent bars T_eff
+    validation_status: str                  # Canonical Phase 6 verdict: "PASS" | "FAIL"
+    validation_tier: str                    # Canonical Phase 6 tier: "TIER_1_STRICT" | "TIER_2_STANDARD" | "TIER_3_MARGINAL"
+    canonical_validation_time_utc: datetime # Timestamp of Phase 6 report sealing
     k_trials_sealed: int                    # Total candidate trials in Phase 6 ledger
     return_series_digest: str               # SHA-256 of underlying return series
 ```
+> [!IMPORTANT]
+> **Single Authority Invariant:** Phase 20 consumes Phase 6's canonical validation verdict and discrete evidence tier. Phase 20 **never** independently re-evaluates raw statistical significance thresholds ($p_{\text{DSR}}$, $\text{PBO}$) nor does it construct continuous statistical formulas from raw testing artifacts.
 
 ### 6.4 `EconomicQualificationEvidenceInput` (from Phase 8.5)
 ```python
@@ -381,7 +382,7 @@ Eligible Candidate Set: S_i ∈ S_eligible
 | Predicate ID | Name | Evaluated Condition | Fail-Closed Reason Code |
 | :--- | :--- | :--- | :--- |
 | **FW-01** | Sovereign Admission | `candidate.admission_status == "ADMITTED"` AND `as_of_time <= admission_expiry` | `ERR_SELECTION_NOT_ADMITTED` |
-| **FW-02** | Statistical Validity | `stat_evidence.dsr_p_value <= 0.05` AND `stat_evidence.pbo_probability <= 0.30` | `ERR_SELECTION_STAT_UNQUALIFIED` |
+| **FW-02** | Statistical Validity | `stat_evidence.validation_status == "PASS"` AND `validation_report_digest` resolves to sealed Phase 6 ledger | `ERR_SELECTION_STAT_UNQUALIFIED` |
 | **FW-03** | Economic Qualification | `econ_evidence.qualification_status == "QUALIFIED"` AND `net_sharpe > 0.0` | `ERR_SELECTION_ECON_UNQUALIFIED` |
 | **FW-04** | Forward Health State | `fwd_health.health_state IN {"HEALTHY", "DEGRADED_PERMITTED"}` | `ERR_SELECTION_FORWARD_BLOCKED` |
 | **FW-05** | Telemetry Freshness | `as_of_time - fwd_health.last_telemetry <= policy.max_evidence_age` | `ERR_SELECTION_STALE_TELEMETRY` |
@@ -501,15 +502,23 @@ Where all components are normalized to the bounded range $[0.00, 1.00]$:
    $$H(S_i) = \max\left(0.00,\, 1.00 - \frac{|Z_{\text{divergence}}|}{3.0}\right)$$
 3. **$E(S_i) \in [0, 1]$ (Evidence Strength):** Historical risk-adjusted quality from Phase 8.5 Dossier:
    $$E(S_i) = \min\left(1.00,\, \frac{\text{NetSharpe}}{3.0}\right)$$
-4. **$R(S_i) \in [0, 1]$ (Robustness):** Overfitting resilience from Phase 6 ValidationReport:
-   $$R(S_i) = (1.00 - \text{PBO}) \times (1.00 - p_{\text{DSR}})$$
+4. **$R(S_i) \in [0, 1]$ (Validation Evidence Tier):** Discrete canonical evidence tier certified by Phase 6 statistical authority:
+   $$R(S_i) = \text{ValidationTierWeight}(\text{stat\_evidence.validation\_tier})$$
+   Where $\text{ValidationTierWeight}$ is a strictly discrete governance policy lookup:
+   $$\text{ValidationTierWeight}(\text{tier}) = \begin{cases} 
+   1.00 & \text{if } \text{"TIER\_1\_STRICT"} \\
+   0.75 & \text{if } \text{"TIER\_2\_STANDARD"} \\
+   0.50 & \text{if } \text{"TIER\_3\_MARGINAL"} \\
+   0.00 & \text{otherwise}
+   \end{cases}$$
+   *Architectural Invariant:* Phase 20 does **not** construct an ad-hoc continuous statistical score from raw $p$-values or overfitting probabilities. It consumes the discrete canonical qualification tier assigned solely by the Phase 6 statistical authority.
 5. **$U(S_i) \in [0, 1]$ (Relative Suitability):** Performance stability specifically measured during historical instances of regime $R_t$.
 
 ### 10.3 Governance Policy Weights
 The weights $w_1, \dots, w_5$ are owned strictly by the `SelectionPolicy` and must satisfy:
 $$\sum_{j=1}^5 w_j = 1.00, \quad w_j \ge 0$$
 *Baseline Governance Preset (`POL-SELECTION-CONSERVATIVE-V1`):*
-$$w_1 = 0.35\;(\text{Compatibility}),\quad w_2 = 0.25\;(\text{Health}),\quad w_3 = 0.15\;(\text{Evidence}),\quad w_4 = 0.15\;(\text{Robustness}),\quad w_5 = 0.10\;(\text{History})$$
+$$w_1 = 0.35\;(\text{Compatibility}),\quad w_2 = 0.25\;(\text{Health}),\quad w_3 = 0.15\;(\text{Evidence}),\quad w_4 = 0.15\;(\text{Validation Tier}),\quad w_5 = 0.10\;(\text{History})$$
 
 ### 10.4 Explicit Penalty Deductions
 The final selection score applies multiplicative and additive penalties for operational risks:
@@ -540,15 +549,16 @@ Under `AGENTS.md` Rule 3 (Strict Fail-Closed Contract), UNKNOWN is a first-class
 | `CONFLICTED_SIGNALS` | Strategy compatible with regime but forward health is alerting | Suppress candidate | Candidate excluded from ranking |
 | `NO_ELIGIBLE_STRATEGY` | All candidates rejected by Eligibility Firewall | Fail-closed halt | `NO_SELECTION` |
 | `NO_POLICY_MATCH` | No active policy covers the observed market conditions | Fail-closed halt | `SELECTION_BLOCKED` |
-| `INSUFFICIENT_REGIME_SUPPORT` | Total historical bars in detected regime $< \text{minimum}$ | Suppress regime fit | `NO_SELECTION` or generic fallback |
+| `INSUFFICIENT_REGIME_SUPPORT` | Total historical bars in detected regime $< \text{minimum}$ | Suppress regime fit | `NO_SELECTION` (or explicit `FALLBACK_DEFENSIVE_CASH`) |
 | `SELECTION_BLOCKED` | Portfolio-level kill switch or cooling lock active | Fail-closed halt | `BLOCKED` |
 
 ### 11.2 Prohibition of Silent Fallbacks
 Traditional systems frequently employ the silent fallback: *"If regime is uncertain, keep running the previous winner."*  
 **ACASH strictly prohibits this silent behavior.**
-- If a fallback policy is declared (e.g., `FALLBACK_TO_DEFENSIVE_CASH`), it must be an explicitly named, auditable policy state.
-- The decision record must explicitly report `decision_status = "FALLBACK_DEFENSIVE"` with reason code `ERR_FALLBACK_TRIGGERED_REGIME_UNKNOWN`.
-- Silently persisting a strategy without a valid, fresh selection evaluation is treated as an architectural violation.
+- **Zero Ambiguous Fallbacks:** Undefined or "generic fallback" mechanisms are strictly prohibited.
+- **Explicit Governed Policy State:** If a defensive fallback stance is configured (e.g., `FALLBACK_TO_DEFENSIVE_CASH`), it must be an explicitly named, separately governed, and auditable policy state requiring prior governance authorization.
+- **Audit Reason Codes:** The decision record must explicitly report `decision_status = "FALLBACK_DEFENSIVE"` with an auditable reason code (e.g., `ERR_FALLBACK_TRIGGERED_REGIME_INSUFFICIENT_SUPPORT` or `ERR_FALLBACK_TRIGGERED_REGIME_UNKNOWN`).
+- **No Implicit Continuation:** Silently persisting a strategy without a valid, fresh selection evaluation is treated as an architectural violation.
 
 ---
 
@@ -606,9 +616,9 @@ The `SelectionPolicyEngine` evaluates separation against `policy.tie_margin_thre
    - Candidate $S_{(1)}$ is selected: `SELECT(S_{(1)})`.
 2. **Near-Tie / Indeterminate ($\Delta_{\text{score}} < \text{tie\_margin}$):**
    - **Policy Mode A (Single Winner Required):** The engine executes the deterministic secondary tie-breaker cascade:
-     1. Lower Deflated Sharpe Ratio $p$-value ($p_{\text{DSR}}$).
-     2. Lower Probability of Backtest Overfitting (PBO).
-     3. Higher effective sample size ($N_{\text{eff}}$).
+     1. Higher canonical Phase 6 validation evidence tier (`stat_evidence.validation_tier`: `TIER_1_STRICT` > `TIER_2_STANDARD` > `TIER_3_MARGINAL`).
+     2. Higher canonical Effective Sample Size ($N_{\text{eff}}$) as certified in Phase 17 Gate 6.
+     3. Higher Economic Qualification Net Sharpe Ratio as certified in Phase 8.5 Dossier.
      4. Lexicographical comparison of `strategy_id` (guarantees strict mathematical determinism; never random choice).
    - **Policy Mode B (Multi-Strategy Permitted):** Both candidates are admitted to the selected set: `SELECT_SET({S_{(1)}, S_{(2)}})` for Phase 21 risk-weight solving.
    - **Policy Mode C (Conservative Fail-Closed):** The engine halts and flags `REVIEW_REQUIRED`.
@@ -652,8 +662,8 @@ To prevent arbitrary tuning, all thresholds are categorized under the ACASH Four
 | :--- | :---: | :--- | :--- | :--- |
 | `INVARIANT_LIVE_CAPITAL_FLOOR` | **A** | `$0.00` | Sovereign System | Fundamental safety invariant. |
 | `INVARIANT_FAIL_CLOSED_DEFAULT` | **A** | `NO_SELECTION` | `AGENTS.md` | Ambiguity must produce zero risk. |
-| `GOV_MAX_DSR_P_VALUE` | **B** | `0.05` | Phase 6 Authority | Multiple testing false-positive ceiling. |
-| `GOV_MAX_PBO_PROBABILITY` | **B** | `0.30` | Phase 6 Authority | Overfitting risk limit. |
+| `GOV_REQUIRE_PHASE6_PASS` | **B** | `"PASS"` | Phase 6 Authority | Canonical statistical validation requirement. Raw thresholds ($p_{\text{DSR}}$, $\text{PBO}$) are owned solely by Phase 6. |
+| `GOV_MIN_VALIDATION_TIER` | **B** | `"TIER_3_MARGINAL"` | Governance Board | Minimum canonical evidence tier eligible for selection. |
 | `GOV_MAX_EVIDENCE_AGE_SEC` | **B** | `86,400` (24h) | Governance Board | Evidence staleness boundary. |
 | `GOV_MIN_REGIME_CONFIDENCE` | **B** | `0.60` | Phase 19 Authority | Prevents acting on regime noise. |
 | `GOV_MAX_DRAWDOWN_LIMIT_PCT` | **B** | `0.10` (10%) | Risk Management | Maximum allowable strategy drawdown. |
@@ -879,7 +889,7 @@ To demonstrate structural resilience, Phase 20 is subjected to eighteen adversar
 | # | Adversarial Vector | Control Mechanism | Failure Mode | Fail-Closed Outcome | Authority Owner | Verification Status |
 | :-: | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | **Authority Boundary Violation:** Caller requests Phase 20 to allocate dollar capital or route an order. | Hard architectural interface; Phase 20 DTOs contain zero capital/order fields. | API rejection; method not found. | Engine raises `InterfaceAuthorityError`. Zero order emitted. | Phase 20 Architecture | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
-| **2** | **Selection vs Validation Confusion:** Strategy with $p_{\text{DSR}} = 0.45$ submitted claiming "strong recent momentum." | Firewall Gate 2 strictly checks Phase 6 `ValidationReport` ($p_{\text{DSR}} \le 0.05$). | Candidate rejected at firewall. | Candidate excluded under `ERR_SELECTION_STAT_UNQUALIFIED`. | Phase 6 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
+| **2** | **Selection vs Validation Confusion:** Strategy with unvalidated or failed statistical status submitted claiming "strong recent momentum." | Firewall Gate 2 strictly checks `stat_evidence.validation_status == "PASS"` and verifies `validation_report_digest` against sealed Phase 6 ledger. | Candidate rejected at firewall. | Candidate excluded under `ERR_SELECTION_STAT_UNQUALIFIED`. | Phase 6 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **3** | **Selection vs Admission Confusion:** Highly profitable research candidate from Phase 18 evaluated before Phase 17 admission. | Firewall Gate 1 verifies `admission_status == "ADMITTED"` in Phase 17 catalog. | Unadmitted candidate rejected. | Excluded under `ERR_SELECTION_NOT_ADMITTED`. | Phase 17 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **4** | **Selection vs Allocation Confusion:** Downstream consumer interprets `SELECT_SET` as equal 50/50 capital weighting. | Output contract contains no weights; Phase 21 owns all mathematical solvers. | Semantic misinterpretation. | Phase 21 enforces $w_i = 0.00$ until ERC solver executes. | Phase 21 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **5** | **Lookahead Leakage:** Candidate returns or regime labels include timestamps where $T_{\text{knowledge}} > T_{\text{as\_of}}$. | Temporal causality validator checks all input timestamps against $T_{\text{as\_of}}$. | Lookahead data detected. | Engine raises `TemporalCausalityError`; `SELECTION_BLOCKED`. | Data Contract Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
@@ -887,7 +897,7 @@ To demonstrate structural resilience, Phase 20 is subjected to eighteen adversar
 | **7** | **Stale Evidence Attack:** Telemetry feed ceases updating, preserving a healthy state from 72 hours ago. | Firewall Gate 5 checks `as_of_time - last_telemetry <= max_evidence_age`. | Stale telemetry rejected. | Candidate excluded under `ERR_SELECTION_STALE_TELEMETRY`. | Phase 11 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **8** | **UNKNOWN Coercion Attack:** System attempts to select previous winner when Phase 19 reports `UNKNOWN_REGIME`. | Firewall Gate 8 explicitly halts if `regime_id == "UNKNOWN"`. | Arbitrary fallback blocked. | Decision emitted as `NO_SELECTION`. | Phase 20 Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **9** | **Forward Health Override:** User attempts to force selection of a strategy marked `MONITORING_BLOCKED` in Phase 11. | Firewall Gate 4 hard-rejects non-healthy states; zero override flag exists in DTO. | Override attempt rejected. | Excluded under `ERR_SELECTION_FORWARD_BLOCKED`. | Phase 11 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
-| **10**| **Tie / Forced-Winner Bias:** Two candidates score within $0.001$; engine randomly picks one. | Deterministic tie cascade: $p_{\text{DSR}} \to \text{PBO} \to N_{\text{eff}} \to \text{Lexicographical}$. | Non-deterministic selection. | Strictly deterministic tie resolution or `REVIEW_REQUIRED`. | Policy Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
+| **10**| **Tie / Forced-Winner Bias:** Two candidates score within $0.001$; engine randomly picks one. | Deterministic tie cascade: `validation_tier` $\to N_{\text{eff}} \to \text{NetSharpe} \to \text{Lexicographical}$. | Non-deterministic selection. | Strictly deterministic tie resolution or `REVIEW_REQUIRED`. | Policy Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **11**| **Exclusion Leakage:** Excluded candidate's features influence the relative ranking of remaining candidates. | Firewall completely removes candidate before scoring normalization begins. | Contaminated relative scores. | Invariant: Scoring is calculated strictly over $\mathcal{S}_{\text{eligible}}$. | Decision Scoring | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **12**| **AI Epistemic Overreach:** LLM service attempts to submit an unvetted strategy into the candidate pool. | Ingestion requires cryptographic Phase 17 catalog admission receipt. | Unauthorized insertion. | Candidate rejected under `ERR_SELECTION_NOT_ADMITTED`. | AI Epistemic Firewall | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **13**| **Policy Drift:** Operator silently modifies scoring weights without updating policy version or digest. | Engine verifies `policy_digest` against immutable policy manifest. | Tampered policy detected. | Engine raises `PolicyIntegrityError`; `SELECTION_BLOCKED`. | Governance Board | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
@@ -1005,8 +1015,8 @@ Phase 20 Master Architecture Specification is deemed complete and acceptable whe
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE20-SELECTION-v1.0
-Specification Status    : PROPOSED ARCHITECTURE — HUMAN APPROVAL PENDING
+Document ID             : ACASH-SPEC-PHASE20-SELECTION-v1.1
+Specification Status    : PROPOSED ARCHITECTURE — READY FOR HUMAN APPROVAL (Rev 1.1)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023
@@ -1015,9 +1025,17 @@ Lead Quant Architect   : Antigravity / Senior Quant Research Architect
 Governance Auditor      : Statistical Governance & Decision-System Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
+Remediation Ledger (Rev 1.1):
+  - Block A Resolved    : Phase 20 strictly consumes Phase 6 canonical validation
+                          status ("PASS") & sealed digest; zero raw p-value re-testing.
+  - Block B Resolved    : Removed ad-hoc continuous statistical composite R(S_i);
+                          replaced with canonical Phase 6 discrete validation tier.
+  - Minor Resolved      : Removed ambiguous "generic fallback"; strictly enforced
+                          fail-closed NO_SELECTION with explicit named policy state.
+
 Verification Status:
   - Architecture Review : COMPLETE / SATISFIED
-  - Authority Isolation : STRICTLY DEMARCATED
+  - Authority Isolation : STRICTLY DEMARCATED (Zero Phase 6.5 Overreach)
   - Mathematical Sound  : ZERO UNVERIFIED CLAIMS / HEURISTIC TAGGED
   - Fail-Closed Contract: COMPLETE (16/16 Failure Modes Handled)
   - Adversarial Audit   : COMPLETE (18/18 Dimensions Addressed)
@@ -1025,7 +1043,7 @@ Verification Status:
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
 FINAL VERDICT:
-  -> CONDITIONAL PASS: READY FOR HUMAN REVIEW & GOVERNANCE APPROVAL
+  -> CONDITIONAL PASS -> READY FOR HUMAN APPROVAL
   -> IMPLEMENTATION: LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
