@@ -41,7 +41,7 @@ A strategy winning a Phase 18 tournament confers **zero** statistical certificat
 $$\boxed{\text{Tournament Winner} \not\equiv \text{Statistical Validity (Phase 6)} \not\equiv \text{Economic Qual (Phase 8.5)} \not\equiv \text{Admission (Phase 17)} \not\equiv \text{Capital Allocation}}$$
 
 - **Phase 18 is an Exploratory Tournament Harness:** Relative ranking identifies candidates worthy of formal validation; it does *not* prove that the winner possesses genuine predictive edge.
-- **Winner's Curse Awareness:** In any tournament of noisy strategies, the top-ranked candidate is statistically guaranteed to have received positive sample noise (luck). Phase 18 explicitly treats tournament rank as a biased selection metric that must be deflated and purged upstream.
+- **Winner's Curse Awareness:** In any tournament of noisy strategies, the top-ranked candidate is subject to selection-induced upward bias and is expected to contain favorable sampling noise on average. Phase 18 explicitly treats tournament rank as a biased selection metric that must be deflated and purged upstream.
 
 ---
 
@@ -355,7 +355,7 @@ All numerical thresholds and evaluation parameters in Phase 18 are classified in
 | $\text{Tier-1 Parameter Sweep} \pm 20\%$ | Two-Tier Harness | **Class B: Governance-Defined Threshold** | Phase 18 Research Governance | Standard exploratory screening boundary |
 | $\text{Worker Concurrency} \le \text{Cores} - 2$ | Resource Substrate | **Class B: Governance-Defined Threshold** | Phase 18 Host Protection Policy | CPU starvation prevention policy |
 | $\text{Max Worker Memory} \le 2.0\text{ GB}$ | Resource Substrate | **Class B: Governance-Defined Threshold** | Phase 18 Host Protection Policy | Memory thrashing prevention policy |
-| $\text{Minimum Cohort Size} \ge 5$ | Cohort Manager | **Class C: Research Heuristic** | Quantitative Tournament Best Practice | Minimum cross-sectional diversity heuristic |
+| $\text{Minimum Cohort Size} \ge 5$ | Cohort Manager | **Class C: Research Heuristic** | Quantitative Tournament Best Practice | Minimum diversity heuristic (< 5 flags weak cohort / research warning; does not invalidate alpha) |
 | $\text{Tie-Breaking Alpha Band } p > 0.05$ | Scoring Engine | **Class C: Research Heuristic** | Econometric Hypothesis Testing Standard | Pairwise statistical tie detection heuristic |
 | Winner's Curse Heuristic $\sqrt{\frac{2 \ln M}{T}}$| Scoring Engine | **Class C: Research Heuristic** | Extreme Value Theory (López de Prado 2018) | Heuristic ranking selection discount |
 | 4 Declared Baseline Hurdles | Benchmarking Engine | **Class B: Governance-Defined Threshold** | Phase 18 Benchmarking Standard | Mandatory relative hurdle baseline suite |
