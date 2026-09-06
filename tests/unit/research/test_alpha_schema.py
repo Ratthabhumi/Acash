@@ -32,7 +32,7 @@ from acash.research.alpha_schema import (
 
 
 def test_alpha_lifecycle_state_enum_completeness() -> None:
-    """Verify all 11 core, rejection, and terminal states are uniquely defined."""
+    """Verify all 12 core, rejection, and terminal states are uniquely defined."""
     expected_states = {
         "HYPOTHESIS",
         "RESEARCH_SEARCH",
@@ -45,10 +45,11 @@ def test_alpha_lifecycle_state_enum_completeness() -> None:
         "REJECTED_HURDLE_COLLAPSE",
         "DEGRADED_FORWARD_TEST",
         "RETIRED_STRUCTURAL_BREAK",
+        "TERMINALLY_FALSIFIED",
     }
     actual_states = {s.value for s in AlphaLifecycleState}
     assert actual_states == expected_states
-    assert len(AlphaLifecycleState) == 11
+    assert len(AlphaLifecycleState) == 12
 
 
 def test_valid_forward_lifecycle_transitions() -> None:
@@ -140,6 +141,7 @@ def test_terminal_and_rejection_states_have_zero_outbound_transitions() -> None:
         AlphaLifecycleState.REJECTED_HURDLE_COLLAPSE,
         AlphaLifecycleState.DEGRADED_FORWARD_TEST,
         AlphaLifecycleState.RETIRED_STRUCTURAL_BREAK,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
     ]
     for term_state in terminal_states:
         assert len(ALLOWED_LIFECYCLE_TRANSITIONS[term_state]) == 0

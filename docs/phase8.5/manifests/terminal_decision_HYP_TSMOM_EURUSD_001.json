@@ -1,0 +1,70 @@
+{
+  "decision_type": "PHASE_8_5_TERMINAL_FALSIFICATION_DECISION",
+  "decision_id": "DEC_FALSIFIED_HYP_TSMOM_EURUSD_001",
+  "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+  "hypothesis_sha256": "5afb92d7175721872d51ab82b2ebaaaa353c2d21bcbbd596e8bf1a3c52de0ef4",
+  "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+  "terminal_lifecycle_state": "TERMINALLY_FALSIFIED_REJECTED",
+  "governance_action": "EARLY_TERMINATION_AT_STEP_R3",
+  "step_progression_audit": {
+    "R1_hypothesis_registration": {
+      "status": "PASS_AND_SEALED",
+      "digest": "5afb92d7175721872d51ab82b2ebaaaa353c2d21bcbbd596e8bf1a3c52de0ef4"
+    },
+    "R2_data_preparation": {
+      "status": "PASS_AND_VERIFIED",
+      "dataset_digest": "4a98d857c8ebce92aad4a51e5368175a3b5866cb137a82e9a6b055634392d619",
+      "total_bars": 10000,
+      "in_sample_bars": 6000
+    },
+    "R3_trial_census": {
+      "status": "PASS_AND_SEALED",
+      "census_trials_count": 9,
+      "ledger_digest": "b1185c4f26d4934e930d526b66d7f3e8786bdbb6c24c263957f9288aa4072b43",
+      "empirical_result": "100%_FALSIFIED_IN_SAMPLE",
+      "passing_trials": 0,
+      "falsified_trials": 9
+    },
+    "R4_statistical_validation": {
+      "status": "NOT_REQUIRED_EARLY_TERMINATION",
+      "reason": "Complete in-sample directional and economic failure across all 9 trials renders multiple testing validation scientifically redundant."
+    },
+    "R5_economic_hurdle": {
+      "status": "SKIPPED_UNQUALIFIED"
+    },
+    "R6_qualification_dossier": {
+      "status": "TERMINAL_FALSIFICATION_DOSSIER_FILED"
+    },
+    "R7_runtime_eligibility": {
+      "status": "INELIGIBLE_FAIL_CLOSED"
+    }
+  },
+  "strategy_qualification_verdict": {
+    "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+    "is_qualified": false,
+    "paper_trading_eligible": false,
+    "live_trading_eligible": false,
+    "capital_authority_usd": "0.00"
+  },
+  "protected_oos_discipline_certificate": {
+    "validation_bars_unexposed": [6060, 7999],
+    "oos_bars_unexposed": [8060, 9999],
+    "embargo_buffers_purged": [[6000, 6059], [8000, 8059]],
+    "oos_exposure_state": "UNEXPOSED_PRISTINE",
+    "zero_snooping_certified": true
+  },
+  "empirical_falsification_summary": {
+    "instrument": "EURUSD",
+    "timeframe": "M5",
+    "lookback_universe": [2, 3, 5, 8, 13, 21, 34, 55, 89],
+    "findings": [
+      "Negative Spearman Rank IC across all 9 lookbacks (-0.0126 to -0.0468 for H=1; -0.0175 to -0.0447 for H=6).",
+      "HAC t-statistics fail to achieve significance across all 9 lookbacks (all < +2.00).",
+      "Tier 3 Economic Edge is negative across all 9 lookbacks (~ -2.00 bps per trade under 2.0 bps roundtrip cost).",
+      "Feature autocorrelation exceeds 0.98 ceiling for L=55 (0.9816) and L=89 (0.9890)."
+    ]
+  },
+  "governance_verdict_author": "human_quantitative_governance_lead",
+  "executed_by": "antigravity_verification_agent",
+  "recorded_at_utc": "2026-09-06T15:53:00Z"
+}

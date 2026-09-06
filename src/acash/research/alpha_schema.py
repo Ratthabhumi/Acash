@@ -60,27 +60,38 @@ class AlphaLifecycleState(str, Enum):
     REJECTED_HURDLE_COLLAPSE = "REJECTED_HURDLE_COLLAPSE"
     DEGRADED_FORWARD_TEST = "DEGRADED_FORWARD_TEST"
     RETIRED_STRUCTURAL_BREAK = "RETIRED_STRUCTURAL_BREAK"
+    TERMINALLY_FALSIFIED = "TERMINALLY_FALSIFIED"
 
 
 # Strict deterministic mapping of permitted forward state transitions
 ALLOWED_LIFECYCLE_TRANSITIONS: Mapping[AlphaLifecycleState, Set[AlphaLifecycleState]] = {
-    AlphaLifecycleState.HYPOTHESIS: {AlphaLifecycleState.RESEARCH_SEARCH},
-    AlphaLifecycleState.RESEARCH_SEARCH: {AlphaLifecycleState.CANDIDATE},
+    AlphaLifecycleState.HYPOTHESIS: {
+        AlphaLifecycleState.RESEARCH_SEARCH,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
+    },
+    AlphaLifecycleState.RESEARCH_SEARCH: {
+        AlphaLifecycleState.CANDIDATE,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
+    },
     AlphaLifecycleState.CANDIDATE: {
         AlphaLifecycleState.STATISTICAL_VALIDATED,
         AlphaLifecycleState.REJECTED_STATISTICAL_GATE,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
     },
     AlphaLifecycleState.STATISTICAL_VALIDATED: {
         AlphaLifecycleState.ECONOMIC_EDGE_QUALIFIED,
         AlphaLifecycleState.REJECTED_HURDLE_COLLAPSE,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
     },
     AlphaLifecycleState.ECONOMIC_EDGE_QUALIFIED: {
         AlphaLifecycleState.FORWARD_PAPER_MONITORED,
         AlphaLifecycleState.DEGRADED_FORWARD_TEST,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
     },
     AlphaLifecycleState.FORWARD_PAPER_MONITORED: {
         AlphaLifecycleState.RESEARCH_QUALIFIED,
         AlphaLifecycleState.DEGRADED_FORWARD_TEST,
+        AlphaLifecycleState.TERMINALLY_FALSIFIED,
     },
     AlphaLifecycleState.RESEARCH_QUALIFIED: {
         AlphaLifecycleState.RETIRED_STRUCTURAL_BREAK,
@@ -90,6 +101,7 @@ ALLOWED_LIFECYCLE_TRANSITIONS: Mapping[AlphaLifecycleState, Set[AlphaLifecycleSt
     AlphaLifecycleState.REJECTED_HURDLE_COLLAPSE: set(),
     AlphaLifecycleState.DEGRADED_FORWARD_TEST: set(),
     AlphaLifecycleState.RETIRED_STRUCTURAL_BREAK: set(),
+    AlphaLifecycleState.TERMINALLY_FALSIFIED: set(),
 }
 
 
@@ -111,6 +123,28 @@ def validate_lifecycle_transition(
             f"Illegal Alpha lifecycle transition from '{current_state.value}' to '{target_state.value}'. "
             f"Allowed transitions from '{current_state.value}' are: {[s.value for s in allowed_targets]}."
         )
+
+
+def validate_hypothesis_immutability(
+    existing_spec: Any,
+    candidate_spec: Any,
+) -> None:
+    """Validate that an existing sealed hypothesis cannot be mutated with new parameters under the same ID.
+
+    Raises:
+        DataContractError: If parameter mutation under an existing hypothesis ID is detected.
+    """
+    from acash.research.manifest import calculate_hypothesis_spec_sha256
+
+    if getattr(existing_spec, "hypothesis_id", None) == getattr(candidate_spec, "hypothesis_id", None):
+        existing_digest = calculate_hypothesis_spec_sha256(existing_spec)
+        candidate_digest = calculate_hypothesis_spec_sha256(candidate_spec)
+        if existing_digest != candidate_digest:
+            raise DataContractError(
+                f"HYPOTHESIS_MUTATION_FORBIDDEN: Hypothesis '{existing_spec.hypothesis_id}' is already sealed with "
+                f"digest '{existing_digest}'. Modifying parameters under an existing hypothesis ID is forbidden "
+                f"anti-HARKing violation. A new hypothesis must use a distinct hypothesis ID."
+            )
 
 
 # ---------------------------------------------------------------------------

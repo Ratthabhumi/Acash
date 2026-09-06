@@ -1,0 +1,164 @@
+{
+  "dataset_id": "DS_EURUSD_M5_RESEARCH_CANONICAL_001",
+  "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+  "hypothesis_sha256": "5afb92d7175721872d51ab82b2ebaaaa353c2d21bcbbd596e8bf1a3c52de0ef4",
+  "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+  "instrument": "EURUSD",
+  "frequency": "M5",
+  "row_count": 10000,
+  "provenance": {
+    "source_id": "MT5_METAQUOTES_DEMO",
+    "broker_company": "MetaQuotes Ltd.",
+    "broker_server": "MetaQuotes-Demo",
+    "broker_login": 112040157,
+    "terminal_name": "MetaTrader 5",
+    "terminal_build": 6180,
+    "symbol": "EURUSD",
+    "symbol_path": "Forex\\EURUSD",
+    "currency_base": "EUR",
+    "currency_profit": "USD",
+    "digits": 5,
+    "point": 1e-05,
+    "contract_size": 100000.0,
+    "timeframe": "M5",
+    "timeframe_seconds": 300,
+    "extraction_time_utc": "2026-09-06T15:38:39.814377+00:00"
+  },
+  "time_range": {
+    "min_event_time_utc": "2026-07-20T03:40:00+00:00",
+    "max_event_time_utc": "2026-09-04T21:00:00+00:00",
+    "timezone": "UTC",
+    "broker_utc_offset_seconds": 10800,
+    "duration_days": 46.72222222222222
+  },
+  "integrity_metrics": {
+    "duplicate_timestamps": 0,
+    "monotonic_timestamps": true,
+    "ohlc_violations": 0,
+    "missing_bars_intraweek": 0,
+    "weekend_market_closures": 6
+  },
+  "gaps_census": [
+    {
+      "prev_index": 1359,
+      "next_index": 1360,
+      "prev_raw_time": 1784937300,
+      "next_raw_time": 1785110400,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    },
+    {
+      "prev_index": 2799,
+      "next_index": 2800,
+      "prev_raw_time": 1785542100,
+      "next_raw_time": 1785715200,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    },
+    {
+      "prev_index": 4239,
+      "next_index": 4240,
+      "prev_raw_time": 1786146900,
+      "next_raw_time": 1786320000,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    },
+    {
+      "prev_index": 5679,
+      "next_index": 5680,
+      "prev_raw_time": 1786751700,
+      "next_raw_time": 1786924800,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    },
+    {
+      "prev_index": 7119,
+      "next_index": 7120,
+      "prev_raw_time": 1787356500,
+      "next_raw_time": 1787529600,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    },
+    {
+      "prev_index": 8559,
+      "next_index": 8560,
+      "prev_raw_time": 1787961300,
+      "next_raw_time": 1788134400,
+      "gap_seconds": 173100,
+      "gap_hours": 48.083333333333336,
+      "gap_type": "WEEKEND_MARKET_CLOSURE"
+    }
+  ],
+  "split_policy": {
+    "policy_name": "CHRONOLOGICAL_EMBARGO_60_20_20",
+    "total_bars": 10000,
+    "embargo_bars": 60,
+    "train": {
+      "start_index": 0,
+      "end_index": 5999,
+      "bar_count": 6000,
+      "pct": 0.6,
+      "start_time_utc": "2026-07-20T03:40:00+00:00",
+      "end_time_utc": "2026-08-17T23:40:00+00:00"
+    },
+    "embargo_train_val": {
+      "start_index": 6000,
+      "end_index": 6059,
+      "bar_count": 60,
+      "start_time_utc": "2026-08-17T23:40:00+00:00",
+      "end_time_utc": "2026-08-18T04:40:00+00:00"
+    },
+    "validation": {
+      "start_index": 6060,
+      "end_index": 7999,
+      "bar_count": 1940,
+      "pct": 0.194,
+      "start_time_utc": "2026-08-18T04:40:00+00:00",
+      "end_time_utc": "2026-08-26T22:20:00+00:00"
+    },
+    "embargo_val_oos": {
+      "start_index": 8000,
+      "end_index": 8059,
+      "bar_count": 60,
+      "start_time_utc": "2026-08-26T22:20:00+00:00",
+      "end_time_utc": "2026-08-27T03:20:00+00:00"
+    },
+    "oos_held_out": {
+      "start_index": 8060,
+      "end_index": 9999,
+      "bar_count": 1940,
+      "pct": 0.194,
+      "start_time_utc": "2026-08-27T03:20:00+00:00",
+      "end_time_utc": "2026-09-04T21:00:00+00:00",
+      "exposure_state": "UNEXPOSED_LOCKED"
+    }
+  },
+  "boundary_handling": {
+    "H1_nan_count": 1,
+    "H6_nan_count": 6
+  },
+  "stationarity_audit": {
+    "price_level_stationarity": "NON_STATIONARY_I1",
+    "price_level_df_t_stat": -1.1777830402822418,
+    "price_level_df_beta": -0.0002424194693240568,
+    "log_return_stationarity": "STATIONARY_I0",
+    "log_return_df_t_stat": -104.18408875215205,
+    "log_return_df_beta": -1.0411624933337624,
+    "canonical_statement": "Raw EURUSD price levels are non-stationary unit-root processes (I(1)). Stationarity is not asserted or claimed on raw price levels. Stationarity applies strictly to transformed return and momentum differential series (I(0))."
+  },
+  "digests": {
+    "raw_source_sha256": "61b5c93475edb6cb9fc327fef70774954848245b058291081330fd14244e24b3",
+    "canonical_batch_sha256": "4a98d857c8ebce92aad4a51e5368175a3b5866cb137a82e9a6b055634392d619",
+    "parquet_file_sha256": "ea6e635dd7256e6f3ea6b43f199cc9ca955d9ea27bc0e8977cd542bee341b9cb"
+  },
+  "file_locations": {
+    "raw_csv_path": "data\\raw\\research\\EURUSD_M5_raw.csv",
+    "canonical_parquet_path": "data\\parquet\\research\\EURUSD_M5_canonical.parquet"
+  },
+  "created_at_utc": "2026-09-06T15:38:40.385121+00:00"
+}

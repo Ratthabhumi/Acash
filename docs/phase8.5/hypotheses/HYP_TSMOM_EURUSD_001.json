@@ -1,0 +1,26 @@
+{
+  "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+  "hypothesis_version": "v1.0",
+  "parent_hypothesis_id": null,
+  "economic_rationale": "Intraday time-series momentum (TSMOM) in liquid G10 FX (EURUSD) driven by participant under-reaction and delayed information diffusion across global liquidity tiers. Directional price trends over intermediate M5 lookback windows exhibit positive persistence after filtering micro-noise with a 1.0 bps deadband.",
+  "target_symbol": "EURUSD",
+  "feature_dependencies": [
+    "lookback_return",
+    "close_price"
+  ],
+  "parameter_config_json": "{\"bar_frequency\": \"M5\", \"deadband_bps\": 1.0, \"lookback_bars_grid\": [2, 3, 5, 8, 13, 21, 34, 55, 89], \"nominal_trials_k\": 9, \"signal_type\": \"TERNARY_DIRECTIONAL\", \"strategy_id\": \"STRAT-MOM-MULTI-HORIZON-V1\"}",
+  "expected_direction": "LONG",
+  "target_horizons": [
+    1,
+    6
+  ],
+  "primary_horizon": 1,
+  "invalidation_criteria": {
+    "min_in_sample_rank_ic": "0.025",
+    "min_hac_t_stat": "2.00",
+    "max_feature_autocorrelation": "0.98",
+    "min_cost_adjusted_spread_ratio": "1.50"
+  },
+  "registered_at_utc": "2026-09-06T22:35:00Z",
+  "author": "human_governance_auditor"
+}

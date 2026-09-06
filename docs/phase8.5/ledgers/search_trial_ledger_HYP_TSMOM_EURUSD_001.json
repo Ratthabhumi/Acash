@@ -1,0 +1,227 @@
+{
+  "ledger_id": "LEDGER_TSMOM_EURUSD_001_IN_SAMPLE",
+  "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+  "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+  "sharpe_space": "ANNUAL",
+  "is_sealed": true,
+  "sealed_at_utc": "2026-09-06T15:45:33.376118+00:00",
+  "ledger_digest": "b1185c4f26d4934e930d526b66d7f3e8786bdbb6c24c263957f9288aa4072b43",
+  "trials": [
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l02",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 2,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-8.104867",
+      "p_value": "0.019817355584000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "7745a9b9142243336438b0bb0bfb933872efc0685d2cfe2ff804f06cc355c93c",
+      "in_sample_return_series_sha256": "b05b16b5dc62651833e956f094038f8efd7a61f60bf55e54cf03655d73a9d008",
+      "config_sha256": "092d82abc6ad4b5c207ca0c295b15a9a8cbdb8f3421a2ac5a9f2911ab3157d59",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l02_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l03",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 3,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-6.337956",
+      "p_value": "0.068496281068000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "cfd3672efa452bdc188dacf6e53f3b1a6aab182fd9c106d614886b67ab7fed13",
+      "in_sample_return_series_sha256": "eb3b34393594aaa085a95e75c7d9c4783b2db3623f626009e338435b4171b6dd",
+      "config_sha256": "7cd2a5763a14450f928240ba1fd28406b70182e02f1eed926fa2c732f11bf5e6",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l03_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l05",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 5,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-7.493308",
+      "p_value": "0.031283071109000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "0762ca9a1249e5f6cece25f2707e9a32cb6839b6f0052b7f2afff195a7a0f253",
+      "in_sample_return_series_sha256": "96d26b61039a3e2946c2ae79d9992688fce3c2f0294f1e0fa0dfb35129912f4e",
+      "config_sha256": "e2d1d2477fb617bb06f1be4e4366e8b0edf8492b84e3993a8fa071daa58a0993",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l05_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l08",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 8,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-4.814101",
+      "p_value": "0.166619787853000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "756d455ef27fa431bbf6d876c869c246138e6c3bf9ba851d04d37a144ba63ac8",
+      "in_sample_return_series_sha256": "88e8a247ae86425cda49baadfa39ee5155a4290f5e99dba56b0fac7b10cdbaec",
+      "config_sha256": "d731b6772c3c1b2483dd190331ff866d17a6fcbef18b888f3609d368d4b184d8",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l08_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l13",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 13,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-3.868174",
+      "p_value": "0.266608234097000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "9e66ede9197d3d8fa051972fe35b22521cb9c63a174dc7ff5e746f2a98d2f56e",
+      "in_sample_return_series_sha256": "1ab7ed0a436ba4a15c4b78ecf7ac5ff83279563dbda431443064872b76c47208",
+      "config_sha256": "c5c0711a621e6d30bd4b71594a3da2397ad466853e24ddb8192054f5275c5b54",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l13_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l21",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 21,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-1.287838",
+      "p_value": "0.711673759474000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "029157f411088e7ddfa8fe285257116908421515a0c4306022f73e01f2b88097",
+      "in_sample_return_series_sha256": "5903438cf51e0e40e6ffd7e5cd5faa21f3312f4f4eb361b24eee72e89f634d10",
+      "config_sha256": "0e05bf6eb79f39bbe19f1fabba4f710ccfbcf599589bf4fc2fbb944a387bde32",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l21_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l34",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 34,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "0.746848",
+      "p_value": "0.830459765869000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "f171980b1a1a3592d08c28ca6660ea7ea6330f765e26875f5e8de7a8b1926408",
+      "in_sample_return_series_sha256": "6e55106214e69dbf1985cb3e82cc25c04165f0a7932f8e089a1082be154ae46b",
+      "config_sha256": "bd1a2bdc488eaa8198b00c393d0135a8ef3524b95ec8e10b913902425c673966",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l34_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l55",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 55,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "-1.529415",
+      "p_value": "0.661609761358000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "2cf5112f78d06afc2ac2db34267ca6272baddec614b1f29fcea3b612f40c13bf",
+      "in_sample_return_series_sha256": "e9de8424c062615b2c183ab5d14b51f43d4f218c385ee3b139f55136046d12c9",
+      "config_sha256": "3774a5abc4045ac55572b705931cc0e8258fe40f0bcac1fdd4806d9d3e8d4089",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l55_in_sample"
+    },
+    {
+      "trial_id": "trial_tsmom_eurusd_m5_l89",
+      "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1",
+      "hypothesis_id": "HYP_TSMOM_EURUSD_001",
+      "feature_names": [
+        "close_price",
+        "lookback_return"
+      ],
+      "parameters": {
+        "lookback_bars": 89,
+        "deadband_bps": 1.0,
+        "primary_horizon": 1,
+        "secondary_horizon": 6,
+        "signal_type": "TERNARY_DIRECTIONAL",
+        "strategy_id": "STRAT-MOM-MULTI-HORIZON-V1"
+      },
+      "in_sample_sharpe": "3.289913",
+      "p_value": "0.347823899688000000",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "p_value_input_hash": "da3f37584d73bd7bfa444fc8766e18c99d2ee8f2a135ed5c2b15c887ce3f49e8",
+      "in_sample_return_series_sha256": "de525868d253ec4ad90f402d186434b278329cf784d66e24396b82539fe89f69",
+      "config_sha256": "e6bddafd9592cf6b8ab4168cf03de5ffc2c9c2ece15a93ed69accdbcf68cfb3e",
+      "execution_manifest_id": "manifest_backtest_eurusd_m5_l89_in_sample"
+    }
+  ]
+}

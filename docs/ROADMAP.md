@@ -295,6 +295,17 @@
   - Explicit forward lifecycle state machine (`HYPOTHESIS` $\to$ `CANDIDATE` $\to$ `RESEARCH_QUALIFIED` $\to$ `RETIRED_STRUCTURAL_BREAK`).
   - Strict boundary: $CapitalAuthorityUSD \equiv 0.00$.
 - **Gate 8.5 Criteria:** 100% passing tests across 6 slices; cryptographic SHA-256 DAG binding hypothesis, trial ledger, and validation reports. Commit: `9ce1365`.
+- **Track B (Strategy Qualification Pipeline — `STRAT-MOM-MULTI-HORIZON-V1` / `HYP_TSMOM_EURUSD_001`):**
+  - **Status:** `CLOSED / TERMINALLY FALSIFIED` (Option B: Early Termination executed).
+  - **Lineage Audit:**
+    - Step R1 (Hypothesis Pre-Registration): `✅ PASS / SEALED` (SHA-256: `5afb92d...`).
+    - Step R2 (Historical Data Preparation): `✅ PASS / SEALED` (10,000 bars EURUSD M5 canonical parquet; 16/16 gates passed).
+    - Step R3 (In-Sample Search Census): `✅ PASS / SEALED` (Census of 9 trials, bars 0..5,999 complete).
+    - Hypothesis `HYP_TSMOM_EURUSD_001`: `❌ TERMINALLY FALSIFIED` (9/9 negative Rank IC, negative net edge after friction, HAC $t < 2.0$, autocorrelation violations).
+    - Steps R4–R7: `⛔ EARLY TERMINATED` (Discontinued to preserve OOS integrity and prevent multi-testing noise).
+    - OOS Holdout: `UNEXPOSED_PRISTINE` (bars 6,060..9,999 100% untouched).
+  - **Strategy Authority:** `STRAT-MOM-MULTI-HORIZON-V1` permanently `NOT QUALIFIED / NOT LIVE-ELIGIBLE`. Capital authority remains `$0.00`.
+  - **Governing Dossier:** [`docs/phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md`](phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md).
 
 ---
 
@@ -358,7 +369,7 @@
 
 ---
 
-### 🟡 Phase 13: Live Small Capital Deployment [ACTIVE — STEP 5 SOAK IN PROGRESS]
+### 🟡 Phase 13: Live Small Capital Deployment [INFRASTRUCTURE READY / STRATEGY BLOCKED]
 - **Objective:** Real-world execution validation with micro-capital and strict fail-closed telemetry.
 - **Current Step Progress:**
   - **Slice 1 (Gate A Pre-Live Certification):** `✅ CERTIFIED` (Formal Human Sign-Off on 2026-09-04; A-1 through A-11 PASS; B-1/B-2 CLOSED; 0 Active Blockers; Demo `112040157` 100% Flat; Live Capital $0.00). See [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
@@ -366,15 +377,15 @@
   - **Step 2 (Code & Unit Audit):** `✅ PASS` (Full unit audit clean).
   - **Step 3 (Integration Testing):** `✅ PASS` (Integration pipeline verified).
   - **Step 4 (Restart & Recovery):** `✅ PASS` (Rehydration semantics and state reconstruction verified).
-  - **Step 5 (24-Hour Unattended Soak):** `🟡 ACTIVE / IN PROGRESS` (Running under PID 41844 in background; Capital $0.00; Local Simulator).
-  - **Step 6 (Telemetry Audit):** `🔒 LOCKED` (Awaiting Step 5 24h completion and evidence verification).
-  - **Step 7 (Continuous Paper Readiness):** `🔒 LOCKED`.
-  - **Step 8 (Human GO Checkpoint):** `🔒 LOCKED`.
-  - **Step 9 (90-Day Continuous Paper Run):** `🔒 LOCKED` (Clock has not started).
+  - **Step 5 (24-Hour Unattended Soak):** `✅ VERIFIED COMPLETED` (86,400.21s runtime, 86,085 ledger events, 8,608 telemetry records, 0 errors, graceful exit).
+  - **Step 6 (Telemetry Audit):** `✅ PASS` (Full forensic audit verified: SHA-256 chained integrity, zero gaps >15s, RSS peak 175.29 MB, pulse reconciliation 100%). See [`docs/phase13/phase13_step6_full_audit_report.md`](phase13/phase13_step6_full_audit_report.md).
+  - **Step 7 (Continuous Paper Readiness):** `✅ CONDITIONALLY SATISFIED` (Runtime infrastructure verified ready; blocked on strategy qualification; B23.2 dedicated VM deferred). See [`docs/phase13/phase13_step7_paper_readiness_review.md`](phase13/phase13_step7_paper_readiness_review.md).
+  - **Step 8 (Human GO Checkpoint):** `🔒 LOCKED` (Awaiting qualified strategy & explicit operator authorization).
+  - **Step 9 (90-Day Continuous Paper Run):** `🔒 NOT AUTHORIZED` (Clock has not started; $0.00 capital authority).
 - **Core Invariants:**
   - Live Capital Authority: **$0.00 (Hard-Locked)**.
   - Live Order Emission: **0 Orders**.
-  - Strategy STRAT-MOM-MULTI-HORIZON-V1: **QUALIFICATION_BLOCKED**.
+  - Strategy STRAT-MOM-MULTI-HORIZON-V1: **NOT QUALIFIED / TERMINALLY FALSIFIED**.
   - Broker Wire: **DISCONNECTED**.
 - **Gate 13 Criteria:** **EXPLICIT HUMAN APPROVAL REQUIRED**; all safety gates, kill switches, and alerts verified operational; full completion of 24h soak evidence audit and subsequent steps.
 - **Multi-Broker / Multi-Asset Roadmap (ADR-021):** While Phase 13 currently executes against the active MetaQuotes MT5 Demo baseline under Gate A, the long-term architecture is established as Asset-Agnostic and Multi-Venue (Pepperstone MT5 candidate, Alpaca US Equities/ETF candidate, OANDA API candidate, IBKR multi-asset candidate). See [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
