@@ -1,12 +1,12 @@
 # ACASH Phase 22 — Portfolio Orchestration & Netting
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.5`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.5 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
+> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.6`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.6 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023, ADR-024, ADR-025  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.5.0 (Master Architecture & Governance Specification — Rev 1.5 Remediation)  
+> **Version:** 1.6.0 (Master Architecture & Governance Specification — Rev 1.6 Remediation)  
 
 ---
 
@@ -20,7 +20,7 @@
 > - **LIVE ORDER EMISSION AUTHORITY REMAINS STRICTLY 0.**
 > - **LIVE BROKER CONNECTION REMAINS STRICTLY DISCONNECTED.**
 > - **ZERO RUNTIME MUTATION TO `src/` OR `tests/`.**
-> - **PHASE 13 STEP 5 UNATTENDED SOAK TEST (PID 41844) REMAINS ACTIVE AND UNTOUCHED.**
+> - **PHASE 13 STEP 5 UNATTENDED SOAK TEST COMPLETED (24.00H WINDOW SATISFIED: 86,085 PULSES, 0 EXCEPTIONS, COMPLETED) AND REMAINS UNTOUCHED.**
 > - **ALL CONTROLS IN THIS SPECIFICATION ARE LABELED: `CONTROL SPECIFIED / NOT YET IMPLEMENTED`.**
 
 ---
@@ -386,7 +386,12 @@ Phase 22 implements strict, multi-layered idempotency with complete decoupling b
   - **Deterministic Intent Key (`deterministic_intent_key` / `idempotency_key`):** The pure SHA-256 digest of canonical computational fields $(\text{plan\_digest}, \text{canonical\_symbol}, \text{sequence\_no}, \text{direction}, \text{quantity\_lots})$. It is stationary, tie-invariant, and bit-for-bit identical across independent evaluations and historical replays.
   - **Runtime Instance Handle (`intent_id`):** A wall-clock UUIDv7 string generated at runtime exclusively for IPC message tracking, downstream broker correlation, and lifecycle state persistence in `orchestration_ledger.jsonl`.
 - **Deduplication Window:** An in-memory LRU cache coupled with `orchestration_ledger.jsonl` tracks all active and completed deterministic intent keys over a rolling 48-hour window.
-- **Replay Resistance:** Ingesting an identical `PortfolioAllocationPlan` produces zero duplicate intents; Phase 22 evaluates target vs current position, finds $\Delta Q_s = 0$, and transitions to `IDLE_ON_TARGET`.
+- **Replay Resistance:** Ingesting an identical `PortfolioAllocationPlan` produces zero duplicate intents; Phase 22 evaluates target vs current position, finds $\Delta Q_s = 0$, suppresses order generation at the netting layer (`NETTED` with zero net delta), and concludes the rebalance evaluation cycle with zero execution requirement (`NO_INTENT_REQUIRED`).
+
+$$\boxed{\begin{aligned}
+&\mathbf{INVARIANT:}\quad \texttt{IDLE\_ON\_TARGET} \text{ / } \texttt{NO\_INTENT\_REQUIRED} \text{ is an engine-level portfolio disposition condition,} \\
+&\text{NOT an } \texttt{ExecutionIntent} \text{ lifecycle state, and MUST NOT appear as a DFA transition destination.}
+\end{aligned}}$$
 
 ---
 
@@ -510,6 +515,45 @@ class IntentType(str, Enum):
     PACED_SLICE = "PACED_SLICE"
 
 
+class IntentLifecycleState(str, Enum):
+    '''The strict, closed 15-state DFA for ExecutionIntent lifecycle.'''
+    CREATED = "CREATED"
+    VALIDATED = "VALIDATED"
+    NETTED = "NETTED"
+    READY = "READY"
+    DISPATCHED = "DISPATCHED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    COMPLETED = "COMPLETED"
+    PARTIAL_FILL = "PARTIAL_FILL"
+    REJECTED = "REJECTED"
+    CANCEL_REQUESTED = "CANCEL_REQUESTED"
+    CANCELLED = "CANCELLED"
+    TIMEOUT = "TIMEOUT"
+    UNKNOWN = "UNKNOWN"
+    RECONCILE_PENDING = "RECONCILE_PENDING"
+    RECONCILED = "RECONCILED"
+
+
+class ReconciliationOutcome(str, Enum):
+    '''Audit and reconciliation disposition outcomes (orthogonal to lifecycle state).'''
+    NONE = "NONE"
+    FILL_CONFIRMED = "FILL_CONFIRMED"
+    PARTIAL_CONFIRMED = "PARTIAL_CONFIRMED"
+    CANCEL_CONFIRMED = "CANCEL_CONFIRMED"
+    DROPPED_DOWNSTREAM = "DROPPED_DOWNSTREAM"
+    DESYNC_FORCE_RESOLVED = "DESYNC_FORCE_RESOLVED"
+
+
+class CancellationReason(str, Enum):
+    '''Typed disposition reasons for cancelled intents (orthogonal to lifecycle state).'''
+    NONE = "NONE"
+    USER_REQUESTED = "USER_REQUESTED"
+    PARTIAL_FILL_IDLE_TIMEOUT = "PARTIAL_FILL_IDLE_TIMEOUT"
+    CANCELLED_STALE_INPUT = "CANCELLED_STALE_INPUT"
+    REBALANCE_SUPERSEDED = "REBALANCE_SUPERSEDED"
+    CIRCUIT_BREAKER_HALT = "CIRCUIT_BREAKER_HALT"
+
+
 class ExecutionIntent(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -530,6 +574,11 @@ class ExecutionIntent(BaseModel):
     created_at_utc: datetime            # Intent generation timestamp
     as_of_time_utc: datetime            # Causal evaluation boundary
     valid_until_utc: datetime           # Expiration deadline
+    
+    # Lifecycle State & Dispositions (Strictly Closed 15-State DFA)
+    lifecycle_state: IntentLifecycleState = IntentLifecycleState.CREATED
+    reconciliation_outcome: ReconciliationOutcome = ReconciliationOutcome.NONE
+    cancellation_reason: CancellationReason = CancellationReason.NONE
     
     # Instrument & Commercial Specifications
     canonical_symbol: str               # e.g., "EURUSD"
@@ -596,6 +645,14 @@ The execution intent lifecycle manages intent progression through a formal **15-
                                       15. RECONCILED (Terminal State)
 ```
 
+$$\boxed{\begin{aligned}
+&\mathbf{DFA\;CLOSURE\;INVARIANT:}\quad \text{Only the 15 formal lifecycle states in } \texttt{IntentLifecycleState} \\
+&\text{may appear in the } \texttt{lifecycle\_state} \text{ field of an } \texttt{ExecutionIntent}. \\
+&\text{All engine operational modes (e.g. } \texttt{DEFENSIVE\_HOLD}\text{), engine health states (}\texttt{HEALTHY}\text{, }\texttt{DEGRADED}\text{, }\texttt{HALTED}\text{),} \\
+&\text{reconciliation outcomes (}\texttt{DROPPED\_DOWNSTREAM}\text{), and zero-work disposition conditions (}\texttt{NO\_INTENT\_REQUIRED}\text{)} \\
+&\text{MUST be represented in strictly separate typed fields. Zero pseudo-states permitted in DFA.}
+\end{aligned}}$$
+
 ---
 
 ## 23. Intent State Machine & Transition Invariants (15 States)
@@ -617,7 +674,7 @@ The execution intent lifecycle manages intent progression through a formal **15-
 | **12**| `CANCEL_REQUESTED`| Fill races cancel (fill confirmed first) | `COMPLETED` / `PARTIAL`| Realized fill takes precedence over cancel. |
 | **13**| `DISPATCHED` / `REQ`| Phase 12 disconnects unexpectedly | `UNKNOWN` | **UNKNOWN != FAILED. Reconcile mandatory.** |
 | **14**| `TIMEOUT` / `UNKNOWN`| Phase 12 audit reconciliation triggered | `RECONCILE_PENDING` | Trading locked on instrument; out-of-band query. |
-| **15**| `RECONCILE_PENDING`| Authoritative Phase 12 position confirmed | `RECONCILED` | Realized position synchronized. Terminal state. |
+| **15**| `RECONCILE_PENDING`| Authoritative Phase 12 position confirmed | `RECONCILED` | Realized position synchronized. Sets `reconciliation_outcome` (`FILL_CONFIRMED`, `CANCEL_CONFIRMED`, or `DROPPED_DOWNSTREAM`). Terminal state. |
 
 $$\boxed{\begin{aligned}
 \mathbf{CANONICAL\;PATH\;1:}&\quad \text{DISPATCHED } \xrightarrow{\text{timeout}} \text{TIMEOUT } \longrightarrow \text{RECONCILE\_PENDING } \longrightarrow \text{RECONCILED} \\
@@ -670,7 +727,7 @@ $$\boxed{\begin{aligned}
 ## 28. Stale Allocation Handling
 
 1. **Staleness Threshold:** If $T_{\text{now}} - T_{\text{decision}} > 120\text{s}$, the allocation plan is deemed **STALE**.
-2. **Orchestration Action:** Phase 22 transitions to `DEFENSIVE_HOLD`. All pending un-dispatched intents are dropped (`CANCELLED_STALE_INPUT`).
+2. **Orchestration Action:** Phase 22 transitions engine operational mode to `DEFENSIVE_HOLD`. All pending un-dispatched intents transition to lifecycle state `CANCELLED` with typed disposition `cancellation_reason = CANCELLED_STALE_INPUT`.
 3. **Existing Position Protection:** Existing physical positions are **HELD IN PLACE**. Phase 22 does NOT liquidate positions because of a stale plan; liquidation requires explicit Phase 11 emergency action.
 
 ---
@@ -696,9 +753,9 @@ When Phase 22 restarts (cold boot or post-crash):
 1. **Step 1: Replay Write-Ahead Ledger:** Read `orchestration_ledger.jsonl` from line 0 to EOF. Rebuild in-memory intent states and idempotency sets.
 2. **Step 2: Ingest Phase 12 Snapshot:** Request a fresh, authenticated `Phase12PositionReport`.
 3. **Step 3: State Cross-Reconciliation:** Match active ledger intents against Phase 12 tickets:
-   - If ticket is confirmed closed/filled: Mark intent `COMPLETED`.
-   - If ticket is missing downstream: Mark intent `RECONCILED_DROPPED`.
-   - If ticket is still open: Mark intent `ACKNOWLEDGED`.
+   - If ticket is confirmed closed/filled: Mark intent `COMPLETED` (realized fill synchronized).
+   - If ticket is missing downstream: Transition intent to terminal lifecycle state `RECONCILED` with audit disposition `reconciliation_outcome = DROPPED_DOWNSTREAM`. Lock instrument; log `WARN_INTENT_DROPPED_DOWNSTREAM_RECONCILED`.
+   - If ticket is still resting open: Mark intent `ACKNOWLEDGED`.
 4. **Step 4: Emit Ready State:** Only after reconciliation completes does Phase 22 accept new Phase 21 plans.
 
 ---
@@ -924,6 +981,7 @@ Evaluate Fail-Closed Policy:
 | `ERR_ORCH_STATE_UNKNOWN` | Lifecycle | Disconnect during in-flight order | Transition to `UNKNOWN`; lock instrument. |
 | `ERR_ORCH_DOWNSTREAM_REJECT` | Execution | Phase 12 rejected physical order | Halt instrument; reconcile snapshot. |
 | `ERR_ORCH_PARTIAL_STALL` | Execution | Partial fill stalled past timeout | Transition to `CANCEL_REQUESTED`. |
+| `ERR_ORCH_DFA_STATE_INVALID` | Lifecycle | Non-formal DFA state deserialized in intent | Hard fail-closed halt; quarantine intent. |
 | `ERR_ORCH_LEDGER_WRITE_FAIL` | System | Disk full or WAL write error | Emergency process halt (fsync failed). |
 
 ---
@@ -936,7 +994,7 @@ Evaluate Fail-Closed Policy:
 
 ---
 
-## 47. Adversarial Threat Model (36 Attack Vectors)
+## 47. Adversarial Threat Model (37 Attack Vectors)
 
 | ID | Attack / Threat Vector | Description | Invariant Violated | Detection / Defense Mechanism | System Component | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -976,6 +1034,7 @@ Evaluate Fail-Closed Policy:
 | **34**| **Sovereign Liquidation** | Solver status triggers unrequested dump. | Section 5.2 Invariant | Generic target math; internal fail = HOLD. | Netting Engine | CONTROL SPECIFIED |
 | **35**| **Replay Determinism & UUIDv7 Drift Attack** | Replay at different wall-clock epoch alters UUIDv7; inverts intent sorting if tie-break uses UUIDv7. | Section 15 & 16 Determinism | Tie-breaking bound to deterministic fields (`deterministic_intent_key ASC`); zero UUIDv7 dependence in ordering. | Orchestration | CONTROL SPECIFIED |
 | **36**| **Zero-Transition Phantom Volume Attack** | Static portfolio has $\sum |\Delta Q_{i,s}| = 0$; logic misinterprets $\text{NER}_s=0$ as requiring 100% market execution. | Section 11.2 Property 2b | Explicit separation of Property 2a (positive transition, zero netting) from 2b (zero transition convention, zero venue orders). | Netting Engine | CONTROL SPECIFIED |
+| **37**| **DFA State Pollution & Pseudo-State Leakage Attack** | Malicious or buggy input deserializes pseudo-state (e.g. `IDLE_ON_TARGET`, `RECONCILED_DROPPED`) as lifecycle state. | Section 21 & 22 DFA Closure | Strict `IntentLifecycleState` enum; pseudo-states rejected fail-closed (`ERR_ORCH_DFA_STATE_INVALID`); outcomes segregated to typed fields. | State Machine | CONTROL SPECIFIED |
 
 ---
 
@@ -993,7 +1052,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 - [x] **Criterion 9 (Fail-Closed Concentration):** Concentration breaches halt engine; zero silent clipping.
 - [x] **Criterion 10 (Authorized Risk-Reducing Priority):** Closes strictly precede expansions; zero sovereign emergency close generation.
 - [x] **Criterion 11 (Decoupled Computational Determinism & Identity):** Computational outputs, sequence ordering, and tie-breaking are 100% bit-for-bit deterministic via `deterministic_intent_key`; runtime `intent_id` (UUIDv7) is strictly an ephemeral instance handle without ordering authority.
-- [x] **Criterion 12 (15-State DFA Lifecycle):** Strict state transitions across all 15 formal states; zero undefined paths.
+- [x] **Criterion 12 (Formal 15-State DFA & Total Closure):** Strict state transitions across exactly 15 formal states; enforces DFA Closure Invariant: zero pseudo-states (`IDLE_ON_TARGET`, `RECONCILED_DROPPED`) permitted in `lifecycle_state`; reconciliation outcomes and cancellation reasons quarantined in separate typed fields; zero undefined paths.
 - [x] **Criterion 13 (Epistemic Separation):** `TIMEOUT != SUCCESS` and `UNKNOWN != FAILED`.
 - [x] **Criterion 14 (Missing Position Safety):** Missing position snapshot enters `DEFENSIVE_HOLD`. Never assume zero.
 - [x] **Criterion 15 (Atomic WAL Logging):** Write-ahead ledger append and `fsync` precede IPC dispatch.
@@ -1005,7 +1064,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 
 ## 49. Governance Verification Matrix
 
-| Verification Dimension | Standard / Invariant Required | Revision 1.5 Specification Status | Evidence / Authority |
+| Verification Dimension | Standard / Invariant Required | Revision 1.6 Specification Status | Evidence / Authority |
 | :--- | :--- | :--- | :--- |
 | **Authority Isolation** | Zero strategy selection, zero re-allocation | **VERIFIED (SPECIFICATION)** | Sections 2, 3, 4, 5 |
 | **Liquidation Authority**| No sovereign liquidation; generic target math | **VERIFIED (SPECIFICATION)** | Section 5.2, Section 5.3, Section 40 |
@@ -1018,12 +1077,12 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 | **Residual Semantics** | Min-volume suppression preserves residual per plan | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
 | **Signed Exposure Model**| Unsigned capital $w_i \ge 0 \times$ signed signal $d_{i,s}$ | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-07`), Section 8, 9 |
 | **Firewall Completeness**| 28 deterministic fail-closed predicates | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-01` to `OF-28`) |
-| **State Machine Safety** | 15-state DFA; TIMEOUT vs CANCEL_REQ separated | **VERIFIED (SPECIFICATION)** | Sections 22, 23, 26, 27 |
+| **State Machine Safety** | 15-state DFA with total closure; pseudo-states quarantined to typed outcome fields; TIMEOUT vs CANCEL_REQ separated | **VERIFIED (SPECIFICATION)** | Sections 21, 22, 23, 26, 27 |
 | **Idempotency & Replay**| Decoupled determinism from UUIDv7; tie-break via `deterministic_intent_key ASC` | **VERIFIED (SPECIFICATION)** | Sections 14, 15, 16, 32, 34, 37 |
-| **Adversarial Hardening**| 36 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
+| **Adversarial Hardening**| 37 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
 | **Runtime Code State** | STRICTLY LOCKED / NOT AUTHORIZED | **ENFORCED** | Zero code in `src/` or `tests/` |
 | **Operational Capital** | Hard-locked at $0.00; broker disconnected | **ENFORCED** | Invariant in Header & Section 2 |
-| **Phase 13 Soak Runner** | PID 41844 active and untouched | **ENFORCED** | Step 5 soak unmolested |
+| **Phase 13 Soak Runner** | Step 5 soak completed (24.00h satisfied; 0 exceptions); untouched | **ENFORCED** | Step 5 soak completed naturally |
 
 ---
 
@@ -1033,8 +1092,8 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.5
-Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.5 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)
+Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.6
+Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.6 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023, ADR-024, ADR-025
@@ -1044,7 +1103,7 @@ Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
 Verification Status:
-  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.5)
+  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.6)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection, Allocation, or Wire Overreach)
   - Liquidation Scope   : REMEDIATED (Zero Sovereign Liquidation; DEFENSIVE_HOLD Enforced)
   - Priority Sequencing : REMEDIATED (Priority 1 Sequences Authorized Closes Only; Zero Stop-Out Generation)
@@ -1052,20 +1111,20 @@ Verification Status:
   - Signed Exposure     : REMEDIATED (Unsigned Capital Budget w_i >= 0 x Directional Signal d_{i,s})
   - NER Mathematical    : REMEDIATED (Dual Zero-Transition Convention; Gross Transition = 0 -> Zero Venue Volume)
   - Determinism & Idem  : REMEDIATED (Computational Determinism Decoupled from UUIDv7; Deterministic Tie-Breaking Enforced)
+  - State-Machine Check : REMEDIATED (Formal 15-State DFA with Total Closure; Zero Pseudo-States)
   - State Transitions   : REMEDIATED (TIMEOUT -> RECONCILE vs ACK -> CANCEL_REQUESTED Decoupled)
   - Adapter Boundary    : REMEDIATED (Phase12PositionReport Contract Enforced; Telemetry Purged)
   - Netting Semantics   : REMEDIATED (Zero Synthetic Fills Policy Enforced; Execution Suppression)
   - Target Immutability : REMEDIATED (Pacing vs Re-allocation Enforced; Zero Delta Scaling)
   - Min-Volume Residual : REMEDIATED (Residual Bound to Plan/Epoch; Zero Cross-Plan Contamination)
-  - State-Machine Check : VERIFIED CONSISTENT (Formal 15-State DFA with Strict Canonical Paths)
   - Mathematical Sound  : GOVERNED FORMULATIONS (Algebraic Netting, Lots Quantization, NER)
-  - Fail-Closed Contract: COMPLETE (38 Failure Modes Cataloged; AMBIGUITY -> ZERO INTENT)
-  - Adversarial Audit   : COMPLETE (36/36 Dimensions Addressed)
+  - Fail-Closed Contract: COMPLETE (39 Failure Modes Cataloged; AMBIGUITY -> ZERO INTENT)
+  - Adversarial Audit   : COMPLETE (37/37 Dimensions Addressed)
   - Live Trading State  : HARD-LOCKED ($0.00 Capital, 0 Orders, Broker Disconnected)
-  - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
+  - Background Soak     : COMPLETED (PID 41844 reached 24.00h naturally with 0 errors; ready for Step 6 audit)
 
 FINAL VERDICT:
-  -> REVISION 1.5 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
+  -> REVISION 1.6 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
   -> IMPLEMENTATION: STRICTLY LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
