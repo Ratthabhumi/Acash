@@ -1,12 +1,12 @@
 # ACASH Phase 21 — Risk-Based Capital Allocation Solvers
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE21-ALLOCATION-v1.1`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — READY FOR FINAL HUMAN APPROVAL (Phase 21 Rev 1.1 — State-Machine Normalization & Epistemic Hardening)  
+> **Document ID:** `ACASH-SPEC-PHASE21-ALLOCATION-v1.2`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — READY FOR FINAL HUMAN APPROVAL (Phase 21 Rev 1.2 — Override Scope Hardening & Specification Precision)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.1.0 (State-Machine Normalization & Epistemic Hardening)  
+> **Version:** 1.2.0 (Override Scope Hardening & Specification Precision)  
 
 ---
 
@@ -179,7 +179,7 @@ The engine inspects `decision_status` before invoking any firewall or solver rou
 | `SELECT_SET` | Pipeline Normal Path | Passes to Allocation Firewall; joint portfolio optimization. | Joint optimization over $\{w_1, \dots, w_N\}$. |
 | `NO_SELECTION` | **Deterministic Short-Circuit** | Valid non-error governance state. Bypasses optimizer; zero solver execution. | `NO_ALLOCATION` ($w_i = 0.00, \forall i$, $w_{\text{cash}} = 1.00$). |
 | `REVIEW_REQUIRED` | **Automated Pipeline Halt** | Ambiguous selection requiring human supervisor review. Automated solve blocked. | `ALLOCATION_BLOCKED` ($w_i = 0.00, \forall i$). |
-| `OVERRIDE_AUTHORIZED` | **Override Validation Path** | Explicit human override attached. Re-enters pipeline via dedicated verification. | Sized per authorized override policy. |
+| `OVERRIDE_AUTHORIZED` | **Override Validation Path** | Explicit human override attached. Re-enters pipeline via dedicated verification: Predicate `OVR-01` mechanically enforces the subset-only invariant $\mathbf{S}_{\text{override}} \subseteq \mathbf{S}_{\text{Phase20}}$ and $\mathbf{S}_{\text{override}} \cap \mathbf{E}_{\text{Phase20}} = \emptyset$. | Sized per authorized override policy. |
 | `BLOCKED` | **Automated Pipeline Halt** | Upstream governance or circuit-breaker lock asserted. Solver blocked. | `ALLOCATION_BLOCKED` ($w_i = 0.00, \forall i$). |
 
 ```
@@ -201,7 +201,7 @@ The engine inspects `decision_status` before invoking any firewall or solver rou
                                 ▼                                              │
                     [ OVERRIDE_AUTHORIZED ]                                    ▼
                     (Cryptographically sealed                         [ Out-of-Band Human Review ]
-                     OverrideDecisionRecord)                                   │
+                     OverrideDecisionRecord satisfying OVR-01)                 │
                                 │                                     ┌────────┴────────┐
                                 └─────── Dedicated Verification ──────┤ Approved        │ Rejected
                                                                       ▼                 ▼
@@ -209,36 +209,40 @@ The engine inspects `decision_status` before invoking any firewall or solver rou
 ```
 
 ### 5.2 Strict Selection Boundaries
-1. **No Candidate Resurrection:** Phase 21 cannot allocate capital to any candidate listed in Phase 20's `excluded_candidate_records`.
-2. **No Strategy Substitution:** Phase 21 cannot swap a selected candidate for an unselected candidate because "the unselected candidate has lower correlation."
-3. **No Phantom Allocations:** If Phase 20 emits `NO_SELECTION`, Phase 21 **must** output an empty allocation plan ($w_i = 0.00, \forall i$).
-4. **Clean Non-Error Semantics for NO_SELECTION:** `NO_SELECTION` is a recognized, valid market governance state indicating no strategies matched current conditions. It is deterministically mapped to `NO_ALLOCATION` without generating spurious error codes (`INPUT_INVALID` is strictly reserved for corrupt or unverified payloads).
+1. **Mechanical Override Candidate Scope Invariant (OVR-01):** Phase 21 strictly enforces that a human override cannot expand the strategy universe or function as an unauthorized strategy selection layer ("Phase 20.5"). For any `OVERRIDE_AUTHORIZED` envelope:
+   $$\boxed{\mathbf{S}_{\text{override}} \subseteq \mathbf{S}_{\text{Phase20}} \quad\text{and}\quad \mathbf{S}_{\text{override}} \cap \mathbf{E}_{\text{Phase20}} = \emptyset}$$
+   where $\mathbf{S}_{\text{Phase20}}$ is the set of strategies selected by Phase 20, $\mathbf{E}_{\text{Phase20}}$ is the set of excluded candidates in Phase 20's `excluded_candidate_records`, and $\mathbf{S}_{\text{override}}$ is the strategy set declared in the override record. Any candidate in $\mathbf{S}_{\text{override}}$ that is not in $\mathbf{S}_{\text{Phase20}}$ or that intersects $\mathbf{E}_{\text{Phase20}}$ triggers immediate fail-closed termination under `ERR_ALLOC_OVERRIDE_SCOPE_BREACH` ($\to$ `INPUT_INVALID`).
+2. **No Candidate Resurrection:** Phase 21 cannot allocate capital to any candidate listed in Phase 20's `excluded_candidate_records`.
+3. **No Strategy Substitution:** Phase 21 cannot swap a selected candidate for an unselected candidate because "the unselected candidate has lower correlation."
+4. **No Phantom Allocations:** If Phase 20 emits `NO_SELECTION`, Phase 21 **must** output an empty allocation plan ($w_i = 0.00, \forall i$).
+5. **Clean Non-Error Semantics for NO_SELECTION:** `NO_SELECTION` is a recognized, valid market governance state indicating no strategies matched current conditions. It is deterministically mapped to `NO_ALLOCATION` without generating spurious error codes (`INPUT_INVALID` is strictly reserved for corrupt or unverified payloads).
 
 ---
 
 ## 6. Allocation Eligibility Firewall (`AllocationEligibilityFirewall`)
 
-Before any numerical optimizer or risk solver is invoked, all inputs must pass through the **Allocation Eligibility Firewall**. The firewall evaluates twenty-five fail-closed filter predicates across five governance domains.
+Before any numerical optimizer or risk solver is invoked, all inputs must pass through the **Allocation Eligibility Firewall**. The firewall evaluates twenty-six fail-closed filter predicates across five governance domains.
 
 ```
 Incoming StrategySelectionDecision & Portfolio State
         │
-        ├── [ Domain 1: Upstream Decision Integrity (AF-01 to AF-05) ] ──► Any Fail? ──► REJECT / FAIL-CLOSED
+        ├── [ Domain 1: Upstream Decision Integrity & Scope (AF-01 to AF-05, AF-02b) ] ──► Any Fail? ──► REJECT / FAIL-CLOSED
         ├── [ Domain 2: Sovereign Authority Lineage (AF-06 to AF-10) ] ──► Any Fail? ──► REJECT / FAIL-CLOSED
         ├── [ Domain 3: Capital & Risk Ceiling Checks (AF-11 to AF-15) ] ─► Any Fail? ──► REJECT / FAIL-CLOSED
         ├── [ Domain 4: Numerical & Covariance Quality (AF-16 to AF-20) ] ► Any Fail? ──► REJECT / FAIL-CLOSED
         └── [ Domain 5: Operational & Circuit Breakers (AF-21 to AF-25) ] ► Any Fail? ──► REJECT / FAIL-CLOSED
         │
-        ▼ All 25 Firewall Predicates Verified
+        ▼ All 26 Firewall Predicates Verified
 Eligible for Optimization Solver Execution
 ```
 
-### 6.1 Complete 25-Predicate Firewall Specification
+### 6.1 Complete 26-Predicate Firewall Specification
 
 | Predicate ID | Domain | Evaluated Condition | Fail-Closed Reason Code |
 | :--- | :--- | :--- | :--- |
 | **AF-01** | Decision Integrity | `decision_digest` matches recalculated hash of Phase 20 record | `ERR_ALLOC_DECISION_DIGEST_MISMATCH` |
 | **AF-02** | Status Permitted | `decision_status IN {"SELECTED", "SELECT_SET", "OVERRIDE_AUTHORIZED"}` | `ERR_ALLOC_STATUS_NOT_PERMITTED` |
+| **AF-02b (OVR-01)** | Override Scope Valid | If `OVERRIDE_AUTHORIZED`: $\mathbf{S}_{\text{override}} \subseteq \mathbf{S}_{\text{Phase20}}$ and $\mathbf{S}_{\text{override}} \cap \mathbf{E}_{\text{Phase20}} = \emptyset$ | `ERR_ALLOC_OVERRIDE_SCOPE_BREACH` |
 | **AF-03** | Strategy ID Exists | All `selected_strategy_ids` exist in Phase 17 Sovereign Catalog | `ERR_ALLOC_STRATEGY_NOT_IN_CATALOG` |
 | **AF-04** | Lineage Completeness | `input_set_digest` and `previous_decision_digest` verified | `ERR_ALLOC_LINEAGE_BROKEN` |
 | **AF-05** | No Duplicate IDs | Count of unique IDs in `selected_strategy_ids` equals list length | `ERR_ALLOC_DUPLICATE_STRATEGY_ID` |
@@ -852,12 +856,68 @@ When Phase 20 emits `REVIEW_REQUIRED` or an operational condition requires manua
    - `operator_identity`: Cryptographic public key / credentials
    - `justification_text`: Mandatory detailed rationale (> 50 characters)
    - `override_digest`: SHA-256 of override record
-4. **Re-Entry via Dedicated Firewall Gate (`AF-02`):** The input envelope re-enters Phase 21 with `decision_status = "OVERRIDE_AUTHORIZED"`. Gate `AF-02` verifies the override record against the sealed override ledger. This ensures that overrides cannot bypass firewall checks or weaken fail-closed boundaries.
+4. **Re-Entry via Dedicated Firewall Gates (`AF-02` & `AF-02b`):** The input envelope re-enters Phase 21 with `decision_status = "OVERRIDE_AUTHORIZED"`. Gate `AF-02` verifies the override record against the sealed override ledger, and Gate `AF-02b` (`OVR-01`) mechanically evaluates candidate scope invariants. This ensures that overrides cannot bypass firewall checks, inject unselected strategies, or weaken fail-closed boundaries.
 
-### 34.2 Strict Override Prohibitions
+### 34.2 Mechanical Predicate OVR-01 — Override Candidate Scope Invariant
+To prevent human overrides or compromised envelopes from functioning as an unauthorized strategy selection layer ("Phase 20.5") and violating Phase 20's sovereign selection authority, Phase 21 mechanically evaluates predicate `OVR-01`:
+
+$$\boxed{\begin{aligned}
+\mathbf{S}_{\text{override}} &\subseteq \mathbf{S}_{\text{Phase20}} \\
+\mathbf{S}_{\text{override}} \cap \mathbf{E}_{\text{Phase20}} &= \emptyset \\
+\mathbf{S}_{\text{override}} \cap \mathbf{U}_{\text{Phase20}} &= \emptyset
+\end{aligned}}$$
+
+Where:
+- $\mathbf{S}_{\text{Phase20}}$ is the set of strategies selected by Phase 20 (`selected_strategy_ids`).
+- $\mathbf{E}_{\text{Phase20}}$ is the set of candidate strategies explicitly excluded or rejected by Phase 20 (`excluded_candidate_records`).
+- $\mathbf{U}_{\text{Phase20}}$ is the set of all other admitted strategies in the catalog that were not part of Phase 20's selection slate.
+- $\mathbf{S}_{\text{override}}$ is the set of strategies declared in the incoming override record (`selected_strategy_ids`).
+
+```python
+def evaluate_override_scope_predicate(
+    override_record: OverrideDecisionRecord,
+    phase20_decision: StrategySelectionDecision,
+) -> None:
+    """
+    OVR-01 / AF-02b: Mechanical validation of override candidate scope.
+    Strict fail-closed enforcement: overrides may prune or re-authorize
+    Phase 20 selections, but CANNOT add, swap, or resurrect candidates.
+    """
+    s_phase20 = set(phase20_decision.selected_strategy_ids)
+    e_phase20 = {rec.candidate_id for rec in phase20_decision.excluded_candidate_records}
+    s_override = set(override_record.selected_strategy_ids)
+
+    # 1. Strict subset constraint: Cannot introduce unselected candidates
+    if not s_override.issubset(s_phase20):
+        unauthorized = s_override - s_phase20
+        raise AllocationFirewallError(
+            code="ERR_ALLOC_OVERRIDE_SCOPE_BREACH",
+            message=f"Override attempts to inject unselected strategies: {unauthorized}",
+        )
+
+    # 2. Strict candidate resurrection ban: Cannot resurrect excluded candidates
+    resurrected = s_override.intersection(e_phase20)
+    if resurrected:
+        raise AllocationFirewallError(
+            code="ERR_ALLOC_OVERRIDE_CANDIDATE_RESURRECTION",
+            message=f"Override attempts to resurrect excluded strategies: {resurrected}",
+        )
+```
+
+### 34.3 Permitted vs. Strictly Prohibited Override Matrix
+
+| Override Action Domain | Permitted Governance Actions | Strictly Prohibited Actions (Fail-Closed) |
+| :--- | :--- | :--- |
+| **Strategy Slate Scope** | - Authorize a paused `REVIEW_REQUIRED` slate using $\mathbf{S}_{\text{override}} = \mathbf{S}_{\text{Phase20}}$.<br>- Prune exposure by authorizing a strict subset $\mathbf{S}_{\text{override}} \subset \mathbf{S}_{\text{Phase20}}$. | - Inject any candidate not in $\mathbf{S}_{\text{Phase20}}$.<br>- Resurrect any candidate from $\mathbf{E}_{\text{Phase20}}$.<br>- Create an ad-hoc strategy slate ("Phase 20.5"). |
+| **Solver Selection** | - Switch solver family (e.g. from Mean-Variance to Equal Risk Contribution or Minimum Variance). | - Authorize an uncertified or disabled solver family.<br>- Bypass numerical stability or condition checks. |
+| **Capital Allocation** | - Force defensive 100% cash mode (`FORCE_ZERO_ALLOCATION`). | - Manually prescribe arbitrary numerical weight values ($w_i$) bypassing mathematical optimization. |
+| **Risk Constraints** | - Enforce tighter concentration or lower leverage than policy defaults. | - Loosen or exceed sovereign leverage ($1.00$), concentration ($0.25$), or drawdown ceilings. |
+| **Evidence & Lineage** | - Seal immutable `OverrideDecisionRecord` into cryptographic ledger. | - Mutate upstream evidence (Phase 6, 8.5, 11, 17, 19, or 20 records).<br>- Silently edit weights without generating a ledger digest. |
+
+### 34.4 Strict Override Prohibitions
 A human operator **MUST NOT**:
 - Mutate upstream evidence (Phase 6, 8.5, 11, 17, 19, or 20).
-- Allocate capital to a strategy rejected by Phase 20.
+- Allocate capital to a strategy rejected or excluded by Phase 20.
 - Exceed sovereign concentration, leverage, or drawdown ceilings.
 - Silently edit target weights without generating an `OverrideDecisionRecord`.
 
@@ -944,9 +1004,9 @@ Every execution of Phase 21 is recorded in an append-only, SHA-256 hash-chained 
 
 ---
 
-## 39. Failure Mode Catalog (30 Comprehensive Failure Modes)
+## 39. Failure Mode Catalog (31 Comprehensive Failure Modes)
 
-Phase 21 defines deterministic, fail-closed handling for thirty critical failure modes:
+Phase 21 defines deterministic, fail-closed handling for thirty-one critical failure modes:
 
 | Failure ID | Failure Trigger | Detection Mechanism | Fail-Closed Engine Action | Emitted Plan Status |
 | :--- | :--- | :--- | :--- | :--- |
@@ -980,6 +1040,7 @@ Phase 21 defines deterministic, fail-closed handling for thirty critical failure
 | **ALLOC-28** | Input DTO schema version mismatch | Pydantic validation error | Reject request. Version mismatch. | `INPUT_INVALID` |
 | **ALLOC-29** | Requested solver family disabled | Policy permission check | Halt. Solver not authorized. | `NOT_APPLICABLE` |
 | **ALLOC-30** | Stale previous allocation record | Rebalance check timestamp stale | Treat as initial allocation. | `FEASIBLE` (cold start) |
+| **ALLOC-31** | Override candidate scope breach | OVR-01 subset & exclusion check fail | Immediate halt. Security alert. | `INPUT_INVALID` |
 
 ---
 
@@ -1032,9 +1093,9 @@ All allocation parameters are strictly registered under the ACASH Four-Tier Taxo
 
 ---
 
-## 41. Adversarial Self-Audit (25 Dimensions)
+## 41. Adversarial Self-Audit (26 Dimensions)
 
-To prove institutional resilience, Phase 21 specifies controls across twenty-five adversarial attack vectors:
+To prove institutional resilience, Phase 21 specifies controls across twenty-six adversarial attack vectors:
 
 | # | Adversarial Vector | Control Mechanism | Failure Mode | Fail-Closed Outcome | Authority Owner | Verification Status |
 | :-: | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -1063,6 +1124,7 @@ To prove institutional resilience, Phase 21 specifies controls across twenty-fiv
 | **23**| **Zero-Risk Semantics Confusion:** Downstream listener treats $w_i = 0$ as instruction to send sell orders. | Phase 21 documentation and schemas explicitly declare $w_i$ as target weights only. | Erroneous market dumps. | Phase 22 orchestrator enforces staged liquidation schedules. | Phase 22 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **24**| **Singular Portfolio Volatility:** Base volatility $\sigma_p = 0$ causes division-by-zero in ERC. | AF-20 checks standalone volatilities; floor prevents division by zero. | Runtime divide-by-zero crash. | Engine raises `ERR_ALLOC_VOLATILITY_DEGENERATE`. | Numerical Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 | **25**| **Expected Return Fabrication:** Mean-Variance solver silently sets $\mu_i = \text{mean}(R_i)$. | Strict Section 16 rule halts unless $\boldsymbol{\mu}$ is provided by certified upstream authority. | Spurious mean-variance weights. | Engine halts with `ERR_ALLOC_EXPECTED_RETURN_UNAVAILABLE`. | Epistemic Engine | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
+| **26**| **Override Candidate Injection / Resurrection:** Operator attempts to inject unselected strategy or resurrect excluded candidate via override envelope. | AF-02b (OVR-01) mechanically verifies $\mathbf{S}_{\text{override}} \subseteq \mathbf{S}_{\text{Phase20}}$ and $\mathbf{S}_{\text{override}} \cap \mathbf{E}_{\text{Phase20}} = \emptyset$. | Unauthorized candidate selection via override path ("Phase 20.5"). | Engine halts with `ERR_ALLOC_OVERRIDE_SCOPE_BREACH`; `INPUT_INVALID`. | Phase 20 Authority | CONTROL SPECIFIED / NOT YET IMPLEMENTED |
 
 ---
 
@@ -1184,8 +1246,8 @@ The Phase 21 Master Architecture Specification is deemed acceptable when the fol
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE21-ALLOCATION-v1.1
-Specification Status    : PROPOSED ARCHITECTURE — READY FOR FINAL HUMAN APPROVAL (Rev 1.1)
+Document ID             : ACASH-SPEC-PHASE21-ALLOCATION-v1.2
+Specification Status    : PROPOSED ARCHITECTURE — READY FOR FINAL HUMAN APPROVAL (Rev 1.2)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023
@@ -1194,23 +1256,25 @@ Lead Quant Architect   : Antigravity / Senior Quantitative Portfolio Architect
 Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
-Remediation Ledger (Rev 1.1):
-  - Critical #1 Resolved: Resolved REVIEW_REQUIRED vs AF-02 contradiction; established
-                          dedicated two-stage Override Validation Path (AF-02).
-  - Critical #2 Resolved: Normalized NO_SELECTION as valid non-error governance state
-                          with deterministic short-circuit to NO_ALLOCATION.
-  - Quant #1 Resolved   : Clarified ERC objective convexity (quartic vs log-barrier).
-  - Quant #2 Resolved   : Qualified Risk Parity convergence assumptions.
-  - Quant #3 Resolved   : Refined academic literature wording (necessity/optimal).
-  - Naming Hygiene      : Renamed expected_portfolio_volatility -> modeled_portfolio_volatility.
+Remediation Ledger (Rev 1.2):
+  - Critical #3 Resolved: Established mechanical predicate OVR-01 (AF-02b) preventing
+                          human override from acting as an unauthorized strategy selection
+                          layer ("Phase 20.5"); strictly enforces subset-only invariant
+                          S_override subseteq S_Phase20 and S_override cap E_Phase20 = empty.
+  - Verification Hygiene: Clarified that all verifications at this phase are specification-level
+                          architectural inspections, with runtime implementation strictly
+                          locked (CONTROL SPECIFIED / NOT YET IMPLEMENTED).
+  - Preceding Remediation: Critical #1 (Override Path), Critical #2 (NO_SELECTION semantics),
+                          Quant #1 (ERC convexity), Quant #2 (Convergence assumptions),
+                          Quant #3 (Epistemic wording), Volatility naming hygiene.
 
 Verification Status:
-  - Architecture Review : COMPLETE / SATISFIED
+  - Architecture Review : COMPLETE / SATISFIED (DESIGN SPECIFICATION INSPECTION)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection/Execution Overreach)
-  - State-Machine Check : VERIFIED CONSISTENT (AF-02, Pre-Solver Dispatch, NO_ALLOCATION)
+  - State-Machine Check : VERIFIED CONSISTENT (SPECIFICATION INSPECTION AUDIT — Rev 1.2)
   - Mathematical Sound  : GOVERNED FORMULATIONS (ERC, Risk Parity, VolTargeting)
-  - Fail-Closed Contract: COMPLETE (30/30 Failure Modes Handled; INFEASIBLE -> NO_ALLOC)
-  - Adversarial Audit   : COMPLETE (25/25 Dimensions Addressed)
+  - Fail-Closed Contract: COMPLETE (31/31 Failure Modes Handled; INFEASIBLE -> NO_ALLOC)
+  - Adversarial Audit   : COMPLETE (26/26 Dimensions Addressed)
   - Live Trading State  : HARD-LOCKED ($0.00 Capital, 0 Orders, Broker Disconnected)
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
