@@ -1,12 +1,12 @@
 # ACASH Phase 22 — Portfolio Orchestration & Netting
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.6`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.6 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
+> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.7`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.7 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023, ADR-024, ADR-025  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.6.0 (Master Architecture & Governance Specification — Rev 1.6 Remediation)  
+> **Version:** 1.7.0 (Master Architecture & Governance Specification — Rev 1.7 Remediation)  
 
 ---
 
@@ -616,10 +616,10 @@ The execution intent lifecycle manages intent progression through a formal **15-
 [ Phase 21 Plan ] + [ Phase 12 Report ]
         │
         ▼
-   1. CREATED ──────► 2. VALIDATED ──────► 3. NETTED ──────► 4. READY
-                                                                  │
-                                                                  ▼
-                                                           5. DISPATCHED (to Phase 12)
+   1. CREATED ──────► 2. VALIDATED ──────► 3. NETTED ──────► 4. READY ──────────────┐
+                                                                  │                 │ (pre-dispatch cancel)
+                                                                  ▼                 ▼
+                                                           5. DISPATCHED      11. CANCELLED
                                                                   │
                            ┌──────────────────────────────────────┴──────────────────────────────────────┐
                            ▼                                                                             ▼
@@ -628,8 +628,8 @@ The execution intent lifecycle manages intent progression through a formal **15-
          ┌─────────────────┼─────────────────┬─────────────────┐                                         ▼
          ▼                 ▼                 ▼                 │                                  14. RECONCILE_PENDING
    7. COMPLETED     8. PARTIAL_FILL    9. REJECTED             │                                         │
-         │                 │                 │                 ▼                                         ▼
-         │                 │                 │          10. CANCEL_REQUESTED                      15. RECONCILED
+         ▲                 │                 │                 ▼                                         ▼
+         │ (remainder fill)├──(idle timeout)────────────────► 10. CANCEL_REQUESTED                15. RECONCILED
          │                 │                 │                 │
          │                 │                 │                 ▼
          │                 │                 │          11. CANCELLED
@@ -657,28 +657,34 @@ $$\boxed{\begin{aligned}
 
 ## 23. Intent State Machine & Transition Invariants (15 States)
 
-### 15-State Transition Invariant Table
+### 15-State Transition Invariant Table (20 Canonical Transitions)
 | # | Source State | Event Trigger | Destination State | Invariant / Post-Condition |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `CREATED` | Schema & field validation passes | `VALIDATED` | Deterministic key & runtime UUIDv7 handle assigned. |
 | **2** | `VALIDATED` | Algebraic netting calculation complete | `NETTED` | `delta_lots` computed; deadbands checked. |
 | **3** | `NETTED` | Risk sequencing & priority tiering done | `READY` | Sorted by Priority Tier 1..4. |
-| **4** | `READY` | Payload transmitted over IPC to Phase 12| `DISPATCHED` | Logged to WAL (`orchestration_ledger`). |
-| **5** | `DISPATCHED` | Phase 12 confirms ticket received | `ACKNOWLEDGED` | Downstream ticket ID recorded. |
-| **6** | `DISPATCHED` | No reply within `timeout_seconds` | `TIMEOUT` | **TIMEOUT != SUCCESS. Canonical Path 1.** |
-| **7** | `ACKNOWLEDGED` | Phase 12 reports 100% volume filled | `COMPLETED` | Terminal fill logged; inventory updated. |
-| **8** | `ACKNOWLEDGED` | Phase 12 reports partial fill | `PARTIAL_FILL` | Residual quantity tracked; pacing checks. |
-| **9** | `ACKNOWLEDGED` | Phase 12 reports venue rejection | `REJECTED` | Fail-closed halt; reason code cataloged. |
-| **10**| `ACKNOWLEDGED` | Explicit cancel requested (idle/pause) | `CANCEL_REQUESTED` | Cancel directive dispatched. Canonical Path 2. |
-| **11**| `CANCEL_REQUESTED`| Phase 12 confirms order cancelled | `CANCELLED` | Terminal cancellation confirmed by venue. |
-| **12**| `CANCEL_REQUESTED`| Fill races cancel (fill confirmed first) | `COMPLETED` / `PARTIAL`| Realized fill takes precedence over cancel. |
-| **13**| `DISPATCHED` / `REQ`| Phase 12 disconnects unexpectedly | `UNKNOWN` | **UNKNOWN != FAILED. Reconcile mandatory.** |
-| **14**| `TIMEOUT` / `UNKNOWN`| Phase 12 audit reconciliation triggered | `RECONCILE_PENDING` | Trading locked on instrument; out-of-band query. |
-| **15**| `RECONCILE_PENDING`| Authoritative Phase 12 position confirmed | `RECONCILED` | Realized position synchronized. Sets `reconciliation_outcome` (`FILL_CONFIRMED`, `CANCEL_CONFIRMED`, or `DROPPED_DOWNSTREAM`). Terminal state. |
+| **4** | `READY` | Payload transmitted over IPC to Phase 12 | `DISPATCHED` | Logged to WAL (`orchestration_ledger`). |
+| **5** | `READY` | Stale plan ($T > 120\text{s}$) or engine halt before dispatch | `CANCELLED` | **Canonical Path 3 (Pre-Dispatch Invalidation). Zero IPC cancel sent.** Sets `cancellation_reason = CANCELLED_STALE_INPUT`. |
+| **6** | `DISPATCHED` | Phase 12 confirms ticket received | `ACKNOWLEDGED` | Downstream ticket ID recorded. |
+| **7** | `DISPATCHED` | No reply within `timeout_seconds` | `TIMEOUT` | **TIMEOUT != SUCCESS. Canonical Path 1.** |
+| **8** | `ACKNOWLEDGED` | Phase 12 reports 100% volume filled | `COMPLETED` | Terminal fill logged; realized inventory synchronized. |
+| **9** | `ACKNOWLEDGED` | Phase 12 reports partial fill ($0 < Q_{\text{filled}} < Q_{\text{intent}}$) | `PARTIAL_FILL` | Realized lots updated; residual exposure tracked. |
+| **10**| `ACKNOWLEDGED` | Phase 12 reports venue rejection | `REJECTED` | Fail-closed halt; reason code cataloged. Terminal state. |
+| **11**| `ACKNOWLEDGED` | Explicit cancel requested (rebalance expiry / pause) | `CANCEL_REQUESTED` | Cancel directive dispatched to Phase 12. Canonical Path 2. |
+| **12**| `PARTIAL_FILL` | Remainder volume filled ($Q_{\text{cum}} = Q_{\text{intent}}$) | `COMPLETED` | Terminal completion; final inventory synchronized. |
+| **13**| `PARTIAL_FILL` | Additional partial fill ($Q_{\text{cum}} < Q_{\text{intent}}$) | `PARTIAL_FILL` | Self-loop; cumulative fill updated; residual tracked. |
+| **14**| `PARTIAL_FILL` | Partial fill idle limit exceeded ($\tau_{\text{idle}} > 60\text{s}$) or cancel cmd | `CANCEL_REQUESTED` | Residual cancel directive dispatched to Phase 12. Canonical Path 2. |
+| **15**| `CANCEL_REQUESTED`| Phase 12 confirms order cancelled | `CANCELLED` | Terminal cancellation confirmed by venue. |
+| **16**| `CANCEL_REQUESTED`| Fill races cancel (100% filled confirmed) | `COMPLETED` | Realized fill takes precedence over cancellation. |
+| **17**| `CANCEL_REQUESTED`| Fill races cancel (partial fill confirmed) | `PARTIAL_FILL` | Realized partial fill recorded; cancel races residual. |
+| **18**| `DISPATCHED` / `ACKNOWLEDGED` / `PARTIAL_FILL` / `CANCEL_REQUESTED` | Phase 12 disconnects unexpectedly | `UNKNOWN` | **UNKNOWN != FAILED. Reconcile mandatory.** |
+| **19**| `TIMEOUT` / `UNKNOWN` | Phase 12 audit reconciliation triggered | `RECONCILE_PENDING` | Trading locked on instrument; out-of-band status query. |
+| **20**| `RECONCILE_PENDING` | Authoritative Phase 12 position confirmed | `RECONCILED` | Realized position synchronized. Sets `reconciliation_outcome` (`FILL_CONFIRMED`, `CANCEL_CONFIRMED`, or `DROPPED_DOWNSTREAM`). Terminal state. |
 
 $$\boxed{\begin{aligned}
 \mathbf{CANONICAL\;PATH\;1:}&\quad \text{DISPATCHED } \xrightarrow{\text{timeout}} \text{TIMEOUT } \longrightarrow \text{RECONCILE\_PENDING } \longrightarrow \text{RECONCILED} \\
-\mathbf{CANONICAL\;PATH\;2:}&\quad \text{ACKNOWLEDGED } \xrightarrow{\text{cancel cmd}} \text{CANCEL\_REQUESTED } \longrightarrow \text{CANCELLED (or COMPLETED on race)}
+\mathbf{CANONICAL\;PATH\;2:}&\quad \text{ACKNOWLEDGED / PARTIAL\_FILL } \xrightarrow{\text{cancel cmd}} \text{CANCEL\_REQUESTED } \longrightarrow \text{CANCELLED (or COMPLETED / PARTIAL\_FILL on race)} \\
+\mathbf{CANONICAL\;PATH\;3:}&\quad \text{READY } \xrightarrow{\text{stale plan / halt}} \text{CANCELLED } (\text{Pre-dispatch invalidation; zero venue IPC emitted})
 \end{aligned}}$$
 
 ---
@@ -688,7 +694,9 @@ $$\boxed{\begin{aligned}
 When Phase 12 reports a partial fill ($0 < Q_{\text{filled}} < Q_{\text{intent}}$):
 1. **No Synthetic Completion:** The intent is NEVER marked completed. State becomes `PARTIAL_FILL`.
 2. **Residual Exposure Calculation:** Residual requirement is $Q_{\text{residual}} = Q_{\text{intent}} - Q_{\text{filled}}$.
-3. **Execution Stall Detection:** If no further fills occur within `policy.partial_fill_idle_limit_sec` (default: 60s), Phase 22 emits a `CANCEL_REQUEST` to Phase 12 for the residual balance, transitioning intent to `CANCEL_REQUESTED`.
+3. **Execution Stall Detection:** If no further fills occur within `policy.partial_fill_idle_limit_sec` (default: 60s), Phase 22 emits a `CANCEL_REQUEST` to Phase 12 for the residual balance, transitioning intent from `PARTIAL_FILL` $\to$ `CANCEL_REQUESTED` (Canonical Path 2).
+4. **Remainder Execution:** If subsequent execution fills the entire residual balance ($Q_{\text{cum}} = Q_{\text{intent}}$), intent transitions from `PARTIAL_FILL` $\to$ `COMPLETED`.
+5. **Additional Incremental Fill:** If a subsequent partial fill arrives ($Q_{\text{cum}} < Q_{\text{intent}}$), intent transitions `PARTIAL_FILL` $\to$ `PARTIAL_FILL` (self-loop), updating realized lots and residual notional.
 
 ---
 
@@ -703,10 +711,16 @@ When Phase 12 reports `REJECTED`:
 
 ## 26. Cancellation Handling
 
-1. **Formal Canonical Transition:** An intent enters state **`CANCEL_REQUESTED`** strictly when Phase 22 transmits an explicit cancellation directive to Phase 12 for an acknowledged resting order (e.g. partial-fill idle timeout, rebalance expiration, or `PAUSE_ORCHESTRATION`).
-2. **Separation from Timeout:** IPC communication timeouts do NOT enter `CANCEL_REQUESTED`; they transition strictly to **`TIMEOUT` $\to$ `RECONCILE_PENDING`**.
-3. **Downstream Confirmation Mandatory:** Phase 22 **CANNOT assume an intent is cancelled** until Phase 12 emits an authenticated cancellation receipt, transitioning state from `CANCEL_REQUESTED` to `CANCELLED`.
-4. **Race Condition Resolution:** If a fill occurs while a cancel request is in flight, the fill takes precedence; Phase 22 updates realized inventory and transitions state from `CANCEL_REQUESTED` to `COMPLETED` or `PARTIAL_FILL`.
+### 26.1 Post-Dispatch Cancellation (`CANCEL_REQUESTED` $\to$ `CANCELLED`)
+1. **Formal Post-Dispatch Transition:** An intent enters state **`CANCEL_REQUESTED`** strictly when Phase 22 transmits an explicit cancellation directive to Phase 12 for an acknowledged resting order or active partial fill (Canonical Path 2: e.g. partial-fill idle timeout, rebalance expiration, or `PAUSE_ORCHESTRATION`).
+2. **Separation from Timeout:** IPC communication timeouts do NOT enter `CANCEL_REQUESTED`; they transition strictly to **`TIMEOUT` $\to$ `RECONCILE_PENDING`** (Canonical Path 1).
+3. **Downstream Confirmation Mandatory:** For dispatched orders, Phase 22 **CANNOT assume an intent is cancelled** until Phase 12 emits an authenticated cancellation receipt, transitioning state from `CANCEL_REQUESTED` to `CANCELLED`.
+4. **Race Condition Resolution:** If a fill occurs while a cancel request is in flight, the fill takes precedence; Phase 22 updates realized inventory and transitions state from `CANCEL_REQUESTED` to `COMPLETED` (100% filled) or `PARTIAL_FILL` (partial fill).
+
+### 26.2 Pre-Dispatch Invalidation (`READY` $\to$ `CANCELLED`)
+1. **Direct Terminal Cancellation (Canonical Path 3):** If an intent is invalidated BEFORE physical IPC dispatch (e.g. stale allocation plan $T > 120\text{s}$, new allocation plan supersession, or Phase 11 emergency halt during rebalance assembly), the intent transitions directly from **`READY` $\to$ `CANCELLED`**.
+2. **Zero Downstream Traffic:** **Zero IPC cancellation directive is transmitted to Phase 12 or the venue**, as no physical order was ever emitted.
+3. **Typed Cancellation Reason:** The intent records the exact invalidation cause via `cancellation_reason = CANCELLED_STALE_INPUT`, `REBALANCE_SUPERSEDED`, or `CIRCUIT_BREAKER_HALT`.
 
 ---
 
@@ -727,7 +741,7 @@ $$\boxed{\begin{aligned}
 ## 28. Stale Allocation Handling
 
 1. **Staleness Threshold:** If $T_{\text{now}} - T_{\text{decision}} > 120\text{s}$, the allocation plan is deemed **STALE**.
-2. **Orchestration Action:** Phase 22 transitions engine operational mode to `DEFENSIVE_HOLD`. All pending un-dispatched intents transition to lifecycle state `CANCELLED` with typed disposition `cancellation_reason = CANCELLED_STALE_INPUT`.
+2. **Orchestration Action:** Phase 22 transitions engine operational mode to `DEFENSIVE_HOLD`. All pending un-dispatched intents in state `READY` transition directly to lifecycle state `CANCELLED` via Canonical Path 3 with typed disposition `cancellation_reason = CANCELLED_STALE_INPUT`. Zero venue cancellation IPC is transmitted.
 3. **Existing Position Protection:** Existing physical positions are **HELD IN PLACE**. Phase 22 does NOT liquidate positions because of a stale plan; liquidation requires explicit Phase 11 emergency action.
 
 ---
@@ -1034,7 +1048,7 @@ Evaluate Fail-Closed Policy:
 | **34**| **Sovereign Liquidation** | Solver status triggers unrequested dump. | Section 5.2 Invariant | Generic target math; internal fail = HOLD. | Netting Engine | CONTROL SPECIFIED |
 | **35**| **Replay Determinism & UUIDv7 Drift Attack** | Replay at different wall-clock epoch alters UUIDv7; inverts intent sorting if tie-break uses UUIDv7. | Section 15 & 16 Determinism | Tie-breaking bound to deterministic fields (`deterministic_intent_key ASC`); zero UUIDv7 dependence in ordering. | Orchestration | CONTROL SPECIFIED |
 | **36**| **Zero-Transition Phantom Volume Attack** | Static portfolio has $\sum |\Delta Q_{i,s}| = 0$; logic misinterprets $\text{NER}_s=0$ as requiring 100% market execution. | Section 11.2 Property 2b | Explicit separation of Property 2a (positive transition, zero netting) from 2b (zero transition convention, zero venue orders). | Netting Engine | CONTROL SPECIFIED |
-| **37**| **DFA State Pollution & Pseudo-State Leakage Attack** | Malicious or buggy input deserializes pseudo-state (e.g. `IDLE_ON_TARGET`, `RECONCILED_DROPPED`) as lifecycle state. | Section 21 & 22 DFA Closure | Strict `IntentLifecycleState` enum; pseudo-states rejected fail-closed (`ERR_ORCH_DFA_STATE_INVALID`); outcomes segregated to typed fields. | State Machine | CONTROL SPECIFIED |
+| **37**| **DFA State Pollution & Incomplete Transition Attack** | Malicious or buggy input deserializes pseudo-states (`PARTIAL`, `IDLE_ON_TARGET`, `RECONCILED_DROPPED`) or executes unmapped transitions (e.g. unhandled `PARTIAL_FILL` stall or unmapped pre-dispatch invalidation). | Section 21, 22, 23 DFA Closure | Strict `IntentLifecycleState` enum; fail-closed rejection (`ERR_ORCH_DFA_STATE_INVALID`); total transition coverage across all 15 states with 20 canonical transitions. | State Machine | CONTROL SPECIFIED |
 
 ---
 
@@ -1052,7 +1066,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 - [x] **Criterion 9 (Fail-Closed Concentration):** Concentration breaches halt engine; zero silent clipping.
 - [x] **Criterion 10 (Authorized Risk-Reducing Priority):** Closes strictly precede expansions; zero sovereign emergency close generation.
 - [x] **Criterion 11 (Decoupled Computational Determinism & Identity):** Computational outputs, sequence ordering, and tie-breaking are 100% bit-for-bit deterministic via `deterministic_intent_key`; runtime `intent_id` (UUIDv7) is strictly an ephemeral instance handle without ordering authority.
-- [x] **Criterion 12 (Formal 15-State DFA & Total Closure):** Strict state transitions across exactly 15 formal states; enforces DFA Closure Invariant: zero pseudo-states (`IDLE_ON_TARGET`, `RECONCILED_DROPPED`) permitted in `lifecycle_state`; reconciliation outcomes and cancellation reasons quarantined in separate typed fields; zero undefined paths.
+- [x] **Criterion 12 (Formal 15-State DFA & Total Semantic Closure):** Strict state transitions across exactly 15 formal states; enforces DFA Closure Invariant: zero pseudo-states (`PARTIAL`, `IDLE_ON_TARGET`, `RECONCILED_DROPPED`) permitted; all 20 transitions fully formalized covering `PARTIAL_FILL` exits, race conditions, and pre-dispatch `READY` $\to$ `CANCELLED` invalidation; zero undefined paths.
 - [x] **Criterion 13 (Epistemic Separation):** `TIMEOUT != SUCCESS` and `UNKNOWN != FAILED`.
 - [x] **Criterion 14 (Missing Position Safety):** Missing position snapshot enters `DEFENSIVE_HOLD`. Never assume zero.
 - [x] **Criterion 15 (Atomic WAL Logging):** Write-ahead ledger append and `fsync` precede IPC dispatch.
@@ -1064,7 +1078,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 
 ## 49. Governance Verification Matrix
 
-| Verification Dimension | Standard / Invariant Required | Revision 1.6 Specification Status | Evidence / Authority |
+| Verification Dimension | Standard / Invariant Required | Revision 1.7 Specification Status | Evidence / Authority |
 | :--- | :--- | :--- | :--- |
 | **Authority Isolation** | Zero strategy selection, zero re-allocation | **VERIFIED (SPECIFICATION)** | Sections 2, 3, 4, 5 |
 | **Liquidation Authority**| No sovereign liquidation; generic target math | **VERIFIED (SPECIFICATION)** | Section 5.2, Section 5.3, Section 40 |
@@ -1077,7 +1091,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 | **Residual Semantics** | Min-volume suppression preserves residual per plan | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
 | **Signed Exposure Model**| Unsigned capital $w_i \ge 0 \times$ signed signal $d_{i,s}$ | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-07`), Section 8, 9 |
 | **Firewall Completeness**| 28 deterministic fail-closed predicates | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-01` to `OF-28`) |
-| **State Machine Safety** | 15-state DFA with total closure; pseudo-states quarantined to typed outcome fields; TIMEOUT vs CANCEL_REQ separated | **VERIFIED (SPECIFICATION)** | Sections 21, 22, 23, 26, 27 |
+| **State Machine Safety** | 15-state DFA with total semantic closure; zero pseudo-states; all 20 canonical transitions formalized | **VERIFIED (SPECIFICATION)** | Sections 21, 22, 23, 24, 26, 27, 28 |
 | **Idempotency & Replay**| Decoupled determinism from UUIDv7; tie-break via `deterministic_intent_key ASC` | **VERIFIED (SPECIFICATION)** | Sections 14, 15, 16, 32, 34, 37 |
 | **Adversarial Hardening**| 37 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
 | **Runtime Code State** | STRICTLY LOCKED / NOT AUTHORIZED | **ENFORCED** | Zero code in `src/` or `tests/` |
@@ -1092,8 +1106,8 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.6
-Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.6 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)
+Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.7
+Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.7 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023, ADR-024, ADR-025
@@ -1103,7 +1117,7 @@ Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
 Verification Status:
-  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.6)
+  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.7)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection, Allocation, or Wire Overreach)
   - Liquidation Scope   : REMEDIATED (Zero Sovereign Liquidation; DEFENSIVE_HOLD Enforced)
   - Priority Sequencing : REMEDIATED (Priority 1 Sequences Authorized Closes Only; Zero Stop-Out Generation)
@@ -1111,8 +1125,8 @@ Verification Status:
   - Signed Exposure     : REMEDIATED (Unsigned Capital Budget w_i >= 0 x Directional Signal d_{i,s})
   - NER Mathematical    : REMEDIATED (Dual Zero-Transition Convention; Gross Transition = 0 -> Zero Venue Volume)
   - Determinism & Idem  : REMEDIATED (Computational Determinism Decoupled from UUIDv7; Deterministic Tie-Breaking Enforced)
-  - State-Machine Check : REMEDIATED (Formal 15-State DFA with Total Closure; Zero Pseudo-States)
-  - State Transitions   : REMEDIATED (TIMEOUT -> RECONCILE vs ACK -> CANCEL_REQUESTED Decoupled)
+  - State-Machine Check : REMEDIATED (Formal 15-State DFA with Total Semantic Closure; PARTIAL -> PARTIAL_FILL; 20 Transitions Formalized)
+  - State Transitions   : REMEDIATED (Canonical Path 1, 2, and 3 Formalized; READY -> CANCELLED & PARTIAL_FILL Exits Enforced)
   - Adapter Boundary    : REMEDIATED (Phase12PositionReport Contract Enforced; Telemetry Purged)
   - Netting Semantics   : REMEDIATED (Zero Synthetic Fills Policy Enforced; Execution Suppression)
   - Target Immutability : REMEDIATED (Pacing vs Re-allocation Enforced; Zero Delta Scaling)
@@ -1124,7 +1138,7 @@ Verification Status:
   - Background Soak     : COMPLETED (PID 41844 reached 24.00h naturally with 0 errors; ready for Step 6 audit)
 
 FINAL VERDICT:
-  -> REVISION 1.6 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
+  -> REVISION 1.7 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
   -> IMPLEMENTATION: STRICTLY LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
