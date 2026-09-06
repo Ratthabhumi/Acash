@@ -1,12 +1,12 @@
 # ACASH Phase 22 — Portfolio Orchestration & Netting
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.2`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.2 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
+> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.3`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.3 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023, ADR-024, ADR-025  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.2.0 (Master Architecture & Governance Specification — Rev 1.2 Remediation)  
+> **Version:** 1.3.0 (Master Architecture & Governance Specification — Rev 1.3 Remediation)  
 
 ---
 
@@ -29,7 +29,7 @@
 
 Phase 22 establishes the **Portfolio Orchestration & Netting Engine** for the ACASH quantitative trading and research operating system. 
 
-Positioned strictly between the upstream mathematical capital allocation layer (**Phase 21**) and the downstream physical broker execution adapters (**Phase 12**), Phase 22 transforms abstract, strategy-level target weights into coordinated, risk-sequenced, internally netted, and capacity-constrained **abstract execution intents**.
+Positioned strictly between the upstream mathematical capital allocation layer (**Phase 21**) and the downstream physical broker execution adapters (**Phase 12**), Phase 22 transforms abstract, strategy-level target weights and directional signals into coordinated, risk-sequenced, internally netted, and capacity-constrained **abstract execution intents**.
 
 Phase 22 provides institutional-grade execution coordination:
 1. **Multi-Strategy Intent Aggregation:** Resolves concurrent, multi-strategy demands on shared market instruments without re-optimizing or weakening upstream allocations.
@@ -59,7 +59,7 @@ Phase 22 is an **orchestration, coordination, and netting engine**. It is NOT an
 - **Allocation Plan Ingestion:** Ingest and cryptographically verify `PortfolioAllocationPlan` payloads from Phase 21.
 - **Position Report Ingestion:** Ingest authenticated `Phase12PositionReport` snapshots from Phase 12; Phase 22 has zero direct broker telemetry feed.
 - **Multi-Strategy Aggregation:** Aggregate strategy targets sharing identical instruments into unified portfolio-level targets.
-- **Exposure Translation:** Convert capital weights $w_i$ and notional allocations into discrete, quantized broker lots according to `BrokerSymbolSpec`.
+- **Exposure Translation:** Convert capital weights $w_i \ge 0$ and directional signals $d_{i,s} \in [-1, 1]$ into discrete, quantized broker lots according to `BrokerSymbolSpec`.
 - **Deterministic Algebraic Netting:** Calculate the Net Execution Requirement ($\text{NER}_s$) across opposing strategy positions.
 - **Execution Suppression:** Suppress physical order emission for internally netted volumes without creating synthetic fills.
 - **Execution Constraints:** Apply rebalance deadbands ($\delta_{\text{deadband}}$), deterministic multi-epoch turnover pacing, and Average Daily Volume (ADV) participation caps.
@@ -107,7 +107,7 @@ The ACASH quantitative execution pipeline enforces a strict, unidirectional sove
       │  Contract: StrategySelectionDecision (sealed by decision_digest)
       ▼
   Phase 21: Capital Allocation Engine
-      │  Authority: Determines HOW MUCH capital w_i each strategy receives.
+      │  Authority: Determines HOW MUCH capital w_i >= 0 each strategy receives.
       │  Contract: PortfolioAllocationPlan (sealed by plan_digest)
       ▼
   Phase 22: Portfolio Orchestration & Netting Engine (THIS SPECIFICATION)
@@ -139,7 +139,7 @@ Phase 22 ingests the immutable `PortfolioAllocationPlan` emitted by Phase 21.
 - `capital_basis_usd` & `allocatable_capital_usd`: Total equity and net risk capital.
 - `cash_weight`: Mandatory liquidity buffer $w_0 \in [0.10, 1.00]$.
 - `selected_strategy_ids`: Exact list of authorized strategies.
-- `target_weights`: Dictionary mapping `{strategy_id: w_i}` ($\sum w_i + w_{\text{cash}} = 1.00$).
+- `target_weights`: Dictionary mapping `{strategy_id: w_i}` where $w_i \ge 0.0$ ($\sum w_i + w_{\text{cash}} = 1.00$).
 - `allocated_capital_usd`: Dictionary mapping `{strategy_id: w_i \times \text{allocatable\_capital}}`.
 - `solver_status`: Status from Phase 21 (`"FEASIBLE"`, `"DEFENSIVE_FALLBACK"`, `"NO_ALLOCATION"`).
 
@@ -211,7 +211,7 @@ Proceed to Multi-Strategy Netting & Intent Generation
 | **OF-04** | Lineage Ledger Found | `resolve_sealed_ledger(plan.allocation_plan_id) == TRUE` | `ERR_ORCH_LINEAGE_UNSEALED` |
 | **OF-05** | Plan Freshness | `T_now - plan.decision_timestamp_utc <= max_age_sec` | `ERR_ORCH_PLAN_STALE` |
 | **OF-06** | Strategy Set Match | `set(plan.target_weights.keys()) == set(plan.selected_strategy_ids)` | `ERR_ORCH_STRATEGY_SET_MISMATCH`|
-| **OF-07** | Weights Bounded | `0.0 <= w_i <= policy.max_single_weight` $\forall i$ | `ERR_ORCH_WEIGHT_OUT_OF_BOUNDS` |
+| **OF-07** | Weights Bounded & Non-Negative| `0.0 <= w_i <= policy.max_single_weight` $\forall i$ | `ERR_ORCH_WEIGHT_OUT_OF_BOUNDS` |
 | **OF-08** | Cash Floor Enforced | `plan.cash_weight >= policy.min_cash_floor` (0.10) | `ERR_ORCH_CASH_FLOOR_BREACH` |
 | **OF-09** | Budget Partition Unity | `abs(sum(w_i) + cash_weight - 1.0) <= 1e-9` | `ERR_ORCH_BUDGET_SUM_INVALID` |
 | **OF-10** | Capital Positivity | `plan.capital_basis_usd > 0 and plan.allocatable_capital_usd > 0` | `ERR_ORCH_CAPITAL_NON_POSITIVE` |
@@ -242,18 +242,29 @@ $$\boxed{\mathbf{INVARIANT:}\quad \text{OF-19 or OF-20 breach } \implies \text{B
 
 In an institutional multi-strategy architecture, multiple independent strategies frequently generate targets for identical underlying instruments.
 
-### 8.1 The Multi-Strategy Problem
-Consider three authorized strategies targeting EURUSD at time $t$:
-- Strategy $A$ (Trend Following): Target weight $w_A = +0.20$ (Long \$200,000 notional)
-- Strategy $B$ (Mean Reversion): Target weight $w_B = -0.15$ (Short \$150,000 notional)
-- Strategy $C$ (Carry / Yield): Target weight $w_C = +0.10$ (Long \$100,000 notional)
+### 8.1 The Multi-Strategy Formulation (Unsigned Capital $\times$ Directional Exposure)
+Phase 21 allocates an **unsigned capital budget** $w_i \ge 0.0$ to each strategy. Each strategy emits a **normalized directional exposure intent** $d_{i, s} \in [-1.00, +1.00]$ on instrument $s$:
+- $d_{i, s} > 0$: Long exposure
+- $d_{i, s} < 0$: Short exposure
+- $d_{i, s} = 0$: Neutral / zero exposure
+
+The resulting strategy-level target notional is:
+$$N_{i, s} = w_i \times \text{AllocatableCapital} \times d_{i, s}$$
+
+### 8.2 The Multi-Strategy Aggregation Example
+Consider three authorized strategies targeting EURUSD at time $t$ ($\text{AllocatableCapital} = \$1,000,000$):
+- Strategy $A$ (Trend Following): Capital weight $w_A = 0.20$, direction $d_{A, \text{EURUSD}} = +1.0 \implies N_A = +\$200,000$
+- Strategy $B$ (Mean Reversion): Capital weight $w_B = 0.15$, direction $d_{B, \text{EURUSD}} = -1.0 \implies N_B = -\$150,000$
+- Strategy $C$ (Carry / Yield): Capital weight $w_C = 0.10$, direction $d_{C, \text{EURUSD}} = +1.0 \implies N_C = +\$100,000$
+
+All weights satisfy $w_A, w_B, w_C \ge 0.0$ under `OF-07`.
 
 Without Phase 22 orchestration, executing these strategies independently produces:
 - Gross Volume Traded: \$200k + \$150k + \$100k = **\$450,000 notional** (4.5 Lots).
 - Cross-Spread Friction: 3 round-turn spread crossings + 3 separate broker commission tickets.
 - Latent Exposure Contradiction: Strategy $A$ buys from the broker while Strategy $B$ sells to the broker simultaneously.
 
-### 8.2 Phase 22 Aggregation Transformation
+### 8.3 Phase 22 Aggregation Transformation
 Phase 22 deterministically aggregates all strategy-level targets into a single, unified instrument portfolio target:
 $$N_{\text{EURUSD}, \text{target}} = N_A + N_B + N_C = +\$200\text{k} - \$150\text{k} + \$100\text{k} = +\$150,000 \text{ notional}$$
 - Gross Desired Notional: \$450,000
@@ -264,14 +275,14 @@ $$N_{\text{EURUSD}, \text{target}} = N_A + N_B + N_C = +\$200\text{k} - \$150\te
 
 ## 9. Target Allocation → Desired Exposure Translation
 
-Phase 22 translates abstract target capital into precise, quantized broker lots:
+Phase 22 translates abstract target capital and directional intents into precise, quantized broker lots:
 
 ### 9.1 Mathematical Translation Formulation
 For strategy $i$ and instrument $s$:
 1. **Target Capital:**
-   $$C_{i,s} = w_{i,s} \times \text{AllocatableCapital}$$
-2. **Target Notional Value:**
-   $$N_{i,s} = C_{i,s}$$
+   $$C_i = w_i \times \text{AllocatableCapital}$$
+2. **Signed Target Notional Value:**
+   $$N_{i,s} = C_i \times d_{i,s}$$
 3. **Unconstrained Target Lots:**
    $$Q_{i,s}^* = \frac{N_{i,s}}{P_{\text{mid}, s} \times \text{ContractSize}_s}$$
    Where $P_{\text{mid}, s} = \frac{P_{\text{bid}, s} + P_{\text{ask}, s}}{2}$ is the authoritative causal midpoint price, and $\text{ContractSize}_s$ is from `BrokerSymbolSpec`.
@@ -279,8 +290,11 @@ For strategy $i$ and instrument $s$:
    $$Q_{s, \text{target}} = \sum_{i=1}^{M} Q_{i,s}^*$$
 5. **Discrete Volume Quantization:**
    $$Q_{s, \text{target}}^{\text{quant}} = \text{sgn}(Q_{s, \text{target}}) \times \left( \left\lfloor \frac{|Q_{s, \text{target}}|}{\text{volume\_step}_s} \right\rfloor \times \text{volume\_step}_s \right)$$
-6. **Target Residual Accounting:**
-   The unquantized fractional remainder $Q_{s, \text{target}} - Q_{s, \text{target}}^{\text{quant}}$ is recorded in the audit ledger as an unquantized target residual. Target definitions remain immutable; quantization bounds execution, not economic intent.
+6. **Target Residual Lifecycle & Plan-Binding Invariant:**
+   $$\boxed{\mathbf{INVARIANT:}\quad \text{Residuals are strictly bound to } (\text{allocation\_plan\_id}, \text{symbol}, \text{direction}, \text{causal\_epoch}).}$$
+   - The unquantized fractional remainder $Q_{s, \text{target}} - Q_{s, \text{target}}^{\text{quant}}$ is recorded in the audit ledger as an unquantized target residual.
+   - Target definitions remain immutable. Quantization bounds execution, not economic intent.
+   - Residuals **never cross plan boundaries**; ingesting a new `PortfolioAllocationPlan` retires previous residuals to prevent cross-plan contamination.
 
 ---
 
@@ -424,7 +438,7 @@ If total required turnover $\frac{1}{2} \sum |\Delta w_s|$ exceeds `policy.max_d
 1. **Target Remains Immutable:** Phase 22 **MUST NOT** permanently scale down deltas $\Delta Q_s$, which would corrupt Phase 21's target weights.
 2. **Deterministic Multi-Epoch Pacing:** Phase 22 schedules execution slices across discrete rebalance epochs:
    $$\Delta Q_{s, \text{epoch\_1}} = \Delta Q_s \times \frac{\text{max\_daily\_turnover}}{\text{Turnover}_{\text{raw}}}$$
-   The remaining delta $(\Delta Q_s - \Delta Q_{s, \text{epoch\_1}})$ is preserved in `orchestration_ledger` as a pending target residual for Epoch 2.
+   The remaining delta $(\Delta Q_s - \Delta Q_{s, \text{epoch\_1}})$ is preserved in `orchestration_ledger` as a pending target residual for Epoch 2 bound strictly to `allocation_plan_id`.
 3. **Atomic Fallback:** If multi-epoch pacing is disabled by policy, Phase 22 **FAILS CLOSED** (`ERR_ORCH_TURNOVER_BUDGET_EXCEEDED`) and requests a re-allocation from Phase 21.
 
 ---
@@ -444,7 +458,8 @@ All intents must conform strictly to `BrokerSymbolSpec`:
 - **Minimum Volume & Residual Semantics:** If $|\Delta Q_s| < \text{volume\_min}_s$:
   - The execution delta is **suppressed from immediate dispatch** as uneconomic.
   - **Target Immutability Invariant:** The target $Q_{s, \text{target}}$ remains strictly immutable. Suppression below minimum volume is execution deferral, NEVER target destruction.
-  - **Residual Tracking:** The unexecuted residual $\Delta Q_s$ remains recorded on `orchestration_ledger.jsonl` as pending target exposure, to be re-evaluated in subsequent rebalances when cumulative required volume meets or exceeds `volume_min_s`.
+  - **Residual Tracking & Plan-Binding:** The unexecuted residual $\Delta Q_s$ remains recorded on `orchestration_ledger.jsonl` as pending target exposure bound to `(allocation_plan_id, symbol, direction, causal_epoch)`.
+  - **Cross-Plan Expiration:** Ingesting a new `PortfolioAllocationPlan` supersedes and closes all prior residuals. Prior plan residuals are **never carried forward** into new allocation plans, preventing cross-plan contamination.
 - **Maximum Volume:** If $|\Delta Q_s| > \text{volume\_max}_s$, sliced into multiple child intents.
 - **Price Precision:** Limit prices must be rounded to `digits` decimals and aligned to `tick_size`.
 
@@ -530,15 +545,19 @@ The execution intent lifecycle manages intent progression through a formal **15-
                            ▼                                                                             ▼
                     6. ACKNOWLEDGED                                                               12. TIMEOUT
                            │                                                                             │
-         ┌─────────────────┼─────────────────┬─────────────────┐                                         │
-         ▼                 ▼                 ▼                 ▼                                         │
-   7. COMPLETED     8. PARTIAL_FILL    9. REJECTED     10. CANCEL_REQUESTED                              │
-         │                 │                 │                 │                                         │
-         │                 │                 │                 ▼                                         │
-         │                 │                 │          11. CANCELLED                                    ▼
-         │                 │                 │                 │                                  13. UNKNOWN
-         │                 │                 │                 │                                         │
+         ┌─────────────────┼─────────────────┬─────────────────┐                                         ▼
+         ▼                 ▼                 ▼                 │                                  14. RECONCILE_PENDING
+   7. COMPLETED     8. PARTIAL_FILL    9. REJECTED             │                                         │
+         │                 │                 │                 ▼                                         ▼
+         │                 │                 │          10. CANCEL_REQUESTED                      15. RECONCILED
+         │                 │                 │                 │
+         │                 │                 │                 ▼
+         │                 │                 │          11. CANCELLED
+         │                 │                 │                 │
          └─────────────────┴─────────────────┼─────────────────┴─────────────────────────────────────────┘
+                                             ▼
+                                     13. UNKNOWN (on IPC crash / unconfirmed drop)
+                                             │
                                              ▼
                                      14. RECONCILE_PENDING
                                              │
@@ -562,12 +581,17 @@ The execution intent lifecycle manages intent progression through a formal **15-
 | **7** | `ACKNOWLEDGED` | Phase 12 reports 100% volume filled | `COMPLETED` | Terminal fill logged; inventory updated. |
 | **8** | `ACKNOWLEDGED` | Phase 12 reports partial fill | `PARTIAL_FILL` | Residual quantity tracked; pacing checks. |
 | **9** | `ACKNOWLEDGED` | Phase 12 reports venue rejection | `REJECTED` | Fail-closed halt; reason code cataloged. |
-| **10**| `DISPATCHED` / `ACK`| Cancellation command dispatched to venue | `CANCEL_REQUESTED` | Cancel request transmitted; await venue ACK. |
+| **10**| `ACKNOWLEDGED` | Explicit cancel requested (idle/pause) | `CANCEL_REQUESTED` | Cancel directive dispatched to Phase 12. |
 | **11**| `CANCEL_REQUESTED`| Phase 12 confirms order cancelled | `CANCELLED` | Terminal cancellation confirmed by venue. |
 | **12**| `CANCEL_REQUESTED`| Fill races cancel (fill confirmed first) | `COMPLETED` / `PARTIAL`| Realized fill takes precedence over cancel. |
 | **13**| `DISPATCHED` / `REQ`| Phase 12 disconnects unexpectedly | `UNKNOWN` | **UNKNOWN != FAILED. Reconcile mandatory.** |
-| **14**| `TIMEOUT` / `UNKNOWN`| Phase 12 audit reconciliation triggered | `RECONCILE_PENDING` | Trading locked on instrument. |
+| **14**| `TIMEOUT` / `UNKNOWN`| Phase 12 audit reconciliation triggered | `RECONCILE_PENDING` | Trading locked on instrument; out-of-band query. |
 | **15**| `RECONCILE_PENDING`| Authoritative Phase 12 position confirmed | `RECONCILED` | Realized position synchronized. Terminal state. |
+
+$$\boxed{\begin{aligned}
+\mathbf{CANONICAL\;PATH\;1:}&\quad \text{DISPATCHED } \xrightarrow{\text{timeout}} \text{TIMEOUT } \longrightarrow \text{RECONCILE\_PENDING } \longrightarrow \text{RECONCILED} \\
+\mathbf{CANONICAL\;PATH\;2:}&\quad \text{ACKNOWLEDGED } \xrightarrow{\text{cancel cmd}} \text{CANCEL\_REQUESTED } \longrightarrow \text{CANCELLED (or COMPLETED on race)}
+\end{aligned}}$$
 
 ---
 
@@ -591,9 +615,10 @@ When Phase 12 reports `REJECTED`:
 
 ## 26. Cancellation Handling
 
-1. **Formal Intermediate State:** An intent in state `DISPATCHED` or `ACKNOWLEDGED` enters state **`CANCEL_REQUESTED`** upon timeout, health breach, or shutdown.
-2. **Downstream Confirmation Mandatory:** Phase 22 **CANNOT assume an intent is cancelled** until Phase 12 emits an authenticated cancellation receipt, transitioning state from `CANCEL_REQUESTED` to `CANCELLED`.
-3. **Race Condition Resolution:** If a fill occurs while a cancel request is in flight, the fill takes precedence; Phase 22 updates realized inventory and transitions state from `CANCEL_REQUESTED` to `COMPLETED` or `PARTIAL_FILL`.
+1. **Formal Canonical Transition:** An intent enters state **`CANCEL_REQUESTED`** strictly when Phase 22 transmits an explicit cancellation directive to Phase 12 for an acknowledged resting order (e.g. partial-fill idle timeout, rebalance expiration, or `PAUSE_ORCHESTRATION`).
+2. **Separation from Timeout:** IPC communication timeouts do NOT enter `CANCEL_REQUESTED`; they transition strictly to **`TIMEOUT` $\to$ `RECONCILE_PENDING`**.
+3. **Downstream Confirmation Mandatory:** Phase 22 **CANNOT assume an intent is cancelled** until Phase 12 emits an authenticated cancellation receipt, transitioning state from `CANCEL_REQUESTED` to `CANCELLED`.
+4. **Race Condition Resolution:** If a fill occurs while a cancel request is in flight, the fill takes precedence; Phase 22 updates realized inventory and transitions state from `CANCEL_REQUESTED` to `COMPLETED` or `PARTIAL_FILL`.
 
 ---
 
@@ -604,7 +629,7 @@ $$\boxed{\begin{aligned}
 \mathbf{INVARIANT\;2:}&\quad \text{UNKNOWN } \ne \text{ FAILED} \quad (\text{Unknown does NOT imply order cancellation})
 \end{aligned}}$$
 
-1. **Local Timeout Handling:** If Phase 12 does not respond within $\tau_{\text{timeout}}$ (default: 10.0s), the intent transitions to `TIMEOUT`. Phase 22 **NEVER re-submits the intent**.
+1. **Local Timeout Handling:** If Phase 12 does not respond to an initial dispatch within $\tau_{\text{timeout}}$ (default: 10.0s), the intent transitions strictly to **`TIMEOUT` $\to$ `RECONCILE_PENDING`**. Phase 22 **NEVER re-submits the intent**.
 2. **Unknown State Freezing:** If Phase 12 crashes, restarts, or loses broker connectivity, all in-flight intents transition to `UNKNOWN`.
 3. **Mandatory Query Loop:** In `UNKNOWN` or `TIMEOUT`, Phase 22 dispatches an out-of-band inquiry (`QUERY_INTENT_STATUS`) to Phase 12.
 4. **Reconciliation Lock:** Until Phase 12 confirms whether the order was filled, rejected, or dropped, the instrument is **HARD-LOCKED**. Zero new intents are emitted.
@@ -866,7 +891,7 @@ Evaluate Fail-Closed Policy:
 | `ERR_ORCH_DISPATCH_TIMEOUT` | Lifecycle | Phase 12 did not ACK within 10s | Transition to `TIMEOUT`; lock instrument. |
 | `ERR_ORCH_STATE_UNKNOWN` | Lifecycle | Disconnect during in-flight order | Transition to `UNKNOWN`; lock instrument. |
 | `ERR_ORCH_DOWNSTREAM_REJECT` | Execution | Phase 12 rejected physical order | Halt instrument; reconcile snapshot. |
-| `ERR_ORCH_PARTIAL_STALL` | Execution | Partial fill stalled past timeout | Cancel residual; lock instrument. |
+| `ERR_ORCH_PARTIAL_STALL` | Execution | Partial fill stalled past timeout | Transition to `CANCEL_REQUESTED`. |
 | `ERR_ORCH_LEDGER_WRITE_FAIL` | System | Disk full or WAL write error | Emergency process halt (fsync failed). |
 
 ---
@@ -946,7 +971,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 
 ## 49. Governance Verification Matrix
 
-| Verification Dimension | Standard / Invariant Required | Revision 1.2 Specification Status | Evidence / Authority |
+| Verification Dimension | Standard / Invariant Required | Revision 1.3 Specification Status | Evidence / Authority |
 | :--- | :--- | :--- | :--- |
 | **Authority Isolation** | Zero strategy selection, zero re-allocation | **VERIFIED (SPECIFICATION)** | Sections 2, 3, 4, 5 |
 | **Liquidation Authority**| No sovereign liquidation; generic target math | **VERIFIED (SPECIFICATION)** | Section 5.2, Section 5.3, Section 40 |
@@ -954,9 +979,10 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 | **Netting Semantics** | Execution suppression; zero synthetic fills | **VERIFIED (SPECIFICATION)** | Section 8, 11, 12 |
 | **Target Immutability** | Turnover pacing delays execution, targets fixed | **VERIFIED (SPECIFICATION)** | Section 18.2 |
 | **Constraint Action** | Concentration breach $\implies$ Fail Closed | **VERIFIED (SPECIFICATION)** | Section 7, Section 17, Section 19 |
-| **Residual Semantics** | Min-volume suppression preserves residual | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
+| **Residual Semantics** | Min-volume suppression preserves residual per plan | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
+| **Signed Exposure Model**| Unsigned capital $w_i \ge 0 \times$ signed signal $d_{i,s}$ | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-07`), Section 8, 9 |
 | **Firewall Completeness**| 28 deterministic fail-closed predicates | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-01` to `OF-28`) |
-| **State Machine Safety** | 15-state DFA; CANCEL_REQUESTED formalized | **VERIFIED (SPECIFICATION)** | Sections 22, 23, 26, 27 |
+| **State Machine Safety** | 15-state DFA; TIMEOUT vs CANCEL_REQ separated | **VERIFIED (SPECIFICATION)** | Sections 22, 23, 26, 27 |
 | **Idempotency & Replay**| Deterministic UUIDv7, write-ahead logging | **VERIFIED (SPECIFICATION)** | Sections 14, 32, 34, 37 |
 | **Adversarial Hardening**| 34 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
 | **Runtime Code State** | STRICTLY LOCKED / NOT AUTHORIZED | **ENFORCED** | Zero code in `src/` or `tests/` |
@@ -971,8 +997,8 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.2
-Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.2 REMEDIATION PENDING APPROVAL
+Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.3
+Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.3 REMEDIATION PENDING APPROVAL
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023, ADR-024, ADR-025
@@ -982,15 +1008,17 @@ Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
 Verification Status:
-  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.2)
+  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.3)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection, Allocation, or Wire Overreach)
   - Liquidation Scope   : REMEDIATED (Zero Sovereign Liquidation; DEFENSIVE_HOLD Enforced)
   - Allocation Semantics: REMEDIATED (NO_ALLOCATION -> DEFENSIVE_HOLD; Zero Auto-Liquidation)
+  - Signed Exposure     : REMEDIATED (Unsigned Capital Budget w_i >= 0 x Directional Signal d_{i,s})
+  - State Transitions   : REMEDIATED (TIMEOUT -> RECONCILE vs ACK -> CANCEL_REQUESTED Decoupled)
   - Adapter Boundary    : REMEDIATED (Phase12PositionReport Contract Enforced; Telemetry Purged)
   - Netting Semantics   : REMEDIATED (Zero Synthetic Fills Policy Enforced; Execution Suppression)
   - Target Immutability : REMEDIATED (Pacing vs Re-allocation Enforced; Zero Delta Scaling)
-  - Min-Volume Residual : REMEDIATED (Volume-Min Suppression Preserves Target Residual)
-  - State-Machine Check : VERIFIED CONSISTENT (Formal 15-State DFA with CANCEL_REQUESTED)
+  - Min-Volume Residual : REMEDIATED (Residual Bound to Plan/Epoch; Zero Cross-Plan Contamination)
+  - State-Machine Check : VERIFIED CONSISTENT (Formal 15-State DFA with Strict Canonical Paths)
   - Mathematical Sound  : GOVERNED FORMULATIONS (Algebraic Netting, Lots Quantization, NER)
   - Fail-Closed Contract: COMPLETE (38 Failure Modes Cataloged; AMBIGUITY -> ZERO INTENT)
   - Adversarial Audit   : COMPLETE (34/34 Dimensions Addressed)
@@ -998,7 +1026,7 @@ Verification Status:
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
 FINAL VERDICT:
-  -> REVISION 1.2 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
+  -> REVISION 1.3 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
   -> IMPLEMENTATION: STRICTLY LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
