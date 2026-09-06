@@ -1,12 +1,12 @@
 # ACASH Phase 21 — Risk-Based Capital Allocation Solvers
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE21-ALLOCATION-v1.2`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — READY FOR FINAL HUMAN APPROVAL (Phase 21 Rev 1.2 — Override Scope Hardening & Specification Precision)  
+> **Document ID:** `ACASH-SPEC-PHASE21-ALLOCATION-v1.3`  
+> **Status:** APPROVED ARCHITECTURE & GOVERNANCE SPECIFICATION — FROZEN / IMPLEMENTATION LOCKED (Phase 21 Rev 1.3 — Final Approved)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.2.0 (Override Scope Hardening & Specification Precision)  
+> **Version:** 1.3.0 (Final Approved — Acceptance Criteria Consistency & Full Governance Freeze)  
 
 ---
 
@@ -1226,14 +1226,14 @@ The Phase 21 Master Architecture Specification is deemed acceptable when the fol
 
 - [x] **Criterion 1 (Scope Demarcation):** Phase 21 defines risk-based capital allocation while strictly avoiding strategy selection (Phase 20), statistical validation (Phase 6), and execution orchestration (Phase 22).
 - [x] **Criterion 2 (Selection Integrity):** Enforces that Phase 21 consumes `StrategySelectionDecision` and cannot independently add, substitute, or revive candidates.
-- [x] **Criterion 3 (Eligibility Firewall):** Specifies 25 pre-solver filter predicates (`AF-01` to `AF-25`) covering decision integrity, authority lineage, capital limits, covariance health, and circuit breakers.
+- [x] **Criterion 3 (Eligibility Firewall):** Specifies 26 pre-solver filter predicates (`AF-01` to `AF-25` + `AF-02b` / `OVR-01`) covering decision integrity, authority lineage, override scope, capital limits, covariance health, and circuit breakers.
 - [x] **Criterion 4 (Solver Families):** Mathematically formulates eight governed solver families (ERC, Risk Parity, VolTarget, MinVar, MeanVar, MaxDiv, Risk Budgeting, Defensive Zero-Risk).
 - [x] **Criterion 5 (Epistemic Hygiene):** Explicitly states that numerical optimality $\ne$ market profitability, and strictly bans fabricating expected returns $\boldsymbol{\mu}$.
 - [x] **Criterion 6 (Fail-Closed Feasibility):** Enforces that `INFEASIBLE` solver statuses default strictly to `NO_ALLOCATION` (zero "best-effort" guessing).
 - [x] **Criterion 7 (Covariance Governance):** Specifies Ledoit-Wolf analytical shrinkage and positive-semidefinite matrix validation with transparent repair logging.
 - [x] **Criterion 8 (Capital Source & Unit Discipline):** Disentangles Total Equity from Allocatable Capital and strictly distinguishes risk budgets ($b_i$) from capital weights ($w_i$).
 - [x] **Criterion 9 (Allocation $\ne$ Execution):** Explicitly specifies that target weights $w_i$ are abstract sizing ratios emitting zero broker orders.
-- [x] **Criterion 10 (Adversarial Audit):** Formalizes controls across 25 adversarial attack vectors with explicit fail-closed outcomes.
+- [x] **Criterion 10 (Adversarial Audit):** Formalizes controls across 26 adversarial attack vectors with explicit fail-closed outcomes.
 - [x] **Criterion 11 (Audit Ledger & Lineage):** Specifies the immutable `PortfolioAllocationPlan` schema and hash-chained `allocation_ledger.jsonl`.
 - [x] **Criterion 12 (Zero Machine-Specific Paths):** Verifies document portability using strictly repository-relative paths.
 - [x] **Criterion 13 (Runtime Invariant Preservation):** Confirms zero code implementation, `$0.00` live capital, zero orders, broker disconnected, and Phase 13 soak (PID 41844) untouched.
@@ -1246,8 +1246,8 @@ The Phase 21 Master Architecture Specification is deemed acceptable when the fol
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE21-ALLOCATION-v1.2
-Specification Status    : PROPOSED ARCHITECTURE — READY FOR FINAL HUMAN APPROVAL (Rev 1.2)
+Document ID             : ACASH-SPEC-PHASE21-ALLOCATION-v1.3
+Specification Status    : APPROVED ARCHITECTURE — FROZEN / IMPLEMENTATION LOCKED (Rev 1.3)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023
@@ -1256,22 +1256,23 @@ Lead Quant Architect   : Antigravity / Senior Quantitative Portfolio Architect
 Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
-Remediation Ledger (Rev 1.2):
-  - Critical #3 Resolved: Established mechanical predicate OVR-01 (AF-02b) preventing
-                          human override from acting as an unauthorized strategy selection
-                          layer ("Phase 20.5"); strictly enforces subset-only invariant
-                          S_override subseteq S_Phase20 and S_override cap E_Phase20 = empty.
-  - Verification Hygiene: Clarified that all verifications at this phase are specification-level
-                          architectural inspections, with runtime implementation strictly
-                          locked (CONTROL SPECIFIED / NOT YET IMPLEMENTED).
-  - Preceding Remediation: Critical #1 (Override Path), Critical #2 (NO_SELECTION semantics),
-                          Quant #1 (ERC convexity), Quant #2 (Convergence assumptions),
-                          Quant #3 (Epistemic wording), Volatility naming hygiene.
+Remediation & Final Sign-Off Ledger (Rev 1.3):
+  - Documentation Consistency: Aligned Acceptance Criterion 3 (26 predicates: AF-01 to AF-25
+                               + AF-02b/OVR-01) and Criterion 10 (26 adversarial vectors).
+  - Critical #3 Resolved     : Established mechanical predicate OVR-01 (AF-02b) preventing
+                               human override from acting as unauthorized selection layer ("Phase 20.5");
+                               strictly enforces subset-only invariant S_override subseteq S_Phase20
+                               and S_override cap E_Phase20 = empty.
+  - Critical #1 & #2 Resolved: Solved REVIEW_REQUIRED override path deadlock; normalized
+                               NO_SELECTION as valid non-error state with pre-solver short-circuit.
+  - Epistemic Hardening      : Convexity bounded to log-barrier; convergence bounded to explicit
+                               assumptions; literature claims unbundled from absolute truth;
+                               volatility standardized to modeled_portfolio_volatility.
 
 Verification Status:
   - Architecture Review : COMPLETE / SATISFIED (DESIGN SPECIFICATION INSPECTION)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection/Execution Overreach)
-  - State-Machine Check : VERIFIED CONSISTENT (SPECIFICATION INSPECTION AUDIT — Rev 1.2)
+  - State-Machine Check : VERIFIED CONSISTENT (SPECIFICATION INSPECTION AUDIT — Rev 1.3)
   - Mathematical Sound  : GOVERNED FORMULATIONS (ERC, Risk Parity, VolTargeting)
   - Fail-Closed Contract: COMPLETE (31/31 Failure Modes Handled; INFEASIBLE -> NO_ALLOC)
   - Adversarial Audit   : COMPLETE (26/26 Dimensions Addressed)
@@ -1279,7 +1280,7 @@ Verification Status:
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
 FINAL VERDICT:
-  -> PASS: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
-  -> IMPLEMENTATION: LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
+  -> APPROVED & FROZEN: FULL HUMAN GOVERNANCE SIGN-OFF ACHIEVED
+  -> IMPLEMENTATION: LOCKED UNTIL FORMAL HUMAN IMPLEMENTATION AUTHORIZATION
 ================================================================================
 ```
