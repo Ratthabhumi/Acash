@@ -1,12 +1,12 @@
 # ACASH Phase 22 — Portfolio Orchestration & Netting
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.3`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.3 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
+> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.4`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.4 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023, ADR-024, ADR-025  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.3.0 (Master Architecture & Governance Specification — Rev 1.3 Remediation)  
+> **Version:** 1.4.0 (Master Architecture & Governance Specification — Rev 1.4 Remediation)  
 
 ---
 
@@ -335,11 +335,21 @@ $$\Delta Q_s = Q_{s, \text{target}}^{\text{quant}} - Q_{s, \text{current}}$$
 - If $\Delta Q_s < 0$: Net requirement is **SELL** volume $|\Delta Q_s|$.
 - If $\Delta Q_s = 0$: Position is on target; zero execution intent emitted.
 
-### 11.2 Internal Netting Efficiency Ratio (NER)
-To quantify execution optimization, Phase 22 computes the Netting Efficiency Ratio:
-$$\text{NER}_s = 1 - \frac{|\Delta Q_s|}{\sum_{i=1}^M |Q_{i,s}^* - Q_{i,s, \text{current}}|}$$
-- $\text{NER}_s = 0$: Zero internal crossing (all strategy deltas in same direction).
-- $\text{NER}_s \to 1$: Maximum internal crossing (opposing strategy deltas fully netted).
+### 11.2 Canonical Netting Efficiency Ratio (NER)
+To quantify execution optimization without position-attribution ambiguity, Phase 22 defines the Netting Efficiency Ratio strictly across **strategy-level desired transition deltas**:
+$$\Delta Q_{i, s} = Q_{i, s}^*(t) - Q_{i, s}^*(t-1)$$
+
+$$\text{NER}_s = \begin{cases} 
+1 - \frac{\left| \sum_{i=1}^M \Delta Q_{i, s} \right|}{\sum_{i=1}^M \left| \Delta Q_{i, s} \right|} & \text{if } \sum_{i=1}^M |\Delta Q_{i, s}| > 0 \\
+0.0 & \text{if } \sum_{i=1}^M |\Delta Q_{i, s}| = 0
+\end{cases}$$
+
+#### Mathematical Properties:
+1. **Range Bounds:** $\text{NER}_s \in [0.0, 1.0]$.
+2. **Zero Internal Netting ($\text{NER}_s = 0.0$):** Occurs when all strategy transition deltas $\Delta Q_{i, s}$ share the identical direction (e.g. all strategies desire to expand Long), or when zero rebalance transition is requested. 100% of desired transition volume must be routed to market.
+3. **Maximum Internal Netting ($\text{NER}_s = 1.0$):** Occurs when opposing strategy transitions perfectly offset ($\sum \Delta Q_{i, s} = 0$), requiring zero net physical venue order emission.
+4. **Partial Internal Netting ($\text{NER}_s \in (0.0, 1.0)$):** Exactly $\text{NER}_s \times \sum_{i=1}^M |\Delta Q_{i, s}|$ lots are completely spared from broker commission tickets, bid-ask spread crossing, and venue execution friction.
+5. **Separation from Current Broker Position:** The denominator measures **gross desired strategy turnover** $\sum |\Delta Q_{i,s}|$, completely decoupled from the consolidated account position $Q_{s, \text{current}}$, eliminating any distortion when the portfolio is already on target.
 
 ---
 
@@ -393,11 +403,15 @@ $$\boxed{\mathbf{PRIORITY\;RULE:}\quad \text{Risk-Reducing Liquidations } \prec 
 ```
 Rebalance Intent Set {Intent_1, Intent_2, ..., Intent_K}
        │
-       ├── [ Priority 1: Emergency Close / Stop-Outs ] ─────────► Dispatch Immediately
-       ├── [ Priority 2: Position Reductions (|Q_new| < |Q_old|) ] ► Frees Margin Headroom
+       ├── [ Priority 1: Authorized Risk-Reducing Closes ] ─────► Dispatch Immediately (Mandated by Phase 11 / 21)
+       ├── [ Priority 2: Standard Position Reductions (|Q_new| < |Q_old|) ] ► Frees Margin Headroom
        ├── [ Priority 3: Directional Flips (Long -> Short) ] ───► Close Existing First
        └── [ Priority 4: Position Increases (|Q_new| > |Q_old|) ] ► Requires Verified Margin
 ```
+
+$$\boxed{\mathbf{INVARIANT:}\quad \text{Phase 22 MUST NOT originate, classify, or authorize an emergency close. It only sequences an already-authorized reduction intent.}}$$
+
+Priority Tier 1 is reserved exclusively for sequencing execution intents that carry cryptographic provenance from an upstream Phase 11 `EMERGENCY_HALT` directive or an authorized Phase 21 defensive cash plan ($w_{\text{cash}} = 1.0$). Phase 22 possesses zero stop-out detection, margin call generation, or emergency declaration logic.
 
 ### Deterministic Tie-Breaking
 If multiple intents share the same priority tier, they are sorted deterministically by:
@@ -577,11 +591,11 @@ The execution intent lifecycle manages intent progression through a formal **15-
 | **3** | `NETTED` | Risk sequencing & priority tiering done | `READY` | Sorted by Priority Tier 1..4. |
 | **4** | `READY` | Payload transmitted over IPC to Phase 12| `DISPATCHED` | Logged to WAL (`orchestration_ledger`). |
 | **5** | `DISPATCHED` | Phase 12 confirms ticket received | `ACKNOWLEDGED` | Downstream ticket ID recorded. |
-| **6** | `DISPATCHED` | No reply within `timeout_seconds` | `TIMEOUT` | **TIMEOUT != SUCCESS. Zero assumptions.** |
+| **6** | `DISPATCHED` | No reply within `timeout_seconds` | `TIMEOUT` | **TIMEOUT != SUCCESS. Canonical Path 1.** |
 | **7** | `ACKNOWLEDGED` | Phase 12 reports 100% volume filled | `COMPLETED` | Terminal fill logged; inventory updated. |
 | **8** | `ACKNOWLEDGED` | Phase 12 reports partial fill | `PARTIAL_FILL` | Residual quantity tracked; pacing checks. |
 | **9** | `ACKNOWLEDGED` | Phase 12 reports venue rejection | `REJECTED` | Fail-closed halt; reason code cataloged. |
-| **10**| `ACKNOWLEDGED` | Explicit cancel requested (idle/pause) | `CANCEL_REQUESTED` | Cancel directive dispatched to Phase 12. |
+| **10**| `ACKNOWLEDGED` | Explicit cancel requested (idle/pause) | `CANCEL_REQUESTED` | Cancel directive dispatched. Canonical Path 2. |
 | **11**| `CANCEL_REQUESTED`| Phase 12 confirms order cancelled | `CANCELLED` | Terminal cancellation confirmed by venue. |
 | **12**| `CANCEL_REQUESTED`| Fill races cancel (fill confirmed first) | `COMPLETED` / `PARTIAL`| Realized fill takes precedence over cancel. |
 | **13**| `DISPATCHED` / `REQ`| Phase 12 disconnects unexpectedly | `UNKNOWN` | **UNKNOWN != FAILED. Reconcile mandatory.** |
@@ -953,11 +967,11 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 - [x] **Criterion 3 (Cryptographic Lineage):** 9-stage hash chain binds Phase 6 through Phase 22.
 - [x] **Criterion 4 (28-Predicate Firewall):** All 28 firewall checks must pass before intent dispatch.
 - [x] **Criterion 5 (Phase 12 Decoupling):** Socket isolation guaranteed; consumes `Phase12PositionReport`.
-- [x] **Criterion 6 (Deterministic Netting):** Single-asset algebraic netting calculates $\text{NER}_s$.
+- [x] **Criterion 6 (Canonical Transition Netting & NER):** Calculates $\text{NER}_s$ on gross desired transition deltas $\Delta Q_{i,s}$ decoupled from consolidated account position.
 - [x] **Criterion 7 (Zero Synthetic Fills):** Absolute proscription of virtual fills or fake mid-price trades.
 - [x] **Criterion 8 (Immutable Allocation Targets):** Turnover constraints pace execution; never alter terminal targets.
 - [x] **Criterion 9 (Fail-Closed Concentration):** Concentration breaches halt engine; zero silent clipping.
-- [x] **Criterion 10 (Risk-Sequenced Priority):** Liquidations strictly precede expansions.
+- [x] **Criterion 10 (Authorized Risk-Reducing Priority):** Closes strictly precede expansions; zero sovereign emergency close generation.
 - [x] **Criterion 11 (Execution Intent Immutability):** Frozen Pydantic schema with UUIDv7 and SHA-256 digests.
 - [x] **Criterion 12 (15-State DFA Lifecycle):** Strict state transitions across all 15 formal states; zero undefined paths.
 - [x] **Criterion 13 (Epistemic Separation):** `TIMEOUT != SUCCESS` and `UNKNOWN != FAILED`.
@@ -971,12 +985,14 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 
 ## 49. Governance Verification Matrix
 
-| Verification Dimension | Standard / Invariant Required | Revision 1.3 Specification Status | Evidence / Authority |
+| Verification Dimension | Standard / Invariant Required | Revision 1.4 Specification Status | Evidence / Authority |
 | :--- | :--- | :--- | :--- |
 | **Authority Isolation** | Zero strategy selection, zero re-allocation | **VERIFIED (SPECIFICATION)** | Sections 2, 3, 4, 5 |
 | **Liquidation Authority**| No sovereign liquidation; generic target math | **VERIFIED (SPECIFICATION)** | Section 5.2, Section 5.3, Section 40 |
+| **Emergency Priority** | Priority 1 sequences authorized closes only | **VERIFIED (SPECIFICATION)** | Section 16 |
 | **Interface Boundary** | `Phase12PositionReport` authenticated ingestion | **VERIFIED (SPECIFICATION)** | Section 2, 10, 42, 43 |
 | **Netting Semantics** | Execution suppression; zero synthetic fills | **VERIFIED (SPECIFICATION)** | Section 8, 11, 12 |
+| **NER Formulation** | Transition-based $\text{NER}_s \in [0.0, 1.0]$ | **VERIFIED (SPECIFICATION)** | Section 11.2 |
 | **Target Immutability** | Turnover pacing delays execution, targets fixed | **VERIFIED (SPECIFICATION)** | Section 18.2 |
 | **Constraint Action** | Concentration breach $\implies$ Fail Closed | **VERIFIED (SPECIFICATION)** | Section 7, Section 17, Section 19 |
 | **Residual Semantics** | Min-volume suppression preserves residual per plan | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
@@ -997,8 +1013,8 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.3
-Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.3 REMEDIATION PENDING APPROVAL
+Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.4
+Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.4 REMEDIATION PENDING APPROVAL
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023, ADR-024, ADR-025
@@ -1008,11 +1024,13 @@ Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
 Verification Status:
-  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.3)
+  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.4)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection, Allocation, or Wire Overreach)
   - Liquidation Scope   : REMEDIATED (Zero Sovereign Liquidation; DEFENSIVE_HOLD Enforced)
+  - Priority Sequencing : REMEDIATED (Priority 1 Sequences Authorized Closes Only; Zero Stop-Out Generation)
   - Allocation Semantics: REMEDIATED (NO_ALLOCATION -> DEFENSIVE_HOLD; Zero Auto-Liquidation)
   - Signed Exposure     : REMEDIATED (Unsigned Capital Budget w_i >= 0 x Directional Signal d_{i,s})
+  - NER Mathematical    : REMEDIATED (Transition-Based NER Formulation Decoupled from Current Position)
   - State Transitions   : REMEDIATED (TIMEOUT -> RECONCILE vs ACK -> CANCEL_REQUESTED Decoupled)
   - Adapter Boundary    : REMEDIATED (Phase12PositionReport Contract Enforced; Telemetry Purged)
   - Netting Semantics   : REMEDIATED (Zero Synthetic Fills Policy Enforced; Execution Suppression)
@@ -1026,7 +1044,7 @@ Verification Status:
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
 FINAL VERDICT:
-  -> REVISION 1.3 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
+  -> REVISION 1.4 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
   -> IMPLEMENTATION: STRICTLY LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
