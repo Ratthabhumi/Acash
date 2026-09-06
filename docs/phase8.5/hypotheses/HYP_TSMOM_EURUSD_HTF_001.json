@@ -1,0 +1,51 @@
+{
+  "author": "human_governance_auditor",
+  "economic_rationale": "Higher-timeframe time-series momentum in liquid G10 FX (EURUSD) driven by monetary policy divergence and delayed macroeconomic information diffusion across global institutional participants. Directional price trends over H4 sessions (12h to 20d) exhibit positive persistence where gross price displacements are large enough to comfortably surmount institutional transaction friction.",
+  "expected_direction": {
+    "__type__": "enum",
+    "class": "acash.research.schema.ExpectedDirection",
+    "value": "LONG"
+  },
+  "feature_dependencies": [
+    "lookback_return",
+    "close_price"
+  ],
+  "hypothesis_id": "HYP_TSMOM_EURUSD_HTF_001",
+  "hypothesis_version": "v1.0",
+  "invalidation_criteria": {
+    "max_feature_autocorrelation": {
+      "__type__": "decimal",
+      "value": "0.980000000000000000"
+    },
+    "min_cost_adjusted_spread_ratio": {
+      "__type__": "decimal",
+      "value": "1.500000000000000000"
+    },
+    "min_hac_t_stat": {
+      "__type__": "decimal",
+      "value": "2.000000000000000000"
+    },
+    "min_in_sample_rank_ic": {
+      "__type__": "decimal",
+      "value": "0.025000000000000000"
+    }
+  },
+  "parameter_config_json": "{\"bar_frequency\":\"H4\",\"cost_model_proposed\":{\"fixed_slippage_bps\":\"0.3\",\"quoted_spread_bps\":\"0.4\",\"roundtrip_broker_fee_bps\":\"0.5\",\"status\":\"PROPOSED_SUBJECT_TO_R2_VERIFICATION\",\"total_friction_bps\":\"1.2\"},\"data_contract_proposed\":{\"canonical_window_utc\":[\"2021-01-01T00:00:00Z\",\"2024-12-31T23:59:59Z\"],\"minimum_usable_h4_bars\":{\"__type__\":\"int\",\"value\":5000},\"split_policy\":{\"embargo_bars\":{\"__type__\":\"int\",\"value\":12},\"oos_pct\":\"0.20\",\"train_pct\":\"0.60\",\"val_pct\":\"0.20\"}},\"deadband_bps_grid\":[{\"__type__\":\"float\",\"value\":3.0},{\"__type__\":\"float\",\"value\":6.0}],\"lookback_bars_grid\":[{\"__type__\":\"int\",\"value\":3},{\"__type__\":\"int\",\"value\":6},{\"__type__\":\"int\",\"value\":12},{\"__type__\":\"int\",\"value\":24},{\"__type__\":\"int\",\"value\":48},{\"__type__\":\"int\",\"value\":120}],\"nominal_trials_k\":{\"__type__\":\"int\",\"value\":12},\"signal_type\":\"TERNARY_DIRECTIONAL\",\"strategy_id\":\"STRAT-MOM-HTF-H4-V1\"}",
+  "parent_hypothesis_id": null,
+  "primary_horizon": {
+    "__type__": "int",
+    "value": 1
+  },
+  "registered_at_utc": "2026-09-07T00:00:00Z",
+  "target_horizons": [
+    {
+      "__type__": "int",
+      "value": 1
+    },
+    {
+      "__type__": "int",
+      "value": 6
+    }
+  ],
+  "target_symbol": "EURUSD"
+}

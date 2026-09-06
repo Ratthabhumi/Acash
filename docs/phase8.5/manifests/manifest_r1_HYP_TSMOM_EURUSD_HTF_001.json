@@ -1,0 +1,17 @@
+{
+  "manifest_type": "HYPOTHESIS_REGISTRATION_MANIFEST",
+  "hypothesis_id": "HYP_TSMOM_EURUSD_HTF_001",
+  "hypothesis_version": "v1.0",
+  "hypothesis_sha256": "9c8c5e19a87c3780c779c4f4364b80a5f6331c309b011d0318aa5f44cacb8ac9",
+  "registered_at_utc": "2026-09-07T00:00:00Z",
+  "author": "human_governance_auditor",
+  "target_symbol": "EURUSD",
+  "primary_timeframe": "H4",
+  "search_trial_count_k": 12,
+  "inception_token_id": "AUTH_INCEPTION_HYP_TSMOM_EURUSD_HTF_001_dc9eebd1502d7ed4",
+  "proposal_sha256": "dc9eebd1502d7ed4701f9c2edc456d927c0bedc8601940ad26ac1bbed2b15714",
+  "status": "SEALED_STEP_R1_PASS",
+  "capital_authority_usd": "0.00",
+  "next_required_step": "STEP_R2_HISTORICAL_DATA_PREPARATION_LOCKED",
+  "manifest_sha256": "0a5159097cbec296b0d2f66cb735011f96a6ee931d0ef7b795eaa77fedcb2e91"
+}
