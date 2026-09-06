@@ -1,12 +1,12 @@
 # ACASH Phase 19 — Empirical Regime Detection Engine
 ## Master Research Architecture, Governance Specification & Adversarial Self-Audit
 
-> **Document ID:** `ACASH-SPEC-PHASE19-REGIME-v1.0`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — HUMAN APPROVAL PENDING (Phase 19 Rev 1.0)  
+> **Document ID:** `ACASH-SPEC-PHASE19-REGIME-v1.1`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — HUMAN APPROVAL PENDING (Phase 19 Rev 1.1)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.0.0  
+> **Version:** 1.1.0 (Auditor Remediation & Epistemic Hardening)  
 
 ---
 
@@ -46,7 +46,12 @@ $$\boxed{\begin{aligned}
 \text{Phase 19 Research Evidence} &\not\equiv \text{Phase 6 ValidationReport}
 \end{aligned}}$$
 
-### 1.2 The Measurement vs Decision Dichotomy
+### 1.2 Epistemic Relativism: Representation vs "Market Truth"
+Phase 19 explicitly acknowledges that a regime detector does **not** discover absolute metaphysical "market truth":
+- An HMM identifying 3 latent states, a GMM clustering volatility into 4 densities, and a Rule-Based model classifying trend into 3 quantiles are **alternative mathematical representations of identical underlying data**, not three competing "realities."
+- **Lineage-Bound Regime Identity:** Regime identifiers are not universal constants. A state labeled `REGIME_1` under Detector Model $A$ version 1.0 is mathematically distinct from `REGIME_1` under Detector Model $B$ version 1.1. Nominal integer tags must never be treated as invariant cross-version semantic constants.
+
+### 1.3 The Measurement vs Decision Dichotomy
 Phase 19 is strictly a **measurement and evidence layer**, *not* a decision layer:
 - **Phase 19 Measures:** What empirical state characterizes the market at time $T$? (Trend slope, realized volatility, spread depth, order book imbalance, transition probability).
 - **Phase 20 Decides:** Given the empirical state measured by Phase 19, which admitted strategies from Phase 17 are eligible for execution?
@@ -78,7 +83,7 @@ Phase 19 operates within the immutable ACASH authority hierarchy:
 │  ├── RegimeDataContract (Dual-Temporal PIT)                                 │
 │  ├── RegimeFeatureBuilder (Causal Multi-Dimensional State Descriptors)       │
 │  ├── RegimeDetectionEngine (Bounded Methodological Family)                  │
-│  ├── RegimeStateModel (State Vector + Uncertainty + UNKNOWN State)          │
+│  ├── RegimeStateModel (Lineage-Bound State Vector + UNKNOWN State)          │
 │  ├── RegimeValidationEvidence (Stability vs Significance Boundaries)        │
 │  ├── RegimeHistoryLedger (Append-Only Cryptographic State Transitions)       │
 │  ├── RegimeReproducibilityManifest (Declared-Environment Determinism)       │
@@ -126,7 +131,7 @@ Phase 19 is organized into nine decoupled sovereign subsystems:
        ┌────────────────────┬───────────────┴───────────────┬──────────────────┐
        ▼                    ▼                               ▼                  ▼
 1. DATA CONTRACT       2. FEATURE BUILDER             3. DETECTION ENGINE 4. STATE MODEL
-  (Dual-Temporal PIT)    (Deterministic Causal)         (Bounded Family)    (Vector + UNKNOWN)
+  (Dual-Temporal PIT)    (Deterministic Causal)         (Bounded Family)    (Lineage + UNKNOWN)
                                                                                │
        ┌───────────────────────────────────────────────────────────────────────┘
        ▼
@@ -140,6 +145,12 @@ Phase 19 is organized into nine decoupled sovereign subsystems:
   - `event_time_utc`: Wall-clock exchange bar timestamp.
   - `knowledge_time_utc`: Earliest timestamp when the data was available to the system without lookahead.
   - Invariant: $T_{\text{event\_utc}} \le T_{\text{decision\_utc}} \quad\land\quad T_{\text{knowledge\_utc}} \le T_{\text{as\_of\_utc}}$.
+- **Temporal Alignment Principle:**
+  - Clock precision is calibrated to detector granularity:
+    - Order book / Microstructure detectors: Nanosecond / microsecond exchange synchronization.
+    - Intraday detectors (1m, 5m): Second-level timestamps with session boundary normalization.
+    - Swing / Daily detectors: Bar-close session timestamps.
+  - Mandating microsecond precision for coarse daily detectors is explicitly rejected as over-engineering; precision must be sufficient for the temporal granularity and causal ordering requirements of the detector.
 - **Market & Session Calendar:** Distinguishes continuous trading hours, rollover intervals, weekend closures, and holiday schedules.
 - **Missing Data Policy (Strict Fail-Closed):**
   - Forward-filling of missing market quotes across session breaks is **strictly prohibited**.
@@ -178,22 +189,32 @@ CLASS A: RULE-BASED    CLASS B: CLUSTERING            CLASS C: MARKOV SWITCH CLA
 4. **Class D: Non-Parametric Change-Point Detection:**
    - Bayesian Online Changepoint Detection (BOCPD) or Page-Hinkley CUSUM to identify acute structural distribution shifts.
 
+#### State Ceiling Governance ($K \le 5$):
+- **Epistemic Classification:** $K \le 5$ is a **governance and compute complexity ceiling**, *not* an ontological scientific claim that financial markets possess at most five regimes.
+- **Enforcement Rule:** If a research model requests $K > 5$, the engine must **reject the configuration or require an explicit governance configuration with empirical justification**. Silent auto-merging of extra states is strictly forbidden.
+
 ### 3.4 Subsystem 4: `RegimeStateModel`
-- **Responsibility:** Formal representation of the detected regime state.
-- **Schema Specification (`RegimeState`):**
+- **Responsibility:** Formal representation of the detected regime state with complete cryptographic lineage.
+- **Lineage-Bound State Schema (`RegimeState`):**
   ```python
   class RegimeState(BaseModel):
       timestamp_utc: datetime
       symbol_or_universe: str
       detector_id: str
-      detector_family: DetectorFamily
+      detector_version: str
+      feature_set_id: str
+      lookback_window: int
+      calibration_window: int
+      calibration_method: CalibrationMethod  # EXPANDING, ROLLING, BOUNDED_ADAPTIVE
+      as_of_time_utc: datetime
       primary_regime: RegimeIdentifier
+      state_definition: dict[str, Any]  # Parameter/centroid bounds of the state
       regime_probabilities: dict[RegimeIdentifier, Decimal]
       uncertainty_score: Decimal
       persistence_duration_bars: int
+      support_level: StateSupportLevel  # HIGH_SUPPORT, LOW_SUPPORT, UNSTABLE
       is_ambiguous: bool
-      detector_version: str
-      feature_digest: str
+      manifest_digest: str
   ```
 - **The Mandatory `UNKNOWN` State:**
   When classifier confidence falls below the ambiguity threshold ($P_{\max} < 0.50$), when detectors in an ensemble contradict, or when data gaps exist, Phase 19 must emit:
@@ -206,6 +227,9 @@ CLASS A: RULE-BASED    CLASS B: CLUSTERING            CLASS C: MARKOV SWITCH CLA
   - **Transition Stability:** Frequency of regime flipping (anti-churn metric).
   - **Within-Regime Distributional Homogeneity:** Kolmogorov-Smirnov / Wasserstein distance of return distributions across identical regime tags.
   - **Cross-Regime Separation:** Distance between regime centroids in feature space.
+- **State Support Guardrail ($\ge 3\%$):**
+  - **Classification:** A stability guardrail heuristic, *not* a universal statistical law.
+  - **Rule:** A state with $< 3\%$ empirical sample frequency is **not** assumed to be non-existent or deleted. It is flagged as `LOW_SUPPORT` / `UNSTABLE_STATE` and routed to research evaluation or treated as `UNKNOWN` in live operational slates.
 - **Epistemic Constraint:** Phase 19 validation proves only that the detector measures a persistent statistical distribution; it does **not** prove that trading strategies conditioned on this regime will be profitable.
 
 ### 3.6 Subsystem 6: `RegimeHistoryLedger`
@@ -234,22 +258,34 @@ CLASS A: RULE-BASED    CLASS B: CLUSTERING            CLASS C: MARKOV SWITCH CLA
 ### 3.9 Subsystem 9: Downstream Interface to Phase 20 (`DownstreamContract`)
 - **Responsibility:** Pure read-only emission of regime observations to Phase 20.
 - **Output Artifact (`RegimeObservationEnvelope`):**
-  - Current regime identifier and probability vector.
+  - Current regime identifier, full lineage metadata, and probability vector.
   - Regime stability duration ($N$ bars in current state).
   - Transition alert flag (`TRANSITION_CONFIRMED`, `TRANSITION_CANDIDATE`, `STABLE`).
-  - Uncertainty metadata.
+  - Uncertainty and state support metadata (`HIGH_SUPPORT`, `LOW_SUPPORT`, `UNKNOWN`).
 - **Decoupling Guarantee:** Phase 19 provides the state observation. It possesses zero visibility into strategy code, portfolio weights, or risk budgets.
 
 ---
 
 ## 4. Regime Detection Methodology Governance & Negative Knowledge
 
-### 4.1 Methodology Governance Rules
+### 4.1 Causal Calibration Family
+Phase 19 rejects mandating a single calibration method (such as expanding quantiles alone). In non-stationary financial markets, expanding windows can suffer from historical anchoring and lag behind structural regime shifts.
+
+Phase 19 supports a declared **Causal Calibration Family**:
+$$\boxed{\text{Causal Calibration Family} \not\equiv \text{Sole Mandated Expanding Window}}$$
+
+1. **Expanding Window Calibration:** Uses all causal historical data $[0, t]$ with declared burn-in sample ($N_{\text{burn}} \ge 252$ bars). Best for stationary long-term distributions.
+2. **Rolling Window Calibration:** Uses a fixed backward lookback $[t - W, t]$ with declared window length $W$. Adapts dynamically to non-stationary structural drift.
+3. **Explicitly Bounded Adaptive Calibration:** Uses online parameter updating with strictly clamped step sizes ($\Delta \le \theta_{\text{adapt}}$) to prevent runaway parameter migration.
+
+**Mandatory Invariant:** Every calibration method must operate strictly point-in-time ($t \le T_{\text{decision}}$) with complete parameter lineage recorded in the manifest.
+
+### 4.2 Methodology Governance Rules
 1. **Anti-Whipsaw Hysteresis:** State transitions require confirmation across $H \ge 2$ consecutive bars or a transition probability exceeding threshold $\theta_{\text{trans}} \ge 0.65$ to prevent false switching and trading churn.
 2. **Minimum Regime Duration:** Any regime state with a median empirical duration of $< 5$ bars is classified as `NOISE_STATE` and merged into the background neutral state.
 3. **Parameter Perturbation Robustness:** A detector must survive $\pm 15\%$ perturbation to its lookback window $W$ without altering $> 10\%$ of historical state labels. Detectors collapsing under small window changes fail closed.
 
-### 4.2 Negative Knowledge & Detection Failure Preservation
+### 4.3 Negative Knowledge & Detection Failure Preservation
 Failed, unstable, or non-generalizing regime models are treated as first-class scientific artifacts:
 - **`NegativeRegimeLedger`:** Permanently catalogs detectors that suffered:
   - Excessive transition churn ($> 30\%$ bars exhibiting state flips).
@@ -265,38 +301,38 @@ Failed, unstable, or non-generalizing regime models are treated as first-class s
 Every risk vector is audited with explicit control definitions, fail-closed behaviors, and implementation-readiness statuses:
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                      PHASE 19 ADVERSARIAL AUDIT MATRIX                           │
-├────┬────────────────────────────────────┬───────────────────────────────────────┤
-│ #  │ Audit Dimension                    │ Audit Verification Status             │
-├────┼────────────────────────────────────┼───────────────────────────────────────┤
-│ 1  │ Lookahead Bias / Future Leakage    │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 2  │ Point-in-Time Integrity            │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 3  │ Regime Label Hindsight Bias        │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 4  │ Arbitrary Threshold / Hyperparams  │ CONTROL SPECIFIED — RESEARCH HEURISTIC│
-│ 5  │ Regime Proliferation / Over-Frag   │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 6  │ False Regime Switching / Churn     │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 7  │ Low-Sample Regimes                 │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 8  │ Regime Boundary Sensitivity        │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 9  │ Detector Instability Across Windows│ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 10 │ Data Snooping / Multiple Testing   │ CONTROL SPECIFIED — SUBORDINATE PH6   │
-│ 11 │ Cross-Asset Contamination          │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 12 │ Survivorship Bias                  │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 13 │ Missing Data / Stale Data          │ CONTROL SPECIFIED — STRICT FAIL-CLOSED│
-│ 14 │ Feature Revision / Restatement     │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 15 │ Model Drift                        │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 16 │ Detector Drift                     │ CONTROL SPECIFIED — NOT RUNTIME VERIF │
-│ 17 │ UNKNOWN / Ambiguous State Handling │ CONTROL SPECIFIED — STRICT FAIL-CLOSED│
-│ 18 │ Economic Interpretation Overreach  │ CONTROL SPECIFIED — EPISTEMIC RULE    │
-│ 19 │ Phase 6 Authority Boundary         │ CONTROL SPECIFIED — SOLE AUTH PH6     │
-│ 20 │ Phase 11 Authority Boundary        │ CONTROL SPECIFIED — SOLE AUTH PH11    │
-│ 21 │ Phase 17 Authority Boundary        │ CONTROL SPECIFIED — SOLE AUTH PH17    │
-│ 22 │ Phase 20 Boundary                  │ CONTROL SPECIFIED — READ-ONLY EMISSION│
-│ 23 │ Capital Allocation Boundary        │ CONTROL SPECIFIED — $0.00 HARD-LOCKED │
-│ 24 │ Reproducibility / Lineage          │ CONTROL SPECIFIED — MANIFEST SEALED   │
-│ 25 │ Compute / Resource Governance      │ CONTROL SPECIFIED — RESOURCE BOUNDED  │
-│ 26 │ AI Epistemic Firewall              │ CONTROL SPECIFIED — UNVALIDATED PROP  │
-└────┴────────────────────────────────────┴───────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                          PHASE 19 ADVERSARIAL AUDIT MATRIX                               │
+├────┬────────────────────────────────────┬────────────────────────────────────────────────┤
+│ #  │ Audit Dimension                    │ Audit Classification / Enforced Control        │
+├────┼────────────────────────────────────┼────────────────────────────────────────────────┤
+│ 1  │ Lookahead Bias / Future Leakage    │ CONTROL SPECIFIED — Strict backward window     │
+│ 2  │ Point-in-Time Integrity            │ CONTROL SPECIFIED — Dual-temporal verification │
+│ 3  │ Regime Label Hindsight Bias        │ CONTROL SPECIFIED — Causal filtering required  │
+│ 4  │ Arbitrary Threshold / Hyperparams  │ CONTROL SPECIFIED — Causal calibration family  │
+│ 5  │ Regime Proliferation / Over-Frag   │ CONTROL SPECIFIED — Gov ceiling K<=5 (reject)  │
+│ 6  │ False Regime Switching / Churn     │ CONTROL SPECIFIED — Anti-whipsaw hysteresis    │
+│ 7  │ Low-Sample Regimes                 │ CONTROL SPECIFIED — Low-support flag (<3%)     │
+│ 8  │ Regime Boundary Sensitivity        │ CONTROL SPECIFIED — Noise perturbation test    │
+│ 9  │ Detector Instability Across Windows│ CONTROL SPECIFIED — Centroid tracking cosine   │
+│ 10 │ Data Snooping / Multiple Testing   │ CONTROL SPECIFIED — Subordinate to Phase 6 K   │
+│ 11 │ Cross-Asset Contamination          │ CONTROL SPECIFIED — Granularity-calibrated time│
+│ 12 │ Survivorship Bias                  │ CONTROL SPECIFIED — Negative ledger append-only│
+│ 13 │ Missing Data / Stale Data          │ CONTROL SPECIFIED — Fail-closed to UNKNOWN     │
+│ 14 │ Feature Revision / Restatement     │ CONTROL SPECIFIED — Cryptographic ledger sealing│
+│ 15 │ Model Drift                        │ CONTROL SPECIFIED — KS-distributional watchdog │
+│ 16 │ Detector Drift                     │ CONTROL SPECIFIED — Clamped adaptation ceiling │
+│ 17 │ UNKNOWN / Ambiguous State Handling │ CONTROL SPECIFIED — First-class UNKNOWN state  │
+│ 18 │ Economic Interpretation Overreach  │ CONTROL SPECIFIED — Epistemic math naming only │
+│ 19 │ Phase 6 Authority Boundary         │ CONTROL SPECIFIED — Sole authority Phase 6     │
+│ 20 │ Phase 11 Authority Boundary        │ CONTROL SPECIFIED — Sole authority Phase 11    │
+│ 21 │ Phase 17 Authority Boundary        │ CONTROL SPECIFIED — Sole authority Phase 17    │
+│ 22 │ Phase 20 Boundary                  │ CONTROL SPECIFIED — Read-only state emission   │
+│ 23 │ Capital Allocation Boundary        │ CONTROL SPECIFIED — $0.00 Hard-Locked          │
+│ 24 │ Reproducibility / Lineage          │ CONTROL SPECIFIED — Manifest-sealed determinism│
+│ 25 │ Compute / Resource Governance      │ CONTROL SPECIFIED — Concurrency <= Cores-2     │
+│ 26 │ AI Epistemic Firewall              │ CONTROL SPECIFIED — AI output = unvalidated prop│
+└────┴────────────────────────────────────┴────────────────────────────────────────────────┘
 ```
 
 ### Detailed Dimensional Analysis
@@ -321,15 +357,15 @@ Every risk vector is audited with explicit control definitions, fail-closed beha
 
 #### 4. Arbitrary Threshold & Hyperparameter Tuning
 - **Risk:** Cherry-picking volatility cutoffs (e.g. $\sigma > 0.015$) to optimize a subsequent backtest.
-- **Control:** Cutoffs must be pre-registered using expanding-window empirical quantiles (e.g. 80th percentile over prior 252 bars).
+- **Control:** Calibration must use the declared **Causal Calibration Family** (expanding, rolling, or bounded adaptive) with pre-registered lookback lengths.
 - **Fail-Closed Behavior:** Static hand-tuned magic numbers without empirical derivation are rejected.
 - **Status:** `CONTROL SPECIFIED — RESEARCH HEURISTIC ONLY`.
 
 #### 5. Regime Proliferation / Over-Fragmentation
 - **Risk:** Overfitting data by creating 20 granular micro-regimes with minimal data support.
-- **Control:** Maximum number of active discrete states per detector family is bounded: $K \le 5$.
-- **Fail-Closed Behavior:** Any clustering model initialized with $K > 5$ raises `RegimeProliferationError`.
-- **Status:** `CONTROL SPECIFIED — GOVERNANCE POLICY BOUND`.
+- **Control:** Governance and compute ceiling: $K \le 5$. If a model requests $K > 5$, it is rejected or requires explicit governance configuration with empirical justification.
+- **Fail-Closed Behavior:** Automatic rejection of models requesting $K > 5$ without approved governance waiver.
+- **Status:** `CONTROL SPECIFIED — GOVERNANCE COMPLEXITY CEILING`.
 
 #### 6. False Regime Switching / Churn
 - **Risk:** High-frequency state oscillation generating transaction whipsaw downstream.
@@ -339,8 +375,8 @@ Every risk vector is audited with explicit control definitions, fail-closed beha
 
 #### 7. Low-Sample Regimes
 - **Risk:** Detecting an "acute crisis" regime containing only 6 total bars, making statistical inference impossible.
-- **Control:** Minimum sample threshold: Any state accounting for $< 3\%$ of historical data cannot be admitted as an independent operational regime.
-- **Fail-Closed Behavior:** Sub-threshold states are merged into `RegimeIdentifier.UNKNOWN`.
+- **Control:** State support guardrail: States accounting for $< 3\%$ of historical data are flagged as `LOW_SUPPORT` / `UNSTABLE_STATE`.
+- **Fail-Closed Behavior:** `LOW_SUPPORT` states are routed to research audit or treated as `UNKNOWN` in live selection.
 - **Status:** `CONTROL SPECIFIED — NOT YET VERIFIED IN RUNTIME`.
 
 #### 8. Regime Boundary Sensitivity
@@ -361,9 +397,9 @@ Every risk vector is audited with explicit control definitions, fail-closed beha
 - **Fail-Closed Behavior:** Phase 19 cannot declare statistical significance independently.
 - **Status:** `CONTROL SPECIFIED — SUBORDINATED TO PHASE 6 AUTHORITY`.
 
-#### 11. Cross-Asset Contamination
-- **Risk:** Using US Equity volatility to classify FX market regimes without checking market hours or transmission lags.
-- **Control:** Strict universe scoping: multi-asset features must have explicit alignment contracts and timezone normalization.
+#### 11. Cross-Asset Contamination & Temporal Precision
+- **Risk:** Imposing inappropriate clock mandates across disparate asset timeframes or misaligning cross-asset feeds.
+- **Control:** Calibrated precision: Clock resolution must match detector granularity (nanosecond/microsecond for tick/orderbook; second/minute for intraday; bar-close for daily). Multi-asset features must declare explicit session alignment contracts.
 - **Fail-Closed Behavior:** Unaligned cross-asset streams fail closed immediately.
 - **Status:** `CONTROL SPECIFIED — NOT YET VERIFIED IN RUNTIME`.
 
@@ -387,7 +423,7 @@ Every risk vector is audited with explicit control definitions, fail-closed beha
 
 #### 15. Model Drift
 - **Risk:** Market structural dynamics shift (e.g. zero-rate regime to high-rate regime); old model becomes obsolete.
-- **Control:** Distributional tracking: Kolmogorov-Smirnov test between training feature distribution and rolling 90-day feature distribution.
+- **Control:** Distributional tracking: Kolmogorov-Smirnov test between training feature distribution and rolling feature distribution.
 - **Fail-Closed Behavior:** Significant drift ($p < 0.01$) flags detector as `DETECTOR_DRIFT_DEGRADED`.
 - **Status:** `CONTROL SPECIFIED — NOT YET VERIFIED IN RUNTIME`.
 
@@ -467,14 +503,14 @@ All numerical thresholds in Phase 19 are classified in accordance with `AGENTS.m
 | :--- | :--- | :--- | :--- | :--- |
 | $\text{Capital Allocation} = \$0.00$ | System-Wide | **Class A: Canonical ACASH Invariant** | ADR-023 / Project-Wide Governance | Hard-locked system default invariant |
 | $T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$ | Data Contract | **Class A: Canonical ACASH Invariant** | Phase 2/3 Dual-Temporal Invariant | Causal point-in-time boundary |
-| $\text{Max States } K \le 5$ | State Model | **Class B: Governance-Defined Threshold** | Phase 19 Architecture Policy | Anti-proliferation state ceiling |
+| $\text{Max States } K \le 5$ | State Model | **Class B: Governance-Defined Threshold** | Phase 19 Architecture Policy | Complexity/compute ceiling (not ontological truth) |
 | $\text{Ambiguity Cutoff } P_{\max} < 0.50$ | State Model | **Class B: Governance-Defined Threshold** | Phase 19 Fail-Closed Policy | Transition to UNKNOWN threshold |
 | $\text{Max Missing Bars } \tau_{\text{gap}} \le 2$ | Data Contract | **Class B: Governance-Defined Threshold** | Phase 19 Data Quality Policy | Missing data fail-closed tolerance |
 | $\text{Worker Concurrency } \le \text{Cores} - 2$| Host Governance | **Class B: Governance-Defined Threshold** | Phase 19 Host Protection Policy | CPU starvation prevention ceiling |
 | $\text{Worker Memory } \le 2.0\text{ GB}$ | Host Governance | **Class B: Governance-Defined Threshold** | Phase 19 Host Protection Policy | Host memory thrashing ceiling |
 | $\text{Hysteresis Confirmation } H \ge 2\text{ bars}$ | Detection Engine | **Class C: Research Heuristic** | Microstructure Regime Best Practice | Anti-churn state persistence heuristic |
 | $\text{Transition Prob } \theta_{\text{trans}} \ge 0.65$ | Detection Engine | **Class C: Research Heuristic** | Quantitative Markov Switching Practice| State transition confirmation threshold |
-| $\text{Minimum State Support } \ge 3\%$ | Validation | **Class C: Research Heuristic** | Statistical Clustering Practice | Low-sample state pruning heuristic |
+| $\text{Low-Support Threshold } < 3\%$ | Validation | **Class C: Research Heuristic** | Statistical Clustering Practice | State stability flag (not existence denial) |
 | $\text{Window Perturbation } \pm 15\%$ | Validation | **Class C: Research Heuristic** | Robustness Analysis Practice | Boundary sensitivity sweep heuristic |
 | 90-Day Drift Evaluation Window | Monitoring | **Class D: Illustrative Threshold** | Macro Environment Drift Example | Illustrative drift monitoring window |
 
@@ -516,10 +552,17 @@ When implementation of Phase 19 is formally authorized by the Human Auditor foll
 ACASH EMPIRICAL REGIME DETECTION ENGINE (PHASE 19) — SPECIFICATION PROVENANCE
 ================================================================================
 Specification Document: docs/phase19/phase19_master_regime_detection_architecture.md
-Document Revision     : Phase 19 Rev 1.0 (v1.0.0)
+Document Revision     : Phase 19 Rev 1.1 (v1.1.0)
 Current Status        : PROPOSED / HUMAN APPROVAL PENDING
 Parent Governance     : docs/ROADMAP.md (v3.4.0), AGENTS.md, ADR-022, ADR-023
-Adversarial Audit     : COMPLETE (26 / 26 Dimensions Evaluated)
+Adversarial Audit     : COMPLETE (26 / 26 Dimensions Evaluated — Remediated)
+
+Remediation Highlights (Rev 1.1):
+  [x] K <= 5 Semantics: Explicitly defined as governance/compute ceiling, NOT ontological truth.
+  [x] 3% Floor Semantics: Explicitly defined as LOW_SUPPORT / UNSTABLE flag, NOT existence denial.
+  [x] Calibration Family: Supports expanding, rolling, and bounded adaptive causal methods.
+  [x] Clock Precision: Calibrated to detector granularity; avoided microsecond over-engineering on daily bars.
+  [x] Regime Identity: Explicitly bound to detector_id, version, feature_set, and calibration window lineage.
 
 Audit Classification:
   -> Architecture Specified         : COMPLETE (9 Subsystems Designed)
@@ -540,6 +583,6 @@ Authority Invariants:
 Implementation Status:
   [x] Implementation is STRICTLY LOCKED / NOT AUTHORIZED
   [x] Zero Runtime Code Committed
-  [x] Active Soak Test (PID 41844) Untouched & Continuous (~13.8h elapsed)
+  [x] Active Soak Test (PID 41844) Untouched & Continuous (~13.95h elapsed)
 ================================================================================
 ```
