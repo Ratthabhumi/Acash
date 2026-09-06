@@ -685,7 +685,7 @@ $$\boxed{\begin{aligned}
 ### Deterministic Event Precedence Lattice ($\succ$)
 In a formal Deterministic Finite Automaton (DFA), the state transition function is defined as $\delta: (S \times E) \to S$. When multiple event notifications arrive concurrently or within the same processing pulse (e.g. broker fill notification racing cancellation confirmation or socket disconnect), transition non-determinism is strictly eliminated via an explicit **Event Precedence Order**:
 
-$$\boxed{\mathbf{EVENT\;PRECEDENCE\;LATTICE:}\quad \text{Realized Broker Fill } \succ \text{ Cancel Receipt } \succ \text{ Reject Receipt } \succ \text{ Network Disconnect / Socket Loss}}$$
+$$\boxed{\mathbf{EVENT\;PRECEDENCE\;LATTICE:}\quad \text{Realized Broker Fill} \succ \text{Cancel Receipt} \succ \text{Reject Receipt} \succ \text{Network Disconnect / Socket Loss}}$$
 
 1. **Realized Fill Dominance ($\text{Realized Fill } \succ \text{ Cancel Receipt}$):** Realized execution at the venue matching engine represents irreversible physical settlement reality. If a fill execution notice (100% or partial) arrives concurrently with or in the same processing buffer as a cancel confirmation, the realized fill takes unconditional precedence:
    - $\delta(\text{CANCEL\_REQUESTED}, \text{fill}_{100\%}) \longrightarrow \text{COMPLETED}$
@@ -793,6 +793,15 @@ When Phase 22 restarts (cold boot or post-crash):
    - **`DESYNC_FORCE_RESOLVED`:** Discrepancy between ledger and physical broker state could not be automatically reconciled and was resolved under governed administrative break-glass procedure (ADR-024). Intent transitions to `RECONCILED` with `reconciliation_outcome = DESYNC_FORCE_RESOLVED`. Realized position forced to broker truth.
    - If ticket is still resting open: Mark intent `ACKNOWLEDGED`.
 4. **Step 4: Emit Ready State:** Only after reconciliation completes does Phase 22 accept new Phase 21 plans.
+
+### 31.1 Authoritative Reconciliation Outcome Semantic Mapping Table
+| Reconciliation Outcome | Physical Broker Ground Truth Condition | Allowed Lifecycle Destination | Authoritative Evidence Source | Governed Action & Inventory Resolution |
+| :--- | :--- | :--- | :--- | :--- |
+| `FILL_CONFIRMED` | 100% volume executed downstream ($Q_{\text{filled}} = Q_{\text{intent}}$) | `RECONCILED` (or `COMPLETED` in-flight) | `Phase12PositionReport` / Broker Deal Ticket | Synchronize realized inventory to fill |
+| `PARTIAL_CONFIRMED` | Partial execution ($0 < Q_{\text{filled}} < Q_{\text{intent}}$); residual zero open orders | `RECONCILED` | `Phase12PositionReport` / Broker Order History | Synchronize realized lots; clear residual exposure |
+| `CANCEL_CONFIRMED` | 0 volume executed ($Q_{\text{filled}} = 0$); order cancelled downstream | `RECONCILED` (or `CANCELLED` pre-reconcile) | `Phase12PositionReport` / Broker Cancellation Ack | Clear residual exposure; zero inventory update |
+| `DROPPED_DOWNSTREAM` | Zero record of ticket downstream; lost in transit or dropped at socket | `RECONCILED` | Out-of-band `QUERY_INTENT_STATUS` / Broker Log | Lock instrument; log `WARN_INTENT_DROPPED_DOWNSTREAM_RECONCILED` |
+| `DESYNC_FORCE_RESOLVED` | Unresolvable discrepancy between internal ledger and physical broker | `RECONCILED` | Governed Administrative Protocol (ADR-024) | Lock engine; force internal inventory to broker truth |
 
 ---
 
@@ -1088,7 +1097,7 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 - [x] **Criterion 9 (Fail-Closed Concentration):** Concentration breaches halt engine; zero silent clipping.
 - [x] **Criterion 10 (Authorized Risk-Reducing Priority):** Closes strictly precede expansions; zero sovereign emergency close generation.
 - [x] **Criterion 11 (Decoupled Computational Determinism & Identity):** Computational outputs, sequence ordering, and tie-breaking are 100% bit-for-bit deterministic via `deterministic_intent_key`; runtime `intent_id` (UUIDv7) is strictly an ephemeral instance handle without ordering authority.
-- [x] **Criterion 12 (Formal 15-State DFA & Semantic Closure Hardening Rev 1.8):** Section 21 defines the 15-state `IntentLifecycleState` enum, verified via direct AST parsing to contain exactly 15 members with zero unauthorized states. Section 23 specifies the 20-row, 24-directed-edge transition table with 100% exit coverage on 11 non-terminal states and strict sinks on 4 terminal states (`COMPLETED`, `CANCELLED`, `REJECTED`, `RECONCILED`). Section 23 defines the deterministic Event Precedence Lattice ($\text{Fill } \succ \text{ Cancel } \succ \text{ Reject } \succ \text{ Disconnect}$), proving state-event determinism $\delta(s, e) \in S$. Section 23 LaTeX Canonical Paths 1, 2, and 3 are directly parsed and mathematically proven as subgraphs of the transition relation. `ReconciliationOutcome` enum members (`FILL_CONFIRMED`, `PARTIAL_CONFIRMED`, `CANCEL_CONFIRMED`, `DROPPED_DOWNSTREAM`, `DESYNC_FORCE_RESOLVED`) are 100% mapped to transition semantics. `sequence_number` is formally plan-scoped, preserving `deterministic_intent_key` stability across restarts.
+- [x] **Criterion 12 (Formal 15-State DFA & Semantic Closure Hardening Rev 1.8):** Section 21 defines the 15-state `IntentLifecycleState` enum, verified via AST parsing to inherit `(str, Enum)`, enforce member values equal names, and contain exactly 15 closed members. Section 23 specifies the 20-row, 24-directed-edge transition table with 100% exit coverage on 11 non-terminal states and strict sinks on 4 terminal states (`COMPLETED`, `CANCELLED`, `REJECTED`, `RECONCILED`). Section 23 defines the deterministic Event Precedence Lattice ($\text{Realized Broker Fill} \succ \text{Cancel Receipt} \succ \text{Reject Receipt} \succ \text{Network Disconnect / Socket Loss}$), verified as a strict monotonic total order proving state-event determinism $\delta(s, e) \in S$. Section 23 LaTeX Canonical Paths 1, 2, and 3 are directly parsed and proven as subgraphs of the transition relation. Section 31.1 defines the authoritative 5-column Semantic Mapping Table for all active `ReconciliationOutcome` members, verified by exact-match parsing. `sequence_number` is formally plan-scoped, empirically and mathematically proven to produce zero hash drift in `deterministic_intent_key` across simulated process restarts.
 - [x] **Criterion 13 (Epistemic Separation):** `TIMEOUT != SUCCESS` and `UNKNOWN != FAILED`.
 - [x] **Criterion 14 (Missing Position Safety):** Missing position snapshot enters `DEFENSIVE_HOLD`. Never assume zero.
 - [x] **Criterion 15 (Atomic WAL Logging):** Write-ahead ledger append and `fsync` precede IPC dispatch.
