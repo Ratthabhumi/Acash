@@ -1,12 +1,12 @@
 # ACASH Phase 22 — Portfolio Orchestration & Netting
 ## Master Architecture & Governance Specification
 
-> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.4`  
-> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.4 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
+> **Document ID:** `ACASH-SPEC-PHASE22-ORCHESTRATION-v1.5`  
+> **Status:** PROPOSED ARCHITECTURE & GOVERNANCE SPECIFICATION — REVISION 1.5 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)  
 > **Parent Governance:** `docs/ROADMAP.md` (v3.4.0), `AGENTS.md`, ADR-022, ADR-023, ADR-024, ADR-025  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Strict Fail-Closed Contract, Evidence > Belief, Single Canonical Authority)  
 > **Date:** 2026-09-06  
-> **Version:** 1.4.0 (Master Architecture & Governance Specification — Rev 1.4 Remediation)  
+> **Version:** 1.5.0 (Master Architecture & Governance Specification — Rev 1.5 Remediation)  
 
 ---
 
@@ -346,10 +346,11 @@ $$\text{NER}_s = \begin{cases}
 
 #### Mathematical Properties:
 1. **Range Bounds:** $\text{NER}_s \in [0.0, 1.0]$.
-2. **Zero Internal Netting ($\text{NER}_s = 0.0$):** Occurs when all strategy transition deltas $\Delta Q_{i, s}$ share the identical direction (e.g. all strategies desire to expand Long), or when zero rebalance transition is requested. 100% of desired transition volume must be routed to market.
-3. **Maximum Internal Netting ($\text{NER}_s = 1.0$):** Occurs when opposing strategy transitions perfectly offset ($\sum \Delta Q_{i, s} = 0$), requiring zero net physical venue order emission.
-4. **Partial Internal Netting ($\text{NER}_s \in (0.0, 1.0)$):** Exactly $\text{NER}_s \times \sum_{i=1}^M |\Delta Q_{i, s}|$ lots are completely spared from broker commission tickets, bid-ask spread crossing, and venue execution friction.
-5. **Separation from Current Broker Position:** The denominator measures **gross desired strategy turnover** $\sum |\Delta Q_{i,s}|$, completely decoupled from the consolidated account position $Q_{s, \text{current}}$, eliminating any distortion when the portfolio is already on target.
+2. **Zero Internal Netting with Positive Gross Transition ($\text{NER}_s = 0.0, \sum_{i=1}^M |\Delta Q_{i, s}| > 0$):** Occurs when all strategy transition deltas $\Delta Q_{i, s}$ share the identical direction (e.g. all active strategies desire to expand Long, or all desire to reduce Short). Zero internal netting occurs; no opposing orders cross internally, and 100% of the gross desired transition volume remains for physical venue execution.
+3. **Zero Rebalance Transition Boundary Convention ($\text{NER}_s = 0.0, \sum_{i=1}^M |\Delta Q_{i, s}| = 0$):** Occurs when every strategy is already on target ($\Delta Q_{i, s} = 0, \forall i \in \{1, \dots, M\}$). By convention, $\text{NER}_s = 0.0$; no execution volume exists ($\Delta Q_s = 0$), and zero venue volume is required. This boundary convention is strictly decoupled from the positive-transition zero-netting state.
+4. **Maximum Internal Netting ($\text{NER}_s = 1.0, \sum_{i=1}^M |\Delta Q_{i, s}| > 0$):** Occurs when opposing strategy transitions perfectly offset ($\sum_{i=1}^M \Delta Q_{i, s} = 0$), requiring zero net physical venue order emission ($\Delta Q_s = 0$).
+5. **Partial Internal Netting ($\text{NER}_s \in (0.0, 1.0)$):** Exactly $\text{NER}_s \times \sum_{i=1}^M |\Delta Q_{i, s}|$ lots are completely spared from broker commission tickets, bid-ask spread crossing, and venue execution friction.
+6. **Separation from Current Broker Position:** The denominator measures **gross desired strategy turnover** $\sum_{i=1}^M |\Delta Q_{i,s}|$, completely decoupled from the consolidated account position $Q_{s, \text{current}}$, eliminating any distortion when the portfolio is already on target.
 
 ---
 
@@ -371,26 +372,38 @@ When multiple strategies emit opposing requirements on instrument $s$:
 ## 13. Duplicate Strategy / Duplicate Intent Handling
 
 1. **Duplicate Strategy IDs in Plan:** If `PortfolioAllocationPlan.target_weights` contains duplicate strategy IDs, Phase 22 fails closed immediately (`ERR_ORCH_DUPLICATE_STRATEGY_ID`).
-2. **Duplicate Intent Prevention:** Each execution intent is assigned an immutable `idempotency_key` constructed deterministically:
-   $$\text{idempotency\_key} = \text{SHA256}( \text{plan\_digest} \parallel \text{symbol} \parallel \text{sequence\_no} \parallel \text{direction} \parallel \text{quantity\_lots} )$$
-3. **Re-submission Suppression:** If an intent with an identical `idempotency_key` is already present in `orchestration_ledger.jsonl`, Phase 22 suppresses emission and logs `INFO_INTENT_DEDUPLICATED`.
+2. **Deterministic Content Identity (`deterministic_intent_key`):** Each execution intent possesses an immutable, deterministic content identity key derived exclusively from canonical plan and computational fields:
+   $$\text{deterministic\_intent\_key} \equiv \text{idempotency\_key} = \text{SHA256}( \text{plan\_digest} \parallel \text{canonical\_symbol} \parallel \text{sequence\_no} \parallel \text{direction} \parallel \text{quantity\_lots} )$$
+   This deterministic key governs computational equivalence, replay verification, deduplication, and invariant execution sequencing.
+3. **Re-submission Suppression:** If an intent with an identical `deterministic_intent_key` (or `idempotency_key`) is already present in `orchestration_ledger.jsonl`, Phase 22 suppresses emission and logs `INFO_INTENT_DEDUPLICATED`.
 
 ---
 
 ## 14. Idempotency & Replay Protection Model
 
-Phase 22 implements strict, multi-layered idempotency:
-- **UUIDv7 Identifiers:** All `intent_id` values are monotonically ordered, time-sortable UUIDv7 strings.
-- **Deduplication Window:** An in-memory LRU cache coupled with `orchestration_ledger.jsonl` tracks all active and completed intent keys over a rolling 48-hour window.
+Phase 22 implements strict, multi-layered idempotency with complete decoupling between computational content identity and runtime instance handles:
+- **Separation of Content Identity vs. Runtime Instance Handle:**
+  - **Deterministic Intent Key (`deterministic_intent_key` / `idempotency_key`):** The pure SHA-256 digest of canonical computational fields $(\text{plan\_digest}, \text{canonical\_symbol}, \text{sequence\_no}, \text{direction}, \text{quantity\_lots})$. It is stationary, tie-invariant, and bit-for-bit identical across independent evaluations and historical replays.
+  - **Runtime Instance Handle (`intent_id`):** A wall-clock UUIDv7 string generated at runtime exclusively for IPC message tracking, downstream broker correlation, and lifecycle state persistence in `orchestration_ledger.jsonl`.
+- **Deduplication Window:** An in-memory LRU cache coupled with `orchestration_ledger.jsonl` tracks all active and completed deterministic intent keys over a rolling 48-hour window.
 - **Replay Resistance:** Ingesting an identical `PortfolioAllocationPlan` produces zero duplicate intents; Phase 22 evaluates target vs current position, finds $\Delta Q_s = 0$, and transitions to `IDLE_ON_TARGET`.
 
 ---
 
 ## 15. Deterministic Orchestration Rules
 
-1. **Pure Function Invariance:** Given identical `(PortfolioAllocationPlan, Phase12PositionReport, BrokerSymbolSpec)`, the netting engine produces **bit-for-bit identical** `ExecutionIntent` sets.
-2. **Zero Randomness:** Zero `random()`, zero stochastic sampling, zero heuristic search.
-3. **Deterministic Rounding:** All floating-point numbers are prohibited; all arithmetic is performed using Python `Decimal` with explicit rounding modes (`ROUND_DOWN` for lots to prevent margin over-allocation).
+1. **Decoupled Computational Determinism:**
+   Given identical canonical inputs `(PortfolioAllocationPlan, Phase12PositionReport, BrokerSymbolSpec)` and execution context (`causal_epoch`), the orchestration engine produces **bit-for-bit identical computational outputs**:
+   - Calculated target quantities $Q_{s, \text{target}}^{\text{quant}}$ and lot deltas $\Delta Q_s$.
+   - Direction assignments (`BUY`, `SELL`, `HOLD`) and priority tiers (1, 2, 3, 4).
+   - Netting Efficiency Ratios ($\text{NER}_s$) and multi-epoch turnover slices.
+   - Deterministic intent keys (`deterministic_intent_key` / `idempotency_key`).
+   - Sorted execution intent sequence and dispatch ordering.
+   Every mathematical, logical, and relational calculation is 100% deterministic and reproducible across independent evaluations, cold-start replays, and audit reviews.
+2. **Runtime Instance Handle Isolation:**
+   The `intent_id` (UUIDv7) is explicitly classified as a **runtime-generated instance handle** for IPC dispatch and broker session tracking. It is NOT a deterministic computational output and MUST NOT influence computational state, ordering, tie-breaking, or replay equivalence.
+3. **Zero Randomness:** Zero `random()`, zero stochastic sampling, zero heuristic search.
+4. **Deterministic Rounding:** All floating-point numbers are prohibited; all arithmetic is performed using Python `Decimal` with explicit rounding modes (`ROUND_DOWN` for lots to prevent margin over-allocation).
 
 ---
 
@@ -414,10 +427,13 @@ $$\boxed{\mathbf{INVARIANT:}\quad \text{Phase 22 MUST NOT originate, classify, o
 Priority Tier 1 is reserved exclusively for sequencing execution intents that carry cryptographic provenance from an upstream Phase 11 `EMERGENCY_HALT` directive or an authorized Phase 21 defensive cash plan ($w_{\text{cash}} = 1.0$). Phase 22 possesses zero stop-out detection, margin call generation, or emergency declaration logic.
 
 ### Deterministic Tie-Breaking
-If multiple intents share the same priority tier, they are sorted deterministically by:
-1. Instrument symbol alphabetical order (`symbol ASC`).
-2. Absolute notional delta descending (`|Delta Notional| DESC`).
-3. Intent UUIDv7 ascending (`intent_id ASC`).
+If multiple intents share the same priority tier, they are sorted deterministically by canonical computational fields:
+1. Canonical instrument symbol alphabetical ascending (`canonical_symbol ASC`).
+2. Direction alphabetical ascending (`direction ASC`).
+3. Absolute notional delta descending (`|delta_notional_usd| DESC`).
+4. Deterministic intent key alphabetical ascending (`deterministic_intent_key ASC`).
+
+$$\boxed{\mathbf{INVARIANT:}\quad \text{Tie-breaking MUST NOT rely on runtime } \texttt{intent\_id} \text{ (UUIDv7). Ordering is strictly deterministic.}}$$
 
 ---
 
@@ -498,8 +514,9 @@ class ExecutionIntent(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     # Identifiers & Idempotency
-    intent_id: str                      # UUIDv7 strictly ordered
-    idempotency_key: str                # SHA-256 deduplication key
+    intent_id: str                      # UUIDv7 runtime instance handle (IPC & lifecycle tracking)
+    deterministic_intent_key: str       # SHA-256 canonical computational identity
+    idempotency_key: str                # SHA-256 deduplication key (= deterministic_intent_key)
     sequence_number: int                # Monotonically increasing rebalance counter
     
     # Lineage Links
@@ -586,7 +603,7 @@ The execution intent lifecycle manages intent progression through a formal **15-
 ### 15-State Transition Invariant Table
 | # | Source State | Event Trigger | Destination State | Invariant / Post-Condition |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `CREATED` | Schema & field validation passes | `VALIDATED` | Immutable UUIDv7 assigned. |
+| **1** | `CREATED` | Schema & field validation passes | `VALIDATED` | Deterministic key & runtime UUIDv7 handle assigned. |
 | **2** | `VALIDATED` | Algebraic netting calculation complete | `NETTED` | `delta_lots` computed; deadbands checked. |
 | **3** | `NETTED` | Risk sequencing & priority tiering done | `READY` | Sorted by Priority Tier 1..4. |
 | **4** | `READY` | Payload transmitted over IPC to Phase 12| `DISPATCHED` | Logged to WAL (`orchestration_ledger`). |
@@ -743,8 +760,9 @@ Every execution intent carries an unbreakable 9-stage cryptographic audit trail:
 
 ```python
 def compute_intent_digest(intent: ExecutionIntent) -> str:
+    # Grounded exclusively on deterministic computational identity (omitting ephemeral runtime UUIDv7)
     canonical_payload = {
-        "intent_id": intent.intent_id,
+        "deterministic_intent_key": intent.deterministic_intent_key,
         "idempotency_key": intent.idempotency_key,
         "sequence_number": intent.sequence_number,
         "allocation_plan_id": intent.allocation_plan_id,
@@ -918,7 +936,7 @@ Evaluate Fail-Closed Policy:
 
 ---
 
-## 47. Adversarial Threat Model (34 Attack Vectors)
+## 47. Adversarial Threat Model (36 Attack Vectors)
 
 | ID | Attack / Threat Vector | Description | Invariant Violated | Detection / Defense Mechanism | System Component | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -935,7 +953,7 @@ Evaluate Fail-Closed Policy:
 | **11**| **Partial Fill Ambiguity** | Fill volume unclear during disconnect. | Section 24 Invariant | Mark `UNKNOWN`; lock asset until query done. | State Machine | CONTROL SPECIFIED |
 | **12**| **Timeout Exploitation** | Engine assumes order filled on timeout. | Section 27 Invariant 1 | `TIMEOUT != SUCCESS`. Zero assumptions. | State Machine | CONTROL SPECIFIED |
 | **13**| **UNKNOWN Exploitation** | Engine assumes order failed on disconnect.| Section 27 Invariant 2 | `UNKNOWN != FAILED`. Reconcile mandatory. | State Machine | CONTROL SPECIFIED |
-| **14**| **Idempotency Collision** | Hash collision creates duplicate intent ID.| Section 14 Monotonicity| UUIDv7 timestamp + sequence prevents collision.| Ledger Engine | CONTROL SPECIFIED |
+| **14**| **Idempotency Collision** | Hash collision creates duplicate intent key.| Section 14 Monotonicity| Deterministic SHA-256 key prevents semantic collision; runtime UUIDv7 handle separates instances.| Ledger Engine | CONTROL SPECIFIED |
 | **15**| **Digest Substitution** | Attacker substitutes matching digest. | Lineage Chain Check | Validated against sealed ledger history. | Lineage Engine | CONTROL SPECIFIED |
 | **16**| **Venue Mismatch** | Intent routed to wrong execution venue. | OF-21 Instrument Spec | Symbol verified against `BrokerSymbolSpec`. | Valuation Engine| CONTROL SPECIFIED |
 | **17**| **Symbol Namespace Confuse**| "EURUSD" confused with "EURUSD.raw". | Section 21 Symbol Model| Explicit separation of canonical vs broker symbol.| Schema Engine | CONTROL SPECIFIED |
@@ -956,6 +974,8 @@ Evaluate Fail-Closed Policy:
 | **32**| **Concentration Clipping** | Engine clips >25% weight silently. | Section 17 Invariant | Fail-closed (`ERR_ORCH_CONCENTRATION_BREACH`).| Risk Engine | CONTROL SPECIFIED |
 | **33**| **Synthetic Fill Fictional**| Internal netting credits fake trades at mid.| Section 12.3 Invariant | Zero Synthetic Fills Policy enforced. | Accounting | CONTROL SPECIFIED |
 | **34**| **Sovereign Liquidation** | Solver status triggers unrequested dump. | Section 5.2 Invariant | Generic target math; internal fail = HOLD. | Netting Engine | CONTROL SPECIFIED |
+| **35**| **Replay Determinism & UUIDv7 Drift Attack** | Replay at different wall-clock epoch alters UUIDv7; inverts intent sorting if tie-break uses UUIDv7. | Section 15 & 16 Determinism | Tie-breaking bound to deterministic fields (`deterministic_intent_key ASC`); zero UUIDv7 dependence in ordering. | Orchestration | CONTROL SPECIFIED |
+| **36**| **Zero-Transition Phantom Volume Attack** | Static portfolio has $\sum |\Delta Q_{i,s}| = 0$; logic misinterprets $\text{NER}_s=0$ as requiring 100% market execution. | Section 11.2 Property 2b | Explicit separation of Property 2a (positive transition, zero netting) from 2b (zero transition convention, zero venue orders). | Netting Engine | CONTROL SPECIFIED |
 
 ---
 
@@ -967,12 +987,12 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 - [x] **Criterion 3 (Cryptographic Lineage):** 9-stage hash chain binds Phase 6 through Phase 22.
 - [x] **Criterion 4 (28-Predicate Firewall):** All 28 firewall checks must pass before intent dispatch.
 - [x] **Criterion 5 (Phase 12 Decoupling):** Socket isolation guaranteed; consumes `Phase12PositionReport`.
-- [x] **Criterion 6 (Canonical Transition Netting & NER):** Calculates $\text{NER}_s$ on gross desired transition deltas $\Delta Q_{i,s}$ decoupled from consolidated account position.
+- [x] **Criterion 6 (Canonical Transition Netting & Dual Zero-Transition Convention):** Calculates $\text{NER}_s$ on gross desired transition deltas $\Delta Q_{i,s}$ decoupled from consolidated account position; explicitly enforces dual zero-transition convention: gross desired transition $= 0 \implies \text{NER}_s = 0.0$ by convention with zero venue volume required, strictly separated from positive transition zero netting.
 - [x] **Criterion 7 (Zero Synthetic Fills):** Absolute proscription of virtual fills or fake mid-price trades.
 - [x] **Criterion 8 (Immutable Allocation Targets):** Turnover constraints pace execution; never alter terminal targets.
 - [x] **Criterion 9 (Fail-Closed Concentration):** Concentration breaches halt engine; zero silent clipping.
 - [x] **Criterion 10 (Authorized Risk-Reducing Priority):** Closes strictly precede expansions; zero sovereign emergency close generation.
-- [x] **Criterion 11 (Execution Intent Immutability):** Frozen Pydantic schema with UUIDv7 and SHA-256 digests.
+- [x] **Criterion 11 (Decoupled Computational Determinism & Identity):** Computational outputs, sequence ordering, and tie-breaking are 100% bit-for-bit deterministic via `deterministic_intent_key`; runtime `intent_id` (UUIDv7) is strictly an ephemeral instance handle without ordering authority.
 - [x] **Criterion 12 (15-State DFA Lifecycle):** Strict state transitions across all 15 formal states; zero undefined paths.
 - [x] **Criterion 13 (Epistemic Separation):** `TIMEOUT != SUCCESS` and `UNKNOWN != FAILED`.
 - [x] **Criterion 14 (Missing Position Safety):** Missing position snapshot enters `DEFENSIVE_HOLD`. Never assume zero.
@@ -985,22 +1005,22 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 
 ## 49. Governance Verification Matrix
 
-| Verification Dimension | Standard / Invariant Required | Revision 1.4 Specification Status | Evidence / Authority |
+| Verification Dimension | Standard / Invariant Required | Revision 1.5 Specification Status | Evidence / Authority |
 | :--- | :--- | :--- | :--- |
 | **Authority Isolation** | Zero strategy selection, zero re-allocation | **VERIFIED (SPECIFICATION)** | Sections 2, 3, 4, 5 |
 | **Liquidation Authority**| No sovereign liquidation; generic target math | **VERIFIED (SPECIFICATION)** | Section 5.2, Section 5.3, Section 40 |
 | **Emergency Priority** | Priority 1 sequences authorized closes only | **VERIFIED (SPECIFICATION)** | Section 16 |
 | **Interface Boundary** | `Phase12PositionReport` authenticated ingestion | **VERIFIED (SPECIFICATION)** | Section 2, 10, 42, 43 |
 | **Netting Semantics** | Execution suppression; zero synthetic fills | **VERIFIED (SPECIFICATION)** | Section 8, 11, 12 |
-| **NER Formulation** | Transition-based $\text{NER}_s \in [0.0, 1.0]$ | **VERIFIED (SPECIFICATION)** | Section 11.2 |
+| **NER Formulation** | Transition-based $\text{NER}_s \in [0.0, 1.0]$; dual zero-transition convention | **VERIFIED (SPECIFICATION)** | Section 11.2 |
 | **Target Immutability** | Turnover pacing delays execution, targets fixed | **VERIFIED (SPECIFICATION)** | Section 18.2 |
 | **Constraint Action** | Concentration breach $\implies$ Fail Closed | **VERIFIED (SPECIFICATION)** | Section 7, Section 17, Section 19 |
 | **Residual Semantics** | Min-volume suppression preserves residual per plan | **VERIFIED (SPECIFICATION)** | Section 9.1, Section 20 |
 | **Signed Exposure Model**| Unsigned capital $w_i \ge 0 \times$ signed signal $d_{i,s}$ | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-07`), Section 8, 9 |
 | **Firewall Completeness**| 28 deterministic fail-closed predicates | **VERIFIED (SPECIFICATION)** | Section 7 (`OF-01` to `OF-28`) |
 | **State Machine Safety** | 15-state DFA; TIMEOUT vs CANCEL_REQ separated | **VERIFIED (SPECIFICATION)** | Sections 22, 23, 26, 27 |
-| **Idempotency & Replay**| Deterministic UUIDv7, write-ahead logging | **VERIFIED (SPECIFICATION)** | Sections 14, 32, 34, 37 |
-| **Adversarial Hardening**| 34 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
+| **Idempotency & Replay**| Decoupled determinism from UUIDv7; tie-break via `deterministic_intent_key ASC` | **VERIFIED (SPECIFICATION)** | Sections 14, 15, 16, 32, 34, 37 |
+| **Adversarial Hardening**| 36 attack vectors addressed with fail-closed | **VERIFIED (SPECIFICATION)** | Section 47 |
 | **Runtime Code State** | STRICTLY LOCKED / NOT AUTHORIZED | **ENFORCED** | Zero code in `src/` or `tests/` |
 | **Operational Capital** | Hard-locked at $0.00; broker disconnected | **ENFORCED** | Invariant in Header & Section 2 |
 | **Phase 13 Soak Runner** | PID 41844 active and untouched | **ENFORCED** | Step 5 soak unmolested |
@@ -1013,8 +1033,8 @@ Phase 22 must satisfy **18 plan-level architectural acceptance criteria**:
 ================================================================================
                     ACASH GOVERNANCE & ARCHITECTURE SIGN-OFF
 ================================================================================
-Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.4
-Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.4 REMEDIATION PENDING APPROVAL
+Document ID             : ACASH-SPEC-PHASE22-ORCHESTRATION-v1.5
+Specification Status    : PROPOSED ARCHITECTURE — REVISION 1.5 REMEDIATION (PENDING FINAL AUDIT & HUMAN GOVERNANCE APPROVAL)
 Implementation Status   : STRICTLY LOCKED / NOT AUTHORIZED
 Parent Roadmap          : docs/ROADMAP.md (v3.4.0)
 Parent Architecture     : AGENTS.md, ADR-022, ADR-023, ADR-024, ADR-025
@@ -1024,13 +1044,14 @@ Governance Auditor      : Statistical Governance & Risk Management Reviewer
 DevOps / SRE Lead       : Fail-Closed Systems Engineer
 
 Verification Status:
-  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.4)
+  - Architecture Review : REMEDIATION COMPLETE (REVISION 1.5)
   - Authority Isolation : STRICTLY DEMARCATED (Zero Selection, Allocation, or Wire Overreach)
   - Liquidation Scope   : REMEDIATED (Zero Sovereign Liquidation; DEFENSIVE_HOLD Enforced)
   - Priority Sequencing : REMEDIATED (Priority 1 Sequences Authorized Closes Only; Zero Stop-Out Generation)
   - Allocation Semantics: REMEDIATED (NO_ALLOCATION -> DEFENSIVE_HOLD; Zero Auto-Liquidation)
   - Signed Exposure     : REMEDIATED (Unsigned Capital Budget w_i >= 0 x Directional Signal d_{i,s})
-  - NER Mathematical    : REMEDIATED (Transition-Based NER Formulation Decoupled from Current Position)
+  - NER Mathematical    : REMEDIATED (Dual Zero-Transition Convention; Gross Transition = 0 -> Zero Venue Volume)
+  - Determinism & Idem  : REMEDIATED (Computational Determinism Decoupled from UUIDv7; Deterministic Tie-Breaking Enforced)
   - State Transitions   : REMEDIATED (TIMEOUT -> RECONCILE vs ACK -> CANCEL_REQUESTED Decoupled)
   - Adapter Boundary    : REMEDIATED (Phase12PositionReport Contract Enforced; Telemetry Purged)
   - Netting Semantics   : REMEDIATED (Zero Synthetic Fills Policy Enforced; Execution Suppression)
@@ -1039,12 +1060,12 @@ Verification Status:
   - State-Machine Check : VERIFIED CONSISTENT (Formal 15-State DFA with Strict Canonical Paths)
   - Mathematical Sound  : GOVERNED FORMULATIONS (Algebraic Netting, Lots Quantization, NER)
   - Fail-Closed Contract: COMPLETE (38 Failure Modes Cataloged; AMBIGUITY -> ZERO INTENT)
-  - Adversarial Audit   : COMPLETE (34/34 Dimensions Addressed)
+  - Adversarial Audit   : COMPLETE (36/36 Dimensions Addressed)
   - Live Trading State  : HARD-LOCKED ($0.00 Capital, 0 Orders, Broker Disconnected)
   - Background Soak     : UNTOUCHED (PID 41844 Active in Step 5)
 
 FINAL VERDICT:
-  -> REVISION 1.4 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
+  -> REVISION 1.5 ARCHITECTURE: READY FOR FINAL HUMAN GOVERNANCE APPROVAL
   -> IMPLEMENTATION: STRICTLY LOCKED UNTIL FORMAL HUMAN GOVERNANCE SIGN-OFF
 ================================================================================
 ```
