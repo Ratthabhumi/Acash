@@ -167,7 +167,7 @@ def _compute_series_sha256(returns_dec: List[Decimal]) -> str:
 # Main R3 Census Execution
 # ---------------------------------------------------------------------------
 
-def run_step_r3_census() -> None:
+def run_step_r3_census() -> Dict[str, Any]:
     print("=" * 80)
     print("ACASH PHASE 8.5 STEP R3 — IN-SAMPLE SEARCH CENSUS")
     print(f"Hypothesis: {HYPOTHESIS_ID} (Ordinal HYP_002)")
@@ -556,7 +556,7 @@ def run_step_r3_census() -> None:
         return obj
 
     # Build ledger dict manually — bypass pydantic model_dump() which chokes on MappingProxyType
-    def _serialize_trial(t: SearchTrialRecord) -> dict:
+    def _serialize_trial(t: SearchTrialRecord) -> Dict[str, Any]:
         return {
             "trial_id": t.trial_id,
             "strategy_id": t.strategy_id,

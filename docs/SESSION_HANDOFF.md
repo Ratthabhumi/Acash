@@ -1,205 +1,288 @@
 # ACASH — Session Handoff
-## Phase 13 Slice 1: Gate A Pre-Live Certification — COMPLETED & CERTIFIED
 
-> **Document:** `docs/SESSION_HANDOFF.md`  
-> **Status:** PHASE 13 SLICE 1 COMPLETED — GATE A CERTIFIED (FORMAL HUMAN SIGN-OFF RECORDED)  
-> **Gate A Status:** 🟢 **CERTIFIED** (Human Auditor Sign-Off: 2026-09-04)  
-> **Gate B Status:** 🔒 **STRICTLY LOCKED** ($0.00 Live Capital Authority)  
-> **Operating Environment:** Windows 10/11 x64, Python 3.14.6 (`.venv`), MetaTrader 5 Desktop Terminal (Demo Only)  
-> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness $\neq$ Mathematical Validity)  
-> **Date:** 2026-09-04  
+> **Document:** `docs/SESSION_HANDOFF.md`
+> **Status:** HYP_002 CLOSED — RESEARCH STANDING BY — PHASE 14 CONTINUATION PENDING HUMAN AUTHORIZATION
+> **Date:** 2026-09-07
+> **Operating Environment:** Windows 10/11 x64, Python 3.14.x (`.venv`)
+> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness ≠ Mathematical Validity, Single Canonical Authority)
 
 ---
 
-## 1. Executive Summary & Current Governance State
+## 1. SESSION STATUS
 
-This document establishes the authoritative state of the ACASH quantitative execution repository following the formal completion and human sign-off of **Phase 13 Slice 1 (Gate A Pre-Live Certification)** on **2026-09-04**.
+**System is RESEARCH STANDING BY.**
+
+This session completed the canonical closure of **HYP_TSMOM_EURUSD_HTF_002 (Ordinal HYP_002)** at the governance level, sealed it, and prepared a clean resume point for the next session. No Phase 14 implementation, no HYP_003, and no empirical/trading activity occurred.
+
+**The single next recommended action is: Review / authorize Phase 14 implementation.**
+
+---
+
+## 2. CURRENT CANONICAL STATE
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                    ACASH CURRENT GOVERNANCE LEDGER                     │
-├──────────────────────────────────┬─────────────────────────────────────┤
-│  Gate A Pre-Live Certification   │  🟢 CERTIFIED (Human Signed-Off)    │
-│  Blocker B-1 Remediation         │  🟢 REMEDIATED & VERIFIED           │
-│  Blocker B-2 Remediation         │  🟢 REMEDIATED & VERIFIED           │
-│  Dedicated Regression Tests      │  🟢 4/4 PASSED (test_layer_b_*)    │
-│  MT5 Execution Unit Tests        │  🟢 190/190 PASSED                  │
-│  Layer A Pre-Live Integration    │  🟢 11/11 PASSED                    │
-│  Static Type Checker (MyPy)      │  🟢 CLEAN (273 source files)        │
-│  Broker Reality (Demo 112040157) │  🟢 100% FLAT (0 Pos, 0 Ord, $0 DD) │
-│  Live Capital Authority          │  🔒 $0.00 (Hard-Locked)             │
-│  Production Codebase (src/)      │  🔒 STRICTLY FROZEN (0 diff)        │
-│  Consolidated Gate A Audit       │  🟢 COMPLETE & SIGNED-OFF           │
-│  Gate B Authorization Status     │  🔒 STRICTLY LOCKED                 │
-│  Remote GitHub Push              │  🟢 SYNCED (Verified origin/main)   │
-└──────────────────────────────────┴─────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           ACASH GOVERNANCE LEDGER                         │
+├───────────────────────────────────┬───────────────────────────────────────┤
+│ HYP_001 (M5 Intraday)            │ TERMINALLY_FALSIFIED / CLOSED / IMMUT  │
+│ HYP_002 (H4 Session)             │ TERMINALLY_FALSIFIED / CLOSED          │
+│ HYP_003                          │ NOT CREATED                            │
+│ HYP_002 Validation (3751..4996)  │ QUARANTINED / PRISTINE (NOT REUSABLE)  │
+│ HYP_002 Blind OOS (5009..6230)   │ QUARANTINED / PRISTINE (NOT REUSABLE)  │
+│ 2026 M5 Holdout (6060..9999)     │ QUARANTINED / PRISTINE                 │
+│ Live Capital Authority           │ $0.00 (Hard-Locked)                    │
+│ Live Trading Authority           │ LOCKED                                 │
+│ Broker Connection                │ DISCONNECTED / NONE                    │
+│ Phase 14 (Research Intelligence) │ DESIGN READY / APPROVAL PENDING        │
+│ Phase 14 Runtime (srch/research) │ NOT IMPLEMENTED                        │
+│ System                           │ RESEARCH STANDING BY                   │
+└───────────────────────────────────┴───────────────────────────────────────┘
 ```
 
-> [!IMPORTANT]
-> **GATE A CERTIFIED — GATE B STRICTLY LOCKED**  
-> Formal human auditor sign-off has certified Phase 13 Slice 1 Gate A. In accordance with strict governance rules, Gate A certification **DOES NOT** authorize Gate B progression or live capital deployment. Live capital authority remains hard-locked at `$0.00`.
+---
+
+## 3. HYPOTHESIS LINEAGE
+
+| Hypothesis | Market / TF | Lifecycle | Final State |
+|---|---|---|---|
+| `HYP_TSMOM_EURUSD_001` | EURUSD M5 | R1→R2→R3 (0/9 qualified) → R4–R7 early-terminated | **TERMINALLY_FALSIFIED / CLOSED / IMMUTABLE** |
+| `HYP_TSMOM_EURUSD_HTF_002` | EURUSD H4 | R1→R2→R3 (0/12 qualified) → R4 early-terminated | **TERMINALLY_FALSIFIED / CLOSED** |
+| `HYP_003` | — | — | **NOT CREATED** |
 
 ---
 
-## 2. Immutable Frozen Baselines & Progression
+## 4. HYP_001 FINAL STATE
 
-- **Phase 7 (Live Execution Reality):** `FROZEN`
-- **Phase 8 (Portfolio Allocation & Tournament):** `FROZEN` (`e6f1d04`)
-- **Phase 8.5 (Alpha Research & Economic Evidence):** `FROZEN` (`9ce1365`)
-- **Phase 9 (Deterministic Risk Engine & Kill Switch):** `FROZEN` (`6bd40d8`)
-- **Phase 10 (Runtime Orchestration & Continuous Paper Operations):** `FROZEN` (`3955bf6`)
-- **Phase 11 (Strategy Forward Drift & Execution Reality Attribution):** `FROZEN` (`092a2b1`)
-- **Phase 12 (MT5 & Venue Execution Adapters):** `FROZEN` (`1e1d154`, Closeout: `docs/phase12/closeout_report.md`)
-- **Phase 13 (Live Small Capital Deployment):**
-  - **Slice 1 (Gate A Pre-Live Certification):** `COMPLETED & CERTIFIED`
-    - Layer A (Automated Pytest Suite): `✅ 11/11 PASSED`
-    - Layer B (Operational Demo Terminal Rehearsal): `✅ 3/3 PASSED (A-3, A-10, A-11)`
-    - Blockers B-1 and B-2: `✅ REMEDIATED & CLOSED`
-    - Consolidated Gate A Audit: `✅ SIGNED-OFF BY HUMAN AUDITOR`
-  - **Gate A Certification Status:** `🟢 CERTIFIED`
-  - **Gate B Authorization Status:** `🔒 STRICTLY LOCKED`
-  - **Live Capital Authority:** `🔒 $0.00`
-  - **Production Codebase (`src/`):** `🔒 STRICTLY FROZEN` (Zero diff)
+- **Identity:** `HYP_TSMOM_EURUSD_001`
+- **State:** `TERMINALLY_FALSIFIED / CLOSED / IMMUTABLE`
+- **In-sample:** 0/9 trials qualified (M5 intraday momentum).
+- **R4–R7:** early-terminated by the failure rule.
+- **Sealed hypothesis digest:** `5afb92d7175721872d51ab82b2ebaaaa353c2d21bcbbd596e8bf1a3c52de0ef4`
+- **R3 ledger digest:** `b1185c4f26d4934e930d526b66d7f3e8786bdbb6c24c263957f9288aa4072b43`
+- **2026 M5 Holdout (6060..9999):** `QUARANTINED / PRISTINE`
+- **Status:** `VERIFIED` (closure artifacts audited in prior session)
 
 ---
 
-## 3. Remediated Blockers B-1 and B-2 (Detailed Audit Findings)
+## 5. HYP_002 FINAL STATE
 
-### Finding B-1: Intent Lineage Mismatch & 4-Tier Lifecycle Cross-Identity
-- **Original Defect:** The A-11 harness previously bound the entry deal to an off-by-one intent `INT_DEMO_A3_1788516517`, whereas frozen A-3 evidence recorded `INT_DEMO_A3_1788516518`.
-- **Remediation Implemented:**
-  1. Defined canonical immutable A-3 constants in [`scripts/phase13_layer_b_harness.py`](../scripts/phase13_layer_b_harness.py):
-     - `CANONICAL_A3_INTENT = "INT_DEMO_A3_1788516518"`
-     - `CANONICAL_A3_DEAL_TICKET = 10071863196`
-     - `CANONICAL_A3_ORDER_TICKET = 10355518139`
-     - `CANONICAL_A3_POSITION_TICKET = 10355518139`
-  2. Implemented `validate_a3_lifecycle_binding()`, enforcing fail-closed `DataContractError` if any tier diverges:
-     $$\text{intent\_id} \to \text{deal\_ticket} \to \text{order\_ticket} \to \text{position\_ticket}$$
-  3. Regenerated `docs/phase13/layer_b_evidence_a11.json` with exact string equality:
-     `a3["intent_id"] == a11["entry_deal_intent_id"] == "INT_DEMO_A3_1788516518"`.
-  4. Both entry and exit 4-tier identifiers are now explicitly reported in the A-11 evidence artifact.
-- **Audit Classification:** `Exact Identifier Equality + 4-Tier Lifecycle Validation` (distinct from cryptographic lineage).
-- **Status:** **REMEDIATED — LOCAL VERIFICATION PASS ✅**
+- **Identity:** `HYP_TSMOM_EURUSD_HTF_002` (Ordinal `HYP_002`)
+- **State:** `TERMINALLY_FALSIFIED / CLOSED`
+- **In-sample census:** exactly `K=12` pre-registered trials executed; **0/12 qualified**.
+- **Per-gate result:** 0/12 passed Rank IC, 0/12 passed HAC t-stat, 12/12 passed stationarity (ρ₁), 0/12 passed Net PnL, 0/12 passed Sharpe.
+- **Sharpe range:** −2.234 … −3.677 (undeflated annualized IS Sharpe, annualization √1512, friction 1.2 bps roundtrip).
+- **R4:** skipped by the early-termination rule (failure condition reached in-sample).
+- **Status:** `VERIFIED` (R3 forensic closure audit + governance hardening completed this session, 2026-09-07)
 
-### Finding B-2: Non-Deterministic Exit Deal Binding & Shadowing Regression
-- **Original Defect:** The fallback branch in A-11 (`if not positions:`) previously selected `exit_deals[-1]` by filtering only `deal_type == SELL and symbol == EURUSD`, allowing exit deals from subsequent position lifecycles to be erroneously bound to Position A.
-- **Remediation Implemented:**
-  1. Implemented `select_authoritative_exit_deal(entry_deal, all_deals)` with strict relational binding:
-     $$\text{d.deal\_type} == \text{SELL} \land \text{d.symbol} == \text{entry.symbol} \land \text{d.position\_ticket} == \text{entry.position\_ticket}$$
-  2. Deterministic tie-breaking: sorts matches by `(int(d.deal_time_utc.timestamp() * 1000), d.deal_ticket)` ascending, returning the latest authoritative exit deal for THIS specific position lifecycle.
-  3. Fails closed (`DataContractError`) if no matching exit deal exists.
-- **Regression Test Coverage:**
-  - `tests/unit/execution/mt5/test_layer_b_harness_rehearsal_binding.py` proves that in a multi-position history (Position A older, Position B newer), querying Position A strictly returns Exit A (`10073606868`), never Exit B (`20000000003`).
-- **Status:** **REMEDIATED — LOCAL VERIFICATION PASS ✅**
+### Complete HYP_002 lifecycle
+| Step | Status |
+|---|---|
+| R1 Pre-registration | ✅ PASS & SEALED |
+| R2 Data Preparation | ✅ PASS & SEALED |
+| R3 In-Sample Search Census | ✅ PASS AS PROCESS (12/12 executed, 0/12 qualified) |
+| R4 Validation | ⏭️ SKIPPED / EARLY-TERMINATED |
 
 ---
 
-## 4. Authoritative Artifact SHA-256 Hashes
+## 6. CRYPTOGRAPHIC DIGESTS (HYP_002)
 
-All artifact hashes have been computed and verified directly from the local filesystem using standard SHA-256 (`Get-FileHash`):
+> These digests are **historical and immutable**. They MUST NOT be altered.
 
-| File Path | Full 64-Character SHA-256 Digest | Status |
+| Artifact | Digest |
+|---|---|
+| Sealed hypothesis spec (`HYP_TSMOM_EURUSD_HTF_002.json`) | `47c077a65f3057ae5ec83c8e7cf9179ababea9e5b18bc999bdc480a44f544afe` |
+| R3 Search Trial Ledger (`ledger_digest`) | `d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565` |
+| R3 Manifest (`r3_manifest_HYP_TSMOM_EURUSD_HTF_002.json`) | `809ac530c69745924550723b19b79a7a82bd4182659f6eb2a5cfc4b019c24ccd` |
+
+Digest lineage cross-check (`VERIFIED` this session):
+- R3 manifest's `hypothesis_sha256` == sealed hypothesis digest.
+- R3 manifest's `ledger_digest` == ledger JSON `ledger_digest` field. (Ledger digest is the canonical sealed-model digest, not a raw file hash.)
+
+---
+
+## 7. DATA QUARANTINE STATE
+
+Cross-Hypothesis Data Quarantine is a **HARD INVARIANT**. Every protected partition is `PRISTINE` / `UNEXPOSED`.
+
+| Protected Span | Bars | Status |
 |---|---|---|
-| `docs/phase13/layer_b_evidence_a3.json` | `d9d3cbe976b94b007bd1a64f0d32daba570cdd282ae57a5ad8b47a10606f3ab0` | **FROZEN / UNTOUCHED** |
-| `docs/phase13/layer_b_evidence_a10.json` | `18cefed3b338e553c752bbb2a94fb59b7446233bfb8699313449472f254ad012` | **FROZEN / UNTOUCHED** |
-| `docs/phase13/layer_b_evidence_a11.json` | `883de6ca4d5b0bdb6475d05f8123258114bef650e9b017c21e9f0e7275ff38e9` | **REGENERATED (B-1/B-2 FIX)** |
-| `docs/phase13/kill_switch_demo.jsonl` | `ab48377b101a301ae1e7c186f2bf274d431e3bc1341bdecf603e47a4da3848cb` | **PERSISTED** |
-| `docs/phase13/layer_b_evidence_preflight.json` | `5aec7837b22ec1765ee52c616d0bf61d1e862ddc47fd4ff18b16aeb9ca96c7a3` | **RESTORED / CLEAN** |
+| HYP_002 H4 Validation | 3751..4996 | `QUARANTINED / PRISTINE` — NOT REUSABLE FOR HYP_003 BY DEFAULT |
+| HYP_002 H4 Blind OOS | 5009..6230 | `QUARANTINED / PRISTINE` — NOT REUSABLE FOR HYP_003 BY DEFAULT |
+| 2026 M5 Holdout (HYP_001) | 6060..9999 | `QUARANTINED / PRISTINE` |
+
+Enforced in code:
+- `src/acash/research/quarantine.py` — `PERMANENTLY_QUARANTINED_HOLDOUTS`:
+  - `"HYP_TSMOM_EURUSD_001": (6060, 9999)`
+  - `"HYP_TSMOM_EURUSD_HTF_002": (3751, 6230)`
+- `src/acash/research/reinception.py` — `PERMANENTLY_QUARANTINED_WINDOWS`:
+  - `"EURUSD_M5_HOLDOUT"`: `2026-08-18T04:40:00+00:00` → `2026-09-04T21:00:00+00:00`
+  - `"EURUSD_H4_VALIDATION_OOS"`: `2023-05-29T16:00:00+00:00` → `2024-12-31T20:00:00+00:00`
+
+Status: `VERIFIED` (quarantine fail-closed behavior covered by unit tests).
 
 ---
 
-## 5. Broker Reality Verification (MetaTrader 5 Demo)
+## 8. CAPITAL / TRADING AUTHORITY
 
-Direct API query executed against the connected MetaTrader 5 Terminal:
-- **Broker Login:** `112040157`
-- **Account Mode:** `DEMO (0)`
-- **Account Balance:** `2,999.65 USD`
-- **Account Equity:** `2,999.65 USD`
-- **Open Positions Count:** `0` (**100% FLAT**)
-- **Active Orders Count:** `0` (**100% FLAT**)
-- **Rehearsal `order_send` Calls:** `0` (Strictly zero broker mutations during remediation)
-- **Operational Demarcation:**
-  - **Broker State:** `READ-ONLY`
-  - **Filesystem Evidence:** `WRITE`
+| Authority | State |
+|---|---|
+| Live Capital Authority | `$0.00` (Hard-Locked) |
+| Live Order Emission | `0` |
+| Trading Authority | `LOCKED` |
+| Broker Connection | `DISCONNECTED / NONE` |
+
+Status: `VERIFIED`. No capital or trading authorization was modified.
 
 ---
 
-## 6. Architecture & Governance Documents Added
+## 9. GOVERNANCE FIXES COMPLETED (this session)
 
-Three foundational architecture and governance specifications have been recorded in `docs/`:
+Committed hardening fixes for HYP_002 governance closure:
 
-1. **ADR-021: Multi-Broker & Multi-Asset Architecture Decision** ([`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md))
-   - Establishes asset-agnostic Core decoupled from MT5/Forex.
-   - Decouples opportunity discovery from connected execution venues.
-   - Defines policy-driven instrument and venue routing layer.
-2. **ADR-022: Market-Adaptive, Strategy-Agnostic & Event-Aware Trading Governance** ([`docs/architecture/market_adaptive_strategy_governance.md`](architecture/market_adaptive_strategy_governance.md))
-   - Core paradigm: Flexible Decision Making + Fixed Safety Guardrails.
-   - Strategy neutrality: Anti-bias governance; rejects "Grid = bad" / "AI = better".
-   - Strategy $\times$ Regime evaluation and graduated event policies.
-   - Committed and verified on GitHub at commit `14bcc04`.
-3. **Strategy Forensic Evaluation & Risk Analysis Framework** ([`docs/architecture/strategy_forensic_evaluation_framework.md`](architecture/strategy_forensic_evaluation_framework.md))
-   - Formal 12-layer strategy evaluation methodology (Performance, Basket Forensics, Sizing/Grid Mechanics, Hedge Forensics, Capital/Margin, Tail Risk Stress Testing, Near-Death Analysis, Capital Injection Audit, Robustness, Regime Analysis, Event-Aware Analysis, Execution Microstructure).
-   - Uniform cost model (Gross P/L $\neq$ Net P/L).
-   - Epistemic evidence hierarchy (`PROVEN`, `REPORTED`, `UNVERIFIED`, `INFERRED`, `UNKNOWN`).
-   - Fair Strategy Tournament with frozen prior rules.
-   - Illustrative case study on EA Alice (classified as `UNVERIFIED` hypothesis).
+1. **HAC bandwidth methodology annotated (`VERIFIED`).** R3 executed `HacBandwidthMethod.NEWEY_WEST_PLUGIN` (Newey-West 1994 rule-of-thumb, bandwidth `8` for all trials), not the previously documented Andrews (1991) AR(1) plug-in. Recorded as a governance-maintenance annotation in the design doc, R3 audit report (§5.1), and dossier (§4b.1). Historical result NOT rewritten; no re-run.
+2. **Haircut Sharpe terminology clarified (`VERIFIED`).** R3's `haircut_sharpe_annualized` / ledger `in_sample_sharpe` is the **undeflated annualized in-sample Sharpe** (`mean/std(ddof=1) × √1512`). The canonical Phase-6 Haircut Sharpe is **multiple-testing–adjusted** (`MultipleTestingEngine.calculate_bonferroni_haircut_sharpe`). **Never conflate the two.** Mapping documented (audit §5.2, dossier §4b.2, design doc).
+3. **HYP_002 added to the terminal hypothesis registry (`VERIFIED`)** — `TERMINAL_HYPOTHESIS_REGISTRY` in `src/acash/research/reinception.py`.
+4. **HYP_002 protected H4 Validation/OOS region added to quarantine enforcement (`VERIFIED`)** — both `quarantine.py` and `reinception.py`.
+5. **H4 `UNLOCKED_FOR_R3_CENSUS` dataset exposure state supported (`VERIFIED`)** — added to `DatasetExposureState` enum so the H4 R2/R3 train partition is recognized (fixes a latent `UNKNOWN` fail for the legitimate drawn-in-sample behavior).
+6. **Dossier ledger digest typo corrected (`VERIFIED`)** — mermaid digest updated `18c1df66…` → `d6d62733…`; actual ledger untouched.
 
 ---
 
-## 7. Step-by-Step Runbook: Resuming at Home
+## 10. TEST AND TYPE-CHECK RESULTS
 
-When continuing this work on your home workstation, follow these exact verification steps:
+| Check | Result | Status |
+|---|---|---|
+| Full local test suite | **1534 passed, 1 skipped, 0 failures, 3 warnings** | VERIFIED (this session) |
+| MyPy (`src/ tests/`) | **0 issues over 310 source files** | VERIFIED (this session) |
+| Post-fix static governance audit | **17/17 assertions PASS** | VERIFIED (this session) |
+| Remote CI / GitHub | `NOT INDEPENDENTLY VERIFIED` (not re-pushed this session) | REPORTED (unverified) |
 
-### Step 1: Pull and Verify Clean Synchronization
+The 3 warnings were inspected: (2) `Pandas4Warning: Timestamp.utcnow deprecated` in `tests/unit/backtest/test_nautilus_bridge.py`; (1) expected pydantic serializer warning in `test_mt5_reconciliation.py` (`INVALID_MODE` enum). All classified as expected behavior / dependency debt, not actionable defects.
+
+> Gate: test success is an **output**, not proof of scientific validity. See Section 12.
+
+---
+
+## 11. KNOWN METHODOLOGICAL CAVEATS
+
+- **Scope of HYP_002 falsification (`VERIFIED`):** the result falsifies only *"univariate unconditional price momentum on EURUSD H4 under HYP_002."* It does **NOT** prove:
+  - universal mean reversion;
+  - failure of all momentum strategies;
+  - failure of other assets or timeframes;
+  - profitability of carry / macro / orderflow;
+  - profitability in 2026.
+- **Epistemic boundary:** a failed momentum hypothesis must never be turned into a positive mean-reversion claim without a new, independently registered hypothesis.
+- **Haircut Sharpe seam (`VERIFIED`):** R3's undeflated annualized IS Sharpe is **NOT** the canonical multiple-testing–adjusted Haircut Sharpe. No Bonferroni/DSR deflation was applied in R3. The two metrics must never be conflated.
+- **HAC method deviation (`VERIFIED`):** executed method was Newey-West plug-in, not Andrews (1991). All 12 HAC t-stats were negative (−0.31 … −1.58), far below the +2.00 hurdle, so the verdict is unaffected by the method.
+- **Statistical dependence (`RETENTION`):** candidate models sharing underlying data remain statistically dependent; marginal vs. conditional admission probabilities are distinct. No claim of orthogonality is made.
+
+---
+
+## 12. PHASE 14 CURRENT STATUS
+
+- **Design documents exist:**
+  - `docs/phase14/phase14_master_research_architecture_plan.md` (Rev 1.2, `PROPOSED MASTER RESEARCH ARCHITECTURE - HUMAN APPROVAL PENDING`)
+  - `docs/phase14/phase14_architecture_and_governance_plan.md` (v1.0)
+- **Status:** `DESIGN READY` → `HUMAN APPROVAL PENDING` → `IMPLEMENTATION PENDING`.
+- **Runtime module:** **NOT IMPLEMENTED** — no package exists under `src/acash/research/ai`.
+- **Purpose:** Research Intelligence only. AI output is an **`UNVALIDATED PROPOSAL`**.
+- **Phase 14 has ZERO authority** to: register hypotheses, qualify alpha, certify backtests, authorize trading, access capital, bypass R1 / R2 / R3, bypass quarantine, or override human governance.
+- **Future flow:**
+  ```
+  Phase 14 Research Intelligence
+    → candidate research proposal
+    → ResearchReInceptionGate
+    → NEW R1 → R2 → R3 → later validation/governance
+  ```
+- **Do NOT create HYP_003 yet.**
+
+---
+
+## 13. WHAT MUST NOT BE DONE
+
+- Do NOT create `HYP_003` yet.
+- Do NOT reuse `HYP_002` Validation/OOS partitions (quarantined).
+- Do NOT reuse the 2026 M5 Holdout (quarantined).
+- Do NOT run more `HYP_002` trials.
+- Do NOT run Validation / OOS / backtests on quarantined data.
+- Do NOT access, modify, or delete the 2026 M5 Holdout.
+- Do NOT acquire new market data without authorization.
+- Do NOT connect to a broker.
+- Do NOT allocate capital > `$0.00`.
+- Do NOT alter historical HYP_001 / HYP_002 results or their digests (Sections 4, 5, 6).
+- Do NOT treat AI / Phase 14 output as anything other than an `UNVALIDATED PROPOSAL`.
+- Do NOT run Phase 14 runtime (it does not exist yet).
+
+---
+
+## 14. NEXT RECOMMENDED ACTION
+
+**Review / authorize Phase 14 implementation.**
+
+This is the architecture-phase gate. Approval of the Phase 14 plan (design) vs. authorization to implement the Phase 14 runtime are **separate authorizations**. Only after Phase 14 human authorization may the Research Intelligence runtime be built, and only after that may it propose a candidate for `HYP_003` (which itself requires a fresh, independent R1 pre-registration).
+
+---
+
+## 15. EXACT RESUME CHECKLIST FOR NEXT SESSION
+
+> Optimized for resuming from another machine/session. On opening this document, resume here directly — you do not need to re-read prior history.
+
+### Step 1 — Verify clean synchronization
 ```powershell
-# 1. Fetch and pull latest commits
 git fetch origin
-git pull origin main
-
-# 2. Verify git status is completely clean
-git status
-
-# 3. Verify HEAD commit and sync with origin/main
+git status          # expect: working tree CLEAN
 git log -3 --oneline
 git rev-parse HEAD
-git rev-parse origin/main
 ```
 
-### Step 2: Virtual Environment Verification
+### Step 2 — Verify virtual environment & type checker
 ```powershell
-# 1. Ensure Python 3.14 venv is active and packages synced
 uv sync
-
-# 2. Run type checker across codebase
 uv run mypy src/ tests/
-# Expected: Success: no issues found in 266 source files
+# Expected: Success: no issues found in 310 source files
 ```
 
-### Step 3: Execute Regression Test Suites
+### Step 3 — Verify HYP_002 closure digests (immutable anchors)
 ```powershell
-# 1. Run dedicated B-1 / B-2 harness regression suite
-uv run pytest tests/unit/execution/mt5/test_layer_b_harness_rehearsal_binding.py -v
-# Expected: 4 passed
-
-# 2. Run full MT5 execution unit suite
-uv run pytest tests/unit/execution/mt5/ -v
-# Expected: 190 passed
-
-# 3. Run Layer A Gate A pre-live certification suite
-uv run pytest tests/integration/test_phase13_slice1_gate_a.py -v
-# Expected: 11 passed
+Get-Content docs/phase8.5/manifests/r3_manifest_HYP_TSMOM_EURUSD_HTF_002.json | ConvertFrom-Json |
+  Select-Object hypothesis_sha256, ledger_digest
+# hypothesis_sha256 == 47c077a65f3057ae5ec83c8e7cf9179ababea9e5b18bc999bdc480a44f544afe
+# ledger_digest       == d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565
 ```
 
-### Step 4: Verify Artifact Hashes
+### Step 4 — Verify governance/quarantine enforcement
+- Confirm `HYP_TSMOM_EURUSD_HTF_002` is in `TERMINAL_HYPOTHESIS_REGISTRY` (`reinception.py`).
+- Confirm `("HYP_TSMOM_EURUSD_HTF_002", (3751, 6230))` is in `PERMANENTLY_QUARANTINED_HOLDOUTS` (`quarantine.py`) and the H4 window is in `PERMANENTLY_QUARANTINED_WINDOWS`.
+
+### Step 5 — Run targeted governance regression
 ```powershell
-Get-FileHash docs/phase13/layer_b_evidence_*.json, docs/phase13/kill_switch_demo.jsonl -Algorithm SHA256 | Format-Table -AutoSize
+uv run pytest tests/unit/research/test_governance_hardening.py tests/unit/research/test_research_reinception_gate.py -q
+# Expected focuses: HYP_002 registry membership; H4 validation/OOS quarantine fail-closed; positive H4 train path
 ```
-Confirm all hashes match Section 4 of this handoff document exactly.
 
-### Step 5: Completed Action — Consolidated Gate A Audit & Sign-Off
-1. Formal **Consolidated Gate A Audit** executed and recorded at [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
-2. All 11 Gate A items (A-1 through A-11) verified passed.
-3. Blockers B-1 and B-2 verified closed.
-4. Formal Human Sign-Off recorded on 2026-09-04: **Phase 13 Slice 1 Gate A is CERTIFIED**.
-5. **Gate B remains STRICTLY LOCKED.** Live capital authority remains `$0.00`.
-6. Next Phase: Await explicit human instructions for subsequent Phase progression (e.g. Phase 14 Runtime Orchestration).
+### Step 6 — Run full regression suite (optional but recommended before any code change)
+```powershell
+uv run pytest -q
+# Expected (reference): 1534 passed, 1 skipped, 0 failures, 3 warnings
+```
+
+### Step 7 — Next session objective
+1. Read `docs/phase14/phase14_master_research_architecture_plan.md` (and `phase14_architecture_and_governance_plan.md`).
+2. Obtain **human authorization** for Phase 14 implementation (separate from design approval).
+3. Only then implement the Research Intelligence runtime under `src/acash/research/ai`.
+4. Only after that may it propose a candidate for `HYP_003` — via `ResearchReInceptionGate` → NEW R1.
+
+**System is RESEARCH STANDING BY. HYP_003 is NOT CREATED.**
+
+---
+
+## Appendix A — Historical Record: Phase 13 Slice 1 (Gate A)
+
+The prior canonical handoff (2026-09-04, Phase 13 Slice 1 Gate A Pre-Live Certification) is superseded for *current-state* purposes but its governance evidence remains valid and is preserved:
+
+- **Gate A:** `CERTIFIED` (Human Auditor Sign-Off 2026-09-04).
+- **Gate B:** `STRICTLY LOCKED` — live capital `$0.00`.
+- **Phase 13 status:** Steps 1–4 PASSED; strategy blocked (`NO QUALIFIED ALPHA`).
+- Phase 13 Gate A evidence artifacts (A-3/A-10/A-11) and the B-1/B-2 remediation remain under their frozen digests in `docs/phase13/`.
+
+This Phase 13 record does not change the current Phase 8.5 / HYP_002 closed state described in Sections 1–15.
