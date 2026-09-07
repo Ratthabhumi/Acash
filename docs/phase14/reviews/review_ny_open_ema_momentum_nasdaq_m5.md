@@ -248,10 +248,11 @@ An audit of the parameters reveals an immense search space ($K$) available to th
 | **Stop Multiplier** | $3, 4, 5, 6, 8, 10 \times \text{ATR}$ | 6 |
 | **Trail Activation Threshold** | $+0.25\text{R}, +0.5\text{R}, +0.75\text{R}, +1.0\text{R}$ | 4 |
 | **Session Exit Rule** | 15:55 ET flat vs Overnight hold | 2 |
-| **Total Combinatorial Space** | $\prod \text{Choices}$ | **$\approx 368,640$ possible models** |
+| **Total Combinatorial Space (Illustrative)** | $\prod \text{Hypothetical Choices}$ | **$\approx 368,640$ illustrative paths (INFERRED / NOT PROVEN)** |
 
-**Critical Implication:**  
-Even if a researcher tested only 1% of this space ($K \approx 3,600$ trials), standard Bonferroni and Deflated Sharpe Ratio (DSR) adjustments dictate that a nominal $t$-statistic of $+2.6$ or a Sharpe of $1.85$ could easily be produced by pure random chance without any genuine economic edge.
+> [!NOTE]
+> **Epistemic Classification of Search Space Size:**  
+> The figure $\approx 368,640$ is an **INFERRED / ILLUSTRATIVE ESTIMATE** showing how quickly degrees of freedom explode under combinatorial choices; it is **NOT A PROVEN TRIAL COUNT**. An authoritative cardinality requires explicit pre-registration of allowable parameter sets. However, even if a researcher tested only a tiny fraction of this illustrative grid, standard multiple-testing deflation (DSR/FWER) dictates that reported performance metrics could easily represent a statistical selection artifact.
 
 ---
 
@@ -307,10 +308,10 @@ $$\boxed{\mathbf{B.\ NEEDS\ MORE\ RESEARCH\ (REFINE)}}$$
 1. **Do NOT Create `HYP_003`.** Maintain system state as `RESEARCH STANDING BY`.
 2. **Execute Independent Econometric Pre-Study (Literature-Driven):**  
    Before specifying strategy rules, examine whether the first 30 minutes of CME NQ trading exhibits statistically significant directional autocorrelation with the remainder of the session across 2018–2024 (using Gao et al., 2018 methodology), independent of any trading system.
-3. **Derive Parameters from First Principles (Zero Backtest Peeking):**  
-   - Justify `FAST_EMA_PERIOD` on market structure grounds (e.g. 12 bars on M5 = 60 minutes = first hour trend filter).
-   - Justify `ATR_PERIOD` using standard volatility conventions (e.g. 14 bars).
-   - Mandate an explicit session exit rule (e.g. 15:55 ET MOC order) to eliminate overnight holding risk.
+3. **Refuse Parameter Guessing / Hindsight Reconstruction:**  
+   - `FAST_EMA_PERIOD` is **NOT PROVEN** (stating 12 bars = 60 minutes is an unsupported post-hoc rationalization; it must be justified by independent research or left open to formal investigation).
+   - `ATR_PERIOD` is **NOT PROVEN** (assuming 14 simply because it is an industry convention is rejected).
+   - Session exit rules and stop semantics must be formally declared from first principles without target-matching the source backtest.
 4. **Author Independent Canonical Dataset Manifest:**  
    Acquire and verify an authoritative CME NQ continuous futures dataset with explicit roll accounting, completely isolated from all existing quarantined holdouts.
 5. **Human Review Checkpoint:**  
