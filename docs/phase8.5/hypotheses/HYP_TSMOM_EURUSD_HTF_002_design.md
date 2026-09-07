@@ -1,37 +1,37 @@
-# Research Hypothesis Design Draft: EURUSD Higher-Timeframe Time-Series Momentum (HYP_002) [SUPERSEDED]
+# Research Hypothesis Design: EURUSD Higher-Timeframe Time-Series Momentum (HYP_002)
 
-> [!WARNING]
-> **SUPERSEDED ADMINISTRATIVE DRAFT**  
-> This design draft used the provisional identifier `HYP_TSMOM_EURUSD_HTF_001`. Under the Governance-Safe Hypothesis Identity Normalization, this identifier has been formally superseded by **`HYP_TSMOM_EURUSD_HTF_002`** to encode sequential hypothesis ordinality (`HYP_002`).  
-> **Active Canonical Document:** [`docs/phase8.5/hypotheses/HYP_TSMOM_EURUSD_HTF_002_design.md`](HYP_TSMOM_EURUSD_HTF_002_design.md)  
-> **Lineage Record:** [`docs/phase8.5/phase8_5_hypothesis_supersession_lineage_mapping.md`](../phase8_5_hypothesis_supersession_lineage_mapping.md)  
-
-> **Document ID:** `DESIGN-HYP-TSMOM-EURUSD-HTF-001`  
-> **Timestamp:** `2026-09-06T23:42:00+00:00`  
-> **Classification:** `SUPERSEDED ADMINISTRATIVE PROPOSAL DRAFT`  
+> **Document ID:** `DESIGN-HYP-TSMOM-EURUSD-HTF-002`  
+> **Timestamp:** `2026-09-07T00:05:00+00:00`  
+> **Classification:** `CANONICAL RESEARCH HYPOTHESIS SPECIFICATION (HYP_002)`  
+> **Canonical Hypothesis ID:** `HYP_TSMOM_EURUSD_HTF_002`  
+> **Superseded Administrative ID:** `HYP_TSMOM_EURUSD_HTF_001`  
 > **Authority:** `AGENTS.md` (Zero Unverified Claims, Honest Scientific Skepticism)  
-> **Status:** `SUPERSEDED BY HYP_TSMOM_EURUSD_HTF_002`  
-> **Governing Gate:** `ResearchReInceptionGate` (R1 Entry Control)  
+> **Status:** `R1 PASS / SEALED`  
+> **Governing Gate:** `ResearchReInceptionGate` (Gate Decision: `INCEPTION_AUTHORIZED`)  
+> **Lineage Reference:** [`docs/phase8.5/phase8_5_hypothesis_supersession_lineage_mapping.md`](../phase8_5_hypothesis_supersession_lineage_mapping.md)  
 
 ---
 
 ## 1. Governance Affirmations & Boundary Notice
 
 ### Strict Non-Execution Boundaries
-- **No Market Data Accessed:** Zero market-data files were opened, read, or inspected during the drafting of this proposal.
+- **No Market Data Accessed:** Zero market-data files were opened, read, or inspected during the drafting or registration of this proposal.
 - **No Empirical Research Executed:** Zero backtests, regressions, or statistical calculations were performed.
-- **No Hypothesis Registered:** This document is a **design specification draft only**. It has NOT been submitted to `ResearchReInceptionGate`, and no sealed JSON file has been written to `docs/phase8.5/hypotheses/`.
+- **Sealed Hypothesis Milestone:** This document specifies `HYP_TSMOM_EURUSD_HTF_002`, officially registered under `ResearchReInceptionGate` and sealed to disk as `docs/phase8.5/hypotheses/HYP_TSMOM_EURUSD_HTF_002.json`.
 - **Zero Holdout Exposure:** The quarantined M5 holdout (bars 6,060..9,999 from `HYP_TSMOM_EURUSD_001`) remains **100% unexposed and pristine**.
-- **Immutable Prior Falsification:** `HYP_TSMOM_EURUSD_001` remains permanently closed in `TERMINALLY_FALSIFIED` state.
+- **Immutable Prior Falsification:** `HYP_TSMOM_EURUSD_001` (`HYP_001`) remains permanently closed in `TERMINALLY_FALSIFIED` state.
 - **Capital Authority:** Strictly hard-locked at **`$0.00`**.
 - **Phase 13 Step 8/9:** Strictly **LOCKED / NOT AUTHORIZED**.
+- **Step R2 / Step R3:** Strictly **LOCKED**.
 
 ---
 
 ## 2. Hypothesis Identity & Research Question
 
 ### 2.1 Candidate Hypothesis Identity
-- **Candidate Hypothesis ID:** `HYP_TSMOM_EURUSD_HTF_001`
+- **Canonical Hypothesis ID:** `HYP_TSMOM_EURUSD_HTF_002`
+- **Hypothesis Ordinal:** `HYP_002` (Second sequential hypothesis in ACASH quantitative track)
+- **Superseded Administrative ID:** `HYP_TSMOM_EURUSD_HTF_001`
 - **Candidate Version:** `1.0.0`
 - **Target Instrument:** `EURUSD`
 - **Asset Class:** Foreign Exchange Spot / Institutional ECN Standard
@@ -207,18 +207,8 @@ To eliminate arithmetic ambiguity between calendar time and market sessions, the
 
 ---
 
-## 12. Human Operator Decision Checkpoints
+## 12. Final Status
 
-Before this proposal can be submitted to `ResearchReInceptionGate` and registered as Step R1:
+$$\boxed{\mathbf{STATUS:\ R1\ PASS\ \&\ SEALED\ (HYP\_002)}}$$
 
-1. **Timeframe Scope:** Option A (H4 Primary, $K=12$) is **APPROVED**.
-2. **Calendar Window Scope:** 2021-01-01 to 2024-12-31 with $N \ge 5,000$ usable H4 bars is **APPROVED**.
-3. **Authorization to Proceed to Step R1:** Human operator sign-off required to submit the proposal to `ResearchReInceptionGate`, emit `InceptionAuthorizationToken`, and generate sealed `docs/phase8.5/hypotheses/HYP_TSMOM_EURUSD_HTF_001.json`.
-
----
-
-## 13. Final Design Verdict
-
-$$\boxed{\mathbf{VERDICT:\ READY\ FOR\ HUMAN\ R1\ REVIEW}}$$
-
-*(All 4 mandatory contract corrections applied. Zero market data was touched. Zero empirical research was run. Capital authority remains strictly $0.00).*
+*(Pre-registered under `ResearchReInceptionGate` Token `AUTH_INCEPTION_HYP_TSMOM_EURUSD_HTF_002_fb926a6f495c73a0`. Zero market data was touched. Capital authority remains strictly $0.00. Step R2 remains strictly LOCKED).*
