@@ -12,6 +12,7 @@ Strictly verifies:
 from decimal import Decimal
 import json
 from pathlib import Path
+from typing import Callable, Sequence
 import numpy as np
 import pytest
 import pyarrow.parquet as pq
@@ -29,7 +30,7 @@ from acash.validation.schema import (
 @pytest.fixture
 def sealed_r3_ledger() -> SearchTrialLedger:
     """Load and validate the sealed Step R3 SearchTrialLedger."""
-    ledger_path = Path("data/manifests/research/search_trial_ledger_HYP_TSMOM_EURUSD_001.json")
+    ledger_path = Path("docs/phase8.5/ledgers/search_trial_ledger_HYP_TSMOM_EURUSD_001.json")
     assert ledger_path.exists(), f"Ledger file not found at {ledger_path}"
 
     with open(ledger_path, "r", encoding="utf-8") as f:
@@ -76,9 +77,16 @@ def test_r3_complete_9_trial_census(sealed_r3_ledger: SearchTrialLedger) -> None
     assert trial_ids == expected_ids
 
 
-def test_r3_data_isolation_in_sample_strictly(sealed_r3_ledger: SearchTrialLedger) -> None:
+def test_r3_data_isolation_in_sample_strictly(
+    sealed_r3_ledger: SearchTrialLedger,
+    require_research_artifact: Callable[[Sequence[Path], str], None],
+) -> None:
     """Verify that trial returns are derived strictly from in-sample bars (length <= 6,000)."""
     trials_dir = Path("data/parquet/research/trials")
+    require_research_artifact(
+        [trials_dir / f"returns_{trial.trial_id}.parquet" for trial in sealed_r3_ledger.trials],
+        "Sealed R3 trial return series parquet files (data/parquet/research/trials/*.parquet)",
+    )
     assert trials_dir.exists()
 
     for trial in sealed_r3_ledger.trials:
@@ -98,9 +106,16 @@ def test_r3_data_isolation_in_sample_strictly(sealed_r3_ledger: SearchTrialLedge
 
 
 
-def test_r3_return_series_sha256_integrity(sealed_r3_ledger: SearchTrialLedger) -> None:
+def test_r3_return_series_sha256_integrity(
+    sealed_r3_ledger: SearchTrialLedger,
+    require_research_artifact: Callable[[Sequence[Path], str], None],
+) -> None:
     """Verify bit-for-bit SHA-256 match between stored trial return hashes and actual series data."""
     trials_dir = Path("data/parquet/research/trials")
+    require_research_artifact(
+        [trials_dir / f"returns_{trial.trial_id}.parquet" for trial in sealed_r3_ledger.trials],
+        "Sealed R3 trial return series parquet files (data/parquet/research/trials/*.parquet)",
+    )
 
     for trial in sealed_r3_ledger.trials:
         ret_path = trials_dir / f"returns_{trial.trial_id}.parquet"
@@ -130,7 +145,7 @@ def test_r3_canonical_p_value_and_input_hash_binding(sealed_r3_ledger: SearchTri
 
 def test_r3_anti_harking_census_accounting() -> None:
     """Verify that all 9 trials are documented in the census manifest and none were pruned."""
-    census_manifest_path = Path("data/manifests/research/manifest_census_HYP_TSMOM_EURUSD_001.json")
+    census_manifest_path = Path("docs/phase8.5/manifests/manifest_census_HYP_TSMOM_EURUSD_001.json")
     assert census_manifest_path.exists()
 
     with open(census_manifest_path, "r", encoding="utf-8") as f:
