@@ -45,6 +45,10 @@ class DatasetExposureState(str, Enum):
     # Formally authorized and cryptographically bound to an active registered hypothesis.
     AUTHORIZED_FOR_HYPOTHESIS = "AUTHORIZED_FOR_HYPOTHESIS"
 
+    # In-sample training partition authorized for the registered R3 search-trial census
+    # sweep of a sealed hypothesis (H4 canonical partition state as written by R2/R3).
+    UNLOCKED_FOR_R3_CENSUS = "UNLOCKED_FOR_R3_CENSUS"
+
     # Evaluated / accessed during empirical research execution within the protocol.
     EXPOSED = "EXPOSED"
 
@@ -126,6 +130,10 @@ class DatasetQuarantineValidator:
     PERMANENTLY_QUARANTINED_HOLDOUTS: Mapping[str, Tuple[int, int]] = {
         # HYP_TSMOM_EURUSD_001 M5 Validation + OOS bars (6060 to 9999) are permanently quarantined
         "HYP_TSMOM_EURUSD_001": (6060, 9999),
+        # HYP_TSMOM_EURUSD_HTF_002 H4 Validation (3751..4996) + second embargo (4997..5008)
+        # + Blind OOS (5009..6230) protected span is permanently quarantined (3751 to 6230).
+        # NOT REUSABLE for any future hypothesis (e.g. HYP_003) by default.
+        "HYP_TSMOM_EURUSD_HTF_002": (3751, 6230),
     }
 
     @classmethod

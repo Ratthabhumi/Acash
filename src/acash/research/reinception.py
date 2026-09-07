@@ -68,12 +68,16 @@ class InceptionDecision(str, Enum):
 # Sealed terminal hypotheses that can NEVER be resurrected or reused
 TERMINAL_HYPOTHESIS_REGISTRY: Tuple[str, ...] = (
     "HYP_TSMOM_EURUSD_001",
+    "HYP_TSMOM_EURUSD_HTF_002",
 )
 
 # Quarantined time windows that cannot be reused without valid governance exception
 PERMANENTLY_QUARANTINED_WINDOWS: Mapping[str, Tuple[str, str]] = {
     # M5 holdout bars 6,060 to 9,999 from HYP_TSMOM_EURUSD_001
     "EURUSD_M5_HOLDOUT": ("2026-08-18T04:40:00+00:00", "2026-09-04T21:00:00+00:00"),
+    # HYP_TSMOM_EURUSD_HTF_002 H4 protected spans: Validation (3751..4996) +
+    # embargo_val_oos (4997..5008) + Blind OOS (5009..6230). NOT REUSABLE for HYP_003.
+    "EURUSD_H4_VALIDATION_OOS": ("2023-05-29T16:00:00+00:00", "2024-12-31T20:00:00+00:00"),
 }
 
 
@@ -344,17 +348,24 @@ class ResearchReInceptionGate:
                 f"DATA_CONTRACT_REJECTED: proposed_data_window start '{start_utc}' >= end '{end_utc}'."
             )
 
-        # Quarantine check against M5 holdout window
-        # Window: 2026-08-18T04:40:00+00:00 to 2026-09-04T21:00:00+00:00 for EURUSD M5
-        if proposal.target_symbol == "EURUSD" and proposal.target_timeframe.upper() == "M5":
-            q_start, q_end = PERMANENTLY_QUARANTINED_WINDOWS["EURUSD_M5_HOLDOUT"]
+        # Quarantine check against permanently protected holdout windows.
+        # M5:     2026-08-18T04:40:00+00:00 to 2026-09-04T21:00:00+00:00 (HYP_001 holdout)
+        # H4:     2023-05-29T16:00:00+00:00 to 2024-12-31T20:00:00+00:00 (HYP_002 Validation+OOS)
+        window_key_by_instrument: Mapping[str, str] = {
+            "EURUSD_M5": "EURUSD_M5_HOLDOUT",
+            "EURUSD_H4": "EURUSD_H4_VALIDATION_OOS",
+        }
+        instrument_key = f"{proposal.target_symbol}_{proposal.target_timeframe.upper()}"
+        quarantined_window_key = window_key_by_instrument.get(instrument_key)
+        if quarantined_window_key is not None:
+            q_start, q_end = PERMANENTLY_QUARANTINED_WINDOWS[quarantined_window_key]
             # Check if windows overlap
             if not (end_utc <= q_start or start_utc >= q_end):
                 # Proposed window overlaps with quarantined holdout!
                 if not proposal.governance_exception_id:
                     raise DataContractError(
                         f"BLOCKED_QUARANTINE_VIOLATION: Proposed data window ({start_utc}..{end_utc}) overlaps "
-                        f"with permanently quarantined M5 holdout ({q_start}..{q_end}). "
+                        f"with permanently quarantined window '{quarantined_window_key}' ({q_start}..{q_end}). "
                         f"Quarantined data cannot be reused without an explicit, verified governance exception."
                     )
 

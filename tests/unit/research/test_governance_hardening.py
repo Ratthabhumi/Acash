@@ -103,6 +103,43 @@ def test_new_hypothesis_cannot_implicitly_inherit_prior_dataset(
         )
 
 
+@pytest.fixture
+def canonical_h4_manifest() -> Dict[str, Any]:
+    """Load canonical EURUSD H4 dataset manifest bound to HYP_TSMOM_EURUSD_HTF_002."""
+    manifest_path = Path("docs/phase8.5/manifests/manifest-EURUSD_H4_2021_2024_canonical.json")
+    assert manifest_path.exists(), f"H4 dataset manifest not found at {manifest_path}"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest_data: Dict[str, Any] = json.load(f)
+        return manifest_data
+
+
+@pytest.fixture
+def sealed_hyp_spec_htf_002() -> HypothesisSpecification:
+    """Load canonical sealed HYP_TSMOM_EURUSD_HTF_002 specification."""
+    hyp_path = Path("docs/phase8.5/hypotheses/HYP_TSMOM_EURUSD_HTF_002.json")
+    assert hyp_path.exists(), f"Sealed hypothesis not found at {hyp_path}"
+    with open(hyp_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data.get("expected_direction"), dict) and "__type__" in data.get("expected_direction", {}):
+        clean_dict = {
+            "hypothesis_id": data["hypothesis_id"],
+            "hypothesis_version": data["hypothesis_version"],
+            "parent_hypothesis_id": data.get("parent_hypothesis_id"),
+            "economic_rationale": data["economic_rationale"],
+            "target_symbol": data["target_symbol"],
+            "feature_dependencies": data["feature_dependencies"],
+            "parameter_config_json": data["parameter_config_json"],
+            "expected_direction": data["expected_direction"]["value"],
+            "target_horizons": [x["value"] if isinstance(x, dict) else x for x in data["target_horizons"]],
+            "primary_horizon": data["primary_horizon"]["value"] if isinstance(data["primary_horizon"], dict) else data["primary_horizon"],
+            "invalidation_criteria": {k: v["value"] if isinstance(v, dict) else v for k, v in data["invalidation_criteria"].items()},
+            "registered_at_utc": data["registered_at_utc"],
+            "author": data["author"],
+        }
+        return HypothesisSpecification.model_validate(clean_dict)
+    return HypothesisSpecification.model_validate(data)
+
+
 def test_quarantined_m5_holdout_inaccessible_to_any_new_research(
     sealed_hyp_spec: HypothesisSpecification,
     canonical_m5_manifest: Dict[str, Any],
@@ -140,6 +177,62 @@ def test_quarantined_m5_holdout_inaccessible_to_any_new_research(
             dataset_manifest=modified_manifest,
             requested_partition="oos",
         )
+
+
+def test_quarantined_h4_validation_and_oos_inaccessible_to_hyp_003(
+    canonical_h4_manifest: Dict[str, Any],
+) -> None:
+    """Invariant: HYP_TSMOM_EURUSD_HTF_002 H4 Validation + Blind OOS are permanently quarantined."""
+    assert "HYP_TSMOM_EURUSD_HTF_002" in DatasetQuarantineValidator.PERMANENTLY_QUARANTINED_HOLDOUTS
+    protected_span = DatasetQuarantineValidator.PERMANENTLY_QUARANTINED_HOLDOUTS["HYP_TSMOM_EURUSD_HTF_002"]
+    assert protected_span == (3751, 6230)
+    assert "HYP_TSMOM_EURUSD_001" in DatasetQuarantineValidator.PERMANENTLY_QUARANTINED_HOLDOUTS
+
+    # Candidate HYP_003 (mean-reversion) attempting to inherit the H4 Validation/OOS partitions
+    hyp_003_spec = HypothesisSpecification(
+        hypothesis_id="HYP_MR_EURUSD_004",
+        hypothesis_version="1.0.0",
+        economic_rationale="Candidate HYP_003 mean reversion",
+        target_symbol="EURUSD",
+        feature_dependencies=["feature_reversal"],
+        parameter_config_json='{"lookback": 5}',
+        expected_direction=ExpectedDirection.SHORT,
+        target_horizons=[1],
+        primary_horizon=1,
+        invalidation_criteria=InvalidationCriteria(),
+        registered_at_utc="2026-09-07T00:00:00+00:00",
+        author="ResearchAgent",
+    )
+
+    # Even if allowed_hypothesis_ids included the new hypothesis, protected partitions are quarantined
+    modified_manifest = dict(canonical_h4_manifest)
+    modified_manifest["allowed_hypothesis_ids"] = ["HYP_MR_EURUSD_004"]
+
+    with pytest.raises(DataContractError, match="DATASET_QUARANTINED_ERROR"):
+        DatasetQuarantineValidator.validate_dataset_binding_for_execution(
+            spec=hyp_003_spec,
+            dataset_manifest=modified_manifest,
+            requested_partition="validation",
+        )
+
+    with pytest.raises(DataContractError, match="DATASET_QUARANTINED_ERROR"):
+        DatasetQuarantineValidator.validate_dataset_binding_for_execution(
+            spec=hyp_003_spec,
+            dataset_manifest=modified_manifest,
+            requested_partition="oos",
+        )
+
+
+def test_positive_path_h4_train_partition_authorized_for_hyp_002(
+    sealed_hyp_spec_htf_002: HypothesisSpecification,
+    canonical_h4_manifest: Dict[str, Any],
+) -> None:
+    """Positive Path: HYP_002 remains authorized for R3 census training partition on H4."""
+    DatasetQuarantineValidator.validate_dataset_binding_for_execution(
+        spec=sealed_hyp_spec_htf_002,
+        dataset_manifest=canonical_h4_manifest,
+        requested_partition="train",
+    )
 
 
 def test_unknown_dataset_exposure_state_fails_closed(

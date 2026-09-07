@@ -130,6 +130,24 @@ def test_reusing_terminally_falsified_id_fails_closed(
         ResearchReInceptionGate.evaluate_reinception_proposal(proposal=falsified_proposal)
 
 
+def test_reusing_hyp_002_terminally_falsified_id_fails_closed(
+    valid_proposal: ResearchInceptionProposal,
+) -> None:
+    """Invariant: HYP_TSMOM_EURUSD_HTF_002 is registered as terminally falsified and cannot be reused."""
+    assert "HYP_TSMOM_EURUSD_HTF_002" in TERMINAL_HYPOTHESIS_REGISTRY
+    falsified_proposal = valid_proposal.model_copy(
+        update={"candidate_hypothesis_id": "HYP_TSMOM_EURUSD_HTF_002"}
+    )
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION"):
+        ResearchReInceptionGate.evaluate_reinception_proposal(proposal=falsified_proposal)
+
+
+def test_terminal_registry_contains_all_falsified_hypotheses() -> None:
+    """Invariant: Every sealed terminally-falsified hypothesis is explicitly registered."""
+    assert "HYP_TSMOM_EURUSD_001" in TERMINAL_HYPOTHESIS_REGISTRY
+    assert "HYP_TSMOM_EURUSD_HTF_002" in TERMINAL_HYPOTHESIS_REGISTRY
+
+
 def test_sealed_id_collision_fails_closed(
     valid_proposal: ResearchInceptionProposal,
     tmp_path: Path,

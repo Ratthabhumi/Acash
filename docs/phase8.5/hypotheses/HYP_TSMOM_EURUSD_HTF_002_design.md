@@ -147,7 +147,9 @@ To prevent boundary ambiguity, pass and fail criteria are defined as strict math
 | **Average Net Trade PnL** | $\overline{\text{Net PnL}} \ge +1.5\text{ bps}$ | $\overline{\text{Net PnL}} < +1.5\text{ bps}$ |
 | **Annualized Haircut Sharpe** | $\text{Haircut } SR \ge +0.50$ | $\text{Haircut } SR < +0.50$ |
 
-*HAC Bandwidth:* Evaluated using Andrews 1991 AR(1) automatic plug-in bandwidth selection.
+*HAC Bandwidth:* Pre-registered as Andrews 1991 AR(1) automatic plug-in bandwidth selection. **Governance Maintenance Annotation (STEP-G closure, 2026-09-07):** the executed R3 census used `HacBandwidthMethod.NEWEY_WEST_PLUGIN` (Newey-West 1994 rule-of-thumb `floor(4 * (T / 100)^(2/9))`, bandwidth `8` for all trials). The executed method is authoritative for HYP_002 R3; the pre-registration reference above is recorded as a documentation deviation. No re-run was performed. All HAC $t$-stats are negative (`-0.31` to `-1.58`, hurdle `+2.00`), so the verdict is unaffected. See `phase8_5_r3_search_trial_census_audit_HYP_002.md` §5.1.
+
+*"Haircut Sharpe" Terminology (Mapping):* In the R3 context this field is the **undeflated annualized in-sample Sharpe** (`mean / std(ddof=1) × √1512` on active-trade net returns). It is **NOT** the canonical Phase-6 multiple-testing-adjusted Haircut Sharpe (`MultipleTestingEngine.calculate_bonferroni_haircut_sharpe`). The two must never be conflated. R3 did not apply any Bonferroni/DSR deflation. See `phase8_5_r3_search_trial_census_audit_HYP_002.md` §5.2.
 
 ### 8.2 Mandatory Boolean Conjunction Logic
 A candidate trial is **QUALIFIED** if and only if **ALL** mandatory criteria pass simultaneously:
