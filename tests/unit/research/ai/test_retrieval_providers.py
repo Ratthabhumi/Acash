@@ -8,11 +8,13 @@ Covers:
 - Explicit classification: NOT_FOUND / TIMEOUT / HTTP_ERROR / CONTENT_TYPE_REJECTED /
   SIZE_LIMIT_EXCEEDED / PARSE_ERROR / NOT_MODIFIED / PROVIDER_ERROR.
 - Registry fail-closed behavior for unknown sources, unregistered providers,
-  locator mismatches, and unbound provider outputs.
+  locator mismatches, unbound provider outputs, and forged provenance binding.
+- Honest bounded streaming: the HTTP provider stops consuming a lazy body as soon
+  as the size cap is exceeded (early-termination proof, zero network).
 """
 
 from datetime import datetime
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional
 
 import hashlib
 import httpx
@@ -296,6 +298,41 @@ def test_registry_happy_path_resolves_via_source_binding(
     assert result.request_id == retrieval_request.request_id
 
 
+@pytest.mark.parametrize(
+    ("forged_field", "forged_value"),
+    [
+        ("locator", "https://evil.example.com/planted.txt"),
+        ("source_id", "SRC-ffee123412341234"),
+    ],
+)
+def test_registry_rejects_forged_provenance_binding(
+    retrieval_request: RetrievalRequest,
+    retrieval_source: SourceDescriptor,
+    fixture_catalog: Dict[str, FixtureContent],
+    fixed_clock: Callable[[], datetime],
+    forged_field: str,
+    forged_value: object,
+) -> None:
+    class ForgingProvider(BaseSourceRetriever):
+        provider_id = "forging.v1"
+
+        def __init__(self, inner: BaseSourceRetriever) -> None:
+            self._inner = inner
+
+        def retrieve(self, request: RetrievalRequest, source: SourceDescriptor) -> RetrievalResult:
+            result = self._inner.retrieve(request, source)
+            forged_provenance = result.provenance.model_copy(update={forged_field: forged_value})
+            return result.model_copy(update={"provenance": forged_provenance})
+
+    inner = FixtureSourceRetriever(catalog=fixture_catalog, clock=fixed_clock)
+    registry = SourceProviderRegistry(
+        providers={"forging.v1": ForgingProvider(inner)},
+        source_bindings={retrieval_source.source_id: ("forging.v1", retrieval_source)},
+    )
+    with pytest.raises(ProviderMisconfigurationError):
+        registry.retrieve(retrieval_request)
+
+
 # ---------------------------------------------------------------------------
 # HTTP provider classification (MockTransport only — zero real network)
 # ---------------------------------------------------------------------------
@@ -472,3 +509,82 @@ def test_http_provider_empty_body_success_status_is_error(
     result = provider.retrieve(retrieval_request, retrieval_source)
     assert result.retrieval_status == RetrievalStatus.HTTP_ERROR
     assert result.raw_content_ref is None
+
+
+# ---------------------------------------------------------------------------
+# Honest bounded streaming (lazy transport, zero network)
+# ---------------------------------------------------------------------------
+
+
+class CountingByteStream(httpx.SyncByteStream):
+    """Reports exactly how many body bytes the provider actually consumed."""
+
+    def __init__(self, chunks: Iterable[bytes]) -> None:
+        self._chunks = list(chunks)
+        self.yielded_bytes = 0
+        self.yielded_chunks = 0
+        self.close_called = False
+
+    def __iter__(self) -> Iterator[bytes]:
+        for chunk in self._chunks:
+            self.yielded_chunks += 1
+            self.yielded_bytes += len(chunk)
+            yield chunk
+
+    def close(self) -> None:
+        self.close_called = True
+
+
+class LazyStreamingTransport(httpx.BaseTransport):
+    """Custom transport that streams a body lazily instead of buffering it.
+
+    Unlike ``httpx.MockTransport`` (which eagerly buffers ``response.read()``),
+    this transport hands the client a live, countable byte stream, so an
+    early-termination proof is honest rather than simulated.
+    """
+
+    def __init__(self, chunks: Iterable[bytes]) -> None:
+        self._chunks = chunks
+        self.last_stream: Optional[CountingByteStream] = None
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        stream = CountingByteStream(self._chunks)
+        self.last_stream = stream
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/plain"},
+            request=request,
+            stream=stream,
+        )
+
+
+def test_http_provider_size_limit_stops_lazy_streaming_early(
+    retrieval_request: RetrievalRequest,
+    retrieval_source: SourceDescriptor,
+    fixed_clock: Callable[[], datetime],
+) -> None:
+    chunk_size = 500
+    chunks = [b"x" * chunk_size] * 30
+    total_body = len(b"".join(chunks))
+
+    transport = LazyStreamingTransport(chunks)
+    client = httpx.Client(
+        transport=transport,
+        follow_redirects=False,
+        timeout=httpx.Timeout(15.0, connect=5.0),
+    )
+    provider = HttpSourceRetriever(client=client, clock=fixed_clock)
+    tiny_request = retrieval_request.model_copy(update={"max_content_bytes": 1_000})
+
+    result = provider.retrieve(tiny_request, retrieval_source)
+
+    assert transport.last_stream is not None
+    consumed = transport.last_stream.yielded_bytes
+    max_bytes = tiny_request.max_content_bytes
+    # SIZE_LIMIT_EXCEEDED, stream NOT consumed to completion, stream closed, and
+    # consumption bounded by max_content_bytes plus at most one transport chunk.
+    assert result.retrieval_status == RetrievalStatus.SIZE_LIMIT_EXCEEDED
+    assert consumed > max_bytes
+    assert consumed <= max_bytes + chunk_size
+    assert consumed < total_body
+    assert transport.last_stream.close_called

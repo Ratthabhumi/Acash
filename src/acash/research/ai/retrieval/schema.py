@@ -303,22 +303,86 @@ class EvidenceRecord(BaseModel):
         """Content identity: raw content hash (timestamps excluded by construction)."""
         return self.result.raw_content_sha256
 
+    @field_validator("result")
+    @classmethod
+    def forbid_verified_epistemic_result(cls, result: RetrievalResult) -> RetrievalResult:
+        # Pydantic model_copy(update=...) defaults to validate=False, so the
+        # RetrievalResult __init__ validator is NOT the enforceable boundary.
+        # This validator re-arms the invariant at the EvidenceRecord boundary:
+        # a VERIFIED result (however constructed) is rejected at record creation.
+        if result.epistemic_classification == EvidenceClassification.VERIFIED:
+            raise RetrievalError(
+                "An evidence record cannot wrap VERIFIED retrieved content. "
+                "Retrieval success is evidence collection, not independent verification."
+            )
+        return result
+
     @model_validator(mode="after")
     def verify_cross_references(self) -> "EvidenceRecord":
-        if self.request.source_id != self.source.source_id:
-            raise InvalidResultStateError(
-                f"request.source_id '{self.request.source_id}' != source.source_id '{self.source.source_id}'."
-            )
-        if self.request.locator != self.source.locator:
-            raise InvalidResultStateError("request.locator does not match source descriptor locator.")
-        if self.result.request_id != self.request.request_id:
-            raise InvalidResultStateError("result.request_id does not match request.request_id.")
-        if self.result.source_id != self.request.source_id:
-            raise InvalidResultStateError("result.source_id does not match request.source_id.")
-        if self.result.provenance.source_id != self.source.source_id:
-            raise InvalidResultStateError("provenance.source_id does not match source.source_id.")
-        if self.result.provenance.retrieved_at_utc != self.result.retrieved_at_utc:
-            raise InvalidResultStateError("provenance.retrieved_at_utc does not match result.retrieved_at_utc.")
+        def _require(condition: bool, message: str) -> None:
+            if not condition:
+                raise InvalidResultStateError(message)
+
+        _require(
+            self.request.source_id == self.source.source_id,
+            f"request.source_id '{self.request.source_id}' != source.source_id '{self.source.source_id}'.",
+        )
+        _require(
+            self.request.locator == self.source.locator,
+            "request.locator does not match source descriptor locator.",
+        )
+        _require(
+            self.result.request_id == self.request.request_id,
+            "result.request_id does not match request.request_id.",
+        )
+        _require(
+            self.result.source_id == self.request.source_id,
+            "result.source_id does not match request.source_id.",
+        )
+        _require(
+            self.result.provenance.source_id == self.source.source_id,
+            "provenance.source_id does not match source.source_id.",
+        )
+        _require(
+            self.result.provenance.locator == self.request.locator,
+            "provenance.locator does not match request.locator.",
+        )
+        _require(
+            self.result.provenance.locator == self.source.locator,
+            "provenance.locator does not match source descriptor locator.",
+        )
+        _require(
+            self.result.provenance.retrieved_at_utc == self.result.retrieved_at_utc,
+            "provenance.retrieved_at_utc does not match result.retrieved_at_utc.",
+        )
+        _require(
+            self.result.provenance.raw_content_sha256 == self.result.raw_content_sha256,
+            "provenance.raw_content_sha256 does not match result.raw_content_sha256.",
+        )
+        _require(
+            self.result.provenance.normalized_content_sha256 == self.result.normalized_content_sha256,
+            "provenance.normalized_content_sha256 does not match result.normalized_content_sha256.",
+        )
+        _require(
+            self.result.provenance.content_bytes_observed == self.result.content_length_bytes,
+            "provenance.content_bytes_observed does not match result.content_length_bytes.",
+        )
+        _require(
+            self.result.provenance.http_status == self.result.http_status,
+            "provenance.http_status does not match result.http_status.",
+        )
+        _require(
+            self.result.provenance.content_type_received == self.result.returned_content_type,
+            "provenance.content_type_received does not match result.returned_content_type.",
+        )
+        _require(
+            self.result.provenance.retrieval_status == self.result.retrieval_status,
+            "provenance.retrieval_status does not match result.retrieval_status.",
+        )
+        _require(
+            self.result.provenance.requested_at_utc == self.request.created_at_utc,
+            "provenance.requested_at_utc does not match request.created_at_utc.",
+        )
         return self
 
     def compute_record_digest(self) -> str:

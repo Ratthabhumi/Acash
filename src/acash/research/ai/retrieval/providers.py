@@ -23,7 +23,6 @@ import httpx
 
 from acash.research.ai.retrieval.enums import NormalizationPolicy, RetrievalMode, RetrievalStatus
 from acash.research.ai.schema import _canonical_sha256
-from acash.research.ai.retrieval.enums import NormalizationPolicy, RetrievalMode, RetrievalStatus
 from acash.research.ai.retrieval.exceptions import (
     ProviderMisconfigurationError,
     UnknownProviderError,
@@ -251,6 +250,14 @@ class SourceProviderRegistry:
             raise ProviderMisconfigurationError(
                 "Provider returned a result not bound to the originating request/source."
             )
+        if result.provenance.locator != request.locator:
+            raise ProviderMisconfigurationError(
+                "Provider returned provenance.locator that does not match the originating request locator."
+            )
+        if result.provenance.source_id != request.source_id:
+            raise ProviderMisconfigurationError(
+                "Provider returned provenance.source_id that does not match the originating request source_id."
+            )
         return result
 
 
@@ -400,11 +407,114 @@ class HttpSourceRetriever(BaseSourceRetriever):
             if request.conditional_last_modified_utc:
                 headers["If-Modified-Since"] = request.conditional_last_modified_utc
         try:
-            response = self._client.get(
+            with self._client.stream(
+                "GET",
                 request.locator,
                 headers=headers,
                 timeout=request.timeout_seconds,
-            )
+            ) as response:
+                if response.status_code == 304:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.NOT_MODIFIED,
+                        retrieved_at_utc,
+                        http_status=304,
+                        detail="Conditional request returned 304 Not Modified.",
+                    )
+                if response.status_code in _ALLOWED_FAILURE_HTTP_STATUSES:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.NOT_FOUND,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail=f"HTTP status {response.status_code}: resource not found.",
+                    )
+                if response.status_code < 200 or response.status_code >= 300:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.HTTP_ERROR,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail=f"Non-success HTTP status {response.status_code} (redirects are not followed).",
+                    )
+
+                returned_header = response.headers.get("content-type")
+                returned_content_type = returned_header.split(";")[0].strip().lower() if returned_header else ""
+                if not returned_content_type or not content_type_accepted(
+                    returned_content_type, request.accepted_content_types
+                ):
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.CONTENT_TYPE_REJECTED,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail=f"content_type '{returned_header}' is not accepted by the request.",
+                    )
+
+                # Streaming consumption: the body is read lazily and the cumulative
+                # size is checked after every chunk, so network consumption is bounded
+                # by max_content_bytes plus at most one transport chunk.
+                raw_bytes = b""
+                try:
+                    for chunk in response.iter_bytes():
+                        raw_bytes += chunk
+                        if len(raw_bytes) > request.max_content_bytes:
+                            return _failure_result(
+                                request,
+                                source,
+                                self.provider_id,
+                                RetrievalStatus.SIZE_LIMIT_EXCEEDED,
+                                retrieved_at_utc,
+                                http_status=response.status_code,
+                                detail=f"body exceeds max_content_bytes={request.max_content_bytes}.",
+                            )
+                except httpx.TimeoutException as exc:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.TIMEOUT,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail=f"HTTP read timed out while streaming the body: {exc}",
+                    )
+                except httpx.RequestError as exc:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.PROVIDER_ERROR,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail=f"HTTP transport error while streaming the body: {exc}",
+                    )
+                if len(raw_bytes) == 0:
+                    return _failure_result(
+                        request,
+                        source,
+                        self.provider_id,
+                        RetrievalStatus.HTTP_ERROR,
+                        retrieved_at_utc,
+                        http_status=response.status_code,
+                        detail="Received an empty body with a 2xx status.",
+                    )
+                return _content_result(
+                    request,
+                    source,
+                    self.provider_id,
+                    retrieved_at_utc,
+                    response.status_code,
+                    returned_content_type,
+                    raw_bytes,
+                )
         except httpx.TimeoutException as exc:
             return _failure_result(
                 request,
@@ -423,82 +533,3 @@ class HttpSourceRetriever(BaseSourceRetriever):
                 retrieved_at_utc,
                 detail=f"HTTP transport error: {exc}",
             )
-
-        if response.status_code == 304:
-            return _failure_result(
-                request,
-                source,
-                self.provider_id,
-                RetrievalStatus.NOT_MODIFIED,
-                retrieved_at_utc,
-                http_status=304,
-                detail="Conditional request returned 304 Not Modified.",
-            )
-        if response.status_code in _ALLOWED_FAILURE_HTTP_STATUSES:
-            return _failure_result(
-                request,
-                source,
-                self.provider_id,
-                RetrievalStatus.NOT_FOUND,
-                retrieved_at_utc,
-                http_status=response.status_code,
-                detail=f"HTTP status {response.status_code}: resource not found.",
-            )
-        if response.status_code < 200 or response.status_code >= 300:
-            return _failure_result(
-                request,
-                source,
-                self.provider_id,
-                RetrievalStatus.HTTP_ERROR,
-                retrieved_at_utc,
-                http_status=response.status_code,
-                detail=f"Non-success HTTP status {response.status_code} (redirects are not followed).",
-            )
-
-        returned_header = response.headers.get("content-type")
-        returned_content_type = returned_header.split(";")[0].strip().lower() if returned_header else ""
-        if not returned_content_type or not content_type_accepted(
-            returned_content_type, request.accepted_content_types
-        ):
-            return _failure_result(
-                request,
-                source,
-                self.provider_id,
-                RetrievalStatus.CONTENT_TYPE_REJECTED,
-                retrieved_at_utc,
-                http_status=response.status_code,
-                detail=f"content_type '{returned_header}' is not accepted by the request.",
-            )
-
-        raw_bytes = b""
-        for chunk in response.iter_bytes():
-            raw_bytes += chunk
-            if len(raw_bytes) > request.max_content_bytes:
-                return _failure_result(
-                    request,
-                    source,
-                    self.provider_id,
-                    RetrievalStatus.SIZE_LIMIT_EXCEEDED,
-                    retrieved_at_utc,
-                    http_status=response.status_code,
-                    detail=f"body exceeds max_content_bytes={request.max_content_bytes}.",
-                )
-        if len(raw_bytes) == 0:
-            return _failure_result(
-                request,
-                source,
-                self.provider_id,
-                RetrievalStatus.HTTP_ERROR,
-                retrieved_at_utc,
-                http_status=response.status_code,
-                detail="Received an empty body with a 2xx status.",
-            )
-        return _content_result(
-            request,
-            source,
-            self.provider_id,
-            retrieved_at_utc,
-            response.status_code,
-            returned_content_type,
-            raw_bytes,
-        )

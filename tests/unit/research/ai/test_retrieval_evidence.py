@@ -14,9 +14,12 @@ from typing import Callable, Dict, Optional
 import pytest
 from pydantic import ValidationError
 
+from acash.research.ai.enums import EvidenceClassification
+from acash.research.ai.retrieval.enums import RetrievalStatus
 from acash.research.ai.retrieval.exceptions import (
     EvidenceStoreError,
     InvalidResultStateError,
+    RetrievalError,
 )
 from acash.research.ai.retrieval.providers import (
     FixtureContent,
@@ -102,6 +105,53 @@ def test_evidence_record_rejects_cross_reference_violations(
     mismatched_result = result.model_copy(update={"request_id": "RET-REQ-ffffffffffffffff"})
     with pytest.raises(InvalidResultStateError):
         _evidence(retrieval_request, retrieval_source, mismatched_result)
+
+
+def test_evidence_record_forbids_model_copy_verified_escalation(
+    retrieval_request: RetrievalRequest,
+    retrieval_source: SourceDescriptor,
+    fixture_catalog: Dict[str, FixtureContent],
+) -> None:
+    result = _build_result(retrieval_request, retrieval_source, fixture_catalog)
+    assert result.epistemic_classification == EvidenceClassification.REPORTED
+
+    # Exact live audit exploit: pydantic model_copy(update=...) bypasses the
+    # RetrievalResult __init__ validator because validate=False is the default.
+    escalated = result.model_copy(
+        update={"epistemic_classification": EvidenceClassification.VERIFIED}
+    )
+    assert escalated.epistemic_classification == EvidenceClassification.VERIFIED
+
+    # The EvidenceRecord construction boundary MUST fail closed on the escalation.
+    with pytest.raises(RetrievalError):
+        _evidence(retrieval_request, retrieval_source, escalated)
+
+
+@pytest.mark.parametrize(
+    ("forged_field", "forged_value"),
+    [
+        ("locator", "https://evil.example.com/planted.txt"),
+        ("raw_content_sha256", "b" * 64),
+        ("normalized_content_sha256", "c" * 64),
+        ("content_bytes_observed", 424_242),
+        ("http_status", 500),
+        ("content_type_received", "application/json"),
+        ("retrieval_status", RetrievalStatus.NOT_FOUND),
+        ("requested_at_utc", "2026-09-07T00:00:00+00:00"),
+    ],
+)
+def test_evidence_record_rejects_forged_provenance_pair_mismatch(
+    retrieval_request: RetrievalRequest,
+    retrieval_source: SourceDescriptor,
+    fixture_catalog: Dict[str, FixtureContent],
+    forged_field: str,
+    forged_value: object,
+) -> None:
+    result = _build_result(retrieval_request, retrieval_source, fixture_catalog)
+    forged_provenance = result.provenance.model_copy(update={forged_field: forged_value})
+    forged_result = result.model_copy(update={"provenance": forged_provenance})
+    with pytest.raises(InvalidResultStateError):
+        _evidence(retrieval_request, retrieval_source, forged_result)
 
 
 def test_evidence_record_digest_stability_and_timestamp_sensitivity(
