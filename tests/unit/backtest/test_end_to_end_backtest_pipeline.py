@@ -120,12 +120,14 @@ def test_end_to_end_backtest_pipeline_execution() -> None:
 
     manifest, fills_tbl, equity_tbl = runner.run_backtest(
         events=events,
+        hypothesis_id="HYP_E2E_0001",
         hypothesis_spec_sha256="a" * 64,
         strategy_config_hash="b" * 64,
         pyproject_toml_sha256=pyproject_sha256,
         uv_lock_sha256=uv_lock_sha256,
         git_commit_hash=git_commit,
         phase4_analytical_edge_bps=Decimal("25.0"),
+        periods_per_year=Decimal("252.0"),
     )
 
 

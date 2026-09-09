@@ -216,10 +216,12 @@ def test_nautilus_substrate_empty_catalog_rejection() -> None:
         with pytest.raises(DataContractError, match="contains 0 bars or ticks"):
             substrate.run_simulation(
                 catalog_path=tmp_dir,
+                hypothesis_id="HYP_NBRIDGE_EMPTY_0001",
                 hypothesis_spec_sha256="0" * 64,
                 strategy_config_hash="0" * 64,
                 pyproject_toml_sha256="0" * 64,
                 git_commit_hash="a" * 40,
+                periods_per_year=Decimal("252.0"),
                 canonical_data_hashes=["a" * 64],
             )
 
@@ -235,15 +237,17 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
 
         t0 = datetime(2026, 1, 19, 14, 30, 0, tzinfo=timezone.utc)
         t1 = datetime(2026, 1, 19, 14, 31, 0, tzinfo=timezone.utc)
+        t2 = datetime(2026, 1, 19, 14, 32, 0, tzinfo=timezone.utc)
+        t3 = datetime(2026, 1, 19, 14, 33, 0, tzinfo=timezone.utc)
 
         bars_table = pa.Table.from_pydict({
-            "timestamp_utc": [t0, t1],
-            "bar_start_utc": [t0, t1],
-            "open": [Decimal("5000.00"), Decimal("5002.00")],
-            "high": [Decimal("5005.00"), Decimal("5010.00")],
-            "low": [Decimal("4995.00"), Decimal("5000.00")],
-            "close": [Decimal("5002.00"), Decimal("5008.00")],
-            "volume": [Decimal("100.0"), Decimal("100.0")],
+            "timestamp_utc": [t0, t1, t2, t3],
+            "bar_start_utc": [t0, t1, t2, t3],
+            "open": [Decimal("5000.00"), Decimal("5002.00"), Decimal("5008.00"), Decimal("5010.00")],
+            "high": [Decimal("5005.00"), Decimal("5010.00"), Decimal("5012.00"), Decimal("5010.00")],
+            "low": [Decimal("4995.00"), Decimal("5000.00"), Decimal("5006.00"), Decimal("5002.00")],
+            "close": [Decimal("5002.00"), Decimal("5008.00"), Decimal("5010.00"), Decimal("5006.00")],
+            "volume": [Decimal("100.0"), Decimal("100.0"), Decimal("100.0"), Decimal("100.0")],
         })
 
         # 1. Export canonical table to Nautilus Parquet catalog
@@ -268,12 +272,14 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
 
         manifest, fills_table, equity_table = substrate.run_simulation(
             catalog_path=cat_dir,
+            hypothesis_id="HYP_NBRIDGE_0001",
             hypothesis_spec_sha256=valid_sha,
             strategy_config_hash=valid_sha,
             canonical_data_hashes=[data_sha],
             pyproject_toml_sha256=pyproject_sha,
             uv_lock_sha256=uv_lock_sha,
             git_commit_hash=git_commit,
+            periods_per_year=Decimal("252.0"),
         )
 
 
@@ -286,10 +292,13 @@ def test_nautilus_substrate_real_unmocked_execution_lifecycle_and_non_empty_tabl
 
         # Assert non-empty canonical Arrow tables emitted
         assert fills_table.num_rows == 1
-        assert equity_table.num_rows == 2
+        assert equity_table.num_rows == 4
         pydict_eq = equity_table.to_pydict()
         assert pydict_eq["unrealized_pnl"][0] == Decimal("0.0")
         assert pydict_eq["unrealized_pnl"][1] == Decimal("300.0")
+        assert pydict_eq["unrealized_pnl"][2] == Decimal("400.0")
+        assert pydict_eq["unrealized_pnl"][3] == Decimal("200.0")
+        assert manifest.execution_summary.sharpe_ratio is not None
         assert pydict_eq["margin_utilized"][1] == Decimal("25040.0")
 
         # Check fill details

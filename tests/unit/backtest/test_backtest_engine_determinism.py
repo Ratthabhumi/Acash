@@ -379,11 +379,13 @@ def test_bitwise_replay_invariance() -> None:
     runner1 = EventBacktestRunner(config=config, strategy_actor=SimpleMockActor())
     manifest1, fills1, equity1 = runner1.run_backtest(
         events=events1,
+        hypothesis_id="HYP_DET_0001",
         hypothesis_spec_sha256=hyp_hash,
         strategy_config_hash=strategy_hash,
         pyproject_toml_sha256=pyproject_sha256,
         uv_lock_sha256=uv_lock_sha256,
         git_commit_hash=git_commit,
+        periods_per_year=Decimal("252.0"),
     )
 
     # Run 2
@@ -391,11 +393,13 @@ def test_bitwise_replay_invariance() -> None:
     runner2 = EventBacktestRunner(config=config, strategy_actor=SimpleMockActor())
     manifest2, fills2, equity2 = runner2.run_backtest(
         events=events2,
+        hypothesis_id="HYP_DET_0001",
         hypothesis_spec_sha256=hyp_hash,
         strategy_config_hash=strategy_hash,
         pyproject_toml_sha256=pyproject_sha256,
         uv_lock_sha256=uv_lock_sha256,
         git_commit_hash=git_commit,
+        periods_per_year=Decimal("252.0"),
     )
 
     # 1. Exact Manifest ID Equivalence
