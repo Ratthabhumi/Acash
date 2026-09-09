@@ -125,7 +125,7 @@
   - 🔒 **Step 9 (90-Day Continuous Paper Forward Run):** STRICTLY LOCKED (Clock has not started).
 - 📐 **Phase 14 (AI Quantitative Research Layer): PLAN APPROVED AT PLAN LEVEL**
   - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor.
-  - **Implementation is STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–9 are certified.
+  - **Implementation is STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–7 are certified **AND** Phase 14 Human Gates G-1..G-5 are rendered. Phase 13 Steps 8–9 remain independently and strictly LOCKED (strategy→execution authorization controls only — Human Ratification D1–D4, 2026-09-08).
   - Zero runtime code implemented; capital and broker execution remain completely decoupled.
 
 ### Repository Synchronization State:
@@ -396,7 +396,7 @@
 - **Objective:** Augment quant research with AI-driven hypothesis formulation, feature discovery, and automated research reporting conforming to Section 33.
 - **Current Status:**
   - Master Research Architecture Revision 1.2: **APPROVED AT PLAN LEVEL** by Human Auditor.
-  - Implementation Status: **STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–9 are certified.
+  - Implementation Status: **STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–7 are certified and Phase 14 Human Gates G-1..G-5 are rendered. Phase 13 Steps 8–9 remain independently and strictly LOCKED (Human Ratification D1–D4, 2026-09-08).
   - Governing Specification: [`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md).
 - **Deliverables:**
   - LLM hypothesis formulation assistant (`acash.research.ai.hypothesis`).
