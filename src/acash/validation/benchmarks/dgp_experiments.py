@@ -180,7 +180,7 @@ def _create_trial_ledger(
                 manifest_id=man_id,
                 hypothesis_id=hypothesis_id,
                 strategy_config_hash=cfg_hash,
-                sharpe=trial.in_sample_sharpe,
+                sharpe=trial.in_sample_sharpe,  # type: ignore[arg-type]  # D6: evidence guaranteed by create() for benchmark trials
             )
     ledger = SearchTrialLedger(
         ledger_id=ledger_id,
@@ -230,7 +230,7 @@ def run_null_dgp_experiment(
         manifest_store: Dict[str, Any] = {}
         strat_id = f"STRAT_NULL_{seed_idx}"
         ledger = _create_trial_ledger(trial_return_matrix=trial_matrix, strategy_id=strat_id, manifest_store=manifest_store)
-        grid = _create_perturbation_grid(strat_id=strat_id, manifest_store=manifest_store, base_sharpe=ledger.trials[0].in_sample_sharpe)
+        grid = _create_perturbation_grid(strat_id=strat_id, manifest_store=manifest_store, base_sharpe=ledger.trials[0].in_sample_sharpe)  # type: ignore[arg-type]  # D6: created via create()
 
         report = gate.evaluate_strategy(
             strategy_id=strat_id,
@@ -461,7 +461,7 @@ def run_governance_admission_experiment(
             store_div: Dict[str, Any] = {}
             strat_id_div = f"STRAT_ADM_DIV_SR{int(true_sr*100)}_{seed_idx}"
             ledger_div = _create_trial_ledger(trial_return_matrix=trial_matrix_div, strategy_id=strat_id_div, manifest_store=store_div)
-            grid_div = _create_perturbation_grid(strat_id=strat_id_div, manifest_store=store_div, base_sharpe=ledger_div.trials[0].in_sample_sharpe)
+            grid_div = _create_perturbation_grid(strat_id=strat_id_div, manifest_store=store_div, base_sharpe=ledger_div.trials[0].in_sample_sharpe)  # type: ignore[arg-type]  # D6: created via create()
 
             rep_div = gate.evaluate_strategy(
                 strategy_id=strat_id_div,
@@ -515,7 +515,7 @@ def run_governance_admission_experiment(
             store_col: Dict[str, Any] = {}
             strat_id_col = f"STRAT_ADM_COL_SR{int(true_sr*100)}_{seed_idx}"
             ledger_col = _create_trial_ledger(trial_return_matrix=trial_matrix_col, strategy_id=strat_id_col, manifest_store=store_col)
-            grid_col = _create_perturbation_grid(strat_id=strat_id_col, manifest_store=store_col, base_sharpe=ledger_col.trials[0].in_sample_sharpe)
+            grid_col = _create_perturbation_grid(strat_id=strat_id_col, manifest_store=store_col, base_sharpe=ledger_col.trials[0].in_sample_sharpe)  # type: ignore[arg-type]  # D6: created via create()
 
             rep_col = gate.evaluate_strategy(
                 strategy_id=strat_id_col,

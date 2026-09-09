@@ -357,7 +357,7 @@
     "terminal_falsification": true
   },
   "ledger_id": "ledger_HYP_TSMOM_EURUSD_HTF_002_20260907T002550Z",
-  "ledger_digest": "d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565",
+  "ledger_digest": "ec219e0ceefa12b01ab2ce8cc0769e977aef37477b012b8f57885959c222e3aa",
   "trading_authority": "LOCKED",
   "capital_authority_usd": 0.0,
   "broker_connection": "NONE",

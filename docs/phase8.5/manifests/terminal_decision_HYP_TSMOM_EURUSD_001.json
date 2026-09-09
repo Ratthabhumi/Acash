@@ -20,7 +20,7 @@
     "R3_trial_census": {
       "status": "PASS_AND_SEALED",
       "census_trials_count": 9,
-      "ledger_digest": "b1185c4f26d4934e930d526b66d7f3e8786bdbb6c24c263957f9288aa4072b43",
+      "ledger_digest": "c7089f6fdb94e5e17acc1ad833d3af5c4d3fe3bc3122577ae62f4a66b56942ab",
       "empirical_result": "100%_FALSIFIED_IN_SAMPLE",
       "passing_trials": 0,
       "falsified_trials": 9

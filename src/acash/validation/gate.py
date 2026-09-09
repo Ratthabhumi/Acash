@@ -417,8 +417,40 @@ class StatisticalValidationGate:
             col_m_hash = _compute_canonical_series_sha256(trial_return_matrix[:, m])
             trial_rec = trial_ledger.trials[m]
 
+            # D6 Fail-Closed Evidence Guards (type-level narrowing; census-complete; ZERO statistical change):
+            rec_sharpe = trial_rec.in_sample_sharpe
+            if rec_sharpe is None:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' carries no in_sample_sharpe evidence; a REGISTERED+FAILED/INVALID "
+                    f"census member cannot satisfy gate matrix verification (no fabricated performance permitted)."
+                )
+            rec_p_value = trial_rec.p_value
+            if rec_p_value is None:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' carries no p_value evidence; a REGISTERED+FAILED/INVALID "
+                    f"census member cannot satisfy gate matrix verification."
+                )
+            rec_p_value_input_hash = trial_rec.p_value_input_hash
+            if rec_p_value_input_hash is None:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' carries no p_value_input_hash evidence; a REGISTERED+FAILED/INVALID "
+                    f"census member cannot satisfy gate matrix verification."
+                )
+            rec_manifest_id = trial_rec.execution_manifest_id
+            if rec_manifest_id is None:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' carries no execution_manifest_id evidence; a REGISTERED+FAILED/INVALID "
+                    f"census member cannot satisfy gate matrix verification."
+                )
+            rec_series_sha256 = trial_rec.in_sample_return_series_sha256
+            if rec_series_sha256 is None:
+                raise DataContractError(
+                    f"Trial '{trial_rec.trial_id}' carries no in_sample_return_series_sha256 evidence; a "
+                    f"REGISTERED+FAILED/INVALID census member cannot satisfy gate matrix verification."
+                )
+
             # 1. Candidate Return Series Lineage (Hard Invariant: No None escape hatch!)
-            if trial_rec.in_sample_return_series_sha256 != col_m_hash:
+            if rec_series_sha256 != col_m_hash:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' registered in_sample_return_series_sha256 ({trial_rec.in_sample_return_series_sha256}) "
                     f"does not match actual matrix column {m} return series SHA-256 ({col_m_hash})."
@@ -444,7 +476,7 @@ class StatisticalValidationGate:
                 computed_sr_m = sr_m_period
 
             epsilon_sr = float(self.config.sharpe_consistency_tolerance)
-            diff_sr = abs(float(trial_rec.in_sample_sharpe) - computed_sr_m)
+            diff_sr = abs(float(rec_sharpe) - computed_sr_m)
             if diff_sr > epsilon_sr:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' registered in_sample_sharpe ({trial_rec.in_sample_sharpe}) "
@@ -459,7 +491,7 @@ class StatisticalValidationGate:
             else:
                 t_stat_m = sr_m_period * math.sqrt(n_is)
                 computed_p_m = math.erfc(abs(t_stat_m) / math.sqrt(2.0))
-            diff_p = abs(float(trial_rec.p_value) - computed_p_m)
+            diff_p = abs(float(rec_p_value) - computed_p_m)
             if diff_p > epsilon_sr:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' registered p_value ({trial_rec.p_value}) "
@@ -472,27 +504,27 @@ class StatisticalValidationGate:
             expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(
                 return_series_sha256=col_m_hash,
                 config_sha256=trial_rec.config_sha256,
-                p_value=trial_rec.p_value,
+                p_value=rec_p_value,
                 p_value_method=trial_rec.p_value_method,
             )
-            if trial_rec.p_value_input_hash != expected_p_hash:
+            if rec_p_value_input_hash != expected_p_hash:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' p_value_input_hash mismatch: stored '{trial_rec.p_value_input_hash}' != computed '{expected_p_hash}'."
                 )
 
 
             # 5. Candidate Execution Lineage (Mandatory BacktestManifest Repository Verification - No Duck Typing!)
-            if trial_rec.execution_manifest_id not in manifest_store:
+            if rec_manifest_id not in manifest_store:
                 raise DataContractError(
-                    f"Trial '{trial_rec.trial_id}' execution manifest '{trial_rec.execution_manifest_id}' missing from manifest_store repository."
+                    f"Trial '{trial_rec.trial_id}' execution manifest '{rec_manifest_id}' missing from manifest_store repository."
                 )
-            manifest = manifest_store[trial_rec.execution_manifest_id]
+            manifest = manifest_store[rec_manifest_id]
             if not isinstance(manifest, BacktestManifest):
                 raise DataContractError(
-                    f"Candidate trial '{trial_rec.trial_id}' manifest '{trial_rec.execution_manifest_id}' "
+                    f"Candidate trial '{trial_rec.trial_id}' manifest '{rec_manifest_id}' "
                     f"must be an instance of BacktestManifest, got {type(manifest).__name__}."
                 )
-            if manifest.manifest_id != trial_rec.execution_manifest_id:
+            if manifest.manifest_id != rec_manifest_id:
                 raise DataContractError(
                     f"Trial '{trial_rec.trial_id}' manifest ID mismatch: expected '{trial_rec.execution_manifest_id}', got '{manifest.manifest_id}'."
                 )
@@ -515,7 +547,7 @@ class StatisticalValidationGate:
                 raise DataContractError(
                     f"Candidate trial '{trial_rec.trial_id}' manifest '{manifest.manifest_id}' execution_summary has no sharpe_ratio."
                 )
-            if abs(float(trial_rec.in_sample_sharpe) - float(manifest_sr)) > epsilon_sr:
+            if abs(float(rec_sharpe) - float(manifest_sr)) > epsilon_sr:
                 raise DataContractError(
                     f"Candidate trial '{trial_rec.trial_id}' ledger Sharpe ({trial_rec.in_sample_sharpe}) "
                     f"deviates from manifest execution summary Sharpe ({manifest_sr})."

@@ -132,10 +132,13 @@ def test_r3_return_series_sha256_integrity(
 def test_r3_canonical_p_value_and_input_hash_binding(sealed_r3_ledger: SearchTrialLedger) -> None:
     """Verify that canonical p-values and p_value_input_hash are verified and mathematically bound."""
     for trial in sealed_r3_ledger.trials:
+        trial_series_sha = trial.in_sample_return_series_sha256
+        trial_p_value = trial.p_value
+        assert trial_series_sha is not None and trial_p_value is not None
         expected_p_hash = SearchTrialRecord.compute_p_value_input_hash(
-            return_series_sha256=trial.in_sample_return_series_sha256,
+            return_series_sha256=trial_series_sha,
             config_sha256=trial.config_sha256,
-            p_value=trial.p_value,
+            p_value=trial_p_value,
             p_value_method=trial.p_value_method,
         )
         assert trial.p_value_input_hash == expected_p_hash, (

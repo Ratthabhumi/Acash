@@ -2,7 +2,7 @@
 
 **Document ID:** `docs/phase14/phase14_d5_d6_ratification_record.md`
 **Type:** Governance acceptance/freeze record (ONE record for this authorization).
-**Status:** `D5 = HUMAN-RATIFIED · PIT LINEAGE IN D5 SCOPE · D6 = HUMAN-RATIFIED`
+**Status:** `D5 = HUMAN-ACCEPTED · PIT LINEAGE IN D5 SCOPE · D6 = OPTION A IMPLEMENTED + VERIFIED · READY FOR HUMAN ACCEPTANCE — STOP`
 **Date:** 2026-09-09
 **Authority:** `./AGENTS.md`, `./phase14_d5_d6_decision_surface.md` (decision surface),
 `./phase14_d8b_acceptance_record.md`, `./phase14_evidence_bridge_ratification_D1_D9.md`,
@@ -21,8 +21,8 @@ S5                         = ACCEPTED
 Seam A Option A            = HUMAN-RATIFIED / ACCEPTED
 D2-A / D3 / D4 / D7        = HUMAN-RATIFIED
 D8-B                       = HUMAN-RATIFIED / ACCEPTED
-D5                        = HUMAN-RATIFIED   (this record)
-D6                        = HUMAN-RATIFIED   (this record)
+D5                        = HUMAN-ACCEPTED   (this record)
+D6                        = OPTION A IMPLEMENTED + VERIFIED · READY FOR HUMAN ACCEPTANCE (this record) — STOP
 D9                        = DEFERRED
 HYP_003                    = ABSENT
 R1                         = NOT STARTED
@@ -31,7 +31,7 @@ Production Orchestration   = ABSENT
 Trading                    = LOCKED
 Capital                    = $0.00
 features_manifest_hash    = UNRESOLVED
-HEAD                        = cff8960
+HEAD                        = 9037ce3
 NO COMMIT / NO PUSH
 ```
 
@@ -109,7 +109,16 @@ During the D6 implementation audit (Stage 2) the following was verified against 
   schema WITHOUT a schema change. Per the ratified rule, the agent STOPS and surfaces the minimum
   required schema decision rather than inventing semantics.
 - The authoritative decision request is recorded separately: `./phase14_d6_schema_decision_request.md`.
-- D5 (Stage 1) is NOT blocked by this finding and is implemented under this record per §2.
+- **RESOLVED (2026-09-09):** The human ratified **D6 Option A** following the Stage 1 audit:
+  - Per-trial status `EXECUTED_SUCCESSFULLY / FAILED / INVALID` (every census member is implicitly REGISTERED).
+  - Evidence fields become Optional; non-executed trials carry `None` evidence plus a non-empty deterministic
+    `failure_reason` (no fabricated performance, no `return = 0`, no row removal).
+  - K = frozen census = `|trials|` remains the invariant; failed/invalid trials remain represented in the census.
+  - `compute_ledger_digest()` binds the status + identity of every census member (ratified digest change).
+  - Statistical deep-return consumption over mixed censuses (`p_values`, empirical trial mean/variance)
+    FAILS CLOSED pending the human D6 statistical-semantics decision (Stage 7 artifact
+    `D6 STATISTICAL SEMANTICS DECISION REQUIRED`). No replacement DSR/Holm accounting is invented.
+  - D5 (Stage 1) is NOT blocked by this finding and is implemented under this record per §2.
 
 ## 6. Implementation surfaces created under this record
 
@@ -117,11 +126,17 @@ During the D6 implementation audit (Stage 2) the following was verified against 
 |---|---|---|
 | `src/acash/research/oos_provenance.py` | D5-A canonical OOS provenance: partition re-use, OOS event segment extraction, separate held-out OOS run, OOS evidence record, PIT attestation + fail-closed lineage verification | NEW |
 | `tests/unit/research/test_oos_provenance.py` | Adversarial D5 tests (separation, identity, boundaries, no IS-equity reuse, PIT fail-closed, determinism, gate-consumability) | NEW |
-| `docs/phase14/phase14_d6_schema_decision_request.md` | Minimum schema decision request for the D6 failed-trial invariant (STOP artifact) | NEW |
-| `src/acash/validation/schema.py`, `validation/gate.py`, `research/evidence_bridge.py`, `backtest/*` | NOT modified under this record | ⛔ |
+| `docs/phase14/phase14_d6_schema_decision_request.md` | Minimum schema decision request for the D6 failed-trial invariant (STOP artifact) — superseded by the human D6 Option A ratification (§5 RESOLVED) | RESOLVED |
+| `src/acash/validation/schema.py` | D6 Option A: `SearchTrialStatus` enum (3 values); Optional evidence fields; status-conditional before/after validators; `create_declared()`; digest binds status + failure_reason; fail-closed `p_values` / empirical mean/variance; `sealed_by_owner`; `seal(..., sealing_owner=...)` | RATIFIED MODIFICATION |
+| `src/acash/validation/gate.py` | D6 fail-closed evidence guards per trial-record column (type-level None narrowing; ZERO statistical change) | RATIFIED MODIFICATION |
+| `src/acash/validation/benchmarks/dgp_experiments.py` | D6-typed narrowing annotations on `in_sample_sharpe` consumers (no math change) | RATIFIED MODIFICATION |
+| `src/acash/research/census_seal_authority.py` | Minimum D6 sealing-owner authority: sole sanctioned `seal_census` (owner attestation + frozen-K `planned_trial_count` anchor) | NEW |
+| `tests/unit/validation/test_d6_failed_trial_census.py` | 23 adversarial D6 tests (status matrix, no-fabrication, digest binding/exclusion, K frozen, fail-closed accessors + gate, sealing authority, Evidence-Bridge-never-seals, persisted R3 artifact golden) | NEW |
+| `docs/phase8.5/ledgers/*.json`, `docs/phase8.5/manifests/{manifest_census,terminal_decision,r3_manifest}*.json` | Ratified digest migration: stored `ledger_digest` recomputed under the status-binding digest rule (digest-only JSON diffs) | RATIFIED MODIFICATION |
+| `src/acash/research/evidence_bridge.py`, `src/acash/backtest/*` | NOT modified (Evidence Bridge constructs records but never seals; no backtest/manifest redesign) | ⛔ |
 
-No existing source or test is modified by this authorization. No schema, gate, bridge, engine, or
-manifest change is made.
+The D5/D6 new work products of this authorization extend `docs/` + `src/` + `tests/` as listed above.
+No BacktestManifest, gate-threshold, features_manifest_hash, or qualification-threshold change is made.
 
 ## 7. Verification contract (to be executed)
 
@@ -179,3 +194,72 @@ the failed-trial status representation is BLOCKED pending the human schema decis
 - Methodological Caveats: OOS identity binding is enforced at the OOS-evidence-record layer because
   `BacktestManifest` digest redesign is forbidden. D6 failed-trial status representation is
   unresolved pending the human schema decision.
+
+---
+
+## 9. D6 Option A execution report (Stages 2-9, this round) — VERIFIED
+
+**Stage 2 — schema (ratified modification):** `src/acash/validation/schema.py` implements D6
+Option A exactly as ratified: 3-value `SearchTrialStatus` enum, single-authority
+`SEARCH_TRIAL_EVIDENCE_FIELDS`, Optional evidence fields, status-aware before-validator
+(FAILED/INVALID -> rejects all evidence + `in_sample_returns`, returns early), after-validator
+`validate_status_conditional_evidence` (full evidence iff EXECUTED_SUCCESSFULLY; None evidence +
+non-empty `failure_reason` otherwise), `create_declared()` factory, digest now binds per-trial
+`trial_status` + `failure_reason`, and fail-closed `p_values` / `get_empirical_sharpe_mean` /
+`get_empirical_sharpe_variance` over mixed censuses. `sealed_by_owner` operational metadata added;
+`seal(..., sealing_owner=...)` records it; BOTH excluded from `ledger_digest`.
+
+**Stage 2 guards (zero statistical change):** `gate.py` per-column loop adds five fail-closed
+`None` guards (`rec_sharpe`, `rec_p_value`, `rec_p_value_input_hash`, `rec_manifest_id`,
+`rec_series_sha256`) replacing usages; `dgp_experiments.py` adds 4 typed narrowing annotations.
+Digest migration: `data/manifests/research/` copies and `docs/phase8.5/` ledgers/manifests
+recomputed under the ratified digest rule (`stored == recomputed`).
+
+**Stage 4 — D6 adversarial tests:** `tests/unit/validation/test_d6_failed_trial_census.py` —
+**23 passed** (happy/golden executed + failed/invalid; boundary: forbidden evidence on FAILED/INVALID,
+invalid status string, `create_declared` rejects EXECUTED + blank reason; contradictory: executed
+with `failure_reason`, missing evidence, forged-replay tamper smuggling/stripping evidence; census-K
+frozen, digest determinism/content-dependency/permutation, sealing-metadata exclusion; fail-closed
+accessors + gate rejection on mixed census; sealing-owner authority incl. future-forward
+re-seal guard + `planned_trial_count` K anchor; Evidence-Bridge NEVER seals; persisted R3 ledger
+golden under the new digest).
+
+**Stage 6 — repository verification:**
+- `pytest` (full): **1990 passed, 1 skipped** (1967 baseline + 23 new D6 tests; no new failure).
+- `mypy src/ tests/`: **no issues found in 371 source files**.
+- Static scan of the diff: no `TODO`/`FIXME`/`PLACEHOLDER`; no magic floors introduced; only
+  pre-existing out-of-scope behaviors retained (`get_empirical_sharpe_mean` empty-census `return 0.0`
+  and `max(0.0, var)` — both exist in the baseline, flagged for a future human decision, NOT touched).
+- `git status` audit: only the surfaces in §6 are new/modified; `HEAD` unchanged at `9037ce3`.
+
+**Stage 7 — STOP artifact (inevitable):** `D6 STATISTICAL SEMANTICS DECISION REQUIRED`. Mixed
+censuses (any FAILED/INVALID member) cannot be consumed by DSR/Holm accounting without a human
+decision on how K is treated for `len(p_values)`, effective-K, and multi-gate dependence accounting.
+The implementation does NOT invent replacement DSR/Holm semantics; `p_values` and the empirical
+Sharpe consumers FAIL CLOSED with an explicit `DataContractError` naming this required decision.
+Gate evaluation of a mixed census is therefore rejected rather than silently weakened.
+
+**Stage 8 — negative-governance audit (this round):** verified ABSENT/UNCHANGED — HYP_003 (absent),
+R1 (NOT STARTED), ResearchReInceptionGate (NOT INVOKED), Production Orchestration (only the minimum
+D6 sealing-owner authority added; Evidence Bridge never seals), Phase 8.5 (no new economic
+decomposition), Alpha Qualification (not invoked), trading/broker/capital (locked / absent / $0.00),
+gate and qualification thresholds + `BacktestManifest` digest (unchanged),
+`features_manifest_hash` (UNRESOLVED, untouched), D9 (DEFERRED).
+
+**Stage 9 — acceptance record:** updated this record (Status, §1, §6, §9). `HEAD = 9037ce3`.
+**NO COMMIT. NO PUSH.**
+
+### D6 Verification Ledger (this round)
+- Implementation Status: COMPLETE (D6 Option A implemented + verified; D5-A intact).
+- Contract Enforcement: STRICT FAIL-CLOSED (status-conditional evidence, K frozen, no fabricated
+  performance/`return = 0`/row removal/silent floors; mixed-census consumption fails closed).
+- Mathematical Authority: CANONICAL SPEC + ratified D6 Option A (§3, §5 RESOLVED); no new
+  statistical DSR/Holm accounting introduced.
+- Local Test Suite: VERIFIED (1990 passed, 1 skipped).
+- Type Checker (MyPy): VERIFIED (371 files clean).
+- Remote CI Status: PENDING / NOT AVAILABLE.
+- Methodological Caveats: mixed-census consumption remains blocked by the Stage 7
+  `D6 STATISTICAL SEMANTICS DECISION REQUIRED` artifact. Pre-existing empty-census `return 0.0`
+  and float-variance `max(0.0, var)` floor in the empirical accessors were NOT in scope and are
+  flagged for a future human decision. `data/manifests/research/` copies are gitignored local
+  artifacts kept byte-identical to the tracked `docs/phase8.5/` twins.
