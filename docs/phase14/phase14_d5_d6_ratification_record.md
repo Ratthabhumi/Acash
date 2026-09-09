@@ -2,7 +2,7 @@
 
 **Document ID:** `docs/phase14/phase14_d5_d6_ratification_record.md`
 **Type:** Governance acceptance/freeze record (ONE record for this authorization).
-**Status:** `D5 = HUMAN-ACCEPTED · PIT LINEAGE IN D5 SCOPE · D6 = OPTION A IMPLEMENTED + VERIFIED · READY FOR HUMAN ACCEPTANCE — STOP`
+**Status:** `D5 = HUMAN-ACCEPTED · PIT LINEAGE IN D5 SCOPE · D6 = OPTION A HUMAN-ACCEPTED · MIXED-CENSUS EVALUATION FAIL-CLOSED · PHASE 5 READINESS PREFLIGHT — STOP`
 **Date:** 2026-09-09
 **Authority:** `./AGENTS.md`, `./phase14_d5_d6_decision_surface.md` (decision surface),
 `./phase14_d8b_acceptance_record.md`, `./phase14_evidence_bridge_ratification_D1_D9.md`,
@@ -22,17 +22,21 @@ Seam A Option A            = HUMAN-RATIFIED / ACCEPTED
 D2-A / D3 / D4 / D7        = HUMAN-RATIFIED
 D8-B                       = HUMAN-RATIFIED / ACCEPTED
 D5                        = HUMAN-ACCEPTED   (this record)
-D6                        = OPTION A IMPLEMENTED + VERIFIED · READY FOR HUMAN ACCEPTANCE (this record) — STOP
+D6                        = HUMAN-ACCEPTED — OPTION A ACTIVE: frozen K / FAILED+INVALID stay in census /
+                             no fabricated evidence / mixed-census evaluation FAIL CLOSED (this record §10)
+D6 statistical semantics  = MIXED-CENSUS EVALUATION FAIL CLOSED; additional mixed/incomplete-census
+                             methodology NOT REQUIRED FOR CURRENT OPERATION / OUT OF SCOPE (§10)
 D9                        = DEFERRED
 HYP_003                    = ABSENT
 R1                         = NOT STARTED
 ResearchReInceptionGate    = NOT INVOKED
-Production Orchestration   = ABSENT
+Production Orchestration   = ABSENT (Phase 5 readiness preflight:
+                             ./phase5_production_orchestration_readiness.md)
 Trading                    = LOCKED
 Capital                    = $0.00
-features_manifest_hash    = UNRESOLVED
-HEAD                        = 9037ce3
-NO COMMIT / NO PUSH
+features_manifest_hash    = UNRESOLVED (unchanged; dependency reported in Phase 5 readiness doc)
+HEAD                        = 649dd50 (D6 Option A implementation commit; pushed to origin/main)
+NO COMMIT / NO PUSH (this acceptance + preflight round)
 ```
 
 ## 2. Ratified D5 decision
@@ -263,3 +267,72 @@ gate and qualification thresholds + `BacktestManifest` digest (unchanged),
   and float-variance `max(0.0, var)` floor in the empirical accessors were NOT in scope and are
   flagged for a future human decision. `data/manifests/research/` copies are gitignored local
   artifacts kept byte-identical to the tracked `docs/phase8.5/` twins.
+
+## 10. D6 Option A — HUMAN ACCEPTANCE (2026-09-09)
+
+The human has explicitly ratified the following decision verbatim: **"I ACCEPT D6 Option A."**
+
+```text
+The declared/pre-registered census K remains frozen.
+FAILED and INVALID trials remain members of the census.
+FAILED and INVALID trials must not receive fabricated statistical evidence.
+Mixed-census statistical evaluation remains fail-closed.
+Final statistical semantics for DSR, Holm, and effective-K for mixed/incomplete censuses are
+NOT REQUIRED FOR CURRENT OPERATION and are deferred unless a future explicit requirement requires
+statistical evaluation of such a census.
+The D6 sealing authority is accepted as governance-enforced, not capability-enforced.
+D6 Option A is therefore ACCEPTED as the current operational governance/safety semantics.
+```
+
+**Terminology (mandatory per mandate):** this record does NOT state "final DSR/Holm/effective-K
+semantics = approved". It records only:
+
+- **"Mixed-census statistical evaluation = fail-closed."**
+- **"Additional statistical methodology for evaluable mixed/incomplete censuses = not required for
+  current operation; out of scope unless a future explicit requirement requires it."**
+
+Options B/C/D/E of the statistical-semantics decision surface are **NOT selected**; no new D6
+statistical methodology is created; DSR, Holm, and effective-K are **NOT modified**.
+
+**Frozen operational semantics:**
+- K = frozen declared/pre-registered census size. `FAILED ∈ census`. `INVALID ∈ census`.
+- K MUST NOT silently become successful-count. Example: K = 20 (16 SUCCESS + 2 FAILED + 2 INVALID)
+  ⇒ K = 20, NOT 16.
+- FAILED/INVALID MUST NOT be represented as: return = 0, Sharpe = 0, p = 1, neutral return, synthetic
+  evidence, imputed evidence, or zero-filled evidence.
+- Operational behavior: MIXED CENSUS → NO COMPLETE STATISTICAL EVIDENCE → FAIL CLOSED.
+
+**Acceptance scope (all verified at HEAD `649dd50`):**
+- `SearchTrialStatus` model (`EXECUTED_SUCCESSFULLY / FAILED / INVALID`)
+- FAILED/INVALID census membership
+- Frozen K invariant
+- No fabricated evidence
+- Mixed-census fail-closed behavior
+- Digest binding (`trial_status` + `failure_reason`)
+- Evidence validation (status-conditional)
+- Census sealing-owner governance mechanism
+- Evidence Bridge non-sealing behavior
+
+**Explicitly NOT authorized by this acceptance:** HYP_003 · R1 · candidate admission · statistical
+research execution · paper trading · live trading · capital · broker connectivity · strategy
+admission · Phase 13 Step 8.
+
+**Sealing-authority caveat (accepted verbatim, no implementation change):**
+"D6 sealing authority is governance-enforced, not capability-enforced." `SearchTrialLedger.seal()`
+remains directly callable; `sealed_by_owner` is metadata/governance evidence, not a technical
+capability boundary. No hardening was applied (e.g. mandatory `expected_k`, gate-side owner
+verification) because none was authorized.
+
+**D5 separation:** D6 acceptance does NOT mean D5 is fully resolved. D5 remains a separate
+workstream with known follow-ups: (1) PIT attestation vs actual point-in-time availability evidence;
+(2) OOS strategy actor state isolation; (3) run-level identity vs BacktestManifest identity.
+
+**Implementation untouched:** `schema.py`, `gate.py`, `deflated_sharpe.py`, `multiple_testing.py`,
+`cpcv.py`, `overfitting.py`, `census_seal_authority.py`, `evidence_bridge.py`, D6 tests, and
+statistical math were NOT modified by this acceptance. This round changed documentation only.
+
+**Phase 5 transition:** D6 acceptance closes the current D6 decision surface and the previously
+deferred mixed-census methodology is demoted to a future *contingent* (only if a future explicit
+requirement demands statistical evaluation of an incomplete/mixed census). The next authorized
+surface — Phase 5 production research/evidence-orchestration readiness — is preflighted in
+`./phase5_production_orchestration_readiness.md` (READ-ONLY; no implementation).
