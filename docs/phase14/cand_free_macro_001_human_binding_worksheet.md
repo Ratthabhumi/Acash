@@ -333,6 +333,331 @@ Only Human Governance converts the worksheet into a frozen pre-registration.
 
 ---
 
+## J. Recorded Human Decisions (ROUND 0 - ROUND 3B)
+
+Authority: **HUMAN GOVERNANCE** (recorded verbatim from Human's explicit statements on 2026-09-10; the agent
+transcribes decisions only and does not fabricate any signature, date, or approval. These are binding
+decisions toward pre-registration; none of them individually constitutes a full freeze or an empirical
+authorization.)
+
+### ROUND 0 - Group A batch confirmation: CONFIRMED
+
+```
+CONFIRM ROUND 0 - A1-A5
+```
+
+| Batch ID | Dimension | Confirmed value (frozen starting value) |
+|----------|-----------|------------------------------------------|
+| A1 | D1 Event universe | FOMC + CPI + NFP, one shared protocol |
+| A2 | D2 Timestamp/timezone | Official release timestamp; primary official source; US Eastern Time (ET); archive release times at retrieval |
+| A3 | D5 Direction/hypothesis | PRIMARY = two-sided deviation; statistical/descriptive object (NOT a directional trade claim) |
+| A4 | D6 Instrument | SPX = primary research series; SPY = robustness/implantation proxy ONLY; separate statistical vs tradability evidence |
+| A5 | D13 Multiple-testing semantics | Adopt ratified D6 canonical semantics: frozen census K; FAILED/INVALID remain; mixed census -> FAIL CLOSED; no new DSR/Holm/effective-K |
+
+### ROUND 1 - D3 Event Window + D4 Return Definition
+
+- **D3 = W-B** — event-day close -> next trading-day close (post-event window).
+  Human rationale: W-A contains pre-announcement movement; W-C mixes pre + post mechanisms; W-D is
+  conceptually best for event-time identification but intraday data is unavailable at $0 daily granularity.
+- **D4 = R-EC** — `R_event = Close(next) / Close(event) - 1` (1-day post-event return).
+- **BINDING CAVEAT (Human):** W-B/R-EC measures the **post-event next-trading-day response**, NOT an
+  immediate announcement reaction. Pre-registration MUST describe the object as post-event
+  next-trading-day response; it must NEVER be labeled "announcement-day return" or "immediate market
+  reaction", because the intraday announcement interval is not directly observed in daily data.
+
+### ROUND 2 - D7 Baseline + D8 Overlap
+
+- **D7 = B-A** — All non-event trading days.
+  Baseline return: `Close(t) -> Close(next)` over non-event trading days (same 1-trading-day horizon as the
+  event return, per W-B).
+  Purge rule: event day + next trading day (window-adjacent per W-B) are excluded from the baseline so no
+  control observation sits inside an event window.
+- **D8 = O-2** — Drop overlapping event windows (later event dropped by chronological event timestamp).
+  Human rationale: O-1 would allow stacked observations needing an aggregation/tie policy (extra
+  specification complexity); O-3 treats cluster-by-family as an inference/dependence treatment, not an
+  observation-selection rule.
+- **Deterministic rule required:** when event windows overlap, apply O-2 and drop the later event in event
+  timestamp order. **Tie-break rule for equal timestamps MUST be pre-registered before validation** and
+  must NOT be chosen after seeing data.
+- **No double-counting CONFIRMED:** "No double-counting without an explicit pre-registered rule."
+- **BINDING CAVEAT (Human):** O-2 reduces the overlapping-observation problem; it does NOT imply IID.
+  Residual temporal dependence (e.g., FOMC events across quarters) and common market conditions across
+  macro events remain. Inference/cluster/HAC treatment is deferred to ROUND 3.
+
+### ROUND 3A - Parameter Grid (D10) + K Derivation (D11)
+
+Human confirmed ROUND 3A as a single batch (no re-confirmation requested):
+
+| Dim | Decision | Confirmed value |
+|-----|----------|-----------------|
+| G-1 | Grid structure | **G-1a crossed single grid** — `EventFamily = {FOMC, CPI, NFP}` one shared protocol |
+| G-2 | Window | **G-2a W-B only** — `Window = {W-B}` single primary window; no robustness windows in the grid |
+| G-3 | Baseline | **G-3a purge = event-day + next-trading-day only** — `Baseline = {B-A}` no extra buffer |
+| G-4 | Instrument | **G-4b** — SPX = formal primary in census; SPY = robustness OUTSIDE formal K |
+| G-5 | Cost | **SKIP -> ROUND 4 (D9)** — not decided now |
+| G-6 | Robustness membership | **G-6b** — robustness entries OUTSIDE formal census |
+| G-7 | Sensitivity | **G-7a** — sensitivity outside formal census, declared pre-run |
+
+**K DERIVATION (D11, derived — never hand-picked):**
+
+Frozen formal grid `CensusGrid = EventFamily (x) Window (x) Baseline (x) Instrument_in_census`:
+
+```
+EventFamily = {FOMC, CPI, NFP}   -> 3
+Window      = {W-B}              -> 1
+Baseline    = {B-A}              -> 1
+Instrument  = {SPX}              -> 1   (SPY robustness OUTSIDE formal census)
+Cost_SPY    = {}                 -> deferred (not in census this round)
+```
+
+```
+K = |CensusGrid| = 3 (x) 1 (x) 1 (x) 1 = 3 DECLARED GRID CELLS
+```
+
+- K is the **size of the frozen declared census** (grid-cell trial count), NOT the number of realized
+  events/observations. `[VERIFIED FACT — ratification record §10; D6 surface §A5; surface §19]`
+- Declared cells (each a trial on the sealed census):
+  1. `FOMC / W-B / B-A / SPX`
+  2. `CPI  / W-B / B-A / SPX`
+  3. `NFP  / W-B / B-A / SPX`
+- D6 ratified semantics (unchanged): `EXECUTED_SUCCESSFULLY`, `FAILED`, `INVALID` all remain census
+  members; K does not silently shrink to the success count; FAILED/INVALID are never imputed (no return=0 /
+  Sharpe=0 / p=1 / synthetic); mixed census -> statistical evaluation FAILS CLOSED; no new DSR/Holm/
+  effective-K semantics added. `[VERIFIED FACT — ratification record §10; D6 surface §A5]`
+- Verbatim caveat from rationale: "Do NOT confuse K with number of realized events/observations" — the
+  per-cell realized observation count is a separate empirical quantity to be recorded at run time, not
+  part of the sealed K.
+
+### ROUND 3B - Statistical Protocol (D12) - CONFIRMED DECISIONS
+
+Human confirmed the following ROUND 3B decisions as a batch (S-2 and S-9 NOT confirmed yet):
+
+| S# | Item | Confirmed value |
+|----|------|-----------------|
+| S-1 | Statistical object | **(a) Event-study object** — two-sided post-event deviation vs baseline; NOT forced into canonical Phase-5 Sharpe machinery |
+| S-3 | Null hypothesis | `H0: E[D] = 0` vs `H1: E[D] != 0` (two-sided deviation) |
+| S-4 | Sidedness | **(b) two-sided test + descriptive sign only** (sign is descriptive, NOT tradable) |
+| S-5 | Clustering unit | **(c) Family x calendar** (two-way cluster: event family + time block) |
+| S-6 | HAC / dependence | **(a) Cluster-robust SE** (by S-5 unit); O-2 does NOT imply IID — residual dependence addressed here |
+| S-7 | T_eff | **(c) post-O-2 T_eff** — formula MUST be pre-registered (open: see current decision surface; not yet bound) |
+| S-8 | Missing observations | **(b) shift per W-B + (c) INVALID fail-closed**; imputation (0/neutral/p=1/SUCCESS) PROHIBITED |
+| S-10 | Inference sample | **IS-based inference**; exact IS/OOS dates deferred to ROUND 4 |
+| S-11 | Gate-6 machinery | **(b) ratified D6 subset** — census + fail-closed + two-sided test; NO new DSR/Holm/PBO/CPCV/effective-K |
+
+Blinding reminder: `S-2` (test statistic) and `S-9` (minimum sample size) remain
+`HUMAN DECISION REQUIRED` — NOT recorded as confirmed.
+
+### Status after ROUNDS 0-3B
+
+- Recorded: A1-A5 confirmed; D3 = W-B; D4 = R-EC; D7 = B-A; D8 = O-2; no-double-counting confirmed;
+  G-1a/G-2a/G-3a/G-4b/G-6b/G-7a confirmed; G-5 deferred to ROUND 4; S-1(a)/S-3/S-4(b)/S-5(c)/S-6(a)/
+  S-7(c direction)/S-8(b+c)/S-10(IS-based)/S-11(b) confirmed; S-2 + S-9 formula + S-9 minimum UNRESOLVED.
+- **K = 3 declared grid cells** (derived from the frozen Cartesian grid, per D6/D11).
+- Freeze checklist: **Parameter grid (D10), K (D11), Statistical protocol (D12) are now BOUND but still
+  counted `0/26 FROZEN`** — binding recorded here is not the Draft Freeze Candidate; full freeze occurs
+  after all rounds + Group C + anti-HARKing review.
+- PRE-REGISTRATION = **NOT FULLY FROZEN**; EMPIRICAL VALIDATION = **NOT AUTHORIZED**; BACKTEST = **NOT
+  AUTHORIZED**.
+- Candidate registry, F-1, HYP_003, R1, Phase 5/6, trading/capital: **UNCHANGED**.
+
+---
+
+## K. CONTINUATION AUDIT — S-2 / S-7 / S-9 CHECKOUT (2026-09-10)
+
+**Object:** Continuation of MACRO-001 specification work from the ROUNDS 0-3B state, resolving all
+derivable/non-Human specification work around S-2, S-7, S-9, then evaluating the Round 4 entry
+condition. Documentation-only; no empirical work, no data retrieval, no download, no statistics.
+`[VERIFIED FACT — this section's contract]`
+
+**Status classification:**
+```
+[DOCUMENTATION-ONLY]
+[NON-EMPIRICAL]
+[NON-AUTHORIZING]
+[RESEARCH CHECKPOINT - NOT A FREEZE, NOT AN AUTHORIZATION]
+```
+
+### K.1 MEC-0011 Closeout Verification (Phase A)
+
+- `docs/phase14/mec_0011_research_audit_closeout.md` present and classified
+  `[RESEARCH CHECKPOINT]` `[SOURCE / PROVENANCE AUDIT]` `[NON-AUTHORIZATION RECORD]`. `[VERIFIED FACT]`
+- MEC-0011 status confirmed: `CLOSED AS A RESEARCH CHECKPOINT` / `NOT VALIDATED` / `NOT A CANDIDATE` /
+  `NOT HYP_003` / `NOT AUTHORIZED FOR EMPIRICAL VALIDATION`. `[VERIFIED FACT — closeout §12]`
+- MEC-0011 is a PARALLEL research track. It is NOT reopened. No MEC-0011 assumption is imported into
+  MACRO-001 by this audit. `[VERIFIED FACT — this section]`
+- The closeout file is NOT modified. `[VERIFIED FACT — this run]`
+
+### K.2 MACRO-001 Current State Confirmed (Phase B)
+
+- Frozen: ROUND 0 A1-A5; D3 = W-B; D4 = R-EC; D7 = B-A; D8 = O-2; no-double-counting confirmed;
+  G-1a/G-2a/G-3a/G-4b/G-6b/G-7a confirmed; G-5 deferred; S-1(a)/S-3/S-4(b)/S-5(c)/S-6(a)/S-7(c direction)/
+  S-8(b+c)/S-10(IS-based)/S-11(b) confirmed. `[VERIFIED FACT — worksheet §J]`
+- **K = 3** frozen declared grid cells (FOMC/CPI/NFP x W-B x B-A x SPX). K = grid cardinality, NOT
+  realized event count. `[VERIFIED FACT — worksheet §J ROUND 3A]`
+- **S-2** (test statistic): NOT confirmed, remains open. `[VERIFIED FACT — worksheet §J ROUND 3B]`
+- **S-7** (post-O-2 T_eff formula): direction confirmed, formula open. `[VERIFIED FACT — worksheet §J ROUND 3B]`
+- **S-9** (candidate-specific minimum requirement): NOT confirmed, remains open. `[VERIFIED FACT — worksheet §J ROUND 3B]`
+- ROUND 4 (IS/OOS/blind/cost), ROUND 5 (kill/PASS-FAIL-INVALID): NOT STARTED. `[VERIFIED FACT — this run]`
+
+### K.3 Quantity Distinction (must be preserved, never conflated)
+
+The following are SEPARATE quantities in this candidate's design. Each is recorded, never merged:
+
+| Quantity | Meaning | Current binding state |
+|----------|---------|------------------------|
+| K | DECLARED grid-cell trial count (sealed census) | **3** (FROZEN) |
+| Realized event count | raw count of candidate events for a cell in the inference window | NOT recorded (no empirical work) |
+| Valid event count | realized events surviving O-2 overlap drop + purge, with no INVALID | NOT recorded; rule derivable (K.5) |
+| N_valid | per-cell minimum event requirement (S-9) | **OPEN - HUMAN DECISION REQUIRED** |
+| T_eff | post-O-2 effective independent observations (S-7) | **OPEN - HUMAN DECISION REQUIRED** |
+| Fixed-horizon HAC unit | inference dependence treatment (S-5/S-6) | cluster unit = family x calendar; time-block granularity **OPEN** |
+
+No threshold values are invented anywhere in this section. `[VERIFIED FACT — this section]`
+
+### K.4 S-2 RESULT — TEST STATISTIC (Phase C)
+
+**Recorded Round 3B starting point:** standardized two-sided t-test on the mean deviation.
+`[VERIFIED FACT — Human's recorded recommendation; this audit verifies it, does not replace it]`
+
+**Derivable components (consistent with confirmed S-1/S-3/S-4/S-6/S-10):**
+- Deviation object (S-1 event-study object): `D_i = R_EC(i) - mu_b_c` per cell c, where
+  `R_EC(i) = Close(next trading day)/Close(event day) - 1` (D4 = R-EC) and `mu_b_c` = mean of the
+  B-A baseline 1-trading-day returns `Close(t+1)/Close(t) - 1` over non-event, non-purged baseline days
+  in the IS sample for the same cell. `[MODEL INFERENCE — concatenation of frozen decisions]`
+- Test statistic: `t = mean(D) / SE_cluster_robust(mean(D))`, two-sided, per declared cell (K=3
+  independent trials on the sealed census). `[MODEL INFERENCE — S-3/S-4/S-6]`
+- Alternative: `H1: E[D] != 0`; sign reported descriptively only, never as a trade direction
+  (S-3/S-4; registry §104). `[VERIFIED FACT]`
+- Inference sample: IS-based only (S-10); exact IS dates deferred to ROUND 4. `[VERIFIED FACT]`
+- Cluster-robust SE uses the S-5 cluster unit (family x calendar). `[VERIFIED FACT — S-5/S-6]`
+
+**IRREDUCIBLE HUMAN CHOICE (S-2 residual):** the t-test's rejection rule is not fully bound. Which
+reference distribution / critical-value convention converts the standardized statistic into an
+acceptance decision is NOT pinned by any ratified record (D6 pins census-K and fail-closed semantics;
+S-11(b) explicitly excludes gate-6 DSR machinery; the candidate is NOT routed to Phase-5 Sharpe
+machinery per S-1(a)). The unresolved S-2 sub-choice is:
+
+- small-sample cluster-robust reference distribution for the two-way cluster:
+  (a) asymptotic standard normal, (b) t with G-1 degrees of freedom (number of clusters - 1),
+  (c) t with an effective-degrees-of-freedom convention (e.g., Cameron-Gelbach-Miller-type), or
+  (d) another pre-registered convention chosen by Human.
+
+Additionally the S-5 calendar-block granularity (which determines the number of clusters and therefore
+the SE and df) is itself open (see K.5). The significance level alpha is NOT an S-2 item: it is
+already routed to ROUND 5 (D20 acceptance thresholds) in the binding schedule. `[MODEL INFERENCE —
+reconciliation of confirmed S-items; no new estimator or test introduced]`
+
+**Conclusion S-2:** test-statistic DEFINITION is derivable; the SMALL-SAMPLE CRITICAL-VALUE/
+DF CONVENTION is an irreducible Human choice.
+`HUMAN DECISION REQUIRED` — S-2 is NOT frozen.
+
+### K.5 S-7 RESULT — POST-O-2 T_eff (Phase D)
+
+**Derivable structure (from confirmed decisions only):**
+- T_eff is computed AFTER O-2 overlap dropping (later event dropped by chronological event timestamp)
+  and AFTER purge/label exclusion (D8=O-2; D7=B-A purge event-day + next-trading-day). `[VERIFIED FACT]`
+- T_eff is computed ONLY from valid observations; FAILED/INVALID observations are never imputed
+  (S-8; ratification D6). Any INVALID input to a cell fails the cell closed - no statistics. `[VERIFIED FACT]`
+- T_eff is distinct from K (declared census size) and from N_valid (S-9 minimum); the integrity
+  chain `realized events >= valid events >= T_eff` is invariant, with equality only under full
+  independence after O-2. `[MODEL INFERENCE]`
+- T_eff must account for the fact that O-2 does NOT imply IID (residual temporal dependence and common
+  market conditions across macro events remain). `[VERIFIED FACT — worksheet §J ROUND 2 caveat]`
+- Cluster-robust inference (S-6(a)) carries the dependence treatment; T_eff is the effective
+  observation count used to describe the sample and guard power, not a second estimator. `[MODEL INFERENCE]`
+
+**IRREDUCIBLE HUMAN CHOICES (S-7):**
+1. **S-5 calendar-block granularity** was never bound: the S-5(i) confirmation "Family x calendar"
+   does not fix the time-block size (yearly / quarterly / monthly / other). This block size drives the
+   cluster count, the cluster-robust SE, AND the number of independent effective blocks. It is a
+   genuine Human choice; the agent does not select it.
+2. **T_eff formula convention**: without a pre-registered dependence-adjustment convention, T_eff is
+   not uniquely determined (e.g., block-count convention vs variance-ratio convention vs
+   `T_eff = N_valid` under cluster-robust SE). This is a genuine Human choice.
+
+**NOT IMPORTED:** the F-1-frozen `T_eff >= 25` / `N_valid >= 250` thresholds
+(`f1_d1_blocker_resolution.md` §, `f1_d1_free_data_feasibility.md` §, ratified N/A) are F-1-specific
+and are NOT binding on MACRO-001; no existing MACRO-001 binding imports them. They are listed here only
+to record the explicit non-import. `[VERIFIED FACT — F-1 docs; worksheet §J]`
+
+**Conclusion S-7:** the T_eff structural chain is derivable; the calendar-block granularity and the
+T_eff formula convention are irreducible Human choices.
+`HUMAN DECISION REQUIRED` — S-7 is NOT frozen.
+
+### K.6 S-9 RESULT — CANDIDATE-SPECIFIC MINIMUM REQUIREMENT (Phase E)
+
+**The five layers are preserved and NOT conflated (doctrine separation):**
+1. Statistical validity/readiness (pre-registration completeness) - NOT yet reached (S-2/S-7/S-9 open).
+2. Candidate promotion criteria (registry) - unchanged; `CAND-FREE-MACRO-001` remains `HUMAN_REVIEW_REQUIRED`.
+3. Phase 6 gate criteria (DSR >= 0.95, MinTRL, Holm-Bonferroni FWER, PBO < 0.25, curvature, OOS retention
+   SR_OOS >= 0.50*SR_IS) - canonical for the return-series path (`ROADMAP.md` Phase 6); NOT applicable to
+   this candidate's primary test, because S-11(b) explicitly adopted the D6 subset with NO new
+   DSR/Holm/PBO/CPCV/effective-K. `[VERIFIED FACT — worksheet §J S-11(b); ROADMAP Phase 6]`
+4. R1 authorization - NOT STARTED; orthogonal to S-9.
+5. Trading authorization - LOCKED; orthogonal to S-9.
+
+**Why S-9 is not derivable:** no ratified record fixes a per-cell event-count minimum for an
+event-study object at $0 daily granularity; the F-1 thresholds are F-1-specific (non-import, K.5); the
+Phase 6 minima cannot be applied to a non-Sharpe event-study object (S-11(b)). A per-cell minimum is a
+research-design judgment for Human. `[MODEL INFERENCE]`
+
+**SMALLEST DECISION SURFACE (presented for Human; agent does NOT select):**
+| ID | Item | Options |
+|----|------|---------|
+| Q-1 | Per-cell minimum valid post-O-2 events | (a) none required (evaluate whatever valid count exists, subject to power caveat) / (b) a Human-specified positive minimum / (c) other pre-registered rule. **No numeric value is proposed here.** |
+| Q-2 | Cell disposition if below minimum | (a) FAIL (executed, acceptance not met) / (b) INVALID (integrity/feasibility failure) / (c) deferred with census preserved. Must respect D6 semantics; INVALID is NOT negative evidence; FAILED/INVALID remain census members; mixed census fails closed. |
+| Q-3 | Scope of the minimum | (a) one rule shared by all three family cells / (b) per-family rules. Family-specific minima must be pre-registered, not derived post-hoc. |
+| Q-4 | Fixed before results | yes - any minimum/rule is fixed in the pre-registration BEFORE empirical execution; selection after seeing counts is prohibited (registry §195-202). |
+
+**Conclusion S-9:** not derivable; Q-1..Q-4 are irreducible Human choices.
+`HUMAN DECISION REQUIRED` — S-9 is NOT frozen.
+
+### K.7 ROUND 4 / ROUND 5 / FREEZE — ENTRY EVALUATION (Phases F/G/H)
+
+- ROUND 4 entry condition (per continuation policy): ROUND 4 may be entered only if S-2, S-7, S-9 are
+  either fully derivable OR already Human-bound. **NOT SATISFIED** (K.4-K.6 leave irreducible Human
+  choices). ROUND 4 is therefore NOT entered in this run. `[VERIFIED FACT — this section]`
+- ROUND 5: depends on ROUND 4 completion per the binding schedule; NOT reached. `[VERIFIED FACT]`
+- Anti-HARKing audit and final freeze audit: require a COMPLETE Draft Freeze Candidate; the
+  pre-registration is not frozen (checklist 0/26 bound); NOT reached. `[VERIFIED FACT]`
+- No freeze is executed, no authorization is granted, no empirical step is recommended by this section.
+
+### K.8 GOVERNANCE BOUNDARY — STOP
+
+```
+[HUMAN DECISION REQUIRED]
+```
+
+Reached at the S-2 / S-7 / S-9 checkout. The exact unresolved items:
+1. **S-2**: small-sample cluster-robust critical-value/df convention for the standardized two-sided
+   t-test on the mean deviation (and its dependency on the S-5 time-block granularity).
+2. **S-7**: S-5 calendar-block granularity + post-O-2 T_eff formula convention (non-import of
+   F-1 thresholds confirmed).
+3. **S-9**: per-cell minimum/rule (Q-1..Q-4) - no value invented, no rule selected.
+
+These items precede ROUNDS 4-5 and the Draft Freeze Candidate in the binding schedule (worksheet §F).
+STOP here. No Round 4, no Round 5, no freeze audit, no anti-HARKing sign-off, no empirical step, no
+authorization. `[VERIFIED FACT — this section's contract]`
+
+### K.9 CONFIRMATIONS (this run)
+
+- No empirical validation. No backtest. No data download. No statistics computed. `[VERIFIED FACT]`
+- No HYP_003. No R1. No ResearchReInceptionGate. No gate change. No trading. Capital $0.00. `[VERIFIED FACT]`
+- No F-1 threshold imported. No MEC-0011 assumption imported. No DXY/ETF/futures substitution. No
+  D6/D8-B/OOS/Phase-6 re-design. K = 3 unchanged. Grid unchanged. `[VERIFIED FACT]`
+- Only this worksheet (designated live binding document) is modified by this continuation. `[VERIFIED FACT]`
+
+### Continuation Verification Ledger
+- Implementation Status: COMPLETE (documentation-only continuation audit appended to the live binding worksheet; no code/test change)
+- Contract Enforcement: STRICT FAIL-CLOSED - no Group-B item silently resolved; no value invented; no threshold proposed; no path selected
+- Mathematical Authority: CANONICAL SPEC / RATIFIED RECORDS referenced; derivation is `[MODEL INFERENCE]` from frozen decisions only
+- Local Test Suite: NOT RUN (docs-only)
+- Type Checker (MyPy): NOT RUN (docs-only)
+- Remote CI Status: NOT APPLICABLE
+- Methodological Caveats: S-2/S-7/S-9 remain HUMAN DECISION REQUIRED; ROUNDS 4-5 gated off because the entry condition is unmet; the F-1 `T_eff >= 25`/`N_valid >= 250` thresholds and Phase 6 gate minima are recorded as canonical-but-NOT-applied, not imported; everything in this section is pre-registration-preservation work, not a freeze or an authorization.
+
+---
+
 ### Verification Ledger
 - Implementation Status: **COMPLETE** (documentation-only compression worksheet; no code/test change).
 - Contract Enforcement: **STRICT FAIL-CLOSED** — no GROUP-B item silently resolved; no value invented; K marked derived (never hand-picked); no `APPROVED/FROZEN/ACCEPTED` written where not canonical.
