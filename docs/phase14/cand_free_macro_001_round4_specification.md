@@ -2,9 +2,10 @@
 
 ## 0. Document Status
 
-- Classification: **[ROUND 4 SPECIFICATION PARTIAL - UPDATED POST-RATIFICATION]** - documentation-only
+- Classification: **[ROUND 4 SPECIFICATION - POST TR/CA HUMAN RATIFICATION]** - documentation-only
   derivation of all structurally derivable Round 4 items. D14/D15/D16 + EX + CO are Human-BOUND via
-  worksheet Section O; TR and CA remain genuinely Human-open (canonical definitions absent).
+  worksheet Section O; TR-1 is HUMAN-RATIFIED/BOUND; CA-1 is HUMAN-RATIFIED at the DECISION level with
+  its SOURCE-BINDING FIELD recorded as an UNRESOLVED PROVENANCE FIELD (CA-1 CRITICAL SOURCE RULE FIRED).
 - Nature: pre-registration-preservation work. No authorization is granted by this document.
 - Effective date: 2026-09-10 (environment date).
 - Non-ASCII: none (ASCII-only file).
@@ -19,9 +20,12 @@
 [NON-AUTHORIZING]
 [D14/D15/D16 BOUND - IS 2013-12-01->2021-12-31 / OOS 2022-01-01->2024-12-31 / BLIND 2025-01-01->2026-09-10]
 [EX BOUND] [CO BOUND (SPY cost DEFERRED)]
-[HUMAN DECISION REQUIRED - TR (tie-break secondary key)]
-[HUMAN DECISION REQUIRED - CA (authoritative trading-calendar/session source)]
-[ROUND 5 NOT REACHED]
+[TR-1 BOUND - secondary key (scheduled-calendar date ASC, family order ASC); family order CPI < NFP < FOMC]
+[CA-1 HUMAN-RATIFIED - DECISION level: NYSE official calendar + confirmed session semantics]
+[CA-1 SOURCE-BINDING FIELD = UNRESOLVED PROVENANCE - authoritative NYSE calendar URL/versioning/archive
+   identifier absent from repo/canonical sources; NOT invented; Human must supply]
+[ROUND 4 BLOCKED - exact blocker: CA-1 source-binding field]
+[ROUND 5 NOT ENTERED]
 ```
 
 ## 1. Entry Audit (ROUND 4 entry condition - MET)
@@ -46,7 +50,7 @@
 | Event inclusion/exclusion | PRESERVED (A1); EX edge rule **BOUND** (official-calendar admission) | worksheet O.4; readiness 11.1 |
 | Event timestamps / timezone | PRESERVED (A2: official release timestamp, primary official source, US ET, archived) | worksheet J ROUND 0 |
 | Event collision handling | PRESERVED (D8 = O-2: drop later event by chronological event timestamp) | worksheet J ROUND 2 |
-| Deterministic ordering / tie-break | **HUMAN CHOICE - TR OPEN** [HUMAN DECISION REQUIRED] | worksheet O.3; canonical secondary key absent |
+| Deterministic ordering / tie-break | **BOUND - TR-1** (HUMAN-RATIFIED: secondary key = (scheduled-calendar date ASC, family order ASC); family order = CPI < NFP < FOMC, applied after A2) | worksheet O.3 |
 | Purge | PRESERVED (G-3a: event-day + next trading day) | worksheet J ROUND 3A |
 | Return construction | PRESERVED (D4 = R-EC) | worksheet J ROUND 1 |
 | Baseline | PRESERVED (D7 = B-A) | worksheet J ROUND 2 |
@@ -93,10 +97,14 @@
   times at retrieval (A2). `[VERIFIED FACT - worksheet J ROUND 0]`
 - O-2 drop rule = deterministic chronological event-timestamp ordering (no post-hoc ordering). `[VERIFIED
   FACT - worksheet J ROUND 2]`
-- Equal-timestamp tie-break rule: **TR OPEN - [HUMAN DECISION REQUIRED]** (worksheet O.3). Must be
-  pre-registered before validation, never chosen after seeing data; the canonical corpus defines NO
-  adequate secondary key, so the agent does not invent one (Human guarded conditional fired). `[VERIFIED
-  FACT - worksheet J ROUND 2; worksheet O.3]`
+- Equal-timestamp tie-break rule: **BOUND - TR-1** (worksheet O.3): secondary key = (scheduled-calendar
+  date ASC, family order ASC), applied AFTER the official release timestamp (A2); family order =
+  CPI < NFP < FOMC. Ratified requirements: strict deterministic; tie-symmetric; pre-registered before
+  validation; never chosen after seeing data; no outcome-dependent/manual selection; SAME ordering for
+  event-census ordering and the D18 manifest ordering record; no F-1 / Phase 5/6 import. Structural
+  condition at census construction: at most one admitted release per family per scheduled-calendar date;
+  if violated FAIL-CLOSED under existing D6 semantics (no invented tie-break extension). `[VERIFIED
+  FACT - worksheet J ROUND 2; worksheet O.3; HUMAN-RATIFIED 2026-09-10]`
 
 ### 3.4 Purge / return / baseline
 
@@ -158,13 +166,18 @@
 | D16 | Blind window | **BOUND** - 2025-01-01 -> 2026-09-10 BLIND HOLDOUT; prohibited information list fixed (worksheet O.1) |
 | EX | Event exclusion edge rule | **BOUND** - official-calendar admission rule (worksheet O.4) |
 | CO | SPY robustness cost model | **BOUND** - DEFERRED - ROBUSTNESS/IMPLEMENTATION LAYER (worksheet O.6) |
-| TR | Tie-break rule (equal event timestamps) | **REMAINING - [HUMAN DECISION REQUIRED - TR]** - canonical secondary key absent; must not be invented (worksheet O.3) |
-| CA | Session/calendar rule (half-days, holidays) | **REMAINING - [HUMAN DECISION REQUIRED - CA]** - authoritative US trading-calendar/session source absent; must not be invented (worksheet O.5) |
+| TR | Tie-break rule (equal event timestamps) | **BOUND - TR-1** (HUMAN-RATIFIED): secondary key = (scheduled-calendar date ASC, family order ASC) after A2; family order CPI < NFP < FOMC; same ordering for census + D18 manifest; structural one-release-per-family-per-date with FAIL-CLOSED D6 (worksheet O.3) |
+| CA | Session/calendar rule (half-days, holidays) | **HUMAN-RATIFIED CA-1 (DECISION level)** - NYSE official trading calendar as valid-session authority + confirmed session semantics; **SOURCE-BINDING FIELD = UNRESOLVED PROVENANCE** - authoritative NYSE calendar URL/versioning/archive absent from repo; NOT invented; Human must supply (worksheet O.5) |
 
-Note: D14/D15/D16/EX/CO are Human-BOUND. TR and CA remain open genuine Human decisions; each must be
-bound before any authorized empirical run. Round 4 is therefore PARTIAL. `[VERIFIED FACT - worksheet O.1/O.3/O.4/O.5/O.6]`
+Note: all Round-4 Human DECISIONS (D14/D15/D16/EX/CO/TR/CA) are now bound/ratified. However ROUND 4 is
+**BLOCKED** by exactly ONE unresolved provenance item: the **CA-1 source-binding field** (the exact
+authoritative NYSE trading/market-holiday calendar URL + versioning + archive identifier), which the
+repository/canonical sources do NOT contain and which the agent must NOT invent (CA-1 CRITICAL SOURCE
+RULE, worksheet O.5). D17/SPX close-series pin is NOT treated as solved by CA binding - it remains a
+separate Group C/D17 decision (surface 66 S-10/S-18 vs readiness 49 "S-04 primary"). `[VERIFIED FACT -
+worksheet O.1/O.3/O.4/O.5/O.6]`
 
-### 4.1 TR Decision Surface (prepared - NOT decided)
+### 4.1 TR Decision Surface (prepared - HUMAN-RATIFIED 2026-09-10: TR-1 BOUND)
 
 **Evidence search (this run).**
 - Canonical MACRO-001 corpus: no adequate secondary key exists. Worksheet ROUND 2/D8 mandates only
@@ -176,7 +189,8 @@ bound before any authorized empirical run. Round 4 is therefore PARTIAL. `[VERIF
   Phase-5/6 execution-domain semantics - NOT declared domain-general. `phase14_evidence_bridge_
   ratification_D1_D9.md` "canonical tie-break/order semantics" binds the F-1 / Phase 5/6 series domain
   only. `[VERIFIED FACT - source inspection, this run]`
-- Conclusion: `TR = HUMAN DECISION REQUIRED`.
+- Conclusion (prior state): `TR = HUMAN DECISION REQUIRED`. **NOW RESOLVED: Human ratified TR-1 on
+  2026-09-10.** `[VERIFIED FACT]`
 
 **Canonical inputs available as components of a Human-chosen key (already bound, nothing invented).**
 - Event family (A1), 3-valued: FOMC / CPI / NFP. `[VERIFIED FACT]`
@@ -206,7 +220,39 @@ bound before any authorized empirical run. Round 4 is therefore PARTIAL. `[VERIF
 - Use the SAME ordering for event-census ordering and the D18 manifest ordering record.
   `[MODEL INFERENCE - D18 manifest binding set, surface 25.1]`
 
-### 4.2 CA Decision Surface (prepared - NOT decided)
+**Governance evaluation - fixed-criteria scan (2026-09-10, historical basis). This scan informed the
+recommendations TR-1 and CA-1, which the Human subsequently RATIFIED (see ratification blocks below).**
+
+| TR criterion | TR-1 | TR-2 | TR-3 | TR-4 | TR-5 |
+|--------------|------|------|------|------|------|
+| 1 deterministic (once key fixed) | PASS | PASS | PASS | COND (decl.) | PASS |
+| 2 reproducible | PASS | PASS | PASS | COND | PASS |
+| 3 tie-symmetric for equal timestamps | PASS | PASS | PASS | PASS | PASS |
+| 4 fully pre-registerable pre-outcome | PASS | PASS | PASS | PASS | PASS |
+| 5 only canonical/authenticated event info | PASS | PASS | PASS | COND | PASS |
+| 6 no manual classification | PASS | PASS | PASS | PASS | PASS |
+| 7 no outcome-dependent selection | PASS | PASS | PASS | PASS | PASS |
+| 8 no F-1/Phase5/6 import unless declared domain-general | PASS | PASS | PASS | FAIL | PASS |
+| Extra discretion (fewer Human-set parameters = better) | 1 param (family order) | 3 params (full field order) | 1 param (family order) | n/a (import) | unbounded |
+
+- Tie set reachability check for TR-1: candidates tied on official release timestamp (A2) are
+  cross-family (FOMC 14:00 ET vs BLS 08:30 ET; CPI vs NFP both BLS 08:30 ET). One release per family
+  per scheduled-calendar date is structurally guaranteed by the pre-announced schedules (readiness
+  11.1); therefore (scheduled-calendar date, family-order) is a TOTAL order on the tie set in practice,
+  and the family order is the effective discriminator for the realistic cross-family tie.
+  `[MODEL INFERENCE - A1/A2/readiness 11.1]`
+- **RATIFIED 2026-09-10: TR-1.** Secondary key = (scheduled-calendar date ASC, family order ASC)
+  applied AFTER the official release timestamp (A2); family order supplied = CPI < NFP < FOMC.
+  Ratified requirements: strict deterministic; tie-symmetric; pre-registered; no outcome-dependent/manual
+  selection; SAME ordering for event-census ordering and the D18 manifest ordering record; NO F-1 /
+  Phase 5/6 import; structural condition: at most one admitted release per family per scheduled-calendar
+  date at census construction, else FAIL-CLOSED under existing D6 (no invented extension, no silent
+  order-by-row). `[HUMAN-RATIFIED]`
+- Unresolved caveats after binding: (a) the single-release-per-family-per-date guarantee must be
+  re-verified at census build under D6 - it is a structural runtime assertion, not a new key rule;
+  (b) confirm the SAME ordering is used in the D18 manifest ordering record at assembly (Group C).
+
+### 4.2 CA Decision Surface (prepared - HUMAN-RATIFIED 2026-09-10: CA-1 DECISION bound; source field UNRESOLVED)
 
 **Evidence search (this run).**
 - Canonical MACRO-001 corpus: NO authoritative US trading-calendar/session rule. A2 (worksheet ROUND 0;
@@ -220,7 +266,35 @@ bound before any authorized empirical run. Round 4 is therefore PARTIAL. `[VERIF
 - F-1 candidate frozen session-validity rule ("early-close with a valid official close IS a valid
   session; deterministic valid-session calendar; no manual shifting") is F-1-isolated and NOT
   importable. `[VERIFIED FACT - isolation boundary; worksheet C]`
-- Conclusion: `CA = HUMAN DECISION REQUIRED`.
+- Conclusion (prior state): `CA = HUMAN DECISION REQUIRED`. **NOW RESOLVED (decision level): Human
+  ratified CA-1 on 2026-09-10.**
+- **CA-1 CRITICAL SOURCE RULE OUTCOME (this run):** the rule requires the repository/canonical sources
+  to ALREADY contain an authoritative NYSE calendar URL/archive identifier sufficient to bind CA-1.
+  Repo-wide verification (incl. `free_data_source_registry.md`, `src/`, all phase-14 docs) found NO such
+  URL/versioning/archive identifier - only descriptive mentions (e.g., "NYSE-listed", "16:00 ET",
+  exchange-distribution counts). Per the rule the agent does NOT invent a URL/provider/archive rule.
+  The exact missing field is recorded as an **UNRESOLVED PROVENANCE FIELD**:
+
+```
+CA-1 SOURCE-BINDING FIELD — FOUR REQUIRED COMPONENTS (all must be supplied by the Human):
+
+  a. authoritative NYSE trading/market-holiday calendar URL
+     (exact URL of the official source; no guessed or paraphrased URL)
+
+  b. version / effective-version identifier
+     (the specific version or effective-date range of the calendar used)
+
+  c. archive identifier or reproducible archived snapshot
+     (e.g., Wayback Machine capture URL, archived file hash, versioned release tag)
+
+  d. retrieval rule
+     (the reproducible procedure for obtaining the exact archived version at future retrieval)
+
+All four components MUST be supplied BY THE HUMAN.
+Agent will not guess or silently substitute any component.
+EMPIRICAL WORK REMAINS STOPPED until all four fields are bound.
+```
+  `[VERIFIED FACT - source-rule check performed 2026-09-10]`
 
 **Canonical inputs (bound) relevant to CA.**
 - Event calendars are pre-announced official schedules (S-05 BLS 8:30am ET convention; S-08 FOMC
@@ -252,9 +326,44 @@ bound before any authorized empirical run. Round 4 is therefore PARTIAL. `[VERIF
   the event-day close -> next-close return is unchanged; confirm no intraday special rule at $0 daily
   (readiness AX). `[MODEL INFERENCE - D4 at daily granularity]`
 
+**Governance evaluation - fixed-criteria scan (2026-09-10, historical basis). This scan informed the
+recommendations TR-1 and CA-1, which the Human subsequently RATIFIED (see ratification blocks below).**
+
+| CA criterion | CA-1 | CA-2 | CA-3 | CA-4 |
+|--------------|------|------|------|------|
+| 1 authoritative US trading-session source | PASS (NYSE official) | WEAK (provider-derived) | COND | FAIL (none exists) |
+| 2 explicit valid-session semantics | COND (confirm checklist) | COND | COND | n/a |
+| 3 explicit holiday treatment | PASS (NYSE market holidays) | COND | COND | n/a |
+| 4 explicit half-day/short-session treatment | PASS (O.5 rule) | COND | COND | n/a |
+| 5 deterministic next-trading-day | PASS (calendar + O.5) | COND | COND | n/a |
+| 6 deterministic halted/missing handling | COND (readiness Z - confirm) | COND | COND | n/a |
+| 7 event timestamp vs session separation | PASS (A2 vs calendar) | PASS | PASS | n/a |
+| 8 reproducible and pre-registerable | PASS (named + archive) | COND | PASS | n/a |
+| 9 no F-1-specific rule import | PASS | PASS | PASS | COND |
+| 10 no silent vendor/source selection | PASS (Human names it) | FAIL (vendor-driven) | PASS | FAIL |
+
+- Authoritative-source note: NYSE official trading/market-holiday calendar is the published US equity
+  trading-session calendar; the SPX index official close is published on those sessions. This is an
+  external authoritative source, NOT an F-1 rule and NOT a vendor convenience. `[MODEL INFERENCE]`
+- **RATIFIED 2026-09-10: CA-1 (DECISION level).** NYSE official US trading calendar = valid-session
+  authority for the SPX close series. Session-semantics checklist CONFIRMED by Human:
+  1 half-day/official early close IS a valid session, official close valid for D4, event not moved;
+  2 event day not a trading session -> W-B maps to next valid trading session;
+  3 missing/halted observation -> INVALID fail-closed per S-8(b+c)/D6, no imputation/substitution;
+  4 CPI/NFP 08:30 ET vs 09:30 ET open: no special intraday rule at daily granularity;
+  5 event timestamp (A2) stays separate from session validity.
+  `[HUMAN-RATIFIED - DECISION]`
+- **SOURCE-BINDING FIELD: UNRESOLVED PROVENANCE** (see outcome above) - authoritative NYSE calendar
+  URL/versioning/archive identifier NOT present in repo/canonical sources; NOT invented; Human must
+  supply. CA-1 is NOT fully bound until this field exists. `[VERIFIED FACT - source-rule check 2026-09-10]`
+- Dependency carried: the authoritative SPX close series must be pinned in Group C/D17 (surface 66
+  S-10/S-18 vs readiness 49 "S-04 primary" text inconsistency) so that "official close" has ONE
+  authority - NOT resolved by CA-1.
+
 ## 5. IS/OOS/Blind Decision Surface (reproduced for the record - D14/D15/D16 now BOUND)
 
-The TR and CA decision surfaces are prepared at Section 4.1 and Section 4.2 above (NOT decided).
+The TR and CA decision surfaces are resolved at Section 4.1 (TR-1 RATIFIED/BOUND) and Section 4.2
+(CA-1 DECISION RATIFIED; source-binding field UNRESOLVED) above.
 The IS/OOS/blind surface reproduced below is included for the archival record only.
 
 > - exact IS start; exact IS end; exact OOS start; exact OOS end
@@ -281,32 +390,58 @@ OOS dates MUST be fixed before empirical validation.
 ## 6. STOP
 
 ```
-[HUMAN DECISION REQUIRED - TR]   <- equal-timestamp tie-break: canonical secondary key absent (O.3)
-[HUMAN DECISION REQUIRED - CA]   <- authoritative US trading-calendar/session source absent (O.5)
-[ROUND 4 PARTIAL]
-[ROUND 5 NOT REACHED]
+[HUMAN MUST SUPPLY - CA-1 SOURCE-BINDING FIELD - ALL FOUR COMPONENTS]
+  a. authoritative NYSE trading/market-holiday calendar URL              <- EMPTY / UNRESOLVED
+  b. version / effective-version identifier                              <- EMPTY / UNRESOLVED
+  c. archive identifier or reproducible archived snapshot                <- EMPTY / UNRESOLVED
+  d. retrieval rule                                                      <- EMPTY / UNRESOLVED
+Absent from repo/canonical sources (verified 2026-09-10); NOT invented; required before ANY empirical work.
+[TR-1 BOUND - secondary key (scheduled-calendar date ASC, family order ASC); family order CPI < NFP < FOMC]
+[CA-1 HUMAN-RATIFIED - DECISION level: NYSE official calendar + session semantics BOUND; source field
+    UNRESOLVED PROVENANCE]
+[ROUND 4 BLOCKED - exact blocker: CA-1 source-binding field]
+[ROUND 5 NOT ENTERED]
 [FREEZE NOT DECLARED]
 ```
 
-D14/D15/D16/EX/CO are BOUND (worksheet O.1/O.4/O.6). The TR/CA Human Decision Surfaces are prepared at
-Section 4.1 / 4.2 above - candidate options TR-1..TR-5 and CA-1..CA-4, plus the session-semantics
-confirmation list. Next required Human response:
+D14/D15/D16/EX/CO/TR are BOUND; CA-1 is HUMAN-RATIFIED at the DECISION level (worksheet O.1/O.3/O.4/O.5/
+O.6). The sole remaining Round-4 item is the CA-1 source-binding field, which the CRITICAL CA SOURCE
+RULE requires the Human to supply (the agent did not invent a URL/provider/archive, and the repository
+does not contain one). Next required Human response:
 
 ```
-TR tie-break (equal event timestamps): select TR-1..TR-5 (or state a rule in words); supply the
-  ordering/key components exactly as requested in the chosen row. Do not expect the agent to invent one.
-CA authoritative US trading-calendar/session: select CA-1..CA-4 (or state a rule in words); then
-  confirm the session-semantics list (half-day/early-close, event-not-a-trading-day, halted/missing,
-  CPI/NFP 8:30 ET vs 9:30 ET open) from Section 4.2.
+CA-1 SOURCE-BINDING FIELD - HUMAN INPUT BLOCK
+=============================================
+
+URL:
+    [EMPTY - Human must supply the exact authoritative NYSE official trading/market-holiday
+     calendar URL. The agent will not invent or guess this value.]
+
+Version / Effective Version:
+    [EMPTY - Human must supply the specific version or effective-date range identifier for
+     the calendar edition used. The agent will not invent or guess this value.]
+
+Archive Identifier / Reproducible Snapshot:
+    [EMPTY - Human must supply an archive identifier (e.g., Wayback Machine capture URL,
+     versioned release tag, archived file hash) that enables exact future retrieval. The
+     agent will not invent or guess this value.]
+
+Retrieval Rule:
+    [EMPTY - Human must supply the exact reproducible procedure for obtaining the archived
+     version at future retrieval. The agent will not invent or guess this value.]
+
 Decision date: ______________
 ```
 
+After all four fields are bound: ROUND 4 closes -> ROUND 5 (D19 kill, D20 PASS/FAIL/INVALID incl. alpha)
+becomes the next HUMAN-CONTROLLED stage.
+
 ## 7. Ledger
 
-- Implementation Status: COMPLETE (Round 4 derivation record updated; TR/CA Human Decision Surfaces prepared at 4.1/4.2; document-only)
-- Contract Enforcement: STRICT FAIL-CLOSED - nothing invented; D14/D15/D16/EX/CO bound via worksheet O; TR/CA surfaced as open with prepared decision surfaces (Human guarded conditionals honored); repo-wide + src/ search performed; no domain-general key/calendar contract declared applicable to MACRO-001
+- Implementation Status: COMPLETE (Round 4 derivation record updated; TR-1 HUMAN-RATIFIED/BOUND; CA-1 DECISION HUMAN-RATIFIED with source-binding field recorded as UNRESOLVED PROVENANCE; ROUND 4 = BLOCKED; document-only)
+- Contract Enforcement: STRICT FAIL-CLOSED - nothing invented; D14/D15/D16/EX/CO/TR bound via worksheet O; CA-1 CRITICAL SOURCE RULE FIRED and honored (no NYSE URL/provider/archive invented; exact missing field recorded as unresolved provenance); D17/SPX close pin NOT silently resolved; repo-wide + src/ search performed; no domain-general key/calendar contract declared applicable to MACRO-001
 - Mathematical Authority: CANONICAL SPEC / HUMAN-RATIFIED RECORDS referenced; no statistics computed
 - Local Test Suite: NOT RUN (docs-only)
 - Type Checker (MyPy): NOT RUN (docs-only)
 - Remote CI Status: NOT APPLICABLE
-- Methodological Caveats: Round 4 is PARTIAL - all derivable structural items resolved; D14/D15/D16 are the primary blocking Human choices with TR/EX/CA/CO contiguous items to be bound pre-run; Round 5, anti-HARKing, and draft freeze are deferred until the Human responds; no empirical step, no data, no backtest, no commit, no push.
+- Methodological Caveats: Round 4 is BLOCKED on exactly one provenance item - the CA-1 source-binding field (Human must supply the authoritative NYSE calendar URL/versioning/archive; verified absent from repo; not invented). TR-1 fully bound. CA-1 decision bound; CA-1 operational binding pending the source field. ROUND 5 (D19 kill, D20 PASS/FAIL/INVALID incl. alpha) is the next HUMAN-CONTROLLED stage but is NOT entered while ROUND 4 is blocked; D17/SPX close-series pin remains a separate Group C decision; no empirical step, no data, no backtest, no commit, no push.

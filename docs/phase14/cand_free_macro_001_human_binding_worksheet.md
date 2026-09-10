@@ -1162,8 +1162,9 @@ inventing. `[VERIFIED FACT — Human instruction, this run]`
 [NON-EMPIRICAL]
 [NON-AUTHORIZING]
 [HUMAN-RATIFIED]
-[ROUND 4 PARTIAL — D14/D15/D16 BOUND · CO BOUND · EX BOUND · TR OPEN · CA OPEN]
-[ROUND 5 NOT REACHED]
+[TR-1 BOUND · CA-1 HUMAN-RATIFIED (DECISION) · CA-1 SOURCE-BINDING FIELD UNRESOLVED PROVENANCE]
+[ROUND 4 BLOCKED — EXACT BLOCKER: CA-1 SOURCE-BINDING FIELD]
+[ROUND 5 NOT ENTERED]
 ```
 
 ### O.1 Ratified Decisions (transcribed verbatim)
@@ -1223,10 +1224,19 @@ domain and is NOT importable into MACRO-001's O-2 rule (isolation boundary). No 
 source-identifier key, or tie-symmetric secondary rule exists in the MACRO-001 spec. Per the Human
 guarded conditional, the agent does NOT invent a secondary key.
 
-**Result:** STOP — `[HUMAN DECISION REQUIRED — TR]`. O-2 continues by chronological event timestamp;
-the equal-timestamp tie-break stays OPEN pending a Human-provided key (or an explicit canonical pointer).
-The full TR Human Decision Surface (candidate rules TR-1..TR-5 + constraints) is prepared at
-`./cand_free_macro_001_round4_specification.md` Section 4.1. `[VERIFIED FACT — prepared 2026-09-10]`
+**Result — HUMAN RATIFICATION (2026-09-10):** the Human ratified **TR-1**; the fail-closed STOP is
+CLOSED. O-2 continues by chronological event timestamp (A2); equal timestamps are then ordered by the
+ratified deterministic secondary key: **secondary key = (scheduled-calendar date ASC, family order ASC)**
+applied AFTER the official release timestamp (A2); **family order = CPI < NFP < FOMC**.
+Ratified TR-1 requirements (recorded verbatim from the Human, not reinterpreted):
+- Strict deterministic secondary key; tie-symmetric; pre-registered before validation.
+- NO outcome-dependent selection; NO manual classification.
+- SAME ordering for event-census ordering and the D18 manifest ordering record.
+- NO import of F-1 / Phase 5 / Phase 6 ordering semantics.
+- Structural condition at census construction: AT MOST ONE admitted release per family per
+  scheduled-calendar date; if violated → FAIL-CLOSED under existing D6 semantics (no invented tie-break
+  extension, no silent order-by-row).
+Status: TR-1 = **BOUND** (HUMAN-RATIFIED). `[VERIFIED FACT — Human instruction, this run]`
 
 ### O.4 EX — unscheduled/emergency exclusion → **BOUND** (derivable, no STOP)
 
@@ -1272,11 +1282,52 @@ manual shifting") exists in the F-1 candidate review — F-1 is isolated and NOT
 NO canonical authoritative US trading-calendar source or session-validity semantics. Per the Human
 guarded conditional, the agent does NOT name a calendar source or extend session semantics.
 
-**Result:** STOP — `[HUMAN DECISION REQUIRED — CA]`. The Human's operative rule is recorded verbatim and
-will bind once the Human names the authoritative US trading-calendar/session source (and confirms its
-half-day/holiday close-validity semantics for the MACRO-001 SPX close series). The full CA Human
-Decision Surface (candidate authorities CA-1..CA-4 + session-semantics confirmation list) is prepared
-at `./cand_free_macro_001_round4_specification.md` Section 4.2. `[VERIFIED FACT — prepared 2026-09-10]`
+**Result — HUMAN RATIFICATION (2026-09-10):** the Human ratified **CA-1** (NYSE official US trading
+calendar = valid-session authority for the SPX close series) and confirmed the session-semantics
+checklist. The decision-level STOP is CLOSED; a separate provenance field REMAINS OPEN (see
+**CA-1 CRITICAL SOURCE RULE** below).
+
+Ratified CA-1 session semantics (recorded verbatim from the Human, not reinterpreted):
+1. Half-day / official early close IS a valid session: the official close of that trading date is VALID
+   for D4; the event is NOT moved to another date.
+2. Event day is NOT a valid trading session: W-B maps the event to the next valid trading session.
+3. Missing / halted required observation: the observation is INVALID → fail-closed per S-8(b+c)/D6; NO
+   imputation, substitution, backfill, or synthetic value.
+4. CPI/NFP 08:30 ET vs regular cash open 09:30 ET: at daily granularity NO special intraday rule; the
+   event-day close → next-close return is unchanged.
+5. Event timestamp semantics (A2) remain separate from trading-session validity.
+
+**CA-1 CRITICAL SOURCE RULE (FIRED):** the authorized binding criterion is that the repository/canonical
+sources must ALREADY contain an authoritative NYSE calendar URL/archive identifier sufficient to bind
+CA-1. Repo-wide search on 2026-09-10 (incl. `free_data_source_registry.md`, `src/`, all phase-14 docs)
+found NO such URL/versioning/archive identifier — only descriptive mentions (e.g., "NYSE-listed",
+"16:00 ET", "NASDAQ/NYSE", exchange-distribution counts). Per the Human's rule, the agent does NOT
+invent a URL, provider, or archive rule. The exact missing source-binding field is recorded verbatim as
+an UNRESOLVED PROVENANCE FIELD:
+
+```
+CA-1 SOURCE-BINDING FIELD — FOUR REQUIRED COMPONENTS (all must be supplied by the Human):
+
+  a. authoritative NYSE trading/market-holiday calendar URL
+     (exact URL of the official source; no guessed or paraphrased URL)
+
+  b. version / effective-version identifier
+     (the specific version or effective-date range of the calendar used)
+
+  c. archive identifier or reproducible archived snapshot
+     (e.g., Wayback Machine capture URL, archived file hash, versioned release tag)
+
+  d. retrieval rule
+     (the reproducible procedure for obtaining the exact archived version at future retrieval)
+
+All four components MUST be supplied BY THE HUMAN.
+The agent will NOT guess, invent, or silently substitute any component.
+EMPIRICAL WORK REMAINS STOPPED until all four fields are bound.
+```
+
+Status: CA-1 = **HUMAN-RATIFIED at the DECISION level** (authority + session semantics BOUND); CA-1
+**NOT fully bound** until the source-binding field is supplied. `[VERIFIED FACT — Human instruction,
+this run; source-rule check performed this run]`
 
 ### O.6 CO — SPY cost model → **BOUND** (DEFERRED — ROBUSTNESS/IMPLEMENTATION LAYER)
 
@@ -1286,41 +1337,91 @@ block the SPX statistical specification unless governance explicitly requires it
 `DEFERRED — ROBUSTNESS/IMPLEMENTATION LAYER`. Status: **BOUND** (no cost value introduced; SPY outside K
 confirms decision surface §17 / registry §109 unchanged).
 
-### O.7 ROUND 4 RESULT — PARTIAL
+### O.7 ROUND 4 RESULT — BLOCKED (decisions bound; one provenance field unresolved)
 
 - D14 / D15 / D16: **BOUND** (O.1). Split fixed; no embargo invented; D6/purge/O-2 authoritative.
 - EX: **BOUND** (O.4). CO: **BOUND** (O.6).
-- TR: **OPEN — [HUMAN DECISION REQUIRED — TR]** (O.3).
-- CA: **OPEN — [HUMAN DECISION REQUIRED — CA]** (O.5).
-- Dependency note: pre-registration MUST NOT be declared frozen while TR/CA remain open (tie-break and
-  session/calendar semantics are required for a fully deterministic, reproducible specification).
+- TR: **BOUND — TR-1** (family order CPI < NFP < FOMC) (O.3).
+- CA: **HUMAN-RATIFIED at the DECISION level — CA-1** (NYSE official calendar + confirmed session
+  semantics) (O.5); **CA-1 SOURCE-BINDING FIELD = UNRESOLVED PROVENANCE FIELD** — verified absent from
+  repo/canonical sources, never invented, Human must supply.
+- ROUND 4 = **BLOCKED**. Exact remaining Round-4 blocker: **CA-1 source-binding field** (authoritative
+  NYSE trading/market-holiday calendar URL + versioning + archive identifier). Pre-registration MUST NOT
+  be declared frozen while this field is unresolved (session/calendar provenance is required for a fully
+  deterministic, reproducible specification).
+- Dependency note: D17/SPX close-series pin is NOT treated as solved merely because CA-1 is ratified —
+  it remains a separate Group C / D17 decision (surface 66 S-10/S-18 vs readiness 49 "S-04 primary"
+  inconsistency), not a Round-4 item. `[VERIFIED FACT — Human instruction, this run]`
 
-### O.8 ROUND 5 — NOT REACHED
+### O.8 ROUND 5 — NOT ENTERED
 
-- ROUND 5 entry is conditional on no genuine Human decision remaining. TR + CA are genuine open Human
-  decisions → ROUND 5 NOT ENTERED this run. `[VERIFIED FACT — Human instruction: enter ROUND 5 iff no
-  genuine Human decision remains]`
-- Even after TR/CA resolve, alpha / D20 is Human-controlled and is NOT bound in this batch — a further
-  ROUND-5 stop `[HUMAN DECISION REQUIRED — alpha/D20]` is expected (worksheet §C D20: "→ ROUND 5 →
-  HUMAN DECISION REQUIRED"; §N.4). `[VERIFIED FACT]`
+- ROUND 5 entry is conditional on no genuine Human decision/provenance blocker remaining. ROUND 4 =
+  **BLOCKED** (CA-1 source-binding field unresolved) → ROUND 5 NOT ENTERED this run. `[VERIFIED FACT —
+  Human instruction: enter ROUND 5 iff no genuine blocker remains]`
+- Next Human-controlled specification stage after the CA-1 source-binding field is supplied: ROUND 5 =
+  D19 Kill conditions → D20 PASS/FAIL/INVALID thresholds. Alpha / D20 is Human-controlled and is NOT
+  bound — a ROUND-5 stop `[HUMAN DECISION REQUIRED — D19/D20 incl. alpha]` is expected (worksheet §C
+  D19/D20; §N.4; decision surface §20.2/§26). `[VERIFIED FACT]`
 - Anti-HARKing: NOT PERFORMED (pre-requisites unmet). Draft Freeze: NOT PREPARED. Maximum state
   reachable later: SPECIFICATION FROZEN (never validated / qualified / paper / live on that basis alone).
 
 ### O.9 STOP
 
 ```
-[HUMAN DECISION REQUIRED — TR]   <- equal-timestamp tie-break: canonical secondary key absent
-[HUMAN DECISION REQUIRED — CA]   <- authoritative US trading-calendar/session source: canonical absent
-[ROUND 4 PARTIAL]
-[ROUND 5 NOT REACHED]
+[HUMAN MUST SUPPLY — CA-1 SOURCE-BINDING FIELD — ALL FOUR COMPONENTS]
+  a. authoritative NYSE trading/market-holiday calendar URL              <- EMPTY / UNRESOLVED
+  b. version / effective-version identifier                              <- EMPTY / UNRESOLVED
+  c. archive identifier or reproducible archived snapshot                <- EMPTY / UNRESOLVED
+  d. retrieval rule                                                      <- EMPTY / UNRESOLVED
+Absent from repo/canonical sources (verified 2026-09-10); NOT invented; required before ANY empirical work.
+[TR-1 BOUND — family order CPI < NFP < FOMC]
+[CA-1 HUMAN-RATIFIED — DECISION level: authority + session semantics BOUND; source field UNRESOLVED]
+[ROUND 4 BLOCKED — exact blocker: CA-1 source-binding field]
+[ROUND 5 NOT ENTERED]
 [FREEZE NOT DECLARED]
 ```
 
-### Round-4 Ratification Verification Ledger
-- Implementation Status: COMPLETE (documentation-only ratification; D14/D15/D16/EX/CO bound; TR/CA surfaced)
-- Contract Enforcement: STRICT FAIL-CLOSED — the Human guarded conditionals for TR/CA fired and were honored; no secondary key invented; no calendar/session source invented; no embargo; no new minimums; no cost values
-- Mathematical Authority: HUMAN-RATIFIED DECISIONS (D14/D15/D16/EX/CO) on canonical sources (registry §100/§102; readiness §11.1/AX/Z; surface §9.1/§10/§22/§23); TR/CA remain HUMAN-OPEN
+---
+
+## CA-1 SOURCE-BINDING HUMAN INPUT
+
+> **Status:** UNRESOLVED PROVENANCE — Human must supply all four values before Round 4 can close.
+> The agent MUST leave these values EMPTY. Do NOT populate from general knowledge.
+
+```
+CA-1 SOURCE-BINDING FIELD — HUMAN INPUT BLOCK
+=============================================
+
+URL:
+    [EMPTY — Human must supply the exact authoritative NYSE official trading/market-holiday
+     calendar URL. The agent will not invent or guess this value.]
+
+Version / Effective Version:
+    [EMPTY — Human must supply the specific version or effective-date range identifier for
+     the calendar edition used. The agent will not invent or guess this value.]
+
+Archive Identifier / Reproducible Snapshot:
+    [EMPTY — Human must supply an archive identifier (e.g., Wayback Machine capture URL,
+     versioned release tag, archived file hash) that enables exact future retrieval. The
+     agent will not invent or guess this value.]
+
+Retrieval Rule:
+    [EMPTY — Human must supply the exact reproducible procedure for obtaining the archived
+     version at future retrieval. The agent will not invent or guess this value.]
+```
+
+> [!IMPORTANT]
+> Round 4 remains **BLOCKED** until all four components above are supplied by the Human.
+> Round 5 is **NOT ENTERED** while Round 4 is blocked.
+> No empirical, data, or backtest work is authorized.
+
+---
+
+### Round-4 Ratification Verification Ledger (updated for TR/CA)
+- Implementation Status: COMPLETE (documentation-only; D14/D15/D16/EX/CO/TR bound; CA-1 decision ratified; CA-1 source-binding field recorded as unresolved provenance; ROUND 4 = BLOCKED)
+- Contract Enforcement: STRICT FAIL-CLOSED — TR-1 bound verbatim with family order; CA-1 CRITICAL SOURCE RULE FIRED → no URL/provider/archive invented; session semantics transcribed; no empirical step; D17/SPX pin not silently resolved
+- Mathematical Authority: HUMAN-RATIFIED DECISIONS (TR-1 with explicit family order; CA-1 with session-semantics checklist) on canonical sources (worksheet J ROUND 2; surface 11.2; readiness AX/Z/11.1; registry 60/77); CA-1 source-bound provenance = UNRESOLVED
 - Local Test Suite: NOT RUN (docs-only)
 - Type Checker (MyPy): NOT RUN (docs-only)
 - Remote CI Status: NOT APPLICABLE
-- Methodological Caveats: Round 4 is PARTIAL — D14/D15/D16/EX/CO bound; TR and CA each require one further Human decision (secondary key; authoritative calendar/session source); Round 5 and its alpha(D20)/anti-HARKing/freeze stages deferred; no empirical action, no data, no backtest, no commit, no push.
+- Methodological Caveats: Round 4 is BLOCKED on exactly one item — the CA-1 source-binding field (Human must supply the authoritative NYSE calendar URL/versioning/archive; agent did not invent one). TR-1 fully bound. ROUND 5 (D19 kill, D20 PASS/FAIL/INVALID incl. alpha), anti-HARKing, and draft freeze are deferred until Round 4 closes; no empirical action, no data, no backtest, no commit, no push.
