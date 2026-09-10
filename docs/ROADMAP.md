@@ -1,8 +1,8 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.4.0  
-**Date:** 2026-09-05  
+**Version:** 3.5.0  
+**Date:** 2026-09-10  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
 > **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
@@ -10,6 +10,66 @@
 > executed in this repository is **Live Execution & Broker Mapping** (Admission →
 > Step 8 Contracts → Broker Semantic Mapping → Alpaca Paper exercise). The
 > Regime-Engine content is deferred; Phase 7 below reflects the real scope.
+
+---
+
+## ACASH CURRENT NORTH-STAR (2026-09-10)
+
+**North Star.** Under strict scientific governance, answer *"where should capital be allocated?"* — including the valid governed answer **NOWHERE** — by progressing the Phase 14 research lanes (mainline `CAND-FREE-MACRO-001`, parallel `MEC-0011`) to a single canonical frozen pre-registration, then explicit Human authorization, then empirical validation and qualification. All trading / capital / broker authority remains **STRICTLY LOCKED** throughout.
+
+```
+CURRENT WORKING MILESTONE (replaces the older "Phase 13 Step 5 soak ACTIVE" framing;
+Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
+
+  MAINLINE .... CAND-FREE-MACRO-001    FREEDATA research lane; CONDITIONALLY READY;
+                                       human binding Rounds 0-3B recorded (K = 3);
+                                       S-2 / S-7 (T_eff formula) / S-9 OPEN;
+                                       PRE-REGISTRATION NOT FULLY FROZEN;
+                                       EMPIRICAL VALIDATION NOT AUTHORIZED
+  PARALLEL .... MEC-0011                Gold/DXY relative-movement; RESEARCH INTAKE ONLY;
+                                       D1=A / D2=C / D3=B human-ratified 2026-09-10;
+                                       DXY source layer BLOCKED (paths P1-P5 await Human);
+                                       NOT AUTHORIZED FOR EMPIRICAL VALIDATION
+  PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
+                                       PENDING HUMAN RATIFICATION
+  LOCKED ...... HYP_003 (NOT CREATED) / R1 (NOT AUTHORIZED) / empirical validation /
+               backtest / trading (LOCKED) / capital ($0.00) / broker (DISCONNECTED) /
+               quarantined HYP_001/HYP_002 data spans (PRISTINE / NOT REUSABLE BY DEFAULT)
+```
+
+### State Register (authoritative boundaries, verified 2026-09-10)
+
+| Class | Lane / Item | State |
+|---|---|---|
+| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-3B recorded (K = 3); **S-2, S-7 T_eff formula, S-9 = HUMAN DECISION REQUIRED**; PRE-REGISTRATION **NOT FULLY FROZEN**; EMPIRICAL VALIDATION **NOT AUTHORIZED** |
+| PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
+| PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
+| PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
+| LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
+| LOCKED | `R1` / `ResearchReInceptionGate` | **NOT AUTHORIZED / NOT INVOKED** |
+| LOCKED | Empirical validation / backtest | **NOT AUTHORIZED** for all candidates |
+| LOCKED | Trading / Capital / Broker | **LOCKED / $0.00 / DISCONNECTED** (0 live orders; no live credential path) |
+| LOCKED | Quarantined data | HYP_001 2026 M5 Holdout; HYP_002 H4 Validation + Blind OOS — PRISTINE / NOT REUSABLE BY DEFAULT |
+| LOCKED | Phase 13 Step 8 (Human GO) / Step 9 (90-day paper) | **LOCKED / NOT AUTHORIZED** (no qualified strategy) |
+| FUTURE | Phases 18-22 | UPCOMING (tournament / regime detection / selection / allocation solvers / orchestration) |
+
+**Authorization ladder — never conflate:** `INFRASTRUCTURE READY != STRATEGY QUALIFIED != PAPER AUTHORIZED != LIVE AUTHORIZED`. Research capability != strategy qualification != execution authorization. The research lanes above are research configurations / candidates — **NOT** registered hypotheses, strategies, or tradeable configurations.
+
+---
+
+## ACASH NOW / NEXT / LATER (2026-09-10)
+
+- **NOW** (binding / documentation-only; no empirical work):
+  1. MACRO-001 ROUND 3B remainder — bind **S-2** (test statistic) and **S-9** (minimum sample size); pre-register the **S-7 (c) post-O-2 T_eff formula**. All three are `HUMAN DECISION REQUIRED`.
+  2. MEC-0011 — Human selection among DXY-leg resolution paths **P1** (paid ICE subscription) / **P2** (authorized redistributor) / **P3** (grey private archive) / **P4** (Stooq DX.F) / **P5** (6-FX model inference); downstream blockers B4-B10 remain open.
+  3. Phase 14 runtime — research-layer slices remain `UNVALIDATED PROPOSALS`; any runtime authorization stays bounded by ratified Human gate discipline (G-gates).
+- **NEXT** (strict sequence; only after S-2 / S-7 / S-9 are bound):
+  1. ROUND 4 — D15 OOS -> D16 Blind -> D14 IS -> D9 Cost.
+  2. ROUND 5 — D19 Kill -> D20 PASS/FAIL/INVALID.
+  3. Draft Freeze Candidate -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> **Explicit Human Authorization** -> then empirical validation / backtest.
+- **LATER** (gated on a HUMAN-AUTHORIZED qualified strategy; nothing before):
+  1. Phase 13 Step 8 Human GO -> Step 9 (90-day continuous paper run).
+  2. Phases 18-22 upstream milestones (tournament, regime detection, selection, allocation solvers, orchestration). All currently LOCKED / NOT AUTHORIZED.
 
 ---
 
@@ -105,38 +165,40 @@
 
 ---
 
-## CURRENT STATE / NEXT STEP — Phase 13 Step 5 Active (24-Hour Soak) ──► Step 6 Telemetry Audit
+## CURRENT STATE / NEXT STEP (Reconciliated 2026-09-10)
 
-> **Current Repository Milestone:** Phase 13 Step 5 (24-Hour Soak Test).  
-> **Soak Status:** ACTIVE / IN PROGRESS under PID `41844` (`pythonw.exe`).  
+> **Current Repository Milestone:** Phase 14 Governance + Research Lanes (CAND-FREE-MACRO-001 mainline / MEC-0011 parallel). System: **RESEARCH STANDING BY**.  
+> **Historical note:** the prior framing "Phase 13 Step 5 (24-Hour Soak) ACTIVE / IN PROGRESS under PID 41844, launched 2026-09-05T10:20:43Z" is a completed historical/snapshot event — Phase 13 Step 5 is VERIFIED COMPLETED (see Phase 13 detail below). Potentially obsolete section found — preserved intentionally.  
 > **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**. Live Orders: **0**. Broker: **DISCONNECTED**.  
 
 ### Current Canonical Execution State:
 - ✅ **Phases 0–12:** COMPLETED & FROZEN (Gates 1–12 certified, frozen contract baseline sealed).
-- 🟡 **Phase 13 (Live Small Capital / Forward Paper Validation): ACTIVE & IN PROGRESS**
+- ✅ **Phase 13 (Live Small Capital / Forward Paper Validation): INFRASTRUCTURE READY / STRATEGY BLOCKED**
   - ✅ **Step 1 (Implementation & Safety Envelopes):** PASSED.
   - ✅ **Step 2 (Code & Unit Audit):** PASSED.
   - ✅ **Step 3 (Integration Testing & Local Simulator):** PASSED.
   - ✅ **Step 4 (Restart, Recovery & Rehydration):** PASSED.
-  - 🟡 **Step 5 (24-Hour Unattended Soak Test):** **ACTIVE / IN PROGRESS** (Launched 2026-09-05T10:20:43Z, PID 41844, continuous telemetry recording).
-  - 🔒 **Step 6 (Telemetry, Reconciliation & Forensic Audit):** STRICTLY LOCKED pending 24.0 wall-clock hours completion and evidence audit.
-  - 🔒 **Step 7 (Continuous Paper Readiness Certification):** STRICTLY LOCKED.
-  - 🔒 **Step 8 (Explicit Human GO Checkpoint):** STRICTLY LOCKED.
-  - 🔒 **Step 9 (90-Day Continuous Paper Forward Run):** STRICTLY LOCKED (Clock has not started).
-- 📐 **Phase 14 (AI Quantitative Research Layer): PLAN APPROVED AT PLAN LEVEL**
+  - ✅ **Step 5 (24-Hour Unattended Soak Test):** **VERIFIED COMPLETED** (86,400.21s runtime, 86,085 ledger events, 8,608 telemetry records, 0 errors, graceful exit; snapshot launched 2026-09-05T10:20:43Z under PID 41844).
+  - ✅ **Step 6 (Telemetry, Reconciliation & Forensic Audit):** PASS (SHA-256 chained integrity, zero gaps >15s, RSS peak 175.29 MB, pulse reconciliation 100%).
+  - ✅ **Step 7 (Continuous Paper Readiness Certification):** CONDITIONALLY SATISFIED (runtime infrastructure verified ready; blocked on strategy qualification; B23.2 VM deferred).
+  - 🔒 **Step 8 (Explicit Human GO Checkpoint):** STRICTLY LOCKED (no qualified strategy).
+  - 🔒 **Step 9 (90-Day Continuous Paper Forward Run):** STRICTLY NOT AUTHORIZED (clock has not started; $0.00 capital authority).
+- 📐 **Phase 14 (AI Quantitative Research Layer): GATE 14 ACCEPTED — RESEARCH CAPABILITY — ZERO TRADING AUTHORITY**
   - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor.
-  - **Implementation is STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–7 are certified **AND** Phase 14 Human Gates G-1..G-5 are rendered. Phase 13 Steps 8–9 remain independently and strictly LOCKED (strategy→execution authorization controls only — Human Ratification D1–D4, 2026-09-08).
-  - Zero runtime code implemented; capital and broker execution remain completely decoupled.
+  - **Gate 14 = ACCEPTED** (2026-09-08) — technical acceptance of the Phase 14 research capability (G-2 CUSTOM-2 scope). **NOT** trading, runtime, or strategy authorization.
+  - Implementation slices exist in the repository as **UNVALIDATED PROPOSALS** (research-AI assistant/converter/prompts/provider; slices 1-4; D6 Option A census sealing; Phase 5 production orchestrator; D8-B release gate, Seam A identity; D5 OOS provenance with PIT lineage). Phase 13 Steps 8-9 remain independently and strictly LOCKED (Human Ratification D1-D4, 2026-09-08).
+  - Zero authority to register hypotheses (HYP_003 NOT CREATED), qualify alpha, certify validation, or trade. Capital and broker execution remain completely decoupled ($0.00 / DISCONNECTED).
 
 ### Repository Synchronization State:
-- **Current Branch:** `main`
-- **Documentation Synchronization Date:** 2026-09-05
-- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 runtime telemetry (`var/phase13_soak/`), and Phase 14 governance documents ([`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md)).
+- **Current Branch:** `main` (HEAD == origin/main == `3bfc2e2`)
+- **Documentation Synchronization Date:** 2026-09-10
+- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 audit records (`docs/phase13/`), and Phase 14 governance / research records (`docs/phase14/`). Older checkpoint snapshots (`docs/SESSION_HANDOFF.md`; `docs/PROJECT_STATUS.md` dated 2026-09-04; `docs/README.md` dated 2026-09-07) are historical / checkpoint-only and may lag this file.
 
 ### Immediate Next Action:
-- Allow active Phase 13 Step 5 soak process (PID 41844) to complete the 24.0-hour wall-clock run without interruption.
-- Perform evidence-based Step 5 completion audit (telemetry continuity, memory trend, ledger integrity, crash recovery validation).
-- Proceed sequentially to Step 6 only upon formal certification of Step 5 evidence.
+- Bind the three open MACRO-001 ROUND 3B items (S-2 test statistic, S-9 minimum sample size, S-7 post-O-2 T_eff formula) — `HUMAN DECISION REQUIRED`.
+- Continue the frozen worksheet sequence: ROUND 4 (D15 OOS -> D16 Blind -> D14 IS -> D9 Cost) -> ROUND 5 (D19 Kill -> D20 PASS/FAIL/INVALID) -> Draft Freeze -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> Explicit Human Authorization.
+- Await Human selection of the MEC-0011 DXY-leg resolution path (P1–P5).
+- No empirical work of any kind until an explicit Human authorization follows a frozen pre-registration.
 
 ---
 
@@ -392,11 +454,14 @@
 
 ---
 
-### 📐 Phase 14: AI Quantitative Research Layer [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
+### 📐 Phase 14: AI Quantitative Research Layer [GATE 14 ACCEPTED — RESEARCH CAPABILITY — UNVALIDATED PROPOSALS — ZERO TRADING AUTHORITY]
 - **Objective:** Augment quant research with AI-driven hypothesis formulation, feature discovery, and automated research reporting conforming to Section 33.
 - **Current Status:**
-  - Master Research Architecture Revision 1.2: **APPROVED AT PLAN LEVEL** by Human Auditor.
-  - Implementation Status: **STRICTLY LOCKED / NOT AUTHORIZED** until Phase 13 Steps 5–7 are certified and Phase 14 Human Gates G-1..G-5 are rendered. Phase 13 Steps 8–9 remain independently and strictly LOCKED (Human Ratification D1–D4, 2026-09-08).
+  - Master Research Architecture Revision 1.2: **APPROVED AT PLAN LEVEL** by Human Auditor (2026-09-08).
+  - Gate 14: **ACCEPTED** (2026-09-08) — technical acceptance of the Phase 14 research capability under the G-2 CUSTOM-2 scope. **NOT** trading, runtime, or strategy authorization.
+  - Governance records on file in `docs/phase14/`: Human Ratification D1–D4 (2026-09-08), D5/D6 ratification, D8-B acceptance, E1–E9 ratification, Gate 14 acceptance, S5 test-only and Seam B acceptance, evidence-bridge governance freeze.
+  - Implementation slices exist in the repository as **UNVALIDATED PROPOSALS** (research-AI hypothesis assistant / converter / prompts / provider; slices 1–4; D6 Option A failed/invalid-trial census sealing; Phase 5 production orchestrator; D8-B release gate; Seam A identity; D5 OOS provenance with PIT lineage; committed 2026-09-07 / 2026-09-09). Zero authority to register hypotheses, qualify alpha, certify validation, connect brokers, or trade.
+  - Runtime authorization remains bounded by ratified Human gate discipline (G-gates). Phase 13 Steps 8–9 remain independently and strictly LOCKED. HYP_003 NOT CREATED; R1 NOT INVOKED; capital $0.00; trading LOCKED; broker DISCONNECTED.
   - Governing Specification: [`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md).
 - **Deliverables:**
   - LLM hypothesis formulation assistant (`acash.research.ai.hypothesis`).
