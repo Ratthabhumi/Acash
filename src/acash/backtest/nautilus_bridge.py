@@ -329,10 +329,12 @@ class NautilusTraderSubstrate:
     def run_simulation(
         self,
         catalog_path: Union[str, Path],
+        hypothesis_id: str,
         hypothesis_spec_sha256: str,
         strategy_config_hash: str,
         pyproject_toml_sha256: str,
         git_commit_hash: str,
+        periods_per_year: Decimal,
         canonical_data_hashes: Optional[List[str]] = None,
         uv_lock_sha256: Optional[str] = None,
         bar_spec: str = "1-MINUTE-LAST-EXTERNAL",
@@ -626,6 +628,15 @@ class NautilusTraderSubstrate:
         orders_report = engine.trader.generate_orders_report()
         total_submitted_orders = len(orders_report) if orders_report is not None and len(orders_report) > 0 else num_fills
 
+        # Truthful Phase 5 Sharpe Emission (Phase 14 D8-B): canonical equity-derived return
+        # series (D2-A/D3) annualized by the single canonical Sharpe authority (D7) using the
+        # frozen periods_per_year supplied from ValidationConfig (D4 sole annualization authority).
+        from acash.backtest.equity_returns import derive_canonical_equity_returns
+        from acash.validation.deflated_sharpe import calculate_annualized_sharpe
+
+        canonical_returns = derive_canonical_equity_returns(equity_table)
+        canonical_sharpe = calculate_annualized_sharpe(canonical_returns, periods_per_year)
+
         summary = BacktestExecutionSummary(
             total_orders=total_submitted_orders,
             total_fills=num_fills,
@@ -635,6 +646,7 @@ class NautilusTraderSubstrate:
             unrealized_pnl=equity_records[-1]["unrealized_pnl"] if equity_records else Decimal("0.0"),
             ending_equity=final_equity,
             net_return_pct=((final_equity - self.config.initial_cash) / self.config.initial_cash) * Decimal("100"),
+            sharpe_ratio=canonical_sharpe,
             max_drawdown_pct=max_drawdown,
             win_rate_pct=win_rate,
         )
@@ -672,7 +684,7 @@ class NautilusTraderSubstrate:
 
         manifest = BacktestManifest(
             manifest_id=manifest_id,
-            hypothesis_id="HYP-NAUTILUS-SUBSTRATE",
+            hypothesis_id=hypothesis_id,
             hypothesis_spec_sha256=hypothesis_spec_sha256,
             canonical_data_hashes=canonical_data_hashes,
             engine_config_hash=engine_config_hash,

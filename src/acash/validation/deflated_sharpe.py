@@ -33,6 +33,92 @@ from acash.validation.schema import DSRResult, SearchTrialLedger, SelectionCorre
 
 EULER_MASCHERONI_CONSTANT = 0.57721566490153286060
 
+MIN_ANNUALIZED_SHARPE_OBSERVATIONS = 2
+ZERO_VARIANCE_STD_EPSILON = 1e-12
+
+
+def calculate_annualized_sharpe(
+    returns: Sequence[Union[Decimal, float]],
+    periods_per_year: Union[Decimal, float, int],
+) -> Decimal:
+    """Single canonical annualized Sharpe ratio authority (Phase 14, D4 / D7 ratified).
+
+    Behavioral contract (behaviorally equivalent to the Phase 6 gate's inline Sharpe
+    mathematics on valid inputs):
+      - arithmetic per-period mean;
+      - sample standard deviation with ``ddof=1``;
+      - annualization via ``sqrt(periods_per_year)``;
+      - ``std <= 1e-12`` (zero variance) fails closed;
+      - non-finite inputs fail closed;
+      - insufficient observations (fewer than ``MIN_ANNUALIZED_SHARPE_OBSERVATIONS``) fail closed;
+      - unsupported or undefined annualization (non-finite or ``<= 0`` ``periods_per_year``)
+        fails closed (``ValidationConfig.periods_per_year`` is the sole annualization authority).
+
+    This function does NOT modify any Phase 6 gate thresholds, acceptance criteria,
+    or governance semantics; it is the pure calculation used for truthful Phase 5
+    ``execution_summary.sharpe_ratio`` emission and Evidence Bridge (D8-B) assembly.
+
+    Args:
+        returns: Per-period simple return observations (two or more required, all finite).
+        periods_per_year: Frozen annualization frequency (must be finite and strictly positive).
+
+    Returns:
+        The annualized Sharpe ratio quantized to the canonical 18-decimal ledger scale.
+
+    Raises:
+        DataContractError: On zero-variance, non-finite, insufficient, or invalid annualization input.
+    """
+    n = len(returns)
+    if n < MIN_ANNUALIZED_SHARPE_OBSERVATIONS:
+        raise DataContractError(
+            f"Cannot compute annualized Sharpe: insufficient observations n={n} "
+            f"< {MIN_ANNUALIZED_SHARPE_OBSERVATIONS}."
+        )
+
+    ppy_dec = periods_per_year if isinstance(periods_per_year, Decimal) else Decimal(str(periods_per_year))
+    if not ppy_dec.is_finite() or ppy_dec <= Decimal("0.0"):
+        raise DataContractError(
+            f"Cannot compute annualized Sharpe: invalid periods_per_year '{periods_per_year}'. "
+            f"Unsupported or undefined annualization must fail closed (ValidationConfig.periods_per_year "
+            f"is the sole annualization authority)."
+        )
+
+    float_vals: List[float] = []
+    for idx, rv in enumerate(returns):
+        rv_dec = rv if isinstance(rv, Decimal) else Decimal(str(rv))
+        if not rv_dec.is_finite():
+            raise DataContractError(
+                f"Cannot compute annualized Sharpe: non-finite return observation at index {idx} ({rv})."
+            )
+        float_vals.append(float(rv_dec))
+
+    arr = np.asarray(float_vals, dtype=np.float64)
+    mean = float(np.mean(arr))
+    std = float(np.std(arr, ddof=1))
+    if not (math.isfinite(mean) and math.isfinite(std)):
+        raise DataContractError(
+            f"Cannot compute annualized Sharpe: non-finite mean ({mean}) or sample "
+            f"standard deviation ({std}) derived from return series."
+        )
+    if std <= ZERO_VARIANCE_STD_EPSILON:
+        raise DataContractError(
+            f"Cannot compute annualized Sharpe: zero-variance return series "
+            f"(sample std {std:.3e} <= {ZERO_VARIANCE_STD_EPSILON}) fails closed."
+        )
+
+    period_sharpe = mean / std
+    annualized = period_sharpe * math.sqrt(float(ppy_dec))
+    if not math.isfinite(annualized):
+        raise DataContractError(
+            f"Cannot compute annualized Sharpe: non-finite annualized result ({annualized}) "
+            f"from period Sharpe ({period_sharpe}) and periods_per_year ({ppy_dec})."
+        )
+
+    quantized = to_decimal18(Decimal(str(annualized)))
+    if quantized is None:
+        raise DataContractError("Cannot compute annualized Sharpe: 18-decimal quantization failed.")
+    return quantized
+
 
 def _standard_normal_cdf(x: float) -> float:
     """Standard normal cumulative distribution function Phi(x)."""

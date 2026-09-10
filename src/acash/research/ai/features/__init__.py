@@ -28,19 +28,29 @@ from acash.research.ai.features.library import (
     canonical_form,
 )
 from acash.research.ai.schema import AIFeatureProposal
+from acash.research.ai.features.materializer import (
+    FEATURE_COLUMN_TYPE,
+    FeatureMaterializationResult,
+    FeatureMaterializer,
+    MaterializationProvenance,
+)
 
 __all__ = [
     "ALIASES",
     "AIFeatureProposal",
     "AstValidationResult",
     "CausalAstValidator",
+    "FEATURE_COLUMN_TYPE",
     "FORBIDDEN_OPERATORS",
     "FeatureDiscoveryEngine",
     "FeatureDiscoveryRequest",
     "FeatureExpressionError",
+    "FeatureMaterializationResult",
+    "FeatureMaterializer",
     "FeatureOperator",
     "GLOBAL_AGGREGATE_NAMES",
     "KNOWN_OPERATORS",
+    "MaterializationProvenance",
     "OPERATOR_ARITY",
     "RESERVED_NAMES",
     "canonical_form",

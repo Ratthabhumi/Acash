@@ -67,6 +67,40 @@ class SharpeSpace(str, Enum):
     PERIOD = "PERIOD"  # Raw single-period Sharpe ratio (unscaled per-bar basis)
 
 
+class SearchTrialStatus(str, Enum):
+    """Ratified D6 per-trial census status (human-ratified Option A).
+
+    Every census member is implicitly REGISTERED (membership in the frozen
+    SearchTrialLedger census). `trial_status` records the executed/failed/invalid
+    OUTCOME of a pre-registered trial WITHOUT inventing or fabricating evidence:
+
+    - EXECUTED_SUCCESSFULLY: trial completed with full, truthful evidence; all evidence
+      fields are mandatory and `failure_reason` MUST be None (backward-compatible default).
+    - FAILED:                trial crashed/failed; evidence fields MUST be None and a
+      non-empty deterministic `failure_reason` is mandatory.
+    - INVALID:               trial invalidated; evidence fields MUST be None and a
+      non-empty deterministic `failure_reason` is mandatory.
+
+    FAILED/INVALID trials REMAIN in the census (K is frozen; K = |trials| never shrinks)
+    and receive no new financial return convention and no fabricated performance.
+    """
+
+    EXECUTED_SUCCESSFULLY = "EXECUTED_SUCCESSFULLY"
+    FAILED = "FAILED"
+    INVALID = "INVALID"
+
+
+# Single authority for the trial evidence field names (used by status-conditional validation,
+# the non-executed factory, and digest-bound consumers). No duplicate field lists elsewhere.
+SEARCH_TRIAL_EVIDENCE_FIELDS: Tuple[str, ...] = (
+    "in_sample_sharpe",
+    "p_value",
+    "p_value_input_hash",
+    "in_sample_return_series_sha256",
+    "execution_manifest_id",
+)
+
+
 class SearchTrialRecord(BaseModel):
     """Immutable audit record of a single strategy trial within an exploratory search ledger."""
 
@@ -77,32 +111,55 @@ class SearchTrialRecord(BaseModel):
     hypothesis_id: str = Field(min_length=1, description="Bound research hypothesis ID.")
     feature_names: Tuple[str, ...] = Field(description="Immutable tuple of feature names used by this trial.")
     parameters: Mapping[str, Any] = Field(description="Immutable dictionary of parameter values explored in this trial.")
-    in_sample_sharpe: Decimal = Field(description="Annualized in-sample Sharpe ratio achieved by this trial.")
-    p_value: Decimal = Field(
+    trial_status: SearchTrialStatus = Field(
+        default=SearchTrialStatus.EXECUTED_SUCCESSFULLY,
+        description=(
+            "Ratified D6 census outcome status. All census members are implicitly REGISTERED; "
+            "EXECUTED_SUCCESSFULLY requires full evidence, FAILED/INVALID require NO evidence."
+        ),
+    )
+    failure_reason: Optional[str] = Field(
+        default=None,
+        description=(
+            "Deterministic non-empty failure/invalidation reason. MUST be None for "
+            "EXECUTED_SUCCESSFULLY trials and MUST be non-empty for FAILED/INVALID trials."
+        ),
+    )
+    in_sample_sharpe: Optional[Decimal] = Field(
+        default=None,
+        description="Annualized in-sample Sharpe ratio achieved by this trial. Mandatory for EXECUTED_SUCCESSFULLY; None for FAILED/INVALID.",
+    )
+    p_value: Optional[Decimal] = Field(
+        default=None,
         description=(
             "Raw unadjusted two-sided asymptotic p-value for H_0: SR_m = 0 under standard normal error "
             "approximation. Serves strictly as a preliminary screening and multiple-testing input. "
-            "NOT to be confused with Deflated Sharpe Ratio (DSR) selection probability."
+            "NOT to be confused with Deflated Sharpe Ratio (DSR) selection probability. "
+            "Mandatory for EXECUTED_SUCCESSFULLY; None for FAILED/INVALID."
         ),
     )
     p_value_method: str = Field(
         default="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
         description="Hypothesis test method deriving p_value (H_0: SR=0 under asymptotic normality approximation).",
     )
-    p_value_input_hash: str = Field(
+    p_value_input_hash: Optional[str] = Field(
+        default=None,
         pattern=r"^[0-9a-f]{64}$",
-        description="Mandatory 64-hex SHA-256 hash binding p_value to return series, config, and test method.",
+        description="64-hex SHA-256 hash binding p_value to return series, config, and test method. Mandatory for EXECUTED_SUCCESSFULLY; None for FAILED/INVALID.",
     )
-    in_sample_return_series_sha256: str = Field(
+    in_sample_return_series_sha256: Optional[str] = Field(
+        default=None,
         pattern=r"^[0-9a-f]{64}$",
-        description="Mandatory 64-hex SHA-256 hash of the trial in-sample return series.",
+        description="64-hex SHA-256 hash of the trial in-sample return series. Mandatory for EXECUTED_SUCCESSFULLY; None for FAILED/INVALID.",
     )
     config_sha256: str = Field(
         pattern=r"^[0-9a-f]{64}$",
-        description="Mandatory 64-hex SHA-256 hash of parameter and feature configuration.",
+        description="Mandatory 64-hex SHA-256 hash of parameter and feature configuration (census identity binding).",
     )
-    execution_manifest_id: str = Field(
-        min_length=1, description="Mandatory bound BacktestManifest ID for candidate execution lineage."
+    execution_manifest_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Bound BacktestManifest ID for candidate execution lineage. Mandatory for EXECUTED_SUCCESSFULLY; None for FAILED/INVALID.",
     )
 
     @staticmethod
@@ -207,6 +264,47 @@ class SearchTrialRecord(BaseModel):
                 features = data.get("feature_names", ())
                 params = data.get("parameters", {})
                 data["config_sha256"] = cls.compute_config_sha256(features, params)
+
+            # D6 status-aware seeding: parse trial_status before evidence derivation.
+            raw_status = data.get("trial_status", SearchTrialStatus.EXECUTED_SUCCESSFULLY)
+            if isinstance(raw_status, SearchTrialStatus):
+                status_is_non_executed = raw_status != SearchTrialStatus.EXECUTED_SUCCESSFULLY
+                data["trial_status"] = raw_status
+            elif raw_status is None:
+                status_is_non_executed = False
+                data["trial_status"] = SearchTrialStatus.EXECUTED_SUCCESSFULLY
+            else:
+                try:
+                    parsed_status = SearchTrialStatus(raw_status)
+                except ValueError as e:
+                    raise DataContractError(
+                        f"Invalid trial_status '{raw_status}' for trial '{trial_id}'. "
+                        f"Must be one of EXECUTED_SUCCESSFULLY / FAILED / INVALID."
+                    ) from e
+                data["trial_status"] = parsed_status
+                status_is_non_executed = parsed_status != SearchTrialStatus.EXECUTED_SUCCESSFULLY
+
+            # REGISTERED+FAILED / REGISTERED+INVALID: no evidence may exist (no fabricated performance),
+            # and NO in_sample_returns may be supplied (crashed/invalid trials have no truthful series).
+            if status_is_non_executed:
+                forbidden_fields = [
+                    field_name
+                    for field_name in SEARCH_TRIAL_EVIDENCE_FIELDS
+                    if data.get(field_name) is not None
+                ]
+                if forbidden_fields:
+                    raise DataContractError(
+                        f"FAILED/INVALID trial '{trial_id}' MUST carry no evidence; forbidden field(s) "
+                        f"{forbidden_fields} were supplied. No fabricated performance is permitted under "
+                        f"the ratified D6 census rule."
+                    )
+                if data.get("in_sample_returns") is not None:
+                    raise DataContractError(
+                        f"FAILED/INVALID trial '{trial_id}' MUST carry no in_sample_returns evidence; "
+                        f"crashed/invalid trials have no truthful return series."
+                    )
+                return data
+
             if "in_sample_return_series_sha256" not in data or data["in_sample_return_series_sha256"] is None:
                 if "in_sample_returns" in data and data["in_sample_returns"] is not None:
                     from acash.validation.gate import _compute_canonical_series_sha256
@@ -256,6 +354,43 @@ class SearchTrialRecord(BaseModel):
                 data["p_value_input_hash"] = expected_p_hash
 
         return data
+
+    @model_validator(mode="after")
+    def validate_status_conditional_evidence(self) -> "SearchTrialRecord":
+        """Ratified D6 evidence contract: full evidence iff EXECUTED_SUCCESSFULLY; none otherwise.
+
+        EXECUTED_SUCCESSFULLY: every evidence field MUST be present and failure_reason MUST be None.
+        FAILED / INVALID:      every evidence field MUST be None and failure_reason MUST be
+                               non-empty (deterministic, no fabricated performance, no silent floor).
+        """
+        evidence_present = {
+            field_name: getattr(self, field_name) is not None
+            for field_name in SEARCH_TRIAL_EVIDENCE_FIELDS
+        }
+        if self.trial_status == SearchTrialStatus.EXECUTED_SUCCESSFULLY:
+            if self.failure_reason is not None:
+                raise DataContractError(
+                    f"EXECUTED_SUCCESSFULLY trial '{self.trial_id}' MUST have failure_reason=None; "
+                    f"got '{self.failure_reason}'."
+                )
+            missing = [name for name, present in evidence_present.items() if not present]
+            if missing:
+                raise DataContractError(
+                    f"EXECUTED_SUCCESSFULLY trial '{self.trial_id}' is missing mandatory evidence field(s): {missing}."
+                )
+            return self
+        present = [name for name, present in evidence_present.items() if present]
+        if present:
+            raise DataContractError(
+                f"Trial '{self.trial_id}' has status '{self.trial_status.value}' but carries evidence field(s) "
+                f"{present}; non-executed trials MUST carry no evidence (no fabricated performance)."
+            )
+        if self.failure_reason is None or not self.failure_reason.strip():
+            raise DataContractError(
+                f"Trial '{self.trial_id}' has status '{self.trial_status.value}' but failure_reason is missing or "
+                f"blank; FAILED/INVALID trials MUST carry a non-empty deterministic failure_reason."
+            )
+        return self
 
     @classmethod
     def create(
@@ -337,6 +472,47 @@ class SearchTrialRecord(BaseModel):
             execution_manifest_id=execution_manifest_id,
         )
 
+    @classmethod
+    def create_declared(
+        cls,
+        trial_id: str,
+        strategy_id: str,
+        hypothesis_id: str,
+        feature_names: Sequence[str],
+        parameters: Mapping[str, Any],
+        trial_status: SearchTrialStatus,
+        failure_reason: str,
+        config_sha256: Optional[str] = None,
+    ) -> "SearchTrialRecord":
+        """Ratified D6 factory for REGISTERED+FAILED / REGISTERED+INVALID census trials.
+
+        Constructs a census member with NO evidence (all evidence fields None) and a
+        non-empty deterministic failure_reason. The trial REMAINS in the census: K is frozen
+        and the identity (trial_id / config_sha256) is preserved. Use create() for executed trials.
+        """
+        if trial_status == SearchTrialStatus.EXECUTED_SUCCESSFULLY:
+            raise DataContractError(
+                f"create_declared() is reserved for FAILED/INVALID trials; use create() for trial '{trial_id}'."
+            )
+        if not failure_reason or not failure_reason.strip():
+            raise DataContractError(
+                f"create_declared() requires a non-empty deterministic failure_reason for trial '{trial_id}'."
+            )
+        frozen_params = deep_freeze_value(parameters)
+        sorted_features = tuple(sorted(list(feature_names)))
+        if config_sha256 is None:
+            config_sha256 = cls.compute_config_sha256(sorted_features, frozen_params)
+        return cls(
+            trial_id=trial_id,
+            strategy_id=strategy_id,
+            hypothesis_id=hypothesis_id,
+            feature_names=sorted_features,
+            parameters=frozen_params,
+            trial_status=trial_status,
+            failure_reason=failure_reason,
+            config_sha256=config_sha256,
+        )
+
 
 
 
@@ -365,6 +541,13 @@ class SearchTrialLedger(BaseModel):
     )
     is_sealed: bool = Field(default=False, description="True if search universe is sealed and immutable.")
     sealed_at_utc: Optional[str] = Field(default=None, description="UTC timestamp when search universe was sealed.")
+    sealed_by_owner: Optional[str] = Field(
+        default=None,
+        description=(
+            "Designated D6 sealing-owner identifier that sealed the census (operational lifecycle "
+            "metadata; like sealed_at_utc it does NOT alter the content identity / ledger_digest)."
+        ),
+    )
     ledger_digest: Optional[str] = Field(
         default=None,
         pattern=r"^[0-9a-f]{64}$",
@@ -408,6 +591,10 @@ class SearchTrialLedger(BaseModel):
                     "p_value": t.p_value,
                     "p_value_method": t.p_value_method,
                     "p_value_input_hash": t.p_value_input_hash,
+                    "trial_status": t.trial_status.value
+                    if isinstance(t.trial_status, SearchTrialStatus)
+                    else str(t.trial_status),
+                    "failure_reason": t.failure_reason,
                 }
                 for t in self.trials
             ],
@@ -415,8 +602,13 @@ class SearchTrialLedger(BaseModel):
         return CanonicalConfigSerializer.compute_sha256(canonical_obj)
 
 
-    def seal(self, sealed_at_utc: Optional[str] = None) -> "SearchTrialLedger":
-        """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest."""
+    def seal(self, sealed_at_utc: Optional[str] = None, sealing_owner: Optional[str] = None) -> "SearchTrialLedger":
+        """Explicitly seal the search trial universe with canonical timestamp and immutable cryptographic digest.
+
+        `sealing_owner` optionally records the designated D6 sealing-owner identifier that performed the
+        sealing (operational metadata; excluded from ledger_digest). The sanctioned authoritative sealing
+        path is `SearchTrialCensusSealAuthority.seal_census` (research components MUST NOT seal).
+        """
         if self.is_sealed and self.ledger_digest is not None:
             return self
 
@@ -427,6 +619,7 @@ class SearchTrialLedger(BaseModel):
             update={
                 "is_sealed": True,
                 "sealed_at_utc": now_utc,
+                "sealed_by_owner": sealing_owner,
                 "ledger_digest": digest,
             }
         )
@@ -477,6 +670,28 @@ class SearchTrialLedger(BaseModel):
         """Total number of exploratory trials K."""
         return len(self.trials)
 
+    def _assert_census_evidence(self, consumer: str, required_fields: Sequence[str]) -> None:
+        """Fail closed rather than silently skip/fabricate for non-executed census members (D6).
+
+        DSR/Holm/p-value consumers operate on the FROZEN census (K = |trials|). A census
+        containing FAILED/INVALID members cannot truthfully contribute evidence to these
+        statistics; substituting values or shrinking K is forbidden under the ratified D6 rule.
+        """
+        for t in self.trials:
+            if t.trial_status != SearchTrialStatus.EXECUTED_SUCCESSFULLY:
+                raise DataContractError(
+                    f"Cannot compute {consumer} over a census containing non-executed trial '{t.trial_id}' "
+                    f"(status='{t.trial_status.value}'). D6 keeps K=|trials| frozen; eclipsing failed trials "
+                    f"or substituting evidence would corrupt DSR/Holm accounting. The D6 statistical-semantics "
+                    f"decision is required before mixed censuses can be consumed."
+                )
+            for field_name in required_fields:
+                if getattr(t, field_name) is None:
+                    raise DataContractError(
+                        f"Cannot compute {consumer}: trial '{t.trial_id}' is missing evidence field "
+                        f"'{field_name}'. Fail-closed; no silent floor or fabricated value is applied."
+                    )
+
     def get_empirical_sharpe_variance(self) -> float:
         """Empirical sample variance of Sharpe ratios across recorded trials.
 
@@ -487,7 +702,15 @@ class SearchTrialLedger(BaseModel):
                 f"Cannot compute empirical trial variance with fewer than 2 recorded trials (got {len(self.trials)}). "
                 f"Single-trial DSR must operate under SelectionCorrectionMode.SINGLE_TRIAL."
             )
-        sharpes = [float(t.in_sample_sharpe) for t in self.trials]
+        self._assert_census_evidence("get_empirical_sharpe_variance", ("in_sample_sharpe",))
+        sharpes: List[float] = []
+        for t in self.trials:
+            sr = t.in_sample_sharpe
+            if sr is None:
+                raise DataContractError(
+                    f"Cannot compute get_empirical_sharpe_variance: trial '{t.trial_id}' has no in_sample_sharpe evidence."
+                )
+            sharpes.append(float(sr))
         var = float(np.var(sharpes, ddof=1))
         return max(0.0, var)
 
@@ -495,14 +718,30 @@ class SearchTrialLedger(BaseModel):
         """Empirical sample mean of Sharpe ratios across recorded trials."""
         if len(self.trials) == 0:
             return 0.0
-        sharpes = [float(t.in_sample_sharpe) for t in self.trials]
+        self._assert_census_evidence("get_empirical_sharpe_mean", ("in_sample_sharpe",))
+        sharpes: List[float] = []
+        for t in self.trials:
+            sr = t.in_sample_sharpe
+            if sr is None:
+                raise DataContractError(
+                    f"Cannot compute get_empirical_sharpe_mean: trial '{t.trial_id}' has no in_sample_sharpe evidence."
+                )
+            sharpes.append(float(sr))
         return float(np.mean(sharpes))
 
     @property
     def p_values(self) -> List[Decimal]:
-
-        """All empirical p-values recorded in the ledger."""
-        return [t.p_value for t in self.trials]
+        """All empirical p-values recorded in the ledger (census-complete; fails closed on non-executed members)."""
+        self._assert_census_evidence("p_values", ("p_value",))
+        p_vals: List[Decimal] = []
+        for t in self.trials:
+            p = t.p_value
+            if p is None:
+                raise DataContractError(
+                    f"Cannot compute p_values: trial '{t.trial_id}' has no p_value evidence."
+                )
+            p_vals.append(p)
+        return p_vals
 
 
 class ParameterPerturbationPoint(BaseModel):

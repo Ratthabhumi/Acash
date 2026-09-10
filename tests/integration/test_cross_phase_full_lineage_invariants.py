@@ -629,10 +629,12 @@ def test_cross_phase_nautilus_substrate_separation_and_catalog_export() -> None:
         with pytest.raises(SubstrateRuntimeUnavailableError, match="NautilusTrader runtime package"):
             substrate.run_simulation(
                 catalog_path=exported_bars_path,
+                hypothesis_id="HYP-CROSS-PHASE-01",
                 hypothesis_spec_sha256="0" * 64,
                 strategy_config_hash="0" * 64,
                 pyproject_toml_sha256="0" * 64,
                 git_commit_hash="a" * 40,
+                periods_per_year=Decimal("252.0"),
             )
 
 
@@ -683,35 +685,41 @@ def test_cross_phase_sovereign_native_substrate_and_shadow_accounting() -> None:
         },
     )
 
-    # Bar Event triggering actor on_bar
-    bar_event = BacktestMarketEvent(
-        event_type=BacktestEventType.BAR,
-        symbol="ES.FUT",
-        event_timestamp_ns=t0_ns + 60_000_000_000,
-        source_order_key="ES.FUT:BARS:1",
-        message_rank=10,
-        stream_id="BARS",
-        row_sub_index=0,
-        payload={
-            "open": Decimal("5001.00"),
-            "high": Decimal("5005.00"),
-            "low": Decimal("5000.00"),
-            "close": Decimal("5004.00"),
-            "volume": Decimal("500.0"),
-            "bar_index": 0,
-        },
-    )
+    # Bar Events triggering actor on_bar
+    closes = [Decimal("5004.00"), Decimal("5007.00"), Decimal("5002.00")]
+    bar_events = [
+        BacktestMarketEvent(
+            event_type=BacktestEventType.BAR,
+            symbol="ES.FUT",
+            event_timestamp_ns=t0_ns + (60_000_000_000 * (i + 1)),
+            source_order_key=f"ES.FUT:BARS:{i + 1}",
+            message_rank=10,
+            stream_id="BARS",
+            row_sub_index=0,
+            payload={
+                "open": closes[i] - Decimal("1.00"),
+                "high": closes[i] + Decimal("2.00"),
+                "low": closes[i] - Decimal("2.00"),
+                "close": closes[i],
+                "volume": Decimal("500.0"),
+                "bar_index": i,
+            },
+        )
+        for i in range(3)
+    ]
 
-    events = [snap_event, bar_event]
+    events = [snap_event, *bar_events]
     valid_sha = "0" * 64
     valid_git = "a" * 40
 
     manifest, fills_tbl, equity_tbl = runner.run_backtest(
         events=events,
+        hypothesis_id="HYP-CROSS-PHASE-01",
         hypothesis_spec_sha256=valid_sha,
         strategy_config_hash=valid_sha,
         pyproject_toml_sha256=valid_sha,
         git_commit_hash=valid_git,
+        periods_per_year=Decimal("252.0"),
         canonical_data_hashes=[valid_sha],
     )
 

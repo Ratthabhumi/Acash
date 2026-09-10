@@ -1076,8 +1076,10 @@ def test_statistical_validation_gate_rejects_m_k_ledger_mismatch() -> None:
     ]
 
     for t in trials:
-        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
-            manifest_id=t.execution_manifest_id,
+        t_manifest_id = t.execution_manifest_id
+        assert t_manifest_id is not None
+        manifest_store[t_manifest_id] = _make_mock_manifest(
+            manifest_id=t_manifest_id,
             hypothesis_id="HYP_01",
             strategy_config_hash=t.config_sha256,
         )
@@ -1347,7 +1349,7 @@ def test_statistical_validation_gate_verifies_candidate_return_series_sha256() -
             p_value=Decimal("0.050"),
             in_sample_return_series_sha256="deadbeef" * 8,  # Tampered hash
             config_sha256=ledger_valid.trials[1].config_sha256,
-            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,
+            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,  # type: ignore[arg-type]  # D6: known-present on executed trial
         ),
     ]
     ledger_tampered = SearchTrialLedger(
@@ -1493,7 +1495,7 @@ def test_statistical_validation_gate_rejects_tampered_candidate_config_sha256() 
             p_value=Decimal("0.050"),
             in_sample_return_series_sha256=ledger_valid.trials[1].in_sample_return_series_sha256,
             config_sha256="deadbeef" * 8,  # Tampered config hash
-            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,
+            execution_manifest_id=ledger_valid.trials[1].execution_manifest_id,  # type: ignore[arg-type]  # D6: known-present on executed trial
         ),
 
     ]
@@ -2426,11 +2428,14 @@ def test_statistical_validation_gate_rejects_when_primary_candidate_fails_fwer()
         ),
     ]
     for t in trials:
-        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
-            manifest_id=t.execution_manifest_id,
+        t_manifest_id = t.execution_manifest_id
+        t_sharpe = t.in_sample_sharpe
+        assert t_manifest_id is not None and t_sharpe is not None
+        manifest_store[t_manifest_id] = _make_mock_manifest(
+            manifest_id=t_manifest_id,
             hypothesis_id="HYP_01",
             strategy_config_hash=t.config_sha256,
-            sharpe=t.in_sample_sharpe,
+            sharpe=t_sharpe,
         )
 
     ledger = SearchTrialLedger(
@@ -2506,11 +2511,14 @@ def test_statistical_validation_gate_rejects_divergent_ledger_p_value() -> None:
         ),
     ]
     for t in trials:
-        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
-            manifest_id=t.execution_manifest_id,
+        t_manifest_id = t.execution_manifest_id
+        t_sharpe = t.in_sample_sharpe
+        assert t_manifest_id is not None and t_sharpe is not None
+        manifest_store[t_manifest_id] = _make_mock_manifest(
+            manifest_id=t_manifest_id,
             hypothesis_id="HYP_01",
             strategy_config_hash=t.config_sha256,
-            sharpe=t.in_sample_sharpe,
+            sharpe=t_sharpe,
         )
 
     ledger = SearchTrialLedger(
@@ -2584,11 +2592,14 @@ def test_statistical_validation_gate_rejects_tampered_p_value_input_hash() -> No
         ),
     ]
     for t in trials:
-        manifest_store[t.execution_manifest_id] = _make_mock_manifest(
-            manifest_id=t.execution_manifest_id,
+        t_manifest_id = t.execution_manifest_id
+        t_sharpe = t.in_sample_sharpe
+        assert t_manifest_id is not None and t_sharpe is not None
+        manifest_store[t_manifest_id] = _make_mock_manifest(
+            manifest_id=t_manifest_id,
             hypothesis_id="HYP_01",
             strategy_config_hash=t.config_sha256,
-            sharpe=t.in_sample_sharpe,
+            sharpe=t_sharpe,
         )
 
     ledger = SearchTrialLedger(
@@ -2690,8 +2701,10 @@ def test_search_trial_record_single_canonical_p_value_authority() -> None:
     )
     assert rec.p_value == derived_p
     assert rec.p_value != offset_p
+    rec_series_sha = rec.in_sample_return_series_sha256
+    assert rec_series_sha is not None
     expected_hash = SearchTrialRecord.compute_p_value_input_hash(
-        return_series_sha256=rec.in_sample_return_series_sha256,
+        return_series_sha256=rec_series_sha,
         config_sha256=rec.config_sha256,
         p_value=derived_p,
         p_value_method="ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",

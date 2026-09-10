@@ -5,7 +5,7 @@
   "sharpe_space": "ANNUAL",
   "is_sealed": true,
   "sealed_at_utc": "2026-09-07T00:25:50.663991+00:00",
-  "ledger_digest": "d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565",
+  "ledger_digest": "ec219e0ceefa12b01ab2ce8cc0769e977aef37477b012b8f57885959c222e3aa",
   "trials": [
     {
       "trial_id": "TRIAL-01",

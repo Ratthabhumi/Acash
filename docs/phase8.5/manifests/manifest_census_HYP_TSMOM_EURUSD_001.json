@@ -328,7 +328,7 @@
   ],
   "ledger_summary": {
     "ledger_id": "LEDGER_TSMOM_EURUSD_001_IN_SAMPLE",
-    "ledger_digest": "b1185c4f26d4934e930d526b66d7f3e8786bdbb6c24c263957f9288aa4072b43",
+    "ledger_digest": "c7089f6fdb94e5e17acc1ad833d3af5c4d3fe3bc3122577ae62f4a66b56942ab",
     "sealed_at_utc": "2026-09-06T15:45:33.376118+00:00",
     "total_trials": 9,
     "total_falsified": 9,

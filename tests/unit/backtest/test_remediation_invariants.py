@@ -118,10 +118,12 @@ def test_engine_boundary_out_of_order_event_rejection() -> None:
     with pytest.raises(DataContractError, match="Out-of-order event sequence detected"):
         runner.run_backtest(
             events=[ev1, ev2],
+            hypothesis_id="HYP_REM_0001",
             hypothesis_spec_sha256="a" * 64,
             strategy_config_hash="b" * 64,
             pyproject_toml_sha256="c" * 64,
             git_commit_hash="d" * 40,
+            periods_per_year=Decimal("252.0"),
             canonical_data_hashes=["e" * 64],
         )
 
@@ -172,10 +174,12 @@ def test_nautilus_manifest_id_and_empty_data_hashes_rejection() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             substrate.run_simulation(
                 catalog_path=tmp_dir,
+                hypothesis_id="HYP_REM_NAUT_0001",
                 hypothesis_spec_sha256="a" * 64,
                 strategy_config_hash="b" * 64,
                 pyproject_toml_sha256="c" * 64,
                 git_commit_hash="d" * 40,
+                periods_per_year=Decimal("252.0"),
                 canonical_data_hashes=[],
             )
 

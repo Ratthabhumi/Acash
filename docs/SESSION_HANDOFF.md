@@ -1,362 +1,199 @@
-# ACASH - Session Handoff
+# ACASH — Session Handoff
 
 > **Document:** `docs/SESSION_HANDOFF.md`
-> **Status:** PHASE 14 SLICES 1-4 COMPLETE - F-1 PROPOSAL REQUIRES REVISION - GATE NOT INVOKED - HYP_003 NOT CREATED
-> **Date:** 2026-09-07
+> **Status:** RESEARCH STANDING BY — CAND-FREE-MACRO-001 CONDITIONALLY READY — HUMAN DECISION BINDING PENDING
+> **Date:** 2026-09-10
 > **Operating Environment:** Windows 10/11 x64, Python 3.14.x (`.venv`)
-> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness != Mathematical Validity, Single Canonical Authority, Separation of Concerns)
->
-> **THIS DOCUMENT IS A CONTINUATION AID. IT IS NOT A GOVERNANCE AUTHORITY.**
-> A new session MUST re-read all canonical sources independently and MUST NOT treat this
-> handoff as a replacement for the source documents it references.
+> **Authority:** `AGENTS.md` (Strict Fail-Closed, Zero Unverified Claims, Implementation Correctness ≠ Mathematical Validity, Single Canonical Authority)
 
 ---
 
-## 1. CURRENT SESSION STATUS (operational)
+## 1. REPOSITORY CHECKPOINT (AUTHORITATIVE)
 
-**System is RESEARCH RE-INCEPTION READY IN PRINCIPLE, but F-1 has NOT completed human freeze.**
+- **Branch:** `main`
+- **HEAD == origin/main == `7faf012`**
+- Sync command used at checkpoint: `git clone` (fresh) or `git pull` (existing repo), then open this file.
 
-- Phase 14 implementation is **COMPLETE through Slice 4**. Implementation endpoint: `d6f1a67`.
-- Human decision: **STOP Phase 14 implementation at Slice 4.** Slice 5: **NOT AUTHORIZED / DO NOT START.**
-- F-1 candidate selected by human; first-principles review and pre-registration proposal drafts exist.
-- The governance audit verdict is **PASS WITH REQUIRED FREEZES**; final recommendation is
-  **B - REQUIRES PROPOSAL REVISION**.
-- **The immediate next task is: revise the F-1 proposal documentation to address the audit findings,
-  then re-run the governance review. Target verdict after revision: A - READY FOR HUMAN FREEZE.**
-- **NO GATE. NO HYP_003. NO R1.** This is mandatory for the next session.
-
----
-
-## 2. CURRENT CANONICAL STATE
-
-```
-+---------------------------------------------------------------------------------------------+
-|                                    ACASH GOVERNANCE LEDGER                                   |
-+-----------------------------------------------------------+---------------------------------+
-| HYP_001 (EURUSD M5)                                       | TERMINALLY_FALSIFIED / CLOSED   |
-| HYP_002 (EURUSD H4)                                       | TERMINALLY_FALSIFIED / CLOSED   |
-| HYP_003                                                    | NOT CREATED                     |
-| EURUSD_M5_HOLDOUT (2026-08-18..2026-09-04, bars 6060-9999) | QUARANTINED / PRISTINE          |
-| EURUSD_H4_VALIDATION_OOS (2023-05-29..2024-12-31)          | QUARANTINED / PRISTINE          |
-| Live Capital Authority                                    | $0.00 (Hard-Locked)             |
-| Live Trading Authority                                    | LOCKED                          |
-| Paper Trading Authority                                   | NOT AUTHORIZED                  |
-| Live Trading Authorization                                | NOT AUTHORIZED                  |
-| ResearchReInceptionGate                                   | NOT INVOKED                     |
-| R1 (Research Inception)                                   | NOT STARTED                     |
-| Hypothesis Seal                                           | NONE                            |
-| Phase 14 implementation                                   | COMPLETE THROUGH SLICE 4 (d6f1a67) |
-| Slice 5                                                    | NOT AUTHORIZED                  |
-| F-1 Proposal Freeze                                       | NOT COMPLETE (REVISION REQUIRED) |
-| System                                                     | RESEARCH RE-INCEPTION READY IN PRINCIPLE |
-+-----------------------------------------------------------+---------------------------------+
-```
-
----
-
-## 3. REPOSITORY STATE (VERIFIED)
-
-- Local repository: `C:\Users\Ratthabhumi\Desktop\CO-OP_Project\Acash`
-- Branch: `main`
-- Working tree: **CLEAN**
-- **HEAD (exact):** `cff8960c7b9ee275d719e4c88a83bb18a40d3b57` (short `cff8960`)
-- HEAD commit message: `docs(phase14): add F-1 first-principles review and pre-registration proposal draft`
-
-### HEAD commit contents (documentation only)
-- `docs/phase14/reviews/review_cand_flow_calendar_rebalance_001.md`
-- `docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md`
-
-### Commit chain (newest first, VERIFIED via `git log`)
-| Commit | Message |
+| Commit | Contains |
 |---|---|
-| `cff8960` | docs(phase14): add F-1 first-principles review and pre-registration proposal draft |
-| `28aef5e` | docs(phase14): add research candidate discovery registry |
-| `dd7bfa9` | docs(phase14): preserve quantitative research doctrine |
-| `d6f1a67` | feat(phase14): implement slice4 research report generator |
-| `e401716` | feat(phase14): implement slice3 exploratory feature discovery |
-| `70f1f0a` | docs(phase14): preserve quantframe integration architecture reference |
-| `6e995e7` | fix(phase14): harden slice2 evidence and retrieval boundaries |
-| `b0d19fd` | docs(phase14): add global arbitrage research direction |
-| `b2dcf5a` | docs(phase14): record prediction market ai research direction |
-| `9895a3c` | feat(phase14): implement slice2 source retrieval foundation with deterministic evidence collection |
-| `dcb2e64` | feat(phase14): implement slice1 research intelligence foundation |
+| `7faf012` | `docs/phase14/cand_free_macro_001_human_binding_worksheet.md` (Human Binding Worksheet — Decision Compression) |
+| `954af2c` | `docs/phase14/cand_free_macro_001_human_specification_decision_surface.md` (Decision Surface, decisions D1–D22) |
+| `3e3d918` | `docs/phase14/cand_free_macro_001_validation_readiness.md` (Validation Readiness package) |
 
-### Remote / push status
-- Remote: `https://github.com/Ratthabhumi/Acash.git`
-- **IMPORTANT:** commit `cff8960` is **LOCAL-ONLY and has NOT been pushed**. Do NOT push.
-- The prior QE note about `acashcrypto/acash` was already resolved: the actual remote is
-  `Ratthabhumi/Acash`; commit `cff8960` exists locally on `main` and was NOT pushed.
+**Known pre-existing untracked file (local only):** `docs/phase14/bootstrap_mechanism_governance_review.md` is **LEFT UNCOMMITTED** — not part of the intended current work. Do not blindly stage it; commit only if a future governance review decides it belongs in the canonical chain.
 
 ---
 
-## 4. PHASE 14 IMPLEMENTATION STATUS
+## 2. CURRENT GOVERNANCE STATE
 
-- **COMPLETE through Slice 4.** Endpoint commit: `d6f1a67`.
-- Slices covered: Slice 1 (research intelligence foundation), Slice 2 (source retrieval /
-  evidence boundaries), Slice 3 (deterministic feature discovery), Slice 4 (Section 33 research
-  report generator).
-- **Human decision: STOP Phase 14 implementation at Slice 4.** Slice 5 is **NOT AUTHORIZED**.
-- Last verified gate checks (prior sessions, reference only - re-verify if needed):
-  - Full local suite last verified reference: ~1715 passed / 12 skipped (full repo), with the
-    ai-directory slice4 suite passing separately. Mypy clean over the whole project at last run.
-    Exact current numbers MUST be re-run by the next session before any code change.
-  - 3 pre-existing warnings classified as expected behavior / dependency debt
-    (Pandas4 deprecation in a tangent reference test; expected pydantic serializer warning), not
-    actionable defects.
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           ACASH GOVERNANCE LEDGER                         │
+├───────────────────────────────────┬───────────────────────────────────────┤
+│ HYP_001 (M5 Intraday)            │ TERMINALLY_FALSIFIED / CLOSED / IMMUT  │
+│ HYP_002 (H4 Session)             │ TERMINALLY_FALSIFIED / CLOSED          │
+│ HYP_003                          │ NOT CREATED                            │
+│ CAND-FREE-MACRO-001              │ CONDITIONALLY READY                    │
+│ PRE-REGISTRATION                 │ NOT FULLY FROZEN                       │
+│ EMPIRICAL VALIDATION             │ NOT AUTHORIZED                         │
+│ BACKTEST                         │ NOT AUTHORIZED                         │
+│ HYP_002 Validation (3751..4996)  │ QUARANTINED / PRISTINE (NOT REUSABLE)  │
+│ HYP_002 Blind OOS (5009..6230)   │ QUARANTINED / PRISTINE (NOT REUSABLE)  │
+│ 2026 M5 Holdout (6060..9999)     │ QUARANTINED / PRISTINE                 │
+│ Live Capital Authority           │ $0.00 (Hard-Locked)                    │
+│ Live Trading Authority           │ LOCKED                                 │
+│ Broker Connection                │ DISCONNECTED / NONE                    │
+│ System                           │ RESEARCH STANDING BY                   │
+└───────────────────────────────────┴───────────────────────────────────────┘
+```
 
 ---
 
-## 5. HYPOTHESIS LINEAGE
+## 3. NEXT STEP — HUMAN SPECIFICATION BINDING
+
+Start from the **Human Binding Worksheet**: `docs/phase14/cand_free_macro_001_human_binding_worksheet.md`.
+
+Decision compression achieved: 22 dimensions (D1–D22) → **5 batch-confirmable** (Group A) + **12 Human choice** (Group B, folded into 5 rounds) + **3 derivable** (Group C, incl. K) + governance items.
+
+Decision sequence (exact order, do not skip):
+
+```
+ROUND 0   Batch-confirm proposed defaults (A1–A5)
+ROUND 1   Event Window + Return          (D3, D4)
+ROUND 2   Baseline + Overlap             (D7, D8)
+ROUND 3   Grid → K → Statistical Protocol (D10, D11, D12)
+          [K = |Cartesian product(Grid)|, derived, never hand-picked]
+ROUND 4   IS/OOS + Blind + Cost          (D14, D15, D16, D9)
+ROUND 5   Kill + PASS/FAIL/INVALID       (D19, D20)
+     ↓
+Draft Freeze Candidate
+     ↓
+Anti-HARKing review ("any parameter chosen because we saw the outcome?")
+     ↓
+Pre-registration Freeze
+     ↓
+Data Archive / Manifest
+     ↓
+Explicit Human Authorization
+     ↓
+ONLY THEN   empirical validation / backtest
+```
+
+Do NOT state that any of these future steps are already completed.
+
+---
+
+## 4. DO NOT RE-RUN COMPLETED STAGES
+
+The following stages are **COMPLETE** and must **NOT** be repeated:
+
+- SSRN literature discovery
+- free-data feasibility review
+- bootstrap mechanism governance review
+- MACRO-001 readiness review (Validation Readiness package, `3e3d918`)
+- Human Specification Decision Surface (`954af2c`)
+- Decision Compression (Human Binding Worksheet, `7faf012`)
+
+Next work begins at: **Human Decision Binding (ROUND 0)** of the worksheet.
+
+---
+
+## 5. SESSION BOUNDARY (HARD, VERBATIM)
+
+- `CAND-FREE-MACRO-001` remains **CONDITIONALLY READY**.
+- `PRE-REGISTRATION` remains **NOT FULLY FROZEN**.
+- `EMPIRICAL VALIDATION` remains **NOT AUTHORIZED**.
+- `BACKTEST` remains **NOT AUTHORIZED**.
+- `HYP_003` = **NOT AUTHORIZED** · `R1` = **NOT AUTHORIZED** · `ResearchReInceptionGate` = **NOT INVOKED**.
+- `TRADING` = **LOCKED** · `CAPITAL` = **$0.00** · `BROKER` = **DISCONNECTED / NONE**.
+
+**DO NOT BACKTEST YET.**
+
+No empirical work is authorized until the full binding sequence of Section 3 completes with explicit Human authorization: no event study, returns, IC, Sharpe, p-values, backtest, parameter optimization, hypothesis creation, gate invocation, broker connection, or order generation.
+
+---
+
+## 6. WHAT MUST NOT BE DONE
+
+- Do NOT create `HYP_003`.
+- Do NOT reuse quarantined HYP_002 Validation/OOS or 2026 M5 Holdout partitions.
+- Do NOT run Validation / OOS / backtests on quarantined data.
+- Do NOT acquire new market data without authorization.
+- Do NOT connect to a broker; do NOT allocate capital > `$0.00`.
+- Do NOT alter historical HYP_001 / HYP_002 results or their digests (Sections 7, 8).
+- Do NOT silently resolve a MACRO-001 decision gap — write `HUMAN DECISION REQUIRED` / `PROPOSED DEFAULT — HUMAN CONFIRMATION REQUIRED`.
+- Do NOT author any empirical/statistical claim for CAND-FREE-MACRO-001 before the pre-registration is frozen.
+- Do NOT invent K, floors (`max(1e-12, val)`), neutral outcomes, or magic constants. Raise `DataContractError` instead.
+
+---
+
+## 7. HYPOTHESIS LINEAGE (HISTORICAL — IMMUTABLE)
 
 | Hypothesis | Market / TF | Lifecycle | Final State |
 |---|---|---|---|
-| `HYP_TSMOM_EURUSD_001` | EURUSD M5 | R1-R3 (0/9 qualified) -> R4-R7 early-terminated | **TERMINALLY_FALSIFIED / CLOSED / IMMUTABLE** |
-| `HYP_TSMOM_EURUSD_HTF_002` | EURUSD H4 | R1-R3 (0/12 qualified) -> R4 early-terminated | **TERMINALLY_FALSIFIED / CLOSED** |
-| `HYP_003` | - | - | **NOT CREATED** |
+| `HYP_TSMOM_EURUSD_001` | EURUSD M5 | R1→R2→R3 (0/9 qualified) → R4–R7 early-terminated | **TERMINALLY_FALSIFIED / CLOSED / IMMUTABLE** |
+| `HYP_TSMOM_EURUSD_HTF_002` | EURUSD H4 | R1→R2→R3 (0/12 qualified) → R4 early-terminated | **TERMINALLY_FALSIFIED / CLOSED** |
+| `HYP_003` | — | — | **NOT CREATED** |
 
-### Immutable HYP_002 digests (historical; MUST NOT be altered)
-- Sealed hypothesis spec: `47c077a65f3057ae5ec83c8e7cf9179ababea9e5b18bc999bdc480a44f544afe`
-- R3 Search Trial Ledger digest: `d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565`
-- R3 Manifest digest: `809ac530c69745924550723b19b79a7a82bd4182659f6eb2a5cfc4b019c24ccd`
+HYP_002 closure: in-sample census exactly `K=12`; 0/12 qualified. Sharpe range −2.234 … −3.677 (undeflated annualized IS, √1512, 1.2 bps roundtrip). Status `VERIFIED` (closure audited 2026-09-07).
 
 ---
 
-## 6. DATA QUARANTINE STATE
+## 8. CRYPTOGRAPHIC DIGESTS (HYP_002) — IMMUTABLE, MUST NOT BE ALTERED
 
-Cross-Hypothesis Data Quarantine is a **HARD INVARIANT**. Protected partitions remain `PRISTINE`.
+| Artifact | Digest |
+|---|---|
+| Sealed hypothesis spec (`HYP_TSMOM_EURUSD_HTF_002.json`) | `47c077a65f3057ae5ec83c8e7cf9179ababea9e5b18bc999bdc480a44f544afe` |
+| R3 Search Trial Ledger (`ledger_digest`) | `d6d627334a1560193c495947e4f9ab3a62e983ac46cba1ef4cf51a1707dd6565` |
+| R3 Manifest (`r3_manifest_HYP_TSMOM_EURUSD_HTF_002.json`) | `809ac530c69745924550723b19b79a7a82bd4182659f6eb2a5cfc4b019c24ccd` |
+
+Lineage cross-check (VERIFIED): manifest `hypothesis_sha256` == sealed digest; manifest `ledger_digest` == ledger `ledger_digest` field.
+
+---
+
+## 9. DATA QUARANTINE STATE — HARD INVARIANT
 
 | Protected Span | Bars | Status |
 |---|---|---|
+| HYP_002 H4 Validation | 3751..4996 | `QUARANTINED / PRISTINE` — NOT REUSABLE BY DEFAULT |
+| HYP_002 H4 Blind OOS | 5009..6230 | `QUARANTINED / PRISTINE` — NOT REUSABLE BY DEFAULT |
 | 2026 M5 Holdout (HYP_001) | 6060..9999 | `QUARANTINED / PRISTINE` |
-| HYP_002 H4 Validation + Blind OOS | 3751..6230 | `QUARANTINED / PRISTINE` |
 
-Enforced in code:
-- `src/acash/research/quarantine.py` and `src/acash/research/reinception.py`,
-  `PERMANENTLY_QUARANTINED_WINDOWS`:
-  - `"EURUSD_M5_HOLDOUT"`: `2026-08-18T04:40:00+00:00` -> `2026-09-04T21:00:00+00:00`
-  - `"EURUSD_H4_VALIDATION_OOS"`: `2023-05-29T16:00:00+00:00` -> `2024-12-31T20:00:00+00:00`
-- `TERMINAL_HYPOTHESIS_REGISTRY` contains both terminal hypotheses.
-
-F-1 (US equity index universe) is disjoint from EURUSD by construction; this must be preserved for
-any future instrument choice.
+Enforced in code: `src/acash/research/quarantine.py` (`PERMANENTLY_QUARANTINED_HOLDOUTS`) and `src/acash/research/reinception.py` (`TERMINAL_HYPOTHESIS_REGISTRY`, `PERMANENTLY_QUARANTINED_WINDOWS`). Status `VERIFIED`.
 
 ---
 
-## 7. CAPITAL / TRADING AUTHORITY
+## 10. CAPITAL / TRADING AUTHORITY
 
 | Authority | State |
 |---|---|
 | Live Capital Authority | `$0.00` (Hard-Locked) |
+| Live Order Emission | `0` |
 | Trading Authority | `LOCKED` |
-| Paper Trading | `NOT AUTHORIZED` |
-| Live Trading | `NOT AUTHORIZED` |
 | Broker Connection | `DISCONNECTED / NONE` |
 
-Status: `VERIFIED`. No capital or trading authorization was modified.
+Status `VERIFIED`. No authorization modified by the MACRO-001 documentation work.
 
 ---
 
-## 8. F-1 CANDIDATE STATE
+## 11. PHASE 14 STATUS
 
-- **Candidate ID:** `CAND-FLOW-CALENDAR-REBALANCE-001` (NOT HYP_003)
-- **Family:** Structural / Forced-Flow (calendar-forced rebalancing)
-- **Selected candidate:** F-1 (human-selected)
-- **First-Principles Review:** `docs/phase14/reviews/review_cand_flow_calendar_rebalance_001.md`
-- **Proposal draft:** `docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md`
-- **Proposal commit:** `cff8960` (both docs, documentation only)
-- Research doctrine: `docs/phase14/research_doctrine.md`
-- Candidate registry: `docs/phase14/research_candidates.md`
-- Phase 14 plans: `docs/phase14/phase14_master_research_architecture_plan.md`,
-  `docs/phase14/phase14_architecture_and_governance_plan.md`
+- **Research-Intelligence runtime:** implemented (`feat(research-ai)` commits). AI output is an **`UNVALIDATED PROPOSAL`** with zero authority to register hypotheses, qualify alpha, certify backtests, authorize trading, access capital, bypass R1/R2/R3, bypass quarantine, or override human governance.
+- **Free-data MACRO-001 lane:** governance documentation complete (readiness → decision surface → binding worksheet). **Empirical work pending frozen pre-registration + Human authorization.**
 
 ---
 
-## 9. GOVERNANCE AUDIT RESULT (most recent, this handoff's basis)
+## 12. EXACT RESUME CHECKLIST FOR NEXT SESSION
 
-- **Overall verdict:** `PASS WITH REQUIRED FREEZES`
-- **Final recommendation:** `B - REQUIRES PROPOSAL REVISION`
-- **Blockers / governance blockers:** NONE (no open item is decidable only after seeing data).
-
-### Priority finding 1 - BORROW / SHORTING MODEL (not fully frozen as written)
-Canonical `CostModelConfig` fields are exactly: `quoted_spread_bps`, `roundtrip_broker_fee_bps`,
-`fixed_slippage_bps`, `latency_delay_ms`. **There is NO dedicated borrow field.** The proposal
-references a deletion-leg borrow cost line but does not state its canonical encoding. The encoding
-MUST be explicitly frozen before R1. Governance choices identified by the audit:
-- **A.** Fold borrow into `fixed_slippage_bps` as a documented conservative lump.
-- **B.** Add borrow as a parameter-grid dimension, with corresponding impact on
-  `grid_cardinality` (`planned_trial_count == grid_cardinality` must hold).
-- **C.** Another explicitly human-approved frozen convention.
-- **No post-hoc encoding.**
-
-### Priority finding 2 - SURVIVORSHIP / CORPORATE ACTIONS (under-specified)
-Top-level point-in-time principle exists, but operational conventions remain under-specified.
-Before R1 the following MUST be explicitly frozen (and must NOT be chosen after looking at results):
-- delisting return convention
-- merger handling
-- ticker-change mapping
-- historical index-list versioning/source
-- corporate-action date ordering
-- split / corporate-action treatment
-
-### Priority finding 3 - SPARSE-EVENT METHODOLOGY
-- Audit classification: **C - correctly left unresolved as HUMAN FREEZE.**
-- The review proposed `T_eff >= 25 per composite leg`, but the proposal did NOT carry that
-  candidate value into the formal freeze item.
-- It should be carried forward as **PROPOSED / NOT YET SEALED** for human approval or override.
-- R1 must NOT resolve the sample-size method by selecting it after seeing data.
-
-### Priority finding 4 - ECONOMIC SIGNIFICANCE (needs alignment)
-Proposal currently has both:
-- a cumulative-reversal threshold, and
-- `min_cost_adjusted_spread_ratio >= 1.50`.
-
-These must be aligned so the economic-significance rule is **deterministic and non-overlapping**.
-
----
-
-## 10. REQUIRED HUMAN FREEZE BEFORE R1
-
-### Original 9 freeze items (remain required)
-1. **Event family** - reconstitution vs. quarterly rebalance vs. separable month-end; one family only.
-2. **Universe / filters** - index spin, size band, min-ADV / free-float floor.
-3. **Horizons** - final set {1, 5, 10} or alternative; primary horizon.
-4. **Direction** - SHORT on the composite indicator (sign frozen).
-5. **Threshold set** - exact rank IC, HAC t, autocorrelation, cost-ratio values for F-1 R1.
-6. **Cost + borrow model** - exact bps stack and locate/borrow assumption.
-7. **Fresh blind window** - de novo dataset window declared before any returns inspection.
-8. **Complete trial grid** - full Cartesian product matching `planned_trial_count == grid_cardinality`.
-9. **Formal hypothesis ID minting path** - ordinal HYP_003 minted only through the formal
-   pre-registration path; never by any review/proposal document.
-
-### Audit-added obligations (must be resolved before R1)
-10. **Borrow-cost canonical encoding** (finding F-1; choice A/B/C above).
-11. **Survivorship / corporate-action operational conventions** (finding F-2; full list above).
-12. **Proposed sparse-event sufficiency:** `T_eff >= 25 per composite leg` carried forward as
-    PROPOSED / NOT YET SEALED (finding F-3).
-13. **Economic-significance alignment** (finding F-4; deterministic, non-overlapping rule).
-
----
-
-## 11. FORBIDDEN CLAIMS (F-1 epistemic boundaries)
-
-F-1 remains a **research candidate**. The mechanism is a **hypothesis, not empirical proof**.
-
-Do NOT state that:
-- the dislocation is proven
-- reversal is proven
-- alpha exists
-- the strategy is validated
-- the strategy is profitable
-
-Use **PROPOSED / NOT PROVEN / REQUIRES HUMAN FREEZE** where appropriate.
-"No empirical claim is established by this document" applies to all F-1 review documents.
-
----
-
-## 12. HARD PROHIBITIONS (next session)
-
-- Do NOT invoke `ResearchReInceptionGate`.
-- Do NOT create / mint HYP_003.
-- Do NOT start R1. Do NOT seal any hypothesis.
-- Do NOT start Slice 5.
-- Do NOT access / download / generate market data.
-- Do NOT connect broker / MT5.
-- Do NOT run backtests, statistical experiments, optimization, or OOS inspection.
-- Do NOT modify Slice 1-4, governance gates, FrozenCore, ExecutionCoordinator, or quarantine.
-- Do NOT push `cff8960` (or any commit) to the remote.
-- Do NOT freeze the F-1 choices yourself; the human must freeze them.
-
----
-
-## 13. IMMEDIATE NEXT TASK (for the next session)
-
-1. **Revise the F-1 proposal documentation** (`docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md`)
-   to address governance audit findings F-1..F-4 (sections 3, 13, 14, 15, 18, 22, 28 of the proposal).
-2. **Re-run the governance review** (read-only audit).
-3. **Target verdict after revision: A - READY FOR HUMAN FREEZE.**
-
-### Strict sequence (do not skip steps)
-```
-PROPOSAL REVISION
-    -> GOVERNANCE RE-REVIEW (TARGET A)
-    -> HUMAN APPROVAL + FREEZE of the required choices
-    -> ResearchReInceptionGate invocation (human-authorized)
-    -> Gate success
-    -> mint formal hypothesis ID through canonical path
-    -> FRESH, INDEPENDENT R1
-```
-Do NOT skip directly to HYP_003 or R1.
-
----
-
-## 14. EXACT RESUME CHECKLIST FOR NEXT SESSION
-
-> This handoff is a continuation aid, NOT a replacement for canonical sources. Re-read everything.
-
-### Step 1 - Read this handoff (done on open).
-### Step 2 - Independently re-read canonical sources
-- `AGENTS.md`
-- `docs/phase14/research_doctrine.md`
-- `docs/phase14/research_candidates.md` (F-1 entry)
-- `docs/phase14/reviews/review_cand_flow_calendar_rebalance_001.md`
-- `docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md`
-- `src/acash/research/reinception.py`
-- `src/acash/research/schema.py`
-- `docs/proposals/phase_4_alpha_engine.md` (N_valid >= 250 rule, HAC policy)
-- Quarantine rules in `src/acash/research/quarantine.py`
-- Section 33 reporting shape in `src/acash/research/ai/reporting/`
-
-### Step 3 - Verify repository state
 ```powershell
-git status               # expect: working tree CLEAN
-git branch --show-current # expect: main
-git rev-parse HEAD        # expect: cff8960c7b9ee275d719e4c88a83bb18a40d3b57 (short cff8960)
-git log --oneline -4
-git remote -v             # expect: https://github.com/Ratthabhumi/Acash.git (NOT pushed)
+git clone https://github.com/Ratthabhumi/Acash.git   # OR: git pull
+# expect HEAD == 7faf012 == origin/main
+Get-Content docs/SESSION_HANDOFF.md                   # this file — checkpoint + boundaries
 ```
 
-### Step 4 - Verify F-1 proposal blob matches commit
-```powershell
-git hash-object docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md
-git rev-parse HEAD:docs/phase14/reviews/proposal_cand_flow_calendar_rebalance_001.md
-# expect: identical blob hashes
-```
+1. Read `docs/phase14/cand_free_macro_001_human_binding_worksheet.md`.
+2. Begin **ROUND 0** — batch-confirm Group A defaults (A1–A5); if any rejected, mark `HUMAN DECISION REQUIRED`.
+3. Proceed ROUND 1 → ROUND 5 per Section 3 sequence.
+4. Produce Draft Freeze Candidate → anti-HARKing review → freeze → manifest → **explicit Human authorization** → only then empirical/backtest.
 
-### Step 5 - Resume from the ACTIVE NEXT TASK
-Resume from Section 13 (proposal revision / governance re-review). Do NOT infer that any pending
-governance decision has been approved. All F-1 numerics remain PROPOSED / NOT YET SEALED.
-
----
-
-## 15. HANDOFF SELF-VALIDATION (state at handoff time)
-
-- HYP_003 = **NOT CREATED**
-- Gate = **NOT INVOKED**
-- R1 = **NOT STARTED**
-- Hypothesis = **NOT SEALED**
-- No market data accessed
-- No broker / MT5 accessed
-- No backtest run
-- No statistical experiment run
-- No optimization run
-- No OOS inspection
-- No trading implementation
-- No Slice 1-4 modification
-- No governance-core modification
-- No FrozenCore modification
-- No ExecutionCoordinator modification
-- No quarantine modification
-- No push to remote
-- Capital: `$0.00`; Trading: **LOCKED**; Paper: **NOT AUTHORIZED**; Live: **NOT AUTHORIZED**
-
----
-
-## Appendix A - Superseded Prior Handoff
-
-The prior canonical handoff content (HYP_002 closure, Phase 14 design-pending, 2026-09-07) is
-superseded for *current-state* purposes by this document. Its governance evidence (HYP_002 digests,
-quarantine spans, HAC-methodology annotation, haircut-Sharpe terminology note, governance hardening
-fixes) remains valid and is preserved in repository history and in `docs/phase14/` and
-`docs/phase8.5/` artifacts. This supersession does not alter any sealed digest or historical result.
-
-**System is RESEARCH RE-INCEPTION READY IN PRINCIPLE. F-1 FREEZE INCOMPLETE. HYP_003 NOT CREATED.**
+**System is RESEARCH STANDING BY. CAND-FREE-MACRO-001 is CONDITIONALLY READY. PRE-REGISTRATION is NOT FULLY FROZEN. EMPIRICAL VALIDATION and BACKTEST are NOT AUTHORIZED.**

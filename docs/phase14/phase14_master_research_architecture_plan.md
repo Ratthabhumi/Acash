@@ -428,5 +428,5 @@ Phase 14 can achieve a **PASS** verdict if and only if all the following conditi
 - Local Test Suite: NOT RUN (Preserving active Step 5 soak process)
 - Type Checker (MyPy): VERIFIED (302 files clean prior to planning)
 - Remote CI Status: PENDING / NOT AVAILABLE
-- Methodological Caveats: Phase 14 runtime implementation is strictly hard-locked until Phase 13 Steps 5-9 are certified.
+- Methodological Caveats: Phase 14 runtime implementation is strictly hard-locked until Phase 13 Steps 5-7 are certified AND Phase 14 Human Gates G-1..G-5 are rendered; Phase 13 Steps 8-9 remain independently and strictly locked (strategy→execution authorization controls only — Human Ratification D1-D4, 2026-09-08).
 ```

@@ -22,6 +22,7 @@ from acash.backtest.adapter import (
     BacktestMarketEvent,
     extract_nanoseconds_from_datetime,
 )
+from acash.backtest.equity_returns import derive_canonical_equity_returns
 from acash.backtest.schema import (
     CANONICAL_BACKTEST_FILLS_SCHEMA,
     CANONICAL_EQUITY_CURVE_SCHEMA,
@@ -747,10 +748,12 @@ class EventBacktestRunner:
     def run_backtest(
         self,
         events: List[BacktestMarketEvent],
+        hypothesis_id: str,
         hypothesis_spec_sha256: str,
         strategy_config_hash: str,
         pyproject_toml_sha256: str,
         git_commit_hash: str,
+        periods_per_year: Decimal,
         uv_lock_sha256: Optional[str] = None,
         canonical_data_hashes: Optional[List[str]] = None,
         phase4_analytical_edge_bps: Decimal = Decimal("0.0"),
@@ -876,6 +879,15 @@ class EventBacktestRunner:
             else (Decimal("999.99") if self.gross_profits > Decimal("0.0") else Decimal("0.0"))
         )
 
+        # Truthful Phase 5 Sharpe Emission (Phase 14 D8-B): canonical equity-derived return
+        # series (D2-A/D3) annualized by the single canonical Sharpe authority (D7) using the
+        # frozen periods_per_year supplied from ValidationConfig (D4 sole annualization authority).
+        equity_table = self._build_equity_table()
+        from acash.validation.deflated_sharpe import calculate_annualized_sharpe
+
+        canonical_returns = derive_canonical_equity_returns(equity_table)
+        canonical_sharpe = calculate_annualized_sharpe(canonical_returns, periods_per_year)
+
         exec_summary = BacktestExecutionSummary(
             total_orders=len(self.orders),
             total_fills=len(self.fills),
@@ -885,7 +897,7 @@ class EventBacktestRunner:
             unrealized_pnl=sum((p.unrealized_pnl for p in self.ledger.positions.values()), Decimal("0.0")),
             ending_equity=ending_equity,
             net_return_pct=net_return_pct,
-            sharpe_ratio=None,
+            sharpe_ratio=canonical_sharpe,
             sortino_ratio=None,
             max_drawdown_pct=self.max_drawdown,
             win_rate_pct=win_rate,
@@ -921,7 +933,7 @@ class EventBacktestRunner:
         manifest = BacktestManifest(
             manifest_id=manifest_id,
             manifest_version="1.0.0",
-            hypothesis_id="HYP-PHASE5-POC",
+            hypothesis_id=hypothesis_id,
             hypothesis_spec_sha256=hypothesis_spec_sha256,
             canonical_data_hashes=canonical_data_hashes,
             engine_config_hash=engine_cfg_hash,
@@ -937,7 +949,6 @@ class EventBacktestRunner:
         )
 
         fills_table = self._build_fills_table()
-        equity_table = self._build_equity_table()
 
         return manifest, fills_table, equity_table
 
