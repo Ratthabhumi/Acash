@@ -1,0 +1,32 @@
+# ACASH paper container build context exclusions.
+# The build context is the ACASH repo root (docker build -f docker/Dockerfile .).
+# Keep build context small and keep secrets out of any intermediate layer.
+
+# VCS
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+*.whl
+
+# Test / quality artifacts
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Runtime evidence — NEVER baked into a container image.
+/data/
+*.journal.jsonl
+*.snapshots.jsonl
+*.manifest.json
+E3.6-*.md
+Acash_Talk-*.md
+docs/research/

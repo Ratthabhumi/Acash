@@ -1,0 +1,58 @@
+# ACASH Paper Service — Containerization Artifact (E3.6 / WS1)
+#
+# DESIGN REFERENCE: E3.6-DESIGN.md §5 (D1.1), §7 (D7.1/D7.2),
+#   §10 (D10.2), §11 (D4.1), §19 (D19.1/D19.2).
+#
+# GOVERNANCE:
+# - This Dockerfile is a BUILD ARTIFACT for the ACASH paper container.
+# - It is NOT deployed here: creation of the HomeLab compose entry, the
+#   interlock wiring, secure-scrape association, and container start are
+#   later HomeLab-side stages gated by the deployment rule, AFTER local
+#   ACASH-side validation gates pass.
+# - Non-root paper UID 10001:10001 (O6 census-guarded decision).
+# - No privileged access, no Docker socket, no NEW_PRIVS equivalents.
+# - TZ normalized to UTC (D4.1). No published host ports (D19.1).
+#
+# Build chain bookkeeping (D7.2): the mapping git commit -> image digest is
+# recorded as DATA (in the ACASH repo or the window manifest authoring step),
+# so RUNTIME PROVENANCE can be re-asserted later. CI builds this image from
+# the ACASH repo at a known commit; the digest is recorded at build time.
+
+# Image base must be pinned by digest in the deployment reference; tag used
+# here is a placeholder that CI resolves to a pinned digest at build time.
+ARG PYTHON_IMAGE_TAG=3.13-slim
+FROM python:${PYTHON_IMAGE_TAG}
+
+# One persistent mount root (D10.3): /data/docker/acash owns windows/, sessions/,
+# logs/, review/ as logical subdirectories. The engine receives
+# --storage /data/docker/acash/sessions — a subdirectory, not a separate mount.
+ENV ACASH_STORAGE_ROOT=/data/docker/acash
+ENV TZ=UTC
+
+# Non-root paper UID (D10.2 / O6): fixed 10001:10001, census-guarded.
+RUN groupadd --gid 10001 paper && \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin paper && \
+    install -d -o paper -g paper /data/docker/acash/windows \
+                              /data/docker/acash/sessions \
+                              /data/docker/acash/logs \
+                              /data/docker/acash/review
+
+WORKDIR /opt/acash
+
+# Install dependencies first for layer cache efficiency. Digest-pinned base
+# image + pinned wheelhouse remain a build-time concern; runtime never checks
+# the network.
+COPY --chown=paper:paper pyproject.toml uv.lock ./
+
+# Build context is the ACASH repo root; application source is copied below.
+COPY --chown=paper:paper src/ ./src/
+
+# Paper service runs as the unprivileged paper UID only (no new privileges).
+USER paper:paper
+
+# The engine CLI is the process entrypoint (python -m acash.paper).
+ENTRYPOINT ["python", "-m", "acash.paper"]
+CMD ["--help"]
+
+# HEALTHCHECK is left to the deployment stage (cAdvisor/VM observe the
+# /metrics endpoint, WS9); no privileged ping is used.

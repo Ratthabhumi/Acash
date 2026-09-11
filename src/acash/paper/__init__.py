@@ -43,6 +43,9 @@ Modules:
     session     — E3.5 PaperFeedSessionSupervisor: real-feed → runner wiring
     review      — E3.5 ReviewPackage builder (OBSERVED/MODEL/DERIVED audit artifact)
     cli         — E3.5 operational CLI (python -m acash.paper)
+    shutdown    — E3.6 bounded SIGTERM/SIGINT graceful-stop handler (WS5/D16)
+    window      — E3.6 observation-window model + deployment interlock (WS3/WS4)
+    metrics     — E3.6 Prometheus-text /metrics endpoint (WS9/D13.1)
 """
 
 from acash.paper.journal import (
@@ -88,6 +91,29 @@ from acash.paper.review import (
     ReviewItem,
     ReviewPackage,
     build_review_package,
+)
+from acash.paper.shutdown import (
+    BoundedGracefulShutdown,
+    GracefulStopOutcome,
+)
+from acash.paper.window import (
+    WindowAuthoringService,
+    WindowInterlockMarker,
+    WindowManifest,
+    WindowState,
+    EvidenceStatus,
+    TransitionClassification,
+    RuntimeSegment,
+    MemberSessionRef,
+    ClockAttestation,
+    DeploymentInterlockRecord,
+    validate_window_manifest,
+)
+from acash.paper.metrics import (
+    MetricsRegistry,
+    PaperMetricsServer,
+    build_operational_metrics,
+    metrics_for_window_and_journal,
 )
 
 __all__ = [
@@ -145,4 +171,24 @@ __all__ = [
     "ReviewItem",
     "ReviewPackage",
     "build_review_package",
+    # E3.6 Graceful Shutdown
+    "BoundedGracefulShutdown",
+    "GracefulStopOutcome",
+    # E3.6 Observation Window / Interlock
+    "WindowAuthoringService",
+    "WindowInterlockMarker",
+    "WindowManifest",
+    "WindowState",
+    "EvidenceStatus",
+    "TransitionClassification",
+    "RuntimeSegment",
+    "MemberSessionRef",
+    "ClockAttestation",
+    "DeploymentInterlockRecord",
+    "validate_window_manifest",
+    # E3.6 Metrics endpoint
+    "MetricsRegistry",
+    "PaperMetricsServer",
+    "build_operational_metrics",
+    "metrics_for_window_and_journal",
 ]

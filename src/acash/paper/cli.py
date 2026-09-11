@@ -81,6 +81,7 @@ def _run_session(
     from acash.paper.manifest import PaperMode
     from acash.paper.runner import PaperSessionConfig, PaperSessionRunner
     from acash.paper.session import PaperFeedSessionSupervisor
+    from acash.paper.shutdown import BoundedGracefulShutdown
 
     storage = Path(args.storage)
     storage.mkdir(parents=True, exist_ok=True)
@@ -140,41 +141,58 @@ def _run_session(
 
     max_steps = args.max_polls
     step = 0
-    while max_steps is None or step < max_steps:
-        step += 1
-        try:
-            supervisor.step_once()
-        except FeedConnectionError as exc:
-            # Halt: feeds never make decisions on disconnected data.
-            print(
-                json.dumps(
-                    {
-                        "event": "FEED_DISCONNECTED",
-                        "session_id": config.session_id,
-                        "reason": str(exc)[:200],
-                    }
-                ),
-                file=sys.stderr,
-            )
-            break
-        except FeedContractError as exc:
-            raise DataContractError(
-                f"Feed contract violated (fail-closed): {exc}"
-            ) from exc
-        if args.poll_interval_ms > 0:
-            time.sleep(args.poll_interval_ms / 1000.0)
+    shutdown_requested = False
+    # Bounded SIGTERM/SIGINT handler: on a graceful-stop request the loop
+    # breaks, disconnect() + stop() seal the manifest within the grace window
+    # (D16.1); exceeding the grace bound exits non-zero (fail-closed).
+    shutdown_ctrl = BoundedGracefulShutdown(grace_seconds=10.0)
+    try:
+        shutdown_ctrl.install()
+        while max_steps is None or step < max_steps:
+            if shutdown_ctrl.shutdown_requested:
+                shutdown_requested = True
+                break
+            step += 1
+            try:
+                supervisor.step_once()
+            except FeedConnectionError as exc:
+                # Halt: feeds never make decisions on disconnected data.
+                print(
+                    json.dumps(
+                        {
+                            "event": "FEED_DISCONNECTED",
+                            "session_id": config.session_id,
+                            "reason": str(exc)[:200],
+                        }
+                    ),
+                    file=sys.stderr,
+                )
+                break
+            except FeedContractError as exc:
+                raise DataContractError(
+                    f"Feed contract violated (fail-closed): {exc}"
+                ) from exc
+            if args.poll_interval_ms > 0:
+                time.sleep(args.poll_interval_ms / 1000.0)
+    finally:
+        shutdown_ctrl.restore()
 
     supervisor.disconnect()
     manifest = runner.stop()
 
+    exit_code = shutdown_ctrl.resolve()
     _dump_payload(
         {
             "event": "SESSION_COMPLETE",
             "session_id": config.session_id,
+            "shutdown_requested": shutdown_requested,
+            "graceful_stop_exit_code": exit_code,
             "manifest": manifest.model_dump(),
             "supervisor_stats": supervisor.stats.to_dict(),
         }
     )
+    if exit_code != 0:
+        sys.exit(exit_code)
     return {"session_id": config.session_id, "manifest": manifest.model_dump()}
 
 
