@@ -19,6 +19,7 @@ from acash.data.integrity import (
     ValidationReport,
 )
 from acash.data.mock import MockMarketDataProvider
+from acash.data.parquet_provider import ParquetMarketDataProvider
 from acash.data.pipeline import (
     IngestedBatchSummary,
     IngestionPipeline,
@@ -52,8 +53,9 @@ from acash.data.sources import (
 from acash.data import features, orderbook, trades
 
 __all__ = [
-    # Mock
+    # Providers
     "MockMarketDataProvider",
+    "ParquetMarketDataProvider",
     # Schema & Types
     "CANONICAL_ARROW_SCHEMA",
     "CANONICAL_COLUMN_NAMES",
