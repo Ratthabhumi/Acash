@@ -22,7 +22,7 @@
 # REQUIRED BEFORE PRODUCTION-LIKE STAGING.
 # In production-like staging, PYTHON_BASE_IMAGE must resolve to an immutable
 # digest (e.g. python:3.13-slim@sha256:...). Do not fabricate or guess a digest.
-ARG PYTHON_BASE_IMAGE=python:3.13-slim
+ARG PYTHON_BASE_IMAGE=python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
 FROM ${PYTHON_BASE_IMAGE}
 
 # One persistent mount root (D10.3): /data/docker/acash owns windows/, sessions/,
