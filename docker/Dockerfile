@@ -18,10 +18,12 @@
 # so RUNTIME PROVENANCE can be re-asserted later. CI builds this image from
 # the ACASH repo at a known commit; the digest is recorded at build time.
 
-# Image base must be pinned by digest in the deployment reference; tag used
-# here is a placeholder that CI resolves to a pinned digest at build time.
-ARG PYTHON_IMAGE_TAG=3.13-slim
-FROM python:${PYTHON_IMAGE_TAG}
+# PROVENANCE NOTE (D7.2): Base image digest pinning is
+# REQUIRED BEFORE PRODUCTION-LIKE STAGING.
+# In production-like staging, PYTHON_BASE_IMAGE must resolve to an immutable
+# digest (e.g. python:3.13-slim@sha256:...). Do not fabricate or guess a digest.
+ARG PYTHON_BASE_IMAGE=python:3.13-slim
+FROM ${PYTHON_BASE_IMAGE}
 
 # One persistent mount root (D10.3): /data/docker/acash owns windows/, sessions/,
 # logs/, review/ as logical subdirectories. The engine receives

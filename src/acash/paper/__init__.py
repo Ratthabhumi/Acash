@@ -109,6 +109,22 @@ from acash.paper.window import (
     DeploymentInterlockRecord,
     validate_window_manifest,
 )
+from acash.paper.backup import (
+    AcashBackupManifest,
+    BackupFileInfo,
+    CANONICAL_STORAGE_ROOT,
+    compute_file_sha256,
+    generate_backup_manifest,
+    create_acash_backup_archive,
+)
+from acash.paper.restore import (
+    RestoreCheckDetail,
+    RestoreValidationResult,
+    safe_extract_archive,
+    validate_restore_state,
+    restore_and_validate,
+)
+
 from acash.paper.metrics import (
     MetricsRegistry,
     PaperMetricsServer,
@@ -186,6 +202,18 @@ __all__ = [
     "ClockAttestation",
     "DeploymentInterlockRecord",
     "validate_window_manifest",
+    # E3.6 WS10 Backup & Restore
+    "AcashBackupManifest",
+    "BackupFileInfo",
+    "CANONICAL_STORAGE_ROOT",
+    "compute_file_sha256",
+    "generate_backup_manifest",
+    "create_acash_backup_archive",
+    "RestoreCheckDetail",
+    "RestoreValidationResult",
+    "safe_extract_archive",
+    "validate_restore_state",
+    "restore_and_validate",
     # E3.6 Metrics endpoint
     "MetricsRegistry",
     "PaperMetricsServer",
