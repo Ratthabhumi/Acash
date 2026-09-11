@@ -1,8 +1,8 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.5.0  
-**Date:** 2026-09-10  
+**Version:** 3.6.0  
+**Date:** 2026-09-11  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
 > **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
@@ -13,22 +13,26 @@
 
 ---
 
-## ACASH CURRENT NORTH-STAR (2026-09-10)
+## ACASH CURRENT NORTH-STAR (2026-09-11)
 
-**North Star.** Under strict scientific governance, answer *"where should capital be allocated?"* — including the valid governed answer **NOWHERE** — by progressing the Phase 14 research lanes (mainline `CAND-FREE-MACRO-001`, parallel `MEC-0011`) to a single canonical frozen pre-registration, then explicit Human authorization, then empirical validation and qualification. All trading / capital / broker authority remains **STRICTLY LOCKED** throughout.
+**North Star.** Under strict scientific governance, answer *"where should capital be allocated?"* — including the valid governed answer **NOWHERE** — by progressing the Phase 14 research lanes (mainline `CAND-FREE-MACRO-001`, parallel `MEC-0011`, parallel `MEC-0013`) to a single canonical frozen pre-registration, then explicit Human authorization, then empirical validation and qualification. All trading / capital / broker authority remains **STRICTLY LOCKED** throughout.
 
 ```
 CURRENT WORKING MILESTONE (replaces the older "Phase 13 Step 5 soak ACTIVE" framing;
 Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 
   MAINLINE .... CAND-FREE-MACRO-001    FREEDATA research lane; CONDITIONALLY READY;
-                                       human binding Rounds 0-3B recorded (K = 3);
-                                       S-2 / S-7 (T_eff formula) / S-9 OPEN;
-                                       PRE-REGISTRATION NOT FULLY FROZEN;
+                                       Rounds 0-3B (K=3), Round 3B remainder (S-2/S-7 F2/S-9),
+                                       Round 4 (D14/D15/D16/EX/CO/CA-1), Round 5 (D19/D20) RATIFIED;
+                                       D17 (SPX close authority) & D18 (manifest) OPEN;
+                                       PRE-REGISTRATION NOT FULLY FROZEN (4/26 checklist);
                                        EMPIRICAL VALIDATION NOT AUTHORIZED
   PARALLEL .... MEC-0011                Gold/DXY relative-movement; RESEARCH INTAKE ONLY;
                                        D1=A / D2=C / D3=B human-ratified 2026-09-10;
                                        DXY source layer BLOCKED (paths P1-P5 await Human);
+                                       NOT AUTHORIZED FOR EMPIRICAL VALIDATION
+  PARALLEL .... MEC-0013                Opening Range Breakout (ORB); RESEARCH INTAKE ONLY;
+                                       untracked artifact; NOT validated, NOT a candidate;
                                        NOT AUTHORIZED FOR EMPIRICAL VALIDATION
   PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
                                        PENDING HUMAN RATIFICATION
@@ -37,12 +41,13 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
                quarantined HYP_001/HYP_002 data spans (PRISTINE / NOT REUSABLE BY DEFAULT)
 ```
 
-### State Register (authoritative boundaries, verified 2026-09-10)
+### State Register (authoritative boundaries, verified 2026-09-11)
 
 | Class | Lane / Item | State |
 |---|---|---|
-| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-3B recorded (K = 3); **S-2, S-7 T_eff formula, S-9 = HUMAN DECISION REQUIRED**; PRE-REGISTRATION **NOT FULLY FROZEN**; EMPIRICAL VALIDATION **NOT AUTHORIZED** |
+| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (4/26); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
 | PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
+| PARALLEL | `MEC-0013` Opening Range Breakout (ORB) | RESEARCH INTAKE ONLY; untracked intake artifact; claims extracted / feasibility uncertified; NOT registered; NOT a candidate; NOT HYP_003; EMPIRICAL VALIDATION NOT AUTHORIZED |
 | PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
 | PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
 | LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
@@ -57,16 +62,19 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 
 ---
 
-## ACASH NOW / NEXT / LATER (2026-09-10)
+## ACASH NOW / NEXT / LATER (2026-09-11)
 
-- **NOW** (binding / documentation-only; no empirical work):
-  1. MACRO-001 ROUND 3B remainder — bind **S-2** (test statistic) and **S-9** (minimum sample size); pre-register the **S-7 (c) post-O-2 T_eff formula**. All three are `HUMAN DECISION REQUIRED`.
-  2. MEC-0011 — Human selection among DXY-leg resolution paths **P1** (paid ICE subscription) / **P2** (authorized redistributor) / **P3** (grey private archive) / **P4** (Stooq DX.F) / **P5** (6-FX model inference); downstream blockers B4-B10 remain open.
-  3. Phase 14 runtime — research-layer slices remain `UNVALIDATED PROPOSALS`; any runtime authorization stays bounded by ratified Human gate discipline (G-gates).
-- **NEXT** (strict sequence; only after S-2 / S-7 / S-9 are bound):
-  1. ROUND 4 — D15 OOS -> D16 Blind -> D14 IS -> D9 Cost.
-  2. ROUND 5 — D19 Kill -> D20 PASS/FAIL/INVALID.
-  3. Draft Freeze Candidate -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> **Explicit Human Authorization** -> then empirical validation / backtest.
+- **NOW** (governance & data-authority resolution; no empirical work):
+  1. MACRO-001 D17 — Resolve SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`).
+  2. MACRO-001 D18 — Downstream reproducibility manifest specification (dependency-blocked on D17).
+  3. MEC-0013 — ORB research intake audit (source claim extraction, mechanism validation, data feasibility, PIT/survivorship/cost audit, human review; research intake only).
+  4. Data-plane test seam — offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` (zero alpha logic; infrastructure only).
+- **NEXT** (strict sequence; only after D17 / D18 are resolved):
+  1. Complete pre-registration freeze checklist (26/26 items) -> Draft Freeze Candidate.
+  2. Anti-HARKing review.
+  3. Pre-registration Freeze.
+  4. Data Archive / Reproducibility Manifest sealing.
+  5. **Explicit Human Authorization** -> then empirical validation / backtest via Phase 5 Production Orchestrator.
 - **LATER** (gated on a HUMAN-AUTHORIZED qualified strategy; nothing before):
   1. Phase 13 Step 8 Human GO -> Step 9 (90-day continuous paper run).
   2. Phases 18-22 upstream milestones (tournament, regime detection, selection, allocation solvers, orchestration). All currently LOCKED / NOT AUTHORIZED.
@@ -190,14 +198,15 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
   - Zero authority to register hypotheses (HYP_003 NOT CREATED), qualify alpha, certify validation, or trade. Capital and broker execution remain completely decoupled ($0.00 / DISCONNECTED).
 
 ### Repository Synchronization State:
-- **Current Branch:** `main` (HEAD == origin/main == `3bfc2e2`)
-- **Documentation Synchronization Date:** 2026-09-10
-- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 audit records (`docs/phase13/`), and Phase 14 governance / research records (`docs/phase14/`). Older checkpoint snapshots (`docs/SESSION_HANDOFF.md`; `docs/PROJECT_STATUS.md` dated 2026-09-04; `docs/README.md` dated 2026-09-07) are historical / checkpoint-only and may lag this file.
+- **Current Branch:** `main` (HEAD == origin/main == `b7e4d5e`)
+- **Documentation Synchronization Date:** 2026-09-11
+- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 audit records (`docs/phase13/`), and Phase 14 governance / research records (`docs/phase14/`). Older checkpoint snapshots (`docs/PROJECT_STATUS.md` dated 2026-09-04; `docs/README.md` dated 2026-09-07) are historical / checkpoint-only and may lag this file.
 
 ### Immediate Next Action:
-- Bind the three open MACRO-001 ROUND 3B items (S-2 test statistic, S-9 minimum sample size, S-7 post-O-2 T_eff formula) — `HUMAN DECISION REQUIRED`.
-- Continue the frozen worksheet sequence: ROUND 4 (D15 OOS -> D16 Blind -> D14 IS -> D9 Cost) -> ROUND 5 (D19 Kill -> D20 PASS/FAIL/INVALID) -> Draft Freeze -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> Explicit Human Authorization.
-- Await Human selection of the MEC-0011 DXY-leg resolution path (P1–P5).
+- Resolve MACRO-001 D17 (SPX close data authority) and D18 (reproducibility manifest).
+- Once D17/D18 are resolved, complete the 26-item pre-registration freeze checklist -> Draft Freeze -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> Explicit Human Authorization.
+- ParquetMarketDataProvider implemented and verified on main (`b7e4d5e`); data-plane ready for offline replay when authorization occurs.
+- MEC-0013 ORB remains isolated research intake (untracked; non-authorizing).
 - No empirical work of any kind until an explicit Human authorization follows a frozen pre-registration.
 
 ---
