@@ -31,8 +31,8 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
                                        D1=A / D2=C / D3=B human-ratified 2026-09-10;
                                        DXY source layer BLOCKED (paths P1-P5 await Human);
                                        NOT AUTHORIZED FOR EMPIRICAL VALIDATION
-  PARALLEL .... MEC-0013                Opening Range Breakout (ORB); RESEARCH INTAKE ONLY;
-                                       untracked artifact; NOT validated, NOT a candidate;
+  PARALLEL .... MEC-0013                Opening Range Breakout (ORB); TRACKED RESEARCH INTAKE ONLY;
+                                       claims extracted; feasibility uncertified; NOT a candidate;
                                        NOT AUTHORIZED FOR EMPIRICAL VALIDATION
   PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
                                        PENDING HUMAN RATIFICATION
@@ -47,7 +47,7 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 |---|---|---|
 | CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (4/26); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
 | PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
-| PARALLEL | `MEC-0013` Opening Range Breakout (ORB) | RESEARCH INTAKE ONLY; untracked intake artifact; claims extracted / feasibility uncertified; NOT registered; NOT a candidate; NOT HYP_003; EMPIRICAL VALIDATION NOT AUTHORIZED |
+| PARALLEL | `MEC-0013` Opening Range Breakout (ORB) | TRACKED RESEARCH INTAKE ONLY (`docs/phase14/mec_0013_orb_research_intake.md`); claims extracted / feasibility uncertified; NOT registered; NOT a candidate; NOT HYP_003; EMPIRICAL VALIDATION NOT AUTHORIZED |
 | PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
 | PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
 | LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
@@ -198,7 +198,7 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
   - Zero authority to register hypotheses (HYP_003 NOT CREATED), qualify alpha, certify validation, or trade. Capital and broker execution remain completely decoupled ($0.00 / DISCONNECTED).
 
 ### Repository Synchronization State:
-- **Current Branch:** `main` (HEAD == origin/main == `b7e4d5e`)
+- **Current Branch:** `main` (HEAD == origin/main == `c78d09c`)
 - **Documentation Synchronization Date:** 2026-09-11
 - **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 audit records (`docs/phase13/`), and Phase 14 governance / research records (`docs/phase14/`). Older checkpoint snapshots (`docs/PROJECT_STATUS.md` dated 2026-09-04; `docs/README.md` dated 2026-09-07) are historical / checkpoint-only and may lag this file.
 
@@ -206,7 +206,7 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 - Resolve MACRO-001 D17 (SPX close data authority) and D18 (reproducibility manifest).
 - Once D17/D18 are resolved, complete the 26-item pre-registration freeze checklist -> Draft Freeze -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> Explicit Human Authorization.
 - ParquetMarketDataProvider implemented and verified on main (`b7e4d5e`); data-plane ready for offline replay when authorization occurs.
-- MEC-0013 ORB remains isolated research intake (untracked; non-authorizing).
+- MEC-0013 ORB remains isolated research intake (tracked research intake; non-authorizing; zero empirical authority).
 - No empirical work of any kind until an explicit Human authorization follows a frozen pre-registration.
 
 ---
