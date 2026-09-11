@@ -114,7 +114,7 @@ To unblock D17 in the future, ALL of the following must be demonstrated ground-t
 - MACRO-001 remains governance-complete but **data-authority blocked**.
 - D17 = **OPEN / GROUP C** - reason: no currently investigated `$0` source satisfies the complete frozen D17 authority contract. The blocker is NOT simply "no free data"; it is a combination of official identity, full-window coverage, session completeness, PIT/as-published provenance, archive-at-retrieval reproducibility, adjustment semantics, licensing/redistribution, and the single-authority requirement.
 - D18 = **OPEN / GROUP C** - D18 is **dependency-blocked** on a D17-bound data authority, NOT failed because of a schema defect. D18 cannot be finalized as a fully bound reproducibility manifest while D17 is unresolved.
-- Draft Freeze = **NOT READY** (26-item checklist: 4/26 checked via D19/D20 (O.10/O.11); 17 items bound by earlier O-records but unacknowledged in checklist -> bookkeeping reconciliation pending; 2 items D17-dependent; 2 items D18-dependent; 1 process item = Human authorization).
+- Draft Freeze = **NOT READY** (26-item checklist: 24/26 checked per surface §28 reconciliation; 1 item D18-dependent unsealed manifest; 1 item Human authorization). D17-E remains ratified.
 - Empirical validation = **NOT AUTHORIZED**. Backtest = **NOT AUTHORIZED**. HYP_003 = **ABSENT**. R1 = **NOT STARTED**. ResearchReInceptionGate = **NOT INVOKED**. Trading/broker/capital = **LOCKED / $0.00**.
 - FREE-DATA TRACK: the ACASH project may continue separate FREE-DATA TRACK / mechanism-first research without weakening MACRO-001 D17. Potential future research may use mechanisms whose data authority can satisfy the same governance standard. No new candidate is created by this register; no empirical validation of another candidate is authorized; no mechanism is converted into HYP_003.
 - F-1 PRESERVATION: F-1 remains separate. Its existing D1 status and blockers remain unchanged. The MACRO-001 D17 blocker is NOT used as justification to modify F-1.
@@ -180,7 +180,7 @@ The repository must not claim Human acceptance unless it already exists in canon
 CLOSURE RECORD (SUMMARY)
 - D17 = OPEN / GROUP C  (data-authority blocked; no investigated $0 source satisfies the frozen contract)
 - D18 = OPEN / GROUP C  (dependency-blocked on D17; NOT a schema defect)
-- Draft Freeze = NOT READY (4/26 freeze checklist)
+- Draft Freeze = NOT READY (24/26 freeze checklist; D18 unsealed template; Human Auth pending)
 - Empirical validation = NOT AUTHORIZED
 - No provider selected; no provider promoted; no D17/D18 contract relaxation
 - No new provider investigated; S-18 not re-audited; no Stooq endpoint re-audited

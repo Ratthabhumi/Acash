@@ -30,7 +30,7 @@ readiness package `./cand_free_macro_001_validation_readiness.md`.
 | Item | Status |
 |------|--------|
 | CAND-FREE-MACRO-001 readiness (from readiness package) | `CONDITIONALLY READY` `[VERIFIED FACT — ./cand_free_macro_001_validation_readiness.md §5]` |
-| Pre-registration | `NOT FULLY FROZEN` `[VERIFIED FACT — this surface; 4/26 freeze-checklist items bound (Kill conditions = D19, PASS/FAIL/INVALID = D20, worksheets O.10/O.11); remaining items pending Human decisions]` |
+| Pre-registration | `NOT FULLY FROZEN` `[VERIFIED FACT — this surface; 24/26 freeze-checklist items bound per Section 28; D18 manifest and final Human Auth remain open pending D17]` |
 | Empirical validation | `NOT AUTHORIZED` `[VERIFIED FACT — ./free_data_research_registry.md §206-214]` |
 | Backtest | `NOT AUTHORIZED` `[VERIFIED FACT — registry §202]` |
 | Candidate registry status | `HUMAN_REVIEW_REQUIRED` (unchanged) `[VERIFIED FACT — registry §114]` |
@@ -197,7 +197,7 @@ Columns: `ID | Dimension | Current Canonical State | Proposed Default | Alternat
 | D18 | Reproducibility / manifest | Manifest+archive required (registry §107); candidate schema not bound | `PROPOSED DEFAULT`: full manifest binding set (§23) | reduced scope requires explicit reason | MED | **HUMAN DECISION REQUIRED** (binding set) | Manifest binding set frozen |
 | D19 | Kill conditions | **HUMAN-RATIFIED / BOUND (2026-09-10)** — INTEGRITY/PROTOCOL KILL SET ONLY; zero-tolerance (>0); global scope; result INVALID; pre-run + during + pre-verdict; NOT part of K; 5-trigger catalog; frozen O-2/G-3a/TR-1/CA-1/T_eff/D6 rules NOT redefined (binding: worksheet O.10) | trigger × threshold × scope (global/family) × IS/OOS/both × pre/post-all-trials | HIGH — kill rules change census meaning if post-hoc | **BOUND** — no longer Human-open; D20 also bound (O.11) | Kill condition set frozen pre-run |
 | D20 | PASS / FAIL / INVALID criteria | **HUMAN-RATIFIED / BOUND (2026-09-10, worksheet O.11)** — H0: E[D]=0 vs H1: E[D]!=0; two-sided t-test; df = G-1; alpha = 0.05; p < 0.05 => PASS; p >= 0.05 => FAIL; INVALID = D6/D19 integrity semantics; effect magnitude descriptive only; no additional numeric/effect-size cutoff; no auto-import of PBO/DSR/OOS-min/T_eff/N_valid/Holm/effective-K/F-1/Phase-6 thresholds | canonical D6 PASS/FAIL/INVALID semantics preserved; **test + threshold = ratified** | D12 stats; D18 manifest | Acceptance thresholds must exist before any run |
-| D21 | Pre-registration freeze checklist | 4/26 bound (Kill conditions = D19, PASS/FAIL/INVALID = D20, worksheets O.10/O.11) | `PROPOSED DEFAULT — PROCESS`: checklist (§26) fully bound = pre-registration frozen | partial freeze requires explicit exception | HIGH | **HUMAN DECISION REQUIRED** (tracked by Human) | Checklist completion recorded in governance record |
+| D21 | Pre-registration freeze checklist | 24/26 bound (Section 28; D18 manifest schema specified but unsealed on D17; Human Auth open) | `PROPOSED DEFAULT — PROCESS`: checklist (§28) fully bound = pre-registration frozen | partial freeze requires explicit exception | HIGH | **HUMAN DECISION REQUIRED** (tracked by Human) | Checklist completion recorded in governance record |
 | D22 | Governance option (A–E) | Not decided | No default | OPTION A–E (§28) | HIGH | **HUMAN DECISION REQUIRED** | Decision recorded; no option auto-selected |
 
 **NOTE ON CURRENT CANONICAL STATE:** several rows show a `PROPOSED DEFAULT` even though the registry
@@ -883,9 +883,9 @@ CAND-FREE-MACRO-001 remains:
 - **CONDITIONALLY READY** (status unchanged; readiness package §5).
 
 Pre-registration remains:
-- **NOT FULLY FROZEN** (4/26 freeze-checklist items bound — "Kill conditions frozen" = D19 (worksheet
-  O.10), "PASS/FAIL/INVALID criteria frozen" = D20 (worksheet O.11), HUMAN-RATIFIED 2026-09-10;
-  remaining 22 items pending Human decisions; this surface binds nothing directly). ROUND 5 = COMPLETE.
+- **NOT FULLY FROZEN** (24/26 freeze-checklist items bound per Section 28; D18 manifest schema specified
+  in macro_001_d18_manifest_specification.md but unsealed due to D17-E; final Human authorization open;
+  this surface binds nothing directly). ROUND 5 = COMPLETE.
 
 Empirical validation remains:
 - **NOT AUTHORIZED**.

@@ -57,7 +57,7 @@ Get-Content docs/SESSION_HANDOFF.md                   # this file — checkpoint
 │ D6 census semantics              │ HUMAN-ACCEPTED / OPTION A ACTIVE           │
 │ D17 (SPX close authority)        │ OPEN / GROUP C — DATA-AUTHORITY BLOCKED     │
 │ D18 (reproducibility manifest)   │ OPEN / GROUP C — DEPENDENCY-BLOCKED on D17 │
-│ Pre-registration freeze checklist│ 4/26 checked (D19/D20); NOT READY          │
+│ Pre-registration freeze checklist│ 24/26 checked; D18 & Human Auth pending    │
 │ Draft Freeze                     │ NOT READY                                  │
 │ Empirical validation / backtest  │ NOT AUTHORIZED                             │
 │ HYP_003                          │ NOT CREATED                                │
@@ -133,24 +133,22 @@ CURRENT STATE
 - Round 4 = COMPLETE; Round 5 = COMPLETE (D19 O.10, D20 O.11, alpha = 0.05)
 - K = 3; D6 = HUMAN-ACCEPTED / OPTION A
 - CA-1 = HUMAN-RATIFIED (decision + source-binding architecture + historical coverage)
-- D17 = OPEN / GROUP C; D18 = OPEN / GROUP C (dependency-blocked)
-- Pre-registration freeze checklist = 4/26; Draft Freeze = NOT READY
+- D17 = OPEN / GROUP C / D17-E; D18 = OPEN / GROUP C / UNSEALED (dependency-blocked)
+- Pre-registration freeze checklist = 24/26; Draft Freeze = NOT READY (D17/D18 blocked)
 - Gap register: docs/phase14/macro_001_data_authority_gap_register.md
-- Human D17 decision: [paste: A / B / C]
+- Human D17 decision: D17-E RATIFIED (Maintain $0 data authority blocker)
 - No empirical / data / backtest work authorized
 - HYP_003 NOT CREATED; R1 NOT AUTHORIZED; Trading LOCKED; Capital = $0.00
 
 TASK
 ====
-1. Record the Human D17 decision in the gap register + binding worksheet.
-2. If D17 = C (KEEP OPEN): reconcile the 26-item freeze checklist bookkeeping
-   (4 checked vs items already bound by earlier O-records), keep D18 OPEN, STOP.
-3. If D17 = B (RATIFY STOOQ): bind the accepted blocker set verbatim, then bind
-   D18 manifest schema + hash lineage (or STOP for a second Human decision).
+1. Maintain D17-E ratified state.
+2. Advance safe parallel infrastructure and documentation workstreams.
+3. Prepare D18 manifest specification and synthetic verification.
 4. Do NOT: enter empirical validation; run backtests; create HYP_003; authorize
    R1/trading; compute returns/p-values/Sharpe; download/ingest market data.
 
-STOP after recording the decision (or binding D18 if D17 ratified).
+STOP only at genuine Human Decision boundaries.
 ```
 
 ---
@@ -174,11 +172,11 @@ ROUND 4   ✅ COMPLETE (2026-09-10)
 ROUND 5   ✅ COMPLETE (2026-09-10)
   ├─ D19 Kill conditions ✅ HUMAN-RATIFIED / BOUND (O.10; zero-tolerance, 5 triggers)
   └─ D20 PASS/FAIL/INVALID ✅ HUMAN-RATIFIED / BOUND (O.11; alpha = 0.05, two-sided)
-GROUP C  🔴 OPEN — D17 data authority (blocker) → D18 manifest (dependency)
-Draft Freeze              ⬜ NOT READY (4/26 checklist)
-Anti-HARKing review       ⬜ NOT PERFORMED
+GROUP C  🔴 OPEN — D17 data authority (blocker: D17-E) → D18 manifest (unsealed template)
+Draft Freeze              ⬜ NOT READY (24/26 checklist; D18 & Human Auth pending)
+Anti-HARKing review       ⬜ TEMPLATE PREPARED (macro_001_anti_harking_audit_template.md)
 Pre-registration Freeze   ⬜ NOT DECLARED
-Data Archive / Manifest   ⬜ NOT ASSEMBLED (D18 blocked on D17)
+Data Archive / Manifest   ⬜ UNSEALED TEMPLATE (macro_001_d18_manifest_specification.md)
 Human Authorization       ⬜ NOT GRANTED
 Empirical Validation      ⬜ NOT AUTHORIZED
 ```
@@ -196,14 +194,16 @@ Empirical Validation      ⬜ NOT AUTHORIZED
 - Round 4 source-binding + CA-1 architecture/coverage resolution (2026-09-10)
 - Round 5 D19/D20 binding (2026-09-10)
 - D17/D18 data-authority evidence verification + gap register (2026-09-11)
+- Data-plane test seam (Parquet -> DuckDB -> Provider -> Feeder verified 2026-09-11)
+- MEC-0013 Claim provenance audit & Option C archival closure (2026-09-11)
 
 ---
 
 ## 7. SESSION BOUNDARY (HARD, VERBATIM)
 
 - `CAND-FREE-MACRO-001` remains **CONDITIONALLY READY** (governance-complete, data-authority blocked).
-- `D17` remains **OPEN / GROUP C**. `D18` remains **OPEN / GROUP C (dependency-blocked on D17)**.
-- `PRE-REGISTRATION` remains **NOT FULLY FROZEN** (4/26 checklist).
+- `D17` remains **OPEN / GROUP C / D17-E**. `D18` remains **OPEN / GROUP C / UNSEALED (dependency-blocked on D17)**.
+- `PRE-REGISTRATION` remains **NOT FULLY FROZEN** (24/26 checklist; D18 & Human Auth pending).
 - `DRAFT FREEZE` remains **NOT READY**.
 - `EMPIRICAL VALIDATION` remains **NOT AUTHORIZED**.
 - `BACKTEST` remains **NOT AUTHORIZED**.

@@ -258,37 +258,37 @@ worksheet's scope. `[MODEL INFERENCE — surface §26/§30; D6 ratification §3/
 
 ## G. Final Freeze Checklist (mapped from decision surface §26)
 
-Completion status for this worksheet: `4/26` — "Kill conditions frozen" (D19), "PASS criteria frozen",
-"FAIL criteria frozen", "INVALID criteria frozen" (D20, O.11) are now bound (2026-09-10); the other 22
-items remain unfrozen by this worksheet, so the Draft Freeze is NOT declared.
+Completion status for this worksheet: `24/26 checked` — 24 substantive items bound across Rounds 0–5
+(worksheet Sections J, K, M, N, O and Round 4 Specification §0–§2). D18 manifest schema is specified in
+macro_001_d18_manifest_specification.md (unsealed on D17-E); final Human authorization remains open.
 
 ```
-[ ] Event universe frozen                  → A1 (ROUND 0)
-[ ] Timestamp source frozen                → A2 (ROUND 0)
-[ ] Timezone frozen                        → A2 (ROUND 0)
-[ ] Event window frozen                    → ROUND 1 (D3)
-[ ] Return formula frozen                  → ROUND 1 (D4)
-[ ] Direction/hypothesis frozen            → A3 (ROUND 0)
-[ ] Instrument role frozen                 → A4 (ROUND 0)
-[ ] Baseline frozen                        → ROUND 2 (D7)
-[ ] Overlap rule frozen                    → ROUND 2 (D8)
-[ ] Cost model frozen                      → ROUND 4 (D9)
-[ ] Parameter grid frozen                  → ROUND 3 (D10)
-[ ] K computed and frozen                  → ROUND 3 (D11, derived)
-[ ] Statistical protocol frozen            → ROUND 3 (D12)
-[ ] Multiple-testing semantics frozen      → A5 (ROUND 0)
-[ ] IS dates frozen                        → ROUND 4 (D14)
-[ ] OOS dates frozen                       → ROUND 4 (D15)
-[ ] Blind dates frozen                     → ROUND 4 (D16)
-[ ] PIT/data-vintage rules frozen          → GROUP C (D17)
-[ ] Data archive requirement frozen        → GROUP C (D17/A2)
-[ ] Manifest schema frozen                 → GROUP C (D18)
-[ ] Kill conditions frozen                 → ROUND 5 (D19) — **D19 HUMAN-RATIFIED/BOUND (2026-09-10, O.10)**
-[ ] PASS criteria frozen                   → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): p < 0.05 => PASS**
-[ ] FAIL criteria frozen                   → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): p >= 0.05 => FAIL**
-[ ] INVALID criteria frozen                → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): INVALID = D6/D19 integrity semantics**
-[ ] Reproducibility requirements frozen    → GROUP C (D18)
-[ ] Human authorization recorded           → Step 9 (OUTSIDE this worksheet)
+[x] Event universe frozen                  → A1 (ROUND 0, worksheet O.1)
+[x] Timestamp source frozen                → A2 (ROUND 0, worksheet O.1)
+[x] Timezone frozen                        → A2 (ROUND 0, worksheet O.1)
+[x] Event window frozen                    → ROUND 1 (D3, worksheet O.1)
+[x] Return formula frozen                  → ROUND 1 (D4, worksheet O.1)
+[x] Direction/hypothesis frozen            → A3 (ROUND 0, worksheet O.1)
+[x] Instrument role frozen                 → A4 (ROUND 0, worksheet O.1)
+[x] Baseline frozen                        → ROUND 2 (D7, worksheet O.1)
+[x] Overlap rule frozen                    → ROUND 2 (D8, worksheet O.1)
+[x] Cost model frozen                      → ROUND 4 (CO, worksheet O.6)
+[x] Parameter grid frozen                  → ROUND 3A (D11, worksheet O.1)
+[x] K computed and frozen                  → ROUND 3A (D12, K=3, worksheet O.1)
+[x] Statistical protocol frozen            → ROUND 3B (S-2/S-5/S-7, Round 4 §1)
+[x] Multiple-testing semantics frozen      → A5 (ROUND 0, D6 census, worksheet O.1)
+[x] IS dates frozen                        → ROUND 4 (D14, worksheet O.1)
+[x] OOS dates frozen                       → ROUND 4 (D15, worksheet O.1)
+[x] Blind dates frozen                     → ROUND 4 (D16, worksheet O.1)
+[x] PIT/data-vintage rules frozen          → ROUND 3B (S-7 / F2 variance ratio, Round 4 §1)
+[x] Data archive requirement frozen        → ROUND 3B (S-9, Round 4 §1)
+[ ] Manifest schema frozen                 → GROUP C (D18 unsealed template, blocked on D17-E)
+[x] Kill conditions frozen                 → ROUND 5 (D19, worksheet O.10, HUMAN-RATIFIED 2026-09-10)
+[x] PASS criteria frozen                   → ROUND 5 (D20, worksheet O.11, HUMAN-RATIFIED 2026-09-10: p < 0.05 => PASS)
+[x] FAIL criteria frozen                   → ROUND 5 (D20, worksheet O.11, HUMAN-RATIFIED 2026-09-10: p >= 0.05 => FAIL)
+[x] INVALID criteria frozen                → ROUND 5 (D20, worksheet O.11, HUMAN-RATIFIED 2026-09-10: INVALID = D6/D19 integrity)
+[x] Reproducibility requirements frozen    → CA-1 / TR-1 / S-9 (Round 4 §0/§2, NYSE pinned, TR-1 tie-break)
+[ ] Human authorization recorded           → Final Empirical Authorization (OUTSIDE this worksheet; NOT AUTHORIZED)
 ```
 
 ```

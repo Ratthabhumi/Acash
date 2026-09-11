@@ -24,16 +24,16 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
   MAINLINE .... CAND-FREE-MACRO-001    FREEDATA research lane; CONDITIONALLY READY;
                                        Rounds 0-3B (K=3), Round 3B remainder (S-2/S-7 F2/S-9),
                                        Round 4 (D14/D15/D16/EX/CO/CA-1), Round 5 (D19/D20) RATIFIED;
-                                       D17 (SPX close authority) & D18 (manifest) OPEN;
-                                       PRE-REGISTRATION NOT FULLY FROZEN (4/26 checklist);
+                                       D17 (SPX close authority) & D18 (manifest) OPEN / D17-E BLOCKED;
+                                       PRE-REGISTRATION NOT FULLY FROZEN (24/26 checklist; D18 & Human Auth pending);
                                        EMPIRICAL VALIDATION NOT AUTHORIZED
   PARALLEL .... MEC-0011                Gold/DXY relative-movement; RESEARCH INTAKE ONLY;
                                        D1=A / D2=C / D3=B human-ratified 2026-09-10;
                                        DXY source layer BLOCKED (paths P1-P5 await Human);
                                        NOT AUTHORIZED FOR EMPIRICAL VALIDATION
-  PARALLEL .... MEC-0013                Opening Range Breakout (ORB); TRACKED RESEARCH INTAKE ONLY;
-                                       claims extracted; feasibility uncertified; NOT a candidate;
-                                       NOT AUTHORIZED FOR EMPIRICAL VALIDATION
+  ARCHIVED .... MEC-0013                Opening Range Breakout (ORB); AUDITED RESEARCH ASSET ONLY;
+                                       MEC-0013-D01 = OPTION C (Archived at $0; No commercial data;
+                                       No 30-day sample; NOT a candidate; NOT HYP_003; Backtest LOCKED)
   PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
                                        PENDING HUMAN RATIFICATION
   LOCKED ...... HYP_003 (NOT CREATED) / R1 (NOT AUTHORIZED) / empirical validation /
