@@ -343,6 +343,10 @@ class PaperEventJournal:
         return self._session_id
 
     @property
+    def path(self) -> Path:
+        return self._path
+
+    @property
     def event_count(self) -> int:
         with self._lock:
             return self._event_count

@@ -36,6 +36,7 @@ PaperSessionConfig contains all parameters required for deterministic replay.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -97,6 +98,7 @@ class PaperSessionConfig:
     risk_model_version: str = "PAPER_INLINE_RISK_V1"
     data_source: str = "SYNTHETIC_BARS"
     market_domain: str = "SYNTHETIC"
+    max_market_data_age_ms: Optional[int] = None
 
     def compute_config_hash(self) -> str:
         """SHA-256 of canonical config (excluding paths which are runtime-dependent)."""
@@ -116,6 +118,8 @@ class PaperSessionConfig:
             "fill_model_version": self.fill_model_version,
             "risk_model_version": self.risk_model_version,
         }
+        if self.max_market_data_age_ms is not None:
+            canonical["max_market_data_age_ms"] = self.max_market_data_age_ms
         canonical_bytes = CanonicalConfigSerializer.to_canonical_json(
             canonical
         ).encode("utf-8")
@@ -166,7 +170,14 @@ class PaperPortfolioState:
 
 @dataclass(frozen=True)
 class SyntheticBar:
-    """A synthetic market bar for infrastructure testing."""
+    """A normalized market bar for paper infrastructure testing.
+
+    When constructed from a real market feed (E3.5) it carries explicit feed
+    provenance: feed_source, feed_source_version, feed_source_id,
+    received_at_utc, feed_sequence, optional book/trade fields, the explicit
+    unavailability list, and observed data age. Never fabricates book/trade
+    fields the provider did not supply.
+    """
 
     timestamp_utc: datetime
     symbol: str
@@ -176,8 +187,25 @@ class SyntheticBar:
     close: Decimal
     volume: Decimal
 
+    # E3.5 real-feed provenance (optional; absent for pure synthetic bars)
+    feed_source: Optional[str] = None
+    feed_source_version: Optional[str] = None
+    feed_source_id: Optional[str] = None
+    received_at_utc: Optional[datetime] = None
+    feed_sequence: Optional[int] = None
+    feed_bid: Optional[Decimal] = None
+    feed_ask: Optional[Decimal] = None
+    feed_trade_count: Optional[int] = None
+    feed_unavailable: Optional[List[str]] = None
+    data_age_ms: Optional[int] = None
+
+    @property
+    def is_real_feed(self) -> bool:
+        """True if this bar came from a real market data feed."""
+        return self.feed_source is not None
+
     def to_journal_payload(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "timestamp_utc": self.timestamp_utc.isoformat(),
             "symbol": self.symbol,
             "open": str(self.open),
@@ -185,14 +213,47 @@ class SyntheticBar:
             "low": str(self.low),
             "close": str(self.close),
             "volume": str(self.volume),
-            "source": "SYNTHETIC_BARS",
-            "GOVERNANCE_LABEL": "INFRASTRUCTURE_TEST_DATA",
         }
+        if self.is_real_feed:
+            payload["source"] = self.feed_source
+            payload["feed_source_version"] = self.feed_source_version
+            payload["feed_source_id"] = self.feed_source_id
+            if self.received_at_utc is not None:
+                payload["received_at_utc"] = self.received_at_utc.isoformat()
+            if self.feed_sequence is not None:
+                payload["feed_sequence"] = self.feed_sequence
+            if self.feed_bid is not None:
+                payload["bid"] = str(self.feed_bid)
+            if self.feed_ask is not None:
+                payload["ask"] = str(self.feed_ask)
+            if self.feed_trade_count is not None:
+                payload["trade_count"] = self.feed_trade_count
+            if self.data_age_ms is not None:
+                payload["data_age_ms"] = self.data_age_ms
+            if self.feed_unavailable:
+                payload["unavailable"] = sorted(self.feed_unavailable)
+            payload["GOVERNANCE_LABEL"] = "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY"
+        else:
+            payload["source"] = "SYNTHETIC_BARS"
+            payload["GOVERNANCE_LABEL"] = "INFRASTRUCTURE_TEST_DATA"
+        return payload
 
 
 # ---------------------------------------------------------------------------
 # PaperSessionRunner — E3 main wiring
 # ---------------------------------------------------------------------------
+
+
+def bar_age_ms(bar: "SyntheticBar") -> int:
+    """Compute observed data age in milliseconds for a real-feed bar.
+
+    Uses received_at_utc - timestamp_utc when both are present, otherwise 0
+    (synthetic bars carry no wall-clock ingestion delta).
+    """
+    if bar.received_at_utc is not None:
+        delta = (bar.received_at_utc - bar.timestamp_utc).total_seconds()
+        return max(0, int(delta * 1000))
+    return 0
 
 
 class PaperSessionRunner:
@@ -260,6 +321,7 @@ class PaperSessionRunner:
         # Safety state
         self._kill_switch_active = False
         self._submitted_intent_ids: Set[str] = set()
+        self._seen_feed_source_ids: Set[str] = set()
         self._daily_realized_loss = Decimal("0")
 
         # Session timing
@@ -316,6 +378,15 @@ class PaperSessionRunner:
         integrity_violations = self._journal.verify_integrity()
         integrity_status = "PASS" if not integrity_violations else "FAIL"
 
+        # Persist end-of-session daily snapshot (append-only, audit reference).
+        if self._journal.event_count > 0:
+            try:
+                self.capture_daily_snapshot()
+            except DataContractError:
+                # A snapshot failure must not silently destroy the manifest
+                # seal; escalate as a session-stop failure (fail-closed).
+                raise
+
         # Record reconciliation to journal
         session_cid = self._journal.new_correlation_id()
         self._health.record_reconciliation(
@@ -361,7 +432,242 @@ class PaperSessionRunner:
             journal_integrity_status=integrity_status,
         )
 
+        # Persist the sealed manifest so audit tools can reload it post-run.
+        try:
+            manifest_path = (
+                self._config.journal_path.parent
+                / f"{self._config.session_id}.manifest.json"
+            )
+            with manifest_path.open("w", encoding="utf-8") as fh:
+                fh.write(
+                    json.dumps(manifest.model_dump(), indent=2, default=str) + "\n"
+                )
+                fh.flush()
+        except Exception as exc:
+            raise DataContractError(
+                f"PaperSessionRunner: manifest persistence failure: {exc}"
+            ) from exc
+
         return manifest
+
+    def capture_daily_snapshot(self) -> DailySnapshot:
+        """Persist an end-of-day operational daily snapshot (append-only).
+
+        The snapshot references journal bounds (first/last sequence + hash)
+        so the journal remains the authority; the snapshot is a summary view
+        for audit, never a replacement. Fail-closed on persistence failure.
+        """
+        events = self._journal.read_all()
+        ordered = sorted(events, key=lambda e: e.sequence)
+        if not ordered:
+            raise DataContractError(
+                "PaperSessionRunner: cannot snapshot an empty journal."
+            )
+
+        first_seq = ordered[0].sequence
+        last_seq = ordered[-1].sequence
+        first_hash = ordered[0].event_hash
+        last_hash = self._journal.last_event_hash
+
+        # Operational counters derived directly from journal events (cannot
+        # be confused with research evidence).
+        signal_count = 0
+        risk_rejection_count = 0
+        feed_disconnect_count = 0
+        stale_data_count = 0
+        exception_count = 0
+        reconciliation_failures = 0
+        incident_count = 0
+
+        for ev in ordered:
+            if ev.event_type in (
+                JournalEventType.SIGNAL_LONG,
+                JournalEventType.SIGNAL_SHORT,
+                JournalEventType.SIGNAL_FLAT,
+                JournalEventType.SIGNAL_EVALUATED,
+            ):
+                signal_count += 1
+            elif ev.event_type == JournalEventType.RISK_REJECTED:
+                risk_rejection_count += 1
+            elif ev.event_type == JournalEventType.FEED_DISCONNECTED:
+                feed_disconnect_count += 1
+            elif ev.event_type == JournalEventType.MARKET_BAR_STALE:
+                stale_data_count += 1
+            elif ev.event_type == JournalEventType.EXCEPTION_RECORDED:
+                exception_count += 1
+            elif ev.event_type == JournalEventType.RECONCILIATION_FAILURE:
+                reconciliation_failures += 1
+
+        incident_count = (
+            feed_disconnect_count
+            + stale_data_count
+            + exception_count
+            + reconciliation_failures
+        )
+
+        integrity_violations = self._journal.verify_integrity()
+        integrity_status = "PASS" if not integrity_violations else "FAIL"
+
+        recon_result = self._reconciler.run_full_reconciliation()
+        reconciliation_failures = max(
+            reconciliation_failures, recon_result.total_violations
+        )
+
+        snapshot = DailySnapshot(
+            snapshot_id=f"{self._config.session_id}-{uuid.uuid4().hex[:8]}",
+            session_id=self._config.session_id,
+            trading_date=datetime.now(timezone.utc).date(),
+            captured_at_utc=datetime.now(timezone.utc),
+            starting_equity=self._config.initial_cash,
+            ending_equity=self._portfolio.equity,
+            pnl=self._portfolio.equity - self._config.initial_cash,
+            cash=self._portfolio.cash,
+            trade_count=self._portfolio.trade_count,
+            order_count=self._portfolio.order_count,
+            rejected_order_count=self._portfolio.rejected_order_count,
+            signal_count=signal_count,
+            risk_rejection_count=risk_rejection_count,
+            system_incident_count=incident_count,
+            feed_disconnect_count=feed_disconnect_count,
+            stale_data_count=stale_data_count,
+            exception_count=exception_count,
+            reconciliation_failures=reconciliation_failures,
+            journal_integrity_status=integrity_status,
+            first_event_sequence=first_seq,
+            last_event_sequence=last_seq,
+            first_event_hash=first_hash,
+            last_event_hash=last_hash,
+        )
+        self._snapshot_store.append(snapshot)
+        return snapshot
+
+    def recover(self) -> Optional[str]:
+        """Recover in-memory state from an existing journal (restart recovery).
+
+        Reconstructs portfolio, submitted intent IDs, start time, and kill
+        switch state from committed journal events. Returns the recovered
+        portfolio-equivalent correlation_id, or the SESSION_STARTED event_id
+        when the journal was empty.
+
+        Throws DataContractError when the journal contents conflict with the
+        session config (fail-closed; no silent reconciliation).
+        """
+        if self._started:
+            raise DataContractError(
+                "PaperSessionRunner: session already started; cannot recover."
+            )
+        if not self._journal.path.exists():
+            raise DataContractError(
+                f"PaperSessionRunner: no journal at {self._journal.path}; "
+                "cannot recover from nothing."
+            )
+
+        events = self._journal.read_all()
+        if not events:
+            # Empty journal — start fresh
+            return self.start()
+
+        # Verify journal integrity before trusting any replay.
+        integrity_violations = self._journal.verify_integrity()
+        if integrity_violations:
+            raise DataContractError(
+                "PaperSessionRunner: journal integrity violated during recovery; "
+                f"{len(integrity_violations)} chain violations found."
+            )
+
+        recovery_cid = self._journal.new_correlation_id()
+
+        # Reconstruct from committed events (in sequence order).
+        recovered_position = Decimal("0")
+        recovered_avg_entry = Decimal("0")
+        recovered_realized_pnl = Decimal("0")
+        recovered_fees = Decimal("0")
+        recovered_trade_count = 0
+        recovered_order_count = 0
+        recovered_rejected_count = 0
+        recovered_intent_ids: Set[str] = set()
+        recovered_feed_source_ids: Set[str] = set()
+        recovered_start_time: Optional[datetime] = None
+        recovered_kill_switch = False
+        saw_feed_provenance = False
+
+        ordered = sorted(events, key=lambda e: e.sequence)
+        for ev in ordered:
+            if ev.event_type == JournalEventType.SESSION_STARTED:
+                recovered_start_time = ev.event_time_utc
+            elif ev.event_type == JournalEventType.ORDER_INTENT_CREATED:
+                intent_id = ev.payload.get("order_intent_id")
+                if intent_id is not None:
+                    recovered_intent_ids.add(str(intent_id))
+                recovered_order_count += 1
+            elif ev.event_type == JournalEventType.KILL_SWITCH_TRIGGERED:
+                recovered_kill_switch = True
+            elif ev.event_type == JournalEventType.PORTFOLIO_UPDATED:
+                pay = ev.payload
+                recovered_cash = pay.get("cash")
+                if recovered_cash is None:
+                    raise DataContractError(
+                        "PaperSessionRunner: PORTFOLIO_UPDATED missing cash "
+                        "during recovery."
+                    )
+                recovered_position = Decimal(str(pay.get("position", "0")))
+                recovered_avg_entry = Decimal(str(pay.get("avg_entry_price", "0")))
+                recovered_realized_pnl = Decimal(str(pay.get("realized_pnl", "0")))
+                recovered_fees = Decimal(str(pay.get("total_fees", "0")))
+                recovered_trade_count = int(pay.get("trade_count", 0))
+                recovered_order_count = int(pay.get("order_count", recovered_order_count))
+                recovered_rejected_count = int(
+                    pay.get("rejected_order_count", recovered_rejected_count)
+                )
+                self._portfolio.cash = Decimal(str(recovered_cash))
+            elif ev.event_type == JournalEventType.MARKET_BAR_RECEIVED:
+                source = ev.payload.get("source")
+                if source not in (None, "SYNTHETIC_BARS"):
+                    saw_feed_provenance = True
+                feed_source_id = ev.payload.get("feed_source_id")
+                if feed_source_id is not None:
+                    recovered_feed_source_ids.add(str(feed_source_id))
+
+        # Apply recovered portfolio state.
+        self._portfolio.position = recovered_position
+        self._portfolio.avg_entry_price = recovered_avg_entry
+        self._portfolio.realized_pnl = recovered_realized_pnl
+        self._portfolio.total_fees = recovered_fees
+        self._portfolio.trade_count = recovered_trade_count
+        self._portfolio.order_count = recovered_order_count
+        self._portfolio.rejected_order_count = recovered_rejected_count
+        self._submitted_intent_ids = recovered_intent_ids
+        self._seen_feed_source_ids = recovered_feed_source_ids
+        self._kill_switch_active = recovered_kill_switch
+        self._start_time_utc = recovered_start_time
+        self._started = True
+
+        if saw_feed_provenance and self._config.data_source == "SYNTHETIC_BARS":
+            raise DataContractError(
+                "PaperSessionRunner: journal contains real-feed bars but config "
+                "data_source is SYNTHETIC_BARS (config conflict during recovery)."
+            )
+
+        self._health.record(
+            kind=HealthEventKind.RECOVERY_ATTEMPTED,
+            correlation_id=recovery_cid,
+            payload={
+                "event": "RECOVERY_ATTEMPTED",
+                "recovered_position": str(self._portfolio.position),
+                "recovered_cash": str(self._portfolio.cash),
+                "recovered_intent_ids": len(self._submitted_intent_ids),
+                "recovered_order_count": self._portfolio.order_count,
+                "recovered_trade_count": self._portfolio.trade_count,
+                "recovered_feed_source_ids": len(self._seen_feed_source_ids),
+                "recovered_kill_switch": self._kill_switch_active,
+                "journal_event_count": len(events),
+                "recovered_start_time_utc": (
+                    recovered_start_time.isoformat() if recovered_start_time else None
+                ),
+            },
+        )
+
+        return recovery_cid
 
     # ------------------------------------------------------------------
     # Core decision loop
@@ -379,6 +685,53 @@ class PaperSessionRunner:
             )
         if self._kill_switch_active:
             return None  # Hard stop — no new decisions while kill switch active
+
+        # E3.5 duplicate-feed-bar gate: a real-feed bar whose provider
+        # source_id was already admitted in this session or a prior session
+        # (recovered restart) is refused. This prevents a restarted feed from
+        # re-creating a decision/order for a bar it already consumed.
+        if (
+            bar.feed_source_id is not None
+            and bar.feed_source_id in self._seen_feed_source_ids
+        ):
+            self._journal.append(
+                event_type=JournalEventType.MARKET_BAR_REJECTED,
+                layer=JournalLayer.MARKET_DATA,
+                event_time_utc=bar.timestamp_utc,
+                correlation_id=self._journal.new_correlation_id(),
+                component=self.COMPONENT,
+                payload={
+                    "event": "MARKET_BAR_REJECTED",
+                    "reason": "DUPLICATE_FEED_SOURCE_ID",
+                    "feed_source_id": bar.feed_source_id,
+                    "session_id": self._config.session_id,
+                },
+            )
+            return None
+
+        # E3.5 stale-data gate: real-feed bars older than the configured
+        # freshness horizon are NOT admitted to the decision pipeline.
+        if (
+            self._config.max_market_data_age_ms is not None
+            and bar.received_at_utc is not None
+        ):
+            age_ms = bar.data_age_ms if bar.data_age_ms is not None else bar_age_ms(bar)
+            if age_ms > self._config.max_market_data_age_ms:
+                self._health.record(
+                    kind=HealthEventKind.STALE_DATA,
+                    correlation_id=self._journal.new_correlation_id(),
+                    payload={
+                        "reason": "DATA_AGE_EXCEEDED",
+                        "age_ms": age_ms,
+                        "max_market_data_age_ms": self._config.max_market_data_age_ms,
+                        "timestamp_utc": bar.timestamp_utc.isoformat(),
+                        "received_at_utc": bar.received_at_utc.isoformat(),
+                    },
+                )
+                return None  # No new trading decision for stale data
+
+        if bar.feed_source_id is not None:
+            self._seen_feed_source_ids.add(bar.feed_source_id)
 
         correlation_id = self._journal.new_correlation_id()
 
@@ -759,6 +1112,10 @@ class PaperSessionRunner:
     @property
     def journal(self) -> PaperEventJournal:
         return self._journal
+
+    @property
+    def session_id(self) -> str:
+        return self._config.session_id
 
     @property
     def portfolio(self) -> PaperPortfolioState:

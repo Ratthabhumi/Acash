@@ -39,6 +39,10 @@ Modules:
     analytics   — PaperAnalyticsEngine: observed metrics (NOT strategy qualification)
     health      — PaperHealthMonitor: system health recording
     snapshot    — DailySnapshot: daily operational summary
+    feed        — E3.5 provider-agnostic real market data feed (IMarketDataFeed)
+    session     — E3.5 PaperFeedSessionSupervisor: real-feed → runner wiring
+    review      — E3.5 ReviewPackage builder (OBSERVED/MODEL/DERIVED audit artifact)
+    cli         — E3.5 operational CLI (python -m acash.paper)
 """
 
 from acash.paper.journal import (
@@ -63,6 +67,28 @@ from acash.paper.runner import PaperSessionRunner, PaperSessionConfig, Synthetic
 from acash.paper.health import PaperHealthMonitor, HealthEventKind
 from acash.paper.analytics import PaperAnalyticsEngine, PaperAnalyticsReport
 from acash.paper.snapshot import DailySnapshot, DailySnapshotStore
+from acash.paper.feed import (
+    FeedBar,
+    FeedStatus,
+    FeedContractError,
+    FeedConnectionError,
+    FeedMalformedResponseError,
+    FeedDataValidationError,
+    IMarketDataFeed,
+    BinancePublicKlinesFeed,
+    StooqCsvFeed,
+    feed_bar_to_synthetic_bar,
+)
+from acash.paper.session import (
+    FeedSupervisorStats,
+    PaperFeedSessionSupervisor,
+)
+from acash.paper.review import (
+    ProvenanceLabel,
+    ReviewItem,
+    ReviewPackage,
+    build_review_package,
+)
 
 __all__ = [
     # Journal
@@ -100,4 +126,23 @@ __all__ = [
     # Snapshot
     "DailySnapshot",
     "DailySnapshotStore",
+    # E3.5 Feed
+    "FeedBar",
+    "FeedStatus",
+    "FeedContractError",
+    "FeedConnectionError",
+    "FeedMalformedResponseError",
+    "FeedDataValidationError",
+    "IMarketDataFeed",
+    "BinancePublicKlinesFeed",
+    "StooqCsvFeed",
+    "feed_bar_to_synthetic_bar",
+    # E3.5 Session
+    "FeedSupervisorStats",
+    "PaperFeedSessionSupervisor",
+    # E3.5 Review Package
+    "ProvenanceLabel",
+    "ReviewItem",
+    "ReviewPackage",
+    "build_review_package",
 ]
