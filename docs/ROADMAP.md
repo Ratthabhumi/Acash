@@ -45,9 +45,9 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 
 | Class | Lane / Item | State |
 |---|---|---|
-| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (4/26); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
+| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (24/26 checked; D18 & Human Auth pending); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
 | PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
-| PARALLEL | `MEC-0013` Opening Range Breakout (ORB) | TRACKED RESEARCH INTAKE ONLY (`docs/phase14/mec_0013_orb_research_intake.md`); claims extracted / feasibility uncertified; NOT registered; NOT a candidate; NOT HYP_003; EMPIRICAL VALIDATION NOT AUTHORIZED |
+| ARCHIVED | `MEC-0013` Opening Range Breakout (ORB) | AUDITED RESEARCH ASSET ONLY (`docs/phase14/mec_0013_orb_research_intake.md`, `mec_0013_orb_research_audit.md`); Human Ratification MEC-0013-D01 = OPTION C (Archived at $0; No commercial data; No 30-day sample; NOT promoted to candidate; NOT HYP_003; Backtest LOCKED; Zero ACASH empirical evidence) |
 | PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
 | PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
 | LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
@@ -65,10 +65,11 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 ## ACASH NOW / NEXT / LATER (2026-09-11)
 
 - **NOW** (governance & data-authority resolution; no empirical work):
-  1. MACRO-001 D17 — Resolve SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`).
-  2. MACRO-001 D18 — Downstream reproducibility manifest specification (dependency-blocked on D17).
-  3. MEC-0013 — ORB research intake audit (source claim extraction, mechanism validation, data feasibility, PIT/survivorship/cost audit, human review; research intake only).
-  4. Data-plane test seam — offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` (zero alpha logic; infrastructure only).
+  1. MACRO-001 D17 — Human Decision on SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`). D17-E ($0 blocker) maintained.
+  2. MACRO-001 D18 — Downstream reproducibility manifest schema specified (`docs/phase14/macro_001_d18_manifest_specification.md`); unsealed, dependency-blocked on D17.
+  3. MEC-0013 — [COMPLETED / ARCHIVED] Claim-provenance audited, Option C ratified, archived as non-promoted research asset (`docs/phase14/mec_0013_orb_research_audit.md`).
+  4. Data-plane test seam — [COMPLETED / VERIFIED] Offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` verified (`tests/integration/test_parquet_feeder_seam.py`, 4/4 passing, zero alpha logic).
+  5. MACRO-001 Pre-Registration Checklist — [RECONCILED] 24/26 items checked (`docs/phase14/cand_free_macro_001_human_specification_decision_surface.md` §28); Anti-HARKing template prepared (`docs/phase14/macro_001_anti_harking_audit_template.md`).
 - **NEXT** (strict sequence; only after D17 / D18 are resolved):
   1. Complete pre-registration freeze checklist (26/26 items) -> Draft Freeze Candidate.
   2. Anti-HARKing review.

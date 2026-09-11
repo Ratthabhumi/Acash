@@ -765,32 +765,32 @@ No advance beyond Round 5 without separate authorization. `[VERIFIED FACT — wo
 HARD BLOCKING status — every unchecked substantive item keeps pre-registration NOT FROZEN.
 
 ```
-[ ] Event universe frozen
-[ ] Timestamp source frozen
-[ ] Timezone frozen
-[ ] Event window frozen
-[ ] Return formula frozen
-[ ] Direction/hypothesis frozen
-[ ] Instrument role frozen
-[ ] Baseline frozen
-[ ] Overlap rule frozen
-[ ] Cost model frozen
-[ ] Parameter grid frozen
-[ ] K computed and frozen
-[ ] Statistical protocol frozen
-[ ] Multiple-testing semantics frozen
-[ ] IS dates frozen
-[ ] OOS dates frozen
-[ ] Blind dates frozen
-[ ] PIT/data-vintage rules frozen
-[ ] Data archive requirement frozen
-[ ] Manifest schema frozen
-[x] Kill conditions frozen                → D19 (worksheet O.10, HUMAN-RATIFIED 2026-09-10)
-[x] PASS criteria frozen                   → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p < 0.05 => PASS)
-[x] FAIL criteria frozen                   → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p >= 0.05 => FAIL)
-[x] INVALID criteria frozen                → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, INVALID = D6/D19 integrity semantics)
-[ ] Reproducibility requirements frozen
-[ ] Human authorization recorded
+[x] Event universe frozen                 → Batch A1 (surface §9.1, worksheet O.1, FOMC+CPI+NFP)
+[x] Timestamp source frozen               → Batch A2 (surface §10.1, worksheet O.1, official release timestamp)
+[x] Timezone frozen                       → Batch A2 (surface §10.1, worksheet O.1, US Eastern Time ET)
+[x] Event window frozen                   → Round 1 D3 (surface §11.1, worksheet O.1, W-1 post-announcement window)
+[x] Return formula frozen                 → Round 1 D4 (surface §12.1, worksheet O.1, R-EC exact log-return formula)
+[x] Direction/hypothesis frozen           → Batch A3 / D5 (surface §13.1, worksheet O.1, primary two-sided deviation)
+[x] Instrument role frozen                → Batch A4 / D6 (surface §14.1, worksheet O.1, SPX primary / SPY robustness)
+[x] Baseline frozen                       → Round 2 D7 (surface §15.1, worksheet O.1, B-A unconditioned baseline)
+[x] Overlap rule frozen                   → Round 2 D8 (surface §16.1, worksheet O.1, O-2 chronological drop)
+[x] Cost model frozen                     → Round 4 CO (worksheet O.6, SPX primary = $0, SPY robustness deferred)
+[x] Parameter grid frozen                 → Round 3A D11 (surface §19.1, worksheet O.1, G-1 fixed single set: 1h, 2h, 4h)
+[x] K computed and frozen                 → Round 3A D12 (surface §20.1, worksheet O.1, K = 3 fixed census cells)
+[x] Statistical protocol frozen           → Round 3B S-2 / S-5(c) / S-7 (Round 4 §1, two-way cluster, S2-B df = G-1)
+[x] Multiple-testing semantics frozen     → Batch A5 / D13 (surface §21.1, worksheet O.1, D6 census, mixed fails closed)
+[x] IS dates frozen                       → Round 4 D14 (worksheet O.1, 2013-12-01 -> 2021-12-31)
+[x] OOS dates frozen                      → Round 4 D15 (worksheet O.1, 2022-01-01 -> 2024-12-31)
+[x] Blind dates frozen                    → Round 4 D16 (worksheet O.1, 2025-01-01 -> 2026-09-10)
+[x] PIT/data-vintage rules frozen         → Round 3B S-7 / F2 (Round 4 §1, F2 variance-ratio T_eff, PIT release timestamps)
+[x] Data archive requirement frozen       → Round 3B S-9 (Round 4 §1, Q-1a/Q-2c/Q-3a/Q-4 archive-at-retrieval)
+[ ] Manifest schema frozen                → D18 (OPEN / Group C, dependency-blocked on D17 SPX data authority)
+[x] Kill conditions frozen                → D19 (worksheet O.10, HUMAN-RATIFIED 2026-09-10, integrity/protocol kill set)
+[x] PASS criteria frozen                  → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p < 0.05 => PASS)
+[x] FAIL criteria frozen                  → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p >= 0.05 => FAIL)
+[x] INVALID criteria frozen               → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, INVALID = D6/D19 integrity semantics)
+[x] Reproducibility requirements frozen   → CA-1 / TR-1 / S-9 (Round 4 §0/§2, NYSE calendar pinned, TR-1 tie-break)
+[ ] Human authorization recorded          → Final GO decision (NOT AUTHORIZED — strictly gated until D17/D18 resolved)
 ```
 
 ```
@@ -798,10 +798,14 @@ Any unchecked substantive item ⇒  PRE-REGISTRATION NOT FROZEN
                                   EMPIRICAL VALIDATION NOT AUTHORIZED
 ```
 
-Current status: **4/26 checked** (items: "Kill conditions frozen" = D19, HUMAN-RATIFIED/BOUND 2026-09-10;
-"PASS criteria frozen" / "FAIL criteria frozen" / "INVALID criteria frozen" = D20, HUMAN-RATIFIED/BOUND
-2026-09-10, worksheets O.10/O.11). The other 22 items remain unchecked; pre-registration is NOT fully
-frozen. ROUND 5 = COMPLETE (D19 + D20 both bound). `[VERIFIED FACT — worksheets O.10/O.11; this surface]`
+Current status: **24/26 checked** (24 substantive research and methodology items are fully HUMAN-RATIFIED/BOUND
+across Rounds 0–5, worksheets O.1–O.11 and Round 4 Specification §0–§2).
+
+Two items remain unchecked:
+1. `[ ] Manifest schema frozen` → D18 is OPEN / GROUP C, dependency-blocked on D17 SPX data authority.
+2. `[ ] Human authorization recorded` → Final Human GO checkpoint for empirical validation is strictly NOT AUTHORIZED.
+
+Therefore, pre-registration is NOT fully frozen. Empirically BLOCKED under fail-closed governance. `[VERIFIED FACT — worksheets O.1–O.11; Round 4 Specification]`
 
 ---
 
