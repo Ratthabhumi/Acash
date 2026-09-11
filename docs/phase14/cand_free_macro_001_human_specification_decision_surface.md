@@ -30,7 +30,7 @@ readiness package `./cand_free_macro_001_validation_readiness.md`.
 | Item | Status |
 |------|--------|
 | CAND-FREE-MACRO-001 readiness (from readiness package) | `CONDITIONALLY READY` `[VERIFIED FACT — ./cand_free_macro_001_validation_readiness.md §5]` |
-| Pre-registration | `NOT FULLY FROZEN` `[VERIFIED FACT — this surface; 0/26 freeze-checklist items bound until Human decides]` |
+| Pre-registration | `NOT FULLY FROZEN` `[VERIFIED FACT — this surface; 4/26 freeze-checklist items bound (Kill conditions = D19, PASS/FAIL/INVALID = D20, worksheets O.10/O.11); remaining items pending Human decisions]` |
 | Empirical validation | `NOT AUTHORIZED` `[VERIFIED FACT — ./free_data_research_registry.md §206-214]` |
 | Backtest | `NOT AUTHORIZED` `[VERIFIED FACT — registry §202]` |
 | Candidate registry status | `HUMAN_REVIEW_REQUIRED` (unchanged) `[VERIFIED FACT — registry §114]` |
@@ -195,9 +195,9 @@ Columns: `ID | Dimension | Current Canonical State | Proposed Default | Alternat
 | D16 | Blind period | Not declared (readiness §17) | No default selected | blind start/end; data retrieval allowed/denied; who accesses OOS | HIGH — blindness prevents OOS contamination | **HUMAN DECISION REQUIRED** | Blind window + access rule frozen |
 | D17 | Data vintage / archive / PIT | PIT SECURE (calendars); index vintage CONDITIONAL (readiness §11) | `PROPOSED DEFAULT — CANONICAL`: as-published archive + manifest + digest + retrieval timestamp | add second source; reconcile variants | MED — vintage leaks would bias the conditional object | **HUMAN DECISION REQUIRED** (binding details) | Archive/PIT rules + manifest schema frozen |
 | D18 | Reproducibility / manifest | Manifest+archive required (registry §107); candidate schema not bound | `PROPOSED DEFAULT`: full manifest binding set (§23) | reduced scope requires explicit reason | MED | **HUMAN DECISION REQUIRED** (binding set) | Manifest binding set frozen |
-| D19 | Kill conditions | Not declared (readiness §19) | No default selected | trigger × threshold × scope (global/family) × IS/OOS/both × pre/post-all-trials | HIGH — kill rules change census meaning if post-hoc | **HUMAN DECISION REQUIRED** | Kill condition set frozen pre-run |
-| D20 | PASS / FAIL / INVALID criteria | Canonical D6 semantics ratified (ratification §10) | `PROPOSED DEFAULT — CANONICAL`: PASS = executed + acceptance met; FAIL = executed not met; INVALID = integrity failure | candidate-specific acceptance thresholds | MED — threshold invention = hidden test change | **HUMAN DECISION REQUIRED** (thresholds only; semantics unchanged) | Acceptance thresholds frozen |
-| D21 | Pre-registration freeze checklist | 0/26 bound | `PROPOSED DEFAULT — PROCESS`: checklist (§26) fully bound = pre-registration frozen | partial freeze requires explicit exception | HIGH | **HUMAN DECISION REQUIRED** (tracked by Human) | Checklist completion recorded in governance record |
+| D19 | Kill conditions | **HUMAN-RATIFIED / BOUND (2026-09-10)** — INTEGRITY/PROTOCOL KILL SET ONLY; zero-tolerance (>0); global scope; result INVALID; pre-run + during + pre-verdict; NOT part of K; 5-trigger catalog; frozen O-2/G-3a/TR-1/CA-1/T_eff/D6 rules NOT redefined (binding: worksheet O.10) | trigger × threshold × scope (global/family) × IS/OOS/both × pre/post-all-trials | HIGH — kill rules change census meaning if post-hoc | **BOUND** — no longer Human-open; D20 also bound (O.11) | Kill condition set frozen pre-run |
+| D20 | PASS / FAIL / INVALID criteria | **HUMAN-RATIFIED / BOUND (2026-09-10, worksheet O.11)** — H0: E[D]=0 vs H1: E[D]!=0; two-sided t-test; df = G-1; alpha = 0.05; p < 0.05 => PASS; p >= 0.05 => FAIL; INVALID = D6/D19 integrity semantics; effect magnitude descriptive only; no additional numeric/effect-size cutoff; no auto-import of PBO/DSR/OOS-min/T_eff/N_valid/Holm/effective-K/F-1/Phase-6 thresholds | canonical D6 PASS/FAIL/INVALID semantics preserved; **test + threshold = ratified** | D12 stats; D18 manifest | Acceptance thresholds must exist before any run |
+| D21 | Pre-registration freeze checklist | 4/26 bound (Kill conditions = D19, PASS/FAIL/INVALID = D20, worksheets O.10/O.11) | `PROPOSED DEFAULT — PROCESS`: checklist (§26) fully bound = pre-registration frozen | partial freeze requires explicit exception | HIGH | **HUMAN DECISION REQUIRED** (tracked by Human) | Checklist completion recorded in governance record |
 | D22 | Governance option (A–E) | Not decided | No default | OPTION A–E (§28) | HIGH | **HUMAN DECISION REQUIRED** | Decision recorded; no option auto-selected |
 
 **NOTE ON CURRENT CANONICAL STATE:** several rows show a `PROPOSED DEFAULT` even though the registry
@@ -672,9 +672,30 @@ These three require explicit Human binding within the reproducibility decision (
 
 ## 26. Kill Conditions
 
+### 26.0 RATIFIED (2026-09-10)
+
+**D19 = HUMAN-RATIFIED / BOUND** as an INTEGRITY / PROTOCOL KILL SET ONLY (worksheet O.10, verbatim).
+- Trigger: pre-specified data, provenance, protocol, or governance integrity violations that make the
+  experiment uninterpretable. Threshold: deterministic zero-tolerance (>0). Scope: global for
+  experiment-level invariants. Result status: INVALID. Evaluation window: pre-run and/or during IS/OOS
+  validation per the pre-specified invariant (no outcome-dependent evaluation). Timing: preconditions
+  before execution; deterministic checks during execution; global integrity checks before final verdict;
+  no kill rule selected/activated after observing outcomes. K-membership: NOT part of K; K remains the
+  frozen declared census K = 3.
+- Trigger catalog (5): (1) duplicate admitted event > 0; (2) required provenance/source-binding
+  integrity violation > 0; (3) calendar/session authority mapping violation > 0; (4) required observation
+  or required statistical input becomes non-finite or structurally invalid > 0; (5) violation of a frozen
+  protocol invariant that makes the experiment uninterpretable > 0.
+- Frozen rules preserved and NOT redefined by D19: O-2 overlap handling, G-3a purge, TR-1 deterministic
+  event ordering, CA-1 session/calendar validity, T_eff INVALID/fail-closed handling, D6 census semantics.
+  Where a violation of an existing frozen rule makes the experiment uninterpretable, the violation may be
+  classified as an integrity failure under D19 without changing the underlying rule.
+- Performance, effect size, alpha, p-values, t-statistics, returns, and empirical weakness are **D20
+  matters, not D19 matters**. `[VERIFIED FACT — Human ratification 2026-09-10; worksheet O.10]`
+
 ### 26.1 Current state
 
-Kill conditions are unresolved for this candidate (readiness §19/§24.18; D6 surface kill semantics). `[VERIFIED FACT]`
+Kill conditions are now **HUMAN-RATIFIED / BOUND** (2026-09-10, worksheet O.10). `[VERIFIED FACT]`
 
 ### 26.2 Human decision table (D19)
 
@@ -687,13 +708,18 @@ For each kill condition, Human must specify:
 - checked before/after all trials
 - whether the kill condition is itself part of K
 
-`HUMAN DECISION REQUIRED` — no thresholds invented. Canonical thresholds (e.g., gate OOS minimum = 4
-observations; PBO < 0.25; DSR ≥ 0.95) exist ONLY where cited; they are distinguished from candidate-specific
-kill conditions. `[VERIFIED FACT — ROADMAP Phase 6; D5 surface §D5-8]`
+`HUMAN DECISION REQUIRED` for any D19 change — the ratified set is BOUND; only a new Human governance
+action may amend it. **D20 acceptance thresholds are also BOUND (2026-09-10, worksheet O.11).** No
+thresholds are invented. Canonical thresholds (e.g., gate OOS minimum = 4 observations; PBO < 0.25;
+DSR ≥ 0.95) exist ONLY where cited; they are distinguished from candidate-specific kill conditions and
+are NOT auto-imported.
+`[VERIFIED FACT — Human ratification 2026-09-10; worksheet O.10/O.11; ROADMAP Phase 6; D5 surface §D5-8]`
 
 ---
 
-## 27. PASS / FAIL / INVALID Semantics
+## 27. PASS / FAIL / INVALID Semantics — D20 RATIFIED (2026-09-10)
+
+### 27.0 Canonical D6 semantics (preserved, unchanged)
 
 Preserved verbatim from ratified D6 (Class C — semantics are canonical and NOT open to change):
 
@@ -707,8 +733,30 @@ Preserved verbatim from ratified D6 (Class C — semantics are canonical and NOT
 - FAILED/INVALID remain in the census. `[VERIFIED FACT — ratification record §10]`
 - No fabricated evidence (return=0 / Sharpe=0 / p=1 / neutral / imputed / zero-filled). `[VERIFIED FACT — ratification §10]`
 
-Candidate-specific **acceptance thresholds** remain `HUMAN DECISION REQUIRED` where not already canonical
-(D20). `[VERIFIED FACT — task mandate §25]`
+### 27.1 D20 RATIFIED ACCEPTANCE CRITERIA (2026-09-10, worksheet O.11)
+
+The Human has ratified the candidate-specific acceptance criteria for MACRO-001:
+
+- **Statistical hypothesis:** H0: E[D] = 0; H1: E[D] != 0
+- **Test:** Two-sided t-test
+- **Reference degrees of freedom:** df = G - 1 (G = realized number of frozen T2 family × quarterly
+  clusters used by the canonical variance authority)
+- **Significance level:** α = 0.05
+- **Primary acceptance criterion:** p < 0.05 => **PASS**; p ≥ 0.05 => **FAIL**
+- **Effect magnitude:** descriptive only; no additional numeric effect-size acceptance threshold imposed
+- **D19 interaction:** any valid D19 integrity/protocol kill results in INVALID per already-ratified
+  D19/D6 semantics; D19 not redefined by D20
+- **Frozen K:** K remains exactly 3 declared census cells; D20 does not change K or multiplicity
+  semantics
+- **No automatic import:** PBO < 0.25, DSR ≥ 0.95, OOS minimum = 4, T_eff ≥ 25, N_valid ≥ 250,
+  Holm, effective-K reinterpretation, F-1 thresholds, Phase-6 thresholds — NOT imported
+- **No additional criterion:** no additional performance/return/effect-size/Sharpe/magnitude cutoff
+  required beyond the statistical acceptance criterion above
+
+`[VERIFIED FACT — Human ratification 2026-09-10; worksheet O.11]`
+
+ROUND 5 = **COMPLETE (2026-09-10)** — both D19 (§26.0) and D20 (this section) are bound and consistent.
+No advance beyond Round 5 without separate authorization. `[VERIFIED FACT — worksheet O.11]`
 
 ---
 
@@ -737,10 +785,10 @@ HARD BLOCKING status — every unchecked substantive item keeps pre-registration
 [ ] PIT/data-vintage rules frozen
 [ ] Data archive requirement frozen
 [ ] Manifest schema frozen
-[ ] Kill conditions frozen
-[ ] PASS criteria frozen
-[ ] FAIL criteria frozen
-[ ] INVALID criteria frozen
+[x] Kill conditions frozen                → D19 (worksheet O.10, HUMAN-RATIFIED 2026-09-10)
+[x] PASS criteria frozen                   → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p < 0.05 => PASS)
+[x] FAIL criteria frozen                   → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, p >= 0.05 => FAIL)
+[x] INVALID criteria frozen                → D20 (worksheet O.11, HUMAN-RATIFIED 2026-09-10, INVALID = D6/D19 integrity semantics)
 [ ] Reproducibility requirements frozen
 [ ] Human authorization recorded
 ```
@@ -750,7 +798,10 @@ Any unchecked substantive item ⇒  PRE-REGISTRATION NOT FROZEN
                                   EMPIRICAL VALIDATION NOT AUTHORIZED
 ```
 
-Current status: **0/26 checked.** `[MODEL INFERENCE — this surface; nothing was frozen by this document]`
+Current status: **4/26 checked** (items: "Kill conditions frozen" = D19, HUMAN-RATIFIED/BOUND 2026-09-10;
+"PASS criteria frozen" / "FAIL criteria frozen" / "INVALID criteria frozen" = D20, HUMAN-RATIFIED/BOUND
+2026-09-10, worksheets O.10/O.11). The other 22 items remain unchecked; pre-registration is NOT fully
+frozen. ROUND 5 = COMPLETE (D19 + D20 both bound). `[VERIFIED FACT — worksheets O.10/O.11; this surface]`
 
 ---
 
@@ -828,7 +879,9 @@ CAND-FREE-MACRO-001 remains:
 - **CONDITIONALLY READY** (status unchanged; readiness package §5).
 
 Pre-registration remains:
-- **NOT FULLY FROZEN** (0/26 freeze-checklist items bound; this surface binds nothing).
+- **NOT FULLY FROZEN** (4/26 freeze-checklist items bound — "Kill conditions frozen" = D19 (worksheet
+  O.10), "PASS/FAIL/INVALID criteria frozen" = D20 (worksheet O.11), HUMAN-RATIFIED 2026-09-10;
+  remaining 22 items pending Human decisions; this surface binds nothing directly). ROUND 5 = COMPLETE.
 
 Empirical validation remains:
 - **NOT AUTHORIZED**.

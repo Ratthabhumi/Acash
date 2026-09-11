@@ -42,6 +42,7 @@ Thumbs.db
 
 # Local agent / IDE sessions
 .omc/
+.kilo/
 
 # Local runtime data & soak test output
 var/

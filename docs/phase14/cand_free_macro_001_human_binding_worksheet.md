@@ -139,8 +139,8 @@ correct. No "pick K = 30 or 60" debate. `[VERIFIED FACT — task mandate §16; D
 
 | ID | Current state | Exact alternatives (from §26/§27) | Downstream dependents | Why freeze before validation |
 |----|---------------|-----------------------------------|-----------------------|------------------------------|
-| D19 Kill conditions | Not declared (readiness §9 AK) | trigger × threshold × scope (global/family) × IS/OOS/both × pre/post-all-trials; canonical thresholds where cited only | D20; D18 manifest | Kill rules change census meaning if post-hoc |
-| D20 PASS/FAIL/INVALID | D6 semantics canonical; candidate thresholds NOT declared | semantics preserved (PASS executed+accepted / FAIL executed-not-accepted / INVALID integrity-only, INVALID ≠ negative evidence); **thresholds = Human choice** | D12 stats; D18 manifest | Acceptance thresholds must exist before any run |
+| D19 Kill conditions | **HUMAN-RATIFIED / BOUND (2026-09-10)** — INTEGRITY/PROTOCOL KILL SET ONLY; zero-tolerance (>0); global scope; INVALID; pre-run + during + pre-verdict; NOT part of K; 5-trigger catalog (worksheet O.10); frozen O-2/G-3a/TR-1/CA-1/T_eff/D6 rules NOT redefined | trigger × threshold × scope (global/family) × IS/OOS/both × pre/post-all-trials; canonical thresholds where cited only | D20; D18 manifest | Kill rules change census meaning if post-hoc |
+| D20 PASS/FAIL/INVALID | **HUMAN-RATIFIED / BOUND (2026-09-10, O.11)** — H0: E[D]=0 vs H1: E[D]!=0 (two-sided); df = G-1; alpha = 0.05; p < 0.05 => PASS; p >= 0.05 => FAIL; INVALID = D6/D19 integrity semantics; effect magnitude descriptive only; NO effect-size/PBO/DSR/Holm/F-1 threshold imported | semantics preserved (PASS executed+accepted / FAIL executed-not-accepted / INVALID integrity-only, INVALID ≠ negative evidence); **thresholds = ratified** | D12 stats; D18 manifest | Acceptance thresholds must exist before any run |
 
 **Group-B total:** 12 items, folded into 5 rounds. This is the "true debate" set. `[MODEL INFERENCE]`
 
@@ -258,7 +258,9 @@ worksheet's scope. `[MODEL INFERENCE — surface §26/§30; D6 ratification §3/
 
 ## G. Final Freeze Checklist (mapped from decision surface §26)
 
-Completion status for this worksheet: `0/26` — nothing is frozen by this document.
+Completion status for this worksheet: `4/26` — "Kill conditions frozen" (D19), "PASS criteria frozen",
+"FAIL criteria frozen", "INVALID criteria frozen" (D20, O.11) are now bound (2026-09-10); the other 22
+items remain unfrozen by this worksheet, so the Draft Freeze is NOT declared.
 
 ```
 [ ] Event universe frozen                  → A1 (ROUND 0)
@@ -281,10 +283,10 @@ Completion status for this worksheet: `0/26` — nothing is frozen by this docum
 [ ] PIT/data-vintage rules frozen          → GROUP C (D17)
 [ ] Data archive requirement frozen        → GROUP C (D17/A2)
 [ ] Manifest schema frozen                 → GROUP C (D18)
-[ ] Kill conditions frozen                 → ROUND 5 (D19)
-[ ] PASS criteria frozen                   → ROUND 5 (D20)
-[ ] FAIL criteria frozen                   → ROUND 5 (D20)
-[ ] INVALID criteria frozen                → ROUND 5 (D20)
+[ ] Kill conditions frozen                 → ROUND 5 (D19) — **D19 HUMAN-RATIFIED/BOUND (2026-09-10, O.10)**
+[ ] PASS criteria frozen                   → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): p < 0.05 => PASS**
+[ ] FAIL criteria frozen                   → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): p >= 0.05 => FAIL**
+[ ] INVALID criteria frozen                → ROUND 5 (D20) — **D20 HUMAN-RATIFIED/BOUND (2026-09-10, O.11): INVALID = D6/D19 integrity semantics**
 [ ] Reproducibility requirements frozen    → GROUP C (D18)
 [ ] Human authorization recorded           → Step 9 (OUTSIDE this worksheet)
 ```
@@ -1162,9 +1164,17 @@ inventing. `[VERIFIED FACT — Human instruction, this run]`
 [NON-EMPIRICAL]
 [NON-AUTHORIZING]
 [HUMAN-RATIFIED]
-[TR-1 BOUND · CA-1 HUMAN-RATIFIED (DECISION) · CA-1 SOURCE-BINDING FIELD UNRESOLVED PROVENANCE]
-[ROUND 4 BLOCKED — EXACT BLOCKER: CA-1 SOURCE-BINDING FIELD]
-[ROUND 5 NOT ENTERED]
+[TR-1 BOUND · CA-1 HUMAN-RATIFIED (DECISION) · CA-1 SOURCE-BINDING ARCHITECTURE HUMAN-RATIFIED
+     — 2026 artifact pinned (SHA-256 recorded); CA-1 HISTORICAL COVERAGE 2013–2026 = HUMAN-RATIFIED /
+     COMPLETE (2026-09-10 Human ratification): 15 artifacts (13 official press-release PDFs for
+     2014–2027 + 2 official HTML artifacts for 2013) retrieved, content-verified, hash-pinned]
+[CA-1 HISTORICAL COVERAGE = HUMAN-RATIFIED / COMPLETE — 2013 = EXPLICIT PRE-PDF-ERA HISTORICAL
+     ARTIFACT EXCEPTION (official BusinessWire NYSE Euronext release + archived nyx.com page, accepted
+     by Human 2026-09-10); 2014–2025 = OFFICIAL NYSE ANNUAL CALENDAR ARTIFACT PRIMARY MODEL]
+[ROUND 4 = COMPLETE (Human-closed 2026-09-10) — all Round-4 Human decisions bound/ratified; CA-1
+     coverage Human-ratified; no genuine Round-4 blocker remains (closure audit §O.7)]
+[ROUND 5 ENTERED — D19/D20 HUMAN DECISION SURFACE PREPARED ONLY; D19 HUMAN-RATIFIED/BOUND 2026-09-10
+     (O.10); D20 HUMAN-RATIFIED/BOUND 2026-09-10 (O.11) — alpha = 0.05; ROUND 5 COMPLETE]
 ```
 
 ### O.1 Ratified Decisions (transcribed verbatim)
@@ -1325,9 +1335,97 @@ The agent will NOT guess, invent, or silently substitute any component.
 EMPIRICAL WORK REMAINS STOPPED until all four fields are bound.
 ```
 
+> **HISTORIC RECORD (pre-ratification gap).** The four-component gap block above is the prior recorded
+> state of the CRITICAL SOURCE RULE. It is **SUPERSEDED** by the Human's ratification in **O.5a** below:
+> the source-binding ARCHITECTURE (per-year NYSE annual Trading Calendar PDF model + 9-step retrieval
+> rule) is now ratified, the 2026 artifact is pinned, and the annual artifact coverage for 2013–2025
+> is now COMPLETE per the 2026-09-10 coverage audit (CA-1 HISTORICAL COVERAGE = COMPLETE).
+> CAVEAT: the 2013 coverage uses official HTML-form artifacts (BusinessWire release + archived
+> nyx.com page), not a standalone PDF (pre-PDF press era) — Human form-acceptance required before
+> Round 4 close.
+
+### O.5a CA-1 SOURCE-BINDING ARCHITECTURE — HUMAN RATIFIED (2026-09-10, home continuation)
+
+**The Human has ratified the CA-1 SOURCE-BINDING ARCHITECTURE.** This is the architecture-level
+binding (per-year artifact model + retrieval rule). It does NOT declare Round 4 complete and does
+NOT authorize empirical validation.
+
+```
+CA-1 AUTHORITY
+==============
+Authority:                    NYSE official
+Primary artifact model:       Annual NYSE official Trading Calendar PDF, pinned separately for
+                              every calendar year required by the MACRO-001 research window
+Coverage:                     2013-01-01 through 2026-09-10
+Version / effective-version:  Use the "Dates are correct as of [date]" statement printed in each
+                              official annual NYSE Trading Calendar PDF as the document's
+                              effective-version identifier
+Archive / reproducibility:    Preserve the exact retrieved PDF bytes and SHA-256 digest for every
+                              annual calendar artifact used by MACRO-001
+
+RETRIEVAL RULE (Human-ratified)
+===============================
+1. Retrieve the official NYSE annual Trading Calendar PDF for the required calendar year.
+2. Record the exact official NYSE URL.
+3. Record the PDF's printed "as of" date.
+4. Compute and record SHA-256 of the exact retrieved bytes.
+5. Preserve the exact bytes in the canonical repository archive according to the
+   project's existing archival convention (archive-at-retrieval + manifest; readiness AL/§20).
+6. On future retrieval, require SHA-256 equality with the pinned artifact before accepting
+   the calendar.
+7. If the official live URL becomes unavailable, use the already pinned archived artifact /
+   reproducible snapshot.
+8. Never substitute a generic US holiday calendar, vendor calendar, NASDAQ calendar, or
+   another exchange calendar.
+9. If an annual artifact required for the research window cannot be obtained or provenance
+   cannot be established, FAIL CLOSED — do not infer the missing calendar.
+```
+
+**2026 artifact (first pinned artifact — actually retrieved this session, hash computed on the
+exact bytes):**
+
+| Field | Value |
+|---|---|
+| URL | `https://www.nyse.com/publicdocs/nyse/ICE_NYSE_2026_Yearly_Trading_Calendar.pdf` |
+| Bytes | 232,670 |
+| SHA-256 | `70F5577EB43E60A9DBBECAAE3CEC23D0F02028C05C7F175013BB3E97816D394F` |
+| Printed as-of date | Dec. 10 2025 (footer inside PDF) |
+| PDF /CreationDate | 2025-12-19 10:32 ET |
+| Archive status | exact bytes preserved for repo archive (archived per convention on archival commit) |
+
+**Supporting authority (NOT the immutable primary artifact):**
+`https://www.nyse.com/trade/hours-calendars` — official NYSE Holidays & Trading Hours page
+(mutable; 2026–2028 holiday table + early-close annotations; Wayback snapshots exist).
+
+[CA-1 = HUMAN-RATIFIED / SOURCE-BOUND at the ARCHITECTURE level]
+[Do NOT claim the 2026 PDF alone covers 2013–2026 — per-year coverage is mandatory]
+[CA-1 HISTORICAL COVERAGE 2013–2025 = COMPLETE (2026-09-10 audit) — 15 artifacts hash-pinned:
+   13 official press-release PDFs (2014–2027) + 2 official HTML artifacts for 2013]
+
 Status: CA-1 = **HUMAN-RATIFIED at the DECISION level** (authority + session semantics BOUND); CA-1
-**NOT fully bound** until the source-binding field is supplied. `[VERIFIED FACT — Human instruction,
-this run; source-rule check performed this run]`
+**SOURCE-BINDING ARCHITECTURE HUMAN-RATIFIED (O.5a)** with the 2026 artifact pinned; annual coverage
+2013–2025 **COMPLETE per the 2026-09-10 coverage audit** (13 official press-release PDFs + 2 official
+HTML artifacts for 2013).
+
+**CA-1 HISTORICAL COVERAGE — HUMAN RATIFIED (2026-09-10).** The Human explicitly ratified the proposed
+CA-1 historical provenance manifest and the complete 2013–2025 coverage determination:
+```
+CA-1 HISTORICAL COVERAGE = HUMAN-RATIFIED / COMPLETE
+2013 = EXPLICIT PRE-PDF-ERA HISTORICAL ARTIFACT EXCEPTION (2013 only)
+       1. NYSE Euronext / NYX official-era holiday-calendar content
+       2. BusinessWire syndicated official NYSE Euronext release
+       3. Archived official nyx.com NYSE holidays-and-hours page
+       4. Cross-checked calendar dates
+       5. Exact retrieved bytes + SHA-256
+       6. Wayback capture identifiers recorded
+Later years (2014–2025) = OFFICIAL NYSE ANNUAL CALENDAR ARTIFACT PRIMARY MODEL (unchanged)
+```
+The 2013 exception does NOT change the CA-1 architecture for later years: official NYSE annual
+calendar artifacts remain the primary provenance model where such artifacts exist. All existing
+provenance hashes and identifiers are preserved. `[HUMAN-RATIFIED 2026-09-10]`
+
+CA-1 is now **operationally bound for the full research window.** `[VERIFIED FACT — Human
+ratification 2026-09-10; coverage audit 2026-09-10]`
 
 ### O.6 CO — SPY cost model → **BOUND** (DEFERRED — ROBUSTNESS/IMPLEMENTATION LAYER)
 
@@ -1337,91 +1435,401 @@ block the SPX statistical specification unless governance explicitly requires it
 `DEFERRED — ROBUSTNESS/IMPLEMENTATION LAYER`. Status: **BOUND** (no cost value introduced; SPY outside K
 confirms decision surface §17 / registry §109 unchanged).
 
-### O.7 ROUND 4 RESULT — BLOCKED (decisions bound; one provenance field unresolved)
+### O.7 ROUND 4 RESULT — COMPLETE (Human-closed 2026-09-10; closure audit no genuine blocker)
 
 - D14 / D15 / D16: **BOUND** (O.1). Split fixed; no embargo invented; D6/purge/O-2 authoritative.
 - EX: **BOUND** (O.4). CO: **BOUND** (O.6).
 - TR: **BOUND — TR-1** (family order CPI < NFP < FOMC) (O.3).
 - CA: **HUMAN-RATIFIED at the DECISION level — CA-1** (NYSE official calendar + confirmed session
-  semantics) (O.5); **CA-1 SOURCE-BINDING FIELD = UNRESOLVED PROVENANCE FIELD** — verified absent from
-  repo/canonical sources, never invented, Human must supply.
-- ROUND 4 = **BLOCKED**. Exact remaining Round-4 blocker: **CA-1 source-binding field** (authoritative
-  NYSE trading/market-holiday calendar URL + versioning + archive identifier). Pre-registration MUST NOT
-  be declared frozen while this field is unresolved (session/calendar provenance is required for a fully
-  deterministic, reproducible specification).
+  semantics) (O.5); **CA-1 SOURCE-BINDING ARCHITECTURE HUMAN-RATIFIED (O.5a)** with the 2026 artifact
+  pinned; **CA-1 HISTORICAL COVERAGE = HUMAN-RATIFIED / COMPLETE (O.5a, Human 2026-09-10)** — 2026-09-10
+  coverage audit: 13 official press-release PDFs covering 2014–2027 + 2 official HTML artifacts covering
+  2013, all retrieved, content-verified, hash-pinned; 2013 accepted as an explicit pre-PDF-era
+  historical-artifact exception.
+- ROUND 4 = **COMPLETE**. The Round-4 blocker **CA-1 HISTORICAL COVERAGE** is resolved AND the manifest
+  + 2013 artifact-form caveat were Human-accepted (2026-09-10). Annual NYSE calendar coverage for
+  calendar years 2013–2025 within the research window (IS 2013-12-01→2021-12-31, OOS 2022-01-01→2024-12-31,
+  BLIND 2025-01-01→2026-09-10) is Human-ratified. Round-4 closure audit (round4 spec §7) confirmed no
+  genuine unresolved Round-4 Human decision remains.
 - Dependency note: D17/SPX close-series pin is NOT treated as solved merely because CA-1 is ratified —
   it remains a separate Group C / D17 decision (surface 66 S-10/S-18 vs readiness 49 "S-04 primary"
-  inconsistency), not a Round-4 item. `[VERIFIED FACT — Human instruction, this run]`
+  inconsistency), not a Round-4 item; recorded **D17 = OPEN / NON-BLOCKING FOR ROUND 4** per the existing
+  Group C sequencing (worksheet F: Round 4 → Round 5 → Group C (D17/D18) → Draft Freeze).
+  `[VERIFIED FACT — Human instruction, this run]`
 
-### O.8 ROUND 5 — NOT ENTERED
+### O.8 ROUND 5 — ENTERED (D19/D20 HUMAN DECISION SURFACE PREPARED ONLY)
 
-- ROUND 5 entry is conditional on no genuine Human decision/provenance blocker remaining. ROUND 4 =
-  **BLOCKED** (CA-1 source-binding field unresolved) → ROUND 5 NOT ENTERED this run. `[VERIFIED FACT —
-  Human instruction: enter ROUND 5 iff no genuine blocker remains]`
-- Next Human-controlled specification stage after the CA-1 source-binding field is supplied: ROUND 5 =
-  D19 Kill conditions → D20 PASS/FAIL/INVALID thresholds. Alpha / D20 is Human-controlled and is NOT
-  bound — a ROUND-5 stop `[HUMAN DECISION REQUIRED — D19/D20 incl. alpha]` is expected (worksheet §C
-  D19/D20; §N.4; decision surface §20.2/§26). `[VERIFIED FACT]`
+- ROUND 5 entry condition is satisfied: no genuine Human decision/provenance blocker remains and ROUND 4
+  is Human-closed. **ROUND 5 ENTERED** for the sole purpose of exposing the **D19/D20 HUMAN DECISION
+  SURFACE** (see round4 spec §8). At entry, **NO** D19/D20/alpha/threshold/kill condition is selected.
+`[VERIFIED FACT — Human instruction: enter ROUND 5 iff no genuine blocker remains]` **This entry record
+   is HISTORICAL; current ROUND 5 state is superseded by O.10 (D19 HUMAN-RATIFIED/BOUND) and O.11 (D20
+   HUMAN-RATIFIED/BOUND); ROUND 5 = COMPLETE.**
+- ROUND 5 content per worksheet §C D19/D20; §N.4; decision surface §20.2/§26/§27: **D19** kill
+  conditions (trigger × threshold × scope (global/family) × result status (FAIL/INVALID per D6) ×
+  eval window (IS/OOS/both) × pre/post-all-trials × part-of-K) and **D20** PASS/FAIL/INVALID candidate-
+  specific acceptance thresholds (semantics canonical/class C, unchanged; alpha is a D20/D12-controlled
+  choice). D19 was HUMAN-RATIFIED/BOUND on 2026-09-10 (O.10); D20 was HUMAN-RATIFIED/BOUND on
+  2026-09-10 (O.11). **ROUND 5 = COMPLETE (2026-09-10).** `[VERIFIED FACT]`
 - Anti-HARKing: NOT PERFORMED (pre-requisites unmet). Draft Freeze: NOT PREPARED. Maximum state
   reachable later: SPECIFICATION FROZEN (never validated / qualified / paper / live on that basis alone).
 
 ### O.9 STOP
 
 ```
-[HUMAN MUST SUPPLY — CA-1 SOURCE-BINDING FIELD — ALL FOUR COMPONENTS]
-  a. authoritative NYSE trading/market-holiday calendar URL              <- EMPTY / UNRESOLVED
-  b. version / effective-version identifier                              <- EMPTY / UNRESOLVED
-  c. archive identifier or reproducible archived snapshot                <- EMPTY / UNRESOLVED
-  d. retrieval rule                                                      <- EMPTY / UNRESOLVED
-Absent from repo/canonical sources (verified 2026-09-10); NOT invented; required before ANY empirical work.
+[CA-1 SOURCE-BINDING ARCHITECTURE HUMAN-RATIFIED (2026-09-10) — per-year NYSE annual Trading Calendar
+ PDF model; retrieval rule of 9 steps ratified; supporting page = Holidays & Trading Hours]
+[2026 ARTIFACT PINNED — URL recorded; as-of Dec. 10 2025; SHA-256 70F5577E...16D394F (bytes 232,670)]
+[CA-1 HISTORICAL COVERAGE = HUMAN-RATIFIED / COMPLETE (2026-09-10) — 2013 = EXPLICIT PRE-PDF-ERA
+   HISTORICAL ARTIFACT EXCEPTION (BusinessWire release 20110107005513 + archived nyx.com page capture
+   20130708145321, accepted by Human); 2014–2027 covered by 13 official press-release PDFs; all
+   content-verified, SHA-256 on exact bytes; no hashes fabricated]
 [TR-1 BOUND — family order CPI < NFP < FOMC]
-[CA-1 HUMAN-RATIFIED — DECISION level: authority + session semantics BOUND; source field UNRESOLVED]
-[ROUND 4 BLOCKED — exact blocker: CA-1 source-binding field]
-[ROUND 5 NOT ENTERED]
+[CA-1 HUMAN-RATIFIED — DECISION level: authority + session semantics BOUND; SOURCE-BINDING architecture
+   RATIFIED at architecture level; coverage for full window COMPLETE + HUMAN-RATIFIED]
+[ROUND 4 = COMPLETE (2026-09-10) — closure audit §O.7: no genuine Round-4 Human decision remains]
+[ROUND 5 ENTERED — D19/D20 HUMAN DECISION SURFACE PREPARED ONLY (round4 spec §8); historical record]
+[D19 = HUMAN-RATIFIED / BOUND (2026-09-10) — INTEGRITY/PROTOCOL KILL SET ONLY]
+[D20 = HUMAN-RATIFIED / BOUND (2026-09-10) — PASS/FAIL/INVALID acceptance criteria (O.11)]
+[ROUND 5 = COMPLETE (2026-09-10) — D19 + D20 BOUND; no advance beyond Round 5]
 [FREEZE NOT DECLARED]
 ```
 
 ---
 
-## CA-1 SOURCE-BINDING HUMAN INPUT
+## O.10 HUMAN RATIFICATION — D19 KILL CONDITIONS (2026-09-10) — **BOUND**
 
-> **Status:** UNRESOLVED PROVENANCE — Human must supply all four values before Round 4 can close.
-> The agent MUST leave these values EMPTY. Do NOT populate from general knowledge.
+**Authority:** HUMAN GOVERNANCE — the Human ratified D19 as an **INTEGRITY / PROTOCOL KILL SET ONLY**,
+verifying it against the pre-binding audit (Round 5 D19/D20 review, delivered prior to this ratification).
+The agent transcribes the Human decision verbatim; it does not reinterpret, substitute, or extend it.
+`[VERIFIED FACT — Human instruction, 2026-09-10]`
+
+**Status classification:**
+```
+[DOCUMENTATION-ONLY]
+[NON-EMPIRICAL]
+[NON-AUTHORIZING]
+[HUMAN-RATIFIED]
+[D19 = HUMAN-RATIFIED / BOUND]
+[D20 = HUMAN-RATIFIED / BOUND (2026-09-10, O.11)]
+[ROUND 5 = COMPLETE — D19 + D20 BOUND]
+```
+
+**Ratified D19 decision (verbatim Human ratification):**
+
+```text
+D19 = INTEGRITY / PROTOCOL KILL SET ONLY.
+
+D19 does NOT contain performance-based kill conditions.
+Performance, effect size, alpha, p-values, t-statistics, returns, or
+empirical weakness are D20 matters, not D19 matters.
+
+D19 fields:
+
+1. Trigger
+   Pre-specified data, provenance, protocol, or governance integrity
+   violations that make the experiment uninterpretable.
+
+2. Threshold
+   Deterministic zero-tolerance: any prohibited violation (>0).
+
+3. Scope
+   Global for experiment-level invariants.
+
+4. Result status
+   INVALID.
+
+5. Evaluation window
+   Pre-run and/or during IS/OOS validation according to the
+   pre-specified invariant. No outcome-dependent evaluation.
+
+6. Timing
+   Preconditions before execution; deterministic checks during
+   execution; global integrity checks before final verdict.
+   No kill rule may be selected or activated after observing outcomes.
+
+7. K-membership
+   D19 kill conditions are NOT members of K.
+   K remains the frozen declared census K = 3.
+
+D19 trigger catalog:
+
+1. Duplicate admitted event > 0.
+2. Required provenance/source-binding integrity violation > 0.
+3. Calendar/session authority mapping violation > 0.
+4. Required observation or required statistical input becomes
+   non-finite or structurally invalid > 0.
+5. Violation of a frozen protocol invariant that makes the
+   experiment uninterpretable > 0.
+
+The following frozen rules remain authoritative and are NOT redefined
+by D19:
+
+- O-2 overlap handling
+- G-3a purge
+- TR-1 deterministic event ordering
+- CA-1 session/calendar validity
+- T_eff INVALID/fail-closed handling
+- D6 census semantics
+
+D19 must not silently amend any of those rules.
+
+Where a violation of an existing frozen rule makes the experiment
+uninterpretable, the violation may be classified as an integrity
+failure under D19, without changing the underlying rule.
+
+D19 kill conditions are not trials and do not change K.
+```
+
+**Binding effects (verified, this run):**
+- D19 = a pre-registered integrity/protocol kill set. Result status of a D19 kill = **INVALID** (per D6
+  semantics: integrity failure, NOT negative evidence). `[VERIFIED FACT — decision surface §27; D6]`
+- **No performance/effect-size/alpha/t-stat/p-value/return trigger enters D19.** Those remain D20
+  (acceptance threshold) decisions. `[VERIFIED FACT — ratification; decision surface §26.2]`
+- **Frozen rules preserved, not redefined:** O-2 (worksheet J ROUND 2), G-3a (worksheet J ROUND 3A),
+  TR-1 (O.3), CA-1 (O.5/O.5a), T_eff N.1, D6 census semantics (§C/A5) remain the authoritative
+  semantics of their own rules. D19 only classifies a violation that makes the experiment uninterpretable
+  as an integrity failure; it does not amend the underlying rule. `[VERIFIED FACT — ratification]`
+- **K unchanged:** K remains the frozen declared census = 3 (FOMC/W-B/B-A/SPX · CPI/W-B/B-A/SPX ·
+  NFP/W-B/B-A/SPX). D19 kill conditions are not trials; they do not enter K. `[VERIFIED FACT — round4
+  spec §3.6; ratification]`
+- D19 kill conditions bind into the future frozen manifest (D18 binding set, decision surface §25.1);
+  D18 remains Group C / OUT OF SCOPE here. `[VERIFIED FACT — decision surface §25.1]`
+- Anti-HARKing: NOT PERFORMED. Draft Freeze: NOT PREPARED. ROUND 5 remains **NOT COMPLETE** at entry
+  (historical); **ROUND 5 is now COMPLETE (2026-09-10)** — D20 ratified and bound in O.11. `[VERIFIED
+  FACT — O.11]`
+
+### O.10 STOP
 
 ```
-CA-1 SOURCE-BINDING FIELD — HUMAN INPUT BLOCK
-=============================================
-
-URL:
-    [EMPTY — Human must supply the exact authoritative NYSE official trading/market-holiday
-     calendar URL. The agent will not invent or guess this value.]
-
-Version / Effective Version:
-    [EMPTY — Human must supply the specific version or effective-date range identifier for
-     the calendar edition used. The agent will not invent or guess this value.]
-
-Archive Identifier / Reproducible Snapshot:
-    [EMPTY — Human must supply an archive identifier (e.g., Wayback Machine capture URL,
-     versioned release tag, archived file hash) that enables exact future retrieval. The
-     agent will not invent or guess this value.]
-
-Retrieval Rule:
-    [EMPTY — Human must supply the exact reproducible procedure for obtaining the archived
-     version at future retrieval. The agent will not invent or guess this value.]
+[D19 = HUMAN-RATIFIED / BOUND (2026-09-10) — INTEGRITY/PROTOCOL KILL SET ONLY; zero-tolerance >0;
+ global scope; result INVALID; pre-run + during + pre-verdict; NOT part of K; 5-trigger catalog;
+ frozen O-2/G-3a/TR-1/CA-1/T_eff/D6 rules NOT redefined]
+[D20 = HUMAN-RATIFIED / BOUND (2026-09-10, O.11) — superseded by O.11; this line is a historical
+ D19-record entry]
+[ALPHA = 0.05 (HUMAN-RATIFIED, O.11)]
+[K = 3 (UNCHANGED)]
+[D6 = HUMAN-ACCEPTED / UNCHANGED]
+[D17 = OPEN (Group C) — NOT RESOLVED HERE]
+[ROUND 5 = COMPLETE (2026-09-10) — D19 AND D20 BOTH BOUND; no advance beyond Round 5]
+[SUCCESS/FAILED/INVALID semantics remain canonical (D6)]
+[FREEZE NOT DECLARED]
 ```
+
+---
+
+## O.11 HUMAN RATIFICATION — D20 PASS/FAIL/INVALID ACCEPTANCE CRITERIA (2026-09-10) — **BOUND**
+
+**Authority:** HUMAN GOVERNANCE — the Human ratified D20 as the candidate-specific acceptance criteria
+for MACRO-001, verifying it against the pre-binding audit (Round 5 D19/D20 review). The agent
+transcribes the Human decision verbatim; it does not reinterpret, substitute, or extend it.
+`[VERIFIED FACT — Human instruction, 2026-09-10]`
+
+**Status classification:**
+```
+[DOCUMENTATION-ONLY]
+[NON-EMPIRICAL]
+[NON-AUTHORIZING]
+[HUMAN-RATIFIED]
+[D19 = HUMAN-RATIFIED / BOUND (unchanged)]
+[D20 = HUMAN-RATIFIED / BOUND]
+[ROUND 5 = COMPLETE]
+```
+
+**Ratified D20 decision (verbatim Human ratification):**
+
+```text
+D20 = HUMAN-RATIFIED.
+
+1. Canonical D6 semantics remain unchanged:
+
+   PASS  = valid execution + complete evidence + acceptance criteria satisfied.
+   FAIL  = valid execution + complete evidence + acceptance criteria not satisfied.
+   INVALID = integrity/data/protocol failure; not negative empirical evidence.
+
+2. Statistical hypothesis:
+
+   H0: E[D] = 0
+   H1: E[D] != 0
+
+3. Test:
+
+   Two-sided t-test.
+
+4. Reference degrees of freedom:
+
+   df = G - 1
+
+   where G is the realized number of frozen T2 family x quarterly clusters
+   used by the canonical variance authority.
+
+5. Significance level:
+
+   alpha = 0.05
+
+6. Primary acceptance criterion:
+
+   p < 0.05  => PASS
+   p >= 0.05 => FAIL
+
+7. Effect magnitude:
+
+   Descriptive only.
+   No additional numeric effect-size acceptance threshold is imposed.
+
+8. D19 interaction:
+
+   Any valid D19 integrity/protocol kill results in INVALID according to the
+   already-ratified D19 and D6 semantics.
+   D19 is not redefined by D20.
+
+9. Frozen K:
+
+   K remains exactly 3 declared census cells.
+   D20 does not change K or multiplicity semantics.
+
+10. No automatic import:
+
+    Do NOT import PBO < 0.25, DSR >= 0.95, OOS minimum = 4, T_eff >= 25,
+    N_valid >= 250, Holm, effective-K reinterpretation, F-1 thresholds, or
+    any other Phase-6/F-1 acceptance threshold.
+
+11. No additional candidate-specific numeric criterion:
+
+    No additional performance, return, effect-size, Sharpe, or magnitude
+    cutoff is required for PASS beyond the predefined statistical acceptance
+    criterion above.
+```
+
+**Binding effects (verified, this run):**
+- **D20 = HUMAN-RATIFIED / BOUND**: H0: E[D]=0 vs H1: E[D]!=0, two-sided t-test, df = G-1 (frozen
+  T2 family × quarterly clusters, canonical variance authority), alpha = 0.05, p < 0.05 => PASS,
+  p >= 0.05 => FAIL. `[VERIFIED FACT — ratification; round4 spec §3.5; worksheet M S2-B]`
+- **PASS/FAIL/INVALID semantics unchanged (canonical D6):** PASS = executed + accepted; FAIL = executed
+  + not accepted (valid negative evidence); INVALID = integrity/data/protocol failure (NOT negative
+  evidence). `[VERIFIED FACT — decision surface §27]`
+- **Effect magnitude = descriptive only**; no additional numeric effect-size / performance / return /
+  Sharpe / magnitude cutoff. `[VERIFIED FACT — ratification]`
+- **Nothing auto-imported:** PBO < 0.25, DSR >= 0.95, OOS minimum 4, T_eff >= 25, N_valid >= 250,
+  Holm, effective-K reinterpretation, F-1 thresholds, Phase-6 thresholds — NOT bound by this decision.
+  `[VERIFIED FACT — ratification]`
+- **D19 unchanged:** D19 remains the INTEGRITY/PROTOCOL KILL SET ONLY; D19 kills => INVALID under
+  ratified D19/D6 semantics. `[VERIFIED FACT — ratification; O.10]`
+- **K unchanged:** K remains exactly 3 declared census cells; D20 does not change K or multiplicity
+  semantics. `[VERIFIED FACT — ratification; round4 spec §3.6]`
+- MOOD concern: ROUND 5 is COMPLETE (D19 + D20 both bound). Draft Freeze, Anti-HARKing, Group C
+  (D17/D18), pre-registration, and empirical validation are NOT entered. `[VERIFIED FACT]`
+
+### O.11 STOP
+
+```
+[D20 = HUMAN-RATIFIED / BOUND (2026-09-10) — H0: E[D]=0; H1: E[D]!=0; two-sided t-test; df = G-1;
+ alpha = 0.05; p < 0.05 => PASS; p >= 0.05 => FAIL; INVALID = D6/D19 integrity semantics;
+ effect magnitude descriptive only; no extra numeric/effect-size cutoff; no auto-import of
+ PBO/DSR/OOS-min/T_eff/N_valid/Holm/effective-K/F-1/Phase-6 thresholds]
+[D19 = HUMAN-RATIFIED / BOUND (UNCHANGED)]
+[D6 = HUMAN-ACCEPTED / UNCHANGED]
+[K = 3 (UNCHANGED)]
+[ALPHA = 0.05 (RATIFIED)]
+[D17 = OPEN (Group C) — NOT RESOLVED HERE]
+[D18 = OUT OF SCOPE (Group C) — NOT RESOLVED HERE]
+[ROUND 5 = COMPLETE (2026-09-10) — D19 + D20 BOUND; NO ADVANCE BEYOND ROUND 5]
+[DRAFT FREEZE NOT ENTERED]
+[ANTI-HARKING NOT ENTERED]
+[PRE-REGISTRATION NOT ENTERED]
+[EMPIRICAL VALIDATION NOT AUTHORIZED]
+[HYP_003 NOT CREATED / R1 NOT STARTED / TRADING NOT AUTHORIZED]
+[FREEZE NOT DECLARED]
+```
+
+---
+
+## CA-1 SOURCE-BINDING — RATIFIED ARCHITECTURE + COVERAGE (COMPLETE)
+
+> **Status:** ARCHITECTURE HUMAN-RATIFIED (2026-09-10) · 2026 artifact pinned · **CA-1 HISTORICAL
+> COVERAGE = HUMAN-RATIFIED / COMPLETE (2026-09-10)** — every required annual artifact (2013–2025) is
+> actually retrieved, content-verified and hash-pinned (per the 2026-09-10 coverage audit) and the
+> complete coverage determination + proposed archive manifest were accepted by the Human. No hashes
+> were fabricated; no vendor/other-exchange/generic calendar substituted. The archival commit is a
+> separate Human-authorized step.
+
+```
+CA-1 SOURCE-BINDING — ANNUAL ARTIFACT COVERAGE (research window 2013-01-01 -> 2026-09-10)
+========================================================================================
+YEAR | PATH-PERIOD | OFFICIAL URL (retrieved)                      | RETRIEVED? | AS-OF/PUB    | SHA-256          | ARCHIVE
+-----|-------------|----------------------------------------------|------------|--------------|------------------|--------
+2013 | IS          | BusinessWire news/home/20110107005513/en/NYSE-Euronext-NYX-Announces-2012-2013-Holiday (official NYSE Euronext US release, lists 2012+2013) + archived nyx.com/holidays-and-hours/nyse (capture 20130708145321; official 2013+2014 table) | YES | 2011-01-07 / 2013-07-08 | 220999AF...26256 (HTML) / 0DE65D39...82A3A (HTML) | WAYBACK
+2014 | IS          | s2.q4cdn.com/154085107/files/doc_news/archive/b97d77df-0ecb-4db0-9ced-75bdb9b218ba.pdf (2015 release; 2014 set out below) + nyx page above | YES | Dec. 20 2013 | 6628B038...44FEE | ICE IR CDN
+2015 | IS          | same b97d77df PDF + archive/442a7c75-b606-4b5d-9853-2efa7d6634c3.pdf (2016 release) | YES | Dec. 20 2013 / Dec. 08 2014 | 6628B038...44FEE + 27C9870E...E357 | ICE IR CDN
+2016 | IS          | 442a7c75 PDF + archive/b273f2b1-f4f0-46ae-b6ec-a64e35cd6b7e.pdf (2017 release) | YES | Dec. 08 2014 / Feb. 02 2016 | 27C9870E...E357 + AAC47989...52B | ICE IR CDN
+2017 | IS          | b273f2b1 PDF + archive/313c9417-c6e3-46d3-b820-dbc7d9961ebd.pdf (2018+2019 release) | YES | Feb. 02 2016 / Dec. 12 2016 | AAC47989...52B + B76374B1...305F | ICE IR CDN
+2018 | IS          | 313c9417 PDF + archive/27aaa58b-ebcb-4f53-b505-aee992f54968.pdf (2018-2020 release) | YES | Dec. 12 2016 / Nov. 27 2017 | B76374B1...305F + B13C0181...9812 | ICE IR CDN
+2019 | IS          | 27aaa58b PDF + archive/15638cee-2935-4422-bcb4-a3733587eb8b.pdf (2019-2021 release) | YES | Nov. 27 2017 / Dec. 04 2018 | B13C0181...9812 + BFC91FF0...B58A | ICE IR CDN
+2020 | IS          | 15638cee PDF + archive/91a5230f-7233-4a93-b30a-79c9411ebdbe.pdf (2020-2022 release) | YES | Dec. 04 2018 / Dec. 09 2019 | BFC91FF0...B58A + 685A189E...AC9C2 | ICE IR CDN
+2021 | IS          | 91a5230f PDF + 2021-2022-and-2023 press PDF (release 2020-12-28) | YES | Dec. 09 2019 / Dec. 28 2020 | 685A189E...AC9C2 + 4419CB78...EEB49 | ICE IR CDN
+2022 | OOS         | 2021-2022-and-2023 PDF + 2022-2023-and-2024 press PDF (release 2021-12-27) | YES | Dec. 28 2020 / Dec. 27 2021 | 4419CB78...EEB49 + B8537E45...049E90 | ICE IR CDN
+2023 | OOS         | 2022-2023-and-2024 PDF + 2023-2024-and-2025 press PDF (release 2022-12-21) | YES | Dec. 27 2021 / Dec. 21 2022 | B8537E45...049E90 + 8092099C...67186 | ICE IR CDN
+2024 | OOS         | 2023-2024-and-2025 PDF + 2024-2025-and-2026 press PDF (release 2023-11-10) | YES | Dec. 21 2022 / Nov. 10 2023 | 8092099C...67186 + A379433B...BD64F | ICE IR CDN
+2025 | BLIND       | 2024-2025-and-2026 PDF + 2025-2026-and-2027 press PDF (release 2024-11-08) | YES | Nov. 10 2023 / Nov. 08 2024 | A379433B...BD64F + 6D719AAA...FE3355 | ICE IR CDN
+2026 | BLIND       | 2025-2026-and-2027 PDF + 2026-2027-and-2028 press PDF (release 2025-12-23) + https://www.nyse.com/publicdocs/nyse/ICE_NYSE_2026_Yearly_Trading_Calendar.pdf | YES | Nov. 08 2024 / Dec. 23 2025 / Dec. 10 2025 | 6D719AAA...FE3355 + 76775C27...E1D23 + 70F5577E...16D394F | ICE IR CDN / NYSE.COM
+```
+
+CA-1 HISTORICAL COVERAGE = **HUMAN-RATIFIED / COMPLETE (2026-09-10).** Every calendar year 2013–2025
+within the research window (plus pinned 2026) is covered by at least one actually retrieved official
+NYSE artifact: 13 official NYSE Group / NYSE Euronext press-release PDFs from the ICE IR Q4 CDN
+(2014–2027 coverage) plus the official 2013 data via two artifacts — (i) the official BusinessWire
+distributed NYSE Euronext release "NYSE Euronext (NYX) Announces its 2012 and 2013 Holiday Calendar
+and Early Closings" (story 20110107005513) and (ii) the archived official nyx.com "Holidays and
+Hours — NYSE" page (Wayback capture 2013-07-08), both listing the full 2013 (+2014) holiday calendar
+and matching the press dates. All artifacts content-verified (pypdf text extraction for PDFs; direct
+text check for HTML) and SHA-256 computed on exact retrieved bytes. No hashes fabricated; no
+generic/vendor/other-exchange calendar substituted. Round 4 blocker (CA-1 HISTORICAL COVERAGE) is
+RESOLVED; the manifest + 2013 form were Human-accepted (2026-09-10); ROUND 4 = COMPLETE.
 
 > [!IMPORTANT]
-> Round 4 remains **BLOCKED** until all four components above are supplied by the Human.
-> Round 5 is **NOT ENTERED** while Round 4 is blocked.
+> **2013 artifact-form exception (Human-accepted 2026-09-10):** 2013 predates the PDF-era press artifacts;
+> its official coverage is via HTML renderings of official releases/pages (BusinessWire +
+> archived nyx.com), NOT a standalone per-year PDF. The Human explicitly accepted this HTML-form
+> coverage for 2013 as an **explicit pre-PDF-era historical-artifact exception (2013 only)**; later
+> years keep the official NYSE annual-artifact primary model. The exact official URLs for 2013–2025
+> were NOT assumed to follow the 2026 filename pattern (verified:
+> ICE_NYSE_{2024/2025/2027}_Yearly_Trading_Calendar.pdf return 404); per-year coverage was built from
+> the actually retrieved per-year official press-release artifacts instead. No inference from the
+> 2026 artifact or from a generic holiday rule was used.
+> Round 5 was **ENTERED — D19/D20 HUMAN DECISION SURFACE PREPARED ONLY** (round4 spec §8). On 2026-09-10
+> the Human ratified **D19** (INTEGRITY/PROTOCOL KILL SET ONLY, O.10) and **D20** (acceptance criteria
+> incl. alpha = 0.05, O.11); **ROUND 5 = COMPLETE (2026-09-10)**.
 > No empirical, data, or backtest work is authorized.
 
 ---
 
-### Round-4 Ratification Verification Ledger (updated for TR/CA)
-- Implementation Status: COMPLETE (documentation-only; D14/D15/D16/EX/CO/TR bound; CA-1 decision ratified; CA-1 source-binding field recorded as unresolved provenance; ROUND 4 = BLOCKED)
-- Contract Enforcement: STRICT FAIL-CLOSED — TR-1 bound verbatim with family order; CA-1 CRITICAL SOURCE RULE FIRED → no URL/provider/archive invented; session semantics transcribed; no empirical step; D17/SPX pin not silently resolved
-- Mathematical Authority: HUMAN-RATIFIED DECISIONS (TR-1 with explicit family order; CA-1 with session-semantics checklist) on canonical sources (worksheet J ROUND 2; surface 11.2; readiness AX/Z/11.1; registry 60/77); CA-1 source-bound provenance = UNRESOLVED
+### Round-4 Ratification Verification Ledger (updated after Round 4 close)
+- Implementation Status: COMPLETE (documentation-only; D14/D15/D16/EX/CO/TR bound; CA-1 decision ratified; CA-1 source-binding ARCHITECTURE Human-ratified with 2026 artifact pinned; CA-1 HISTORICAL COVERAGE (2013–2025) = HUMAN-RATIFIED / COMPLETE per 2026-09-10 coverage audit + Human ratification — 15 artifacts retrieved/verified/hash-pinned; 2013 accepted as explicit pre-PDF-era HTML exception; ROUND 4 = COMPLETE; ROUND 5 ENTERED — D19/D20 surface prepared (historical); D19 HUMAN-RATIFIED/BOUND 2026-09-10 (O.10); D20 STILL OPEN)
+- Contract Enforcement: STRICT FAIL-CLOSED — TR-1 bound verbatim with family order; CA-1 CRITICAL SOURCE RULE honored (no URL/provider/archive invented; 2026 artifact actually retrieved and hash-computed; no hashes fabricated; per-year coverage mandate preserved; no inference from generic holiday rules; no vendor/other-exchange substitution); session semantics transcribed; no empirical step; D17/SPX pin not silently resolved (recorded D17 = OPEN / NON-BLOCKING FOR ROUND 4, Group C)
+- Mathematical Authority: HUMAN-RATIFIED DECISIONS (TR-1 with explicit family order; CA-1 with session-semantics checklist and source-binding architecture) on canonical sources (worksheet J ROUND 2; surface 11.2; readiness AX/Z/11.1; registry 60/77); all 15 coverage-artifact SHA-256 digests computed on exact retrieved bytes
+- Local Test Suite: NOT RUN (docs-only; retrieval artifacts kept in temp dir, not staged)
+- Type Checker (MyPy): NOT RUN (docs-only)
+- Remote CI Status: NOT APPLICABLE
+- Methodological Caveats: Round 4 is now COMPLETE — the sole provenance blocker (CA-1 HISTORICAL COVERAGE) was resolved by the 2026-09-10 coverage audit and the manifest + 2013 artifact-form caveat were Human-accepted (2026-09-10). 2013 (pre-PDF press era) is covered via official HTML-form artifacts (BusinessWire release 20110107005513 + archived nyx.com/holidays-and-hours/nyse capture 20130708145321) as an explicit 2013-only historical-artifact exception; this does not change the later-year official-artifact primary model. Proposed archive manifest (15 artifacts: 13 PDF + 2 HTML) accepted as the provenance record; artifact files remain in the temp dir (never staged/committed without separate Human authorization). TR-1 fully bound. ROUND 5 was ENTERED for surface preparation ONLY — no decisions were selected at that time (historical); D19 is now HUMAN-RATIFIED/BOUND (O.10, 2026-09-10). **SUPERSESSION NOTE (2026-09-10): this Round-4 ledger is a historical record; D20 is now HUMAN-RATIFIED/BOUND (O.11, alpha = 0.05) and ROUND 5 = COMPLETE.** D17/SPX close-series pin remains a separate Group C decision (OPEN / NON-BLOCKING FOR ROUND 4). No empirical action, no data, no backtest, no commit, no push.
+
+---
+
+### D19 Ratification Verification Ledger (2026-09-10)
+- Implementation Status: COMPLETE (documentation-only binding; D19 INTEGRITY/PROTOCOL KILL SET HUMAN-RATIFIED/BOUND verbatim in O.10; D20 STILL OPEN)
+- Contract Enforcement: STRICT FAIL-CLOSED — D19 transcribed verbatim; zero-tolerance (>0); global scope; result INVALID; NOT part of K; no performance/alpha/effect-size trigger added; frozen rules O-2/G-3a/TR-1/CA-1/T_eff/D6 preserved and NOT redefined; no silent amending; no inference of any D20 value
+- Mathematical Authority: HUMAN-RATIFIED DECISION (D19 kill set) transcribed against decision surface §26/§27 + D6 semantics; no statistics computed
 - Local Test Suite: NOT RUN (docs-only)
 - Type Checker (MyPy): NOT RUN (docs-only)
 - Remote CI Status: NOT APPLICABLE
-- Methodological Caveats: Round 4 is BLOCKED on exactly one item — the CA-1 source-binding field (Human must supply the authoritative NYSE calendar URL/versioning/archive; agent did not invent one). TR-1 fully bound. ROUND 5 (D19 kill, D20 PASS/FAIL/INVALID incl. alpha), anti-HARKing, and draft freeze are deferred until Round 4 closes; no empirical action, no data, no backtest, no commit, no push.
+- Methodological Caveats: D19 = validity/integrity boundary only; D20 (acceptance thresholds incl. alpha) is the empirical acceptance boundary. **SUPERSESSION NOTE (2026-09-10): this D19 ledger is a historical record; D20 has since been HUMAN-RATIFIED/BOUND (O.11, alpha = 0.05) and ROUND 5 = COMPLETE.** The two ratification points were intentionally separate per Human instruction. Kill conditions bind into the future D18 manifest (Group C). K unchanged = 3. D6 unchanged. D17 OPEN. No empirical/backtest/HYP_003/R1/trading/commit/push.
+
+---
+
+### D20 Ratification Verification Ledger (2026-09-10)
+- Implementation Status: COMPLETE (documentation-only binding; D20 PASS/FAIL/INVALID acceptance criteria HUMAN-RATIFIED/BOUND verbatim in O.11; ROUND 5 = COMPLETE)
+- Contract Enforcement: STRICT FAIL-CLOSED — D20 transcribed verbatim: H0 E[D]=0 / H1 E[D]!=0; two-sided t-test; df = G-1; alpha = 0.05; p < 0.05 => PASS; p >= 0.05 => FAIL; INVALID = D6/D19 integrity semantics (not negative evidence); effect magnitude descriptive only; no additional numeric/effect-size criterion; no auto-import of PBO/DSR/OOS-min/T_eff/N_valid/Holm/effective-K/F-1/Phase-6 thresholds; D19/D6/K preserved and NOT redefined; no value invented or inferred
+- Mathematical Authority: HUMAN-RATIFIED DECISION (D20 acceptance criteria) transcribed against decision surface §27 + D6 semantics + frozen S-2 (S2-B df = G-1) / S-3 / S-4(b); no statistics computed
+- Local Test Suite: NOT RUN (docs-only)
+- Type Checker (MyPy): NOT RUN (docs-only)
+- Remote CI Status: NOT APPLICABLE
+- Methodological Caveats: D20 = empirical acceptance boundary (PASS/FAIL/INVALID) only; D19 = validity/integrity boundary (kill set), unchanged; K = 3 unchanged; D6 unchanged. D20 does not enter K and does not change multiplicity semantics. Draft Freeze / Anti-HARKing / Group C (D17/D18) / pre-registration / empirical validation NOT entered. D17 = OPEN (Group C). No empirical/backtest/HYP_003/R1/trading/commit/push.
