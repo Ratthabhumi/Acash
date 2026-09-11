@@ -45,32 +45,34 @@
 
 ---
 
-## 3. Human Decision Surface for MEC-0013
-
-If Human Governance wishes to progress MEC-0013 in the future, the following decision surface governs:
+## 3. Human Governance Decision Record
 
 ```text
 Decision ID:        MEC-0013-D01
-Question:           How shall ACASH resolve the intraday 1-minute data authority blocker for MEC-0013?
-Why Uninferable:    Requires budget authorization ($0 vs paid) or scope truncation (<30 days vs multi-year).
-
-Option A:           Procure commercial consolidated 1-minute historical intraday dataset
-                    (e.g. FirstRate Data, Databento, Polygon, Tick Data).
-                    Consequence: Solves data authority cleanly; requires commercial budget.
-
-Option B:           Truncate research to recent rolling sample using free API (e.g. 30-day Yahoo 1m).
-                    Consequence: $0 cost; severely under-powered sample ($N < 25$ days);
-                    fails ACASH statistical power standards.
-
-Option C (Recom.):  Maintain MEC-0013 as an archived, formal, complete theoretical mechanism intake.
-                    Do NOT promote to candidate; do NOT allocate capital; keep backtest LOCKED.
-                    Focus data procurement / authority efforts on the mainline MACRO-001 track.
+Ratified Selection: OPTION C (RATIFIED 2026-09-11)
+Decision Rationale: Maintain MEC-0013 as an archived, formal, complete theoretical mechanism intake.
+                    Do NOT promote to candidate; do NOT allocate commercial data budget;
+                    do NOT truncate to 30-day Yahoo 1m sample; keep empirical backtest LOCKED.
+                    Preserve $0 free-data discipline and prioritize MACRO-001 mainline resolution.
+Authority:          HUMAN GOVERNANCE
 ```
 
 ---
 
+## 4. Final Disposition & Archival Record
+
+- **Status:** `RESEARCH INTAKE AUDITED & FORMALIZED (ARCHIVED)`
+- **Candidate Standing:** `NOT PROMOTED`
+- **Hypothesis Standing:** `NOT HYP_003` (`HYP_003` remains `ABSENT`)
+- **Empirical Backtest:** `STRICTLY LOCKED`
+- **Data Authority:** `BLOCKED AT $0.00`
+- **ACASH Empirical Evidence:** `NONE` (Zero backtests, zero Sharpe, zero win rates)
+- **Reopening Trigger:** Requires explicit Human authorization for commercial data procurement, an authoritative $0 source discovery, or pre-registered scope change.
+
+---
+
 ### Verification Ledger
-- Implementation Status: COMPLETE (Documentation-only readiness checklist)
+- Implementation Status: COMPLETE (Documentation-only readiness checklist & ratified closure)
 - Contract Enforcement: STRICT FAIL-CLOSED
 - Mathematical Authority: CANONICAL SPEC / AGENTS.md
 - Local Test Suite / MyPy: NOT RUN (Documentation-only artifact)

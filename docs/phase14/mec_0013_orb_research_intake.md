@@ -316,20 +316,29 @@ This document explicitly **DOES NOT**:
 
 ---
 
-## 14. Final Governance Classification
+## 14. Final Governance Classification & Archival Closure
 
 ```
 ===============================================================================
-MEC-0013 CLASSIFICATION: RESEARCH INTAKE & FORMALIZATION ONLY
+MEC-0013 CLASSIFICATION: RESEARCH INTAKE AUDITED & FORMALIZED (ARCHIVED)
 ===============================================================================
-- Status:                   PROPOSED / UNVALIDATED
-- Candidate Level:          NOT A CANDIDATE
-- Hypothesis Level:         NOT HYP_003
+- Ratified Decision:        MEC-0013-D01 = OPTION C (RATIFIED 2026-09-11)
+- Status:                   ARCHIVED RESEARCH ASSET / NON-CANDIDATE
+- Research Readiness:       CONDITIONALLY AUDITED / EMPIRICALLY BLOCKED
+- Candidate Standing:       NOT PROMOTED to free_data_research_registry.md
+- Hypothesis Standing:      NOT HYP_003 (HYP_003 remains ABSENT)
 - Research Lifecycle:       NOT R1 AUTHORIZED
+- Empirical Backtest:       STRICTLY LOCKED
+- Data Authority State:     BLOCKED AT $0.00 (no multi-year PIT 1m consolidated feed)
+- ACASH Empirical Evidence: NONE (Zero backtests, zero Sharpe, zero win rates)
 - Execution Authority:      NOT PAPER AUTHORIZED
 - Capital Authority:        $0.00 (HARD-LOCKED)
 - Trading Authority:        LOCKED
 ===============================================================================
-STOP — MEC-0013 FORMALIZATION COMPLETE; EMPIRICAL VALIDATION REMAINS UNAUTHORIZED.
+STOP — MEC-0013 FORMALLY ARCHIVED; EMPIRICAL VALIDATION REMAINS UNAUTHORIZED.
 ===============================================================================
 ```
+
+See companion audit documents:
+- Audit: [`docs/phase14/mec_0013_orb_research_audit.md`](./mec_0013_orb_research_audit.md)
+- Checklist: [`docs/phase14/mec_0013_orb_readiness_checklist.md`](./mec_0013_orb_readiness_checklist.md)
