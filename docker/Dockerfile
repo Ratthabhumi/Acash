@@ -30,7 +30,7 @@ FROM ${PYTHON_BASE_IMAGE}
 # --storage /data/docker/acash/sessions — a subdirectory, not a separate mount.
 ENV ACASH_STORAGE_ROOT=/data/docker/acash
 ENV TZ=UTC
-
+ENV PYTHONPATH=/opt/acash/src
 # Non-root paper UID (D10.2 / O6): fixed 10001:10001, census-guarded.
 RUN groupadd --gid 10001 paper && \
     useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin paper && \
@@ -45,9 +45,12 @@ WORKDIR /opt/acash
 # image + pinned wheelhouse remain a build-time concern; runtime never checks
 # the network.
 COPY --chown=paper:paper pyproject.toml uv.lock ./
+COPY --chown=paper:paper README.md ./README.md
 
 # Build context is the ACASH repo root; application source is copied below.
 COPY --chown=paper:paper src/ ./src/
+
+RUN pip install --no-cache-dir .
 
 # Paper service runs as the unprivileged paper UID only (no new privileges).
 USER paper:paper
