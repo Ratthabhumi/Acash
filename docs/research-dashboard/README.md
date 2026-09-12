@@ -80,7 +80,7 @@ cd dashboard
 npm install
 npm run dev
 ```
-Access the dashboard at `http://localhost:3000`.
+Access the dashboard at `http://localhost:3002`.
 
 ### Typecheck & Production Build
 ```bash
