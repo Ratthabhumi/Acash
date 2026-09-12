@@ -118,7 +118,7 @@ export const ValidationPage: React.FC<ValidationPageProps> = ({ researchRun }) =
 
           <div className="flex items-center space-x-1.5 text-xs font-mono-code text-slate-600 bg-slate-50 px-2.5 py-1 rounded border border-slate-200">
             <Lock className="w-3 h-3 text-slate-500" />
-            <span>OOS Bars 5,009..6,230: UNTOUCHED</span>
+            <span>DEMO OOS PARTITION · SIMULATED</span>
           </div>
         </div>
 
@@ -128,7 +128,7 @@ export const ValidationPage: React.FC<ValidationPageProps> = ({ researchRun }) =
               <tr className="border-b border-slate-200 text-slate-500 text-[11px]">
                 <th className="pb-2 font-medium">Evaluation Metric</th>
                 <th className="pb-2 font-medium text-right">In-Sample (Simulated)</th>
-                <th className="pb-2 font-medium text-right">Out-of-Sample (Blind)</th>
+                <th className="pb-2 font-medium text-right">Out-of-Sample (Demo Partition)</th>
                 <th className="pb-2 font-medium text-right">Degradation Delta</th>
                 <th className="pb-2 font-medium text-center">Status</th>
               </tr>
@@ -155,7 +155,7 @@ export const ValidationPage: React.FC<ValidationPageProps> = ({ researchRun }) =
             <span>Epistemic Integrity Notice:</span>
           </div>
           <p className="leading-relaxed font-sans text-slate-600">
-            Per ACASH governance standards, blind test partitions are never unsealed during research iterations. Unsealing requires formal ratification of hypothesis formulation, frozen parameters, and registered trial counts to preserve legitimate statistical confidence intervals.
+            Mock Demonstration Notice: In canonical ACASH governance, out-of-sample partitions remain strictly unexposed during active research iterations. The partitions shown in this dashboard are purely synthetic mock structures and do not represent actual ACASH research evidence or qualification.
           </p>
         </div>
       </div>

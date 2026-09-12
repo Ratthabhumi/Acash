@@ -39,6 +39,13 @@ test('Data Contract: Epistemic & Demo Invariants', () => {
     mockDataContent.includes('Performance metrics do not imply research qualification or trading authorization.'),
     'Governance disclaimer must be exact'
   );
+
+  // 6. Hardened Epistemic Boundaries (No fake capital, no fake runtime namespaces)
+  assert.doesNotMatch(mockDataContent, /startingCashUsd/, 'Mock data must NOT represent cash/capital as startingCashUsd');
+  assert.match(mockDataContent, /simulatedReferenceNotionalUsd/, 'Mock data must explicitly use simulatedReferenceNotionalUsd');
+  assert.doesNotMatch(mockDataContent, /sourceModule:\s*'acash\./, 'Mock lineage must NOT pretend to be live acash.* modules');
+  assert.doesNotMatch(mockDataContent, /riskVerdict:\s*'APPROVED/, 'Mock riskVerdict must NOT use APPROVED');
+  assert.doesNotMatch(mockDataContent, /SOVEREIGN_RISK_GATE/, 'Mock authority rule must NOT use SOVEREIGN');
 });
 
 test('Evidence Lineage Contract: Exactly 11 Stages', () => {

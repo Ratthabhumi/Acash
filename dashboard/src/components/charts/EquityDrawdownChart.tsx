@@ -155,7 +155,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
             Portfolio Valuation & Drawdown Profile
           </h3>
           <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
-            Bi-temporal Mark-to-Market (MTM) Valuation vs Gross Potential
+            Simulated Reference Notional ($100,000) · Mark-to-Market Valuation Profile
           </p>
         </div>
 
@@ -399,13 +399,13 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
               <span className="text-slate-300 font-semibold">{hoveredPoint.date}</span>
             </div>
             <div className="flex justify-between gap-4 text-[11px]">
-              <span className="text-slate-400">Net Valuation:</span>
+              <span className="text-slate-400">Simulated Notional:</span>
               <span className="font-semibold text-emerald-400">
                 ${hoveredPoint.netEquity.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between gap-4 text-[11px]">
-              <span className="text-slate-400">Gross Valuation:</span>
+              <span className="text-slate-400">Gross (Pre-Friction):</span>
               <span className="text-slate-300">
                 ${hoveredPoint.grossEquity?.toLocaleString()}
               </span>
@@ -421,7 +421,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
               </span>
             </div>
             <div className="flex justify-between gap-4 text-[11px] pt-1 border-t border-slate-800/80 text-[10px]">
-              <span className="text-slate-400">Trades Filled:</span>
+              <span className="text-slate-400">Simulated Fills:</span>
               <span className="text-slate-200">{hoveredPoint.tradeCount}</span>
             </div>
           </div>

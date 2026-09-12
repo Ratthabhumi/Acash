@@ -119,7 +119,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 Gross-to-Net Friction Attribution
               </h3>
               <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
-                Stress decay across 127 executed fills
+                Simulated friction decay across 127 mock fills
               </p>
             </div>
             <button
