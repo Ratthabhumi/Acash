@@ -32,7 +32,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Union
 
 from acash.core.domain.exceptions import DataContractError
 
@@ -87,7 +87,7 @@ class PaperMetricsServer:
 
     def __init__(
         self,
-        registry: MetricsRegistry,
+        registry: Union[MetricsRegistry, Callable[[], Union[MetricsRegistry, str]]],
         host: str = "0.0.0.0",
         port: int = 9102,
     ) -> None:
@@ -132,7 +132,11 @@ class PaperMetricsServer:
                     self.wfile.write(b"404 not found\n")
                     return
                 try:
-                    body = registry.render()
+                    if callable(registry):
+                        reg = registry()
+                        body = reg.render() if hasattr(reg, "render") else str(reg)
+                    else:
+                        body = registry.render()
                 except DataContractError as exc:
                     self.send_response(503)
                     self.send_header("Content-Type", "text/plain; charset=utf-8")

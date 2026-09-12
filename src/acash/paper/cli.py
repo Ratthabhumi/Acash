@@ -137,7 +137,66 @@ def _run_session(
     )
 
     runner.start()
-    supervisor.connect()
+
+    metrics_server = None
+    metrics_port = getattr(args, "metrics_port", 9102)
+    metrics_host = getattr(args, "metrics_host", "0.0.0.0")
+    if metrics_port > 0:
+        from acash.paper.metrics import PaperMetricsServer, build_operational_metrics
+        from acash.paper.window import WindowState
+
+        def _resolve_window_state() -> str:
+            for candidate in (storage.parent, storage):
+                w_dir = candidate / "windows"
+                if w_dir.exists():
+                    for marker_file in sorted(w_dir.glob("*.state.json")):
+                        try:
+                            data = json.loads(marker_file.read_text(encoding="utf-8"))
+                            st = data.get("state")
+                            if st in ("QUIESCENT", "OPEN", "SEALED", "VOID"):
+                                return st
+                        except Exception:
+                            pass
+            return WindowState.QUIESCENT.value
+
+        session_started_at = datetime.now(timezone.utc)
+
+        def _collect() -> Any:
+            uptime = max(
+                0.0,
+                (datetime.now(timezone.utc) - session_started_at).total_seconds(),
+            )
+            violations = runner.journal.verify_integrity()
+            integrity_status = "PASS" if not violations else "FAIL"
+            return build_operational_metrics(
+                event_count=runner.journal.event_count,
+                journal_integrity_status=integrity_status,
+                window_state=_resolve_window_state(),
+                feed_failure_events=supervisor.stats.disconnect_count,
+                auto_recovery_used=False,
+                uptime_seconds=uptime,
+            )
+
+        metrics_server = PaperMetricsServer(
+            registry=_collect,
+            host=metrics_host,
+            port=metrics_port,
+        )
+        metrics_server.start()
+
+    try:
+        supervisor.connect()
+    except FeedConnectionError as exc:
+        print(
+            json.dumps(
+                {
+                    "event": "FEED_CONNECT_FAILED",
+                    "session_id": config.session_id,
+                    "reason": str(exc)[:200],
+                }
+            ),
+            file=sys.stderr,
+        )
 
     max_steps = args.max_polls
     step = 0
@@ -153,6 +212,11 @@ def _run_session(
                 shutdown_requested = True
                 break
             step += 1
+            if supervisor.stats.halted:
+                # In halted state (fail-closed, D6.1), no decisions made, no bars admitted.
+                if args.poll_interval_ms > 0:
+                    time.sleep(args.poll_interval_ms / 1000.0)
+                continue
             try:
                 supervisor.step_once()
             except FeedConnectionError as exc:
@@ -167,7 +231,7 @@ def _run_session(
                     ),
                     file=sys.stderr,
                 )
-                break
+                continue
             except FeedContractError as exc:
                 raise DataContractError(
                     f"Feed contract violated (fail-closed): {exc}"
@@ -176,6 +240,8 @@ def _run_session(
                 time.sleep(args.poll_interval_ms / 1000.0)
     finally:
         shutdown_ctrl.restore()
+        if metrics_server is not None:
+            metrics_server.stop()
 
     supervisor.disconnect()
     manifest = runner.stop()
@@ -353,6 +419,17 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         type=int,
         help="Freshness horizon in ms (default derived from timeframe).",
+    )
+    parser.add_argument(
+        "--metrics-host",
+        default="0.0.0.0",
+        help="Host to bind the Prometheus /metrics listener (default: 0.0.0.0).",
+    )
+    parser.add_argument(
+        "--metrics-port",
+        default=9102,
+        type=int,
+        help="Port to bind the Prometheus /metrics listener (default: 9102, 0 to disable).",
     )
 
 

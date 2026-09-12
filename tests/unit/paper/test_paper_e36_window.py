@@ -565,3 +565,37 @@ def test_metrics_convenience_function() -> None:
     )
     assert 'acash_journal_integrity_status{state="FAIL"} 0.0' in text
     assert 'acash_window_state{state="VOID"} 1.0' in text
+
+def test_metrics_server_dynamic_callable_registry() -> None:
+    port = free_port()
+    state = {"event_count": 10, "state": "QUIESCENT"}
+
+    def _dynamic_collect():
+        return build_operational_metrics(
+            event_count=state["event_count"],
+            journal_integrity_status="PASS",
+            window_state=state["state"],
+            feed_failure_events=0,
+            auto_recovery_used=False,
+            uptime_seconds=5.0,
+        )
+
+    server = PaperMetricsServer(_dynamic_collect, host="127.0.0.1", port=port)
+    server.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as resp:
+            assert resp.status == 200
+            body = resp.read().decode("utf-8")
+        assert 'acash_journal_event_count 10.0' in body
+        assert 'acash_window_state{state="QUIESCENT"} 1.0' in body
+
+        # Update state dynamically
+        state["event_count"] = 25
+        state["state"] = "OPEN"
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as resp:
+            assert resp.status == 200
+            body2 = resp.read().decode("utf-8")
+        assert 'acash_journal_event_count 25.0' in body2
+        assert 'acash_window_state{state="OPEN"} 1.0' in body2
+    finally:
+        server.stop()
