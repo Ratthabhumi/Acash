@@ -60,7 +60,7 @@ if not exist "%DASHBOARD_DIR%\package.json" (
     exit /b 1
 )
 
-:: 4. Install dependencies using lockfile
+:: 4. Install dependencies using lockfile (Strict reproducibility: no silent npm install fallback)
 echo [*] Navigating to dashboard directory...
 cd /d "%DASHBOARD_DIR%"
 if %ERRORLEVEL% NEQ 0 (
@@ -74,9 +74,13 @@ if exist "%DASHBOARD_DIR%\package-lock.json" (
     echo [*] Found package-lock.json. Running 'npm ci'...
     call npm ci
     if %ERRORLEVEL% NEQ 0 (
-        echo [WARN] 'npm ci' failed. Retrying with 'npm install'...
-        call npm install
-        if %ERRORLEVEL% NEQ 0 goto error_install
+        echo.
+        echo [ERROR] 'npm ci' failed.
+        echo [ERROR] Dependency installation was aborted to preserve lockfile reproducibility.
+        echo [ERROR] Please inspect the npm error above and resolve the environment or lockfile issue.
+        cd /d "%REPO_ROOT%"
+        pause
+        exit /b 1
     )
 ) else (
     echo [*] No package-lock.json found. Running 'npm install'...

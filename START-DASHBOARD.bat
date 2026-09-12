@@ -44,24 +44,30 @@ if %ERRORLEVEL% NEQ 0 (
 if not exist "%DASHBOARD_DIR%\node_modules" (
     echo.
     echo [ERROR] Dashboard dependencies are not installed.
-    echo Please run SETUP.bat first to initialize the environment.
+    echo Please run SETUP.bat first.
     echo.
     pause
     exit /b 1
 )
 
 :: 3. Launch dashboard
-echo [*] Starting ACASH Research Dashboard...
+echo [*] Starting ACASH Research Dashboard development server...
 echo [*] Target URL: http://localhost:3000
+echo [*] Waiting for server readiness before opening browser...
 echo [*] Press Ctrl+C in this terminal to stop the server.
 echo.
 
 cd /d "%DASHBOARD_DIR%"
 
-:: Open default browser
-start "" http://localhost:3000
+:: Background readiness watcher: polls http://localhost:3000 until responsive, then opens browser exactly once
+where curl >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    start /b "" cmd /c "for /l %%i in (1,1,60) do (curl.exe -s -f -o nul http://localhost:3000 && (start """" http://localhost:3000 & exit) || timeout /t 1 /nobreak >nul)"
+) else (
+    start /b "" powershell -NoProfile -Command "$u='http://localhost:3000'; for($i=0;$i -lt 60;$i++){ try { $r=Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 1; if($r.StatusCode -eq 200){ Start-Process $u; exit 0 } } catch {} Start-Sleep -Seconds 1 }"
+)
 
-:: Run Vite development server (keeps terminal open)
+:: Run Vite development server in foreground (keeps terminal open)
 call npm run dev
 
 cd /d "%REPO_ROOT%"
