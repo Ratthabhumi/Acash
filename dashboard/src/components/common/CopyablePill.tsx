@@ -33,8 +33,8 @@ export const CopyablePill: React.FC<CopyablePillProps> = ({
     : value;
 
   return (
-    <div className={`inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-xs text-charcoal-700 font-mono-code transition-colors hover:border-slate-300 ${className}`}>
-      {label && <span className="text-slate-400 select-none font-sans font-normal">{label}:</span>}
+    <div className={`inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded px-2 py-0.5 text-xs text-charcoal-700 dark:text-slate-300 font-mono-code transition-colors hover:border-slate-300 dark:hover:border-slate-600 ${className}`}>
+      {label && <span className="text-slate-400 dark:text-slate-500 select-none font-sans font-normal">{label}:</span>}
       <span className="truncate max-w-[220px]" title={value}>
         {displayValue}
       </span>
@@ -42,10 +42,10 @@ export const CopyablePill: React.FC<CopyablePillProps> = ({
         onClick={handleCopy}
         type="button"
         title={copied ? 'Copied to clipboard' : 'Click to copy full value'}
-        className="text-slate-400 hover:text-slate-700 focus:outline-none flex items-center gap-1 ml-0.5"
+        className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 focus:outline-none flex items-center gap-1 ml-0.5"
       >
         {copied ? (
-          <span className="inline-flex items-center text-[10px] text-emerald-700 font-sans font-medium">
+          <span className="inline-flex items-center text-[10px] text-emerald-700 dark:text-emerald-400 font-sans font-medium">
             <Check className="w-3 h-3 mr-0.5" />
             Copied
           </span>

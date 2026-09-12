@@ -26,21 +26,21 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   return (
     <div className="space-y-6">
       {/* 1. Top Metadata Information Bar */}
-      <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs transition-colors">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-slate-900 tracking-tight">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                 {metadata.strategyId}
               </h2>
-              <span className="text-xs font-mono-code px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="text-xs font-mono-code px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 v{metadata.strategyVersion}
               </span>
-              <span className="text-[11px] font-mono-code px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+              <span className="text-[11px] font-mono-code px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 font-medium">
                 SIMULATED RUN
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-mono-code">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono-code">
               {metadata.dataSource} · Timeframe: {dataset.timeframe} · Bars: {dataset.barCount.toLocaleString()}
             </p>
           </div>
@@ -112,19 +112,19 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       {/* 4. Split Grid: Friction Waterfall & Validation Quick Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gross-to-Net Friction Breakdown */}
-        <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-4 transition-colors">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
             <div>
-              <h3 className="text-xs font-semibold text-slate-900 tracking-tight">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                 Gross-to-Net Friction Attribution
               </h3>
-              <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
                 Simulated friction decay across 127 mock fills
               </p>
             </div>
             <button
               onClick={() => onNavigateTab('validation')}
-              className="text-xs font-mono-code text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-colors"
+              className="text-xs font-mono-code text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
             >
               <span>View Gates</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -132,52 +132,52 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
 
           <div className="space-y-3 font-mono-code text-xs">
-            <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
-              <span className="text-slate-600">Gross Simulated Potential</span>
-              <span className="font-semibold text-slate-900">+{metrics.grossReturnPct.toFixed(2)}%</span>
+            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800/60">
+              <span className="text-slate-600 dark:text-slate-400">Gross Simulated Potential</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-100">+{metrics.grossReturnPct.toFixed(2)}%</span>
             </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 text-rose-700">
+            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800/60 text-rose-700 dark:text-rose-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 Quoted Bid/Ask Spread (0.4 bps/trade)
               </span>
               <span>-{(metrics.totalFrictionCostPct * 0.33).toFixed(2)}%</span>
             </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 text-rose-700">
+            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800/60 text-rose-700 dark:text-rose-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 Execution Fees (0.5 bps/trade)
               </span>
               <span>-{metrics.feesPaidPct.toFixed(2)}%</span>
             </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 text-rose-700">
+            <div className="flex justify-between items-center py-1.5 border-b border-slate-50 dark:border-slate-800/60 text-rose-700 dark:text-rose-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                 Conservative Slippage Model (0.3 bps/trade)
               </span>
               <span>-{metrics.slippageIncurredPct.toFixed(2)}%</span>
             </div>
-            <div className="flex justify-between items-center pt-2 font-semibold text-slate-900 bg-slate-50/80 p-2 rounded">
+            <div className="flex justify-between items-center pt-2 font-semibold text-slate-900 dark:text-slate-100 bg-slate-50/80 dark:bg-slate-800/60 p-2 rounded">
               <span>Net Empirical Performance</span>
-              <span className="text-emerald-700">+{metrics.netReturnPct.toFixed(2)}%</span>
+              <span className="text-emerald-700 dark:text-emerald-400">+{metrics.netReturnPct.toFixed(2)}%</span>
             </div>
           </div>
         </div>
 
         {/* Validation Checklist Snapshot */}
-        <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-4 transition-colors">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
             <div>
-              <h3 className="text-xs font-semibold text-slate-900 tracking-tight">
+              <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
                 Statistical Gate Status Snapshot
               </h3>
-              <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
                 Canonical Research Standards · Zero Fake Pass
               </p>
             </div>
             <button
               onClick={() => onNavigateTab('validation')}
-              className="text-xs font-mono-code text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-colors"
+              className="text-xs font-mono-code text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
             >
               <span>Audit Details</span>
               <ChevronRight className="w-3.5 h-3.5" />
@@ -188,11 +188,11 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             {validationCriteria.slice(0, 4).map((crit) => (
               <div
                 key={crit.id}
-                className="flex items-center justify-between p-2 rounded bg-slate-50/60 border border-slate-100 text-xs"
+                className="flex items-center justify-between p-2 rounded bg-slate-50/60 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs"
               >
                 <div className="truncate pr-2">
-                  <div className="font-medium text-slate-900 truncate">{crit.name}</div>
-                  <div className="text-[11px] text-slate-500 font-mono-code truncate">
+                  <div className="font-medium text-slate-900 dark:text-slate-200 truncate">{crit.name}</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code truncate">
                     {crit.ruleSpecification}
                   </div>
                 </div>
@@ -201,57 +201,58 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             ))}
           </div>
 
-          <div className="pt-1 text-[11px] text-slate-500 font-mono-code flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <div className="pt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono-code flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
             <span>Out-of-sample partitions remain strictly unexposed.</span>
           </div>
         </div>
       </div>
 
       {/* 5. 90-Day Simulation Timeline & Events */}
-      <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+      {/* 5. 90-Day Simulation Timeline & Events */}
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-4 transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <div>
-            <h3 className="text-xs font-semibold text-slate-900 tracking-tight">
+            <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
               Simulation Milestone Timeline (90-Day Chronology)
             </h3>
-            <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
               Click any milestone to inspect structured telemetry payload
             </p>
           </div>
-          <span className="text-[11px] font-mono-code px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+          <span className="text-[11px] font-mono-code px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
             {timelineEvents.length} Recorded Milestones
           </span>
         </div>
 
-        <div className="relative pl-6 space-y-4 border-l border-slate-200 ml-2">
+        <div className="relative pl-6 space-y-4 border-l border-slate-200 dark:border-slate-800 ml-2">
           {timelineEvents.map((evt) => (
             <div
               key={evt.id}
               onClick={() => setSelectedEvent(evt)}
               className={`group cursor-pointer p-3 rounded-md border transition-all text-xs ${
                 selectedEvent?.id === evt.id
-                  ? 'border-slate-900 bg-slate-50 shadow-xs'
-                  : 'border-slate-100 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                  ? 'border-slate-900 dark:border-slate-500 bg-slate-50 dark:bg-slate-800/80 shadow-xs'
+                  : 'border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
               }`}
             >
               {/* Timeline Marker Bullet */}
-              <div className="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full border-2 border-white bg-slate-600 group-hover:bg-slate-900 transition-colors" />
+              <div className="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 bg-slate-600 dark:bg-slate-500 group-hover:bg-slate-900 dark:group-hover:bg-slate-200 transition-colors" />
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
                 <div className="flex items-center space-x-2">
-                  <span className="font-mono-code font-semibold text-slate-900">
+                  <span className="font-mono-code font-semibold text-slate-900 dark:text-slate-100">
                     {evt.title}
                   </span>
-                  <span className="text-[10px] font-mono-code px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                  <span className="text-[10px] font-mono-code px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                     {evt.category}
                   </span>
                 </div>
-                <span className="text-[11px] font-mono-code text-slate-400">
+                <span className="text-[11px] font-mono-code text-slate-400 dark:text-slate-500">
                   {new Date(evt.timestamp).toUTCString().slice(5, 22)}
                 </span>
               </div>
-              <p className="text-slate-600 text-[11px] leading-relaxed">
+              <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
                 {evt.summary}
               </p>
             </div>
@@ -260,30 +261,30 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
         {/* Selected Event Payload Detail Modal / Drawer */}
         {selectedEvent && (
-          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs space-y-2 font-mono-code animate-in fade-in duration-100">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
-              <span className="font-semibold text-slate-800">
+          <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 text-xs space-y-2 font-mono-code animate-in fade-in duration-100">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
                 Payload Telemetry: {selectedEvent.id} ({selectedEvent.title})
               </span>
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="text-slate-400 hover:text-slate-600 text-[11px]"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-[11px]"
               >
                 Close Drawer
               </button>
             </div>
-            <pre className="text-[11px] text-slate-700 overflow-x-auto p-2 rounded bg-white border border-slate-200">
+            <pre className="text-[11px] text-slate-700 dark:text-slate-300 overflow-x-auto p-2 rounded bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
               {JSON.stringify(selectedEvent.payload, null, 2)}
             </pre>
             {selectedEvent.relatedTradeId && (
               <div className="flex items-center gap-2 pt-1 text-[11px]">
-                <span className="text-slate-500">Related Trade:</span>
+                <span className="text-slate-500 dark:text-slate-400">Related Trade:</span>
                 <button
                   onClick={() => {
                     onNavigateTab('trades');
                     if (onSelectTradeId) onSelectTradeId(selectedEvent.relatedTradeId!);
                   }}
-                  className="text-slate-900 underline font-medium hover:text-blue-600"
+                  className="text-slate-900 dark:text-slate-200 underline font-medium hover:text-blue-600 dark:hover:text-blue-400"
                 >
                   {selectedEvent.relatedTradeId}
                 </button>
@@ -294,19 +295,19 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       </div>
 
       {/* 6. Recent Simulated Executions Preview */}
-      <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-4 transition-colors">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
           <div>
-            <h3 className="text-xs font-semibold text-slate-900 tracking-tight">
+            <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
               Recent Simulated Executions (Sample 6 of {trades.length})
             </h3>
-            <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
               Strict next-bar open fill simulation with 1.2 bps friction deduction
             </p>
           </div>
           <button
             onClick={() => onNavigateTab('trades')}
-            className="text-xs font-mono-code text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-colors"
+            className="text-xs font-mono-code text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
           >
             <span>Open All 127 Trades</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -316,7 +317,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono-code">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-500 text-[11px]">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px]">
                 <th className="pb-2 font-medium">Trade ID</th>
                 <th className="pb-2 font-medium">Date (UTC)</th>
                 <th className="pb-2 font-medium">Symbol</th>
@@ -329,42 +330,42 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                 <th className="pb-2 font-medium text-center">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTrades.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-2 text-slate-900 font-semibold">{t.id}</td>
-                  <td className="py-2 text-slate-500 text-[11px]">{t.timestamp.slice(0, 16).replace('T', ' ')}</td>
-                  <td className="py-2 text-slate-700">{t.symbol}</td>
+                <tr key={t.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                  <td className="py-2 text-slate-900 dark:text-slate-200 font-semibold">{t.id}</td>
+                  <td className="py-2 text-slate-500 dark:text-slate-400 text-[11px]">{t.timestamp.slice(0, 16).replace('T', ' ')}</td>
+                  <td className="py-2 text-slate-700 dark:text-slate-300">{t.symbol}</td>
                   <td className="py-2">
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         t.side === 'LONG'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                          : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                       }`}
                     >
                       {t.side}
                     </span>
                   </td>
-                  <td className="py-2 text-right text-slate-600">{t.entryPrice.toFixed(4)}</td>
-                  <td className="py-2 text-right text-slate-600">{t.exitPrice.toFixed(4)}</td>
+                  <td className="py-2 text-right text-slate-600 dark:text-slate-400">{t.entryPrice.toFixed(4)}</td>
+                  <td className="py-2 text-right text-slate-600 dark:text-slate-400">{t.exitPrice.toFixed(4)}</td>
                   <td
                     className={`py-2 text-right font-medium ${
-                      t.pnlBps >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      t.pnlBps >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                     }`}
                   >
                     {t.pnlBps >= 0 ? `+${t.pnlBps}` : t.pnlBps}
                   </td>
                   <td
                     className={`py-2 text-right font-medium ${
-                      t.pnlUsd >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      t.pnlUsd >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                     }`}
                   >
                     ${t.pnlUsd.toLocaleString()}
                   </td>
                   <td
                     className={`py-2 text-right font-medium ${
-                      t.rMultiple >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      t.rMultiple >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
                     }`}
                   >
                     {t.rMultiple >= 0 ? `+${t.rMultiple}R` : `${t.rMultiple}R`}

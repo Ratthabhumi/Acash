@@ -8,6 +8,7 @@ import { TradesPage } from './pages/TradesPage';
 import { EvidencePage } from './pages/EvidencePage';
 import { ValidationPage } from './pages/ValidationPage';
 import { SkeletonLoader } from './components/common/SkeletonLoader';
+import { ThemeProvider } from './context/ThemeContext';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<DashboardTab>('overview');
@@ -31,16 +32,18 @@ export const App: React.FC = () => {
 
   if (loading || !researchRun) {
     return (
-      <div className="min-h-screen bg-slate-50 p-8 flex flex-col space-y-4 max-w-6xl mx-auto">
-        <SkeletonLoader className="h-10 w-full" />
-        <SkeletonLoader className="h-16 w-full" />
-        <div className="grid grid-cols-4 gap-4">
-          <SkeletonLoader className="h-24" />
-          <SkeletonLoader className="h-24" />
-          <SkeletonLoader className="h-24" />
-          <SkeletonLoader className="h-24" />
+      <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950">
+        <div className="p-8 flex flex-col space-y-4 max-w-6xl mx-auto">
+          <SkeletonLoader className="h-10 w-full" />
+          <SkeletonLoader className="h-16 w-full" />
+          <div className="grid grid-cols-4 gap-4">
+            <SkeletonLoader className="h-24" />
+            <SkeletonLoader className="h-24" />
+            <SkeletonLoader className="h-24" />
+            <SkeletonLoader className="h-24" />
+          </div>
+          <SkeletonLoader className="h-96 w-full" />
         </div>
-        <SkeletonLoader className="h-96 w-full" />
       </div>
     );
   }
@@ -57,34 +60,36 @@ export const App: React.FC = () => {
   };
 
   return (
-    <AppShell
-      researchRun={researchRun}
-      currentTab={currentTab}
-      onSelectTab={handleNavigateTab}
-    >
-      {currentTab === 'overview' && (
-        <OverviewPage
-          researchRun={researchRun}
-          onNavigateTab={handleNavigateTab}
-          onSelectTradeId={handleSelectTrade}
-        />
-      )}
+    <ThemeProvider>
+      <AppShell
+        researchRun={researchRun}
+        currentTab={currentTab}
+        onSelectTab={handleNavigateTab}
+      >
+        {currentTab === 'overview' && (
+          <OverviewPage
+            researchRun={researchRun}
+            onNavigateTab={handleNavigateTab}
+            onSelectTradeId={handleSelectTrade}
+          />
+        )}
 
-      {currentTab === 'trades' && (
-        <TradesPage
-          trades={researchRun.trades}
-          initialSelectedTradeId={selectedTradeId}
-        />
-      )}
+        {currentTab === 'trades' && (
+          <TradesPage
+            trades={researchRun.trades}
+            initialSelectedTradeId={selectedTradeId}
+          />
+        )}
 
-      {currentTab === 'evidence' && (
-        <EvidencePage researchRun={researchRun} />
-      )}
+        {currentTab === 'evidence' && (
+          <EvidencePage researchRun={researchRun} />
+        )}
 
-      {currentTab === 'validation' && (
-        <ValidationPage researchRun={researchRun} />
-      )}
-    </AppShell>
+        {currentTab === 'validation' && (
+          <ValidationPage researchRun={researchRun} />
+        )}
+      </AppShell>
+    </ThemeProvider>
   );
 };
 

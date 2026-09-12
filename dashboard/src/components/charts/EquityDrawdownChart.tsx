@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { EquityPoint } from '../../types/research';
+import { useTheme } from '../../context/ThemeContext';
 
 interface EquityDrawdownChartProps {
   data: EquityPoint[];
@@ -8,6 +9,8 @@ interface EquityDrawdownChartProps {
 type TimeframeOption = '1W' | '1M' | '3M' | 'ALL';
 
 export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [activeTimeframe, setActiveTimeframe] = useState<TimeframeOption>('ALL');
   const [hoveredPoint, setHoveredPoint] = useState<EquityPoint | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
@@ -147,14 +150,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
   };
 
   return (
-    <div className="bg-white rounded-lg border border-enterprise-border p-4 shadow-xs">
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs transition-colors">
       {/* Chart Controls Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
         <div>
-          <h3 className="text-xs font-semibold text-slate-900 tracking-tight">
+          <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
             Portfolio Valuation & Drawdown Profile
           </h3>
-          <p className="text-[11px] text-slate-500 font-mono-code mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
             Simulated Reference Notional ($100,000) · Mark-to-Market Valuation Profile
           </p>
         </div>
@@ -162,13 +165,13 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
         {/* Legend and Timeframe Filters */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Legend */}
-          <div className="flex items-center space-x-3 text-[11px] font-mono-code text-slate-600">
+          <div className="flex items-center space-x-3 text-[11px] font-mono-code text-slate-600 dark:text-slate-400">
             <div className="flex items-center space-x-1.5">
-              <span className="w-2.5 h-0.5 bg-slate-900 rounded-full" />
+              <span className="w-2.5 h-0.5 bg-slate-900 dark:bg-slate-100 rounded-full" />
               <span>Net Equity</span>
             </div>
             <div className="flex items-center space-x-1.5">
-              <span className="w-2.5 h-0.5 bg-slate-400 stroke-dasharray rounded-full" />
+              <span className="w-2.5 h-0.5 bg-slate-400 dark:bg-slate-500 stroke-dasharray rounded-full" />
               <span>Gross (Pre-Friction)</span>
             </div>
             <div className="flex items-center space-x-1.5">
@@ -178,15 +181,15 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           </div>
 
           {/* Timeframe Buttons */}
-          <div className="flex items-center rounded bg-slate-100 p-0.5 border border-slate-200 text-xs font-mono-code">
+          <div className="flex items-center rounded bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 text-xs font-mono-code">
             {(['1W', '1M', '3M', 'ALL'] as TimeframeOption[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setActiveTimeframe(tf)}
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                   activeTimeframe === tf
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 {tf}
@@ -206,8 +209,8 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
         >
           <defs>
             <linearGradient id="netEquityGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0f172a" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="#0f172a" stopOpacity="0.0" />
+              <stop offset="0%" stopColor={isDark ? '#38bdf8' : '#0f172a'} stopOpacity={isDark ? 0.12 : 0.08} />
+              <stop offset="100%" stopColor={isDark ? '#38bdf8' : '#0f172a'} stopOpacity={0.0} />
             </linearGradient>
             <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.05" />
@@ -226,14 +229,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke="#f1f5f9"
+                  stroke={isDark ? '#1e293b' : '#f1f5f9'}
                   strokeWidth="1"
                 />
                 <text
                   x={padding.left - 8}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[10px] fill-slate-400 font-mono-code"
+                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
                 >
                   ${val.toLocaleString()}
                 </text>
@@ -248,16 +251,16 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           <path
             d={grossPath}
             fill="none"
-            stroke="#94a3b8"
+            stroke={isDark ? '#64748b' : '#94a3b8'}
             strokeWidth="1.25"
             strokeDasharray="3 3"
           />
 
-          {/* Net Equity Line (Solid Charcoal) */}
+          {/* Net Equity Line (High-contrast charcoal in light, crisp slate-50 in dark) */}
           <path
             d={netPath}
             fill="none"
-            stroke="#0f172a"
+            stroke={isDark ? '#f8fafc' : '#0f172a'}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -269,7 +272,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
             y1={padding.top + equityHeight + 20}
             x2={width - padding.right}
             y2={padding.top + equityHeight + 20}
-            stroke="#e2e8f0"
+            stroke={isDark ? '#1e293b' : '#e2e8f0'}
             strokeWidth="1"
           />
 
@@ -277,7 +280,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           <text
             x={padding.left}
             y={padding.top + equityHeight + 30}
-            className="text-[10px] font-mono-code fill-slate-500 font-medium"
+            className="text-[10px] font-mono-code fill-slate-500 dark:fill-slate-400 font-medium"
           >
             Drawdown (%)
           </text>
@@ -293,14 +296,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke="#f8fafc"
+                  stroke={isDark ? '#1e293b' : '#f8fafc'}
                   strokeWidth="1"
                 />
                 <text
                   x={padding.left - 8}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[10px] fill-slate-400 font-mono-code"
+                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
                 >
                   {val}%
                 </text>
@@ -332,7 +335,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                 x={x}
                 y={y}
                 textAnchor="middle"
-                className="text-[10px] fill-slate-400 font-mono-code"
+                className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
               >
                 {d.date.slice(5)}
               </text>
@@ -347,7 +350,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                 y1={padding.top}
                 x2={hoverX}
                 y2={padding.top + equityHeight + 35 + drawdownHeight}
-                stroke="#64748b"
+                stroke={isDark ? '#475569' : '#64748b'}
                 strokeWidth="1"
                 strokeDasharray="2 2"
               />
@@ -357,8 +360,8 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                     cx={hoverX}
                     cy={getEquityY(hoveredPoint.netEquity)}
                     r="3.5"
-                    fill="#0f172a"
-                    stroke="#ffffff"
+                    fill={isDark ? '#f8fafc' : '#0f172a'}
+                    stroke={isDark ? '#0f172a' : '#ffffff'}
                     strokeWidth="1.5"
                   />
                   <circle
@@ -374,7 +377,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                     }
                     r="3"
                     fill="#f43f5e"
-                    stroke="#ffffff"
+                    stroke={isDark ? '#0f172a' : '#ffffff'}
                     strokeWidth="1.5"
                   />
                 </>

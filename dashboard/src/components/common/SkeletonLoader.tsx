@@ -10,7 +10,7 @@ export const SkeletonLoader: React.FC<{ rows?: number; height?: string; classNam
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className={`bg-slate-200 rounded ${height}`}
+          className={`bg-slate-200 dark:bg-slate-800 rounded ${height}`}
           style={{ opacity: 1 - i * (0.6 / rows) }}
         />
       ))}
