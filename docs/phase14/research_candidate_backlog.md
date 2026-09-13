@@ -131,8 +131,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Known Confounders:** Long-term upward crypto beta (2015–2025 structural drift); single-regime bull market dominance; lookback parameter selection bias.
 - **Likely Failure Modes:** Severe whipsaws during prolonged sideways/choppy regimes; failure to overcome taker fees during false volatility breakouts.
 - **Regimes Where It Might Fail:** Extended range-bound consolidation; low-liquidity summer doldrums; sudden central bank liquidity reversals.
-- **Pre-Empirical Falsification Concept:** If post-breakout forward returns exhibit zero positive autocorrelation relative to an unconditioned drift baseline across rolling 6-month windows, reject the mechanism.
-- **Required Controls:** Unconditioned simple trend baseline; buy-and-hold benchmark; volatility-regime split; transaction fee stress test.
+- **Pre-Empirical Falsification Concept (Illustrative, Not Frozen):** Examine whether post-breakout forward returns exhibit positive autocorrelation relative to an unconditioned drift baseline across rolling historical windows (e.g. illustrative 6-month windows).
+- **Required Controls (Illustrative):** Unconditioned simple trend baseline; buy-and-hold benchmark; volatility-regime split; transaction fee stress test.
 - **Dependencies:** Qualified historical crypto dataset (`DS-CRYPTO-BTC-M1`).
 - **Governance State:** `UNRATIFIED_BACKLOG`
 - **Human Decisions Needed:** Minimum holding period definition; venue authority selection.
@@ -160,8 +160,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Known Confounders:** Apparent reversion in mid-price that cannot be captured after accounting for bid-ask spread; survivorship of trades that did not blow up.
 - **Likely Failure Modes:** Consecutive trend extensions causing catastrophic drawdown; friction consumes entire gross statistical edge.
 - **Regimes Where It Might Fail:** Strong macro trend regimes; systemic credit events (e.g., FTX/Luna-style collapse cascades).
-- **Pre-Empirical Falsification Concept:** If gross returns fail to cover 2x conservative round-turn fee + spread friction, or if conditional mean reversion vanishes when excluding overnight/weekend hours, reject immediately.
-- **Required Controls:** Baseline unconditioned fade; execution lag model (at least 1 bar delay); realistic taker fee and slippage stress tiers.
+- **Pre-Empirical Falsification Concept (Illustrative, Not Frozen):** Examine whether gross dislocation returns exceed conservative round-turn fee and spread friction buffers, or if conditional mean reversion vanishes when excluding overnight/weekend periods.
+- **Required Controls (Illustrative):** Baseline unconditioned fade; execution lag model (e.g. illustrative 1-bar execution delay); realistic taker fee and slippage stress tiers.
 - **Dependencies:** Qualified high-resolution data foundation with verified execution assumptions.
 - **Governance State:** `UNRATIFIED_BACKLOG`
 - **Human Decisions Needed:** Minimum dislocation threshold standard; stop-loss boundary governance.
@@ -425,17 +425,17 @@ TIER 3 (Advanced / Data-Intensive & Complex Flow Queue)
 
 ---
 
-## 7. Baseline-First Complexity Ladder
+## 7. Proposed Baseline-First Planning Framework (Non-Canonical)
 
-A core doctrine of ACASH research is that **complexity must earn its admission**:
+A core research planning heuristic of ACASH is that **complexity should demonstrate incremental value over simpler baselines**:
 
-| Candidate Family | Mandatory Benchmark Baseline | Requirement for Complexity Admission |
+| Candidate Family | Candidate Baseline (Illustrative) | Assessment Question (Exploratory / Non-Canonical) |
 | :--- | :--- | :--- |
-| **Regime-Conditioned Model** | Identical unconditioned baseline model (e.g. plain SMA or raw momentum). | Must prove statistically significant increase in DSR and lower MaxDD after complexity penalty. |
-| **Multi-Horizon Model** | Standalone single-horizon baseline model. | Must prove incremental information value beyond the single dominant horizon. |
-| **Cross-Sectional Model** | Naive equal-weight universe portfolio / simple median-split benchmark. | Must demonstrate net outperformance after accounting for rebalancing turnover drag. |
-| **Intraday Session Model** | 24-hour unconditioned baseline / random-entry timing benchmark. | Must prove opening 30-minute window yields higher Sharpe net of opening spread widening. |
-| **Directional Alpha Model** | Passive Buy-and-Hold / Cash Risk-Free rate ($0.00$). | Must outperform cash after all transaction costs, slippage, and drawdown stress. |
+| **Regime-Conditioned Model** | Identical unconditioned baseline model (e.g. plain SMA or raw momentum). | Does adding the regime condition yield demonstrable risk-adjusted improvement over the unconditioned baseline after penalizing for complexity? |
+| **Multi-Horizon Model** | Standalone single-horizon baseline model. | Does multi-horizon agreement contain genuine incremental information beyond the strongest single-horizon baseline? |
+| **Cross-Sectional Model** | Naive equal-weight universe portfolio / simple median-split benchmark. | Does relative strength ranking generate positive spread after accounting for turnover and rebalancing drag? |
+| **Intraday Session Model** | Unconditioned session baseline / random-entry timing benchmark. | Does trading the session open window provide statistical advantage over full-session exposure after accounting for opening spread widening? |
+| **Directional Alpha Model** | Passive Buy-and-Hold / Cash Risk-Free rate ($0.00$). | Does the directional model produce risk-adjusted excess return over passive cash/holding benchmarks net of all friction? |
 
 ---
 
@@ -457,7 +457,7 @@ When research candidates are eventually authorized and tested, exploratory empir
 
 ## 9. Data Dependency Matrix
 
-| Candidate ID | Target Market | Timeframe | OHLCV | Bid/Ask | Tick Trades | Order Book | Macro / Yields | Corporate Actions | Futures Rolls | Funding Rates | Calendar Sched. | Target Coverage |
+| Candidate ID | Target Market | Timeframe | OHLCV | Bid/Ask | Tick Trades | Order Book | Macro / Yields | Corporate Actions | Futures Rolls | Funding Rates | Calendar Sched. | Target Coverage (Illustrative, Not Frozen) |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **RQ-BACKLOG-001** | `BTC` | H1/H4 | **REQUIRED** | OPTIONAL | NOT_REQ | NOT_REQ | NOT_REQ | NOT_REQ | NOT_REQ | OPTIONAL | NOT_REQ | 2 to 4 Years |
 | **RQ-BACKLOG-002** | `BTC` | M1/M5 | **REQUIRED** | **REQUIRED** | OPTIONAL | NOT_REQ | NOT_REQ | NOT_REQ | NOT_REQ | NOT_REQ | NOT_REQ | 1 to 2 Years |

@@ -198,9 +198,10 @@ Candidate strategies should be evaluated across multiple pre-declared friction t
 > [!NOTE]
 > **RESEARCH PRINCIPLE:** Candidate strategies should demonstrate resilience across increasing friction tiers. Specific cost multipliers, spread distributions, and survival criteria must be pre-declared per hypothesis rather than imposed as a universal project-wide threshold.
 
-### 7.3 Execution Realism Models
-- **Bar-Close vs. Next-Bar Execution:** Signals generated at the close of Bar $t$ must execute at the Open of Bar $t+1$ ($\text{price} = \text{open}_{t+1}$ plus spread/slippage). Zero-lag bar-close execution ($\text{price} = \text{close}_t$) is prohibited unless justified by high-frequency limit order simulation.
-- **Resolution Limit:** Tick-level precision or intra-bar limit order fills cannot be claimed when testing against M1 or M5 OHLC bar data. If intra-bar execution is required, conservative assumptions must be applied (e.g. buying at bar High, selling at bar Low for adverse bounding).
+### 7.3 Execution Realism & Causal Modeling Principles
+- **Causal & Point-in-Time Discipline:** Execution assumptions must be strictly causal, point-in-time, and pre-declared. Canonical Phase 5 backtesting substrate natively supports structured execution configurations (`SimulationLatencyConfig`, order types `LIMIT`/`MARKET`/`IOC`/`FOK`/`GTC`, `FeeModelConfig`, and `SlippageModelConfig` in `src/acash/backtest/schema.py`).
+- **Illustrative Conservative Modeling:** For coarse or bar-aggregated strategies, next-bar open execution ($\text{price} = \text{open}_{t+1}$ plus spread/slippage) represents a common conservative baseline model. Other valid causal execution models (such as modeled order transit delays or limit queues) may be utilized provided they are pre-declared and compatible with the data frequency.
+- **Resolution Compatibility:** Execution precision cannot exceed underlying data fidelity. Tick-level queue priority or sub-bar fills must not be claimed when evaluating coarse OHLC bar series without explicit conservative bounding assumptions.
 
 ---
 
@@ -235,7 +236,7 @@ $$\text{Raw Bar Count } (T) \neq \text{Independent Effective Observations } (T_{
 
 ### 9.1 Serial Dependence & Autocorrelation
 - High-frequency bars (M1/M5) exhibit severe autocorrelation and volatility clustering. Treating $1,000,000$ M1 bars as $1,000,000$ independent IID samples is mathematically fraudulent.
-- Effective sample size must be adjusted for serial correlation using canonical Newey-West long-run variance and effective degrees of freedom formulations.
+- Serial dependence must be accounted for using the canonical statistical method applicable to the registered trial; raw bars must not be treated as IID.
 
 ### 9.2 Non-Binding Trade Count Planning Heuristics
 While canonical acceptance is governed strictly by Minimum Track Record Length ($\text{MinTRL}$) and statistical significance, the following non-binding sample heuristics guide pre-empirical feasibility:
@@ -353,9 +354,9 @@ Before any empirical backtest code is executed, the researcher must verify and s
 - [ ] 5. Instrument universe, timeframe, and calendar normalization are frozen.
 - [ ] 6. Train, Validation, and Untouched OOS partition dates are sealed.
 - [ ] 7. Information barrier and purging/embargo rules are configured for time-series isolation.
-- [ ] 8. Mandatory benchmark baselines (Cash, Buy-and-Hold, Simple Trend) are defined.
-- [ ] 9. Base, Conservative, and Stress cost tiers are explicitly configured.
-- [ ] 10. Parameter search space bounds, step sizes, and search budget ($K_{\max}$) are frozen.
+- [ ] 8. Hypothesis-appropriate benchmark baseline(s) are frozen.
+- [ ] 9. Friction and cost/slippage evaluation design is frozen.
+- [ ] 10. Declared parameter search space and search-budget bounds are frozen (noting that search budget is an exploratory parameter limit, not a canonical K definition).
 - [ ] 11. Canonical Phase 6 multiple-testing integration (SearchTrialLedger) is acknowledged.
 - [ ] 12. Component ablation testing plan is documented.
 - [ ] 13. Pre-empirical falsification and stopping criteria are sealed.

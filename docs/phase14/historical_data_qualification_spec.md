@@ -27,7 +27,7 @@
 
 The objective of this specification is to define the architectural foundation, metadata schema, data lifecycle, quality verification tests, and version-freeze protocols required for historical market data in ACASH before empirical quantitative research commences.
 
-Moving from operational infrastructure verification (such as G7) into empirical hypothesis testing requires clean, stationary, time-consistent, and auditable historical data. Without an authoritative data qualification standard, quantitative research is vulnerable to:
+Moving from operational infrastructure verification (such as G7) into empirical hypothesis testing requires clean, well-characterized, time-consistent, and auditable historical data (with stationarity or non-stationarity evaluated downstream per series, transformation, and hypothesis rather than as a qualification gate). Without an authoritative data qualification standard, quantitative research is vulnerable to:
 1. Silent survivorship bias, look-ahead bias, and corporate action leakage.
 2. Inconsistent timezone alignments and artificial weekend/holiday gap artifacts.
 3. Unverified volume definitions (e.g., tick count masquerading as traded contract volume).
@@ -401,18 +401,18 @@ EMPIRICAL RESEARCH RUN
 
 ## 12. Storage & Hardware Architecture Planning (Homelab Context)
 
-The ACASH homelab operates under constrained compute and RAM resources (e.g., Raspberry Pi / micro-server tier). Loading multi-year M1 bar data across multiple assets into memory is strictly prohibited.
+The ACASH homelab operates in a resource-constrained environment. Loading multi-year M1 bar data across multiple assets simultaneously into memory should be avoided in favor of streaming, chunked, or partitioned access.
 
 ### 12.1 Format Evaluation: Parquet vs. DuckDB (Proposal)
 
 | Evaluation Dimension | Apache Parquet (Storage) | DuckDB (Analytical Engine) |
 | :--- | :--- | :--- |
 | **Storage Paradigm** | Columnar binary format with snappy/zstd compression. | In-process vectorized analytical SQL / OLAP database. |
-| **Compression Ratio** | High (typically 80–90% reduction vs. raw CSV). | High; supports direct zero-copy querying of Parquet files. |
-| **Memory Footprint** | Extremely low when scanned in row-groups or partitions. | Low RAM overhead; operates out-of-core with spill-to-disk. |
+| **Compression Ratio** | High (illustrative: substantial storage footprint reduction vs. raw CSV). | High; supports direct zero-copy querying of Parquet files. |
+| **Memory Footprint** | Low when scanned in row-groups or partitions. | Low RAM overhead; operates out-of-core with spill-to-disk. |
 | **Predicate Pushdown** | Supported natively (filters on timestamp/symbol read only required pages). | Executes vectorized SQL queries directly over partitioned Parquet files. |
 | **Operational Overhead** | Zero daemon processes; pure static filesystem files. | Embedded engine (library import); zero background services. |
-| **Recommendation** | **PROPOSED CANONICAL STORAGE FORMAT** | **PROPOSED CANONICAL QUERY ENGINE** |
+| **Recommendation** | **CANDIDATE STORAGE FORMAT (NON-CANONICAL PROPOSAL)** | **CANDIDATE QUERY ENGINE (NON-CANONICAL PROPOSAL)** |
 
 ### 12.2 Partitioning & Storage Strategy (Proposal)
 - **Directory Structure:**
@@ -431,7 +431,7 @@ The ACASH homelab operates under constrained compute and RAM resources (e.g., Ra
                         ├── year=2024/part-0.parquet
                         └── year=2025/part-0.parquet
   ```
-- **Chunking & Row-Group Sizing:** Partition by `year` or `year-month` to ensure individual Parquet files remain between 20MB and 100MB, allowing rapid scans on low-RAM hardware without out-of-memory crashes.
+- **Chunking & Row-Group Sizing:** Partition by `year` or `year-month` to ensure individual Parquet files remain manageably sized (e.g. illustrative planning target of ~20–100MB partitions), facilitating scans on resource-constrained hardware.
 
 ---
 
