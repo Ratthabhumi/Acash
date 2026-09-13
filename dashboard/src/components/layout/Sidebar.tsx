@@ -7,10 +7,11 @@ import {
   Database, 
   Lock, 
   Layers,
-  X
+  X,
+  Swords
 } from 'lucide-react';
 
-export type DashboardTab = 'overview' | 'trades' | 'evidence' | 'validation';
+export type DashboardTab = 'overview' | 'trades' | 'evidence' | 'validation' | 'shadow';
 
 interface SidebarProps {
   currentTab: DashboardTab;
@@ -55,6 +56,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ShieldCheck,
       badge: 'Gated',
       description: 'Statistical criteria & blind OOS',
+    },
+    {
+      id: 'shadow' as DashboardTab,
+      label: 'Shadow Tournament',
+      icon: Swords,
+      badge: 'SIMULATED',
+      description: 'Shadow alpha tournament — read-only',
     },
   ];
 

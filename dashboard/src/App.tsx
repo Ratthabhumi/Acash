@@ -7,6 +7,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { TradesPage } from './pages/TradesPage';
 import { EvidencePage } from './pages/EvidencePage';
 import { ValidationPage } from './pages/ValidationPage';
+import { ShadowTournamentPage } from './pages/ShadowTournamentPage';
 import { SkeletonLoader } from './components/common/SkeletonLoader';
 import { ThemeProvider } from './context/ThemeContext';
 
@@ -87,6 +88,10 @@ export const App: React.FC = () => {
 
         {currentTab === 'validation' && (
           <ValidationPage researchRun={researchRun} />
+        )}
+
+        {currentTab === 'shadow' && (
+          <ShadowTournamentPage />
         )}
       </AppShell>
     </ThemeProvider>
