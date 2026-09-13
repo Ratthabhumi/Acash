@@ -56,7 +56,7 @@ The data layer must remain strictly decoupled from strategy execution engines, o
 
 ## 3. Proposed Research Data Domains
 
-In accordance with [asset_market_agnostic_research_direction.md](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/architecture/asset_market_agnostic_research_direction.md), ACASH research architectures are designed to be cross-asset and market-agnostic. The domains below represent prospective data domains for future research ingestion.
+In accordance with [asset_market_agnostic_research_direction.md](../architecture/asset_market_agnostic_research_direction.md), ACASH research architectures are designed to be cross-asset and market-agnostic. The domains below represent prospective data domains for future research ingestion.
 
 > [!IMPORTANT]
 > **CLASSIFICATION:** Every asset below is classified strictly as a **PROPOSED RESEARCH DATA DOMAIN**, NOT an approved trading universe.
@@ -193,9 +193,9 @@ QUALIFICATION CHECKS (Automated Anomaly & Structural Verification Battery)
 
 ---
 
-## 7. Canonical OHLCV Schema Requirements
+## 7. Proposed Research Normalized Bar Contract (Non-Canonical)
 
-All normalized historical bar series must strictly conform to the following foundational schema:
+All normalized historical bar series evaluated under this non-governing specification are expected to conform to the following proposed research schema:
 
 | Field Name | Type | Constraints / Invariants | Required? |
 | :--- | :--- | :--- | :--- |
@@ -206,12 +206,12 @@ All normalized historical bar series must strictly conform to the following foun
 | `high` | `FLOAT64` | Finite, $\ge \max(\text{open}, \text{close})$, $\ge \text{low}$. | **YES** |
 | `low` | `FLOAT64` | Finite, $\le \min(\text{open}, \text{close})$, $> 0.0$. | **YES** |
 | `close` | `FLOAT64` | Finite, non-negative, $\in [\text{low}, \text{high}]$. | **YES** |
-| `volume` | `FLOAT64` | Finite, $\ge 0.0$. If volume is economically meaningless, set to `0.0` and flag metadata. | **YES** |
+| `volume` | `FLOAT64` or `NULL` | Optional finite value $\ge 0.0$. If the vendor feed does not supply volume, it must remain `NULL` (unavailable) matching `FeedBar` doctrine. It must **never** be fabricated as `0.0`. True zero volume must be strictly distinguished from unavailable volume. | **CONDITIONAL** |
 | `source_id` | `STRING` | Identifier of the vendor/origin data feed. | **YES** |
 | `flags` | `UINT32` | Bitmask capturing qualification anomalies, auction bars, or vendor warning flags. | **YES** |
 
 > [!CAUTION]
-> **VOLUME DISCIPLINE:** In markets lacking centralized exchange volume (such as Spot FX), tick volume must **never** be silently cast or relabeled as true contract volume. If tick volume is used, `volume_semantics` must explicitly be tagged `"TICK_VOLUME"`.
+> **VOLUME DISCIPLINE & UNAVAILABLE SEMANTICS:** In alignment with canonical `FeedBar` invariants (`src/acash/paper/feed.py`), fields not supplied by a data provider are recorded as unavailable (`None`/`NULL`) and must never be fabricated. In markets lacking centralized exchange volume (such as Spot FX), tick volume must **never** be silently cast or relabeled as true contract volume. If tick volume is used, `volume_semantics` must explicitly be tagged `"TICK_VOLUME"`.
 
 ---
 
@@ -448,18 +448,18 @@ The historical data pipeline enforces the project-wide **Fail-Closed Contract** 
 
 ## 14. Open Decisions Register (Data Foundation)
 
-The following decisions require explicit human authorization before implementation:
+The following decisions represent unresolved open surfaces requiring human research prioritization or ratification prior to empirical ingestion. All listed candidate options are **illustrative and non-exhaustive**:
 
-| Decision ID | Decision Description | Rationale | Candidate Options | Status | Human Ratification Required? |
+| Decision ID | Decision Description | Rationale | Candidate Options (Illustrative, Non-Exhaustive) | Status | Human Ratification Required? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **DATA-DEC-001** | Initial BTC Historical Market Data Provider | Select authoritative primary source for historical BTC M1 research data. | Binance Public Archives, DoltHub, Kraken Public API, Commercial Vendor. | **UNRESOLVED** | **YES** |
-| **DATA-DEC-002** | Target Historical Coverage Span for Crypto | Define minimum historical research span for initial exploratory studies. | 1 Year vs. 2 Years vs. 4 Years. | **UNRESOLVED** | **YES** |
-| **DATA-DEC-003** | Parquet Partitioning & Compression Standard | Ratify exact compression algorithm and directory partitioning schema. | Snappy vs. ZSTD; Year vs. Year-Month partitions. | **UNRESOLVED** | **YES** |
+| **DATA-DEC-002** | Target Historical Coverage Span for Crypto | Define planning research span for initial exploratory studies. | 1 Year vs. 2 Years vs. 4 Years. | **UNRESOLVED** | **YES** |
+| **DATA-DEC-003** | Parquet Partitioning & Compression Standard | Evaluate compression algorithm and directory partitioning schema. | Snappy vs. ZSTD; Year vs. Year-Month partitions. | **UNRESOLVED** | **YES** |
 | **DATA-DEC-004** | Historical Data Retention & Storage Policy | Define retention tiers across hot, warm, and cold storage on homelab. | Keep all raw archives on homelab vs. external NAS / object storage. | **UNRESOLVED** | **YES** |
 | **DATA-DEC-005** | FX Reference Data Provider Authority | Select reference data source for EURUSD tick/M1 data. | TrueFX, Dukascopy, Interactive Brokers, HistData. | **UNRESOLVED** | **YES** |
 | **DATA-DEC-006** | Equity Index Futures (`ES`) Data Authority | Determine commercial licensing vs. proxy data source for continuous ES. | Licensed CME data, Interactive Brokers historical API, ETF proxy (`SPY`). | **UNRESOLVED** | **YES** |
-| **DATA-DEC-007** | Gold (`XAU`) Pricing Representation | Ratify research proxy for gold. | Spot XAUUSD (OTC), COMEX Gold Futures (`GC`), ETF proxy (`GLD`). | **UNRESOLVED** | **YES** |
-| **DATA-DEC-008** | Continuous Futures Roll & Adjustment Authority | Ratify default roll methodology for futures research. | Volume rollover with Panama difference adjustment vs. Ratio adjustment. | **UNRESOLVED** | **YES** |
+| **DATA-DEC-007** | Gold (`XAU`) Pricing Representation | Identify research proxy for gold. | Spot XAUUSD (OTC), COMEX Gold Futures (`GC`), ETF proxy (`GLD`). | **UNRESOLVED** | **YES** |
+| **DATA-DEC-008** | Continuous Futures Roll & Adjustment Policy | Define roll and adjustment policy per instrument and provider rather than as a single universal default, reflecting contract differences. | Volume rollover with Panama difference adjustment, Open interest rollover, Ratio adjustment, Unadjusted stitched. | **UNRESOLVED** | **YES** |
 
 ---
 

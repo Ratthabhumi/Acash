@@ -159,21 +159,21 @@ Fold 3:             [--- Train 3 ---][ Test 3 ]
 ### 5.1 Protocol Invariants
 1. **Mechanism Justification:** The choice between Expanding Window (accumulating all structural history) and Rolling Window (adapting to regime shifts by discarding stale history) must be justified economically by the strategy mechanism *prior* to testing.
 2. **Anti-Cherry-Picking Invariant:** Walk-forward analysis is **not** an opportunity to adjust retraining frequencies or window lengths until every fold passes. The retrain interval and window parameters must be pre-declared.
-3. **Consolidated Ledger Accounting:** All optimization iterations executed across all walk-forward folds must be aggregated into the canonical trial count ($K_{\text{total}} = \sum K_{\text{fold}}$).
+3. **Canonical Trial Census Accounting:** Walk-forward modeling must strictly adhere to canonical Phase 6 / D6 `SearchTrialLedger` semantics. Exact trial identity, fold representation, grouping, and $K$ evaluation defer exclusively to canonical governance and the sealed ledger. This non-governing protocol creates zero independent formulas for summing or scaling $K$.
 
 ---
 
-## 6. Mandatory Benchmark Baselines (The Complexity Ladder)
+## 6. Proposed Benchmark Baseline Framework (Illustrative Complexity Ladder)
 
-A strategy cannot claim alpha in a vacuum. Every empirical backtest must be evaluated alongside mandatory benchmark baselines:
+A strategy cannot claim alpha in a vacuum. Empirical evaluations should be compared alongside appropriate benchmark baselines:
 
-| Strategy Family | Required Benchmark Baselines | Hurdle Criteria |
+| Strategy Family | Candidate Benchmark Baselines (Illustrative) | Exploratory Assessment Concept |
 | :--- | :--- | :--- |
-| **Directional Crypto / Equity** | 1. Cash / Risk-Free ($0.00$ return).<br>2. Buy-and-Hold asset benchmark.<br>3. Simple Moving Average (SMA) baseline. | Must achieve higher Sharpe and lower MaxDD than Buy-and-Hold net of costs; must demonstrate statistically significant information gain over plain SMA. |
-| **Regime-Conditioned Model** | 1. Unconditioned identical baseline model.<br>2. Passive cash benchmark. | Must prove that adding the regime filter significantly improves OOS Sharpe and MinTRL over the unconditioned baseline. |
-| **Mean Reversion / Dislocation** | 1. Random-entry null model.<br>2. Unconditioned counter-trend baseline. | Must demonstrate that timing conditional on dislocation outperforms random-entry timing net of spread/friction. |
-| **Cross-Sectional Momentum** | 1. Naive Equal-Weight universe portfolio.<br>2. Market-Cap Weighted universe benchmark. | Must outperform equal-weight allocation after accounting for turnover drag. |
-| **Multi-Horizon Model** | 1. Standalone single-horizon baseline models. | Must demonstrate incremental information gain over the best individual horizon after parameter penalization. |
+| **Directional Crypto / Equity** | 1. Cash / Risk-Free ($0.00$ return).<br>2. Buy-and-Hold asset benchmark.<br>3. Simple Moving Average (SMA) baseline. | Examine whether candidate achieves risk-adjusted excess return over passive benchmarks net of costs; assess information gain over plain SMA. |
+| **Regime-Conditioned Model** | 1. Unconditioned identical baseline model.<br>2. Passive cash benchmark. | Examine whether adding the regime filter improves out-of-sample risk-adjusted metrics over the unconditioned baseline. |
+| **Mean Reversion / Dislocation** | 1. Random-entry null model.<br>2. Unconditioned counter-trend baseline. | Examine whether timing conditional on dislocation outperforms random-entry timing net of spread/friction. |
+| **Cross-Sectional Momentum** | 1. Naive Equal-Weight universe portfolio.<br>2. Market-Cap Weighted universe benchmark. | Examine whether relative strength ranking outperforms equal-weight allocation after accounting for turnover drag. |
+| **Multi-Horizon Model** | 1. Standalone single-horizon baseline models. | Examine whether multi-horizon agreement adds incremental value beyond the single strongest standalone horizon. |
 
 ---
 
@@ -186,17 +186,17 @@ Every simulation run must independently report:
 $$\text{Gross Return Series } \{R_{\text{gross}, t}\} \quad \text{and} \quad \text{Net Return Series } \{R_{\text{net}, t}\}$$
 $$\Delta_{\text{friction}} = \text{Annualized Sharpe}_{\text{gross}} - \text{Annualized Sharpe}_{\text{net}}$$
 
-### 7.2 Mandatory Three-Tier Cost Stress Battery
-Every candidate strategy must be evaluated across three pre-declared friction tiers:
+### 7.2 Proposed Three-Tier Cost Stress Framework (Illustrative)
+Candidate strategies should be evaluated across multiple pre-declared friction tiers. Specific fee, spread, and slippage values must be declared per hypothesis rather than imposed as global constants:
 
-| Cost Tier | Exchange Fee Assumption | Spread Assumption | Slippage Assumption | Assessment Role |
+| Cost Tier | Fee Component (Illustrative) | Spread Component (Illustrative) | Slippage Component (Illustrative) | Assessment Role |
 | :--- | :--- | :--- | :--- | :--- |
-| **Base Cost Tier** | Published VIP-0 / Retail taker fee (e.g. 5–10 bps). | Historical median bid-ask spread. | 1 tick adverse execution. | Realistic expected baseline friction. |
-| **Conservative Tier** | Retail taker fee + 25% buffer. | 75th percentile historical spread. | 2 ticks adverse execution. | Buffer against deteriorating market liquidity. |
-| **Stress Cost Tier** | 2.0x Base taker fee. | 95th percentile historical spread (high-volatility regime spread). | 3–5 ticks adverse slippage / queue penalty. | Evaluates strategy survival during flash crashes and liquidity vacuums. |
+| **Base Cost Tier** | Published retail/VIP taker fee schedule. | Historical median bid-ask spread. | Baseline 1-tick execution model. | Expected baseline friction. |
+| **Conservative Tier** | Retail taker fee with conservative buffer. | Upper-quartile (e.g. 75th percentile) spread. | Multi-tick adverse execution buffer. | Buffer against deteriorating market liquidity. |
+| **Stress Cost Tier** | Elevated taker fee stress multiplier. | High-volatility / crisis spread percentile. | Extended queue penalty / adverse impact. | Evaluates strategy survival during liquidity shocks. |
 
-> [!CAUTION]
-> **SURVIVAL HURDLE:** A candidate strategy that achieves positive net Sharpe under Base Cost but collapses to negative Sharpe or catastrophic drawdown under the Conservative Tier is classified as **`FAILED_UNDER_COSTS`** and blocked from qualification.
+> [!NOTE]
+> **RESEARCH PRINCIPLE:** Candidate strategies should demonstrate resilience across increasing friction tiers. Specific cost multipliers, spread distributions, and survival criteria must be pre-declared per hypothesis rather than imposed as a universal project-wide threshold.
 
 ### 7.3 Execution Realism Models
 - **Bar-Close vs. Next-Bar Execution:** Signals generated at the close of Bar $t$ must execute at the Open of Bar $t+1$ ($\text{price} = \text{open}_{t+1}$ plus spread/slippage). Zero-lag bar-close execution ($\text{price} = \text{close}_t$) is prohibited unless justified by high-frequency limit order simulation.
@@ -216,10 +216,14 @@ Before running optimization sweeps, the research manifest must record:
 - Optimization algorithm (Grid search, Random search, Bayesian optimization).
 - Objective function (e.g. in-sample Sharpe ratio, Calmar ratio).
 
-### 8.2 Canonical Alignment with SearchTrialLedger
-- **Zero Discarded Trials:** Every evaluated parameter configuration constitutes a trial. A researcher must never discard losing trials from the ledger.
-- **Trial Census:** The total trial count $K$ is authoritatively registered in `SearchTrialLedger`.
-- **DSR Calculation:** Canonical Phase 6 `DeflatedSharpe` utilizes the total trial count $K$, sample variance of candidate trials $\mathbb{V}[\text{SR}_k]$, return skewness, and kurtosis to compute the multiple-testing adjusted $p$-value.
+### 8.2 Canonical Alignment with SearchTrialLedger & D6 Governance
+- **Sole Canonical Authority:** Exact trial definition, trial grouping, census membership, and multiple-testing $K$ consumption MUST defer exclusively to canonical Phase 6 / D6 `SearchTrialLedger` semantics (`docs/phase14/phase14_d5_d6_ratification_record.md`). This non-governing protocol has zero authority to define an alternative trial-counting formula, grouping mechanism, or $K$ rule.
+- **Ratified D6 Invariants:**
+  - The trial census is pre-registered before blind evaluation begins.
+  - $K$ is frozen before evaluation and never shrinks.
+  - Every registered trial remains represented in the census with status `EXECUTED_SUCCESSFULLY`, `FAILED`, or `INVALID`.
+  - Failed or crashed trials are never silently discarded, zero-filled, or replaced.
+- **Canonical DSR Integration:** Downstream statistical accounting (`DeflatedSharpe`, `PBO`, `MinTRL`, `HaircutSharpe`) operates strictly over the frozen registered census in accordance with canonical Phase 6 mathematical engines.
 
 ---
 
@@ -263,40 +267,39 @@ Robust Surface (Desirable):        Overfitted Spike (Disqualified):
 ```
 
 ### 10.1 Parameter Stability Verification
-- **Surface Smoothness:** Evaluate strategy performance across a $\pm 20\%$ perturbation grid around chosen parameters.
-- **Cliff-Edge Detection:** If a $10\%$ shift in lookback period or threshold causes Sharpe to collapse by $> 50\%$ or swing from positive to negative, the strategy is flagged as **`FAILED_PARAMETER_STABILITY`**.
-- **Sign Stability:** Returns must remain positive across the majority of neighboring parameter sets.
+- **Surface Smoothness:** Evaluate strategy performance across a perturbation grid around chosen parameters.
+- **Cliff-Edge Detection:** Examine sensitivity to small parameter shifts (e.g. abrupt collapse of performance under neighboring parameters). Specific acceptable degradation limits should be pre-declared per hypothesis rather than established as a universal gate.
+- **Sign Stability:** Examine whether directional returns remain qualitatively consistent across neighboring parameter regions.
 
 ### 10.2 Component Ablation Testing
 For multi-factor, multi-timeframe, or regime-conditioned strategies:
-- Systematically remove each individual component or filter.
-- Re-evaluate performance of the ablated sub-model.
-- **Hurdle:** Each component must demonstrate statistically significant incremental contribution to the strategy's risk-adjusted returns. If removing a complex filter produces no material change in OOS performance, the filter must be pruned.
+- Systematically evaluate sub-models with individual components or filters omitted.
+- Examine whether each added component provides incremental risk-adjusted benefit over simpler ablated forms.
 
 ### 10.3 Cross-Regime Stress Battery
-Strategies must be evaluated independently across partitioned macroeconomic environments:
-1. **Bull Regime:** Sustained upward market trend.
-2. **Bear Regime:** Sustained downward market trend.
-3. **Sideways / Range-Bound:** High mean reversion, low directional drift.
-4. **High-Volatility Regime:** Top 20th percentile volatility environment.
-5. **Low-Volatility Regime:** Bottom 20th percentile volatility environment.
-6. **Liquidity Stress Events:** Historical market flash crashes and crisis days.
+Strategies should be examined across diverse historical macroeconomic environments where data permits:
+1. **Bull Regime:** Upward market trend.
+2. **Bear Regime:** Downward market trend.
+3. **Sideways / Range-Bound:** Mean-reverting, low directional drift environment.
+4. **Elevated Volatility Regime:** Stressed volatility environment.
+5. **Low-Volatility Regime:** Compressed volatility environment.
+6. **Liquidity Stress Events:** Historical market dislocations.
+*(Regime classification boundaries must be pre-declared rather than fitted post-hoc).*
 
 ---
 
-## 11. Pre-Empirical Failure Taxonomy & Stopping Rules
+## 11. Proposed Descriptive Failure Labels (Non-Canonical Research Vocabulary)
 
-ACASH treats empirical research failure as valuable scientific knowledge. Experiments that fail must be cataloged according to the authoritative failure taxonomy:
+When experiments fail during research exploration, the following proposed descriptive labels provide non-canonical research vocabulary for post-mortem analysis. These labels do NOT supersede or replace canonical Phase 6 validation gate verdicts (`ValidationGateVerdict`: `REJECT_OVERFIT_DSR`, `REJECT_HIGH_PBO`, `REJECT_PARAMETER_FRAGILE`, `REJECT_INSUFFICIENT_TRL`, `REJECT_FRICTION_COLLAPSE`, `REJECT_OOS_DEGRADATION`, etc.) or D6 census statuses (`SearchTrialStatus`: `EXECUTED_SUCCESSFULLY`, `FAILED`, `INVALID`):
 
-### 11.1 Authoritative Failure Codes
 1. **`FAILED_IN_SAMPLE`:** Strategy cannot achieve statistical significance or required baseline outperformance in-sample.
 2. **`FAILED_VALIDATION`:** Model family selection collapses during validation fold analysis.
 3. **`FAILED_OOS`:** Strategy fails to maintain positive risk-adjusted returns on the untouched out-of-sample partition.
 4. **`FAILED_WALK_FORWARD`:** Performance degrades substantially across rolling walk-forward test segments.
-5. **`FAILED_UNDER_COSTS`:** Net returns turn negative or fall below hurdle rates under Conservative or Stress cost tiers.
+5. **`FAILED_UNDER_COSTS`:** Net returns turn negative or fall below hurdle rates under conservative or stress cost tiers.
 6. **`FAILED_PARAMETER_STABILITY`:** Strategy exhibits cliff-edge sensitivity to minor parameter adjustments.
 7. **`FAILED_REGIME_ROBUSTNESS`:** Edge is entirely confined to a single historical market regime and collapses in others.
-8. **`FAILED_MULTIPLE_TESTING`:** Deflated Sharpe Ratio ($p > 0.05$) or Haircut Sharpe fails canonical Phase 6 significance tests.
+8. **`FAILED_MULTIPLE_TESTING`:** Multiple-testing adjusted significance fails canonical Phase 6 statistical thresholds.
 9. **`FAILED_MIN_TRL`:** Historical track record length is shorter than the statistically required Minimum Track Record Length.
 10. **`FAILED_DATA_QUALITY`:** Post-hoc discovery of data corruption, unadjusted corporate actions, or timestamp anomalies.
 11. **`FAILED_REPRODUCIBILITY`:** Independent execution fails to replicate identical metrics from the simulation manifest.
@@ -304,69 +307,31 @@ ACASH treats empirical research failure as valuable scientific knowledge. Experi
 
 ### 11.2 Early Stopping Rules (Anti-Data Mining Limits)
 To prevent infinite iterative strategy rescue:
-- **Maximum Search Budget:** Each formal hypothesis must declare a strict maximum parameter evaluation budget (e.g. $K_{\max} = 100$ trials). Once exhausted, research on that hypothesis terminates.
+- **Hypothesis-Specific Search Budget:** A formal hypothesis may pre-declare a search budget appropriate to its mechanism; this document prescribes no universal $K_{\max}$ constant.
 - **Zero OOS Rescues:** If a strategy fails OOS, modifying rules and re-testing on the same OOS partition is strictly blocked.
 
 ---
 
-## 12. Reproducibility Contract & Simulation Manifest
+## 12. Reproducibility Contract & Canonical Manifest Alignment
 
-Every completed backtest run must generate an immutable, cryptographically verifiable **Simulation Manifest** (`manifest.json`):
+### 12.1 Canonical Authority: Phase 5 BacktestManifest
+Every completed backtest run must generate an immutable, cryptographically verifiable provenance manifest. This document creates zero alternative or parallel manifest schemas. All backtesting runs defer exclusively to the canonical Phase 5 backtesting substrate schema (`src/acash/backtest/schema.py`):
+- **`BacktestManifest`:** Immutable, content-derived provenance manifest binding `manifest_id`, `manifest_version`, `hypothesis_id`, `hypothesis_spec_sha256`, `canonical_data_hashes`, `engine_config_hash`, `strategy_config_hash`, `prng_seed`, `git_commit_hash`, `execution_summary`, and `reality_gap`.
+- **`FeeModelConfig` & `SlippageModelConfig`:** Canonical representation of venue fees, ticket costs, linear impact, and fixed slippage.
+- **`RealityGapSummary`:** Canonical decomposition of spread drag, slippage drag, latency drag, and fee drag.
 
-```json
-{
-  "simulation_id": "SIM-20260913-BTC-TREND-001",
-  "trial_id": "TRIAL-0042",
-  "hypothesis_id": "HYP_PROPOSAL_ONLY_NOT_RATIFIED",
-  "dataset_freeze": {
-    "dataset_id": "DS-CRYPTO-BTC-M1-v1.0",
-    "dataset_sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
-    "qualification_report_id": "QR-20260913-BTC-M1-001"
-  },
-  "code_lineage": {
-    "git_commit_sha": "c17c336b527de2762a1234567890abcdef123456",
-    "clean_working_tree": true
-  },
-  "experiment_config_sha256": "a8f5f167f44f4964e6c998dee827110c...",
-  "random_seed": 42,
-  "partitions": {
-    "train_utc": ["2022-01-01T00:00:00Z", "2023-12-31T23:59:00Z"],
-    "validation_utc": ["2024-01-01T00:00:00Z", "2024-06-30T23:59:00Z"],
-    "untouched_oos_utc": ["2024-07-01T00:00:00Z", "2025-12-31T23:59:00Z"]
-  },
-  "cost_model": {
-    "tier": "CONSERVATIVE",
-    "fee_bps": 7.5,
-    "spread_model": "HISTORICAL_75TH_PERCENTILE",
-    "slippage_ticks": 2
-  },
-  "metrics_summary": {
-    "gross_sharpe_annualized": 1.85,
-    "net_sharpe_annualized": 1.22,
-    "max_drawdown_pct": 14.5,
-    "total_trades": 642,
-    "win_rate_pct": 52.4,
-    "profit_factor": 1.38
-  },
-  "phase6_validation_bridge": {
-    "trial_count_k": 42,
-    "canonical_dsr_p_value": 0.021,
-    "canonical_pbo": 0.12,
-    "min_trl_years": 1.8,
-    "haircut_sharpe": 1.05
-  },
-  "verdict": "FAILED_PARAMETER_STABILITY",
-  "failure_rationale": "Strategy Sharpe drops from 1.22 to 0.15 when lookback period is adjusted from 20 to 22."
-}
-```
+### 12.2 Unresolved Extension Needs for Future Manifest Revisions (Non-Authoritative)
+Future research iterations may consider the following extension fields for potential canonical inclusion in future manifest versions, subject to separate governance ratification:
+- Reference to `dataset_qualification_report_id` and its SHA-256 digest.
+- Explicit partition date boundaries (`train_utc`, `validation_utc`, `untouched_oos_utc`).
+- Formal parameter perturbation grid digest.
+*(These fields are noted strictly as future research needs and do not constitute an authorized schema modification).*
 
 ---
 
-## 13. Definition of "Paper-Ready Candidate"
+## 13. Paper-Ready Candidate Boundary
 
-Passing this validation protocol does **not** grant execution authority. A candidate that successfully navigates all in-sample, out-of-sample, walk-forward, friction-stress, and Phase 6 statistical hurdles is classified strictly as a:
-
-$$\text{\textbf{PAPER-READY RESEARCH CANDIDATE}}$$
+When canonical Phase 4/5/6 gates and applicable qualification evidence establish the required pre-paper research state, the candidate may be described as paper-ready for human review. This non-governing protocol has zero authority to confer that state.
 
 ### Explicit Invariants
 1. **Zero Execution Authorization:** "Paper-Ready" status does **not** mean paper trading is authorized, running, or permitted.
@@ -402,12 +367,13 @@ Before any empirical backtest code is executed, the researcher must verify and s
 
 ## 15. Open Human Decisions Register (Validation Protocol)
 
-| Decision ID | Decision Subject | Context | Candidate Alternatives | Status | Human Ratification Required? |
+The following decisions represent open research surfaces. All listed candidate alternatives are **illustrative and non-exhaustive**:
+
+| Decision ID | Decision Subject | Context | Candidate Alternatives (Illustrative, Non-Exhaustive) | Status | Human Ratification Required? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **VAL-DEC-001** | Canonical OOS Partition Length for Crypto Research | Define standardized duration for the untouched OOS partition in crypto assets. | 6 Months vs. 12 Months vs. 18 Months. | **UNRESOLVED** | **YES** |
-| **VAL-DEC-002** | Default Maximum Parameter Search Budget ($K_{\max}$) | Set default upper bound on discrete parameter combinations per formal hypothesis. | $K_{\max} = 50$ vs. $K_{\max} = 100$ vs. $K_{\max} = 250$. | **UNRESOLVED** | **YES** |
-| **VAL-DEC-003** | Standardized Walk-Forward Fold Horizon | Ratify default walk-forward retraining frequency for intraday vs. daily strategies. | Quarterly retraining vs. Semi-annual retraining vs. Expanding window. | **UNRESOLVED** | **YES** |
-| **VAL-DEC-004** | Execution Latency Standard for M1/M5 Backtests | Define standard simulated latency delay between bar completion and order entry. | Next-bar Open (0 latency) vs. Next-bar Open + 200ms queue penalty. | **UNRESOLVED** | **YES** |
+| **VAL-DEC-001** | OOS Partition Horizon Surface | Define partition duration for the untouched OOS evaluation per hypothesis/asset class. | To be pre-declared per hypothesis (e.g. 6 Months vs. 12 Months vs. multi-year macro). | **UNRESOLVED** | **YES (Per-hypothesis)** |
+| **VAL-DEC-002** | Walk-Forward Fold Horizon Surface | Define walk-forward retraining frequency per strategy horizon. | To be pre-declared per hypothesis (e.g. quarterly vs. semi-annual vs. expanding window). | **UNRESOLVED** | **YES (Per-hypothesis)** |
+| **VAL-DEC-003** | Execution Latency Model Surface | Define simulated latency delay between bar completion and order entry per asset/market. | Next-bar Open (0 latency) vs. Next-bar Open + simulated network/queue penalty. | **UNRESOLVED** | **YES (Per-hypothesis)** |
 
 ---
 

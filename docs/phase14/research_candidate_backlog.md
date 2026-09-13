@@ -51,7 +51,7 @@ It does **NOT** answer: *"What strategy should ACASH trade?"*
 
 ### 1.2 Anti-HARKing Invariants
 1. **No Numerical Optimization in the Backlog:** Thresholds, entry levels, indicator periods, and stop distances are explicitly omitted from backlog definitions.
-2. **Mandatory Mechanism-First Requirement:** A statistical anomaly without a plausible economic, structural, or behavioral mechanism is treated as data mining noise.
+2. **Mechanism-First Doctrine:** A plausible economic, structural, or behavioral mechanism is strongly preferred. In alignment with the Phase 14 master research architecture, candidates with weak or unverified mechanisms may remain exploratory, but cannot be treated as validated alpha and retain reduced epistemic status. Only genuinely impossible, self-contradictory, or invalid market premises are rejected solely at mechanism review.
 3. **Plausibility of Non-Existence:** Every candidate must document why the proposed edge might be an illusion, an artifact of data errors, or already arbitraged away.
 4. **Namespace Isolation:** All backlog items are assigned the prefix `RQ-BACKLOG-###`. The formal hypothesis namespace `HYP_###` is strictly protected and cannot be assigned without canonical human governance.
 
@@ -125,8 +125,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Qualified historical M1/M5 OHLCV aggregated to H1/H4; historical funding rates if perpetuals are studied.
 - **Minimum Data Fields:** `timestamp_utc`, `open`, `high`, `low`, `close`, `volume`.
 - **Market-Specific Data Risks:** Exchange outage spikes during high-volatility events; historical liquidation wick distortion across different venues.
-- **Expected Signal Frequency:** Low to Moderate (2 to 6 signals per month).
-- **Expected Trade Frequency:** Low (holding periods spanning days to weeks).
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: infrequent / multi-day).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: multi-day holding).
 - **Potential Cost Sensitivity:** Low to Moderate (longer holding horizons dilute transaction friction).
 - **Known Confounders:** Long-term upward crypto beta (2015–2025 structural drift); single-regime bull market dominance; lookback parameter selection bias.
 - **Likely Failure Modes:** Severe whipsaws during prolonged sideways/choppy regimes; failure to overcome taker fees during false volatility breakouts.
@@ -154,8 +154,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** High-resolution qualified M1 OHLCV; tick/quote data if available.
 - **Minimum Data Fields:** `timestamp_utc`, `open`, `high`, `low`, `close`, `volume`.
 - **Market-Specific Data Risks:** Exchange downtime during violent wicks; bid-ask spread blowout during flash crashes preventing realistic execution.
-- **Expected Signal Frequency:** Moderate to High (10 to 30 events per month).
-- **Expected Trade Frequency:** High.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: short-horizon dislocation events).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: high turnover).
 - **Potential Cost Sensitivity:** Extremely High (vulnerable to spread, taker fees, and adverse slippage).
 - **Known Confounders:** Apparent reversion in mid-price that cannot be captured after accounting for bid-ask spread; survivorship of trades that did not blow up.
 - **Likely Failure Modes:** Consecutive trend extensions causing catastrophic drawdown; friction consumes entire gross statistical edge.
@@ -183,8 +183,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Qualified historical OHLCV across target markets.
 - **Minimum Data Fields:** `timestamp_utc`, `open`, `high`, `low`, `close`, `volume`.
 - **Market-Specific Data Risks:** Look-ahead bias in volatility estimator (e.g., using centered rolling windows or unshifted normalization).
-- **Expected Signal Frequency:** Low (regime switches occur over weeks or months).
-- **Expected Trade Frequency:** Low.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: infrequent regime switches).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: low turnover).
 - **Potential Cost Sensitivity:** Low.
 - **Known Confounders:** Overfitting regime threshold parameters on in-sample data; regime classifier acting as a disguised post-hoc curve fit.
 - **Likely Failure Modes:** False regime transitions generating excessive turnover; missing the single largest trend run of the cycle due to a false "hostile" regime classification.
@@ -212,8 +212,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Multi-asset synchronized daily historical price and yield series.
 - **Minimum Data Fields:** Synchronous daily close prices, standardized UTC cutoff times.
 - **Market-Specific Data Risks:** Non-synchronous closing times across global markets (Tokyo vs. London vs. New York closes creating artificial leads/lags).
-- **Expected Signal Frequency:** Very Low (1 to 4 macro state transitions per year).
-- **Expected Trade Frequency:** Very Low.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: macro state transitions).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: low turnover).
 - **Potential Cost Sensitivity:** Negligible.
 - **Known Confounders:** Macro regime classification merely acts as a contemporaneous description of past crisis events rather than an ex-ante predictive signal.
 - **Likely Failure Modes:** Regime indicator triggers after 80% of the market drawdown has already occurred; regime signals whipsaw during stagflationary periods.
@@ -241,8 +241,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Point-in-time cross-sectional universe data including delistings and constituent changes.
 - **Minimum Data Fields:** `timestamp_utc`, `symbol`, `close`, `volume`, `tradable_flag`.
 - **Market-Specific Data Risks:** Survivorship bias (evaluating today's winning universe backward in time); illiquid asset inclusion skewing theoretical performance.
-- **Expected Signal Frequency:** Weekly / Bi-weekly rebalancing.
-- **Expected Trade Frequency:** Moderate.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: periodic rebalancing).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: moderate turnover).
 - **Potential Cost Sensitivity:** High (portfolio rebalancing across multiple assets incurs continuous transaction fees and bid-ask friction).
 - **Known Confounders:** Implicit exposure to market beta, size factor, or industry concentration masquerading as idiosyncratic relative strength.
 - **Likely Failure Modes:** Severe momentum crash during sudden market inflections; excessive turnover destroying net returns.
@@ -270,8 +270,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Qualified historical M1 bar data with verified exchange timezone normalization.
 - **Minimum Data Fields:** `timestamp_utc`, `open`, `high`, `low`, `close`, `volume`.
 - **Market-Specific Data Risks:** Daylight Saving Time (DST) misalignments causing 1-hour shifts in session open timestamps; vendor bar timestamp conventions (bar-start vs. bar-end).
-- **Expected Signal Frequency:** High (1 signal per trading day per asset).
-- **Expected Trade Frequency:** High (daily intraday trading).
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: session open events).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: intraday trading).
 - **Potential Cost Sensitivity:** Very High (intraday trades are highly vulnerable to opening spread widening and slippage).
 - **Known Confounders:** Data snooping around specific opening minute cutoffs (e.g. optimizing 5-min vs. 15-min open range); single-year regime artifacts.
 - **Likely Failure Modes:** Spread widening at the open destroys paper edge; stop-outs from erratic opening auction volatility.
@@ -299,8 +299,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Historical OHLCV series.
 - **Minimum Data Fields:** `timestamp_utc`, `open`, `high`, `low`, `close`.
 - **Market-Specific Data Risks:** Extreme spikes in illiquid historical data generating artificially tiny position sizes (denominator explosion).
-- **Expected Signal Frequency:** Continuous position scaling.
-- **Expected Trade Frequency:** Depends on re-sizing tolerance threshold.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: continuous or threshold-based position scaling).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: governed by rebalancing tolerance bands).
 - **Potential Cost Sensitivity:** Low to Moderate (frequent rebalancing to target volatility incurs incremental rebalancing costs).
 - **Known Confounders:** Testing volatility sizing on in-sample return series where future volatility is implicitly known.
 - **Likely Failure Modes:** High turnover from continuous sizing adjustments; whipsawed into tiny positions at the start of major market recoveries.
@@ -328,8 +328,8 @@ Human Decisions Needed:     Decisions requiring human approval prior to promotio
 - **Required Data:** Synchronous multi-timeframe OHLCV data.
 - **Minimum Data Fields:** Multi-timeframe OHLCV series.
 - **Market-Specific Data Risks:** Look-ahead leakage across timeframe boundaries (e.g., referencing a daily bar close before the day has officially closed).
-- **Expected Signal Frequency:** Low to Moderate.
-- **Expected Trade Frequency:** Low.
+- **Expected Signal Frequency:** TO BE ESTIMATED (Illustrative planning assumption: multi-timeframe alignment).
+- **Expected Trade Frequency:** TO BE ESTIMATED (Illustrative planning assumption: dependent on slowest horizon).
 - **Potential Cost Sensitivity:** Low.
 - **Known Confounders:** Multiple testing bias across timeframe combinations (testing 10 combinations and selecting the best performing); redundant collinear signals.
 - **Likely Failure Modes:** Entering trends at the exact exhaustion point; missing fast-moving trades due to sluggish higher-timeframe confirmation.
@@ -439,9 +439,9 @@ A core doctrine of ACASH research is that **complexity must earn its admission**
 
 ---
 
-## 8. Pre-Empirical Failure Taxonomy
+## 8. Proposed Descriptive Failure Labels (Non-Canonical Planning Vocabulary)
 
-When research candidates are eventually authorized and tested, empirical outcomes must be classified into authoritative failure categories. Research failure is valid scientific progress:
+When research candidates are eventually authorized and tested, exploratory empirical findings may be categorized using the following proposed descriptive labels. These labels serve solely as non-canonical research shorthand and do NOT supersede or replace canonical Phase 6 validation verdicts (`ValidationGateVerdict`) or D6 trial statuses (`SearchTrialStatus`):
 
 1. **`NO_EFFECT`:** In-sample return distribution shows zero statistical divergence from null hypothesis.
 2. **`FAILED_OOS`:** Strategy demonstrates positive performance in-sample but fails completely on untouched out-of-sample partition.
@@ -476,11 +476,13 @@ When research candidates are eventually authorized and tested, empirical outcome
 
 ## 10. Open Human Decisions Register (Research Backlog)
 
-| Decision ID | Decision Subject | Context | Candidate Alternatives | Status | Human Ratification Required? |
+The following decisions represent open research surfaces. All listed candidate alternatives are **illustrative and non-exhaustive**:
+
+| Decision ID | Decision Subject | Context | Candidate Alternatives (Illustrative, Non-Exhaustive) | Status | Human Ratification Required? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **RES-DEC-001** | First Research Candidate for Formal Promotion | Select which single candidate from Tier 1 should be formulated for formal hypothesis intake after data qualification. | `RQ-BACKLOG-001` (BTC Trend) vs. `RQ-BACKLOG-002` (BTC Reversion) vs. `RQ-BACKLOG-003` (Regime Trend). | **UNRESOLVED** | **YES** |
 | **RES-DEC-002** | Initial Historical Research Universe Boundary | Define the initial empirical testing universe scope. | Crypto-only (`BTC`, `ETH`) vs. Multi-Asset Core (`BTC`, `ES`, `EURUSD`, `XAU`). | **UNRESOLVED** | **YES** |
-| **RES-DEC-003** | Minimum Trade Count Guidance for Backlog Feasibility | Set qualitative heuristic for exploratory feasibility screening. | 100 trades vs. 300 trades vs. 500 trades minimum sample. | **UNRESOLVED** | **YES** |
+| **RES-DEC-003** | Exploratory Sample Size Heuristic for Prioritization | Provide non-binding planning guidance for preliminary research triage without establishing a new statistical admission gate (which remains governed exclusively by canonical MinTRL). | Defer to canonical MinTRL; use non-binding planning markers (e.g. 100 vs. 300 trades) for feasibility ranking. | **UNRESOLVED** | **NO (Non-binding planning heuristic only; MinTRL governs admission)** |
 | **RES-DEC-004** | Benchmark Asset Authority for Crypto Beta | Select standard buy-and-hold benchmark against which crypto excess returns are measured. | Spot BTC-USDT vs. Equal-Weight Top 10 Index. | **UNRESOLVED** | **YES** |
 
 ---
