@@ -154,7 +154,7 @@ def _run_session(
                             data = json.loads(marker_file.read_text(encoding="utf-8"))
                             st = data.get("state")
                             if st in ("QUIESCENT", "OPEN", "SEALED", "VOID"):
-                                return st
+                                return str(st)
                         except Exception:
                             pass
             return WindowState.QUIESCENT.value
@@ -221,12 +221,17 @@ def _run_session(
                 supervisor.step_once()
             except FeedConnectionError as exc:
                 # Halt: feeds never make decisions on disconnected data.
+                from acash.paper.feed import sanitize_diagnostic_text
+
                 print(
                     json.dumps(
                         {
                             "event": "FEED_DISCONNECTED",
                             "session_id": config.session_id,
-                            "reason": str(exc)[:200],
+                            "reason": sanitize_diagnostic_text(str(exc)[:200]),
+                            "error_class": getattr(exc, "error_class", exc.__class__.__name__),
+                            "category": getattr(exc, "category", "CONNECTION_ERROR"),
+                            "last_bar_utc": getattr(exc, "last_bar_utc", None),
                         }
                     ),
                     file=sys.stderr,

@@ -38,10 +38,17 @@ from acash.paper.feed import (
     FeedMalformedResponseError,
     IMarketDataFeed,
     feed_bar_to_synthetic_bar,
+    sanitize_diagnostic_text,
 )
 from acash.paper.health import HealthEventKind, PaperHealthMonitor
 from acash.paper.journal import JournalEventType, JournalLayer, PaperEventJournal
 from acash.paper.runner import PaperSessionRunner
+
+
+def _format_iso(dt: Optional[Any]) -> Optional[str]:
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    return None
 
 
 @dataclass
@@ -59,6 +66,9 @@ class FeedSupervisorStats:
     last_error: Optional[str] = None
     halted: bool = False
     halted_reason: Optional[str] = None
+    last_admitted_bar_utc: Optional[datetime] = None
+    last_gap_seconds: Optional[float] = None
+    resume_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -79,6 +89,13 @@ class FeedSupervisorStats:
             "last_error": self.last_error,
             "halted": self.halted,
             "halted_reason": self.halted_reason,
+            "last_admitted_bar_utc": (
+                self.last_admitted_bar_utc.isoformat()
+                if self.last_admitted_bar_utc
+                else None
+            ),
+            "last_gap_seconds": self.last_gap_seconds,
+            "resume_count": self.resume_count,
         }
 
 
@@ -119,6 +136,7 @@ class PaperFeedSessionSupervisor:
         self._stats = FeedSupervisorStats()
         self._resume_count = 0
         self._is_connected = False
+        self._last_admitted_bar_utc: Optional[datetime] = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -132,15 +150,32 @@ class PaperFeedSessionSupervisor:
             self._stats.halted = True
             self._stats.halted_reason = "FEED_CONNECT_FAILED"
             cid = self._journal.new_correlation_id()
+            payload = {
+                "event": "FEED_CONNECT_FAILED",
+                "provider": self._feed.provider_id,
+                "provider_version": getattr(self._feed, "provider_version", "unknown"),
+                "reason": sanitize_diagnostic_text(str(exc)[:500]),
+                "error_class": getattr(exc, "error_class", exc.__class__.__name__),
+                "category": getattr(exc, "category", "CONNECTION_ERROR"),
+                "operation": getattr(exc, "operation", "connect"),
+                "endpoint": getattr(exc, "endpoint", None),
+                "symbol": getattr(exc, "symbol", getattr(self._feed, "symbol", None)),
+                "timeframe": (
+                    getattr(exc, "timeframe", None)
+                    or getattr(getattr(self._feed, "timeframe", None), "value", None)
+                ),
+                "status_code": getattr(exc, "status_code", None),
+                "timeout_seconds": getattr(exc, "timeout_seconds", None),
+                "last_poll_utc": getattr(exc, "last_poll_utc", None),
+                "last_bar_utc": getattr(exc, "last_bar_utc", None),
+                "disconnect_count": self._stats.disconnect_count,
+                "session_id": self._runner.session_id,
+                "GOVERNANCE_LABEL": "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY",
+            }
             self._health.record(
                 kind=HealthEventKind.FEED_DISCONNECTED,
                 correlation_id=cid,
-                payload={
-                    "event": "FEED_CONNECT_FAILED",
-                    "provider": self._feed.provider_id,
-                    "reason": str(exc)[:500],
-                    "session_id": self._runner.session_id,
-                },
+                payload=payload,
             )
             raise
 
@@ -150,17 +185,22 @@ class PaperFeedSessionSupervisor:
         self._stats.halted_reason = None
         self._is_connected = True
         cid = self._journal.new_correlation_id()
+        payload = {
+            "event": "FEED_CONNECTED",
+            "provider": self._feed.provider_id,
+            "provider_version": self._feed.provider_version,
+            "symbol": self._feed.symbol,
+            "timeframe": self._feed.timeframe.value,
+            "session_id": self._runner.session_id,
+            "resume_count": self._resume_count,
+            "is_recovery": self._resume_count > 0,
+            "last_bar_utc": _format_iso(getattr(self._feed, "_last_bar_utc", None)),
+            "GOVERNANCE_LABEL": "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY",
+        }
         self._health.record(
             kind=HealthEventKind.FEED_CONNECTED,
             correlation_id=cid,
-            payload={
-                "event": "FEED_CONNECTED",
-                "provider": self._feed.provider_id,
-                "provider_version": self._feed.provider_version,
-                "symbol": self._feed.symbol,
-                "timeframe": self._feed.timeframe.value,
-                "session_id": self._runner.session_id,
-            },
+            payload=payload,
         )
 
     def disconnect(self) -> None:
@@ -178,6 +218,8 @@ class PaperFeedSessionSupervisor:
                 "event": "FEED_DISCONNECTED",
                 "provider": self._feed.provider_id,
                 "session_id": self._runner.session_id,
+                "last_bar_utc": _format_iso(getattr(self._feed, "_last_bar_utc", None)),
+                "GOVERNANCE_LABEL": "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY",
             },
         )
 
@@ -188,6 +230,26 @@ class PaperFeedSessionSupervisor:
         halted and no bars are admitted.
         """
         self._resume_count += 1
+        self._stats.resume_count = self._resume_count
+        cid = self._journal.new_correlation_id()
+        self._health.record(
+            kind=HealthEventKind.RECOVERY_ATTEMPTED,
+            correlation_id=cid,
+            payload={
+                "event": "RECOVERY_ATTEMPTED",
+                "attempt_number": self._resume_count,
+                "provider": self._feed.provider_id,
+                "symbol": getattr(self._feed, "symbol", None),
+                "timeframe": (
+                    getattr(getattr(self._feed, "timeframe", None), "value", None)
+                    if getattr(self._feed, "timeframe", None)
+                    else None
+                ),
+                "last_bar_utc": _format_iso(getattr(self._feed, "_last_bar_utc", None)),
+                "session_id": self._runner.session_id,
+                "GOVERNANCE_LABEL": "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY",
+            },
+        )
         self.connect()
         self._is_connected = True
 
@@ -214,15 +276,32 @@ class PaperFeedSessionSupervisor:
             self._stats.halted = True
             self._stats.halted_reason = "FEED_DISCONNECTED"
             cid = self._journal.new_correlation_id()
+            payload = {
+                "event": "FEED_DISCONNECTED",
+                "provider": self._feed.provider_id,
+                "provider_version": getattr(self._feed, "provider_version", "unknown"),
+                "reason": sanitize_diagnostic_text(str(exc)[:500]),
+                "error_class": getattr(exc, "error_class", exc.__class__.__name__),
+                "category": getattr(exc, "category", "CONNECTION_ERROR"),
+                "operation": getattr(exc, "operation", "poll"),
+                "endpoint": getattr(exc, "endpoint", None),
+                "symbol": getattr(exc, "symbol", getattr(self._feed, "symbol", None)),
+                "timeframe": (
+                    getattr(exc, "timeframe", None)
+                    or getattr(getattr(self._feed, "timeframe", None), "value", None)
+                ),
+                "status_code": getattr(exc, "status_code", None),
+                "timeout_seconds": getattr(exc, "timeout_seconds", None),
+                "last_poll_utc": getattr(exc, "last_poll_utc", None),
+                "last_bar_utc": getattr(exc, "last_bar_utc", None),
+                "disconnect_count": self._stats.disconnect_count,
+                "session_id": self._runner.session_id,
+                "GOVERNANCE_LABEL": "REAL_MARKET_DATA_EXECUTION_INFRA_ONLY",
+            }
             self._health.record(
                 kind=HealthEventKind.FEED_DISCONNECTED,
                 correlation_id=cid,
-                payload={
-                    "event": "FEED_DISCONNECTED",
-                    "provider": self._feed.provider_id,
-                    "reason": str(exc)[:500],
-                    "session_id": self._runner.session_id,
-                },
+                payload=payload,
             )
             raise
         except (FeedMalformedResponseError, FeedDataValidationError) as exc:
@@ -241,6 +320,13 @@ class PaperFeedSessionSupervisor:
             # Idempotent polling: no new bar exists yet. Not an error.
             self._stats.duplicate_bars_skipped += 1
             return None
+
+        # Data continuity tracking
+        if self._last_admitted_bar_utc is not None and bar.timestamp_utc > self._last_admitted_bar_utc:
+            gap_seconds = (bar.timestamp_utc - self._last_admitted_bar_utc).total_seconds()
+            self._stats.last_gap_seconds = gap_seconds
+        self._last_admitted_bar_utc = bar.timestamp_utc
+        self._stats.last_admitted_bar_utc = bar.timestamp_utc
 
         self._stats.bars_admitted += 1
         synthetic = feed_bar_to_synthetic_bar(bar, self._strategy_symbol)

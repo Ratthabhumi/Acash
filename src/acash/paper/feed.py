@@ -31,6 +31,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import httpx
@@ -44,6 +45,27 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# Feed Diagnostics & Sanitization
+# ---------------------------------------------------------------------------
+
+
+def sanitize_diagnostic_text(text: str) -> str:
+    """Sanitize strings for logs/journal, redacting credentials, secrets, and auth tokens."""
+    if not text:
+        return ""
+    res = str(text)
+    res = re.sub(r"://([^:@\s]+):([^@\s]+)@", r"://\1:***@", res)
+    res = re.sub(
+        r"((?:api[_-]?key|secret|token|password|auth|authorization)=)(?:[^\s&]+)",
+        r"\1***",
+        res,
+        flags=re.IGNORECASE,
+    )
+    res = re.sub(r"(Bearer\s+)[A-Za-z0-9_\-\.]+", r"\1***", res, flags=re.IGNORECASE)
+    return res
+
+
+# ---------------------------------------------------------------------------
 # Feed error hierarchy — strict fail-closed
 # ---------------------------------------------------------------------------
 
@@ -53,7 +75,40 @@ class FeedContractError(DataContractError):
 
 
 class FeedConnectionError(FeedContractError):
-    """Raised when the feed cannot connect or the connection is lost."""
+    """Raised when the feed cannot connect or the connection is lost.
+
+    Carries optional structured diagnostic metadata to preserve observability
+    without compromising fail-closed contract enforcement.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_class: Optional[str] = None,
+        category: Optional[str] = None,
+        operation: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        status_code: Optional[int] = None,
+        timeout_seconds: Optional[float] = None,
+        last_poll_utc: Optional[str] = None,
+        last_bar_utc: Optional[str] = None,
+        reconnect_count: Optional[int] = None,
+    ) -> None:
+        super().__init__(message)
+        self.error_class = error_class
+        self.category = category
+        self.operation = operation
+        self.endpoint = endpoint
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.status_code = status_code
+        self.timeout_seconds = timeout_seconds
+        self.last_poll_utc = last_poll_utc
+        self.last_bar_utc = last_bar_utc
+        self.reconnect_count = reconnect_count
 
 
 class FeedMalformedResponseError(FeedContractError):
@@ -396,9 +451,10 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
     # -- lifecycle -----------------------------------------------------------
 
     def connect(self) -> None:
+        endpoint = "https://api.binance.com/api/v3/klines"
         try:
             resp = self._client.get(
-                "https://api.binance.com/api/v3/klines",
+                endpoint,
                 params={
                     "symbol": self._symbol,
                     "interval": self._TIMEFRAME_MAP[self._tf],
@@ -406,12 +462,40 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 },
             )
             resp.raise_for_status()
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
             self._is_connected = False
-            self._last_error = f"CONNECT_ERROR: {exc.__class__.__name__}"
-            raise FeedConnectionError(
-                f"BinancePublicKlinesFeed.connect failed: {exc.__class__.__name__}. "
+            error_cls = exc.__class__.__name__
+            self._last_error = f"CONNECT_ERROR: {error_cls}"
+
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(exc, httpx.TimeoutException):
+                category = "TIMEOUT"
+            elif isinstance(exc, httpx.HTTPStatusError):
+                category = "HTTP_ERROR"
+            else:
+                category = "CONNECTION_ERROR"
+
+            timeout_sec = None
+            if hasattr(self._client, "timeout"):
+                timeout_sec = getattr(self._client.timeout, "connect", None)
+
+            msg = (
+                f"BinancePublicKlinesFeed.connect failed: {error_cls}. "
                 "FEED DISCONNECTED — no further market data decisions may be made."
+            )
+            raise FeedConnectionError(
+                sanitize_diagnostic_text(msg),
+                error_class=error_cls,
+                category=category,
+                operation="connect",
+                endpoint=endpoint,
+                symbol=self._symbol,
+                timeframe=self._tf.value,
+                status_code=status_code,
+                timeout_seconds=timeout_sec,
+                last_poll_utc=self._last_poll_utc.isoformat() if self._last_poll_utc else None,
+                last_bar_utc=self._last_bar_utc.isoformat() if self._last_bar_utc else None,
+                reconnect_count=self._reconnect_count,
             ) from exc
         self._is_connected = True
         self._last_poll_utc = datetime.now(timezone.utc)
@@ -425,11 +509,20 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
         if not self._is_connected:
             raise FeedConnectionError(
                 "BinancePublicKlinesFeed.poll_next_bar: feed is not connected. "
-                "FEED DISCONNECTED — no market data decisions may be made."
+                "FEED DISCONNECTED — no market data decisions may be made.",
+                error_class="FeedNotConnected",
+                category="NOT_CONNECTED",
+                operation="poll",
+                symbol=self._symbol,
+                timeframe=self._tf.value,
+                last_poll_utc=self._last_poll_utc.isoformat() if self._last_poll_utc else None,
+                last_bar_utc=self._last_bar_utc.isoformat() if self._last_bar_utc else None,
+                reconnect_count=self._reconnect_count,
             )
+        endpoint = "https://api.binance.com/api/v3/klines"
         try:
             resp = self._client.get(
-                "https://api.binance.com/api/v3/klines",
+                endpoint,
                 params={
                     "symbol": self._symbol,
                     "interval": self._TIMEFRAME_MAP[self._tf],
@@ -438,13 +531,41 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
             )
             resp.raise_for_status()
             raw = resp.json()
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
             self._is_connected = False
             self._reconnect_count += 1
-            self._last_error = f"POLL_ERROR: {exc.__class__.__name__}"
-            raise FeedConnectionError(
-                f"BinancePublicKlinesFeed.poll_next_bar connection lost: {exc.__class__.__name__}. "
+            error_cls = exc.__class__.__name__
+            self._last_error = f"POLL_ERROR: {error_cls}"
+
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(exc, httpx.TimeoutException):
+                category = "TIMEOUT"
+            elif isinstance(exc, httpx.HTTPStatusError):
+                category = "HTTP_ERROR"
+            else:
+                category = "CONNECTION_ERROR"
+
+            timeout_sec = None
+            if hasattr(self._client, "timeout"):
+                timeout_sec = getattr(self._client.timeout, "read", None)
+
+            msg = (
+                f"BinancePublicKlinesFeed.poll_next_bar connection lost: {error_cls}. "
                 "FEED DISCONNECTED — no market data decisions may be made."
+            )
+            raise FeedConnectionError(
+                sanitize_diagnostic_text(msg),
+                error_class=error_cls,
+                category=category,
+                operation="poll",
+                endpoint=endpoint,
+                symbol=self._symbol,
+                timeframe=self._tf.value,
+                status_code=status_code,
+                timeout_seconds=timeout_sec,
+                last_poll_utc=self._last_poll_utc.isoformat() if self._last_poll_utc else None,
+                last_bar_utc=self._last_bar_utc.isoformat() if self._last_bar_utc else None,
+                reconnect_count=self._reconnect_count,
             ) from exc
         except ValueError as exc:
             raise FeedMalformedResponseError(
@@ -457,7 +578,10 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 "BinancePublicKlinesFeed: expected a non-empty array of klines."
             )
         row = raw[0]
-        return self._parse_kline(row)
+        bar = self._parse_kline(row)
+        if bar is not None:
+            self._last_bar_utc = bar.timestamp_utc
+        return bar
 
     def _parse_kline(self, row: Any) -> Optional[FeedBar]:
         if not isinstance(row, list) or len(row) < 6:
@@ -586,12 +710,18 @@ class StooqCsvFeed(IMarketDataFeed):
                 params={"s": self._symbol, "i": "d"},
             )
             resp.raise_for_status()
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
             self._is_connected = False
             self._last_error = f"CONNECT_ERROR: {exc.__class__.__name__}"
             raise FeedConnectionError(
                 f"StooqCsvFeed.connect failed: {exc.__class__.__name__}. "
-                "FEED DISCONNECTED — no further market data decisions may be made."
+                "FEED DISCONNECTED — no further market data decisions may be made.",
+                error_class=exc.__class__.__name__,
+                category="TIMEOUT" if isinstance(exc, httpx.TimeoutException) else ("HTTP_ERROR" if isinstance(exc, httpx.HTTPStatusError) else "CONNECTION_ERROR"),
+                operation="connect",
+                endpoint="https://stooq.com/q/d/l/",
+                symbol=self._symbol,
+                timeframe=self._tf.value,
             ) from exc
         self._is_connected = True
         self._last_poll_utc = datetime.now(timezone.utc)
@@ -603,7 +733,12 @@ class StooqCsvFeed(IMarketDataFeed):
         if not self._is_connected:
             raise FeedConnectionError(
                 "StooqCsvFeed.poll_next_bar: feed is not connected. "
-                "FEED DISCONNECTED — no market data decisions may be made."
+                "FEED DISCONNECTED — no market data decisions may be made.",
+                error_class="FeedNotConnected",
+                category="NOT_CONNECTED",
+                operation="poll",
+                symbol=self._symbol,
+                timeframe=self._tf.value,
             )
         try:
             resp = self._client.get(
@@ -612,13 +747,20 @@ class StooqCsvFeed(IMarketDataFeed):
             )
             resp.raise_for_status()
             text = resp.text
-        except (httpx.TimeoutException, httpx.RequestError) as exc:
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
             self._is_connected = False
             self._reconnect_count += 1
             self._last_error = f"POLL_ERROR: {exc.__class__.__name__}"
             raise FeedConnectionError(
                 f"StooqCsvFeed.poll_next_bar connection lost: {exc.__class__.__name__}. "
-                "FEED DISCONNECTED — no market data decisions may be made."
+                "FEED DISCONNECTED — no market data decisions may be made.",
+                error_class=exc.__class__.__name__,
+                category="TIMEOUT" if isinstance(exc, httpx.TimeoutException) else ("HTTP_ERROR" if isinstance(exc, httpx.HTTPStatusError) else "CONNECTION_ERROR"),
+                operation="poll",
+                endpoint="https://stooq.com/q/d/l/",
+                symbol=self._symbol,
+                timeframe=self._tf.value,
+                reconnect_count=self._reconnect_count,
             ) from exc
 
         self._last_poll_utc = datetime.now(timezone.utc)
