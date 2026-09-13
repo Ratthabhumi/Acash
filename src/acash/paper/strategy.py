@@ -31,7 +31,40 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Protocol, Sequence, runtime_checkable
+
+
+# ---------------------------------------------------------------------------
+# Strategy protocol
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class PaperStrategyProtocol(Protocol):
+    """Protocol defining the paper strategy execution interface.
+
+    Enables dependency injection of independent strategy instances into
+    PaperSessionRunner while preserving fail-closed type safety.
+    """
+
+    @property
+    def strategy_id(self) -> str:
+        """Unique strategy identifier."""
+        ...
+
+    @property
+    def strategy_version(self) -> str:
+        """Strategy version string."""
+        ...
+
+    def evaluate(
+        self,
+        closes: Sequence[Decimal],
+        evaluation_time_utc: datetime,
+        market_event_reference: str,
+    ) -> Optional[StrategySignal]:
+        """Evaluate market data and produce an optional strategy signal."""
+        ...
 
 
 # ---------------------------------------------------------------------------

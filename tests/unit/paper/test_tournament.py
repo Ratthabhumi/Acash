@@ -3,24 +3,36 @@
 Validates all mandatory invariants:
 - Zero real order dispatch path (NO_REAL_ORDERS=True, CANONICAL_CAPITAL_USD=$0.00)
 - Isolated virtual portfolios (Slot A, B, C)
+- Strategy injection seam: proves independent strategy logic can run in distinct slots
 - Zero state leakage across slots
 - Synchronized bar semantics (identical bar delivered to each active slot)
 - Independent journals per slot
-- Fail-closed feed disconnect and stale data handling
+- Globally unique session IDs across repeated runs
+- Fail-closed feed disconnect and stale data handling (halts slots & seals manifests)
+- Bar rejection while halted and prevention of double-start
 - Honest reporting of unassigned slots (zero fabrication)
-- Output dictionary adheres to dashboard schema contract
+- Read-only HTTP status API server (GET /api/shadow/status, GET /healthz, POST rejected with 405)
 """
 
 import json
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Dict, Optional, Sequence
 
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.paper.metrics import MetricsRegistry
 from acash.paper.runner import SyntheticBar
+from acash.paper.strategy import (
+    InfrastructureTestStrategy,
+    PaperStrategyProtocol,
+    SignalDirection,
+    StrategySignal,
+)
 from acash.paper.tournament import (
     CANONICAL_CAPITAL_USD,
     NO_REAL_ORDERS,
@@ -31,6 +43,7 @@ from acash.paper.tournament import (
     TournamentSlot,
     create_default_shadow_tournament,
 )
+from acash.paper.tournament_api import ShadowApiServer
 
 
 def _make_sample_bar(price: str = "50000.0", seq: int = 1) -> SyntheticBar:
@@ -69,7 +82,7 @@ def test_slot_creation_and_isolation(tmp_path: Path) -> None:
     """Verify slots enforce valid slot IDs and isolate portfolios."""
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
-        acash_commit_sha="638388e38f721b49cab2621532b04757d6d85586",
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
     )
 
     slots = supervisor.slots
@@ -97,59 +110,111 @@ def test_slot_creation_and_isolation(tmp_path: Path) -> None:
         )
 
 
-def test_tournament_lifecycle_and_synchronized_bars(tmp_path: Path) -> None:
-    """Verify synchronized bar processing across active slots with zero leakage."""
-    supervisor = create_default_shadow_tournament(
+def test_unique_session_ids_on_repeated_runs(tmp_path: Path) -> None:
+    """Verify two tournaments created on the same day receive distinct IDs and paths."""
+    t1 = create_default_shadow_tournament(
         storage_dir=tmp_path,
-        acash_commit_sha="638388e38f721b49cab2621532b04757d6d85586",
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+    )
+    t2 = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
     )
 
-    assert supervisor.overall_status == "NOT_STARTED"
+    assert t1.tournament_id != t2.tournament_id
+    assert t1.slots["A"].session_id != t2.slots["A"].session_id
+    assert t1.slots["A"].runner is not None and t2.slots["A"].runner is not None
+    assert t1.slots["A"].runner._config.journal_path != t2.slots["A"].runner._config.journal_path
 
-    # Start tournament
+
+def test_strategy_injection_seam_and_divergence(tmp_path: Path) -> None:
+    """Verify strategy injection seam allows distinct strategies in Slots A & B."""
+    # Fast strategy: periods 2/3
+    strat_a = InfrastructureTestStrategy(
+        fast_period=2,
+        slow_period=3,
+        trade_quantity=Decimal("1.0"),
+        symbol="BTCUSDT",
+    )
+    # Slower strategy: periods 4/6
+    strat_b = InfrastructureTestStrategy(
+        fast_period=4,
+        slow_period=6,
+        trade_quantity=Decimal("2.0"),
+        symbol="BTCUSDT",
+    )
+
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        slot_strategies={"A": strat_a, "B": strat_b},
+    )
+
+    assert supervisor.slots["A"].runner is not None
+    assert supervisor.slots["B"].runner is not None
+    assert supervisor.slots["C"].runner is None  # Slot C remains UNASSIGNED
+
     supervisor.start()
-    assert supervisor.overall_status == "RUNNING"
-    assert supervisor.feed_health == "HEALTHY"
 
-    # Feed 10 synchronized bars
-    for i in range(1, 11):
-        price = str(50000.0 + i * 50.0)
-        bar = _make_sample_bar(price=price, seq=i)
+    # Feed bars with oscillation to generate signals
+    prices = ["50000.0", "50100.0", "50200.0", "50150.0", "50300.0", "50250.0", "50400.0"]
+    for idx, p in enumerate(prices, 1):
+        bar = _make_sample_bar(price=p, seq=idx)
         results = supervisor.process_bar(bar)
-
-        # Slot A has a runner, Slots B and C do not
-        assert "A" in results
-        assert results["B"] is None
+        assert "A" in results and "B" in results and "C" in results
         assert results["C"] is None
 
-    # Check Slot A journal exists on disk
-    journal_file = tmp_path / f"{supervisor.tournament_id}_slot_a.journal.jsonl"
-    assert journal_file.exists(), "Slot A must have its own isolated journal"
+    # Check that Slot A and Slot B journals exist independently
+    runner_a = supervisor.slots["A"].runner
+    runner_b = supervisor.slots["B"].runner
+    assert runner_a is not None and runner_b is not None
+    slot_a_journal = runner_a._config.journal_path
+    slot_b_journal = runner_b._config.journal_path
+    assert slot_a_journal.exists()
+    assert slot_b_journal.exists()
+    assert slot_a_journal != slot_b_journal
 
-    # Slot B and C must have zero journals created
-    journal_b = tmp_path / f"{supervisor.tournament_id}_slot_b.journal.jsonl"
-    assert not journal_b.exists(), "Unassigned slot must not create stray journals"
 
-
-def test_feed_disconnect_and_stale_data_halts(tmp_path: Path) -> None:
-    """Verify fail-closed halts when feed disconnects or data is stale."""
+def test_halt_lifecycle_seals_manifests_and_rejects_subsequent_bars(tmp_path: Path) -> None:
+    """Verify fail-closed halt sets slots to HALTED, seals manifests, and blocks bars."""
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
-        acash_commit_sha="638388e38f721b49cab2621532b04757d6d85586",
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
     )
     supervisor.start()
     assert supervisor.overall_status == "RUNNING"
+    assert supervisor.slots["A"].status == "RUNNING"
 
-    # Trigger feed disconnect
-    supervisor.record_feed_disconnect("Simulated network drop")
+    # Process 5 bars
+    for i in range(1, 6):
+        bar = _make_sample_bar(price=str(50000.0 + i * 10), seq=i)
+        supervisor.process_bar(bar)
+
+    # Halt tournament via feed disconnect
+    supervisor.record_feed_disconnect("Simulated provider disconnect")
+
     assert supervisor.overall_status == "HALTED"
     assert supervisor.feed_health == "DISCONNECTED"
-    assert "Feed disconnected" in (supervisor._halt_reason or "")
+    assert supervisor.slots["A"].status == "HALTED"
+    assert "Feed disconnected" in (supervisor.slots["A"].halt_reason or "")
 
-    # Bars received during HALTED state must be rejected
-    bar = _make_sample_bar(price="50000.0", seq=1)
-    results = supervisor.process_bar(bar)
-    assert all(cid is None for cid in results.values())
+    # Manifest should be sealed on disk for slot A
+    runner_a_halt = supervisor.slots["A"].runner
+    assert runner_a_halt is not None
+    manifest_path = (
+        runner_a_halt._config.journal_path.parent
+        / f"{supervisor.slots['A'].session_id}.manifest.json"
+    )
+    assert manifest_path.exists(), "Manifest must be sealed on halt"
+
+    # Subsequent bars must be strictly rejected
+    bar_after = _make_sample_bar(price="51000.0", seq=7)
+    rejected_results = supervisor.process_bar(bar_after)
+    assert all(r is None for r in rejected_results.values())
+
+    # Double start must raise DataContractError (no automatic resume)
+    with pytest.raises(DataContractError, match="cannot start tournament in status 'HALTED'"):
+        supervisor.start()
 
 
 def test_export_status_json_conforms_to_dashboard_contract(tmp_path: Path) -> None:
@@ -157,7 +222,7 @@ def test_export_status_json_conforms_to_dashboard_contract(tmp_path: Path) -> No
     metrics_registry = MetricsRegistry()
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
-        acash_commit_sha="638388e38f721b49cab2621532b04757d6d85586",
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
         metrics_registry=metrics_registry,
     )
 
@@ -180,6 +245,7 @@ def test_export_status_json_conforms_to_dashboard_contract(tmp_path: Path) -> No
     assert slots["A"]["slotId"] == "A"
     assert slots["B"]["status"] == "UNASSIGNED"
     assert slots["C"]["status"] == "UNASSIGNED"
+    assert slots["B"]["metrics"]["exposurePct"] is None
 
     # Meta
     meta = data["_meta"]
@@ -193,7 +259,7 @@ def test_metrics_exposition(tmp_path: Path) -> None:
     registry = MetricsRegistry()
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
-        acash_commit_sha="638388e38f721b49cab2621532b04757d6d85586",
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
         metrics_registry=registry,
     )
 
@@ -203,3 +269,54 @@ def test_metrics_exposition(tmp_path: Path) -> None:
     assert "acash_shadow_tournament_real_orders_total 0.0" in text
     assert "acash_shadow_tournament_is_simulated_only 1.0" in text
     assert 'acash_shadow_tournament_virtual_nav_usd{slot="A"' in text
+
+
+def test_shadow_api_server_endpoints(tmp_path: Path) -> None:
+    """Verify Read-Only Shadow HTTP API server."""
+    metrics_registry = MetricsRegistry()
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        metrics_registry=metrics_registry,
+    )
+
+    # Start API server on ephemeral port (e.g. 19103)
+    server = ShadowApiServer(
+        supervisor=supervisor,
+        host="127.0.0.1",
+        port=19103,
+        metrics_registry=metrics_registry,
+    )
+    server.start()
+
+    try:
+        # Test GET /api/shadow/status
+        url_status = "http://127.0.0.1:19103/api/shadow/status"
+        with urllib.request.urlopen(url_status, timeout=3.0) as resp:
+            assert resp.status == 200
+            assert "application/json" in resp.headers.get("Content-Type", "")
+            data = json.loads(resp.read().decode("utf-8"))
+            assert data["global"]["canonicalCapitalUsd"] == 0.0
+            assert data["global"]["noRealOrders"] is True
+
+        # Test GET /healthz
+        url_health = "http://127.0.0.1:19103/healthz"
+        with urllib.request.urlopen(url_health, timeout=3.0) as resp:
+            assert resp.status == 200
+            health_data = json.loads(resp.read().decode("utf-8"))
+            assert health_data["status"] == "ok"
+            assert health_data["NO_REAL_ORDERS"] is True
+
+        # Test POST rejected with 405 Method Not Allowed
+        req = urllib.request.Request(
+            url_status,
+            data=b'{"order": "buy"}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req, timeout=3.0)
+        assert exc_info.value.code == 405
+
+    finally:
+        server.stop()

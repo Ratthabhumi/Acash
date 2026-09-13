@@ -458,6 +458,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     review_p.add_argument("--session-id", required=True)
     review_p.add_argument("--storage", default="var/paper")
 
+    tournament_p = sub.add_parser("tournament", help="Run Shadow Alpha Tournament multi-strategy simulation.")
+    tournament_p.add_argument("--provider", choices=["binance", "stooq"], default="binance")
+    tournament_p.add_argument("--symbol", default="BTCUSDT")
+    tournament_p.add_argument("--timeframe", choices=[tf.value for tf in BarTimeframe], default=BarTimeframe.M1.value)
+    tournament_p.add_argument("--storage", type=Path, default=Path("/data/docker/acash/tournament"))
+    tournament_p.add_argument("--api-port", type=int, default=9103)
+    tournament_p.add_argument("--metrics-port", type=int, default=9102)
+    tournament_p.add_argument("--poll-interval-seconds", type=float, default=2.0)
+    tournament_p.add_argument("--git-commit", default="unknown")
+
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -471,6 +481,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         _integrity_session(args)
     elif args.command == "review":
         _review_session(args)
+    elif args.command == "tournament":
+        from acash.paper.tournament_cli import run_tournament
+        args.timeframe = BarTimeframe(args.timeframe)
+        return run_tournament(args)
     else:
         parser.print_help()
         return 2

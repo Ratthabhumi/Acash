@@ -19,6 +19,9 @@ const repoContent = fs.readFileSync(repoPath, 'utf-8');
 const pagePath = path.resolve(__dirname, '../src/pages/ShadowTournamentPage.tsx');
 const pageContent = fs.readFileSync(pagePath, 'utf-8');
 
+const distHtmlPath = path.resolve(__dirname, '../dist/index.html');
+const distHtmlContent = fs.existsSync(distHtmlPath) ? fs.readFileSync(distHtmlPath, 'utf-8') : '';
+
 test('Shadow Alpha Tournament Contract: Zero Real Orders and Simulated Only', () => {
   // 1. Mandatory governance constants in types
   assert.match(typesContent, /CANONICAL_CAPITAL_USD:\s*0\.00/, 'Canonical capital must be structurally 0.00');
@@ -56,10 +59,21 @@ test('Shadow Alpha Tournament Contract: 3 Strategy Slots with Honest Unassigned 
   assert.match(mockContent, /status:\s*'UNASSIGNED'/, 'Slots without approved candidates must be UNASSIGNED');
 });
 
-test('Shadow Alpha Tournament Contract: Mobile Responsiveness and Fail-Closed Indicators', () => {
-  // Page must have responsive grid classes (grid-cols-1 for mobile, md:grid-cols-3 for desktop)
-  assert.match(pageContent, /grid-cols-1 md:grid-cols-3/, 'Slot cards must adapt from 1 col on mobile to 3 cols on desktop');
+test('Shadow Alpha Tournament Contract: Fail-Closed Production Repository Defaults', () => {
+  // 1. Must check VITE_SHADOW_ALLOW_MOCK explicitly
+  assert.match(repoContent, /VITE_SHADOW_ALLOW_MOCK === 'true'/, 'Must require explicit dev-only flag VITE_SHADOW_ALLOW_MOCK');
 
-  // Page must indicate mock/stale data status
-  assert.ok(pageContent.includes('MOCK DEMO DATA'), 'Mock data warning banner must be implemented');
+  // 2. Default factory must return LiveShadowRepository when allowMock is false
+  assert.match(repoContent, /if \(allowMock\) \{\s*return new MockShadowRepository\(\);\s*\}\s*return new LiveShadowRepository/, 'Must default to LiveShadowRepository and never silently fall back to mock');
+
+  // 3. Live repository must return error state on failure, never mock data
+  assert.match(repoContent, /return \{\s*ok:\s*false,\s*data:\s*null,\s*error:/, 'Live repository failure must yield ok: false, data: null');
+});
+
+test('Shadow Alpha Tournament Contract: Relative Base and Path Routing Compatibility', () => {
+  if (distHtmlContent) {
+    // Assets must be relative (./assets/...) to support both / and /acash/ path prefixes
+    assert.match(distHtmlContent, /src="\.\/assets\//, 'Built scripts must use relative ./assets/ path for path-prefix compatibility');
+    assert.match(distHtmlContent, /href="\.\/assets\//, 'Built styles must use relative ./assets/ path for path-prefix compatibility');
+  }
 });

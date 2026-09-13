@@ -7,6 +7,7 @@ Governance Invariants (Non-Negotiable):
 - Zero cross-strategy state leakage (virtual cash, virtual positions, virtual orders, virtual fills)
 - Synchronized shared feed: all active slots receive the exact same market bar
 - Independent flight recorder journals and manifests per slot
+- Fail-closed lifecycle: feed disconnect/stale data halts all active slots and seals journals
 - Read-only dashboard representation: zero trading controls or mutation endpoints
 """
 
@@ -15,11 +16,12 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.paper.journal import JournalEventType, PaperEventJournal
@@ -28,6 +30,12 @@ from acash.paper.runner import (
     PaperSessionConfig,
     PaperSessionRunner,
     SyntheticBar,
+)
+from acash.paper.strategy import (
+    InfrastructureTestStrategy,
+    PaperStrategyProtocol,
+    SignalDirection,
+    StrategySignal,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,8 +85,8 @@ class SlotMetrics:
     unrealized_pnl_usd: Decimal = Decimal("0.00")
     max_drawdown_pct: Decimal = Decimal("0.00")
     current_drawdown_pct: Decimal = Decimal("0.00")
-    exposure_pct: Decimal = Decimal("0.00")
-    risk_utilization_pct: Decimal = Decimal("0.00")
+    exposure_pct: Optional[Decimal] = None
+    risk_utilization_pct: Optional[Decimal] = None
     open_position_count: int = 0
     simulated_order_count: int = 0
     simulated_fill_count: int = 0
@@ -88,7 +96,7 @@ class SlotMetrics:
     signal_count: int = 0
     last_signal_utc: Optional[str] = None
     last_fill_utc: Optional[str] = None
-    duration_seconds: int = 0
+    duration_seconds: Optional[int] = None
 
 
 @dataclass
@@ -109,6 +117,7 @@ class TournamentSlot:
     session_id: str
     config_hash: str
     acash_commit_sha: str
+    max_position_units: Decimal = Decimal("10.0")
     metrics: SlotMetrics = field(default_factory=SlotMetrics)
     runner: Optional[PaperSessionRunner] = None
     halt_reason: Optional[str] = None
@@ -126,6 +135,8 @@ class TournamentSlot:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize slot to dictionary matching TypeScript StrategySlot contract."""
+        is_unassigned = self.status == "UNASSIGNED" or self.runner is None
+
         return {
             "slotId": self.slot_id,
             "strategyId": self.strategy_id,
@@ -133,16 +144,16 @@ class TournamentSlot:
             "strategyVersion": self.strategy_version,
             "governanceLabel": "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
             if "INFRA-TEST" in self.strategy_id
-            else "SHADOW_ALPHA_CANDIDATE",
+            else ("SHADOW_ALPHA_CANDIDATE" if not is_unassigned else "UNASSIGNED_SLOT"),
             "status": self.status,
             "sessionId": self.session_id,
             "configHash": self.config_hash,
             "acashCommitSha": self.acash_commit_sha,
             "haltReason": self.halt_reason,
             "lastBarUtc": self.last_bar_utc,
-            "openPositions": self.open_positions,
-            "recentFills": self.recent_fills,
-            "equityCurve": self.equity_curve,
+            "openPositions": self.open_positions if not is_unassigned else [],
+            "recentFills": self.recent_fills if not is_unassigned else [],
+            "equityCurve": self.equity_curve if not is_unassigned else [],
             "metrics": {
                 "initialNavUsd": float(self.metrics.initial_nav_usd),
                 "currentNavUsd": float(self.metrics.current_nav_usd),
@@ -152,8 +163,12 @@ class TournamentSlot:
                 "unrealizedPnlUsd": float(self.metrics.unrealized_pnl_usd),
                 "maxDrawdownPct": float(self.metrics.max_drawdown_pct),
                 "currentDrawdownPct": float(self.metrics.current_drawdown_pct),
-                "exposurePct": float(self.metrics.exposure_pct),
-                "riskUtilizationPct": float(self.metrics.risk_utilization_pct),
+                "exposurePct": float(self.metrics.exposure_pct)
+                if self.metrics.exposure_pct is not None
+                else (0.0 if not is_unassigned else None),
+                "riskUtilizationPct": float(self.metrics.risk_utilization_pct)
+                if self.metrics.risk_utilization_pct is not None
+                else (0.0 if not is_unassigned else None),
                 "openPositionCount": self.metrics.open_position_count,
                 "simulatedOrderCount": self.metrics.simulated_order_count,
                 "simulatedFillCount": self.metrics.simulated_fill_count,
@@ -165,7 +180,9 @@ class TournamentSlot:
                 "signalCount": self.metrics.signal_count,
                 "lastSignalUtc": self.metrics.last_signal_utc,
                 "lastFillUtc": self.metrics.last_fill_utc,
-                "durationSeconds": self.metrics.duration_seconds,
+                "durationSeconds": self.metrics.duration_seconds
+                if not is_unassigned
+                else None,
             },
         }
 
@@ -184,8 +201,10 @@ class ShadowTournamentSupervisor:
        memory spaces, journals, snapshots, and metrics registries.
     3. SYNCHRONIZED MARKET DATA: When a bar is received, it is processed sequentially
        across active slots with identical bar payload.
-    4. IMMUTABLE REPORTING: Status dictionary faithfully reflects unassigned slots
-       rather than fabricating simulated alpha candidates.
+    4. FAIL-CLOSED HALT: Any feed disconnect or stale data puts tournament in HALTED
+       state, stops active runners, seals manifests, and rejects subsequent bars.
+    5. RESUME DISCIPLINE: No automatic resume. Calling start() on an already-started
+       or halted tournament raises DataContractError.
     """
 
     def __init__(
@@ -213,6 +232,9 @@ class ShadowTournamentSupervisor:
         self._last_data_timestamp_utc: Optional[datetime] = None
         self._last_successful_update_utc: datetime = datetime.now(timezone.utc)
         self._bar_count: int = 0
+        self._closed_positions_history: Dict[str, List[Decimal]] = {
+            s: [] for s in SLOT_IDS
+        }
 
         self._update_metrics()
 
@@ -236,11 +258,12 @@ class ShadowTournamentSupervisor:
         """Start the tournament.
 
         Starts the underlying runner for each assigned slot.
+        Raises DataContractError if already started or halted (fail-closed).
         """
         with self._lock:
-            if self._overall_status == "RUNNING":
+            if self._overall_status in ("RUNNING", "HALTED"):
                 raise DataContractError(
-                    "ShadowTournamentSupervisor: tournament already running."
+                    f"ShadowTournamentSupervisor: cannot start tournament in status '{self._overall_status}'."
                 )
 
             active_slots = [s for s in self._slots.values() if s.runner is not None]
@@ -254,11 +277,46 @@ class ShadowTournamentSupervisor:
                 if slot.runner is not None:
                     slot.runner.start()
                     slot.status = "RUNNING"
+                    slot.metrics.duration_seconds = 0
 
             self._overall_status = "RUNNING"
             self._halt_reason = None
             self._feed_health = "HEALTHY"
             self._last_successful_update_utc = datetime.now(timezone.utc)
+            self._update_metrics()
+
+    def halt(self, reason: str, feed_health: str = "HALTED") -> None:
+        """Halt tournament and all active slot runners fail-closed.
+
+        Seals manifests for active runners so journals are safely finalized.
+        """
+        with self._lock:
+            if self._overall_status == "HALTED":
+                return  # already halted
+
+            self._overall_status = "HALTED"
+            self._halt_reason = reason
+            self._feed_health = feed_health
+            self._last_successful_update_utc = datetime.now(timezone.utc)
+
+            for slot_id, slot in self._slots.items():
+                if slot.status == "RUNNING":
+                    slot.status = "HALTED"
+                    slot.halt_reason = reason
+                    if slot.runner is not None and slot.runner._started:
+                        try:
+                            slot.runner.stop()
+                            logger.info(
+                                "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
+                                slot_id,
+                            )
+                        except Exception as exc:
+                            logger.error(
+                                "ShadowTournamentSupervisor: error stopping slot %s runner: %s",
+                                slot_id,
+                                exc,
+                            )
+
             self._update_metrics()
 
     def process_bar(self, bar: SyntheticBar) -> Dict[str, Optional[str]]:
@@ -270,7 +328,7 @@ class ShadowTournamentSupervisor:
         with self._lock:
             if self._overall_status != "RUNNING":
                 logger.warning(
-                    "ShadowTournamentSupervisor: bar ignored; tournament status is %s",
+                    "ShadowTournamentSupervisor: bar rejected; tournament status is %s",
                     self._overall_status,
                 )
                 return {s: None for s in self._slots}
@@ -293,8 +351,8 @@ class ShadowTournamentSupervisor:
                     cid = slot.runner.process_bar(bar)
                     results[slot_id] = cid
 
-                    # Update slot state from runner portfolio
-                    self._sync_slot_portfolio(slot, bar.close, bar.timestamp_utc)
+                    # Update slot state from runner portfolio and events
+                    self._sync_slot_state(slot, bar, cid)
 
                 except Exception as exc:
                     slot.status = "ERROR"
@@ -310,14 +368,18 @@ class ShadowTournamentSupervisor:
             self._update_metrics()
             return results
 
-    def _sync_slot_portfolio(
-        self, slot: TournamentSlot, mark_price: Decimal, bar_time: datetime
+    def _sync_slot_state(
+        self,
+        slot: TournamentSlot,
+        bar: SyntheticBar,
+        decision_cid: Optional[str],
     ) -> None:
         """Sync slot metrics from runner portfolio with zero state leakage."""
         if slot.runner is None:
             return
 
         portfolio = slot.runner._portfolio
+        mark_price = bar.close
         equity = portfolio.cash + (portfolio.position * mark_price)
         pnl = equity - slot.metrics.initial_nav_usd
         pnl_pct = (pnl / slot.metrics.initial_nav_usd) * Decimal("100.0")
@@ -329,8 +391,50 @@ class ShadowTournamentSupervisor:
         slot.metrics.unrealized_pnl_usd = portfolio.position * (mark_price - portfolio.avg_entry_price)
         slot.metrics.simulated_order_count = portfolio.order_count
         slot.metrics.simulated_fill_count = portfolio.trade_count
-        slot.metrics.open_position_count = 1 if portfolio.position != Decimal("0") else 0
-        slot.last_bar_utc = bar_time.isoformat()
+        slot.last_bar_utc = bar.timestamp_utc.isoformat()
+
+        # Position tracking & open positions
+        if portfolio.position != Decimal("0"):
+            slot.metrics.open_position_count = 1
+            side = "LONG" if portfolio.position > Decimal("0") else "SHORT"
+            slot.open_positions = [
+                {
+                    "symbol": bar.symbol,
+                    "side": side,
+                    "quantity": float(abs(portfolio.position)),
+                    "entryPrice": float(portfolio.avg_entry_price),
+                    "currentPrice": float(mark_price),
+                    "unrealizedPnlUsd": float(slot.metrics.unrealized_pnl_usd),
+                }
+            ]
+            # Exposure & risk utilization
+            position_notional = abs(portfolio.position * mark_price)
+            slot.metrics.exposure_pct = (
+                (position_notional / equity * Decimal("100.0"))
+                if equity > Decimal("0")
+                else Decimal("0.0")
+            )
+            slot.metrics.risk_utilization_pct = (
+                (abs(portfolio.position) / slot.max_position_units * Decimal("100.0"))
+                if slot.max_position_units > Decimal("0")
+                else Decimal("0.0")
+            )
+        else:
+            slot.metrics.open_position_count = 0
+            slot.open_positions = []
+            slot.metrics.exposure_pct = Decimal("0.0")
+            slot.metrics.risk_utilization_pct = Decimal("0.0")
+
+        # Duration
+        if self._start_time_utc is not None:
+            slot.metrics.duration_seconds = int(
+                (datetime.now(timezone.utc) - self._start_time_utc).total_seconds()
+            )
+
+        # Decision & fill timestamps
+        if decision_cid is not None:
+            slot.metrics.signal_count += 1
+            slot.metrics.last_signal_utc = bar.timestamp_utc.isoformat()
 
         # Update peak NAV and drawdown
         if equity > slot.peak_nav_usd:
@@ -341,10 +445,10 @@ class ShadowTournamentSupervisor:
             if dd > slot.metrics.max_drawdown_pct:
                 slot.metrics.max_drawdown_pct = dd
 
-        # Update equity curve history (capped to last 100 points)
+        # Update equity curve history (capped to last 100 points of recent M1 window)
         slot.equity_curve.append(
             {
-                "timestampUtc": bar_time.isoformat(),
+                "timestampUtc": bar.timestamp_utc.isoformat(),
                 "navUsd": float(equity),
                 "pnlUsd": float(pnl),
             }
@@ -354,23 +458,14 @@ class ShadowTournamentSupervisor:
 
     def record_feed_disconnect(self, reason: str) -> None:
         """Record feed disconnection and fail-closed halt."""
-        with self._lock:
-            self._feed_health = "DISCONNECTED"
-            self._overall_status = "HALTED"
-            self._halt_reason = f"Feed disconnected: {reason}"
-            self._last_successful_update_utc = datetime.now(timezone.utc)
-            self._update_metrics()
+        self.halt(reason=f"Feed disconnected: {reason}", feed_health="DISCONNECTED")
 
     def record_feed_stale(self, age_ms: int, max_age_ms: int) -> None:
         """Record stale market data and fail-closed halt."""
-        with self._lock:
-            self._feed_health = "STALE"
-            self._overall_status = "HALTED"
-            self._halt_reason = (
-                f"Feed data stale: observed {age_ms}ms > allowed {max_age_ms}ms"
-            )
-            self._last_successful_update_utc = datetime.now(timezone.utc)
-            self._update_metrics()
+        self.halt(
+            reason=f"Feed data stale: observed {age_ms}ms > allowed {max_age_ms}ms",
+            feed_health="STALE",
+        )
 
     def _update_metrics(self) -> None:
         """Export operational Prometheus metrics if registry configured."""
@@ -446,7 +541,7 @@ class ShadowTournamentSupervisor:
             active_slots = [
                 s
                 for s in self._slots.values()
-                if s.status == "RUNNING" and s.metrics.simulated_fill_count > 0
+                if s.status in ("RUNNING", "HALTED") and s.metrics.simulated_fill_count > 0
             ]
             active_slots.sort(key=lambda s: s.metrics.pnl_usd, reverse=True)
 
@@ -534,76 +629,111 @@ class ShadowTournamentSupervisor:
 def create_default_shadow_tournament(
     storage_dir: Path,
     acash_commit_sha: str,
+    slot_strategies: Optional[Dict[str, PaperStrategyProtocol]] = None,
     metrics_registry: Optional[MetricsRegistry] = None,
 ) -> ShadowTournamentSupervisor:
-    """Construct a canonical Shadow Alpha Tournament instance.
+    """Construct a canonical Shadow Alpha Tournament instance with globally unique ID.
 
-    Slot A is allocated to InfrastructureTestStrategy.
-    Slots B and C remain UNASSIGNED pending Human selection.
+    Parameters:
+    - storage_dir: Destination path for slot journals and manifests.
+    - acash_commit_sha: Commit SHA for provenance audit.
+    - slot_strategies: Optional map of slot_id -> StrategyProtocol instance.
+      If a slot has no strategy provided, Slot A defaults to InfrastructureTestStrategy
+      while Slots B and C remain UNASSIGNED (honest reporting).
     """
     storage_dir.mkdir(parents=True, exist_ok=True)
-    tournament_id = f"SHADOW-TOURNAMENT-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
 
-    # Slot A: InfrastructureTestStrategy
-    slot_a_config = PaperSessionConfig(
-        session_id=f"{tournament_id}-SLOT-A",
-        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-001",
-        strategy_version="1.0.0",
-        instrument="BTCUSDT",
-        initial_cash=Decimal("1000.00"),
-        max_position_units=Decimal("10.0"),
-        max_notional=Decimal("100000.0"),
-        max_daily_loss=Decimal("100.0"),
-        fill_slippage_bps=Decimal("5.0"),
-        fill_commission_per_unit=Decimal("0.0004"),
-        prng_seed=42,
-        git_commit=acash_commit_sha,
-        component_version="1.0.0",
-        journal_path=storage_dir / f"{tournament_id}_slot_a.journal.jsonl",
-        snapshot_path=storage_dir / f"{tournament_id}_slot_a.snapshots.jsonl",
-    )
-    runner_a = PaperSessionRunner(slot_a_config)
-
-    slot_a = TournamentSlot(
-        slot_id="A",
-        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-001",
-        strategy_name="Infrastructure Test Strategy (Slot A)",
-        strategy_version="1.0.0",
-        status="INITIALIZING",
-        session_id=slot_a_config.session_id,
-        config_hash=slot_a_config.compute_config_hash(),
-        acash_commit_sha=acash_commit_sha,
-        runner=runner_a,
+    # Globally unique tournament ID: timestamp with seconds + 8 hex chars
+    unique_suffix = uuid.uuid4().hex[:8]
+    tournament_id = (
+        f"SHADOW-{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{unique_suffix}"
     )
 
-    # Slots B and C: UNASSIGNED (honest reporting of repo state)
-    slot_b = TournamentSlot(
-        slot_id="B",
-        strategy_id="UNASSIGNED",
-        strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
-        strategy_version="N/A",
-        status="UNASSIGNED",
-        session_id=f"{tournament_id}-SLOT-B-UNASSIGNED",
-        config_hash="0" * 64,
-        acash_commit_sha=acash_commit_sha,
-        runner=None,
-        halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
-    )
+    strategies = slot_strategies or {}
 
-    slot_c = TournamentSlot(
-        slot_id="C",
-        strategy_id="UNASSIGNED",
-        strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
-        strategy_version="N/A",
-        status="UNASSIGNED",
-        session_id=f"{tournament_id}-SLOT-C-UNASSIGNED",
-        config_hash="0" * 64,
-        acash_commit_sha=acash_commit_sha,
-        runner=None,
-        halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
-    )
+    # Helper to build a slot runner with its own strategy instance
+    def _build_slot_runner(slot_id: str, strategy: PaperStrategyProtocol) -> Tuple[TournamentSlot, PaperSessionRunner]:
+        cfg = PaperSessionConfig(
+            session_id=f"{tournament_id}-SLOT-{slot_id}",
+            strategy_id=strategy.strategy_id,
+            strategy_version=strategy.strategy_version,
+            instrument="BTCUSDT",
+            initial_cash=Decimal("1000.00"),
+            max_position_units=Decimal("10.0"),
+            max_notional=Decimal("100000.0"),
+            max_daily_loss=Decimal("100.0"),
+            fill_slippage_bps=Decimal("5.0"),
+            fill_commission_per_unit=Decimal("0.0004"),
+            prng_seed=42 + ord(slot_id),
+            git_commit=acash_commit_sha,
+            component_version="1.0.0",
+            journal_path=storage_dir / f"{tournament_id}_slot_{slot_id.lower()}.journal.jsonl",
+            snapshot_path=storage_dir / f"{tournament_id}_slot_{slot_id.lower()}.snapshots.jsonl",
+        )
+        runner = PaperSessionRunner(cfg, strategy=strategy)
+        slot = TournamentSlot(
+            slot_id=slot_id,
+            strategy_id=strategy.strategy_id,
+            strategy_name=f"Strategy ({slot_id}): {strategy.strategy_id}",
+            strategy_version=strategy.strategy_version,
+            status="INITIALIZING",
+            session_id=cfg.session_id,
+            config_hash=cfg.compute_config_hash(),
+            acash_commit_sha=acash_commit_sha,
+            runner=runner,
+        )
+        return slot, runner
 
-    slots = {"A": slot_a, "B": slot_b, "C": slot_c}
+    slots: Dict[str, TournamentSlot] = {}
+
+    # Slot A: injected strategy or default InfrastructureTestStrategy
+    if "A" in strategies:
+        slot_a, _ = _build_slot_runner("A", strategies["A"])
+    else:
+        default_strat_a = InfrastructureTestStrategy(
+            fast_period=3,
+            slow_period=5,
+            trade_quantity=Decimal("1.0"),
+            symbol="BTCUSDT",
+        )
+        slot_a, _ = _build_slot_runner("A", default_strat_a)
+    slots["A"] = slot_a
+
+    # Slot B: injected strategy or UNASSIGNED
+    if "B" in strategies:
+        slot_b, _ = _build_slot_runner("B", strategies["B"])
+    else:
+        slot_b = TournamentSlot(
+            slot_id="B",
+            strategy_id="UNASSIGNED",
+            strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
+            strategy_version="N/A",
+            status="UNASSIGNED",
+            session_id=f"{tournament_id}-SLOT-B-UNASSIGNED",
+            config_hash="0" * 64,
+            acash_commit_sha=acash_commit_sha,
+            runner=None,
+            halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
+        )
+    slots["B"] = slot_b
+
+    # Slot C: injected strategy or UNASSIGNED
+    if "C" in strategies:
+        slot_c, _ = _build_slot_runner("C", strategies["C"])
+    else:
+        slot_c = TournamentSlot(
+            slot_id="C",
+            strategy_id="UNASSIGNED",
+            strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
+            strategy_version="N/A",
+            status="UNASSIGNED",
+            session_id=f"{tournament_id}-SLOT-C-UNASSIGNED",
+            config_hash="0" * 64,
+            acash_commit_sha=acash_commit_sha,
+            runner=None,
+            halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
+        )
+    slots["C"] = slot_c
 
     return ShadowTournamentSupervisor(
         tournament_id=tournament_id,

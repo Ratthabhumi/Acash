@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from acash.paper.journal import (
     JournalEvent,
@@ -32,7 +32,12 @@ from acash.paper.journal import (
     JournalLayer,
     PaperEventJournal,
 )
-from acash.paper.strategy import InfrastructureTestStrategy, SignalDirection, StrategySignal
+from acash.paper.strategy import (
+    InfrastructureTestStrategy,
+    PaperStrategyProtocol,
+    SignalDirection,
+    StrategySignal,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +135,7 @@ class ReplayEngine:
     def __init__(
         self,
         session_id: str,
-        strategy: InfrastructureTestStrategy,
+        strategy: Union[InfrastructureTestStrategy, PaperStrategyProtocol],
     ) -> None:
         if not session_id or not session_id.strip():
             raise ValueError("ReplayEngine: session_id must be non-empty.")

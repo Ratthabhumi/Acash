@@ -18,8 +18,12 @@ import { mockTournamentState } from './shadowMockData';
 // ---------------------------------------------------------------------------
 
 // Live API base URL — configure via Vite env variable when backend exists.
-// Falls back to mock data if empty/unavailable.
+// Default is same-origin relative path ('') which fetches /api/shadow/status.
 const SHADOW_API_BASE = ((import.meta as unknown) as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_SHADOW_API_URL ?? '';
+
+// Governance rule: Mock fallback is strictly disabled in production.
+// Only enabled when explicitly set to 'true' in development/demo environments.
+const SHADOW_ALLOW_MOCK = ((import.meta as unknown) as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_SHADOW_ALLOW_MOCK === 'true';
 
 const POLL_INTERVAL_MS = 15_000; // 15 seconds
 
@@ -139,11 +143,13 @@ class LiveShadowRepository implements IShadowRepository {
 // Factory — resolves to live or mock based on environment
 // ---------------------------------------------------------------------------
 
-function createShadowRepository(): IShadowRepository {
-  if (SHADOW_API_BASE && SHADOW_API_BASE.startsWith('http')) {
-    return new LiveShadowRepository(SHADOW_API_BASE);
+export function createShadowRepository(apiBase = SHADOW_API_BASE, allowMock = SHADOW_ALLOW_MOCK): IShadowRepository {
+  // Fail-closed contract: Default is ALWAYS Live repository (same-origin /api/shadow/status).
+  // Mock repository is permitted ONLY when VITE_SHADOW_ALLOW_MOCK=true is explicitly configured.
+  if (allowMock) {
+    return new MockShadowRepository();
   }
-  return new MockShadowRepository();
+  return new LiveShadowRepository(apiBase);
 }
 
 export const shadowRepository: IShadowRepository = createShadowRepository();

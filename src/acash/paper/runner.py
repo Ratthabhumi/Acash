@@ -60,6 +60,7 @@ from acash.paper.replay import ReplayEngine, ReplayResult
 from acash.paper.snapshot import DailySnapshot, DailySnapshotStore
 from acash.paper.strategy import (
     InfrastructureTestStrategy,
+    PaperStrategyProtocol,
     SignalDirection,
     StrategySignal,
 )
@@ -276,6 +277,7 @@ class PaperSessionRunner:
     def __init__(
         self,
         config: PaperSessionConfig,
+        strategy: Optional[PaperStrategyProtocol] = None,
     ) -> None:
         if config.mode != PaperMode.PAPER_ONLY:
             raise DataContractError(
@@ -297,13 +299,16 @@ class PaperSessionRunner:
             session_id=config.session_id,
             component_version=config.component_version,
         )
-        self._strategy = InfrastructureTestStrategy(
-            fast_period=3,
-            slow_period=5,
-            trade_quantity=Decimal("1.0"),
-            symbol=config.instrument,
-            config_hash=self._config_hash,
-        )
+        if strategy is not None:
+            self._strategy: PaperStrategyProtocol = strategy
+        else:
+            self._strategy = InfrastructureTestStrategy(
+                fast_period=3,
+                slow_period=5,
+                trade_quantity=Decimal("1.0"),
+                symbol=config.instrument,
+                config_hash=self._config_hash,
+            )
         self._reconciler = PaperReconciliationEngine(
             session_id=config.session_id,
             journal=self._journal,
