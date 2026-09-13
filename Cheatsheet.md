@@ -32,7 +32,7 @@ $$\boxed{\mathbf{Research\ (14/8.5)} \longrightarrow \mathbf{Allocation\ (8)} \l
   - Session: `E3.5-20260913-025117-de2762`
   - Adjudication Basis: **Explicit Human Forensic Adjudication**
   - Historical harness result: `FAIL` (due to `SESSION_ID=unknown` evidence/session-binding defect).
-  - Canonical accepted result: `PASS` (verified 6.00h continuous, 360 M1 bars, 0 restarts, 0 OOM, journal integrity PASS, reconciliation PASS, sealed manifest, VictoriaMetrics telemetry unbroken).
+  - Canonical accepted result: `PASS` (verified continuous runtime: manifest 21,639.30s / harness-loop 21,624s; 361 M1 bars spanning 360 intervals, 0 duplicate timestamps, 0 missing M1 slots; 0 restarts; 0 OOM; journal integrity PASS; reconciliation PASS; sealed manifest; VictoriaMetrics active-window telemetry unbroken [1,443 samples]; zero failure-shaped feed interruptions, 1 graceful shutdown disconnect; zero recovery used; container-memory samples accepted as sufficient by explicit Human Forensic Adjudication).
   - Pi tooling remediation: **MERGED** (`68142aecdccf636912902bbfc4061895c877d195` on `Pi_Personal-Infrastructure/main`).
 - **Phase 13 (Live Small Capital / Forward Paper Validation):**
   - Steps 1–7: **CERTIFIED / CONDITIONALLY SATISFIED**.
@@ -477,7 +477,7 @@ $$\text{Stage 1: Data Check} \longrightarrow \text{Stage 2: Strategy Census} \lo
 - **Current Step Progress:**
   - Steps 1–4: **PASSED** (Implementation, Code Audit, Integration, Recovery).
   - Steps 5–7: **CERTIFIED** (24h local soak complete; telemetry audit PASS; continuous paper readiness certified).
-  - **Gate G7 / Stage S11 (Homelab 6h Soak):** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, Human Forensic Adjudication; Pi tooling remediation merged @ `68142ae`).
+  - **Gate G7 / Stage S11 (Homelab 6h Soak):** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, Human Forensic Adjudication; manifest 21,639.30s, 361 M1 bars spanning 360 intervals, zero failure-shaped feed interruptions, no recovery used; Pi tooling remediation merged @ `68142ae`).
   - Steps 8–9: **STRICTLY LOCKED** (Step 8 Human GO checkpoint locked; Step 9 90-day paper run NOT AUTHORIZED).
 - **Strict Invariants:** Zero live capital authority ($0.00), zero real order submissions (`ORDER_SUBMITTED == 0`), broker disconnected, paper trading NOT AUTHORIZED, live trading LOCKED.
 - **Known Non-Blocking Follow-Up Debt:**

@@ -238,7 +238,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 12. **Phase 12 — MT5 & Multi-Venue Execution Adapters (COMPLETED & FROZEN @ `1e1d154`):**
     - High-integrity broker connectivity for MetaTrader 5 with immutable symbol specs, Decimal volume quantization, tick-grid price alignment, Windows Local IPC transport, and authoritative 6-D reconciliation engine.
 13. **Phase 13 & Infrastructure Validation (Steps 1–7 Certified | Gate G7 / Stage S11 CLOSED):**
-    - Steps 1–7 certified; homelab continuous soak validated under Gate G7 / Stage S11 (Session `E3.5-20260913-025117-de2762`, adjudicated PASS by Human Governance Authority). Pi verifier tooling remediation merged at commit `68142ae`. Steps 8–9 strictly LOCKED ($0.00 capital authority; 0 real orders; broker disconnected).
+    - Steps 1–7 certified; homelab continuous soak validated under Gate G7 / Stage S11 (Session `E3.5-20260913-025117-de2762`, adjudicated PASS by Human Forensic Adjudication: manifest 21,639.30s, 361 M1 bars spanning 360 intervals, zero failure-shaped feed disconnects). Pi verifier tooling remediation merged at commit `68142ae`. Steps 8–9 strictly LOCKED ($0.00 capital authority; 0 real orders; broker disconnected).
 14. **Phase 14 — AI Quantitative Research Layer (PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED):**
     - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor. AI outputs strictly classified as unvalidated proposals; implementation locked until Phase 13 Steps 5–9 are certified.
 
@@ -310,7 +310,7 @@ The complete canonical documentation suite is organized systematically in [`docs
 - **Phases 0–12:** Complete, hardened, and frozen (Gates 1–12 certified).
 - **Phase 13 Infrastructure & Homelab Soak:**
   - Steps 1–7: **CERTIFIED**.
-  - **Gate G7 / Stage S11:** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, accepted by explicit Human Forensic Adjudication).
+  - **Gate G7 / Stage S11:** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, accepted by explicit Human Forensic Adjudication: manifest 21,639.30s, 361 M1 bars spanning 360 intervals, 0 restarts, zero failure-shaped feed interruptions, container memory samples accepted).
   - Pi verifier tooling remediation: **MERGED** (`68142aecdccf636912902bbfc4061895c877d195` on `Pi_Personal-Infrastructure/main`).
   - Steps 8–9: **STRICTLY LOCKED** pending a qualified strategy and explicit Human GO authorization.
 - **Phase 14 (AI Quantitative Research Layer):**
