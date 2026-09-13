@@ -36,6 +36,12 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
                                        No 30-day sample; NOT a candidate; NOT HYP_003; Backtest LOCKED)
   PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
                                        PENDING HUMAN RATIFICATION
+  INFRASTRUCTURE .. Gate G7 / Stage S11   HOMELAB 6-HOUR OPERATIONAL SOAK; CLOSED / PASS;
+                                       Session E3.5-20260913-025117-de2762;
+                                       Human Forensic Adjudication;
+                                       Pi tooling remediation MERGED @ 68142ae;
+                                       ZERO REAL ORDER SUBMISSIONS;
+                                       NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION
   LOCKED ...... HYP_003 (NOT CREATED) / R1 (NOT AUTHORIZED) / empirical validation /
                backtest / trading (LOCKED) / capital ($0.00) / broker (DISCONNECTED) /
                quarantined HYP_001/HYP_002 data spans (PRISTINE / NOT REUSABLE BY DEFAULT)
@@ -48,6 +54,7 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 | CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (24/26 checked; D18 & Human Auth pending); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
 | PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
 | ARCHIVED | `MEC-0013` Opening Range Breakout (ORB) | AUDITED RESEARCH ASSET ONLY (`docs/phase14/mec_0013_orb_research_intake.md`, `mec_0013_orb_research_audit.md`); Human Ratification MEC-0013-D01 = OPTION C (Archived at $0; No commercial data; No 30-day sample; NOT promoted to candidate; NOT HYP_003; Backtest LOCKED; Zero ACASH empirical evidence) |
+| COMPLETED | `Gate G7` / `Stage S11` (Homelab 6h Soak) | **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`; Human Forensic Adjudication; historical harness printed FAIL via `SESSION_ID=unknown` binding defect; verified evidence satisfies all G7 criteria; Pi verifier remediation merged @ `68142ae`; ZERO REAL ORDER SUBMISSIONS) |
 | PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
 | PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
 | LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
@@ -62,15 +69,16 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 
 ---
 
-## ACASH NOW / NEXT / LATER (2026-09-11)
+## ACASH NOW / NEXT / LATER (2026-09-13)
 
 - **NOW** (governance & data-authority resolution; no empirical work):
-  1. MACRO-001 D17 — Human Decision on SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`). D17-E ($0 blocker) maintained.
-  2. MACRO-001 D18 — Downstream reproducibility manifest schema specified (`docs/phase14/macro_001_d18_manifest_specification.md`); unsealed, dependency-blocked on D17.
-  3. MEC-0013 — [COMPLETED / ARCHIVED] Claim-provenance audited, Option C ratified, archived as non-promoted research asset (`docs/phase14/mec_0013_orb_research_audit.md`).
-  4. Data-plane test seam — [COMPLETED / VERIFIED] Offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` verified (`tests/integration/test_parquet_feeder_seam.py`, 4/4 passing, zero alpha logic).
-  5. MACRO-001 Pre-Registration Checklist — [RECONCILED] 24/26 items checked (`docs/phase14/cand_free_macro_001_human_specification_decision_surface.md` §28); Anti-HARKing template prepared (`docs/phase14/macro_001_anti_harking_audit_template.md`).
-- **NEXT** (strict sequence; only after D17 / D18 are resolved):
+  1. Gate G7 / Stage S11 — [COMPLETED / CLOSED] Infrastructure 6h continuous soak validated under session `E3.5-20260913-025117-de2762` via Human Forensic Adjudication; Pi tooling remediation merged @ `68142ae`; ZERO REAL ORDER SUBMISSIONS.
+  2. MACRO-001 D17 — Human Decision on SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`). D17-E ($0 blocker) maintained.
+  3. MACRO-001 D18 — Downstream reproducibility manifest schema specified (`docs/phase14/macro_001_d18_manifest_specification.md`); unsealed, dependency-blocked on D17.
+  4. MEC-0013 — [COMPLETED / ARCHIVED] Claim-provenance audited, Option C ratified, archived as non-promoted research asset (`docs/phase14/mec_0013_orb_research_audit.md`).
+  5. Data-plane test seam — [COMPLETED / VERIFIED] Offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` verified (`tests/integration/test_parquet_feeder_seam.py`, 4/4 passing, zero alpha logic).
+  6. MACRO-001 Pre-Registration Checklist — [RECONCILED] 24/26 items checked (`docs/phase14/cand_free_macro_001_human_specification_decision_surface.md` §28); Anti-HARKing template prepared (`docs/phase14/macro_001_anti_harking_audit_template.md`).
+- **NEXT** (NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION; strict sequence; only after D17 / D18 are resolved):
   1. Complete pre-registration freeze checklist (26/26 items) -> Draft Freeze Candidate.
   2. Anti-HARKing review.
   3. Pre-registration Freeze.
@@ -130,14 +138,15 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
 ✅ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN — 1240/1240 Tests, 1e1d154]
    │
    ▼
-🟡 Phase 13: Live Small Capital Deployment ──► Gate 13 [ACTIVE — Step 5 24h Soak In Progress, Capital $0.00]
+✅ Phase 13: Live Small Capital & Infrastructure ──► Gate 13 Steps 1–7 Certified; Gate G7 / Stage S11 CLOSED [PASS — Session E3.5-20260913-025117-de2762]
    ├─ ✅ Step 1: Implementation & Safety Envelopes [PASSED]
    ├─ ✅ Step 2: Code & Unit Audit [PASSED]
    ├─ ✅ Step 3: Integration Testing & Local Simulator [PASSED]
    ├─ ✅ Step 4: Restart, Recovery & Rehydration [PASSED]
-   ├─ 🟡 Step 5: 24-Hour Unattended Soak Test [ACTIVE / IN PROGRESS]
-   ├─ 🔒 Step 6: Telemetry, Reconciliation & Forensic Audit [LOCKED]
-   ├─ 🔒 Step 7: Continuous Paper Readiness Certification [LOCKED]
+   ├─ ✅ Step 5: 24-Hour Unattended Soak Test [VERIFIED COMPLETED]
+   ├─ ✅ Step 6: Telemetry, Reconciliation & Forensic Audit [PASSED]
+   ├─ ✅ Step 7: Continuous Paper Readiness Certification [CONDITIONALLY SATISFIED]
+   ├─ ✅ Gate G7 / Stage S11: Homelab 6h Continuous Soak [CLOSED / PASS — Human Forensic Adjudication]
    ├─ 🔒 Step 8: Explicit Human GO Checkpoint [LOCKED]
    └─ 🔒 Step 9: 90-Day Continuous Paper Forward Run [LOCKED]
    │
@@ -452,13 +461,29 @@ Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
   - **Step 5 (24-Hour Unattended Soak):** `✅ VERIFIED COMPLETED` (86,400.21s runtime, 86,085 ledger events, 8,608 telemetry records, 0 errors, graceful exit).
   - **Step 6 (Telemetry Audit):** `✅ PASS` (Full forensic audit verified: SHA-256 chained integrity, zero gaps >15s, RSS peak 175.29 MB, pulse reconciliation 100%). See [`docs/phase13/phase13_step6_full_audit_report.md`](phase13/phase13_step6_full_audit_report.md).
   - **Step 7 (Continuous Paper Readiness):** `✅ CONDITIONALLY SATISFIED` (Runtime infrastructure verified ready; blocked on strategy qualification; B23.2 dedicated VM deferred). See [`docs/phase13/phase13_step7_paper_readiness_review.md`](phase13/phase13_step7_paper_readiness_review.md).
+  - **Gate G7 / Stage S11 (Homelab 6-Hour Operational Soak):** `✅ CLOSED / PASS`
+    - **Session ID:** `E3.5-20260913-025117-de2762`
+    - **Adjudication Basis:** Explicit **Human Forensic Adjudication**
+    - **Historical Harness Result:** `FAIL` (due to `SESSION_ID=unknown` evidence/session-binding defect in the runner script; post-run harness looked for `unknown.*` evidence files).
+    - **Canonical Accepted Result:** `PASS` (actual sealed session artifacts independently recovered and verified; satisfies all ratified G7 criteria).
+    - **Verified Evidence:** $\ge 6.00$ hours continuous runtime (21,660s), exact continuous M1 sequence (360 bars, 0 duplicate timestamps), zero restarts (`RestartCount == 0`), zero OOM, journal integrity PASS (SHA-256 event hash chain), reconciliation PASS, sealed manifest, continuous VictoriaMetrics telemetry, no feed-failure interruption, operator-only recovery (`operator_only_recovery == true`), memory RSS evidence accepted by explicit human forensic adjudication.
+    - **Pi Tooling Remediation:** Verifier remediation merged into `Ratthabhumi/Pi_Personal-Infrastructure/main` at commit `68142aecdccf636912902bbfc4061895c877d195`. Verifier enforces canonical invariant: **ZERO REAL ORDER SUBMISSIONS** (`ORDER_SUBMITTED == 0`, `manifest.no_real_orders == true`, `manifest.simulated_fills_only == true`). Distinguishes allowed internal simulated paper order accounting (`ORDER_INTENT_CREATED`, `FILL_SIMULATED`, non-zero `total_order_count`) from prohibited real broker dispatches. Requirement `total_order_count == 0` eliminated.
+    - **Known Non-Blocking Follow-Up Debt:**
+      1. *Pi diagnostic formatting:* `jq -r ".${field} // empty"` may display boolean `false` as empty/missing in diagnostic logs; enforcement remains strict fail-closed.
+      2. *ACASH manifest docstring:* `manifest.py` docstring states `total_order_count: Total orders submitted` while runtime behavior counts internal simulated order intents (documentation debt; does not represent real broker dispatches).
   - **Step 8 (Human GO Checkpoint):** `🔒 LOCKED` (Awaiting qualified strategy & explicit operator authorization).
   - **Step 9 (90-Day Continuous Paper Run):** `🔒 NOT AUTHORIZED` (Clock has not started; $0.00 capital authority).
 - **Core Invariants:**
   - Live Capital Authority: **$0.00 (Hard-Locked)**.
-  - Live Order Emission: **0 Orders**.
+  - Live Real Orders: **0 Orders** (`NO_REAL_ORDERS=true`, `simulated_fills_only=true`).
   - Strategy STRAT-MOM-MULTI-HORIZON-V1: **NOT QUALIFIED / TERMINALLY FALSIFIED**.
   - Broker Wire: **DISCONNECTED**.
+  - Paper Trading: **NOT AUTHORIZED**.
+  - Live Trading: **LOCKED**.
+  - Backtesting: **LOCKED**.
+  - HYP_003: **NOT CREATED**.
+  - R1: **NOT STARTED**.
+  - **NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION**.
 - **Gate 13 Criteria:** **EXPLICIT HUMAN APPROVAL REQUIRED**; all safety gates, kill switches, and alerts verified operational; full completion of 24h soak evidence audit and subsequent steps.
 - **Multi-Broker / Multi-Asset Roadmap (ADR-021):** While Phase 13 currently executes against the active MetaQuotes MT5 Demo baseline under Gate A, the long-term architecture is established as Asset-Agnostic and Multi-Venue (Pepperstone MT5 candidate, Alpaca US Equities/ETF candidate, OANDA API candidate, IBKR multi-asset candidate). See [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
 

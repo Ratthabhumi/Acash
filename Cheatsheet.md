@@ -1,7 +1,7 @@
 # ACASH — Developer & Quant Quick Reference Cheatsheet
 
 **Project:** ACASH (Automated Capital Allocation System)  
-**Version:** 1.14.0 (Phase 12 Frozen | Phase 13 Step 5 Active | Phase 14 Plan Approved)  
+**Version:** 1.14.0 (Phases 0–12 Frozen | Phase 13 Steps 1–7 Certified | Gate G7 / Stage S11 CLOSED [PASS] | Phase 14 Research Pre-Registration | Trading & Paper LOCKED)
 **Test Suite:** Strict Multi-Tier Gate Discipline (Phase-specific regression suites verified at gate checkpoints) | MyPy: Strict mode clean | HEAD: `origin/main`  
 **Operating Philosophy:** *"DO NOT ASSUME AN EDGE. PROVE IT."*
 
@@ -26,19 +26,35 @@ $$\boxed{\mathbf{Research\ (14/8.5)} \longrightarrow \mathbf{Allocation\ (8)} \l
 
 ---
 
-## 1.5 Current Governance & Operational State (2026-09-05)
+## 1.5 Current Governance & Operational State (2026-09-13)
 
-- **Phase 12 (MT5 & Multi-Venue Execution Adapters):** COMPLETED & FROZEN (`1e1d154`).
-- **Phase 13 (Live Small Capital / Forward Paper Validation):** ACTIVE & IN PROGRESS.
-  - Steps 1–4: **PASSED** (Implementation, Code Audit, Integration, Recovery).
-  - Step 5 (24-Hour Unattended Soak): **ACTIVE / IN PROGRESS** (PID `41844`, `pythonw.exe`).
-  - Steps 6–9: **STRICTLY LOCKED** pending Step 5 wall-clock completion & evidence audit.
-- **Phase 14 (AI Quantitative Research Layer):** PLAN APPROVED AT PLAN LEVEL (`docs/phase14/phase14_master_research_architecture_plan.md`).
-  - Implementation: **STRICTLY LOCKED / NOT AUTHORIZED**.
-- **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**.
-- **Live Order Emission:** Strictly **0 Orders**.
-- **Broker Connection:** Strictly **DISCONNECTED**.
-- **Strategy Admission:** Strictly **`QUALIFICATION_BLOCKED`**.
+- **Gate G7 / Stage S11 (Homelab 6-Hour Operational Soak):** **CLOSED / PASS**
+  - Session: `E3.5-20260913-025117-de2762`
+  - Adjudication Basis: **Explicit Human Forensic Adjudication**
+  - Historical harness result: `FAIL` (due to `SESSION_ID=unknown` evidence/session-binding defect).
+  - Canonical accepted result: `PASS` (verified 6.00h continuous, 360 M1 bars, 0 restarts, 0 OOM, journal integrity PASS, reconciliation PASS, sealed manifest, VictoriaMetrics telemetry unbroken).
+  - Pi tooling remediation: **MERGED** (`68142aecdccf636912902bbfc4061895c877d195` on `Pi_Personal-Infrastructure/main`).
+- **Phase 13 (Live Small Capital / Forward Paper Validation):**
+  - Steps 1–7: **CERTIFIED / CONDITIONALLY SATISFIED**.
+  - Step 8 (Human GO Checkpoint): **STRICTLY LOCKED** (no qualified strategy).
+  - Step 9 (90-Day Continuous Paper Run): **STRICTLY NOT AUTHORIZED** ($0.00 capital authority).
+- **Phase 14 (AI Quantitative Research Layer):**
+  - Gate 14 technical research capability accepted; pre-registration in progress for mainline `CAND-FREE-MACRO-001` (resolving data-authority items D17/D18).
+  - Implementation slices are strictly unvalidated proposals; zero trading, backtest, or execution authority.
+- **Canonical Safety Invariant:** **ZERO REAL ORDER SUBMISSIONS**
+  - Enforces `ORDER_SUBMITTED == 0`, `manifest.no_real_orders == true`, and `manifest.simulated_fills_only == true`.
+  - Internal simulated paper order accounting (`ORDER_INTENT_CREATED`, `FILL_SIMULATED`, non-zero `total_order_count` / `total_trade_count`) does not violate `NO_REAL_ORDERS=true`.
+  - `total_order_count == 0` is strictly eliminated as a requirement.
+- **Strict Governance Boundaries:**
+  - Live Capital Authority: Strictly **$0.00 (Hard-Locked)**.
+  - Live Real Orders: Strictly **0 Orders** (`NO_REAL_ORDERS=true`).
+  - Broker Connection: Strictly **DISCONNECTED**.
+  - Paper Trading: **NOT AUTHORIZED**.
+  - Live Trading: **LOCKED**.
+  - Backtesting: **LOCKED**.
+  - HYP_003: **NOT CREATED**.
+  - R1: **NOT STARTED**.
+- **Next Governance Transition:** **AWAITING HUMAN DECISION**.
 
 ---
 
@@ -456,13 +472,17 @@ $$\text{Stage 1: Data Check} \longrightarrow \text{Stage 2: Strategy Census} \lo
 
 ---
 
-## 14. Phase 13: Live Small Capital Deployment [ACTIVE — STEP 5 SOAK IN PROGRESS]
+## 14. Phase 13 & Infrastructure Validation [STEPS 1–7 CERTIFIED | GATE G7 / STAGE S11 CLOSED]
 - **Execution Envelope:** Micro-capital live execution validation with micro-lots under strict $0.00 capital authority.
 - **Current Step Progress:**
   - Steps 1–4: **PASSED** (Implementation, Code Audit, Integration, Recovery).
-  - Step 5: **ACTIVE / IN PROGRESS** (24-hour unattended soak runner under PID `41844`, Local Simulator).
-  - Steps 6–9: **STRICTLY LOCKED** pending Step 5 wall-clock completion and evidence audit.
-- **Strict Invariant:** Zero live capital authority ($0.00), zero live orders, broker disconnected, strategy blocked.
+  - Steps 5–7: **CERTIFIED** (24h local soak complete; telemetry audit PASS; continuous paper readiness certified).
+  - **Gate G7 / Stage S11 (Homelab 6h Soak):** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, Human Forensic Adjudication; Pi tooling remediation merged @ `68142ae`).
+  - Steps 8–9: **STRICTLY LOCKED** (Step 8 Human GO checkpoint locked; Step 9 90-day paper run NOT AUTHORIZED).
+- **Strict Invariants:** Zero live capital authority ($0.00), zero real order submissions (`ORDER_SUBMITTED == 0`), broker disconnected, paper trading NOT AUTHORIZED, live trading LOCKED.
+- **Known Non-Blocking Follow-Up Debt:**
+  1. Pi diagnostic formatting: `jq -r ".${field} // empty"` may display boolean `false` as empty/missing in diagnostic messages; enforcement remains fail-closed.
+  2. ACASH manifest wording: `total_order_count` docstring in `manifest.py` states "Total orders submitted" while runtime behavior tracks simulated order intents (documentation debt; not real broker dispatch).
 
 ---
 
@@ -486,8 +506,9 @@ uv run pytest tests/integration/ -v
 # 2. Run Static Type Checker (MyPy - strict mode)
 uv run mypy src/ tests/
 
-# 3. Check Phase 13 Step 5 Soak Status
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\status_phase13_soak.ps1
+# 3. Post-G7 Offline Evidence Verification & Audit (Target Session)
+bash scripts/automation/verify_g7_evidence.sh E3.5-20260913-025117-de2762
+bash scripts/automation/g7.sh audit E3.5-20260913-025117-de2762
 
 # 4. Check Git Status & Lineage
 git status --short

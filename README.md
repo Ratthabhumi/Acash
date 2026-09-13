@@ -2,8 +2,9 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-Proprietary%20%2F%20Research-green.svg)](#)
 [![Architecture: Modular Monolith](https://img.shields.io/badge/architecture-Modular%20Monolith-orange.svg)](#)
-[![Status: Phase 13 Step 5 Active (24h Soak)](https://img.shields.io/badge/status-Phase%2013%20Step%205%20Active%20(24h%20Soak)-yellow.svg)](docs/ROADMAP.md)
-[![Phase 14: Plan Approved (Impl Locked)](https://img.shields.io/badge/Phase%2014-Plan%20Approved%20(Impl%20Locked)-blue.svg)](docs/phase14/phase14_master_research_architecture_plan.md)
+[![Status: Gate G7 / Stage S11 Closed (PASS)](https://img.shields.io/badge/status-Gate%20G7%20%2F%20Stage%20S11%20Closed%20(PASS)-green.svg)](docs/ROADMAP.md)
+[![Phase 14: Research Pre-Registration (Trading Locked)](https://img.shields.io/badge/Phase%2014-Research%20Pre--Registration%20(Trading%20Locked)-blue.svg)](docs/phase14/phase14_master_research_architecture_plan.md)
+[![Trading: Strictly Locked ($0.00 Capital)](https://img.shields.io/badge/trading-Strictly%20Locked%20($0.00%20Capital)-red.svg)](docs/ROADMAP.md)
 
 ---
 
@@ -174,7 +175,7 @@ ACASH explicitly decouples state management from decision and execution flows:
 ✅ Phase 10: Runtime Orchestration & Continuous Paper Operations (Supervisor + Scheduler + Ledger) ──► Gate 10 [FROZEN @ 3955bf6]
 ✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [FROZEN @ 092a2b1]
 ✅ Phase 12: MT5 & Multi-Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN @ 1e1d154]
-🟡 Phase 13: Live Small Capital Deployment ──► Gate 13 [ACTIVE — Step 5 24h Soak In Progress, Capital $0.00]
+✅ Phase 13 & Infrastructure: Small Capital & Soak ──► Gate 13 Steps 1–7 Certified; Gate G7 / Stage S11 CLOSED [PASS — Human Forensic Adjudication, Session E3.5-20260913-025117-de2762]; Steps 8–9 LOCKED
 📐 Phase 14: AI Quantitative Research Layer ──► Gate 14 [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
 ⏳ Phase 15–22: Strategy Admission Standard & Lifecycle Sequence [HARMONIZED — ADR-023]
 🏛️ Phase 23: Adaptive Multi-Horizon Strategy Architecture [ARCHITECTURAL RECORD — ADR-024/025]
@@ -236,8 +237,8 @@ ACASH explicitly decouples state management from decision and execution flows:
     - Completed, hardened, and frozen under sequential governance (Gates 8, 8.5, 9, 10, 11 passed).
 12. **Phase 12 — MT5 & Multi-Venue Execution Adapters (COMPLETED & FROZEN @ `1e1d154`):**
     - High-integrity broker connectivity for MetaTrader 5 with immutable symbol specs, Decimal volume quantization, tick-grid price alignment, Windows Local IPC transport, and authoritative 6-D reconciliation engine.
-13. **Phase 13 — Live Small Capital Deployment (ACTIVE & IN PROGRESS):**
-    - Forward execution validation with micro-capital. Steps 1–4 passed; Step 5 24-hour unattended soak test actively executing in background (PID 41844); Steps 6–9 locked. Live capital hard-locked at $0.00; live orders 0; broker disconnected.
+13. **Phase 13 & Infrastructure Validation (Steps 1–7 Certified | Gate G7 / Stage S11 CLOSED):**
+    - Steps 1–7 certified; homelab continuous soak validated under Gate G7 / Stage S11 (Session `E3.5-20260913-025117-de2762`, adjudicated PASS by Human Governance Authority). Pi verifier tooling remediation merged at commit `68142ae`. Steps 8–9 strictly LOCKED ($0.00 capital authority; 0 real orders; broker disconnected).
 14. **Phase 14 — AI Quantitative Research Layer (PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED):**
     - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor. AI outputs strictly classified as unvalidated proposals; implementation locked until Phase 13 Steps 5–9 are certified.
 
@@ -301,34 +302,38 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ---
 
-## 5.5 CURRENT STATUS / NEXT STEP — Phase 13 Step 5 Active (24h Soak) ──► Step 6 Telemetry Audit
+## 5.5 CURRENT STATUS / OPERATING POSTURE — Post-Gate G7 / Stage S11 Forensic Closure
 
-> **As of Active 24-Hour Soak Test (PID `41844`).** This is the authoritative current status
-> for the repository — see [`docs/ROADMAP.md`](docs/ROADMAP.md) and
-> [`Cheatsheet.md`](Cheatsheet.md) for the synchronized status blocks.
+> **Current Authoritative Governance State (2026-09-13).** Synchronized with [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`Cheatsheet.md`](Cheatsheet.md).
 
-### Where the project is
-- **Phases 0–12 complete, hardened, and frozen** (Gates 1–12 certified).
-- **Phase 13 (Live Small Capital / Forward Paper Validation): ACTIVE & IN PROGRESS**
-  - Steps 1–4: **PASSED** (Implementation, Unit Audit, Integration Testing, Recovery/Restart).
-  - Step 5 (24-Hour Unattended Soak Test): **ACTIVE / IN PROGRESS** running in background under PID `41844` (`pythonw.exe`).
-  - Steps 6–9: **STRICTLY LOCKED** pending 24.0 wall-clock hours completion and formal evidence audit.
-- **Phase 14 (AI Quantitative Research Layer): PLAN APPROVED AT PLAN LEVEL**
-  - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor ([`docs/phase14/phase14_master_research_architecture_plan.md`](docs/phase14/phase14_master_research_architecture_plan.md)).
-  - **Implementation is STRICTLY LOCKED / FORBIDDEN** until Phase 13 Steps 5–9 are certified.
+### Project Maturity & Current State
+- **Phases 0–12:** Complete, hardened, and frozen (Gates 1–12 certified).
+- **Phase 13 Infrastructure & Homelab Soak:**
+  - Steps 1–7: **CERTIFIED**.
+  - **Gate G7 / Stage S11:** **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`, accepted by explicit Human Forensic Adjudication).
+  - Pi verifier tooling remediation: **MERGED** (`68142aecdccf636912902bbfc4061895c877d195` on `Pi_Personal-Infrastructure/main`).
+  - Steps 8–9: **STRICTLY LOCKED** pending a qualified strategy and explicit Human GO authorization.
+- **Phase 14 (AI Quantitative Research Layer):**
+  - Gate 14 technical research capability accepted; pre-registration in progress for mainline `CAND-FREE-MACRO-001` (resolving data-authority items D17/D18).
+  - Implementation slices are strictly unvalidated proposals; zero trading, backtest, or execution authority.
 
-### Sovereign Separation of Concerns & Safety Invariants
-$$\boxed{\mathbf{Research\ (14)} \neq \mathbf{Qualification\ (8.5)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (12)} \neq \mathbf{Broker}}$$
+### Strict Safety Invariants & Zero-Real-Order Posture
+$$\boxed{\mathbf{Research\ (14)} \neq \mathbf{Qualification\ (8.5)} \neq \mathbf{Allocation\ (8)} \neq \mathbf{Supervisor\ (10)} \neq \mathbf{Risk\ (9)} \neq \mathbf{Execution\ (12/7)} \neq \mathbf{Broker}}$$
 
-- **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**.
-- **Live Order Emission:** Strictly **0 Orders**.
+- **Canonical Safety Invariant:** **ZERO REAL ORDER SUBMISSIONS**.
+  - Distinguishes allowed simulated paper execution (`ORDER_INTENT_CREATED`, `FILL_SIMULATED`, portfolio accounting) from strictly forbidden real broker dispatches (`ORDER_SUBMITTED == 0`).
+- **Canonical Capital Authority:** Strictly **$0.00 (Hard-Locked)**.
+- **Real Order Submissions:** Strictly **0 Orders** (`NO_REAL_ORDERS=true`, `simulated_fills_only=true`).
 - **Broker Connection:** Strictly **DISCONNECTED**.
-- **Strategy Admission:** Strictly **`QUALIFICATION_BLOCKED`**.
+- **Paper Trading:** **NOT AUTHORIZED**.
+- **Live Trading:** **LOCKED**.
+- **Backtesting:** **LOCKED**.
+- **HYP_003:** **NOT CREATED**.
+- **R1:** **NOT STARTED**.
 
-### Immediate Next Milestone
-- Allow Phase 13 Step 5 soak process (PID 41844) to complete the 24.0-hour wall-clock run without interruption.
-- Perform evidence-based Step 5 completion audit (telemetry continuity, memory trend, ledger integrity, crash recovery validation).
-- Proceed sequentially to Step 6 only upon formal certification of Step 5 evidence.
+### Next Governance Transition
+- **NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION**
+- Canonical governance records: [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/operations/G7-SOAK-20260913-OBSERVATIONS.md`](docs/operations/G7-SOAK-20260913-OBSERVATIONS.md), [`docs/phase14/research_execution_timing_note.md`](docs/phase14/research_execution_timing_note.md).
 
 ---
 
