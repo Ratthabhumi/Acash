@@ -98,12 +98,31 @@ def test_alpaca_venue_derived_endpoints() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI tests require Windows PowerShell")
-def test_powershell_launcher_help_and_missing_vault(tmp_path: Path) -> None:
-    """Verify launcher shows error when vault is not found or displays help cleanly."""
+def test_powershell_launcher_help() -> None:
+    """Help exits cleanly regardless of the host's output encoding."""
     run_script = SCRIPTS_DIR / "run_paper.ps1"
 
     # Test ShowHelp
     cmd_help = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(run_script), "-ShowHelp"]
-    res_help = subprocess.run(cmd_help, capture_output=True, text=True)
+    # The contract markers are ASCII; inspect bytes without locale-dependent
+    # decoding of PowerShell's localized help text.
+    res_help = subprocess.run(cmd_help, capture_output=True, timeout=30)
     assert res_help.returncode == 0
-    assert "ACASH" in res_help.stdout or "Paper-Only" in res_help.stdout
+    assert b"ACASH" in res_help.stdout or b"Paper-Only" in res_help.stdout
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows launcher requires Windows PowerShell")
+def test_powershell_launcher_missing_vault_fails_closed(tmp_path: Path) -> None:
+    """An isolated empty profile must fail before credentials or payload use."""
+    command = [
+        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        str(SCRIPTS_DIR / "run_paper.ps1"), "-PreflightOnly",
+    ]
+    result = subprocess.run(
+        command,
+        env={**os.environ, "USERPROFILE": str(tmp_path)},
+        capture_output=True,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert b"credentials not found in local vault" in result.stdout

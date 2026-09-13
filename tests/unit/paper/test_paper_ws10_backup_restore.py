@@ -45,6 +45,9 @@ from tests.fixtures.synthetic_acash_backup import (
 )
 
 
+type CreatedBackup = tuple[Path, Path, AcashBackupManifest]
+
+
 @pytest.fixture
 def clean_synthetic_root(tmp_path: Path) -> Path:
     """Fixture providing a populated synthetic ACASH storage root."""
@@ -54,7 +57,7 @@ def clean_synthetic_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def created_backup(clean_synthetic_root: Path, tmp_path: Path):
+def created_backup(clean_synthetic_root: Path, tmp_path: Path) -> CreatedBackup:
     """Fixture creating a clean tar.gz backup archive and manifest."""
     backup_out = tmp_path / "backup_out"
     archive_path, manifest_path, manifest = create_acash_backup_archive(
@@ -84,7 +87,7 @@ def test_01_synthetic_fixture_structure(clean_synthetic_root: Path) -> None:
     assert len(window_states) == 1
 
 
-def test_02_backup_archive_and_manifest_generation(created_backup) -> None:
+def test_02_backup_archive_and_manifest_generation(created_backup: CreatedBackup) -> None:
     """Verify backup creates tar.gz, manifest.json, and sha256 checksums."""
     archive_path, manifest_path, manifest = created_backup
 
@@ -103,7 +106,7 @@ def test_02_backup_archive_and_manifest_generation(created_backup) -> None:
         assert not rel_path.startswith("/")
 
 
-def test_03_restore_and_validation_pass(created_backup, tmp_path: Path) -> None:
+def test_03_restore_and_validation_pass(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Verify clean backup restores and validates with PASS on all checks."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_drill"
@@ -126,7 +129,7 @@ def test_03_restore_and_validation_pass(created_backup, tmp_path: Path) -> None:
     assert "CHK_WINDOW_MANIFEST_PROVENANCE" in [c.check_id for c in result.checks]
 
 
-def test_04_tampered_journal_detection_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_04_tampered_journal_detection_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Corrupting an event in the session journal must cause FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_corrupt_journal"
@@ -155,7 +158,7 @@ def test_04_tampered_journal_detection_fails_closed(created_backup, tmp_path: Pa
     assert any("Checksum mismatch" in v or "Journal" in v for v in result.violations)
 
 
-def test_05_tampered_session_manifest_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_05_tampered_session_manifest_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Tampering with session manifest mode or lineage must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_corrupt_smanifest"
@@ -179,7 +182,7 @@ def test_05_tampered_session_manifest_fails_closed(created_backup, tmp_path: Pat
     assert any("mode" in v or "Checksum mismatch" in v for v in result.violations)
 
 
-def test_06_tampered_window_manifest_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_06_tampered_window_manifest_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Tampering with WindowManifest runtime segment or hash must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_corrupt_wmanifest"
@@ -203,7 +206,7 @@ def test_06_tampered_window_manifest_fails_closed(created_backup, tmp_path: Path
     assert any("computed hash" in v or "Checksum mismatch" in v for v in result.violations)
 
 
-def test_07_missing_file_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_07_missing_file_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Deleting an evidence file listed in the manifest must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_missing_file"
@@ -225,7 +228,7 @@ def test_07_missing_file_fails_closed(created_backup, tmp_path: Path) -> None:
     assert any("Missing file from backup manifest" in v for v in result.violations)
 
 
-def test_08_unexpected_file_detected_in_strict_mode(created_backup, tmp_path: Path) -> None:
+def test_08_unexpected_file_detected_in_strict_mode(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Injecting an unauthorized rogue file into sessions must FAIL CLOSED in strict mode."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_unexpected_file"
@@ -248,7 +251,7 @@ def test_08_unexpected_file_detected_in_strict_mode(created_backup, tmp_path: Pa
     assert any("Unexpected extraneous files detected" in v for v in result.violations)
 
 
-def test_09_provenance_mismatch_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_09_provenance_mismatch_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Segment with altered container_id or missing clock attestation must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_provenance_mismatch"
@@ -271,7 +274,7 @@ def test_09_provenance_mismatch_fails_closed(created_backup, tmp_path: Path) -> 
     assert result.passed is False
 
 
-def test_10_wrong_git_commit_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_10_wrong_git_commit_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Providing expected_git_commit that doesn't match restored state must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_wrong_commit"
@@ -288,7 +291,7 @@ def test_10_wrong_git_commit_fails_closed(created_backup, tmp_path: Path) -> Non
     assert any("git_commit" in v for v in result.violations)
 
 
-def test_11_wrong_config_hash_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_11_wrong_config_hash_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Providing expected_config_hash mismatch must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_wrong_config"
@@ -305,7 +308,7 @@ def test_11_wrong_config_hash_fails_closed(created_backup, tmp_path: Path) -> No
     assert any("config_hash" in v for v in result.violations)
 
 
-def test_12_wrong_image_digest_fails_closed(created_backup, tmp_path: Path) -> None:
+def test_12_wrong_image_digest_fails_closed(created_backup: CreatedBackup, tmp_path: Path) -> None:
     """Providing expected_image_digest mismatch must FAIL CLOSED."""
     archive_path, manifest_path, manifest = created_backup
     staging_dir = tmp_path / "staging_wrong_digest"

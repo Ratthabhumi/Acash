@@ -603,37 +603,38 @@ class TestPaperSessionManifest:
     def test_manifest_hash_is_deterministic(self) -> None:
         """Same inputs → same manifest_hash."""
         now = datetime.now(timezone.utc)
-        kwargs = dict(
-            session_id="SES-HASH-TEST",
-            manifest_id="MAN-HASH",
-            strategy_id="STRAT-X",
-            strategy_version="2.0.0",
-            is_infrastructure_test_strategy=True,
-            git_commit="deadbeef",
-            config_hash="a" * 64,
-            strategy_config_hash="b" * 64,
-            journal_final_hash="c" * 64,
-            data_source="SYN",
-            instrument_universe=["SYN-USD"],
-            market_domain="SYN",
-            fill_model_version="V1",
-            risk_model_version="V1",
-            start_time_utc=now - timedelta(hours=2),
-            end_time_utc=now,
-            total_event_count=50,
-            total_warning_count=0,
-            total_error_count=0,
-            total_trade_count=5,
-            total_order_count=5,
-            total_rejected_order_count=0,
-            final_portfolio_summary={"equity": "100000"},
-            final_reconciliation_status="PASS",
-            journal_integrity_status="PASS",
-        )
-        m1 = PaperSessionManifest.seal(**kwargs)
-        m2 = PaperSessionManifest.seal(**kwargs)
-        # manifest_hash may differ because sealed_at_utc will differ slightly
-        # but manifest_hash computation excludes sealed_at_utc
+        def seal_manifest() -> PaperSessionManifest:
+            return PaperSessionManifest.seal(
+                session_id="SES-HASH-TEST",
+                manifest_id="MAN-HASH",
+                strategy_id="STRAT-X",
+                strategy_version="2.0.0",
+                is_infrastructure_test_strategy=True,
+                git_commit="deadbeef",
+                config_hash="a" * 64,
+                strategy_config_hash="b" * 64,
+                journal_final_hash="c" * 64,
+                data_source="SYN",
+                instrument_universe=["SYN-USD"],
+                market_domain="SYN",
+                fill_model_version="V1",
+                risk_model_version="V1",
+                start_time_utc=now - timedelta(hours=2),
+                end_time_utc=now,
+                total_event_count=50,
+                total_warning_count=0,
+                total_error_count=0,
+                total_trade_count=5,
+                total_order_count=5,
+                total_rejected_order_count=0,
+                final_portfolio_summary={"equity": "100000"},
+                final_reconciliation_status="PASS",
+                journal_integrity_status="PASS",
+            )
+
+        m1 = seal_manifest()
+        m2 = seal_manifest()
+        # Sealing timestamps are excluded from the canonical manifest hash.
         assert m1.manifest_hash == m2.manifest_hash
 
 

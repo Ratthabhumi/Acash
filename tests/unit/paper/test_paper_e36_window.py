@@ -31,6 +31,7 @@ import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.paper.metrics import (
+    MetricsRegistry,
     PaperMetricsServer,
     build_operational_metrics,
     metrics_for_window_and_journal,
@@ -568,13 +569,14 @@ def test_metrics_convenience_function() -> None:
 
 def test_metrics_server_dynamic_callable_registry() -> None:
     port = free_port()
-    state = {"event_count": 10, "state": "QUIESCENT"}
+    event_count = 10
+    window_state = "QUIESCENT"
 
-    def _dynamic_collect():
+    def _dynamic_collect() -> MetricsRegistry:
         return build_operational_metrics(
-            event_count=state["event_count"],
+            event_count=event_count,
             journal_integrity_status="PASS",
-            window_state=state["state"],
+            window_state=window_state,
             feed_failure_events=0,
             auto_recovery_used=False,
             uptime_seconds=5.0,
@@ -590,8 +592,8 @@ def test_metrics_server_dynamic_callable_registry() -> None:
         assert 'acash_window_state{state="QUIESCENT"} 1.0' in body
 
         # Update state dynamically
-        state["event_count"] = 25
-        state["state"] = "OPEN"
+        event_count = 25
+        window_state = "OPEN"
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as resp:
             assert resp.status == 200
             body2 = resp.read().decode("utf-8")
