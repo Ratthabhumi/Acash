@@ -80,3 +80,47 @@ All agent reports must conclude with an explicit verification ledger:
 - Remote CI Status: [VERIFIED (run id) / PENDING / NOT AVAILABLE]
 - Methodological Caveats: [EXPLICIT BOUNDARY STATEMENTS]
 ```
+
+---
+
+## 4. Session Start, Authority, and Reusable Workflows
+
+- Establish the actual checkout with `git status --short --branch`, `git branch -vv`,
+  `git log -5 --oneline`, `git diff`, and `git diff --cached`. Local tracking refs
+  are not proof of current remote state. Preserve existing work; never pull,
+  reset, stash, or overwrite merely to make an audit look clean.
+- Read the relevant source and decision records using the
+  [agent workflow and source map](docs/engineering/agent-workflow.md). Handoffs,
+  dashboards, other agents' memories, and this bootstrap's audit snapshot are
+  navigation aids, not new governance authority. Resolve conflicts by decision
+  scope and explicit supersession; unresolved authority stays blocked.
+- Infrastructure readiness != strategy qualification != paper authorization !=
+  live authorization. AI has no sovereign authority. Keep canonical capital at
+  $0.00 and `NO_REAL_ORDERS=true` unless the required explicit human authorization
+  changes that specific boundary. Synthetic cash in fixtures is not live capital.
+- Before a mutation involving hypotheses, strategy, research admission, data
+  authority, gates, capital, paper/live access, or governance, classify the
+  required human authority and verify the applicable authorization. A task request
+  or profitable result alone does not satisfy a separate ratification contract.
+  Continue safe inspection and preparation; stop the dependent mutation if its
+  required authority is absent. Do not ask again for authorization already
+  established for the same action and scope.
+- Preserve historical governance and phase records. New operating instructions
+  cannot create HYP_003, start R1, unlock backtests, grant trading authority, or
+  amend acceptance criteria. Record a separately authorized amendment with its
+  lineage rather than silently rewriting history.
+- Feed policy and G7 acceptance come from their human decision records. An audit
+  is not a launch/resume request. Reconnect != trading resume; G7 audit != G7 PASS.
+- Treat `inspect`, `audit`, and `check` requests as read-only. For authorized
+  implementation, use the smallest safe change and the verification workflow
+  above. Do not commit, push, create a PR, or mutate remote branches without an
+  explicit request covering that action. No blind resets, force pushes, history
+  rewrites, or discarding uncommitted work.
+- Report facts with evidence, separate inference and proposals, state changes,
+  tests, risks, unresolved items, authorization status, and the next step; finish
+  with the verification ledger. Prefer direct, technically precise communication
+  in the user's language. Do not infer production stack components from personal
+  interests; inspect project manifests.
+- Repository skills live in `.agents/skills/`. Use the workflow map to select
+  only the relevant skill. They are instructions, not runtime enforcement or a
+  guarantee of model behavior; do not load every skill into every task.
