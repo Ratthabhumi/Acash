@@ -1,13 +1,13 @@
 # ACASH V5 — BTC Historical Acquisition Decision Pack
 
-**Document ID:** `docs/phase14/btc_historical_acquisition_decision_pack.md`  
-**STATUS: NON-GOVERNING**  
-**AUTHORITY: NONE**  
-**DATA ACQUISITION AUTHORIZATION: NONE**  
-**EMPIRICAL AUTHORIZATION: NONE**  
-**BACKTEST AUTHORIZATION: NONE**  
-**PAPER AUTHORIZATION: NONE**  
-**LIVE AUTHORIZATION: NONE**  
+**Document ID:** `docs/phase14/btc_historical_acquisition_decision_pack.md`
+**STATUS: NON-GOVERNING**
+**AUTHORITY: NONE**
+**DATA ACQUISITION AUTHORIZATION: NONE**
+**EMPIRICAL AUTHORIZATION: NONE**
+**BACKTEST AUTHORIZATION: NONE**
+**PAPER AUTHORIZATION: NONE**
+**LIVE AUTHORIZATION: NONE**
 **Canonical Architectural Context:** `AGENTS.md`, `docs/ROADMAP.md`, `docs/DECISIONS.md`, `docs/phase14/historical_data_qualification_spec.md`, `docs/phase14/free_data_source_registry.md`, `docs/phase14/free_data_research_registry.md`
 
 ---
@@ -57,8 +57,8 @@ We evaluate three candidate exchange sources and one independent secondary refer
 | **Earliest M1 Date** | 2017-08-17 (`BTCUSDT` Spot launch) | ~2013-10-06 (XBT/USD trade history) | ~2015-01-26 (Coinbase BTC-USD) | Multi-year (~2018+ for Binance/Kraken) |
 | **Latest Coverage** | Rolling daily updates (T-1 day lag) | Rolling periodic CSV dumps / Live REST | Live rolling real-time | Rolling daily updates |
 | **Archive Organization** | Hierarchical: `data/spot/monthly/klines/{SYMBOL}/1m/` | Flat ZIP/CSV files by symbol/quarter | No bulk zip archive; REST query only | AWS S3 / HTTP REST streaming |
-| **Archive Mutability** | Immutable historical monthly zips | Immutable historical quarterly CSVs | Real-time endpoint queryable | Immutable daily tick archives |
-| **Revision Policy** | No silent in-place overwrite; updates append | Periodic additions of completed quarters | Real-time bar updates | Versioned parser schema |
+| **Archive Mutability** | Externally revisable by provider; frozen locally upon acquisition | Quarterly historical CSV dumps | Real-time endpoint queryable | Daily tick archives |
+| **Revision Policy** | Provider may update/replace archives with revised checksums; ACASH binds local bytes | Periodic additions of completed quarters | Real-time bar updates | Versioned parser schema |
 | **Timestamp Semantics** | Unix Epoch Milliseconds (`open_time`, `close_time`) | Unix Epoch Seconds / Nanoseconds | Unix Epoch Seconds (ISO-8601 available) | Unix Epoch Microseconds / Nanoseconds |
 | **OHLC Semantics** | Standard Open, High, Low, Close per window | Aggregated from discrete trade ticks | Standard Open, High, Low, Close | Derived from order book / trades |
 | **Volume Semantics** | Base asset volume & Quote asset volume | Base volume (BTC quantity traded) | Base volume (BTC quantity) | Base & Quote traded volume |
@@ -76,9 +76,9 @@ We evaluate three candidate exchange sources and one independent secondary refer
 | **PIT Characteristics** | High (exact historical execution timestamps) | High (exact historical trade timestamps) | High (historical execution timestamps) | Exact nanosecond exchange timestamps |
 | **Known Gaps / Outages** | Documented maintenance windows (2018, 2019) | Documented system maintenance events | Documented degraded engine periods | Tracks underlying exchange outages |
 | **Known Symbol Changes** | None for `BTCUSDT` (stable since 2017) | `XXBTZUSD` vs `XBTUSDT` symbology | `BTC-USD` vs `BTC-USDT` | Handled via unified mapping |
-| **Known Data Corrections** | Rare; Binance announcements on restatements | None reported for completed quarters | None reported | Monitored |
-| **Reproducibility** | High (versioned zips + SHA-256 checksums) | High (static CSV archives + hashes) | Low (floating window pagination) | High (deterministic raw data replay) |
-| **Primary Risks** | Single-exchange dependence; ToS changes | Aggregation complexity from trade ticks | Crawler rate-limit throttling; incomplete bars | Paid license cost boundary |
+| **Known Data Corrections** | Provider file replacements documented (e.g. issue #475); exact checksum & retrieval UTC binding required | None reported for completed quarters | None reported | Monitored |
+| **Reproducibility** | High once frozen locally (vendor zips + dual SHA-256) | High (static CSV archives + hashes) | Low (floating window pagination) | High (deterministic raw data replay) |
+| **Primary Risks** | External provider mutability; single-exchange concentration | Aggregation complexity from trade ticks | Crawler rate-limit throttling; incomplete bars | Paid license cost boundary |
 | **Evidence Status** | **VERIFIED** | **VERIFIED** | **PARTIALLY VERIFIED** | **NOT SUITABLE AT $0** |
 
 ---
@@ -89,7 +89,7 @@ Based on the empirical evidence gathered above:
 
 ### 3.1 Primary Candidate Recommendation: Binance Public Data Archives
 - **Status:** **`PRIMARY CANDIDATE (RECOMMENDED)`**
-- **Rationale:** 
+- **Rationale:**
   1. Direct, pre-aggregated M1 kline archives organized by month and day at `$0.00`.
   2. Cryptographic checksum files (`.CHECKSUM` SHA-256) are published alongside every raw artifact.
   3. Includes critical microstructural fields: base volume, quote volume, trade count, taker buy base volume, taker buy quote volume.
@@ -151,32 +151,32 @@ To ensure ACASH does not assume primary vendor data is immaculate, the acquisiti
 1. **Exchange Price Differences are Legitimate:** Prices between Binance (`BTCUSDT`) and Kraken (`BTCUSD` / `BTCUSDT`) naturally diverge due to differing liquidity, counterparty credit, and fiat vs. stablecoin pegs. **Exact price equality must never be asserted.**
 2. **Structural Sanity Invariants:**
    - **Timestamp Monotonicity:** Both series must strictly advance forward in time without backwards jumps.
-   - **Extreme Event Coincidence:** Major historical market movements (e.g. 2020-03-12 50% crash, 2021-05-19 liquidation cascade, 2022-11-08 FTX collapse) must show contemporaneous peak volatility within a $\pm 2$-minute window.
-   - **Directional Parity:** Daily return correlation ($r$) between Binance BTCUSDT and Kraken XBTUSD must exceed $0.98$ across continuous operational months.
+   - **Extreme Event Coincidence:** Major historical market movements (e.g. 2020-03-12 50% crash, 2021-05-19 liquidation cascade, 2022-11-08 FTX collapse) should show contemporaneous peak volatility within an illustrative candidate window (e.g. $\pm 2$ to $\pm 5$ minutes, `ILLUSTRATIVE / NOT FROZEN`).
+   - **Directional Parity:** Daily return correlation ($r$) between Binance BTCUSDT and Kraken XBTUSD can serve as a sanity benchmark (e.g. candidate threshold $r > 0.95$, `ILLUSTRATIVE / NOT FROZEN`, across continuous operational months).
    - **Bar Cadence:** Any gap in Binance M1 bars exceeding 15 consecutive minutes must be checked against Kraken to classify whether the event was an exchange-specific downtime or a market-wide phenomenon.
 
 ---
 
 ## 5. Target Historical Coverage Span Evaluation (`DATA-DEC-002`)
 
-The table below evaluates four candidate historical coverage spans. 
+The table below evaluates four candidate historical coverage spans.
 
 > [!NOTE]
-> All bar counts and storage sizes are **non-binding planning heuristics** only. Coverage selection does not constitute a statistical sufficiency claim or an admission gate.
+> All bar counts, download durations, CSV sizes, and Parquet sizes are **ILLUSTRATIVE CAPACITY ESTIMATES** (no machine- or network-specific download time promise). Coverage selection does not constitute a statistical sufficiency claim or an admission gate, and remains subject to `DATA-DEC-002` human ratification.
 
-| Horizon | Approximate M1 Bars | Regime Coverage Span | Uncompressed CSV Footprint | Compressed Parquet (zstd) | Ingestion & Verification Complexity | Research Utility & Limitations |
+| Horizon | Approximate M1 Bars (Illustrative) | Regime Coverage Span | Uncompressed CSV Footprint (Estimate) | Compressed Parquet (zstd) (Estimate) | Ingestion & Verification Complexity | Research Utility & Limitations |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1 Year** (e.g. 2023) | ~525,600 | Single macro regime (post-FTX recovery, low-to-medium volatility, ETF speculation). | ~45 MB | ~8 MB | Minimal (< 1 min download, trivial qualification). | **Insufficient Regime Diversity:** Fails to cover deep bear markets, high-inflation tightening shocks, or extreme liquidation spirals. |
-| **2 Years** (e.g. 2022–2023) | ~1,051,200 | Severe bear market (Luna/FTX collapse, aggressive Fed hikes) + early recovery regime. | ~90 MB | ~16 MB | Low (< 3 min download, single-pass qualification). | **Moderate Diversity:** Captures structural distress and grinding recovery; lacks multi-year halving cycle dynamics. |
-| **4 Years** (e.g. 2020–2023) | ~2,102,400 | Full liquidity cycle: COVID crash, massive monetary expansion, ATH bull market, 2022 unwind, 2023 consolidation. | ~180 MB | ~32 MB | Moderate (~5 min download, multi-regime qualification). | **Recommended Planning Baseline:** Provides multi-regime out-of-sample splits across distinct monetary environments. |
-| **Maximum Available** (2017–Present) | ~4,750,000+ | Complete Binance exchange history: 2017 retail mania, 2018–2019 crypto winter, 2020–2021 bull market, 2022 bear, 2023–2024 ETF era. | ~420 MB | ~75 MB | Moderate-High (requires handling early 2017 exchange-growth anomalies and maintenance outages). | **Comprehensive Longitudinal Scope:** Maximum statistical power, but early periods (2017–2018) exhibit non-stationary microstructure and fragmented liquidity. |
+| **1 Year** (e.g. 2023 Sample) | ~525,600 | Single macro regime (post-FTX recovery, low-to-medium volatility, ETF speculation). | ~45 MB | ~8 MB | Low complexity (illustrative quick download). | **Insufficient Regime Diversity:** Fails to cover deep bear markets, high-inflation tightening shocks, or extreme liquidation spirals. |
+| **2 Years** (e.g. 2022–2023 Sample) | ~1,051,200 | Severe bear market (Luna/FTX collapse, aggressive Fed hikes) + early recovery regime. | ~90 MB | ~16 MB | Moderate complexity. | **Moderate Diversity:** Captures structural distress and grinding recovery; lacks multi-year halving cycle dynamics. |
+| **Candidate Rolling 4-Year Window** (e.g. 2020–2023 Historical Example or Latest Window through 2024–2026) | ~2,102,400 | Full liquidity cycle: COVID crash, monetary expansion, bull market, 2022 unwind, 2023–2024 consolidation/ETF era. | ~180 MB | ~32 MB | Moderate complexity (multi-regime qualification). | **Candidate Baseline:** Provides multi-regime out-of-sample splits across distinct monetary environments. Exact boundary dates subject to `DATA-DEC-002` human decision. |
+| **Maximum Available** (2017–Present) | ~4,750,000+ | Complete Binance exchange history: 2017 retail mania, 2018–2019 crypto winter, 2020–2021 bull market, 2022 bear, 2023–2026 ETF era. | ~420 MB | ~75 MB | Moderate-High (requires handling early 2017 exchange-growth anomalies and maintenance outages). | **Comprehensive Longitudinal Scope:** Maximum statistical power, but early periods (2017–2018) exhibit non-stationary microstructure and fragmented liquidity. |
 
 ---
 
 ## 6. Partition & Storage Implementation (`DATA-DEC-003`)
 
 ### 6.1 Storage Hierarchy
-ACASH standardizes analytical research datasets on local Parquet files queried via DuckDB:
+ACASH evaluates a candidate storage implementation using local Parquet files queried via DuckDB (`CANDIDATE IMPLEMENTATION — subject to DATA-DEC-003 human ratification`):
 
 ```text
 /data/research/market_data/
@@ -184,7 +184,7 @@ ACASH standardizes analytical research datasets on local Parquet files queried v
     └── binance/
         └── spot/
             └── btcusdt/
-                ├── raw_archives/                          <-- Immutable vendor ZIPs + .CHECKSUM
+                ├── raw_archives/                          <-- Provider archives (frozen locally upon acquisition + verified with vendor & ACASH checksums)
                 │   ├── BTCUSDT-1m-2022-01.zip
                 │   ├── BTCUSDT-1m-2022-01.zip.CHECKSUM
                 │   └── ...
@@ -278,32 +278,32 @@ When human authorization is granted to acquire historical data, the execution pi
 Before any historical acquisition script is executed, human governance must ratify:
 
 1. **`DATA-DEC-001` Ratification:** Approve Binance Public Data Archives as primary acquisition source and Kraken as secondary validation reference.
-2. **`DATA-DEC-002` Ratification:** Authorize specific historical target horizon (e.g., 4-Year Baseline: 2020–2023 vs. Maximum Available: 2017–Present).
-3. **`DATA-DEC-003` Ratification:** Authorize physical local storage allocation (est. < 100 MB for Parquet) and directory location.
+2. **`DATA-DEC-002` Ratification:** Authorize specific historical target horizon (e.g., candidate rolling 4-year window through 2024–2026 vs. maximum available 2017–present).
+3. **`DATA-DEC-003` Ratification:** Authorize candidate Parquet/DuckDB storage implementation and physical local storage allocation (illustrative capacity estimate < 100 MB).
 
 ---
 
 ## 9. External Evidence & Citations
 
-1. **Binance Public Data Vision Portal:**  
-   - URL: `https://data.binance.vision/`  
-   - Access Date: 2026-09-13 UTC  
+1. **Binance Public Data Vision Portal:**
+   - URL: `https://data.binance.vision/`
+   - Access Date: 2026-09-13 UTC
    - Supported Claims: Public availability of monthly/daily M1 klines, aggTrades, and trade archives for `BTCUSDT`; S3 public bucket `https://s3-ap-northeast-1.amazonaws.com/data.binance.vision`.
-2. **Binance Public Data Terms of Use:**  
-   - URL: `https://data.binance.vision/terms-of-use.html`  
-   - Access Date: 2026-09-13 UTC  
+2. **Binance Public Data Terms of Use:**
+   - URL: `https://data.binance.vision/terms-of-use.html`
+   - Access Date: 2026-09-13 UTC
    - Supported Claims: Public access terms; personal and research use; redistribution constraints.
-3. **Binance Public Data GitHub Documentation:**  
-   - URL: `https://github.com/binance/binance-public-data/`  
-   - Access Date: 2026-09-13 UTC  
-   - Supported Claims: Archive directory structure, file naming conventions, `.CHECKSUM` hash support, and automated download scripts.
-4. **Kraken Historical Market Data Archives:**  
-   - URL: `https://support.kraken.com/hc/en-us/articles/360047124832-Downloadable-historical-market-data`  
-   - Access Date: 2026-09-13 UTC  
+3. **Binance Public Data GitHub Documentation & Mutability Notices:**
+   - URL: `https://github.com/binance/binance-public-data/`
+   - Access Date: 2026-09-13 UTC
+   - Supported Claims: Archive directory structure, file naming conventions, `.CHECKSUM` hash support, and automated download scripts. Note: binance-public-data issue #475 documents discrepancies between monthly archives and daily archives/API, and repository documentation confirms archived files may be updated or replaced when issues are found, publishing replacement checksums. External provider archives are therefore treated as externally mutable until frozen locally by ACASH acquisition manifests.
+4. **Kraken Historical Market Data Archives:**
+   - URL: `https://support.kraken.com/hc/en-us/articles/360047124832-Downloadable-historical-market-data`
+   - Access Date: 2026-09-13 UTC
    - Supported Claims: Downloadable historical trade CSV files for `XBTUSD` and `XBTUSDT` since exchange inception; public availability for research.
-5. **Coinbase Exchange API Reference:**  
-   - URL: `https://docs.cdp.coinbase.com/exchange/reference/getproductcandles`  
-   - Access Date: 2026-09-13 UTC  
+5. **Coinbase Exchange API Reference:**
+   - URL: `https://docs.cdp.coinbase.com/exchange/reference/getproductcandles`
+   - Access Date: 2026-09-13 UTC
    - Supported Claims: REST candles endpoint returns max 300 candles per call; public rate limits apply; absence of official multi-year bulk ZIP archives.
 
 ---
@@ -311,8 +311,8 @@ Before any historical acquisition script is executed, human governance must rati
 ### Verification Ledger
 - Implementation Status: COMPLETE (Documentation & decision pack specification)
 - Contract Enforcement: STRICT FAIL-CLOSED (Zero download, zero backtest authority, zero hypothesis creation)
-- Mathematical Authority: CANONICAL SPEC (Aligned with `historical_data_qualification_spec.md`)
+- Mathematical Authority: PLANNING / NON-GOVERNING SPEC (Aligned with `historical_data_qualification_spec.md`)
 - Local Test Suite: NOT RUN (Documentation-only deliverable)
 - Type Checker (MyPy): NOT RUN (Documentation-only deliverable)
 - Remote CI Status: NOT APPLICABLE
-- Methodological Caveats: Planning bar counts and storage sizes are non-binding heuristics. Dual-source cross-verification does not assume price identity between distinct venues.
+- Methodological Caveats: Planning bar counts and storage sizes are non-binding illustrative capacity estimates. Dual-source cross-verification does not assume price identity between distinct venues. All external archives are treated as externally mutable until locally verified and frozen.
