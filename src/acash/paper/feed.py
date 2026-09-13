@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -383,17 +383,42 @@ class IMarketDataFeed(ABC):
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _KlineCandidate:
+    """Internal structured representation of a single candidate kline from Binance."""
+
+    open_ms: int
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    close_ms: int
+    trade_count: int
+
+
 class BinancePublicKlinesFeed(IMarketDataFeed):
     """Free public Binance REST klines feed. NO credentials required.
 
-    Reads GET /api/v3/klines?symbol=<SYM>&interval=<IV>&limit=1.
+    Admits finalized/closed candles only. An in-progress (open) candle is never
+    emitted. Finalization is determined explicitly by verifying that the candle's
+    close time (close_ms) is less than or equal to the captured observation clock
+    (close_ms <= observation_now_ms).
+
     Supplies real OHLCV + volume + trade_count. bid/ask are NOT supplied by
     the klines endpoint and are therefore recorded as unavailable (never
     fabricated from trades).
+
+    Catch-Up Scope Boundary:
+    Polls up to candidate_limit (default 5) recent klines to tolerate transient
+    polling latency. If an extended disconnect exceeds the candidate window,
+    only the newest finalized candle is emitted and continuity tracking journals
+    the elapsed gap. ACASH does not fabricate missing historical bars.
     """
 
     PROVIDER_ID = "binance.public.klines"
     PROVIDER_VERSION = "1.0.0"
+    DEFAULT_CANDIDATE_LIMIT = 5
 
     _TIMEFRAME_MAP: Dict[BarTimeframe, str] = {
         BarTimeframe.M1: "1m",
@@ -410,6 +435,8 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
         timeframe: BarTimeframe = BarTimeframe.M1,
         *,
         client: Optional[httpx.Client] = None,
+        clock: Optional[Callable[[], datetime]] = None,
+        candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
     ) -> None:
         if not symbol or not symbol.strip():
             raise FeedContractError("BinancePublicKlinesFeed: symbol must be non-empty.")
@@ -423,12 +450,21 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
             timeout=httpx.Timeout(10.0, connect=5.0, read=10.0),
             limits=httpx.Limits(max_keepalive_connections=1, max_connections=2),
         )
+        self._clock: Callable[[], datetime] = clock or (lambda: datetime.now(timezone.utc))
+        self._candidate_limit = max(1, candidate_limit)
         self._is_connected = False
         self._last_source_id: Optional[str] = None
         self._last_bar_utc: Optional[datetime] = None
         self._last_poll_utc: Optional[datetime] = None
         self._reconnect_count = 0
         self._last_error: Optional[str] = None
+
+    def _get_observation_now(self) -> datetime:
+        """Capture the single observation instant normalized to UTC."""
+        now = self._clock()
+        if now.tzinfo is None:
+            return now.replace(tzinfo=timezone.utc)
+        return now.astimezone(timezone.utc)
 
     # -- identity -----------------------------------------------------------
 
@@ -458,7 +494,7 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 params={
                     "symbol": self._symbol,
                     "interval": self._TIMEFRAME_MAP[self._tf],
-                    "limit": 1,
+                    "limit": self._candidate_limit,
                 },
             )
             resp.raise_for_status()
@@ -498,7 +534,7 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 reconnect_count=self._reconnect_count,
             ) from exc
         self._is_connected = True
-        self._last_poll_utc = datetime.now(timezone.utc)
+        self._last_poll_utc = self._get_observation_now()
 
     def disconnect(self) -> None:
         self._is_connected = False
@@ -526,7 +562,7 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 params={
                     "symbol": self._symbol,
                     "interval": self._TIMEFRAME_MAP[self._tf],
-                    "limit": 1,
+                    "limit": self._candidate_limit,
                 },
             )
             resp.raise_for_status()
@@ -572,42 +608,42 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 f"BinancePublicKlinesFeed: response was not valid JSON: {exc}"
             ) from exc
 
-        self._last_poll_utc = datetime.now(timezone.utc)
+        # Single observation clock captured for this poll
+        observation_now = self._get_observation_now()
+        self._last_poll_utc = observation_now
+
         if not isinstance(raw, list) or len(raw) == 0:
             raise FeedMalformedResponseError(
                 "BinancePublicKlinesFeed: expected a non-empty array of klines."
             )
-        row = raw[0]
-        bar = self._parse_kline(row)
-        if bar is not None:
-            self._last_bar_utc = bar.timestamp_utc
-        return bar
 
-    def _parse_kline(self, row: Any) -> Optional[FeedBar]:
-        if not isinstance(row, list) or len(row) < 6:
-            raise FeedMalformedResponseError(
-                "BinancePublicKlinesFeed: malformed kline row (expected >= 6 fields)."
-            )
-        try:
-            open_ms = int(row[0])
-            close_ms = int(row[6])
-            open_dec = Decimal(str(row[1]))
-            high_dec = Decimal(str(row[2]))
-            low_dec = Decimal(str(row[3]))
-            close_dec = Decimal(str(row[4]))
-            volume_dec = Decimal(str(row[5]))
-            trade_count = int(row[8])
-        except (TypeError, ValueError, IndexError, InvalidOperation) as exc:
-            raise FeedMalformedResponseError(f"BinancePublicKlinesFeed: cannot parse kline row: {exc}") from exc
+        observation_now_ms = int(observation_now.timestamp() * 1000)
 
-        # Idempotent polling: deduplicate on (open, close) millisecond identity.
-        source_id = f"{open_ms}:{close_ms}"
+        # 1. Parse structural fields for all candidate rows
+        candidates = [self._parse_candidate_row(r) for r in raw]
+
+        # 2. Filter closed candidates: candle close_ms must be <= observation_now_ms
+        closed_candidates = [c for c in candidates if c.close_ms <= observation_now_ms]
+        if not closed_candidates:
+            # All candidates are open/in-progress; do NOT mutate _last_source_id or _last_bar_utc
+            return None
+
+        # 3. Select newest valid closed candidate
+        newest = max(closed_candidates, key=lambda c: c.close_ms)
+        source_id = f"{newest.open_ms}:{newest.close_ms}"
+
+        # 4. Deduplicate on finalized source_id
         if source_id == self._last_source_id:
             return None
-        self._last_source_id = source_id
 
-        event_time = datetime.fromtimestamp(close_ms / 1000.0, tz=timezone.utc)
-        received_at = datetime.now(timezone.utc)
+        # 5. Build FeedBar with canonical event timestamp and single observation instant
+        event_time = datetime.fromtimestamp(newest.close_ms / 1000.0, tz=timezone.utc)
+        if event_time > observation_now:
+            raise FeedContractError(
+                f"BinancePublicKlinesFeed: impossible future event_time {event_time.isoformat()} "
+                f"> received_at {observation_now.isoformat()} for finalized candidate {source_id}."
+            )
+
         bar = FeedBar.build(
             provider=self.PROVIDER_ID,
             provider_version=self.PROVIDER_VERSION,
@@ -615,26 +651,65 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
             symbol=self._symbol,
             timeframe=self._tf,
             timestamp_utc=event_time,
-            received_at_utc=received_at,
+            received_at_utc=observation_now,
+            open=newest.open,
+            high=newest.high,
+            low=newest.low,
+            close=newest.close,
+            volume=newest.volume,
+            trade_count=newest.trade_count,
+            unavailable=["bid", "ask", "latency"],
+        )
+
+        # 6. Commit admitted state only after successful validation
+        self._last_source_id = source_id
+        self._last_bar_utc = event_time
+        return bar
+
+    def _parse_candidate_row(self, row: Any) -> _KlineCandidate:
+        """Parse raw API row into _KlineCandidate, fail-closed on malformed structure."""
+        if not isinstance(row, list) or len(row) < 9:
+            raise FeedMalformedResponseError(
+                "BinancePublicKlinesFeed: malformed kline row (expected >= 9 fields)."
+            )
+        try:
+            open_ms = int(row[0])
+            open_dec = Decimal(str(row[1]))
+            high_dec = Decimal(str(row[2]))
+            low_dec = Decimal(str(row[3]))
+            close_dec = Decimal(str(row[4]))
+            volume_dec = Decimal(str(row[5]))
+            close_ms = int(row[6])
+            trade_count = int(row[8])
+        except (TypeError, ValueError, IndexError, InvalidOperation) as exc:
+            raise FeedMalformedResponseError(
+                f"BinancePublicKlinesFeed: cannot parse kline row: {exc}"
+            ) from exc
+
+        return _KlineCandidate(
+            open_ms=open_ms,
             open=open_dec,
             high=high_dec,
             low=low_dec,
             close=close_dec,
             volume=volume_dec,
+            close_ms=close_ms,
             trade_count=trade_count,
-            unavailable=["bid", "ask", "latency"],
         )
-        # FeedBar validation is fail-closed; geometry invariants enforced there.
-        self._last_bar_utc = event_time
-        return bar
 
     # -- status ---------------------------------------------------------------
 
     def status(self) -> FeedStatus:
         age = 0
         if self._last_bar_utc is not None:
-            now = datetime.now(timezone.utc)
-            age = max(0, int((now - self._last_bar_utc).total_seconds() * 1000))
+            now = self._get_observation_now()
+            delta_sec = (now - self._last_bar_utc).total_seconds()
+            if delta_sec < -0.001:
+                raise FeedContractError(
+                    f"BinancePublicKlinesFeed: last_bar_utc {self._last_bar_utc.isoformat()} "
+                    f"is in the future relative to observation clock {now.isoformat()}."
+                )
+            age = max(0, int(round(delta_sec * 1000)))
         return FeedStatus(
             provider=self.PROVIDER_ID,
             is_connected=self._is_connected,

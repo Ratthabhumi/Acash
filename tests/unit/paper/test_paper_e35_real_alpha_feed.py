@@ -379,6 +379,316 @@ class TestBinancePublicKlinesFeed:
         assert feed.status().is_connected is False
 
 
+class _MutableClock:
+    def __init__(self, initial_utc: datetime) -> None:
+        self.current = initial_utc
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, td: timedelta) -> None:
+        self.current += td
+
+
+def _make_binance_raw_row(
+    open_ms: int,
+    close_ms: int,
+    open_str: str = "100.00",
+    high_str: str = "101.00",
+    low_str: str = "99.00",
+    close_str: str = "100.50",
+    volume_str: str = "1000.0",
+    trade_count: int = 50,
+) -> list[object]:
+    return [
+        open_ms,       # 0: Open time
+        open_str,      # 1: Open
+        high_str,      # 2: High
+        low_str,       # 3: Low
+        close_str,     # 4: Close
+        volume_str,    # 5: Volume
+        close_ms,      # 6: Close time
+        "100000.00",   # 7: Quote asset volume
+        trade_count,   # 8: Number of trades
+        "500.0",       # 9: Taker buy base asset volume
+        "50000.00",    # 10: Taker buy quote asset volume
+        "0",           # 11: Ignore
+    ]
+
+
+class TestBinanceFinalizedCandleContract:
+    """Rigorous regression tests for Binance finalized candle data contract.
+
+    Invariants:
+    1. poll_next_bar() admits only closed/finalized candles (close_ms <= observation_now_ms).
+    2. Open candles must never advance _last_source_id or _last_bar_utc.
+    3. Finalization transition: an open candle that later closes is admitted exactly once.
+    4. For every emitted FeedBar: bar.timestamp_utc <= bar.received_at_utc.
+    5. FeedStatus.data_age_ms strictly tracks elapsed wall-clock time; impossible future timestamps fail closed.
+    6. Recovery semantics: fail closed, operator-only resume, zero automatic retries/reconnects.
+    """
+
+    def test_open_candle_only_returns_none_and_leaves_state_unadvanced(self) -> None:
+        """Requirement 1: API returns one open candle where close_ms > now_ms."""
+        # 12:00:30 UTC -> observation clock
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 0, 30, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        open_row = _make_binance_raw_row(c_open_ms, c_close_ms)
+        client = httpx.Client(transport=_binance_transport([open_row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        bar = feed.poll_next_bar()
+        assert bar is None
+        assert feed._last_source_id is None
+        assert feed._last_bar_utc is None
+        assert feed.status().last_bar_utc is None
+
+    def test_closed_and_open_candidates_emits_newest_closed_only(self) -> None:
+        """Requirement 2: API returns previous finalized candle and current open candle."""
+        # Clock at 12:01:30 UTC
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 1, 30, tzinfo=timezone.utc))
+        c0_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c0_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        c1_open_ms = int(datetime(2026, 9, 13, 12, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c1_close_ms = int(datetime(2026, 9, 13, 12, 1, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        c0_row = _make_binance_raw_row(c0_open_ms, c0_close_ms, close_str="100.00", trade_count=40)
+        c1_row = _make_binance_raw_row(c1_open_ms, c1_close_ms, close_str="105.00", trade_count=10)
+
+        client = httpx.Client(transport=_binance_transport([c0_row, c1_row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        bar = feed.poll_next_bar()
+        assert bar is not None
+        assert bar.source_id == f"{c0_open_ms}:{c0_close_ms}"
+        assert bar.close == Decimal("100.00")
+        assert bar.trade_count == 40
+        assert feed._last_source_id == f"{c0_open_ms}:{c0_close_ms}"
+
+    def test_finalization_transition_open_then_closed_emitted_once(self) -> None:
+        """Requirement 3 & 7: Candle polled while open is NOT discarded; once closed, emitted with finalized values."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 0, 45, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        response_data: list[list[object]] = [
+            _make_binance_raw_row(
+                c_open_ms,
+                c_close_ms,
+                open_str="100.00",
+                high_str="101.00",
+                low_str="99.50",
+                close_str="100.25",
+                volume_str="150.0",
+                trade_count=12,
+            )
+        ]
+
+        def handler(_req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=response_data)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler=handler))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        # Poll 1: While candle is still open
+        assert feed.poll_next_bar() is None
+        assert feed._last_source_id is None
+        assert feed._last_bar_utc is None
+
+        # Advance clock to 12:01:05 (candle is now closed) and update row to finalized state
+        clock.advance(timedelta(seconds=20))
+        response_data[0] = _make_binance_raw_row(
+            c_open_ms,
+            c_close_ms,
+            open_str="100.00",
+            high_str="103.50",
+            low_str="98.50",
+            close_str="102.75",
+            volume_str="580.0",
+            trade_count=48,
+        )
+
+        # Poll 2: Now finalized, must be admitted with FINALIZED values
+        bar = feed.poll_next_bar()
+        assert bar is not None
+        assert bar.source_id == f"{c_open_ms}:{c_close_ms}"
+        assert bar.open == Decimal("100.00")
+        assert bar.high == Decimal("103.50")
+        assert bar.low == Decimal("98.50")
+        assert bar.close == Decimal("102.75")
+        assert bar.volume == Decimal("580.0")
+        assert bar.trade_count == 48
+        assert bar.timestamp_utc <= bar.received_at_utc
+
+        # Poll 3: Polling same response returns None (emitted at most once)
+        assert feed.poll_next_bar() is None
+
+    def test_repeated_finalized_candle_emits_at_most_once(self) -> None:
+        """Requirement 4: Same finalized response repeatedly returns None after first emission."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 1, 10, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        row = _make_binance_raw_row(c_open_ms, c_close_ms)
+        client = httpx.Client(transport=_binance_transport([row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        b1 = feed.poll_next_bar()
+        assert b1 is not None
+        b2 = feed.poll_next_bar()
+        assert b2 is None
+        b3 = feed.poll_next_bar()
+        assert b3 is None
+
+    def test_next_finalized_candle_emitted_sequentially(self) -> None:
+        """Requirement 5: After candle N is emitted, candle N+1 is emitted normally."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 1, 15, tzinfo=timezone.utc))
+        c0_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c0_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+        c1_open_ms = int(datetime(2026, 9, 13, 12, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c1_close_ms = int(datetime(2026, 9, 13, 12, 1, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        response_data = [_make_binance_raw_row(c0_open_ms, c0_close_ms, close_str="100.00")]
+
+        def handler(_req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=response_data)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler=handler))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        b0 = feed.poll_next_bar()
+        assert b0 is not None
+        assert b0.source_id == f"{c0_open_ms}:{c0_close_ms}"
+
+        # Clock advances past candle 1 close; API now includes both candidates
+        clock.advance(timedelta(seconds=60))  # Now 12:02:15 UTC
+        response_data.append(_make_binance_raw_row(c1_open_ms, c1_close_ms, high_str="106.00", close_str="105.00"))
+
+        b1 = feed.poll_next_bar()
+        assert b1 is not None
+        assert b1.source_id == f"{c1_open_ms}:{c1_close_ms}"
+        assert b1.close == Decimal("105.00")
+
+        # Third poll returns None
+        assert feed.poll_next_bar() is None
+
+    def test_no_future_event_time_invariant(self) -> None:
+        """Requirement 6: Invariant timestamp_utc <= received_at_utc is strictly preserved."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 1, 0, 500000, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 1, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+
+        row = _make_binance_raw_row(c_open_ms, c_close_ms)
+        client = httpx.Client(transport=_binance_transport([row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        bar = feed.poll_next_bar()
+        assert bar is not None
+        assert bar.timestamp_utc <= bar.received_at_utc
+
+    def test_data_age_ms_advances_monotonically_and_fails_closed_on_future(self) -> None:
+        """Requirement 8: data_age_ms tracks elapsed time from deterministic clock without silent floor masking."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 1, 5, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+
+        row = _make_binance_raw_row(c_open_ms, c_close_ms)
+        client = httpx.Client(transport=_binance_transport([row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        bar = feed.poll_next_bar()
+        assert bar is not None
+
+        # At 12:01:05, candle closed at 12:01:00 -> exactly 5000ms
+        st1 = feed.status()
+        assert st1.data_age_ms == 5000
+
+        # Advance clock by 12.5 seconds -> 17500ms
+        clock.advance(timedelta(milliseconds=12500))
+        st2 = feed.status()
+        assert st2.data_age_ms == 17500
+
+        # Boundary fail-closed: if last_bar_utc is somehow in the future relative to observation clock,
+        # status() MUST raise FeedContractError instead of hiding it behind max(0, negative).
+        clock.advance(timedelta(seconds=-30))  # Rewind clock so last_bar_utc is in the future
+        with pytest.raises(FeedContractError, match="in the future"):
+            feed.status()
+
+    def test_malformed_response_fail_closed(self) -> None:
+        """Requirement 9: Malformed rows fail closed with FeedMalformedResponseError."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 2, 0, tzinfo=timezone.utc))
+        # Row with fewer than 9 fields
+        short_row = [1704441600000, "100.0", "101.0", "99.0", "100.5", "100.0", 1704441660000]
+        client = httpx.Client(transport=_binance_transport([short_row]))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        with pytest.raises(FeedMalformedResponseError, match="expected >= 9 fields"):
+            feed.poll_next_bar()
+
+        # Non-numeric decimal field
+        bad_price_row = _make_binance_raw_row(1704441600000, 1704441660000, open_str="NOT_A_PRICE")
+        client2 = httpx.Client(transport=_binance_transport([bad_price_row]))
+        feed2 = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client2, clock=clock)
+        feed2.connect()
+
+        with pytest.raises(FeedMalformedResponseError, match="cannot parse kline row"):
+            feed2.poll_next_bar()
+
+    def test_connection_failure_disconnects_and_raises(self) -> None:
+        """Requirement 10: Timeout / HTTP error fails closed and sets is_connected=False."""
+        def handler(_req: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("read timed out during poll")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler=handler))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client)
+        # Artificially mark connected to test poll failure
+        feed._is_connected = True
+
+        with pytest.raises(FeedConnectionError, match="ReadTimeout"):
+            feed.poll_next_bar()
+
+        assert feed.status().is_connected is False
+
+    def test_no_automatic_recovery(self) -> None:
+        """Requirement 11: Fail closed without automatic recovery; subsequent poll without connect() raises."""
+        def handler(_req: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("connection refused")
+
+        call_count = 0
+
+        def counting_handler(_req: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise httpx.ConnectError("connection refused")
+
+        client = httpx.Client(transport=httpx.MockTransport(handler=counting_handler))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client)
+        feed._is_connected = True
+
+        # First failure
+        with pytest.raises(FeedConnectionError):
+            feed.poll_next_bar()
+        assert feed.status().is_connected is False
+        assert call_count == 1
+
+        # Second poll: MUST fail closed immediately without attempting reconnect or making HTTP requests
+        with pytest.raises(FeedConnectionError, match="not connected"):
+            feed.poll_next_bar()
+        assert call_count == 1  # No automatic retry request was made
+
+
+
 # ===========================================================================
 # III. StooqCsvFeed
 # ===========================================================================
