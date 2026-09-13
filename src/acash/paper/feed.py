@@ -455,15 +455,22 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
         self._is_connected = False
         self._last_source_id: Optional[str] = None
         self._last_bar_utc: Optional[datetime] = None
+        self._last_admitted_close_ms: Optional[int] = None
         self._last_poll_utc: Optional[datetime] = None
         self._reconnect_count = 0
         self._last_error: Optional[str] = None
 
     def _get_observation_now(self) -> datetime:
-        """Capture the single observation instant normalized to UTC."""
+        """Capture the observation instant normalized to UTC.
+
+        Fail-closed: Injected clocks returning naive datetimes are rejected with FeedContractError.
+        """
         now = self._clock()
         if now.tzinfo is None:
-            return now.replace(tzinfo=timezone.utc)
+            raise FeedContractError(
+                f"BinancePublicKlinesFeed: clock returned naive datetime {now!r}. "
+                "Timezone-aware UTC datetime is strictly required."
+            )
         return now.astimezone(timezone.utc)
 
     # -- identity -----------------------------------------------------------
@@ -555,6 +562,15 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 last_bar_utc=self._last_bar_utc.isoformat() if self._last_bar_utc else None,
                 reconnect_count=self._reconnect_count,
             )
+
+        # 1. Capture eligibility cutoff BEFORE issuing HTTP GET.
+        # A candidate is eligible ONLY if its entire candle interval closed strictly
+        # before this HTTP request started (close_ms < request_started_ms).
+        # This eliminates the race condition where a request started before close
+        # returns an interim snapshot that arrives after close.
+        request_started_at = self._get_observation_now()
+        request_started_ms = int(request_started_at.timestamp() * 1000)
+
         endpoint = "https://api.binance.com/api/v3/klines"
         try:
             resp = self._client.get(
@@ -608,40 +624,61 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
                 f"BinancePublicKlinesFeed: response was not valid JSON: {exc}"
             ) from exc
 
-        # Single observation clock captured for this poll
-        observation_now = self._get_observation_now()
-        self._last_poll_utc = observation_now
+        # 2. Capture response receipt instant
+        received_at = self._get_observation_now()
+        self._last_poll_utc = received_at
 
         if not isinstance(raw, list) or len(raw) == 0:
             raise FeedMalformedResponseError(
                 "BinancePublicKlinesFeed: expected a non-empty array of klines."
             )
 
-        observation_now_ms = int(observation_now.timestamp() * 1000)
-
-        # 1. Parse structural fields for all candidate rows
+        # 3. Parse structural fields for all candidate rows
         candidates = [self._parse_candidate_row(r) for r in raw]
 
-        # 2. Filter closed candidates: candle close_ms must be <= observation_now_ms
-        closed_candidates = [c for c in candidates if c.close_ms <= observation_now_ms]
+        # 4. Strict post-close finalization filter:
+        # Binance close_ms represents the last millisecond of the interval.
+        # A candidate is safely finalized only if close_ms < request_started_ms
+        # (or equivalently close_ms + 1 <= request_started_ms).
+        closed_candidates = [c for c in candidates if c.close_ms < request_started_ms]
         if not closed_candidates:
-            # All candidates are open/in-progress; do NOT mutate _last_source_id or _last_bar_utc
+            # All candidate rows were still open when the HTTP request was initiated.
             return None
 
-        # 3. Select newest valid closed candidate
-        newest = max(closed_candidates, key=lambda c: c.close_ms)
-        source_id = f"{newest.open_ms}:{newest.close_ms}"
+        # 5. Sequential unseen-bar selection:
+        # If no prior bar has been admitted, bootstrap with the newest safely-finalized candidate.
+        # Once initialized, advance sequentially (chronologically) through unseen candidates
+        # using min(close_ms) so that multiple unseen finalized bars within candidate_limit
+        # are emitted one-by-one on consecutive polls without skipping.
+        last_close_ms = self._last_admitted_close_ms
+        if last_close_ms is None and self._last_bar_utc is not None:
+            last_close_ms = int(self._last_bar_utc.timestamp() * 1000)
 
-        # 4. Deduplicate on finalized source_id
+        if last_close_ms is None:
+            candidate = max(closed_candidates, key=lambda c: c.close_ms)
+        else:
+            unseen = [c for c in closed_candidates if c.close_ms > last_close_ms]
+            if not unseen:
+                return None
+            candidate = min(unseen, key=lambda c: c.close_ms)
+
+        source_id = f"{candidate.open_ms}:{candidate.close_ms}"
         if source_id == self._last_source_id:
             return None
 
-        # 5. Build FeedBar with canonical event timestamp and single observation instant
-        event_time = datetime.fromtimestamp(newest.close_ms / 1000.0, tz=timezone.utc)
-        if event_time > observation_now:
+        # 6. Event-time invariants:
+        # candidate closed strictly before request began; request began before or at receipt
+        # event_time <= request_started_at <= received_at
+        event_time = datetime.fromtimestamp(candidate.close_ms / 1000.0, tz=timezone.utc)
+        if event_time > request_started_at:
             raise FeedContractError(
-                f"BinancePublicKlinesFeed: impossible future event_time {event_time.isoformat()} "
-                f"> received_at {observation_now.isoformat()} for finalized candidate {source_id}."
+                f"BinancePublicKlinesFeed: impossible event_time {event_time.isoformat()} "
+                f"> eligibility_cutoff {request_started_at.isoformat()} for candidate {source_id}."
+            )
+        if request_started_at > received_at:
+            raise FeedContractError(
+                f"BinancePublicKlinesFeed: eligibility_cutoff {request_started_at.isoformat()} "
+                f"> received_at {received_at.isoformat()}."
             )
 
         bar = FeedBar.build(
@@ -651,19 +688,20 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
             symbol=self._symbol,
             timeframe=self._tf,
             timestamp_utc=event_time,
-            received_at_utc=observation_now,
-            open=newest.open,
-            high=newest.high,
-            low=newest.low,
-            close=newest.close,
-            volume=newest.volume,
-            trade_count=newest.trade_count,
+            received_at_utc=received_at,
+            open=candidate.open,
+            high=candidate.high,
+            low=candidate.low,
+            close=candidate.close,
+            volume=candidate.volume,
+            trade_count=candidate.trade_count,
             unavailable=["bid", "ask", "latency"],
         )
 
-        # 6. Commit admitted state only after successful validation
+        # 7. Commit admitted state only after successful validation
         self._last_source_id = source_id
         self._last_bar_utc = event_time
+        self._last_admitted_close_ms = candidate.close_ms
         return bar
 
     def _parse_candidate_row(self, row: Any) -> _KlineCandidate:
@@ -700,9 +738,9 @@ class BinancePublicKlinesFeed(IMarketDataFeed):
     # -- status ---------------------------------------------------------------
 
     def status(self) -> FeedStatus:
+        now = self._get_observation_now()
         age = 0
         if self._last_bar_utc is not None:
-            now = self._get_observation_now()
             delta_sec = (now - self._last_bar_utc).total_seconds()
             if delta_sec < -0.001:
                 raise FeedContractError(

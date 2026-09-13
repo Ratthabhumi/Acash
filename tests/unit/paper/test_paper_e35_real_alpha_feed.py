@@ -687,6 +687,193 @@ class TestBinanceFinalizedCandleContract:
             feed.poll_next_bar()
         assert call_count == 1  # No automatic retry request was made
 
+    def test_request_crossing_close_boundary_rejected_until_subsequent_request(self) -> None:
+        """Finding 1 (BLOCKER): Request started before close must not classify candle as finalized
+
+        Simulates:
+        - Request starts at 12:00:59.900 (candle still open).
+        - HTTP handler executes and takes 150ms, response returns at 12:01:00.050.
+        - Candidate row represents the 12:00:00-12:00:59.999 candle.
+        - Must return None because candidate was not safely closed when request was initiated.
+        - Subsequent request starting at 12:01:01.000 (safely post-close) emits the finalized bar.
+        """
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 0, 59, 900000, tzinfo=timezone.utc))
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        response_data = [_make_binance_raw_row(c_open_ms, c_close_ms, close_str="100.50")]
+
+        def handler(_req: httpx.Request) -> httpx.Response:
+            # Simulate network latency crossing the close boundary during transit
+            clock.advance(timedelta(milliseconds=150))  # now 12:01:00.050 UTC
+            return httpx.Response(200, json=response_data)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler=handler))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client, clock=clock)
+        feed.connect()
+
+        # Reset clock specifically to pre-request instant 12:00:59.900 for poll 1
+        clock.current = datetime(2026, 9, 13, 12, 0, 59, 900000, tzinfo=timezone.utc)
+
+        # Poll 1: Request started at 12:00:59.900 (< close_ms 12:00:59.999)
+        # Even though response arrived at 12:01:00.050, it MUST NOT be admitted.
+        bar1 = feed.poll_next_bar()
+        assert bar1 is None
+        assert feed._last_source_id is None
+        assert feed._last_bar_utc is None
+
+        # Poll 2: Advance clock safely past close before starting the second request
+        clock.advance(timedelta(seconds=1))  # now 12:01:01.050 UTC
+        bar2 = feed.poll_next_bar()
+        assert bar2 is not None
+        assert bar2.source_id == f"{c_open_ms}:{c_close_ms}"
+        assert bar2.timestamp_utc <= bar2.received_at_utc
+
+    def test_two_unseen_finalized_bars_emitted_sequentially_without_skipping(self) -> None:
+        """Finding 2 (MAJOR): Multiple unseen finalized candidates within candidate_limit are emitted sequentially.
+
+        State:
+        - M0 was previously admitted.
+        - Response contains [M0, M1, M2, M3_open].
+        - Poll 1 must emit M1.
+        - Poll 2 must emit M2.
+        - Poll 3 must return None (M3 is open, M1 and M2 are already admitted).
+        """
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 3, 15, tzinfo=timezone.utc))
+        m0_open = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m0_close = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        m1_open = int(datetime(2026, 9, 13, 12, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m1_close = int(datetime(2026, 9, 13, 12, 1, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        m2_open = int(datetime(2026, 9, 13, 12, 2, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m2_close = int(datetime(2026, 9, 13, 12, 2, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        m3_open = int(datetime(2026, 9, 13, 12, 3, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m3_close = int(datetime(2026, 9, 13, 12, 3, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        # Initial bootstrap with M0
+        bootstrap_data = [_make_binance_raw_row(m0_open, m0_close, close_str="100.0")]
+        client1 = httpx.Client(transport=_binance_transport(bootstrap_data))
+        feed = BinancePublicKlinesFeed("BTCUSDT", BarTimeframe.M1, client=client1, clock=clock)
+        feed.connect()
+        b0 = feed.poll_next_bar()
+        assert b0 is not None
+        assert b0.source_id == f"{m0_open}:{m0_close}"
+
+        # Response now contains M0, M1, M2 (closed) and M3 (open)
+        multi_data = [
+            _make_binance_raw_row(m0_open, m0_close, high_str="105.0", close_str="100.0"),
+            _make_binance_raw_row(m1_open, m1_close, high_str="105.0", close_str="101.0"),
+            _make_binance_raw_row(m2_open, m2_close, high_str="105.0", close_str="102.0"),
+            _make_binance_raw_row(m3_open, m3_close, high_str="105.0", close_str="103.0"),
+        ]
+        feed._client = httpx.Client(transport=_binance_transport(multi_data))
+
+        # Poll 1 -> must emit M1 (oldest unseen), NOT M2
+        b1 = feed.poll_next_bar()
+        assert b1 is not None
+        assert b1.source_id == f"{m1_open}:{m1_close}"
+        assert b1.close == Decimal("101.0")
+
+        # Poll 2 -> must emit M2
+        b2 = feed.poll_next_bar()
+        assert b2 is not None
+        assert b2.source_id == f"{m2_open}:{m2_close}"
+        assert b2.close == Decimal("102.0")
+
+        # Poll 3 -> M3 is open (close 12:03:59.999 > request_started 12:03:15), returns None
+        b3 = feed.poll_next_bar()
+        assert b3 is None
+
+    def test_candidate_window_overflow_gap_emits_earliest_available_unseen(self) -> None:
+        """Candidate-window overflow: when gap exceeds candidate_limit, advances from earliest available unseen candidate."""
+        clock = _MutableClock(datetime(2026, 9, 13, 12, 15, 0, tzinfo=timezone.utc))
+        m0_open = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m0_close = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        # Feed with candidate_limit=3
+        feed = BinancePublicKlinesFeed(
+            "BTCUSDT",
+            BarTimeframe.M1,
+            client=httpx.Client(transport=_binance_transport([_make_binance_raw_row(m0_open, m0_close)])),
+            clock=clock,
+            candidate_limit=3,
+        )
+        feed.connect()
+        assert feed.poll_next_bar() is not None
+
+        # After long outage, window of 3 klines contains M10, M11, M12 (M1..M9 are no longer in window)
+        m10_open = int(datetime(2026, 9, 13, 12, 10, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m10_close = int(datetime(2026, 9, 13, 12, 10, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+        m11_open = int(datetime(2026, 9, 13, 12, 11, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m11_close = int(datetime(2026, 9, 13, 12, 11, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+        m12_open = int(datetime(2026, 9, 13, 12, 12, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        m12_close = int(datetime(2026, 9, 13, 12, 12, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        overflow_rows = [
+            _make_binance_raw_row(m10_open, m10_close, high_str="120.0", close_str="110.0"),
+            _make_binance_raw_row(m11_open, m11_close, high_str="120.0", close_str="111.0"),
+            _make_binance_raw_row(m12_open, m12_close, high_str="120.0", close_str="112.0"),
+        ]
+        feed._client = httpx.Client(transport=_binance_transport(overflow_rows))
+
+        # Emits M10 (earliest available unseen), no missing bars fabricated
+        b10 = feed.poll_next_bar()
+        assert b10 is not None
+        assert b10.source_id == f"{m10_open}:{m10_close}"
+
+        # Next poll emits M11
+        b11 = feed.poll_next_bar()
+        assert b11 is not None
+        assert b11.source_id == f"{m11_open}:{m11_close}"
+
+    def test_exact_close_boundary_strictly_post_close(self) -> None:
+        """Exact close boundary: candidate is not eligible when request_started_ms == close_ms, eligible when > close_ms."""
+        c_open_ms = int(datetime(2026, 9, 13, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        c_close_ms = int(datetime(2026, 9, 13, 12, 0, 59, 999000, tzinfo=timezone.utc).timestamp() * 1000)
+
+        row = _make_binance_raw_row(c_open_ms, c_close_ms)
+        # Clock at exact boundary: request_started_ms == close_ms
+        exact_boundary_dt = datetime.fromtimestamp(c_close_ms / 1000.0, tz=timezone.utc)
+        clock = _MutableClock(exact_boundary_dt)
+
+        feed = BinancePublicKlinesFeed(
+            "BTCUSDT",
+            BarTimeframe.M1,
+            client=httpx.Client(transport=_binance_transport([row])),
+            clock=clock,
+        )
+        feed.connect()
+
+        # At exact boundary: candle interval's last millisecond is right now -> NOT safely post-close
+        assert feed.poll_next_bar() is None
+
+        # Advance clock by exactly 1 millisecond -> now strictly post-close
+        clock.advance(timedelta(milliseconds=1))
+        bar = feed.poll_next_bar()
+        assert bar is not None
+        assert bar.source_id == f"{c_open_ms}:{c_close_ms}"
+
+    def test_naive_injected_clock_raises_feed_contract_error(self) -> None:
+        """Naive injected clock must fail closed with FeedContractError."""
+        naive_dt = datetime(2026, 9, 13, 12, 0, 0)  # No tzinfo
+        feed = BinancePublicKlinesFeed(
+            "BTCUSDT",
+            BarTimeframe.M1,
+            client=httpx.Client(transport=_binance_transport([])),
+            clock=lambda: naive_dt,
+        )
+        with pytest.raises(FeedContractError, match="naive datetime"):
+            feed.connect()
+
+        feed._is_connected = True
+        with pytest.raises(FeedContractError, match="naive datetime"):
+            feed.poll_next_bar()
+
+        with pytest.raises(FeedContractError, match="naive datetime"):
+            feed.status()
+
 
 
 # ===========================================================================
