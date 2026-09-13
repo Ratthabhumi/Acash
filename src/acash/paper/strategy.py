@@ -57,6 +57,16 @@ class PaperStrategyProtocol(Protocol):
         """Strategy version string."""
         ...
 
+    @property
+    def is_infrastructure_test(self) -> bool:
+        """True if the strategy is an infrastructure test harness only."""
+        ...
+
+    @property
+    def governance_label(self) -> str:
+        """Explicit governance classification string for evidence lineage."""
+        ...
+
     def evaluate(
         self,
         closes: Sequence[Decimal],
@@ -99,7 +109,8 @@ class StrategySignal:
     feature_snapshot: Dict[str, Any]
     market_event_reference: str  # e.g., bar timestamp ISO string
     config_hash: str
-    is_infrastructure_test: bool = True  # Always True for this strategy
+    is_infrastructure_test: bool = True
+    governance_label: str = "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
 
     def to_journal_payload(self) -> Dict[str, Any]:
         """Serialize to journal payload format."""
@@ -116,7 +127,7 @@ class StrategySignal:
             "market_event_reference": self.market_event_reference,
             "config_hash": self.config_hash,
             "is_infrastructure_test": self.is_infrastructure_test,
-            "GOVERNANCE_LABEL": "INFRASTRUCTURE_TEST_STRATEGY_ONLY",
+            "GOVERNANCE_LABEL": self.governance_label,
         }
 
 
@@ -176,6 +187,14 @@ class InfrastructureTestStrategy:
     @property
     def strategy_version(self) -> str:
         return self.STRATEGY_VERSION
+
+    @property
+    def is_infrastructure_test(self) -> bool:
+        return True
+
+    @property
+    def governance_label(self) -> str:
+        return self.GOVERNANCE_LABEL
 
     def evaluate(
         self,
@@ -243,4 +262,5 @@ class InfrastructureTestStrategy:
             market_event_reference=market_event_reference,
             config_hash=self._config_hash,
             is_infrastructure_test=True,
+            governance_label=self.GOVERNANCE_LABEL,
         )

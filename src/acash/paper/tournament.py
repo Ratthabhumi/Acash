@@ -137,14 +137,24 @@ class TournamentSlot:
         """Serialize slot to dictionary matching TypeScript StrategySlot contract."""
         is_unassigned = self.status == "UNASSIGNED" or self.runner is None
 
+        gov_label: str
+        if is_unassigned or self.runner is None:
+            gov_label = "UNASSIGNED_SLOT"
+        else:
+            strat = self.runner._strategy
+            if hasattr(strat, "governance_label"):
+                gov_label = strat.governance_label
+            elif getattr(strat, "is_infrastructure_test", True):
+                gov_label = "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
+            else:
+                gov_label = "SHADOW_ALPHA_CANDIDATE"
+
         return {
             "slotId": self.slot_id,
             "strategyId": self.strategy_id,
             "strategyName": self.strategy_name,
             "strategyVersion": self.strategy_version,
-            "governanceLabel": "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
-            if "INFRA-TEST" in self.strategy_id
-            else ("SHADOW_ALPHA_CANDIDATE" if not is_unassigned else "UNASSIGNED_SLOT"),
+            "governanceLabel": gov_label,
             "status": self.status,
             "sessionId": self.session_id,
             "configHash": self.config_hash,
@@ -631,6 +641,11 @@ def create_default_shadow_tournament(
     acash_commit_sha: str,
     slot_strategies: Optional[Dict[str, PaperStrategyProtocol]] = None,
     metrics_registry: Optional[MetricsRegistry] = None,
+    *,
+    instrument: str = "BTCUSDT",
+    data_source: str = "binance.public.klines",
+    market_domain: str = "SPOT",
+    max_market_data_age_ms: Optional[int] = 65_000,
 ) -> ShadowTournamentSupervisor:
     """Construct a canonical Shadow Alpha Tournament instance with globally unique ID.
 
@@ -640,6 +655,10 @@ def create_default_shadow_tournament(
     - slot_strategies: Optional map of slot_id -> StrategyProtocol instance.
       If a slot has no strategy provided, Slot A defaults to InfrastructureTestStrategy
       while Slots B and C remain UNASSIGNED (honest reporting).
+    - instrument: Target symbol (default BTCUSDT).
+    - data_source: Feed data source provider string for manifest provenance.
+    - market_domain: Market domain string (e.g. SPOT, CRYPTO_SPOT).
+    - max_market_data_age_ms: Max market data staleness horizon before fail-closed halt.
     """
     storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -657,7 +676,7 @@ def create_default_shadow_tournament(
             session_id=f"{tournament_id}-SLOT-{slot_id}",
             strategy_id=strategy.strategy_id,
             strategy_version=strategy.strategy_version,
-            instrument="BTCUSDT",
+            instrument=instrument,
             initial_cash=Decimal("1000.00"),
             max_position_units=Decimal("10.0"),
             max_notional=Decimal("100000.0"),
@@ -669,6 +688,9 @@ def create_default_shadow_tournament(
             component_version="1.0.0",
             journal_path=storage_dir / f"{tournament_id}_slot_{slot_id.lower()}.journal.jsonl",
             snapshot_path=storage_dir / f"{tournament_id}_slot_{slot_id.lower()}.snapshots.jsonl",
+            data_source=data_source,
+            market_domain=market_domain,
+            max_market_data_age_ms=max_market_data_age_ms,
         )
         runner = PaperSessionRunner(cfg, strategy=strategy)
         slot = TournamentSlot(
@@ -694,7 +716,7 @@ def create_default_shadow_tournament(
             fast_period=3,
             slow_period=5,
             trade_quantity=Decimal("1.0"),
-            symbol="BTCUSDT",
+            symbol=instrument,
         )
         slot_a, _ = _build_slot_runner("A", default_strat_a)
     slots["A"] = slot_a

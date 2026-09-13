@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -44,6 +46,26 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%SZ",
 )
 logger = logging.getLogger("acash.shadow.tournament")
+
+
+def _detect_git_commit() -> Optional[str]:
+    """Detect current Git commit SHA from environment or local repository."""
+    env_sha = os.environ.get("ACASH_GIT_COMMIT", "").strip()
+    if env_sha:
+        return env_sha
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2.0,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
@@ -93,10 +115,18 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         default=2.0,
         help="Seconds between feed polls",
     )
+    detected_commit = _detect_git_commit()
     parser.add_argument(
         "--git-commit",
-        default="c621824690b7e913ef76990472baa38fd17a925f",
-        help="Current ACASH commit SHA for provenance audit",
+        default=detected_commit,
+        required=detected_commit is None,
+        help="Current ACASH commit SHA for provenance audit (required in deployment)",
+    )
+    parser.add_argument(
+        "--max-data-age-ms",
+        type=int,
+        default=65_000,
+        help="Max allowed market data staleness in milliseconds before fail-closed halt",
     )
     return parser.parse_args(args)
 
@@ -112,12 +142,32 @@ def run_tournament(args: argparse.Namespace) -> int:
     storage_dir.mkdir(parents=True, exist_ok=True)
     status_file = storage_dir / "status.json"
 
-    # Setup Metrics Registry and Supervisor
+    # Setup Public Feed
+    feed: Any
+    data_source: str
+    market_domain: str
+    if args.provider == "binance":
+        feed = BinancePublicKlinesFeed(symbol=args.symbol, timeframe=args.timeframe)
+        data_source = feed.provider_id
+        market_domain = "SPOT"
+    elif args.provider == "stooq":
+        feed = StooqCsvFeed(symbol=args.symbol, timeframe=args.timeframe)
+        data_source = feed.provider_id
+        market_domain = "EQUITY_OR_FX"
+    else:
+        logger.error("Unsupported provider: %s", args.provider)
+        return 1
+
+    # Setup Metrics Registry and Supervisor with explicit real-feed provenance
     metrics_reg = MetricsRegistry()
     supervisor = create_default_shadow_tournament(
         storage_dir=storage_dir,
         acash_commit_sha=args.git_commit,
         metrics_registry=metrics_reg,
+        instrument=args.symbol,
+        data_source=data_source,
+        market_domain=market_domain,
+        max_market_data_age_ms=args.max_data_age_ms,
     )
 
     # Start Prometheus Metrics Server
@@ -139,16 +189,6 @@ def run_tournament(args: argparse.Namespace) -> int:
     api_server.start()
     logger.info("Status API server listening on port %d", args.api_port)
 
-    # Setup Public Feed
-    feed: Any
-    if args.provider == "binance":
-        feed = BinancePublicKlinesFeed(symbol=args.symbol, timeframe=args.timeframe)
-    elif args.provider == "stooq":
-        feed = StooqCsvFeed(symbol=args.symbol, timeframe=args.timeframe)
-    else:
-        logger.error("Unsupported provider: %s", args.provider)
-        return 1
-
     # Signal Handling for Graceful Shutdown
     shutdown_requested = False
 
@@ -160,7 +200,19 @@ def run_tournament(args: argparse.Namespace) -> int:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    # Start Tournament
+    # Lifecycle Invariant: Connect feed BEFORE starting tournament slots
+    logger.info("Connecting to market data feed (%s, %s)...", args.provider, args.symbol)
+    try:
+        feed.connect()
+    except (FeedConnectionError, Exception) as exc:
+        logger.error("Feed connection failed on startup: %s. Halting fail-closed.", exc)
+        supervisor.record_feed_disconnect(str(exc))
+        supervisor.export_status_json(status_file)
+        api_server.stop()
+        metrics_server.stop()
+        return 2
+
+    # Feed connected successfully -> Start tournament slots
     supervisor.start()
     supervisor.export_status_json(status_file)
     logger.info("Tournament %s started. Monitoring feed for %s...", supervisor.tournament_id, args.symbol)
@@ -176,6 +228,28 @@ def run_tournament(args: argparse.Namespace) -> int:
                     results = supervisor.process_bar(synthetic_bar)
                     supervisor.export_status_json(status_file)
                     logger.debug("Processed bar %s (decisions: %s)", synthetic_bar.timestamp_utc, results)
+                else:
+                    # Inspect feed freshness and connection state even when poll returns None
+                    feed_status = feed.status()
+                    if not feed_status.is_connected:
+                        logger.error("Feed connection lost during polling: %s (fail-closed halt)", feed_status.last_error)
+                        supervisor.record_feed_disconnect(feed_status.last_error or "Feed disconnected")
+                        supervisor.export_status_json(status_file)
+                        exit_code = 2
+                        break
+
+                    if feed_status.last_bar_utc is not None and args.max_data_age_ms is not None:
+                        if feed_status.data_age_ms > args.max_data_age_ms:
+                            logger.error(
+                                "Feed data stale: observed %dms > allowed %dms. Fail-closed halt.",
+                                feed_status.data_age_ms,
+                                args.max_data_age_ms,
+                            )
+                            supervisor.record_feed_stale(feed_status.data_age_ms, args.max_data_age_ms)
+                            supervisor.export_status_json(status_file)
+                            exit_code = 4
+                            break
+
             except FeedConnectionError as exc:
                 logger.error("Feed connection failure: %s (fail-closed halt)", exc)
                 supervisor.record_feed_disconnect(str(exc))
@@ -198,7 +272,12 @@ def run_tournament(args: argparse.Namespace) -> int:
             time.sleep(args.poll_interval_seconds)
 
     finally:
-        logger.info("Halting tournament and sealing slot manifests...")
+        logger.info("Halting tournament, disconnecting feed, and sealing manifests...")
+        try:
+            feed.disconnect()
+        except Exception as exc:
+            logger.error("Error disconnecting feed: %s", exc)
+
         supervisor.halt("Tournament shutdown complete")
         supervisor.export_status_json(status_file)
 

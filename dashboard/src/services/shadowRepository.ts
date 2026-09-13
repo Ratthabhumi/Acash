@@ -79,6 +79,26 @@ class MockShadowRepository implements IShadowRepository {
 // Implementation: Live API (when VITE_SHADOW_API_URL is set)
 // ---------------------------------------------------------------------------
 
+/**
+ * Path-prefix safe API endpoint resolver.
+ *
+ * Rules:
+ * 1. If explicit baseUrl is provided, uses it (${baseUrl}/api/shadow/status).
+ * 2. If running under a subpath like /acash/ (Tailscale route via Traefik), resolves to /acash/api/shadow/status.
+ * 3. If running at domain root (LAN mew.lab or localhost), resolves to /api/shadow/status.
+ */
+export function getShadowApiEndpoint(baseUrl: string = SHADOW_API_BASE): string {
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/$/, '')}/api/shadow/status`;
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    const pathname = window.location.pathname;
+    const prefix = pathname.startsWith('/acash') ? '/acash' : '';
+    return `${prefix}/api/shadow/status`;
+  }
+  return '/api/shadow/status';
+}
+
 class LiveShadowRepository implements IShadowRepository {
   private readonly baseUrl: string;
 
@@ -88,8 +108,9 @@ class LiveShadowRepository implements IShadowRepository {
 
   async getState(): Promise<ShadowApiResponse<TournamentState>> {
     const fetchedAt = new Date().toISOString();
+    const endpoint = getShadowApiEndpoint(this.baseUrl);
     try {
-      const resp = await fetch(`${this.baseUrl}/api/shadow/status`, {
+      const resp = await fetch(endpoint, {
         headers: { Accept: 'application/json' },
         // No credentials, no auth headers — read-only public endpoint on private tailnet
       });

@@ -333,6 +333,7 @@ class PaperSessionRunner:
         self._start_time_utc: Optional[datetime] = None
         self._end_time_utc: Optional[datetime] = None
         self._started = False
+        self._manifest: Optional[PaperSessionManifest] = None
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -409,12 +410,13 @@ class PaperSessionRunner:
         )
 
         # Seal manifest
+        is_infra = getattr(self._strategy, "is_infrastructure_test", True)
         manifest = PaperSessionManifest.seal(
             session_id=self._config.session_id,
             manifest_id=str(uuid.uuid4()),
             strategy_id=self._config.strategy_id,
             strategy_version=self._config.strategy_version,
-            is_infrastructure_test_strategy=True,
+            is_infrastructure_test_strategy=is_infra,
             git_commit=self._config.git_commit,
             config_hash=self._config_hash,
             strategy_config_hash=self._config_hash,
@@ -453,7 +455,13 @@ class PaperSessionRunner:
                 f"PaperSessionRunner: manifest persistence failure: {exc}"
             ) from exc
 
+        self._manifest = manifest
         return manifest
+
+    @property
+    def manifest(self) -> Optional[PaperSessionManifest]:
+        """Sealed session manifest if session has stopped, else None."""
+        return self._manifest
 
     def capture_daily_snapshot(self) -> DailySnapshot:
         """Persist an end-of-day operational daily snapshot (append-only).

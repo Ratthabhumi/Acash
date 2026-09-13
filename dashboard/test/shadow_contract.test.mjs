@@ -76,4 +76,9 @@ test('Shadow Alpha Tournament Contract: Relative Base and Path Routing Compatibi
     assert.match(distHtmlContent, /src="\.\/assets\//, 'Built scripts must use relative ./assets/ path for path-prefix compatibility');
     assert.match(distHtmlContent, /href="\.\/assets\//, 'Built styles must use relative ./assets/ path for path-prefix compatibility');
   }
+
+  // Verify getShadowApiEndpoint is exported and handles path prefix
+  assert.match(repoContent, /export function getShadowApiEndpoint/, 'Must export getShadowApiEndpoint');
+  assert.match(repoContent, /pathname\.startsWith\('\/acash'\)/, 'Must detect /acash prefix dynamically from window.location');
+  assert.match(repoContent, /\$\{prefix\}\/api\/shadow\/status/, 'Must resolve API to prefix-safe path');
 });
