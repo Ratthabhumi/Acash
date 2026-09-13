@@ -69,12 +69,15 @@ Evidence gathered from official Binance fee schedules (`https://www.binance.com/
 
 ### 3.2 Secondary Exchange Fee Benchmarks (Kraken Baseline)
 
-Evidence gathered from official Kraken fee schedules (`https://www.kraken.com/features/fee-schedule`):
+Evidence gathered from official Kraken fee schedules (`https://www.kraken.com/features/fee-schedule`, accessed 2026-09-13 UTC):
 
-| Market | Tier Level | Maker Fee | Taker Fee | 30-Day Volume Requirement | Effective Date / Status | Source URL |
+| Market | Tier Level | 30-Day Volume Requirement | Maker Fee | Taker Fee | Effective Date / Status | Source URL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **XBTUSDT Spot** | Retail Tier 1 | **0.4000%** (40.0 bps) | **0.8000%** (80.0 bps) | $0 – $10,000 USD | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
-| **XBTUSDT Spot** | Retail Tier 2 | 0.2500% (25.0 bps) | 0.4000% (40.0 bps) | $10,000 – $50,000 USD | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
+| **XBTUSDT Spot** | Retail Tier 1 | $0+ | **0.4000%** (40.0 bps) | **0.8000%** (80.0 bps) | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
+| **XBTUSDT Spot** | Retail Tier 2 | $2,500+ ($2.5K+) | **0.3000%** (30.0 bps) | **0.6000%** (60.0 bps) | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
+| **XBTUSDT Spot** | Retail Tier 3 | $10,000+ ($10K+) | **0.2200%** (22.0 bps) | **0.3800%** (38.0 bps) | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
+| **XBTUSDT Spot** | Retail Tier 4 | $25,000+ ($25K+) | **0.2000%** (20.0 bps) | **0.3500%** (35.0 bps) | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
+| **XBTUSDT Spot** | Retail Tier 5 | $50,000+ ($50K+) | **0.1500%** (15.0 bps) | **0.3000%** (30.0 bps) | Verified 2026-09-13 | `kraken.com/features/fee-schedule` |
 
 ### 3.3 Strict Fee Policy Invariants
 1. **Never Assume VIP or Token Discounts:** Standard research simulations must default to **VIP 0 Regular User without BNB discount** (Spot: 10.0 bps Maker / 10.0 bps Taker; Perpetual: 2.0 bps Maker / 5.0 bps Taker).
@@ -249,7 +252,7 @@ latency_config = SimulationLatencyConfig(
 3. **Kraken Fee Schedule (Current Official):**
    - URL: `https://www.kraken.com/features/fee-schedule`
    - Access Date: 2026-09-13 UTC
-   - Supported Claims: Spot Retail Tier 1 ($0–$10k volume) is 0.40% Maker (40.0 bps) and 0.80% Taker (80.0 bps); Retail Tier 2 ($10k–$50k volume) is 0.25% Maker (25.0 bps) and 0.40% Taker (40.0 bps).
+   - Supported Claims: Spot Retail Tier 1 ($0+ volume) is 0.4000% Maker (40.0 bps) and 0.8000% Taker (80.0 bps); Tier 2 ($2.5K+ volume) is 0.3000% Maker (30.0 bps) and 0.6000% Taker (60.0 bps); Tier 3 ($10K+ volume) is 0.2200% Maker (22.0 bps) and 0.3800% Taker (38.0 bps); Tier 4 ($25K+ volume) is 0.2000% Maker (20.0 bps) and 0.3500% Taker (35.0 bps); Tier 5 ($50K+ volume) is 0.1500% Maker (15.0 bps) and 0.3000% Taker (30.0 bps).
 
 ---
 
