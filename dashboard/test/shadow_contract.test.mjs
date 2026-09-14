@@ -70,6 +70,32 @@ test('Shadow Alpha Tournament Contract: Fail-Closed Production Repository Defaul
   assert.match(repoContent, /return \{\s*ok:\s*false,\s*data:\s*null,\s*error:/, 'Live repository failure must yield ok: false, data: null');
 });
 
+test('Shadow Alpha Tournament Contract: UNASSIGNED N/A Metrics Are Null-Safe', () => {
+  // Backend serializes exposurePct / riskUtilizationPct / durationSeconds as null
+  // for UNASSIGNED slots. The frontend contract must declare them nullable and the
+  // page must guard before calling toFixed / formatDuration. Null means N/A — never
+  // faked to zero on the client, and never silently fabricated on the backend.
+  assert.match(typesContent, /exposurePct:\s*number \| null/, 'exposurePct must be declared number | null');
+  assert.match(typesContent, /riskUtilizationPct:\s*number \| null/, 'riskUtilizationPct must be declared number | null');
+  assert.match(typesContent, /durationSeconds:\s*number \| null/, 'durationSeconds must be declared number | null');
+
+  assert.match(
+    pageContent,
+    /metrics\.riskUtilizationPct !== null \? `\$\{metrics\.riskUtilizationPct\.toFixed\(1\)\}%` : '—'/,
+    'Risk Util. must guard null and render em dash'
+  );
+  assert.match(
+    pageContent,
+    /metrics\.exposurePct !== null \? `\$\{metrics\.exposurePct\.toFixed\(1\)\}%` : '—'/,
+    'Exposure must guard null and render em dash'
+  );
+  assert.match(
+    pageContent,
+    /metrics\.durationSeconds !== null \? formatDuration\(metrics\.durationSeconds\) : '—'/,
+    'Runtime must guard null and render em dash'
+  );
+});
+
 test('Shadow Alpha Tournament Contract: Relative Base and Path Routing Compatibility', () => {
   if (distHtmlContent) {
     // Assets must be relative (./assets/...) to support both / and /acash/ path prefixes

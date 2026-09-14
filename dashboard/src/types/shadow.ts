@@ -83,8 +83,8 @@ export interface SlotMetrics {
   unrealizedPnlUsd: number;
   maxDrawdownPct: number;
   currentDrawdownPct: number;
-  exposurePct: number;
-  riskUtilizationPct: number;
+  exposurePct: number | null; // null = N/A (UNASSIGNED slot)
+  riskUtilizationPct: number | null; // null = N/A (UNASSIGNED slot)
   openPositionCount: number;
   simulatedOrderCount: number;
   simulatedFillCount: number;
@@ -94,7 +94,7 @@ export interface SlotMetrics {
   signalCount: number;
   lastSignalUtc: string | null;
   lastFillUtc: string | null;
-  durationSeconds: number;
+  durationSeconds: number | null; // null = N/A (UNASSIGNED slot)
 }
 
 export interface StrategySlot {

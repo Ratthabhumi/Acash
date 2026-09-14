@@ -136,7 +136,7 @@ interface SlotCardProps {
   rank: number | null;
 }
 
-const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
+export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
   const { slotId, strategyName, strategyVersion, status, metrics, haltReason, acashCommitSha, lastBarUtc } = slot;
   const isUnassigned = status === 'UNASSIGNED';
   const isHalted = status === 'HALTED';
@@ -235,14 +235,14 @@ const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
           { label: 'Unrealized PnL', value: formatUsd(metrics.unrealizedPnlUsd) },
           { label: 'Max Drawdown', value: metrics.maxDrawdownPct === 0 ? '—' : `-${metrics.maxDrawdownPct.toFixed(2)}%` },
           { label: 'Curr. Drawdown', value: metrics.currentDrawdownPct === 0 ? '—' : `-${metrics.currentDrawdownPct.toFixed(2)}%` },
-          { label: 'Risk Util.', value: `${metrics.riskUtilizationPct.toFixed(1)}%` },
-          { label: 'Exposure', value: `${metrics.exposurePct.toFixed(1)}%` },
+          { label: 'Risk Util.', value: metrics.riskUtilizationPct !== null ? `${metrics.riskUtilizationPct.toFixed(1)}%` : '—' },
+          { label: 'Exposure', value: metrics.exposurePct !== null ? `${metrics.exposurePct.toFixed(1)}%` : '—' },
           { label: 'Open Positions', value: String(metrics.openPositionCount) },
           { label: 'Sim. Fills', value: String(metrics.simulatedFillCount) },
           { label: 'Win Rate', value: metrics.winRatePct !== null ? `${metrics.winRatePct.toFixed(1)}%` : '— (n<2)' },
           { label: 'Signals', value: String(metrics.signalCount) },
           { label: 'Last Signal', value: timeSince(metrics.lastSignalUtc) },
-          { label: 'Runtime', value: formatDuration(metrics.durationSeconds) },
+          { label: 'Runtime', value: metrics.durationSeconds !== null ? formatDuration(metrics.durationSeconds) : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="flex justify-between items-center py-0.5 border-b border-slate-100 dark:border-slate-800">
             <span className="text-slate-500 dark:text-slate-400">{label}</span>
