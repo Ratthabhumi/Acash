@@ -467,6 +467,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     tournament_p.add_argument("--metrics-port", type=int, default=9102)
     tournament_p.add_argument("--poll-interval-seconds", type=float, default=2.0)
     tournament_p.add_argument("--git-commit", default="unknown")
+    tournament_p.add_argument(
+        "--max-data-age-ms",
+        type=int,
+        default=65_000,
+        help="Max allowed market data staleness in milliseconds before fail-closed halt",
+    )
 
     args = parser.parse_args(argv)
 

@@ -96,6 +96,66 @@ class TestArgParsing:
         assert excinfo.value.code == 0
 
 
+class TestTournamentArgParsing:
+    """Regression: top-level `tournament` subparser must expose --max-data-age-ms.
+
+    E3.6/H01: the Docker ENTRYPOINT runs `python -m acash.paper tournament`
+    (cli.py parser). tournament_cli.py defines and consumes args.max_data_age_ms
+    for the fail-closed stale-bar halt, but cli.py did not define the option,
+    so Homelab startup failed with exit 2 (unrecognized argument). This suite
+    pins that wiring.
+    """
+
+    def test_tournament_help_displays_max_data_age_ms(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as excinfo:
+            main(["tournament", "--help"])
+        assert excinfo.value.code == 0
+        assert "--max-data-age-ms" in capsys.readouterr().out
+
+    def test_tournament_accepts_explicit_max_data_age_ms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run_tournament(args: argparse.Namespace) -> int:
+            captured["max_data_age_ms"] = args.max_data_age_ms
+            return 0
+
+        monkeypatch.setattr(
+            "acash.paper.tournament_cli.run_tournament", fake_run_tournament
+        )
+        code = main(
+            [
+                "tournament",
+                "--provider",
+                "stooq",
+                "--symbol",
+                "X",
+                "--max-data-age-ms=65000",
+            ]
+        )
+        assert code == 0
+        assert captured["max_data_age_ms"] == 65000
+
+    def test_tournament_default_max_data_age_ms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_run_tournament(args: argparse.Namespace) -> int:
+            captured["max_data_age_ms"] = args.max_data_age_ms
+            return 0
+
+        monkeypatch.setattr(
+            "acash.paper.tournament_cli.run_tournament", fake_run_tournament
+        )
+        code = main(["tournament", "--provider", "stooq", "--symbol", "X"])
+        assert code == 0
+        assert captured["max_data_age_ms"] == 65000
+
+
 class TestStatus:
     def test_status_against_real_journal(
         self, storage_root: Path, session_id: str, capsys: pytest.CaptureFixture[str]
