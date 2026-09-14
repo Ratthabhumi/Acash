@@ -20,6 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -73,6 +74,27 @@ class TournamentGovernance:
 SLOT_IDS = ("A", "B", "C")
 
 
+class SlotExecutionState(str, Enum):
+    """Granular per-slot & aggregate execution states (Tournament V2 Defect D).
+
+    Surfaced in slot status, aggregate `executionState`, API JSON, Prometheus
+    metrics, and the dashboard contract. Replaces the former coarse HALTED
+    bucket so operators can distinguish WHY a slot is not trading:
+
+    - RUNNING            slot actively processing synchronized bars
+    - RISK_HALTED        kill switch active (MAX_DAILY_LOSS) on this slot
+    - FEED_HALTED        halted fail-closed due to feed disconnect/staleness
+    - STOPPED            stopped by operator/normal shutdown
+    - UNASSIGNED         no runner attached
+    """
+
+    RUNNING = "RUNNING"
+    RISK_HALTED = "RISK_HALTED"
+    FEED_HALTED = "FEED_HALTED"
+    STOPPED = "STOPPED"
+    UNASSIGNED = "UNASSIGNED"
+
+
 @dataclass
 class SlotMetrics:
     """Performance and operational metrics for a single tournament slot."""
@@ -113,7 +135,7 @@ class TournamentSlot:
     strategy_id: str
     strategy_name: str
     strategy_version: str
-    status: str  # 'RUNNING' | 'HALTED' | 'UNASSIGNED' | 'INITIALIZING'
+    status: str  # SlotExecutionState: RUNNING|RISK_HALTED|FEED_HALTED|STOPPED|UNASSIGNED
     session_id: str
     config_hash: str
     acash_commit_sha: str
@@ -160,6 +182,11 @@ class TournamentSlot:
             "configHash": self.config_hash,
             "acashCommitSha": self.acash_commit_sha,
             "haltReason": self.halt_reason,
+            "operatorResolutionRequired": (
+                self.runner.operator_resolution_required
+                if self.runner is not None
+                else False
+            ),
             "lastBarUtc": self.last_bar_utc,
             "openPositions": self.open_positions if not is_unassigned else [],
             "recentFills": self.recent_fills if not is_unassigned else [],
@@ -264,6 +291,27 @@ class ShadowTournamentSupervisor:
     def overall_status(self) -> str:
         return self._overall_status
 
+    def _aggregate_execution_state(self) -> str:
+        """Derive a single tournament-level execution state from slot states.
+
+        Deterministic precedence (fail-closed first):
+        RISK_HALTED > FEED_HALTED > STOPPED > RUNNING > UNASSIGNED > NOT_STARTED.
+        When every slot is halted, the halt kind is preserved at aggregate level;
+        otherwise the most severe active state wins.
+        """
+        slot_states = [s.status for s in self._slots.values()]
+        priority = [
+            SlotExecutionState.RISK_HALTED,
+            SlotExecutionState.FEED_HALTED,
+            SlotExecutionState.STOPPED,
+            SlotExecutionState.RUNNING,
+            SlotExecutionState.UNASSIGNED,
+        ]
+        for state in priority:
+            if state.value in slot_states:
+                return state.value
+        return "NOT_STARTED"
+
     def start(self) -> None:
         """Start the tournament.
 
@@ -329,22 +377,30 @@ class ShadowTournamentSupervisor:
             self._last_successful_update_utc = datetime.now(timezone.utc)
 
             for slot_id, slot in self._slots.items():
-                if slot.status == "RUNNING":
-                    slot.status = "HALTED"
-                    slot.halt_reason = reason
-                    if slot.runner is not None and slot.runner._started:
-                        try:
-                            slot.runner.stop(terminal_reason=terminal_reason)
-                            logger.info(
-                                "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
-                                slot_id,
-                            )
-                        except Exception as exc:
-                            logger.error(
-                                "ShadowTournamentSupervisor: error stopping slot %s runner: %s",
-                                slot_id,
-                                exc,
-                            )
+                if slot.status != "RUNNING":
+                    continue
+                # Granular execution state: an already risk-halted slot stays
+                # RISK_HALTED; feed failures -> FEED_HALTED; else STOPPED.
+                if slot.runner is not None and slot.runner.kill_switch_active:
+                    slot.status = SlotExecutionState.RISK_HALTED.value
+                elif feed_health in ("DISCONNECTED", "STALE"):
+                    slot.status = SlotExecutionState.FEED_HALTED.value
+                else:
+                    slot.status = SlotExecutionState.STOPPED.value
+                slot.halt_reason = reason
+                if slot.runner is not None and slot.runner._started:
+                    try:
+                        slot.runner.stop(terminal_reason=terminal_reason)
+                        logger.info(
+                            "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
+                            slot_id,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "ShadowTournamentSupervisor: error stopping slot %s runner: %s",
+                            slot_id,
+                            exc,
+                        )
 
             self._update_metrics()
 
@@ -406,6 +462,12 @@ class ShadowTournamentSupervisor:
         """Sync slot metrics from runner portfolio with zero state leakage."""
         if slot.runner is None:
             return
+
+        # Defect D: propagate the runner's kill switch into the slot execution
+        # state so status JSON / API / metrics reflect WHY a slot stopped.
+        if slot.runner.kill_switch_active and slot.status == "RUNNING":
+            slot.status = SlotExecutionState.RISK_HALTED.value
+            slot.halt_reason = "Kill switch active (max daily loss breached)"
 
         portfolio = slot.runner._portfolio
         mark_price = bar.close
@@ -521,9 +583,26 @@ class ShadowTournamentSupervisor:
             "acash_shadow_tournament_is_simulated_only", 1.0
         )
 
+        # Aggregate execution state (V2 Defect D): one-hot over the derived
+        # tournament-level state so dashboards can chart severity over time.
+        aggregate_state = self._aggregate_execution_state()
+        for state in SlotExecutionState:
+            self._metrics_registry.set_gauge(
+                "acash_shadow_tournament_execution_state",
+                1.0 if state.value == aggregate_state else 0.0,
+                {"state": state.value},
+            )
+
         # Per-slot metrics
         for slot_id, slot in self._slots.items():
             labels = {"slot": slot_id, "strategy_id": slot.strategy_id}
+            # Per-slot execution state (V2 Defect D).
+            for state in SlotExecutionState:
+                self._metrics_registry.set_gauge(
+                    "acash_shadow_tournament_slot_execution_state",
+                    1.0 if slot.status == state.value else 0.0,
+                    {"slot": slot_id, "state": state.value},
+                )
             self._metrics_registry.set_gauge(
                 "acash_shadow_tournament_virtual_nav_usd",
                 float(slot.metrics.current_nav_usd),
@@ -567,10 +646,16 @@ class ShadowTournamentSupervisor:
 
             # Build leaderboard rankings
             ranked_slots: List[Dict[str, Any]] = []
+            ranked_statuses = {
+                SlotExecutionState.RUNNING.value,
+                SlotExecutionState.RISK_HALTED.value,
+                SlotExecutionState.FEED_HALTED.value,
+                SlotExecutionState.STOPPED.value,
+            }
             active_slots = [
                 s
                 for s in self._slots.values()
-                if s.status in ("RUNNING", "HALTED") and s.metrics.simulated_fill_count > 0
+                if s.status in ranked_statuses and s.metrics.simulated_fill_count > 0
             ]
             active_slots.sort(key=lambda s: s.metrics.pnl_usd, reverse=True)
 
@@ -622,6 +707,7 @@ class ShadowTournamentSupervisor:
                     else None,
                     "lastSuccessfulUpdateUtc": self._last_successful_update_utc.isoformat(),
                     "overallStatus": self._overall_status,
+                    "executionState": self._aggregate_execution_state(),
                     "haltReason": self._halt_reason,
                 },
                 "slots": {

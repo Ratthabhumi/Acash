@@ -176,7 +176,7 @@ def test_strategy_injection_seam_and_divergence(tmp_path: Path) -> None:
 
 
 def test_halt_lifecycle_seals_manifests_and_rejects_subsequent_bars(tmp_path: Path) -> None:
-    """Verify fail-closed halt sets slots to HALTED, seals manifests, and blocks bars."""
+    """Verify fail-closed halt sets slots to granular FEED_HALTED, seals manifests, and blocks bars."""
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
         acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
@@ -195,7 +195,7 @@ def test_halt_lifecycle_seals_manifests_and_rejects_subsequent_bars(tmp_path: Pa
 
     assert supervisor.overall_status == "HALTED"
     assert supervisor.feed_health == "DISCONNECTED"
-    assert supervisor.slots["A"].status == "HALTED"
+    assert supervisor.slots["A"].status == "FEED_HALTED"
     assert "Feed disconnected" in (supervisor.slots["A"].halt_reason or "")
 
     # Manifest should be sealed on disk for slot A

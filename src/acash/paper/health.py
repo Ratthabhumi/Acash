@@ -209,16 +209,23 @@ class PaperHealthMonitor:
         correlation_id: str,
         trigger_reason: str,
         trigger_type: str,
+        position_policy: Optional[str] = None,
+        operator_resolution_required: Optional[bool] = None,
     ) -> str:
         """Record a kill switch activation."""
+        payload: Dict[str, Any] = {
+            "event": "KILL_SWITCH_TRIGGERED",
+            "trigger_reason": trigger_reason,
+            "trigger_type": trigger_type,
+        }
+        if position_policy is not None:
+            payload["position_policy"] = position_policy
+        if operator_resolution_required is not None:
+            payload["operator_resolution_required"] = operator_resolution_required
         return self.record(
             kind=HealthEventKind.KILL_SWITCH,
             correlation_id=correlation_id,
-            payload={
-                "event": "KILL_SWITCH_TRIGGERED",
-                "trigger_reason": trigger_reason,
-                "trigger_type": trigger_type,
-            },
+            payload=payload,
         )
 
     def record_reconciliation(

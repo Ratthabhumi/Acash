@@ -41,6 +41,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -65,6 +66,56 @@ from acash.paper.strategy import (
     StrategySignal,
 )
 from acash.paper.trace import DecisionTrace
+
+
+# ---------------------------------------------------------------------------
+# Portfolio & kill-switch policy seams (Tournament V2 remediation)
+# ---------------------------------------------------------------------------
+
+
+class PortfolioFundingPolicy(str, Enum):
+    """Deterministic policy governing how virtual portfolio cash may be drawn.
+
+    Affects the FAIL-CLOSED funding gate in ``_evaluate_risk``. The policy is
+    part of the canonical config hash (single authority for the gate).
+
+    - SIMULATED_LEVERAGED: H01-preserving default. No cash floor; virtual cash
+      may go negative (leverage is simulated, mirroring the H01 Slot A state
+      where cash reached -699728.123). Presence of negative cash is evidence,
+      not an error, under this policy.
+    - CASH_CONSTRAINED_SPOT: Strict spot discipline. A fill that would drive
+      projected cash below zero is REJECTED by the risk gate (fail-closed).
+    - EXPLICIT_BOUNDED_LEVERAGE: Leverage is permitted only up to an explicit,
+      config-sealed debt limit (max_debt_limit_usd). A fill that would breach
+      the limit is REJECTED.
+    """
+
+    SIMULATED_LEVERAGED = "SIMULATED_LEVERAGED"
+    CASH_CONSTRAINED_SPOT = "CASH_CONSTRAINED_SPOT"
+    EXPLICIT_BOUNDED_LEVERAGE = "EXPLICIT_BOUNDED_LEVERAGE"
+
+
+class KillSwitchPositionPolicy(str, Enum):
+    """Deterministic policy for what happens to the position on kill switch.
+
+    The kill switch is triggered only on a MAX_DAILY_LOSS breach. The chosen
+    policy decides whether the open simulated position is preserved, flattened
+    at mark (via a synthetic closing fill chain), or preserved while an
+    operator resolution is mandatory before any further action.
+
+    - HALT_AND_PRESERVE_POSITION: default, H01-preserving. Trading halts but the
+      open position is kept (mark-to-market continues; flight recorder intact).
+    - HALT_AND_FORCE_SIMULATED_FLATTEN: the position is closed at the reference
+      (mark) price through a synthetic ORDER_INTENT_CREATED -> FILL_SIMULATED ->
+      POSITION_UPDATED -> PORTFOLIO_UPDATED journal chain.
+    - HALT_AND_REQUIRE_OPERATOR_RESOLUTION: like PRESERVE for accounting, but
+      additionally requires an operator resolution (journaled) before resume;
+      no automatic flatten and no automatic resume.
+    """
+
+    HALT_AND_PRESERVE_POSITION = "HALT_AND_PRESERVE_POSITION"
+    HALT_AND_FORCE_SIMULATED_FLATTEN = "HALT_AND_FORCE_SIMULATED_FLATTEN"
+    HALT_AND_REQUIRE_OPERATOR_RESOLUTION = "HALT_AND_REQUIRE_OPERATOR_RESOLUTION"
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +151,25 @@ class PaperSessionConfig:
     data_source: str = "SYNTHETIC_BARS"
     market_domain: str = "SYNTHETIC"
     max_market_data_age_ms: Optional[int] = None
+    portfolio_funding_policy: PortfolioFundingPolicy = PortfolioFundingPolicy.SIMULATED_LEVERAGED
+    max_debt_limit_usd: Decimal = Decimal("0")
+    kill_switch_position_policy: KillSwitchPositionPolicy = KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION
+
+    def _validate(self) -> None:
+        """Fail-fast config validation for the V2 policy seams."""
+        if self.portfolio_funding_policy == PortfolioFundingPolicy.EXPLICIT_BOUNDED_LEVERAGE:
+            if self.max_debt_limit_usd < Decimal("0"):
+                raise DataContractError(
+                    f"PaperSessionConfig: max_debt_limit_usd must be >= 0 for "
+                    f"EXPLICIT_BOUNDED_LEVERAGE, got {self.max_debt_limit_usd}"
+                )
+        if self.max_debt_limit_usd < Decimal("0"):
+            raise DataContractError(
+                f"PaperSessionConfig: max_debt_limit_usd must be >= 0, got {self.max_debt_limit_usd}"
+            )
+
+    def __post_init__(self) -> None:
+        self._validate()
 
     def compute_config_hash(self) -> str:
         """SHA-256 of canonical config (excluding paths which are runtime-dependent)."""
@@ -118,7 +188,11 @@ class PaperSessionConfig:
             "mode": self.mode,
             "fill_model_version": self.fill_model_version,
             "risk_model_version": self.risk_model_version,
+            "portfolio_funding_policy": self.portfolio_funding_policy.value,
+            "kill_switch_position_policy": self.kill_switch_position_policy.value,
         }
+        if self.max_debt_limit_usd != Decimal("0"):
+            canonical["max_debt_limit_usd"] = str(self.max_debt_limit_usd)
         if self.max_market_data_age_ms is not None:
             canonical["max_market_data_age_ms"] = self.max_market_data_age_ms
         canonical_bytes = CanonicalConfigSerializer.to_canonical_json(
@@ -325,6 +399,8 @@ class PaperSessionRunner:
 
         # Safety state
         self._kill_switch_active = False
+        self._kill_switch_pending = False
+        self._operator_resolution_required = False
         self._submitted_intent_ids: Set[str] = set()
         self._seen_feed_source_ids: Set[str] = set()
         self._daily_realized_loss = Decimal("0")
@@ -1000,12 +1076,48 @@ class PaperSessionRunner:
                     f"= {proposed_notional} > {self._config.max_notional}"
                 )
 
+            # Funding policy gate (projected cash after worst-case fill).
+            # Uses the adverse-slippage fill price so a passing gate can never
+            # be undone by execution; the gate is the single authority.
+            slippage_frac = self._config.fill_slippage_bps / Decimal("10000")
+            if signal.direction == SignalDirection.LONG:
+                projected_fill = reference_price * (Decimal("1") + slippage_frac)
+                projected_cash = self._portfolio.cash - (
+                    projected_fill * signal.target_quantity
+                ) - (signal.target_quantity * self._config.fill_commission_per_unit)
+            else:
+                projected_fill = reference_price * (Decimal("1") - slippage_frac)
+                projected_cash = self._portfolio.cash + (
+                    projected_fill * signal.target_quantity
+                ) - (signal.target_quantity * self._config.fill_commission_per_unit)
+
+            funding_policy = self._config.portfolio_funding_policy
+            if funding_policy == PortfolioFundingPolicy.CASH_CONSTRAINED_SPOT:
+                if projected_cash < Decimal("0"):
+                    violations.append(
+                        f"FUNDING_POLICY: projected_cash={projected_cash} < 0 "
+                        f"(CASH_CONSTRAINED_SPOT)"
+                    )
+            elif funding_policy == PortfolioFundingPolicy.EXPLICIT_BOUNDED_LEVERAGE:
+                debt_floor = -self._config.max_debt_limit_usd
+                if projected_cash < debt_floor:
+                    violations.append(
+                        f"FUNDING_POLICY: projected_cash={projected_cash} < debt_floor="
+                        f"{debt_floor} (EXPLICIT_BOUNDED_LEVERAGE, "
+                        f"max_debt_limit_usd={self._config.max_debt_limit_usd})"
+                    )
+
         # Kill switch check (daily loss)
-        if self._daily_realized_loss >= self._config.max_daily_loss:
+        if self._kill_switch_active:
+            violations.append(
+                f"MAX_DAILY_LOSS: kill switch already active "
+                f"(loss {self._daily_realized_loss} >= {self._config.max_daily_loss})"
+            )
+        elif self._daily_realized_loss >= self._config.max_daily_loss:
             violations.append(
                 f"MAX_DAILY_LOSS: {self._daily_realized_loss} >= {self._config.max_daily_loss}"
             )
-            self._trigger_kill_switch(correlation_id, causation_id, "MAX_DAILY_LOSS")
+            self._kill_switch_pending = True
 
         approved = len(violations) == 0
 
@@ -1032,26 +1144,166 @@ class PaperSessionRunner:
                 "daily_realized_loss": str(self._daily_realized_loss),
                 "max_daily_loss": str(self._config.max_daily_loss),
                 "risk_model_version": self._config.risk_model_version,
+                "portfolio_funding_policy": self._config.portfolio_funding_policy.value,
+                "kill_switch_position_policy": self._config.kill_switch_position_policy.value,
             },
         )
+        risk_event_id = ev.event_id
+
+        # Apply kill switch AFTER the risk decision is journaled so the causal
+        # chain is RISK_REJECTED -> KILL_SWITCH_TRIGGERED -> [flatten chain].
+        if self._kill_switch_pending:
+            self._kill_switch_pending = False
+            self._trigger_kill_switch(
+                correlation_id,
+                risk_event_id,
+                "MAX_DAILY_LOSS",
+                reference_price=reference_price,
+            )
 
         if not approved:
             self._portfolio.rejected_order_count += 1
 
-        return approved, "; ".join(violations) if violations else "APPROVED", ev.event_id
+        return approved, "; ".join(violations) if violations else "APPROVED", risk_event_id
 
     def _trigger_kill_switch(
         self,
         correlation_id: str,
         causation_id: str,
         trigger_reason: str,
+        reference_price: Optional[Decimal] = None,
     ) -> None:
-        """Activate kill switch and record to journal."""
+        """Activate kill switch, record to journal, and apply the configured policy.
+
+        The position policy is applied FIRMLY:
+        - HALT_AND_PRESERVE_POSITION: no position mutation (H01-preserving).
+        - HALT_AND_FORCE_SIMULATED_FLATTEN: close any open position at the
+          reference (mark) price via a synthetic closing fill chain. Requires a
+          reference price; a missing mark is a fail-closed DataContractError
+          because flattening without a price would fabricate a fill.
+        - HALT_AND_REQUIRE_OPERATOR_RESOLUTION: marks the session as requiring
+          an operator resolution (exposed via `operator_resolution_required`)
+          and journals that requirement. No auto-flatten, no auto-resume.
+        """
         self._kill_switch_active = True
+        policy = self._config.kill_switch_position_policy
+        if policy == KillSwitchPositionPolicy.HALT_AND_FORCE_SIMULATED_FLATTEN:
+            if self._portfolio.position == Decimal("0"):
+                pass  # nothing to flatten; journal policy-only payload below
+            elif reference_price is None:
+                raise DataContractError(
+                    "KillSwitchPositionPolicy.HALT_AND_FORCE_SIMULATED_FLATTEN "
+                    "requires a reference price to flatten; got None (fail-closed)"
+                )
+            else:
+                self._force_flatten_at_mark(
+                    reference_price=reference_price,
+                    correlation_id=correlation_id,
+                    causation_id=causation_id,
+                )
+        elif policy == KillSwitchPositionPolicy.HALT_AND_REQUIRE_OPERATOR_RESOLUTION:
+            self._operator_resolution_required = True
+
         self._health.record_kill_switch(
             correlation_id=correlation_id,
             trigger_reason=trigger_reason,
             trigger_type="DAILY_LOSS_LIMIT",
+            position_policy=policy.value,
+            operator_resolution_required=self._operator_resolution_required,
+        )
+
+    def _force_flatten_at_mark(
+        self,
+        reference_price: Decimal,
+        correlation_id: str,
+        causation_id: str,
+    ) -> None:
+        """Simulate a full closing of the open position at the mark price.
+
+        Journals the canonical synthetic closing chain so reconciliation and
+        replay remain consistent with a real execution:
+        ORDER_INTENT_CREATED -> FILL_SIMULATED -> POSITION_UPDATED -> PORTFOLIO_UPDATED.
+        """
+        qty = abs(self._portfolio.position)
+        direction = (
+            SignalDirection.SHORT
+            if self._portfolio.position > Decimal("0")
+            else SignalDirection.LONG
+        )
+        symbol = self._config.instrument
+
+        closing = StrategySignal(
+            strategy_id=self._config.strategy_id,
+            strategy_version=self._config.strategy_version,
+            evaluation_timestamp_utc=datetime.now(timezone.utc),
+            symbol=symbol,
+            direction=direction,
+            target_quantity=qty,
+            signal_strength=Decimal("1.0"),
+            decision_reason="KILL_SWITCH_FORCED_FLATTEN",
+            feature_snapshot={"event": "KILL_SWITCH_FORCED_FLATTEN"},
+            market_event_reference="kill_switch_flatten",
+            config_hash=self._config_hash,
+            is_infrastructure_test=True,
+            governance_label="RISK_KILL_SWITCH_FORCED_FLATTEN",
+        )
+
+        intent_id = str(uuid.uuid4())
+        self._submitted_intent_ids.add(intent_id)
+        self._portfolio.order_count += 1
+
+        intent_event_id = self._journal.append(
+            event_type=JournalEventType.ORDER_INTENT_CREATED,
+            layer=JournalLayer.ORDER,
+            event_time_utc=datetime.now(timezone.utc),
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            component=self.COMPONENT,
+            payload={
+                "order_intent_id": intent_id,
+                "symbol": symbol,
+                "side": direction.value,
+                "quantity": str(qty),
+                "order_type": "MARKET",
+                "strategy_id": closing.strategy_id,
+                "GOVERNANCE_LABEL": "RISK_KILL_SWITCH_FORCED_FLATTEN",
+            },
+        ).event_id
+
+        fill_price = reference_price
+        commission = qty * self._config.fill_commission_per_unit
+        notional = fill_price * qty
+        fill_id = str(uuid.uuid4())
+        fill_event_id = self._journal.append(
+            event_type=JournalEventType.FILL_SIMULATED,
+            layer=JournalLayer.EXECUTION,
+            event_time_utc=datetime.now(timezone.utc),
+            correlation_id=correlation_id,
+            causation_id=intent_event_id,
+            component=self.COMPONENT,
+            payload={
+                "fill_id": fill_id,
+                "order_intent_id": intent_id,
+                "symbol": symbol,
+                "side": direction.value,
+                "quantity": str(qty),
+                "fill_price": str(fill_price),
+                "reference_price": str(reference_price),
+                "slippage_bps": "0",
+                "fees": str(commission),
+                "fill_notional": str(notional),
+                "fill_model": "LOCAL_SIMULATOR_KILL_SWITCH_FLATTEN",
+                "GOVERNANCE_LABEL": "RISK_KILL_SWITCH_FORCED_FLATTEN",
+            },
+        ).event_id
+
+        self._update_portfolio(
+            closing,
+            fill_price,
+            commission,
+            datetime.now(timezone.utc),
+            correlation_id,
+            fill_event_id,
         )
 
     def _compute_fill_price(self, bar: SyntheticBar, signal: StrategySignal) -> Decimal:
@@ -1178,6 +1430,10 @@ class PaperSessionRunner:
     @property
     def kill_switch_active(self) -> bool:
         return self._kill_switch_active
+
+    @property
+    def operator_resolution_required(self) -> bool:
+        return self._operator_resolution_required
 
     def get_decision_trace(self, correlation_id: str) -> DecisionTrace:
         """Retrieve the complete decision chain for a correlation_id."""
