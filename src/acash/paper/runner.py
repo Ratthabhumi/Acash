@@ -47,7 +47,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.paper.analytics import PaperAnalyticsEngine, PaperAnalyticsReport
-from acash.paper.health import HealthEventKind, PaperHealthMonitor
+from acash.paper.health import HealthEventKind, PaperHealthMonitor, TerminalReason
 from acash.paper.journal import (
     JournalEvent,
     JournalEventType,
@@ -367,8 +367,18 @@ class PaperSessionRunner:
         )
         return event_id
 
-    def stop(self) -> PaperSessionManifest:
-        """Stop the session, run final reconciliation, and seal manifest."""
+    def stop(
+        self,
+        terminal_reason: TerminalReason = TerminalReason.NORMAL_COMPLETION,
+    ) -> PaperSessionManifest:
+        """Stop the session, run final reconciliation, and seal manifest.
+
+        Args:
+            terminal_reason: Canonical causal reason this session ended.
+                Preserved in the SESSION_STOPPED journal event. The caller is
+                responsible for passing the actual cause (e.g. FEED_DISCONNECTED,
+                RISK_KILL_SWITCH, OPERATOR_STOP); never fabricated here.
+        """
         if not self._started:
             raise DataContractError(
                 "PaperSessionRunner: session not started."
@@ -402,10 +412,10 @@ class PaperSessionRunner:
             details=recon_result.to_summary(),
         )
 
-        # Session stop event
+        # Session stop event — canonical terminal reason (never erased).
         stop_event_id = self._health.session_stopped(
             correlation_id=session_cid,
-            reason="NORMAL_SHUTDOWN",
+            reason=terminal_reason,
             final_event_count=self._journal.event_count,
         )
 
@@ -780,7 +790,7 @@ class PaperSessionRunner:
 
         # --- Layer 4: RISK ---
         risk_approved, risk_reason, risk_event_id = self._evaluate_risk(
-            signal, correlation_id, signal_event_id
+            signal, correlation_id, signal_event_id, reference_price=bar.close
         )
 
         if not risk_approved:
@@ -950,8 +960,18 @@ class PaperSessionRunner:
         signal: StrategySignal,
         correlation_id: str,
         causation_id: str,
+        *,
+        reference_price: Optional[Decimal] = None,
     ) -> Tuple[bool, str, str]:
-        """Inline risk check. Returns (approved: bool, reason: str, event_id: str)."""
+        """Inline risk check. Returns (approved: bool, reason: str, event_id: str).
+
+        Risk gates (all are strict; a breach of ANY gate rejects the order):
+        - MAX_POSITION: |new_position| <= max_position_units
+        - MAX_NOTIONAL: |new_position| * reference_price <= max_notional
+          (cumulative exposure bound, enforced when a valid reference price is
+          available; missing reference price is a contract violation)
+        - MAX_DAILY_LOSS: triggers the kill switch at the daily loss threshold
+        """
         new_position = self._portfolio.position
         if signal.direction == SignalDirection.LONG:
             new_position += signal.target_quantity
@@ -965,6 +985,20 @@ class PaperSessionRunner:
             violations.append(
                 f"MAX_POSITION: |{new_position}| > {self._config.max_position_units}"
             )
+
+        # Max notional check (cumulative exposure bound).
+        # A missing reference price is NOT silently tolerated (fail-closed).
+        if reference_price is None:
+            violations.append(
+                "MAX_NOTIONAL: reference_price missing; cannot size exposure (fail-closed)"
+            )
+        else:
+            proposed_notional = abs(new_position) * reference_price
+            if proposed_notional > self._config.max_notional:
+                violations.append(
+                    f"MAX_NOTIONAL: |{new_position}| * {reference_price} "
+                    f"= {proposed_notional} > {self._config.max_notional}"
+                )
 
         # Kill switch check (daily loss)
         if self._daily_realized_loss >= self._config.max_daily_loss:
@@ -987,7 +1021,14 @@ class PaperSessionRunner:
                 "violations": violations,
                 "current_position": str(self._portfolio.position),
                 "proposed_position": str(new_position),
+                "proposed_notional": (
+                    str(abs(new_position) * reference_price)
+                    if reference_price is not None
+                    else None
+                ),
+                "reference_price": str(reference_price) if reference_price is not None else None,
                 "max_position_units": str(self._config.max_position_units),
+                "max_notional": str(self._config.max_notional),
                 "daily_realized_loss": str(self._daily_realized_loss),
                 "max_daily_loss": str(self._config.max_daily_loss),
                 "risk_model_version": self._config.risk_model_version,

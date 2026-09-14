@@ -44,6 +44,21 @@ class HealthEventKind(str, Enum):
     INTEGRITY_CHECK = "INTEGRITY_CHECK"
 
 
+class TerminalReason(str, Enum):
+    """Canonical terminal (session-stop) reason vocabulary.
+
+    Preserves the causal chain of why a paper session ended. The journal
+    SESSION_STOPPED event MUST record the actual terminal reason, never a
+    fabricated neutral value. Each run is stopped with exactly one reason.
+    """
+
+    NORMAL_COMPLETION = "NORMAL_COMPLETION"
+    OPERATOR_STOP = "OPERATOR_STOP"
+    FEED_DISCONNECTED = "FEED_DISCONNECTED"
+    RISK_KILL_SWITCH = "RISK_KILL_SWITCH"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+
+
 # Map HealthEventKind → JournalEventType
 _KIND_TO_EVENT_TYPE: Dict[HealthEventKind, JournalEventType] = {
     HealthEventKind.SESSION_STARTED: JournalEventType.SESSION_STARTED,
@@ -135,16 +150,27 @@ class PaperHealthMonitor:
     def session_stopped(
         self,
         correlation_id: str,
-        reason: str,
+        reason: TerminalReason,
         final_event_count: int,
     ) -> str:
-        """Record session stop event."""
+        """Record session stop event with a canonical terminal reason.
+
+        Fail-closed: raises DataContractError if ``reason`` is not a valid
+        TerminalReason. Never fabricates a neutral reason for an unknown cause.
+        """
+        try:
+            canonical = TerminalReason(reason)
+        except ValueError as exc:
+            raise DataContractError(
+                f"PaperHealthMonitor: invalid terminal reason {reason!r}. "
+                f"Must be one of {[r.value for r in TerminalReason]}."
+            ) from exc
         return self.record(
             kind=HealthEventKind.SESSION_STOPPED,
             correlation_id=correlation_id,
             payload={
                 "event": "SESSION_STOPPED",
-                "reason": reason,
+                "reason": canonical.value,
                 "final_event_count": final_event_count,
             },
         )

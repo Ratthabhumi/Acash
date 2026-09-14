@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
-from acash.paper.journal import JournalEventType, PaperEventJournal
+from acash.paper.health import HealthEventKind, PaperHealthMonitor, TerminalReason
 from acash.paper.metrics import MetricsRegistry
 from acash.paper.runner import (
     PaperSessionConfig,
@@ -295,11 +295,30 @@ class ShadowTournamentSupervisor:
             self._last_successful_update_utc = datetime.now(timezone.utc)
             self._update_metrics()
 
-    def halt(self, reason: str, feed_health: str = "HALTED") -> None:
+    def halt(
+        self,
+        reason: str,
+        feed_health: str = "HALTED",
+        terminal_reason: Optional[TerminalReason] = None,
+    ) -> None:
         """Halt tournament and all active slot runners fail-closed.
 
         Seals manifests for active runners so journals are safely finalized.
+
+        Args:
+            reason: Human-readable halt cause (preserved verbatim).
+            feed_health: Feed integrity state ("HALTED", "DISCONNECTED", "STALE").
+            terminal_reason: Canonical causal reason propagated to each slot
+                runner's SESSION_STOPPED event. When omitted it is derived
+                deterministically from feed_health (never silently defaulted):
+                DISCONNECTED/STALE -> FEED_DISCONNECTED; else OPERATOR_STOP.
         """
+        if terminal_reason is None:
+            if feed_health in ("DISCONNECTED", "STALE"):
+                terminal_reason = TerminalReason.FEED_DISCONNECTED
+            else:
+                terminal_reason = TerminalReason.OPERATOR_STOP
+
         with self._lock:
             if self._overall_status == "HALTED":
                 return  # already halted
@@ -315,7 +334,7 @@ class ShadowTournamentSupervisor:
                     slot.halt_reason = reason
                     if slot.runner is not None and slot.runner._started:
                         try:
-                            slot.runner.stop()
+                            slot.runner.stop(terminal_reason=terminal_reason)
                             logger.info(
                                 "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
                                 slot_id,

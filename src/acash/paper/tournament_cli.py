@@ -31,6 +31,7 @@ from acash.paper.feed import (
     StooqCsvFeed,
     feed_bar_to_synthetic_bar,
 )
+from acash.paper.health import TerminalReason
 from acash.paper.metrics import MetricsRegistry, PaperMetricsServer
 from acash.paper.tournament import (
     CANONICAL_CAPITAL_USD,
@@ -283,7 +284,10 @@ def run_tournament(args: argparse.Namespace) -> int:
                 break
             except Exception as exc:
                 logger.error("Unexpected runtime failure: %s", exc, exc_info=True)
-                supervisor.halt(f"Unexpected error: {exc}")
+                supervisor.halt(
+                    f"Unexpected error: {exc}",
+                    terminal_reason=TerminalReason.INTERNAL_ERROR,
+                )
                 supervisor.export_status_json(status_file)
                 exit_code = 1
                 break
@@ -297,7 +301,12 @@ def run_tournament(args: argparse.Namespace) -> int:
         except Exception as exc:
             logger.error("Error disconnecting feed: %s", exc)
 
-        supervisor.halt("Tournament shutdown complete")
+        # No-op if already halted (feed disconnect/stale preserved first cause);
+        # otherwise records an operator-driven stop (e.g. SIGINT/SIGTERM).
+        supervisor.halt(
+            "Tournament shutdown complete",
+            terminal_reason=TerminalReason.OPERATOR_STOP,
+        )
         supervisor.export_status_json(status_file)
 
         api_server.stop()
