@@ -32,6 +32,8 @@ from acash.paper.strategy import (
     PaperStrategyProtocol,
     SignalDirection,
     StrategySignal,
+    build_infrastructure_candidates,
+    get_infrastructure_candidate,
 )
 from acash.paper.tournament import (
     CANONICAL_CAPITAL_USD,
@@ -467,3 +469,47 @@ def test_create_default_tournament_ten_slot_fanout(tmp_path: Path) -> None:
 
     # Closed-position history fan-out is aligned with the actual slot set.
     assert set(supervisor._closed_positions_history.keys()) == set(supervisor.slots.keys())
+
+
+def test_infrastructure_catalog_has_ten_distinct_candidates() -> None:
+    """The V2 catalog exposes 10 distinct INFRA_TEST candidates A..J."""
+    candidates = build_infrastructure_candidates(symbol="BTCUSDT")
+    assert set(candidates.keys()) == set("ABCDEFGHIJ")
+    assert len({c.strategy_id for c in candidates.values()}) == 10
+    for candidate in candidates.values():
+        assert candidate.is_infrastructure_test is True
+        assert candidate.governance_label == "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
+
+    # Slot A is bit-compatible with the historical canonical default.
+    slot_a = candidates["A"]
+    assert slot_a.strategy_id == "INFRA-TEST-MOMENTUM-SYNTHETIC-001"
+    assert candidates.get("NOT_A_SLOT") is None
+    assert get_infrastructure_candidate("Z", symbol="BTCUSDT") is None
+
+
+def test_auto_mount_infrastructure_candidates_ten_slot_layout(tmp_path: Path) -> None:
+    """10-slot infra-exercise layout: A..J all mounted as INFRA_TEST only."""
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        num_slots=10,
+        auto_mount_infrastructure_candidates=True,
+    )
+    for slot_id in "ABCDEFGHIJ":
+        slot = supervisor.slots[slot_id]
+        assert slot.runner is not None, f"slot {slot_id} should be mounted"
+        assert slot.strategy_id.startswith("INFRA-TEST-MOMENTUM-SYNTHETIC-")
+        assert slot.runner._strategy.is_infrastructure_test is True
+        assert slot.runner._strategy.governance_label == "INFRASTRUCTURE_TEST_STRATEGY_ONLY"
+        assert slot.config_hash != "0" * 64, "runner config must be sealed, not a placeholder"
+
+    # Default behavior unchanged: without the flag, only A mounts.
+    plain = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        num_slots=10,
+    )
+    assert plain.slots["A"].runner is not None
+    for slot_id in "BCDEFGHIJ":
+        assert plain.slots[slot_id].runner is None
+        assert plain.slots[slot_id].status == "UNASSIGNED"

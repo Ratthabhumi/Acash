@@ -135,6 +135,16 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         default=3,
         help="Number of tournament slot coordinates in [1, 26] (default: 3)",
     )
+    parser.add_argument(
+        "--auto-mount-infra-candidates",
+        action="store_true",
+        default=False,
+        help=(
+            "Explicit opt-in: mount deterministic INFRASTRUCTURE_TEST catalog "
+            "candidates (A..J) for a 10-slot infrastructure-exercise layout. "
+            "Zero alpha candidates are ever mounted by this flag."
+        ),
+    )
     return parser.parse_args(args)
 
 
@@ -172,6 +182,7 @@ def run_tournament(args: argparse.Namespace) -> int:
         acash_commit_sha=args.git_commit,
         metrics_registry=metrics_reg,
         num_slots=args.num_slots,
+        auto_mount_infrastructure_candidates=args.auto_mount_infra_candidates,
         instrument=args.symbol,
         data_source=data_source,
         market_domain=market_domain,

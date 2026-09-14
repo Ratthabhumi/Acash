@@ -130,6 +130,7 @@ def test_runtime_feed_lifecycle_success(tmp_path: Path) -> None:
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
         num_slots=3,
+        auto_mount_infra_candidates=False,
     )
 
     # Patch BinancePublicKlinesFeed constructor to return our mock feed
@@ -166,6 +167,7 @@ def test_runtime_connect_failure_fail_closed(tmp_path: Path) -> None:
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
         num_slots=3,
+        auto_mount_infra_candidates=False,
     )
 
     with patch("acash.paper.tournament_cli.BinancePublicKlinesFeed", return_value=feed):
@@ -203,6 +205,7 @@ def test_runtime_stale_feed_fail_closed(tmp_path: Path) -> None:
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
         num_slots=3,
+        auto_mount_infra_candidates=False,
     )
 
     with patch("acash.paper.tournament_cli.BinancePublicKlinesFeed", return_value=feed):
@@ -269,6 +272,7 @@ def test_runtime_returned_stale_bar_halts_before_processing(tmp_path: Path) -> N
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
         num_slots=3,
+        auto_mount_infra_candidates=False,
     )
 
     process_bar_call_count = 0

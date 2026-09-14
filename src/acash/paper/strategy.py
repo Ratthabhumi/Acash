@@ -164,6 +164,8 @@ class InfrastructureTestStrategy:
         trade_quantity: Decimal = Decimal("1.0"),
         symbol: str = "SYNTH-USD",
         config_hash: str = "0" * 64,
+        strategy_id: Optional[str] = None,
+        strategy_version: Optional[str] = None,
     ) -> None:
         if fast_period >= slow_period:
             raise ValueError(
@@ -179,14 +181,18 @@ class InfrastructureTestStrategy:
         self._quantity = trade_quantity
         self._symbol = symbol
         self._config_hash = config_hash
+        # Per-instance identity override enables a catalog of distinct
+        # INFRASTRUCTURE_TEST variants without subclasses or magic constants.
+        self._instance_id = strategy_id or self.STRATEGY_ID
+        self._instance_version = strategy_version or self.STRATEGY_VERSION
 
     @property
     def strategy_id(self) -> str:
-        return self.STRATEGY_ID
+        return self._instance_id
 
     @property
     def strategy_version(self) -> str:
-        return self.STRATEGY_VERSION
+        return self._instance_version
 
     @property
     def is_infrastructure_test(self) -> bool:
@@ -250,8 +256,8 @@ class InfrastructureTestStrategy:
             reason = "SMA crossover indeterminate"
 
         return StrategySignal(
-            strategy_id=self.STRATEGY_ID,
-            strategy_version=self.STRATEGY_VERSION,
+            strategy_id=self._instance_id,
+            strategy_version=self._instance_version,
             evaluation_timestamp_utc=evaluation_time_utc,
             symbol=self._symbol,
             direction=direction,
@@ -264,3 +270,142 @@ class InfrastructureTestStrategy:
             is_infrastructure_test=True,
             governance_label=self.GOVERNANCE_LABEL,
         )
+
+
+# ---------------------------------------------------------------------------
+# Tournament V2 infrastructure candidate catalog (10 slots)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class InfrastructureCandidateSpec:
+    """Deterministic parameterization of a 10-slot V2 infrastructure candidate.
+
+    All candidates remain INFRASTRUCTURE_TEST_STRATEGY_ONLY. They exist solely
+    to exercise the Execution Track across distinct parameter regimes (fast/
+    slow lookbacks, trade sizes) — they produce NO research evidence and are
+    NOT alpha candidates.
+    """
+
+    strategy_id: str
+    strategy_version: str
+    fast_period: int
+    slow_period: int
+    trade_quantity: Decimal
+
+
+INFRASTRUCTURE_CANDIDATES_10SLOT: Dict[str, InfrastructureCandidateSpec] = {
+    "A": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-001",
+        strategy_version="1.0.0",
+        fast_period=3,
+        slow_period=5,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "B": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-002",
+        strategy_version="1.0.0",
+        fast_period=4,
+        slow_period=6,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "C": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-003",
+        strategy_version="1.0.0",
+        fast_period=5,
+        slow_period=7,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "D": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-004",
+        strategy_version="1.0.0",
+        fast_period=3,
+        slow_period=8,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "E": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-005",
+        strategy_version="1.0.0",
+        fast_period=4,
+        slow_period=7,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "F": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-006",
+        strategy_version="1.0.0",
+        fast_period=6,
+        slow_period=9,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "G": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-007",
+        strategy_version="1.0.0",
+        fast_period=2,
+        slow_period=5,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "H": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-008",
+        strategy_version="1.0.0",
+        fast_period=3,
+        slow_period=6,
+        trade_quantity=Decimal("1.5"),
+    ),
+    "I": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-009",
+        strategy_version="1.0.0",
+        fast_period=4,
+        slow_period=9,
+        trade_quantity=Decimal("1.0"),
+    ),
+    "J": InfrastructureCandidateSpec(
+        strategy_id="INFRA-TEST-MOMENTUM-SYNTHETIC-010",
+        strategy_version="1.0.0",
+        fast_period=5,
+        slow_period=10,
+        trade_quantity=Decimal("1.0"),
+    ),
+}
+
+
+def build_infrastructure_candidates(
+    symbol: str = "BTCUSDT",
+    config_hash: str = "0" * 64,
+) -> Dict[str, InfrastructureTestStrategy]:
+    """Mount the 10 deterministic infrastructure candidates for the V2 tournament.
+
+    Slot A is bit-compatible with the canonical default configuration
+    (fast=3, slow=5, qty=1.0) so slot-level regression stays stable.
+    """
+    return {
+        slot_id: InfrastructureTestStrategy(
+            fast_period=spec.fast_period,
+            slow_period=spec.slow_period,
+            trade_quantity=spec.trade_quantity,
+            symbol=symbol,
+            config_hash=config_hash,
+            strategy_id=spec.strategy_id,
+            strategy_version=spec.strategy_version,
+        )
+        for slot_id, spec in INFRASTRUCTURE_CANDIDATES_10SLOT.items()
+    }
+
+
+def get_infrastructure_candidate(
+    slot_id: str,
+    symbol: str = "BTCUSDT",
+    config_hash: str = "0" * 64,
+) -> Optional[InfrastructureTestStrategy]:
+    """Return a single catalog candidate for slot_id, or None if not in catalog."""
+    spec = INFRASTRUCTURE_CANDIDATES_10SLOT.get(slot_id)
+    if spec is None:
+        return None
+    return InfrastructureTestStrategy(
+        fast_period=spec.fast_period,
+        slow_period=spec.slow_period,
+        trade_quantity=spec.trade_quantity,
+        symbol=symbol,
+        config_hash=config_hash,
+        strategy_id=spec.strategy_id,
+        strategy_version=spec.strategy_version,
+    )

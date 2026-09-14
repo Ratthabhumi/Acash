@@ -38,6 +38,7 @@ from acash.paper.strategy import (
     PaperStrategyProtocol,
     SignalDirection,
     StrategySignal,
+    get_infrastructure_candidate,
 )
 
 logger = logging.getLogger(__name__)
@@ -764,6 +765,7 @@ def create_default_shadow_tournament(
     metrics_registry: Optional[MetricsRegistry] = None,
     *,
     num_slots: int = 3,
+    auto_mount_infrastructure_candidates: bool = False,
     instrument: str = "BTCUSDT",
     data_source: str = "binance.public.klines",
     market_domain: str = "SPOT",
@@ -777,11 +779,19 @@ def create_default_shadow_tournament(
     - otherwise the slot stays UNASSIGNED (honest reporting — no phantom alpha).
     Slot A defaults to InfrastructureTestStrategy when not injected.
 
+    When auto_mount_infrastructure_candidates is True, the deterministic V2
+    catalog (INFRASTRUCTURE_CANDIDATES_10SLOT) is mounted for any slot whose
+    coordinate has a catalog entry and which was not explicitly injected. This
+    is an explicit infrastructure-exercise opt-in (INFRA_TEST only, zero alpha
+    candidates) for the 10-slot V2 readiness layout.
+
     Parameters:
     - storage_dir: Destination path for slot journals and manifests.
     - acash_commit_sha: Commit SHA for provenance audit.
     - slot_strategies: Optional map of slot_id -> StrategyProtocol instance.
     - num_slots: Number of slot coordinates in [1, 26] (default 3).
+    - auto_mount_infrastructure_candidates: Mount deterministic INFRA_TEST
+      candidates for catalog slot coordinates (default False).
     - instrument: Target symbol (default BTCUSDT).
     - data_source: Feed data source provider string for manifest provenance.
     - market_domain: Market domain string (e.g. SPOT, CRYPTO_SPOT).
@@ -838,13 +848,15 @@ def create_default_shadow_tournament(
     # Deterministic fanout: num_slots coordinates in [A..Z].
     for slot_id in slot_ids_for_count(num_slots):
         strategy = strategies.get(slot_id)
-        if slot_id == "A" and strategy is None:
+        if strategy is None and slot_id == "A":
             strategy = InfrastructureTestStrategy(
                 fast_period=3,
                 slow_period=5,
                 trade_quantity=Decimal("1.0"),
                 symbol=instrument,
             )
+        if strategy is None and auto_mount_infrastructure_candidates:
+            strategy = get_infrastructure_candidate(slot_id, symbol=instrument)
         if strategy is None:
             slots[slot_id] = TournamentSlot(
                 slot_id=slot_id,
