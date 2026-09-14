@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -71,7 +72,21 @@ class TournamentGovernance:
 # Slot Configuration and State
 # ---------------------------------------------------------------------------
 
-SLOT_IDS = ("A", "B", "C")
+_SLOT_ID_PATTERN = re.compile(r"^[A-Z]$")
+
+
+def slot_ids_for_count(num_slots: int) -> Tuple[str, ...]:
+    """Deterministically generate slot ids A..Z for a fanout of num_slots.
+
+    Governance note: slot ids are cosmetic coordinate labels, NOT strategy
+    identities. Up to 26 slots (A-Z) are supported; a larger fanout is a
+    contract violation.
+    """
+    if num_slots < 1 or num_slots > 26:
+        raise DataContractError(
+            f"slot fanout must be in [1, 26]; got {num_slots}"
+        )
+    return tuple(chr(ord("A") + i) for i in range(num_slots))
 
 
 class SlotExecutionState(str, Enum):
@@ -150,9 +165,10 @@ class TournamentSlot:
     peak_nav_usd: Decimal = Decimal("1000.00")
 
     def __post_init__(self) -> None:
-        if self.slot_id not in SLOT_IDS:
+        if not _SLOT_ID_PATTERN.fullmatch(self.slot_id):
             raise DataContractError(
-                f"TournamentSlot: invalid slot_id '{self.slot_id}'. Must be one of {SLOT_IDS}"
+                f"TournamentSlot: invalid slot_id '{self.slot_id}'. "
+                "Must be a single uppercase letter (A..Z)."
             )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -270,7 +286,7 @@ class ShadowTournamentSupervisor:
         self._last_successful_update_utc: datetime = datetime.now(timezone.utc)
         self._bar_count: int = 0
         self._closed_positions_history: Dict[str, List[Decimal]] = {
-            s: [] for s in SLOT_IDS
+            s: [] for s in self._slots
         }
 
         self._update_metrics()
@@ -747,6 +763,7 @@ def create_default_shadow_tournament(
     slot_strategies: Optional[Dict[str, PaperStrategyProtocol]] = None,
     metrics_registry: Optional[MetricsRegistry] = None,
     *,
+    num_slots: int = 3,
     instrument: str = "BTCUSDT",
     data_source: str = "binance.public.klines",
     market_domain: str = "SPOT",
@@ -754,12 +771,17 @@ def create_default_shadow_tournament(
 ) -> ShadowTournamentSupervisor:
     """Construct a canonical Shadow Alpha Tournament instance with globally unique ID.
 
+    Slot fanout is configurable (num_slots). For each slot coordinate:
+    - an injected strategy in slot_strategies {slot_id: strategy} is mounted as a
+      live simulated runner;
+    - otherwise the slot stays UNASSIGNED (honest reporting — no phantom alpha).
+    Slot A defaults to InfrastructureTestStrategy when not injected.
+
     Parameters:
     - storage_dir: Destination path for slot journals and manifests.
     - acash_commit_sha: Commit SHA for provenance audit.
     - slot_strategies: Optional map of slot_id -> StrategyProtocol instance.
-      If a slot has no strategy provided, Slot A defaults to InfrastructureTestStrategy
-      while Slots B and C remain UNASSIGNED (honest reporting).
+    - num_slots: Number of slot coordinates in [1, 26] (default 3).
     - instrument: Target symbol (default BTCUSDT).
     - data_source: Feed data source provider string for manifest provenance.
     - market_domain: Market domain string (e.g. SPOT, CRYPTO_SPOT).
@@ -813,54 +835,36 @@ def create_default_shadow_tournament(
 
     slots: Dict[str, TournamentSlot] = {}
 
-    # Slot A: injected strategy or default InfrastructureTestStrategy
-    if "A" in strategies:
-        slot_a, _ = _build_slot_runner("A", strategies["A"])
-    else:
-        default_strat_a = InfrastructureTestStrategy(
-            fast_period=3,
-            slow_period=5,
-            trade_quantity=Decimal("1.0"),
-            symbol=instrument,
-        )
-        slot_a, _ = _build_slot_runner("A", default_strat_a)
-    slots["A"] = slot_a
-
-    # Slot B: injected strategy or UNASSIGNED
-    if "B" in strategies:
-        slot_b, _ = _build_slot_runner("B", strategies["B"])
-    else:
-        slot_b = TournamentSlot(
-            slot_id="B",
-            strategy_id="UNASSIGNED",
-            strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
-            strategy_version="N/A",
-            status="UNASSIGNED",
-            session_id=f"{tournament_id}-SLOT-B-UNASSIGNED",
-            config_hash="0" * 64,
-            acash_commit_sha=acash_commit_sha,
-            runner=None,
-            halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
-        )
-    slots["B"] = slot_b
-
-    # Slot C: injected strategy or UNASSIGNED
-    if "C" in strategies:
-        slot_c, _ = _build_slot_runner("C", strategies["C"])
-    else:
-        slot_c = TournamentSlot(
-            slot_id="C",
-            strategy_id="UNASSIGNED",
-            strategy_name="UNASSIGNED — Awaiting Human Strategy Selection (H02)",
-            strategy_version="N/A",
-            status="UNASSIGNED",
-            session_id=f"{tournament_id}-SLOT-C-UNASSIGNED",
-            config_hash="0" * 64,
-            acash_commit_sha=acash_commit_sha,
-            runner=None,
-            halt_reason="No candidate selected. Zero alpha candidates approved in repo.",
-        )
-    slots["C"] = slot_c
+    # Deterministic fanout: num_slots coordinates in [A..Z].
+    for slot_id in slot_ids_for_count(num_slots):
+        strategy = strategies.get(slot_id)
+        if slot_id == "A" and strategy is None:
+            strategy = InfrastructureTestStrategy(
+                fast_period=3,
+                slow_period=5,
+                trade_quantity=Decimal("1.0"),
+                symbol=instrument,
+            )
+        if strategy is None:
+            slots[slot_id] = TournamentSlot(
+                slot_id=slot_id,
+                strategy_id="UNASSIGNED",
+                strategy_name=(
+                    f"UNASSIGNED — Awaiting Human Strategy Selection (H02)"
+                ),
+                strategy_version="N/A",
+                status="UNASSIGNED",
+                session_id=f"{tournament_id}-SLOT-{slot_id}-UNASSIGNED",
+                config_hash="0" * 64,
+                acash_commit_sha=acash_commit_sha,
+                runner=None,
+                halt_reason=(
+                    "No candidate selected. Zero alpha candidates approved in repo."
+                ),
+            )
+        else:
+            built_slot, _ = _build_slot_runner(slot_id, strategy)
+            slots[slot_id] = built_slot
 
     return ShadowTournamentSupervisor(
         tournament_id=tournament_id,

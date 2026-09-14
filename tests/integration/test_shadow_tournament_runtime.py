@@ -1,4 +1,4 @@
-"""Integration tests for ACASH Shadow Alpha Tournament Runtime Lifecycle.
+﻿"""Integration tests for ACASH Shadow Alpha Tournament Runtime Lifecycle.
 
 Validates:
 1. Feed lifecycle:
@@ -129,6 +129,7 @@ def test_runtime_feed_lifecycle_success(tmp_path: Path) -> None:
         poll_interval_seconds=0.01,
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
+        num_slots=3,
     )
 
     # Patch BinancePublicKlinesFeed constructor to return our mock feed
@@ -164,6 +165,7 @@ def test_runtime_connect_failure_fail_closed(tmp_path: Path) -> None:
         poll_interval_seconds=0.01,
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
+        num_slots=3,
     )
 
     with patch("acash.paper.tournament_cli.BinancePublicKlinesFeed", return_value=feed):
@@ -200,6 +202,7 @@ def test_runtime_stale_feed_fail_closed(tmp_path: Path) -> None:
         poll_interval_seconds=0.01,
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
+        num_slots=3,
     )
 
     with patch("acash.paper.tournament_cli.BinancePublicKlinesFeed", return_value=feed):
@@ -231,7 +234,7 @@ def test_runtime_returned_stale_bar_halts_before_processing(tmp_path: Path) -> N
     from datetime import timedelta
 
     bar_timestamp = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
-    # received_at is 90 seconds after the bar's market event time → age = 90,000 ms
+    # received_at is 90 seconds after the bar's market event time â†’ age = 90,000 ms
     stale_received_at = bar_timestamp + timedelta(seconds=90)
     stale_bar = FeedBar.build(
         provider="mock.binance.public.klines",
@@ -265,6 +268,7 @@ def test_runtime_returned_stale_bar_halts_before_processing(tmp_path: Path) -> N
         poll_interval_seconds=0.01,
         git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
         max_data_age_ms=65_000,
+        num_slots=3,
     )
 
     process_bar_call_count = 0

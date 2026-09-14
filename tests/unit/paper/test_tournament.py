@@ -42,6 +42,7 @@ from acash.paper.tournament import (
     TournamentGovernance,
     TournamentSlot,
     create_default_shadow_tournament,
+    slot_ids_for_count,
 )
 from acash.paper.tournament_api import ShadowApiServer
 
@@ -96,10 +97,10 @@ def test_slot_creation_and_isolation(tmp_path: Path) -> None:
     assert slots["C"].runner is None
     assert slots["C"].status == "UNASSIGNED"
 
-    # Invalid slot ID must raise DataContractError
-    with pytest.raises(DataContractError, match="invalid slot_id 'D'"):
+    # Invalid slot ID must raise DataContractError (non-alpha is always invalid)
+    with pytest.raises(DataContractError, match="invalid slot_id '1'"):
         TournamentSlot(
-            slot_id="D",
+            slot_id="1",
             strategy_id="TEST",
             strategy_name="Test",
             strategy_version="1.0",
@@ -417,3 +418,52 @@ def test_strategy_evidence_classification(tmp_path: Path) -> None:
     assert manifest is not None
     # Crucial finding check: must NOT be falsely sealed as infrastructure test!
     assert manifest.is_infrastructure_test_strategy is False
+
+
+def test_slot_ids_for_count_generates_deterministic_fanout() -> None:
+    """Coordinate labels scale with num_slots; only Slot A auto-mounts a default."""
+    assert slot_ids_for_count(1) == ("A",)
+    assert slot_ids_for_count(3) == ("A", "B", "C")
+    assert slot_ids_for_count(10) == ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
+    assert slot_ids_for_count(26) == tuple(chr(ord("A") + i) for i in range(26))
+
+
+def test_slot_ids_for_count_rejects_fanout_out_of_contract() -> None:
+    with pytest.raises(DataContractError, match="fanout"):
+        slot_ids_for_count(0)
+    with pytest.raises(DataContractError, match="fanout"):
+        slot_ids_for_count(27)
+
+
+def test_create_default_tournament_ten_slot_fanout(tmp_path: Path) -> None:
+    """V2 readiness: 10 slots layout = A mounted + B..J honestly UNASSIGNED."""
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        num_slots=10,
+    )
+    assert set(supervisor.slots.keys()) == {
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+    }
+    assert supervisor.slots["A"].runner is not None
+    for slot_id in "BCDEFGHIJ":
+        slot = supervisor.slots[slot_id]
+        assert slot.runner is None
+        assert slot.status == "UNASSIGNED"
+
+    supervisor.start()
+    assert supervisor.slots["A"].status == "RUNNING"
+    # Aggregate execution state with one live slot and nine UNASSIGNED.
+    assert supervisor._aggregate_execution_state() == "RUNNING"
+
+    # Closed-position history fan-out is aligned with the actual slot set.
+    assert set(supervisor._closed_positions_history.keys()) == set(supervisor.slots.keys())

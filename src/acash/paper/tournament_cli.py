@@ -129,6 +129,12 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         default=65_000,
         help="Max allowed market data staleness in milliseconds before fail-closed halt",
     )
+    parser.add_argument(
+        "--num-slots",
+        type=int,
+        default=3,
+        help="Number of tournament slot coordinates in [1, 26] (default: 3)",
+    )
     return parser.parse_args(args)
 
 
@@ -165,6 +171,7 @@ def run_tournament(args: argparse.Namespace) -> int:
         storage_dir=storage_dir,
         acash_commit_sha=args.git_commit,
         metrics_registry=metrics_reg,
+        num_slots=args.num_slots,
         instrument=args.symbol,
         data_source=data_source,
         market_domain=market_domain,
