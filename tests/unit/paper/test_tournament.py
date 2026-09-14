@@ -26,7 +26,7 @@ import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.paper.metrics import MetricsRegistry
-from acash.paper.runner import SyntheticBar
+from acash.paper.runner import PaperSessionRunner, SyntheticBar
 from acash.paper.strategy import (
     InfrastructureTestStrategy,
     PaperStrategyProtocol,
@@ -469,6 +469,73 @@ def test_create_default_tournament_ten_slot_fanout(tmp_path: Path) -> None:
 
     # Closed-position history fan-out is aligned with the actual slot set.
     assert set(supervisor._closed_positions_history.keys()) == set(supervisor.slots.keys())
+
+
+def test_ten_slot_layout_slot_isolation(tmp_path: Path) -> None:
+    """10-slot isolation: for the whole 10-slot layout, each runner owns a fully independent journal,
+    portfolio, config hash, and session id.
+    """
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        num_slots=10,
+        auto_mount_infrastructure_candidates=True,
+    )
+
+    runners: Dict[str, PaperSessionRunner] = {}
+    for slot_id, slot in supervisor.slots.items():
+        assert slot.runner is not None
+        runners[slot_id] = slot.runner
+
+    # All journals must be distinct physical files.
+    journal_paths = {runner._config.journal_path for runner in runners.values()}
+    assert len(journal_paths) == 10, "every slot must own a distinct journal path"
+    assert len({runner._config.session_id for runner in runners.values()}) == 10
+    assert len({runner._config.compute_config_hash() for runner in runners.values()}) == 10, (
+        "distinct strategies must seal distinct config hashes"
+    )
+
+    supervisor.start()
+    bar = _make_sample_bar("50000.0", 1)
+    results = supervisor.process_bar(bar)
+    assert set(results.keys()) == set("ABCDEFGHIJ")
+    assert all(isinstance(r, str) for r in results.values()), (
+        "every running slot must return a decision trace id per bar"
+    )
+
+    # Identical bar delivered to every slot.
+    for slot_id, slot in supervisor.slots.items():
+        assert slot.last_bar_utc == bar.timestamp_utc.isoformat()
+
+    supervisor.halt("Completed isolation drill")
+    config_hashes: set[str] = set()
+    for slot_id, runner in runners.items():
+        assert runner.manifest is not None, f"slot {slot_id} manifest must be sealed"
+        config_hashes.add(runner.manifest.config_hash)
+    assert len(config_hashes) == 10
+
+
+def test_ten_slot_layout_markets_do_not_leak_across_slots(tmp_path: Path) -> None:
+    """Prove portfolio state stays isolated across the 10 mounted slots."""
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha="c621824690b7e913ef76990472baa38fd17a925f",
+        num_slots=10,
+        auto_mount_infrastructure_candidates=True,
+    )
+    supervisor.start()
+    prices = [str(float(50000 + i * 10)) for i in range(8)]
+    for idx, p in enumerate(prices, 1):
+        supervisor.process_bar(_make_sample_bar(price=p, seq=idx))
+
+    main: set[int] = set()
+    for slot_id, slot in supervisor.slots.items():
+        assert slot.runner is not None
+        # Each slot holds its own position object (never shared).
+        pos = id(slot.runner._portfolio)
+        assert pos not in main, "portfolio objects must never be shared across slots"
+        main.add(pos)
+    assert len(main) == 10
 
 
 def test_infrastructure_catalog_has_ten_distinct_candidates() -> None:
