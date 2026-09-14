@@ -1,497 +1,488 @@
-﻿# ACASH SESSION HANDOFF
-## Shadow Alpha Tournament — Final Cross-Repo Merge / Deployment Readiness Gate
+﻿# ACASH SESSION HANDOFF — H01 Shadow Tournament Risk Findings
+## Canonical Current Session Handoff — 2026-09-14
+
+> [!CAUTION]
+> **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
+> This document is a navigation snapshot, not eternal source of truth.
+> Always `git fetch origin`, verify full 40-char SHAs, and re-inspect
+> container/journal state before any consequential action.
 
 > **Document:** `docs/SESSION_HANDOFF.md`
-> **This handoff is working context only.**
-> Repository state is the source of truth.
-> At the beginning of the next session:
-> 1. `git fetch origin`
-> 2. inspect actual remote branches
-> 3. verify exact full 40-char SHAs
-> 4. verify clean working trees
-> 5. compare branches against current main
-> 6. inspect canonical governance before consequential actions
->
-> **Do not assume this handoff is newer than the repositories.**
+> **This is the single canonical ACASH session handoff.**
+> For the archived E3.6 historical checkpoint, see `E3.6-SESSION-HANDOFF.md`.
+> **Date:** 2026-09-14 (UTC) / 2026-09-14 (Asia/Bangkok)
+> **Status labels used:** FACT | EVIDENCE | INFERENCE | DEFECT | GOVERNANCE BOUNDARY | NEXT ACTION
 
 ---
 
-## 1. Project Objective
+## 1. ACASH Repository — Current State
 
-ACASH is being extended with an isolated **Shadow Alpha Tournament**.
+| Item | Value |
+|---|---|
+| Repository | `Ratthabhumi/Acash` |
+| Branch (main) | `main` |
+| Current `origin/main` | `ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2` |
+| Commit message | `feat(dashboard): migrate UI to ACASH warm neutral standard theme` |
+| Parent commit | `78bb2e42c8221ab83e88d29dd0f0256528b59b72` |
+| Parent message | `fix(dashboard): null-guard UNASSIGNED slot metrics to prevent toFixed crash` |
 
-**Purpose:**
-- consume REAL finalized market data
-- run strategy logic, evaluate risk
-- create SIMULATED order intents and fills
-- maintain independent virtual portfolios
-- collect journals / manifests / metrics
-- show results through the existing custom ACASH Dashboard
-- allow private mobile viewing over Tailscale
-- allow normal ACASH research/development to continue without changing the running Homelab experiment
+**FACT:** `HEAD == origin/main == ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2` verified by
+`git fetch origin` + `git rev-parse` on 2026-09-14.
 
-**This is NOT:**
-- Paper Trading authorization
-- Live Trading
-- real capital
-- backtest authorization
-- HYP_003
-- R1
-- automatic alpha qualification
+**VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
+every session.
 
 ---
 
-## 2. Immutable Governance
+## 2. Pi Personal Infrastructure — Current State
 
-Unless the Human Operator explicitly changes governance:
+| Item | Value |
+|---|---|
+| Repository | `Ratthabhumi/Pi_Personal-Infrastructure` |
+| Current main | `3ce27f09e742768633c23a5d0746a004bc3a1727` |
+| Dashboard pin deployed | `acash-dashboard:ec86a85` |
+| Shadow runtime pin | `acash:shadow-tournament-bb6d49c` |
+
+**VERIFY** Pi main and deployed image tags at start of next session before any Pi action.
+
+---
+
+## 3. Immutable Governance Boundaries
+
+> [!IMPORTANT]
+> These boundaries are HARD LOCKS. No agent, audit, or session result changes them
+> without explicit human authorization.
 
 | Boundary | State |
 |---|---|
-| G7 / S11 | PASS / CLOSED |
-| Paper Trading | NOT AUTHORIZED |
-| Live Trading | LOCKED |
-| Backtesting | LOCKED |
 | HYP_003 | NOT CREATED |
 | R1 | NOT STARTED |
+| Backtesting | LOCKED / NOT AUTHORIZED |
+| Paper Trading | NOT AUTHORIZED |
+| Live Trading | LOCKED |
 | Canonical Capital | $0.00 |
 | NO_REAL_ORDERS | true |
-| Shadow Tournament | SIMULATED / RESEARCH-INFRA ONLY |
-| Dashboard | READ ONLY |
-| Public Internet | DISABLED |
-| Automatic Code Sync | DISABLED |
 | Automatic Feed Reconnect | DISABLED |
 | Operator Resume | REQUIRED |
+| Shadow Tournament | SIMULATED / INFRASTRUCTURE-TEST ONLY |
+| Dashboard | READ ONLY |
+| Public Internet Exposure | DISABLED |
+| Automatic Code Sync | DISABLED |
 
-**Do not reinterpret Shadow Tournament as Paper GO.**
-
----
-
-## 3. ACASH Repository — Current Expected State
-
-```
-Repository:  Ratthabhumi/Acash
-Branch:      feature/shadow-alpha-tournament
-HEAD:        e17b3893e19ba3ce25530daf764ca7964cb0c755
-Main base:   638388e38f721b49cab2621532b04757d6d85586
-```
-
-**Expected lineage:**
-```
-638388e  (main base)
-   ↓
-c621824
-   ↓
-9e4aa9f
-   ↓
-5a7bbac
-   ↓
-e17b389  <- current HEAD
-```
-
-- ahead of main = 4 | behind = 0 | FF-able
-- working tree clean | remote branch synchronized
-
-**VERIFY, do not assume.**
+**Do NOT:**
+- Create HYP_003
+- Authorize Paper or Live
+- Unlock backtesting
+- Introduce real capital or real broker execution
+- Introduce auto-reconnect
+- Restart H01 automatically
 
 ---
 
-## 4. ACASH Work Completed
+## 4. H01 Shadow Tournament — Current Runtime State
 
-### `c621824` -- Initial Shadow Tournament
-- Tournament supervisor, independent strategy slots A/B/C
-- $1,000 virtual NAV concept
-- Custom Shadow Tournament dashboard page
-- Mock/live dashboard repository abstraction, contracts, container artifacts
+### 4.1 Tournament Identity
 
-### `9e4aa9f` -- First Integration Gaps
-- `PaperStrategyProtocol`, strategy dependency injection
-- Read-only Shadow API, tournament CLI / runtime entrypoint
-- Production mock fail-closed behavior
-- Unique session IDs, halt lifecycle, manifest sealing
-- API + metrics wiring, path-prefix-ready dashboard build
+| Item | Value |
+|---|---|
+| Tournament ID | `SHADOW-20260914_073303_142fd6e0` |
+| Runtime image | `acash:shadow-tournament-bb6d49c` |
+| Runtime ACASH commit | `bb6d49c41fefef42c288ebdfce597572433423f9` |
+| H01 start (UTC) | 2026-09-14 07:33:03 UTC |
+| H01 start (Asia/Bangkok) | 2026-09-14 14:33:03 |
+| First nominal 24h checkpoint (UTC) | 2026-09-15 07:33:03 UTC |
+| First nominal 24h checkpoint (Asia/Bangkok) | 2026-09-15 14:33:03 |
 
-### `5a7bbac` -- Major Runtime / Deployment Correctness
-- `feed.connect()` / `feed.disconnect()` lifecycle
-- Real-feed provenance: `data_source`, `market_domain`, max market data age
-- Feed freshness monitoring
-- Strategy evidence classification seam + dynamic manifest classification
-- `/acash/` dashboard API resolution
-- Eliminated stale hard-coded git SHA behavior
+### 4.2 Container Safety State (FACT — observed during session)
 
-### `e17b389` -- Final Stale-Returned-Bar Blocker
+| Item | Observed Value |
+|---|---|
+| Container status | running |
+| Health | healthy |
+| RestartCount | 0 |
+| Feed | HEALTHY |
+| Canonical capital | $0 |
+| realOrderCount | 0 |
+| noRealOrders | true |
+| NO_REAL_ORDERS env | true |
+| Slot A | RUNNING |
+| Slot B | UNASSIGNED |
+| Slot C | UNASSIGNED |
 
-Previous bug:
-```
-poll_next_bar() -> returned stale FeedBar -> process_bar()
--> global tournament could remain RUNNING
-```
+### 4.3 Revised H01 Status Classification
 
-Fixed behavior:
-```
-poll_next_bar()
-      |
-freshness gate  (FeedBar.data_age_ms() > max_data_age_ms)
-      |
-if stale -> HALT -> seal manifests -> export status -> exit code 4
-            DO NOT call process_bar()
-      |
-only fresh bars reach process_bar()
-```
+> [!CAUTION]
+> Do NOT write "H01 GREEN". The correct classification is below.
 
-Added adversarial integration test:
-`tests/integration/test_shadow_tournament_runtime.py::test_runtime_returned_stale_bar_halts_before_processing`
-Patches `process_bar()` to raise `AssertionError` if called for a stale returned bar.
+| Dimension | Status |
+|---|---|
+| H01 infrastructure/feed continuity | **PASS / ongoing** |
+| H01 dashboard/telemetry | **PASS** |
+| H01 real-order safety | **PASS** |
+| H01 execution-risk semantics | **FAIL — remediation required** |
+| H01 execution-chain qualification | **NOT ACCEPTABLE AS FULL PASS UNTIL RISK DEFECTS ARE REMEDIATED** |
+
+**GOVERNANCE BOUNDARY:** This FAIL finding does NOT imply any real-money loss.
+Everything remains simulated-only. Canonical real capital remains $0.
 
 ---
 
-## 5. Latest Reported ACASH Verification
+## 5. Slot A Strategy
 
-Reported by prior session against exact `e17b389`, clean working tree:
+| Item | Value |
+|---|---|
+| Strategy name | `INFRA-TEST-MOMENTUM-SYNTHETIC-001` |
+| Version | 1.0.0 |
+| Class | `InfrastructureTestStrategy` |
+| Governance classification | `INFRASTRUCTURE_TEST_STRATEGY_ONLY` |
+
+**Algorithm (FACT):**
+- SMA fast = 3 bars, SMA slow = 5 bars
+- SMA fast > SMA slow -> LONG signal
+- SMA fast < SMA slow -> SHORT signal
+- Target quantity = 1.0 BTC per non-flat signal
+
+**This strategy is explicitly NOT:**
+- HYP_003
+- Alpha qualification
+- ACASH research evidence
+- Backtest authorization
+- Paper authorization
+- Live authorization
+
+Its sole purpose is infrastructure exercise:
+Signal -> Risk -> Order -> Simulated Fill -> Portfolio -> Journal -> Replay / Observability.
+
+---
+
+## 6. H01 Audit Evidence
+
+### 6.1 Journal Location and Size
+
+| Item | Value |
+|---|---|
+| Journal path | `/data/docker/acash/tournament/SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl` |
+| Observed size | 154847 bytes |
+| Mode | 644 |
+
+**EVIDENCE — Audit event counts (observed in journal snapshot):**
+
+| Event type | Count |
+|---|---|
+| TOTAL_EVENTS | 146 |
+| KILL_SWITCH_TRIGGERED | 1 |
+| RISK_APPROVED | 15 |
+| RISK_REJECTED | 4 |
+| FILL_SIMULATED | 15 |
+| POSITION_UPDATED | 15 |
+
+Maximum observed absolute position: **10.0 BTC**
+Current observed open position (dashboard/API): **LONG 9.0 BTC**
+
+### 6.2 Runtime Metrics (EVIDENCE — observed during session)
+
+| Metric | Observed Value |
+|---|---|
+| initialNavUsd | 1000.0 |
+| currentNavUsd | 2631.967 |
+| pnlUsd | 1631.967 |
+| pnlPct | 163.1967 |
+| realizedPnlUsd | -112.6371264 |
+| unrealizedPnlUsd | 1744.6101264 |
+| maxDrawdownPct | 201.99656384572788 |
+| currentDrawdownPct | 50.42795039794688 |
+| exposurePct | 26685.74833954985 |
+| riskUtilizationPct | 90.0 |
+| openPositionCount | 1 |
+| simulatedOrderCount | 15 |
+| simulatedFillCount | 15 |
+| signalCount | 23 |
+
+> [!IMPORTANT]
+> **INFERENCE / INTERPRETATION BOUNDARY**
+> Interpret ALL performance metrics above strictly as infrastructure-test accounting state.
+> They are NOT strategy research evidence, NOT alpha qualification evidence,
+> and NOT admissible for any research or trading authorization purpose.
+
+---
+
+## 7. Kill Switch Evidence (FACT — observed journal sequence)
+
+**Critical sequence observed in journal:**
+
+| Seq | Event | Key Fields |
+|---|---|---|
+| 136 | RISK_APPROVED | current_position=10.0, proposed_position=9.0, daily_realized_loss=81.545696, max_daily_loss=100.0 |
+| 137 | ORDER_INTENT_CREATED | SHORT 1.0 BTC |
+| 138 | FILL_SIMULATED | fill_price=77815.07300 |
+| 139 | POSITION_UPDATED | 10.0 -> 9.0 BTC |
+| 140 | PORTFOLIO_UPDATED | cash=-699728.123000, equity=887.3568736, position=9.0, realized_pnl=-112.6371264 |
+| 141 | MARKET_BAR_RECEIVED | — |
+| 142 | FEATURE_SNAPSHOT | — |
+| 143 | SIGNAL_SHORT | — |
+| 144 | KILL_SWITCH_TRIGGERED | trigger_reason=MAX_DAILY_LOSS, trigger_type=DAILY_LOSS_LIMIT |
+| 145 | RISK_REJECTED | current_position=9.0, proposed_position=8.0, daily_realized_loss=112.6371264, max_daily_loss=100.0 |
+
+**Kill switch violation:** `MAX_DAILY_LOSS: 112.6371264 >= 100.0`
+
+**FACT:** No further `FILL_SIMULATED` or `POSITION_UPDATED` events occurred after sequence 144 in the
+observed journal snapshot. The decision-loop kill switch DID stop subsequent simulated execution.
+
+---
+
+## 8. PASS Findings — Working Behavior to Preserve
+
+> [!NOTE]
+> Record these explicitly so future remediation work does NOT accidentally destroy working behavior.
+
+**PASS (FACT — observed):**
+- max-position gate DID reject proposed position of 11 BTC
+- max-daily-loss kill switch DID trigger at correct threshold
+- The triggering signal/order path was journaled
+- The subsequent risk check was correctly rejected
+- No `FILL_SIMULATED` or `POSITION_UPDATED` occurred after kill switch
+- Journal remained readable; hash-chain infrastructure remains available
+- Feed remained HEALTHY throughout
+- Container remained running/healthy
+- RestartCount remained 0
+- Real orders remained zero
+- Canonical real capital remained $0
+
+---
+
+## 9. Discovered Execution-Risk Defects
+
+> [!CAUTION]
+> These are confirmed defects requiring remediation. They do NOT imply real-money risk
+> (canonical capital = $0, all simulated). They DO block H01 from qualifying as a full
+> execution-infrastructure PASS.
+
+### DEFECT 1 — MAX_NOTIONAL NOT ENFORCED
+
+**Classification:** DEFECT — execution-risk model gap
+
+**Context (FACT):** Tournament configuration includes:
+```
+initial_cash       = 1000.00
+max_position_units = 10.0
+max_notional       = 100000.0
+max_daily_loss     = 100.0
+```
+
+**EVIDENCE:** The observed `PaperSessionRunner._evaluate_risk()` checks `max_position_units` and
+`max_daily_loss` but does **NOT** enforce `config.max_notional`.
+
+**Evidence of impact:**
+- Runtime allowed 9-10 BTC position at approximately 77,000-78,000 BTC/USD price
+- At 9 BTC x ~78,040 USD/BTC: notional approximately $702,360
+- Configured `max_notional` = $100,000
+- Observed `exposurePct` approximately 26,685%
+
+This is not a dashboard display issue. It is an execution-risk model defect.
+`max_notional` in the config has no enforcement path in the current risk evaluator.
+
+---
+
+### DEFECT 2 — VIRTUAL INSOLVENCY / LEVERAGE SEMANTICS
+
+**Classification:** DEFECT — simulator boundary / margin semantics
+
+**EVIDENCE:**
+```
+cash           = -699,728.123
+initial NAV    = $1,000
+maxDrawdownPct = 201.997%
+```
+
+**FACT:** The tournament drawdown computation operates on these accounting values correctly per its
+current formula. The >200% drawdown is **not** merely a UI formatting defect — it reflects actual
+accounting state in the virtual portfolio.
+
+**Defect:** The simulator currently lacks a clear insolvency/margin/liquidation boundary. A real
+brokerage account would have been liquidated long before these states were reachable. The virtual
+portfolio permits cash/equity states that would be economically insolvent without margin semantics.
+
+**INFERENCE:** The correct remediation design is not self-evident and requires explicit engineering
+decision. Do not assume what the fix should be.
+
+---
+
+### DEFECT 3 — KILL SWITCH DOES NOT FLATTEN EXISTING POSITION
+
+**Classification:** DEFECT — kill-switch safety / design decision required
+
+**FACT:** The max-daily-loss kill switch (SEQ 144) blocks future decisions and orders. However, the
+existing 9.0 BTC simulated position remains open indefinitely after kill switch activation.
+
+**GOVERNANCE BOUNDARY:** Do NOT choose or implement a remediation design in this handoff.
+This requires explicit human/engineering decision.
+
+**Potential options for future decision (INFERENCE — not authorized):**
+- Halt + preserve existing position as-is
+- Halt + forced simulated liquidation at market
+- Halt + explicit operator resolution required before position can be closed
+
+---
+
+### DEFECT 4 — SUPERVISOR / DASHBOARD STATE SEMANTICS
+
+**Classification:** DEFECT — observability / execution-state propagation
+
+**FACT:** After runner kill switch (SEQ 144):
+- Tournament still reports `overallStatus = RUNNING`
+- Slot A still reports `RUNNING`
+- Feed remains `HEALTHY`
+
+**Assessment (EVIDENCE + INFERENCE):** Feed/container health reporting is operationally correct —
+the container is alive and the feed is connected. However, reporting `RUNNING` for Slot A after the
+runner's kill switch is activated is misleading for execution state monitoring.
+
+**Defect:** The system does not expose runner kill-switch state as a distinct slot/tournament execution
+status (e.g., `KILL_SWITCH_ACTIVE`, `HALTED_LOSS_LIMIT`). The dashboard and supervisor API cannot
+currently distinguish "slot running normally" from "slot halted by kill switch, position frozen".
+
+---
+
+## 10. Dashboard Work Completed This Session
+
+### 10.1 Shadow UNASSIGNED Null-Metric Crash Fix
+
+**Commit:** `78bb2e42c8221ab83e88d29dd0f0256528b59b72`
+
+**Fix:** Production `TypeError` caused by null values for:
+- `exposurePct`
+- `riskUtilizationPct`
+- `durationSeconds`
+
+UNASSIGNED Slot B/C now render N/A as em dash instead of crashing.
+
+### 10.2 ACASH Warm Neutral Standard Theme
+
+**Commit:** `ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2` — current ACASH main
+
+**Dashboard validation run on Homelab (FACT — reported by prior session):**
 
 | Check | Result |
 |---|---|
-| Shadow runtime integration tests | 4 / 4 PASS |
-| Full Python suite | 2262 passed, 1 skipped, 0 failures |
-| MyPy new errors in changed files | 0 |
-| MyPy pre-existing unused-ignore (unrelated files) | 6 (compatibility debt) |
-| ACASH working tree | clean |
-| ACASH local HEAD | `e17b389` |
-| ACASH remote HEAD | `e17b389` |
+| npm ci | PASS |
+| tsc --noEmit | PASS |
+| Tests | 24 / 24 PASS |
+| Vite production build | PASS |
+| Linux image build | PASS |
+| Read-only nginx smoke test | PASS |
+| healthz | PASS |
 
-> Do not silently convert these into new verified results.
-> Re-run relevant final-gate checks as required.
+**Final dashboard image:** `acash-dashboard:ec86a85`
+**Linux image ID:** `sha256:307e3aa864ea3cc70be2125b812f97e70cff68e206a292a5cbabd67856beae2f`
+**Production dashboard state (observed):** running / healthy / RestartCount = 0
 
----
+### 10.3 Routes Validated (FACT — observed during session)
 
-## 6. Pi Personal Infrastructure -- Current Expected State
-
-```
-Repository:  Ratthabhumi/Pi_Personal-Infrastructure
-Branch:      feature/acash-shadow-tournament-deploy
-Last known HEAD (before e17b389 ACASH commit):
-             4f06b3836224c208454c3494b406e4740856ce3d
-Main base:   68142aecdccf636912902bbfc4061895c877d195
-```
-
-> **CRITICAL:** Pi branch still references ACASH commit `5a7bbacf5d5ee401a531247e723fc3fa12a59030`.
-> It **MUST** be updated to `e17b3893e19ba3ce25530daf764ca7964cb0c755`
-> before final merge/deploy review.
-> **This is the first remaining technical task.**
-
----
-
-## 7. Immediate Next Task -- Update Pi Provenance
-
-On branch `feature/acash-shadow-tournament-deploy`:
-
-1. Inspect actual `docker/compose.yaml`
-2. Update all Shadow Tournament ACASH provenance references:
-
-```
-Old SHA: 5a7bbacf5d5ee401a531247e723fc3fa12a59030
-New SHA: e17b3893e19ba3ce25530daf764ca7964cb0c755
-```
-
-Fields to update (at minimum):
-- `acash-dashboard` image tag
-- `acash-shadow` image tag
-- `ACASH_GIT_COMMIT` environment variable
-- `--git-commit` CLI argument
-
-Use **actual current file contents**. Do NOT invent image digests before an actual Docker build.
-
-Commit rules: normal follow-up commit / no amend / no rebase / no force push / push the branch / return full new Pi commit SHA.
-
----
-
-## 8. Pi Architecture That Should Already Exist
-
-**Verify rather than recreate.**
-
-### Dashboard (`acash-dashboard`)
-- read-only filesystem; writable nginx tmpfs only where required
-- no Watchtower / no public application port / attached to proxy
-
-| Access | URL |
+| Route | Result |
 |---|---|
-| LAN | `https://acash.mew.lab` |
-| Tailscale | `https://homelab.tail35e4b4.ts.net/acash/` |
+| `https://acash.mew.lab/healthz` (LAN) | HTTP 200 healthy |
+| `https://homelab.tail35e4b4.ts.net/acash/healthz` (Tailscale/Traefik) | HTTP 200 healthy |
+| `https://homelab.tail35e4b4.ts.net/acash/api/shadow/status` | HTTP 200 |
+| VictoriaMetrics job=acash-shadow | health=up, scrapeUrl=http://acash-shadow:9102/metrics |
 
-Redirect: `/acash` -> `/acash/`
-
-Traefik rule:
-```
-Host(`homelab.tail35e4b4.ts.net`) && PathPrefix(`/acash`)
--> strip /acash before forwarding to nginx
-```
-
-API routing:
-```
-Browser   /acash/api/shadow/status
-Traefik   strip /acash
-Nginx     /api/shadow/status
-Proxy     http://acash-shadow:9103/api/shadow/status
-LAN       /api/shadow/status  (root-host mode)
-```
+> [!NOTE]
+> **DNS caveat:** Direct DNS lookup for `homelab.tail35e4b4.ts.net` from the Homelab host failed
+> during one curl test. The Traefik Tailscale Host route was validated successfully using
+> `--resolve 127.0.0.1`. Do not conflate host DNS resolution with router/dashboard health.
 
 ---
 
-## 9. Shadow Runtime Service (`acash-shadow`)
+## 11. Next Session — Recommended Order
 
-```yaml
-user: "10001:10001"
-read_only: true
-security_opt:
-  - no-new-privileges:true
-environment:
-  NO_REAL_ORDERS: "true"
-  CANONICAL_CAPITAL_USD: "0"
-restart: "no"
-```
+> [!IMPORTANT]
+> **Perform read-only verification FIRST before any action.**
 
-- No broker credentials / no host-published trading ports / Watchtower disabled
-- Networks: `proxy`, `acash_staging` (internal)
-- Persistent evidence: `/data/docker/acash/tournament`
-- Internal ports: `9102` metrics, `9103` read-only Shadow API
-
----
-
-## 10. H01 Start Interlock -- Critical
-
-`acash-shadow` **must** remain behind:
-
-```yaml
-profiles:
-  - "acash-shadow"
-```
-
-Normal `docker compose up -d` **MUST NOT start Shadow runtime.**
-
-Shadow runtime requires explicit Human H01:
+**NEXT ACTION — Step 1: Verify current state**
 ```bash
-docker compose --profile acash-shadow up -d acash-shadow
+git fetch origin
+git rev-parse origin/main  # must == ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2
+git status --short --branch
 ```
+Also re-verify: container status, RestartCount, journal path/size, feed health.
 
-**Do not execute without explicit Human authorization.**
+**NEXT ACTION — Step 2: Preserve current H01 evidence**
+- Do NOT restart H01 merely to clear or "reset" observed state
+- Do NOT discard journal; it is the primary audit evidence for this run
+- Preserve journal at `/data/docker/acash/tournament/SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl`
 
----
+**NEXT ACTION — Step 3: Remediation design (engineering review, NOT implementation)**
 
-## 11. VictoriaMetrics
+Address these defects in isolation, in this recommended order:
 
-Verify existing scrape job:
+1. **Defect 1** — max_notional enforcement in `PaperSessionRunner._evaluate_risk()`
+2. **Defect 2** — insolvency/margin semantics — define the virtual portfolio boundary policy
+3. **Defect 3** — kill-switch position policy — decide: halt+preserve vs halt+liquidate vs halt+operator-gate
+4. **Defect 4** — kill-switch execution-state propagation to supervisor/API/dashboard
 
-```yaml
-- job_name: 'acash-shadow'
-  static_configs:
-    - targets: ['acash-shadow:9102']
-      labels:
-        tier: 'execution-infrastructure'
-        mode: 'shadow-tournament'
-```
+**NEXT ACTION — Step 4: Tests before implementation**
 
-Do not remove existing `acash-staging:9102` -- both must coexist.
-Verify VictoriaMetrics shares a network with `acash-shadow`.
+Write adversarial tests for each defect BEFORE implementing the fix.
+Priority order per AGENTS.md:
+Boundary -> Malformed -> Contradictory -> Adversarial -> Numerical Stability -> Golden Reference.
 
----
+**NEXT ACTION — Step 5: Scope isolation**
 
-## 12. Final Cross-Repo Review
+Keep execution-risk remediation strictly isolated from:
+- H02 / research strategy work
+- Any alpha qualification path
+- Any research governance boundary
 
-After updating Pi provenance, perform ONE final merge-gate review.
+**NEXT ACTION — Step 6: Authorization before new run**
 
-### ACASH -- verify:
-- [ ] branch ahead = 4, behind = 0
-- [ ] merge base = current main
-- [ ] exact changed files, no unexpected governance files
-- [ ] feed connects before slots start
-- [ ] no automatic reconnect
-- [ ] returned stale bar halts **before** strategy evaluation
-- [ ] None-poll stale condition also halts
-- [ ] real-feed provenance correct
-- [ ] strategy injection remains isolated
-- [ ] infra strategy labeled `INFRASTRUCTURE_TEST_STRATEGY_ONLY`
-- [ ] future approved alpha representable without false infra classification
-- [ ] API is read-only
-- [ ] production dashboard cannot silently use mock
-- [ ] unique evidence/session paths
-- [ ] halt seals manifests
-
-### Pi -- verify:
-- [ ] exact ACASH SHA = `e17b3893e19ba3ce25530daf764ca7964cb0c755`
-- [ ] H01 profile exists on `acash-shadow`
-- [ ] normal Compose launch excludes Shadow runtime
-- [ ] Tailscale route is private (no Funnel / public exposure)
-- [ ] dashboard routes API correctly
-- [ ] Watchtower disabled for ACASH components
-- [ ] persistent evidence mount present
-- [ ] no trading credentials
-- [ ] VictoriaMetrics scrape exists
-- [ ] Compose parses cleanly
+Only after remediation is reviewed and explicitly authorized should a new execution-infrastructure
+run be considered. Do NOT auto-authorize H02 from this handoff.
 
 ---
 
-## 13. Final Verification Commands
+## 12. Stop Conditions
 
-### ACASH
-```bash
-uv run pytest tests/unit/paper -q
-uv run pytest tests/integration/test_phase14_e35_real_feed_integration.py -q
-uv run pytest tests/integration/test_shadow_tournament_runtime.py -q
-uv run mypy src/ tests/
-git diff --check
-```
+Stop and report to the human before proceeding past these boundaries:
 
-If the complete suite was freshly executed against exact `e17b389` with no subsequent working-tree changes, preserve that evidence and state exactly what was re-run now versus reused.
-
-### Dashboard
-```bash
-cd dashboard
-npm ci
-npm run typecheck
-npm test
-npm run build
-```
-
-### Pi
-```bash
-docker compose -f docker/compose.yaml config --quiet
-docker compose -f docker/compose.yaml config --services
-docker compose -f docker/compose.yaml --profile acash-shadow config --services
-```
-
-Expected:
-- default service set **excludes** `acash-shadow`
-- profile service set **includes** `acash-shadow`
+- Any request to restart H01, start H02, or start `acash-shadow` fresh
+- Any request to create HYP_003, start R1, authorize Paper, authorize Live, or unlock Backtest
+- Any request to introduce real capital or real broker credentials
+- Any conflict between this handoff and actual repository/runtime state
+- Any remediation implementation that touches more than the isolated defect
 
 ---
 
-## 14. Docker / Homelab Caveat
-
-Previous Windows workstation did NOT have Docker daemon running. Therefore:
-- Compose syntax was validated
-- Python runtime was integration-tested with mocked feed
-- **Actual Linux container build/start has NOT yet been proven**
-
-Do not claim actual container runtime verification until performed on `mew@homelab`.
-This is acceptable as a PRE-DEPLOY verification gate.
-
----
-
-## 15. If Final Review Passes
-
-Return **`SAFE TO MERGE`** -- but do **NOT** merge unless explicit Human authorization is present.
-
-**Recommended next Human-controlled sequence:**
-1. FF merge ACASH branch
-2. FF merge Pi branch
-3. On `mew@homelab`: build exact commit-derived images, verify image IDs/digests, run container smoke validation
-4. Deploy dashboard + monitoring only
-5. Verify: LAN UI, Tailscale mobile UI, Shadow API route, VictoriaMetrics topology
-6. **STOP -- await H01 before starting `acash-shadow`**
-
----
-
-## 16. Important -- Alpha Slots
-
-Current real approved Alpha candidates = **0**
-
-- Do not invent strategies to fill A/B/C
-- `InfrastructureTestStrategy` for infrastructure verification only -- must remain labeled `INFRASTRUCTURE_TEST_STRATEGY_ONLY`
-- It is NOT HYP_003, qualified alpha, or admissible research evidence
-- B/C may remain `UNASSIGNED` until Human strategy selection
-
----
-
-## 17. Research Track Remains Separate
-
-Research critical path still involves D17 / data-authority decisions.
-
-Do **NOT** let Shadow deployment silently:
-- unlock backtesting
-- create HYP_003
-- start R1
-- qualify strategy
-- authorize Paper or Live
-
-Research/dev can continue independently after Shadow runtime is deployed. No automatic runtime code synchronization from main.
-
----
-
-## 18. Final Report Format
+## 13. Verification Ledger
 
 ```
-Repository State
-  ACASH:
-    main:
-    branch:
-    HEAD:
-    ahead:
-    behind:
-    merge base:
-    working tree:
-  Pi:
-    main:
-    branch:
-    HEAD:
-    ahead:
-    behind:
-    merge base:
-    working tree:
-
-Verification
-  Python unit:
-  Real-feed integration:
-  Shadow integration:
-  MyPy:
-  Dashboard typecheck:
-  Dashboard tests:
-  Dashboard build:
-  Compose:
-  Default profile interlock:
-  Shadow profile:
-
-Findings
-  Classify only: BLOCKER | MAJOR | MINOR | NONE
-
-Merge Verdict
-  SAFE TO MERGE
-  or
-  HOLD -- DO NOT MERGE
-
-Human Actions Remaining
-  H05   -- Merge authorization
-  BUILD -- Homelab Docker build/digest verification
-  DEPLOY -- Dashboard/monitoring deployment authorization
-  H01   -- Shadow runtime START authorization
-  H02   -- Strategy candidate selection
-  BACKTEST -- Future research authorization
-  (only actions actually requiring Human authority)
+Implementation Status:    DOCUMENTATION ONLY — no runtime code modified
+Contract Enforcement:     N/A (doc-only commit)
+Mathematical Authority:   N/A
+Local Test Suite:         NOT RUN (doc-only; no code changed)
+Type Checker (MyPy):      NOT RUN (doc-only; no code changed)
+Remote CI Status:         NOT AVAILABLE
+Methodological Caveats:
+  - All performance metrics are infrastructure-test accounting state only
+  - Kill-switch stop is confirmed but position remains open
+  - max_notional enforcement gap is confirmed defect
+  - Drawdown >200% reflects real accounting state, not display bug
+  - Dashboard route validation used --resolve; direct DNS resolution failed once
 ```
 
 ---
 
-## 19. Stop Rule
+## 14. NEXT SESSION QUICK START
 
-Even if final merge gate passes -- **DO NOT:**
-- start `acash-shadow`
-- authorize Paper or Live
-- unlock backtest
-- create HYP_003
-- start R1
-- modify capital
-- add auto reconnect
-- connect a real broker
-
-without **explicit Human authorization**.
-
-**Final desired state before Human returns:**
-
-| Item | State |
-|---|---|
-| IMPLEMENTATION | READY |
-| PI PROVENANCE | UPDATED |
-| FINAL REVIEW | COMPLETE |
-| MERGE | AWAITING HUMAN |
-| DEPLOY | AWAITING HUMAN |
-| SHADOW START | AWAITING H01 |
-| REAL CAPITAL | $0.00 |
-| REAL ORDERS | 0 |
+```
+ACASH QUICK START — 2026-09-14 Handoff
+=======================================
+1. git fetch origin; verify origin/main = ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2
+2. Verify container: acash-shadow running/healthy, RestartCount=0, feed=HEALTHY
+3. Verify journal: SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl exists, size ~154847
+4. Governance: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+5. H01 STATUS: feed/container PASS; execution-risk semantics FAIL (4 defects)
+6. DO NOT restart H01 to clear state — preserve journal evidence
+7. DO NOT treat H01 as full PASS — risk defects must be remediated first
+8. Defect 1: max_notional not enforced in _evaluate_risk() — ~$702k notional at $100k limit
+9. Defect 2: virtual insolvency semantics — cash=-$699k, drawdown >200%
+10. Defect 3: kill switch halts decisions but 9 BTC position stays open (design decision needed)
+```
