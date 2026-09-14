@@ -1,5 +1,5 @@
-﻿# ACASH SESSION HANDOFF — H01 Shadow Tournament Risk Findings
-## Canonical Current Session Handoff — 2026-09-14
+﻿# ACASH SESSION HANDOFF — H01 Closure → Tournament V2 Risk Remediation
+## Canonical Current Session Handoff — 2026-09-15
 
 > [!CAUTION]
 > **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
@@ -10,7 +10,7 @@
 > **Document:** `docs/SESSION_HANDOFF.md`
 > **This is the single canonical ACASH session handoff.**
 > For the archived E3.6 historical checkpoint, see `E3.6-SESSION-HANDOFF.md`.
-> **Date:** 2026-09-14 (UTC) / 2026-09-14 (Asia/Bangkok)
+> **Date:** 2026-09-15 (UTC)
 > **Status labels used:** FACT | EVIDENCE | INFERENCE | DEFECT | GOVERNANCE BOUNDARY | NEXT ACTION
 
 ---
@@ -20,14 +20,13 @@
 | Item | Value |
 |---|---|
 | Repository | `Ratthabhumi/Acash` |
-| Branch (main) | `main` |
-| Current `origin/main` | `ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2` |
-| Commit message | `feat(dashboard): migrate UI to ACASH warm neutral standard theme` |
-| Parent commit | `78bb2e42c8221ab83e88d29dd0f0256528b59b72` |
-| Parent message | `fix(dashboard): null-guard UNASSIGNED slot metrics to prevent toFixed crash` |
+| Active branch | `feat/tournament-v2-risk-remediation-10slot` |
+| Branch base | `main @ 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` (origin/main verified) |
+| Base message | `docs: refresh canonical session handoff and archive E3.6 checkpoint` |
 
-**FACT:** `HEAD == origin/main == ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2` verified by
-`git fetch origin` + `git rev-parse` on 2026-09-14.
+**FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` CONFIRMED by `git fetch`
++ `git rev-parse` on 2026-09-15, then `git switch main` + `git pull --ff-only origin main`
+(`638388e..9a58ced`), then branch created at exact main SHA.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -109,6 +108,10 @@ every session.
 | Slot B | UNASSIGNED |
 | Slot C | UNASSIGNED |
 
+> [!IMPORTANT]
+> The above is the **mid-run observation**. See §4.4 for the **terminal** state:
+> the container subsequently exited `EXIT=2` on a feed ReadTimeout after ~7h36m54s.
+
 ### 4.3 Revised H01 Status Classification
 
 > [!CAUTION]
@@ -116,14 +119,32 @@ every session.
 
 | Dimension | Status |
 |---|---|
-| H01 infrastructure/feed continuity | **PASS / ongoing** |
+| H01 infrastructure/feed continuity | **FAIL — 24h NOT ACHIEVED (EXIT=2 at ~7h36m54s)** |
 | H01 dashboard/telemetry | **PASS** |
 | H01 real-order safety | **PASS** |
 | H01 execution-risk semantics | **FAIL — remediation required** |
 | H01 execution-chain qualification | **NOT ACCEPTABLE AS FULL PASS UNTIL RISK DEFECTS ARE REMEDIATED** |
+| H01 run lifecycle | **CLOSED** (no auto-restart; operator+human decision required for next run) |
 
 **GOVERNANCE BOUNDARY:** This FAIL finding does NOT imply any real-money loss.
 Everything remains simulated-only. Canonical real capital remains $0.
+
+### 4.4 Terminal State — Attempt 1 (FACT)
+
+| Item | Value |
+|---|---|
+| Container start (UTC) | 2026-09-14T07:33:01Z |
+| Container finish (UTC) | 2026-09-14T15:09:55Z |
+| Approx runtime | 7h36m54s |
+| Exit code | `EXIT=2` |
+| Final failure | `BinancePublicKlinesFeed.poll_next_bar` `ReadTimeout` → fail-closed halt |
+| 24h continuity | NOT ACHIEVED |
+| Final journal | 156814 bytes; SEQ 146 `RECONCILIATION_COMPLETED` PASS (146 events, 15 orders, 15 fills, 0 violations) |
+| Terminal event | SEQ 147 `SESSION_STOPPED reason=NORMAL_SHUTDOWN` (⚠ causal reason NOT preserved — Defect E) |
+
+**EVIDENCE PRESERVATION:** Full evidence archived at
+[`docs/tournament/H01_ATTEMPT1_EVIDENCE.md`](tournament/H01_ATTEMPT1_EVIDENCE.md).
+Artifacts on Host: `/data/docker/acash/tournament/`.
 
 ---
 
@@ -400,24 +421,26 @@ UNASSIGNED Slot B/C now render N/A as em dash instead of crashing.
 **NEXT ACTION — Step 1: Verify current state**
 ```bash
 git fetch origin
-git rev-parse origin/main  # must == ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2
+git rev-parse origin/main  # must == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
 git status --short --branch
 ```
-Also re-verify: container status, RestartCount, journal path/size, feed health.
+Also re-verify: container status (H01 Attempt 1 = EXITED EXIT=2), journal path/size, feed health.
 
 **NEXT ACTION — Step 2: Preserve current H01 evidence**
 - Do NOT restart H01 merely to clear or "reset" observed state
 - Do NOT discard journal; it is the primary audit evidence for this run
 - Preserve journal at `/data/docker/acash/tournament/SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl`
+- Evidence snapshot: `docs/tournament/H01_ATTEMPT1_EVIDENCE.md`
 
-**NEXT ACTION — Step 3: Remediation design (engineering review, NOT implementation)**
+**NEXT ACTION — Step 3: Remediation (branch `feat/tournament-v2-risk-remediation-10slot`)**
 
-Address these defects in isolation, in this recommended order:
+Address these defects in isolation, in this recommended order (design + tests BEFORE code):
 
-1. **Defect 1** — max_notional enforcement in `PaperSessionRunner._evaluate_risk()`
-2. **Defect 2** — insolvency/margin semantics — define the virtual portfolio boundary policy
-3. **Defect 3** — kill-switch position policy — decide: halt+preserve vs halt+liquidate vs halt+operator-gate
-4. **Defect 4** — kill-switch execution-state propagation to supervisor/API/dashboard
+1. **Defect A** — max_notional enforcement in `PaperSessionRunner._evaluate_risk()`
+2. **Defect B** — insolvency/margin semantics — define the virtual portfolio boundary policy seam
+3. **Defect C** — kill-switch position policy — halt+preserve vs halt+liquidate vs halt+operator-gate (HUMAN DECISION)
+4. **Defect D** — kill-switch execution-state propagation to supervisor/API/dashboard
+5. **Defect E** — terminal shutdown reason preserving causality (FEED_DISCONNECTED / RISK_KILL_SWITCH / OPERATOR_STOP / NORMAL_COMPLETION / INTERNAL_ERROR)
 
 **NEXT ACTION — Step 4: Tests before implementation**
 
@@ -454,7 +477,7 @@ Stop and report to the human before proceeding past these boundaries:
 ## 13. Verification Ledger
 
 ```
-Implementation Status:    DOCUMENTATION ONLY — no runtime code modified
+Implementation Status:    DOCUMENTATION ONLY — H01 closure preserved on feat/tournament-v2 branch
 Contract Enforcement:     N/A (doc-only commit)
 Mathematical Authority:   N/A
 Local Test Suite:         NOT RUN (doc-only; no code changed)
@@ -463,9 +486,11 @@ Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
   - All performance metrics are infrastructure-test accounting state only
   - Kill-switch stop is confirmed but position remains open
-  - max_notional enforcement gap is confirmed defect
+  - max_notional enforcement gap is confirmed defect (Defect A)
   - Drawdown >200% reflects real accounting state, not display bug
   - Dashboard route validation used --resolve; direct DNS resolution failed once
+  - H01 Attempt 1 terminal cause (feed ReadTimeout, EXIT=2) is NOT preserved in
+    SESSION_STOPPED reason (NORMAL_SHUTDOWN) — Defect E
 ```
 
 ---
@@ -473,16 +498,19 @@ Methodological Caveats:
 ## 14. NEXT SESSION QUICK START
 
 ```
-ACASH QUICK START — 2026-09-14 Handoff
+ACASH QUICK START — 2026-09-15 Handoff
 =======================================
-1. git fetch origin; verify origin/main = ec86a8596a8aa3d8a85c6e875d2e72adfc9c3ca2
-2. Verify container: acash-shadow running/healthy, RestartCount=0, feed=HEALTHY
-3. Verify journal: SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl exists, size ~154847
-4. Governance: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
-5. H01 STATUS: feed/container PASS; execution-risk semantics FAIL (4 defects)
-6. DO NOT restart H01 to clear state — preserve journal evidence
-7. DO NOT treat H01 as full PASS — risk defects must be remediated first
-8. Defect 1: max_notional not enforced in _evaluate_risk() — ~$702k notional at $100k limit
-9. Defect 2: virtual insolvency semantics — cash=-$699k, drawdown >200%
-10. Defect 3: kill switch halts decisions but 9 BTC position stays open (design decision needed)
+1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
+2. Active work branch: feat/tournament-v2-risk-remediation-10slot (base = main @ 9a58ced)
+3. Verify H01 Attempt 1 terminal state: container EXITED EXIT=2, ReadTimeout after ~7h36m54s
+4. Journal preserved: SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl (~156814 bytes final)
+5. Governance: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+6. H01 STATUS: feed/container continuity FAIL (24h not achieved); execution-risk semantics FAIL (5 defects A-E)
+7. DO NOT restart H01 to clear state — preserve journal evidence
+8. Defect A: max_notional not enforced in _evaluate_risk() — ~$702k notional at $100k limit
+9. Defect B: virtual insolvency semantics — cash=-$699k, drawdown >200%
+10. Defect C: kill switch halts decisions but 9 BTC position stays open (HUMAN DECISION needed)
+11. Branch path: remediate A-E, then N-slot fanout (target 10), 10 infra candidates,
+    dashboard/API/metrics/manifest V2, validation evidence, then report + Human Decision Packet.
+12. Do NOT merge to main, do NOT deploy, do NOT start any runtime from this branch.
 ```
