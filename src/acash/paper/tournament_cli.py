@@ -223,13 +223,32 @@ def run_tournament(args: argparse.Namespace) -> int:
         while not shutdown_requested:
             try:
                 feed_bar = feed.poll_next_bar()
+
+                # --- Unified post-poll freshness gate ---
+                # Applied to EVERY poll result (FeedBar or None) before any
+                # call to supervisor.process_bar(). This is the canonical
+                # M1 Shadow staleness check (65,000 ms policy).
+                if feed_bar is not None and args.max_data_age_ms is not None:
+                    bar_age_ms = feed_bar.data_age_ms()
+                    if bar_age_ms > args.max_data_age_ms:
+                        logger.error(
+                            "Returned bar is stale: age=%dms > max_data_age_ms=%dms."
+                            " Halting fail-closed without processing.",
+                            bar_age_ms,
+                            args.max_data_age_ms,
+                        )
+                        supervisor.record_feed_stale(bar_age_ms, args.max_data_age_ms)
+                        supervisor.export_status_json(status_file)
+                        exit_code = 4
+                        break
+
                 if feed_bar is not None:
                     synthetic_bar = feed_bar_to_synthetic_bar(feed_bar, strategy_symbol=args.symbol)
                     results = supervisor.process_bar(synthetic_bar)
                     supervisor.export_status_json(status_file)
                     logger.debug("Processed bar %s (decisions: %s)", synthetic_bar.timestamp_utc, results)
                 else:
-                    # Inspect feed freshness and connection state even when poll returns None
+                    # Inspect feed freshness and connection state when poll returns None
                     feed_status = feed.status()
                     if not feed_status.is_connected:
                         logger.error("Feed connection lost during polling: %s (fail-closed halt)", feed_status.last_error)

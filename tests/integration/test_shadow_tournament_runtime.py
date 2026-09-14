@@ -215,3 +215,80 @@ def test_runtime_stale_feed_fail_closed(tmp_path: Path) -> None:
     assert data["global"]["overallStatus"] == "HALTED"
     assert data["global"]["feedHealth"] == "STALE"
     assert "Feed data stale" in data["global"]["haltReason"]
+
+
+def test_runtime_returned_stale_bar_halts_before_processing(tmp_path: Path) -> None:
+    """Prove that a FeedBar returned by poll_next_bar() that exceeds max_data_age_ms
+    causes exit code 4 WITHOUT supervisor.process_bar() being called.
+
+    This is the key invariant: the unified post-poll freshness gate must fire
+    for every returned FeedBar, not only when poll returns None.
+    """
+    storage_dir = tmp_path / "tournament"
+
+    # Build a bar whose received_at_utc is far in the future relative to
+    # timestamp_utc so that FeedBar.data_age_ms() >> 65,000 ms.
+    from datetime import timedelta
+
+    bar_timestamp = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+    # received_at is 90 seconds after the bar's market event time → age = 90,000 ms
+    stale_received_at = bar_timestamp + timedelta(seconds=90)
+    stale_bar = FeedBar.build(
+        provider="mock.binance.public.klines",
+        provider_version="1.0.0",
+        source_id="BTCUSDT-M1-stale",
+        symbol="BTCUSDT",
+        timeframe=BarTimeframe.M1,
+        timestamp_utc=bar_timestamp,
+        received_at_utc=stale_received_at,
+        open=Decimal("50000.0"),
+        high=Decimal("50010.0"),
+        low=Decimal("49990.0"),
+        close=Decimal("50000.0"),
+        volume=Decimal("2.5"),
+        trade_count=100,
+        unavailable=["bid", "ask", "latency"],
+    )
+
+    # Verify the FeedBar.data_age_ms() is indeed stale before injecting it
+    assert stale_bar.data_age_ms() == 90_000
+
+    feed = MockFeed(bars=[stale_bar])
+
+    args = argparse.Namespace(
+        provider="binance",
+        symbol="BTCUSDT",
+        timeframe=BarTimeframe.M1,
+        storage=storage_dir,
+        api_port=29108,
+        metrics_port=29109,
+        poll_interval_seconds=0.01,
+        git_commit="9e4aa9f9276784d20f98fb3986fdbd3e057b5dae",
+        max_data_age_ms=65_000,
+    )
+
+    process_bar_call_count = 0
+
+    with patch("acash.paper.tournament_cli.BinancePublicKlinesFeed", return_value=feed):
+        # Intercept supervisor.process_bar to ensure it is NEVER called
+        with patch(
+            "acash.paper.tournament.ShadowTournamentSupervisor.process_bar",
+            side_effect=lambda bar: (_ for _ in ()).throw(
+                AssertionError("process_bar() MUST NOT be called for a stale returned bar")
+            ),
+        ):
+            exit_code = run_tournament(args)
+
+    # Must exit with code 4 (stale data halt)
+    assert exit_code == 4, f"Expected exit_code=4 (stale), got {exit_code}"
+    # Feed must be disconnected even on fail-closed halt
+    assert feed.disconnect_called is True
+
+    import json
+    status_file = storage_dir / "status.json"
+    data = json.loads(status_file.read_text(encoding="utf-8"))
+    assert data["global"]["overallStatus"] == "HALTED"
+    assert data["global"]["feedHealth"] == "STALE"
+    # haltReason must explicitly mention the stale returned bar
+    assert "stale" in data["global"]["haltReason"].lower()
+
