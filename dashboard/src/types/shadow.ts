@@ -30,13 +30,23 @@ export const SHADOW_GOVERNANCE = {
 // Slot and strategy types
 // ---------------------------------------------------------------------------
 
-export type SlotId = 'A' | 'B' | 'C';
+export type SlotId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
 export type SlotStatus =
   | 'RUNNING'
-  | 'HALTED'
+  | 'RISK_HALTED'
+  | 'FEED_HALTED'
+  | 'STOPPED'
   | 'UNASSIGNED'
   | 'ERROR'
   | 'INITIALIZING';
+
+export type ExecutionState =
+  | 'RUNNING'
+  | 'RISK_HALTED'
+  | 'FEED_HALTED'
+  | 'STOPPED'
+  | 'UNASSIGNED'
+  | 'NOT_STARTED';
 
 export type FeedHealth = 'HEALTHY' | 'STALE' | 'HALTED' | 'DISCONNECTED' | 'UNKNOWN';
 
@@ -48,14 +58,12 @@ export type SimulatedPositionSide = 'LONG' | 'SHORT';
 // ---------------------------------------------------------------------------
 
 export interface SimulatedPosition {
-  positionId: string;
   symbol: string;
   side: SimulatedPositionSide;
-  entryPrice: number;
   quantity: number;
+  entryPrice: number;
+  currentPrice: number;
   unrealizedPnlUsd: number;
-  unrealizedPnlPct: number;
-  openedAtUtc: string;
 }
 
 export interface SimulatedFill {
@@ -71,7 +79,7 @@ export interface SimulatedFill {
 export interface EquityPoint {
   timestampUtc: string;
   navUsd: number;
-  drawdownPct: number;
+  pnlUsd: number;
 }
 
 export interface SlotMetrics {
@@ -112,7 +120,8 @@ export interface StrategySlot {
   sessionId: string;
   configHash: string;
   acashCommitSha: string;
-  haltReason: string | null;     // Populated when HALTED
+  haltReason: string | null;                      // Populated when halted
+  operatorResolutionRequired: boolean;            // Kill-switch operator-resolution flag
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +143,7 @@ export interface TournamentGlobalStatus {
   lastDataTimestampUtc: string | null;
   lastSuccessfulUpdateUtc: string | null;
   overallStatus: 'RUNNING' | 'HALTED' | 'NOT_STARTED' | 'PARTIAL';
+  executionState: ExecutionState;
   haltReason: string | null;
 }
 
@@ -141,10 +151,13 @@ export interface TournamentLeaderboard {
   rankedSlots: Array<{
     rank: number;
     slotId: SlotId;
-    strategyName: string;
-    pnlPct: number;
-    maxDrawdownPct: number;
+    strategyId: string;
     navUsd: number;
+    pnlUsd: number;
+    pnlPct: number;
+    winRatePct: number | null;
+    maxDrawdownPct: number;
+    simulatedFills: number;
   }>;
   comparisonAvailability: 'INSUFFICIENT_SAMPLE' | 'INDICATIVE_ONLY' | 'AVAILABLE';
   comparisonNote: string;
@@ -157,7 +170,7 @@ export interface TournamentState {
   /** Polling metadata for the read-only data plane */
   _meta: {
     fetchedAtUtc: string;
-    dataSource: 'MOCK_DEMO' | 'LIVE_API';
+    dataSource: 'SHADOW_RUNTIME' | 'MOCK_DEMO' | 'LIVE_API';
     isMockData: boolean;
     mockNotice: string;
   };

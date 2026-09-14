@@ -49,14 +49,30 @@ test('Shadow Alpha Tournament Contract: Read-Only Architecture (Zero Mutation)',
   assert.match(repoContent, /subscribe\(/, 'Repository must expose subscribe()');
 });
 
-test('Shadow Alpha Tournament Contract: 3 Strategy Slots with Honest Unassigned State', () => {
-  // Verify 3 slots are instantiated in mock
+test('Shadow Alpha Tournament Contract: 10 Strategy Slots with Honest Unassigned State', () => {
+  // Verify 10 slots are instantiated in mock
   assert.match(mockContent, /A:\s*makeInfraSlot\('A'\)/, 'Slot A must exist');
   assert.match(mockContent, /B:\s*makeInfraSlot\('B'\)/, 'Slot B must exist');
   assert.match(mockContent, /C:\s*makeInfraSlot\('C'\)/, 'Slot C must exist');
+  assert.match(mockContent, /D:\s*makeInfraSlot\('D'\)/, 'Slot D must exist');
+  assert.match(mockContent, /E:\s*makeInfraSlot\('E'\)/, 'Slot E must exist');
+  assert.match(mockContent, /F:\s*makeInfraSlot\('F'\)/, 'Slot F must exist');
+  assert.match(mockContent, /G:\s*makeInfraSlot\('G'\)/, 'Slot G must exist');
+  assert.match(mockContent, /H:\s*makeInfraSlot\('H'\)/, 'Slot H must exist');
+  assert.match(mockContent, /I:\s*makeInfraSlot\('I'\)/, 'Slot I must exist');
+  assert.match(mockContent, /J:\s*makeInfraSlot\('J'\)/, 'Slot J must exist');
 
   // Verify status is honest about unassigned state (zero alpha candidates exist in repo)
   assert.match(mockContent, /status:\s*'UNASSIGNED'/, 'Slots without approved candidates must be UNASSIGNED');
+});
+
+test('Shadow Alpha Tournament Contract: V2 Execution State Fields Present', () => {
+  // Dashboard must render KILL_SWITCH / FEED / STOPPED execution states from backend.
+  assert.match(typesContent, /executionState: ExecutionState/, 'Global status must declare executionState');
+  assert.match(typesContent, /operatorResolutionRequired: boolean/, 'Slots must declare operator resolution flag');
+  assert.match(typesContent, /'SHADOW_RUNTIME'/, 'Live backend dataSource SHADOW_RUNTIME must be declared');
+  assert.match(typesContent, /RISK_HALTED/, 'Slot status must include RISK_HALTED');
+  assert.match(typesContent, /FEED_HALTED/, 'Slot status must include FEED_HALTED');
 });
 
 test('Shadow Alpha Tournament Contract: Fail-Closed Production Repository Defaults', () => {

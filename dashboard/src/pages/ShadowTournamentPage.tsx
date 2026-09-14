@@ -119,7 +119,9 @@ interface StatusDotProps { status: SlotStatus }
 const StatusDot: React.FC<StatusDotProps> = ({ status }) => {
   const cfg: Record<SlotStatus, string> = {
     RUNNING:      'bg-emerald-500',
-    HALTED:       'bg-rose-500',
+    RISK_HALTED:  'bg-rose-500',
+    FEED_HALTED:  'bg-amber-600',
+    STOPPED:      'bg-rose-700',
     UNASSIGNED:   'bg-muted',
     ERROR:        'bg-rose-600 animate-pulse',
     INITIALIZING: 'bg-amber-500 animate-pulse',
@@ -139,7 +141,7 @@ interface SlotCardProps {
 export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
   const { slotId, strategyName, strategyVersion, status, metrics, haltReason, acashCommitSha, lastBarUtc } = slot;
   const isUnassigned = status === 'UNASSIGNED';
-  const isHalted = status === 'HALTED';
+  const isHalted = status === 'RISK_HALTED' || status === 'FEED_HALTED' || status === 'STOPPED' || status === 'ERROR';
 
   const pnlPositive = metrics.pnlPct >= 0;
 
@@ -358,7 +360,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament }) => {
         </div>
       ) : (
         <div className="space-y-2">
-          {leaderboard.rankedSlots.map(({ rank, slotId, strategyName, pnlPct, maxDrawdownPct, navUsd }) => {
+          {leaderboard.rankedSlots.map(({ rank, slotId, strategyId, pnlPct, maxDrawdownPct, navUsd }) => {
             const slot = slots[slotId];
             const positive = pnlPct >= 0;
             return (
@@ -373,7 +375,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament }) => {
                   <div className="flex items-center gap-1.5">
                     <StatusDot status={slot?.status ?? 'UNASSIGNED'} />
                     <span className="text-xs font-semibold text-primary">Slot {slotId}</span>
-                    <span className="text-[10px] text-muted truncate font-mono">{strategyName}</span>
+                    <span className="text-[10px] text-muted truncate font-mono">{strategyId}</span>
                   </div>
                   <div className="text-[10px] text-secondary font-mono mt-0.5">
                     Max DD: {maxDrawdownPct === 0 ? '—' : `-${maxDrawdownPct.toFixed(2)}%`}
@@ -427,7 +429,7 @@ export const ShadowTournamentPage: React.FC = () => {
         <GovernanceBanner />
         <div className="animate-pulse space-y-4">
           <div className="h-32 bg-surface-muted rounded-xl" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="h-64 bg-surface-muted rounded-xl" />
             <div className="h-64 bg-surface-muted rounded-xl" />
             <div className="h-64 bg-surface-muted rounded-xl" />
@@ -466,7 +468,7 @@ export const ShadowTournamentPage: React.FC = () => {
   }
 
   const { data: tournament } = response;
-  const slots: SlotId[] = ['A', 'B', 'C'];
+  const slots: SlotId[] = Object.keys(tournament.slots) as SlotId[];
   const isMock = tournament._meta.isMockData;
 
   // Build rank map from leaderboard
