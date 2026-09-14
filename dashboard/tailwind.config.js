@@ -7,32 +7,41 @@ export default {
   ],
   theme: {
     extend: {
+      // ACASH Warm Neutral Standard — semantic aliases backed by CSS custom
+      // properties. Structural colors flip with the `.dark` class automatically;
+      // `dark:` variants are only needed for semantic status colors.
       colors: {
-        background: "#f8fafc", // slate-50
+        app: 'rgb(var(--bg-app-rgb) / <alpha-value>)',
         surface: {
-          DEFAULT: "#ffffff",
-          subtle: "#f1f5f9", // slate-100
-          hover: "#f8fafc",
+          DEFAULT: 'rgb(var(--bg-surface-rgb) / <alpha-value>)',
+          muted: 'rgb(var(--bg-surface-muted-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--bg-surface-hover-rgb) / <alpha-value>)',
         },
         border: {
-          DEFAULT: "#e2e8f0", // slate-200
-          subtle: "#edf2f7",
-          focus: "#94a3b8",
+          DEFAULT: 'rgb(var(--border-default-rgb) / <alpha-value>)',
+          subtle: 'rgb(var(--border-subtle-rgb) / <alpha-value>)',
+          strong: 'rgb(var(--border-strong-rgb) / <alpha-value>)',
+          focus: 'rgb(var(--accent-rgb) / <alpha-value>)',
         },
-        charcoal: {
-          900: "#0f172a", // primary text
-          700: "#334155", // secondary heading
-          500: "#64748b", // body secondary
-          400: "#94a3b8", // tertiary / muted
-          300: "#cbd5e1", // disabled / subtle
+        default: 'rgb(var(--border-default-rgb) / <alpha-value>)',
+        primary: 'rgb(var(--text-primary-rgb) / <alpha-value>)',
+        secondary: 'rgb(var(--text-secondary-rgb) / <alpha-value>)',
+        muted: 'rgb(var(--text-muted-rgb) / <alpha-value>)',
+        accent: {
+          DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--accent-hover-rgb) / <alpha-value>)',
+          subtle: 'rgb(var(--accent-subtle-rgb) / <alpha-value>)',
         },
-        // Muted semantic enterprise accents
+        // Legacy structural keys retained for compatibility, repointed to the
+        // Warm Neutral tokens so any residual usage stays on-palette.
+        background: 'rgb(var(--bg-app-rgb) / <alpha-value>)',
         brand: {
-          DEFAULT: "#15803d", // emerald-700
-          subtle: "#ecfdf5",  // emerald-50
-          border: "#a7f3d0",  // emerald-200
-          dark: "#166534",
+          DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          subtle: 'rgb(var(--accent-subtle-rgb) / <alpha-value>)',
+          border: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          dark: 'rgb(var(--accent-hover-rgb) / <alpha-value>)',
         },
+        // Semantic status palette — health/verdict colors, unchanged.
         semantic: {
           success: "#15803d",
           "success-bg": "#f0fdf4",

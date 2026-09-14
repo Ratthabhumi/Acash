@@ -101,11 +101,11 @@ export const TradesPage: React.FC<TradesPageProps> = ({
   return (
     <div className="space-y-6">
       {/* 1. Filter and Search Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-3 transition-colors">
+      <div className="bg-surface rounded-lg border border-default p-4 shadow-xs space-y-3 transition-colors">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative flex-1 max-w-md">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 dark:text-slate-500" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-muted" />
             <input
               type="text"
               placeholder="Search by Trade ID, Symbol, or Signal ID..."
@@ -114,7 +114,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 setFilters({ ...filters, searchQuery: e.target.value });
                 setCurrentPage(1);
               }}
-              className="w-full pl-9 pr-3 py-2 rounded border border-slate-200 dark:border-slate-700 text-xs font-mono-code placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-slate-400 dark:focus:border-slate-500 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100"
+              className="w-full pl-9 pr-3 py-2 rounded border border-default text-xs font-mono-code placeholder:text-muted focus:outline-none focus:border-focus bg-surface-muted/50 text-primary"
             />
           </div>
 
@@ -127,7 +127,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 setFilters({ ...filters, symbol: e.target.value });
                 setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs focus:outline-none"
+              className="px-2.5 py-1.5 rounded border border-default bg-surface text-primary text-xs focus:outline-none"
             >
               <option value="ALL">All Symbols</option>
               <option value="EURUSD">EURUSD</option>
@@ -143,7 +143,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 setFilters({ ...filters, side: e.target.value as 'ALL' | 'LONG' | 'SHORT' });
                 setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs focus:outline-none"
+              className="px-2.5 py-1.5 rounded border border-default bg-surface text-primary text-xs focus:outline-none"
             >
               <option value="ALL">All Sides</option>
               <option value="LONG">Long</option>
@@ -157,7 +157,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 setFilters({ ...filters, status: e.target.value as 'ALL' | 'WIN' | 'LOSS' });
                 setCurrentPage(1);
               }}
-              className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs focus:outline-none"
+              className="px-2.5 py-1.5 rounded border border-default bg-surface text-primary text-xs focus:outline-none"
             >
               <option value="ALL">All Outcomes</option>
               <option value="WIN">Winners</option>
@@ -170,7 +170,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                   setFilters({ symbol: 'ALL', side: 'ALL', status: 'ALL', searchQuery: '' });
                   setCurrentPage(1);
                 }}
-                className="px-2 py-1.5 rounded text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="px-2 py-1.5 rounded text-[11px] text-muted hover:text-primary bg-surface-muted hover:bg-surface-hover transition-colors"
               >
                 Reset Filters
               </button>
@@ -179,13 +179,13 @@ export const TradesPage: React.FC<TradesPageProps> = ({
         </div>
 
         {/* Filter Summary Stats */}
-        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-mono-code text-slate-600 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-subtle text-xs font-mono-code text-secondary">
           <div>
-            Showing: <span className="font-semibold text-slate-900 dark:text-slate-100">{summaryStats.count}</span> of {trades.length} trades
+            Showing: <span className="font-semibold text-primary">{summaryStats.count}</span> of {trades.length} trades
           </div>
           <div>·</div>
           <div>
-            Filtered Win Rate: <span className="font-semibold text-slate-900 dark:text-slate-100">{summaryStats.winRate}%</span>
+            Filtered Win Rate: <span className="font-semibold text-primary">{summaryStats.winRate}%</span>
           </div>
           <div>·</div>
           <div>
@@ -195,21 +195,21 @@ export const TradesPage: React.FC<TradesPageProps> = ({
           </div>
           <div>·</div>
           <div>
-            Avg Expectancy: <span className="font-semibold text-slate-900 dark:text-slate-100">{summaryStats.avgR}R</span>
+            Avg Expectancy: <span className="font-semibold text-primary">{summaryStats.avgR}R</span>
           </div>
         </div>
       </div>
 
       {/* 2. Trades Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs space-y-3 transition-colors">
+      <div className="bg-surface rounded-lg border border-default p-4 shadow-xs space-y-3 transition-colors">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono-code">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px]">
-                <th className="pb-2 font-medium cursor-pointer hover:text-slate-900 dark:hover:text-slate-200" onClick={() => toggleSort('sequence')}>
+              <tr className="border-b border-default text-secondary text-[11px]">
+                <th className="pb-2 font-medium cursor-pointer hover:text-primary" onClick={() => toggleSort('sequence')}>
                   <div className="flex items-center gap-1">
                     <span># / ID</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                    <ArrowUpDown className="w-3 h-3 text-muted" />
                   </div>
                 </th>
                 <th className="pb-2 font-medium">Timestamp (UTC)</th>
@@ -217,16 +217,16 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 <th className="pb-2 font-medium">Direction</th>
                 <th className="pb-2 font-medium text-right">Entry</th>
                 <th className="pb-2 font-medium text-right">Exit</th>
-                <th className="pb-2 font-medium text-right cursor-pointer hover:text-slate-900 dark:hover:text-slate-200" onClick={() => toggleSort('durationBars')}>
+                <th className="pb-2 font-medium text-right cursor-pointer hover:text-primary" onClick={() => toggleSort('durationBars')}>
                   <div className="flex items-center justify-end gap-1">
                     <span>Bars</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                    <ArrowUpDown className="w-3 h-3 text-muted" />
                   </div>
                 </th>
-                <th className="pb-2 font-medium text-right cursor-pointer hover:text-slate-900 dark:hover:text-slate-200" onClick={() => toggleSort('pnlBps')}>
+                <th className="pb-2 font-medium text-right cursor-pointer hover:text-primary" onClick={() => toggleSort('pnlBps')}>
                   <div className="flex items-center justify-end gap-1">
                     <span>PnL (bps)</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                    <ArrowUpDown className="w-3 h-3 text-muted" />
                   </div>
                 </th>
                 <th className="pb-2 font-medium text-right">PnL ($)</th>
@@ -235,22 +235,22 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                 <th className="pb-2 font-medium text-right">Audit</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-border-subtle">
               {paginatedTrades.map((t) => (
                 <tr
                   key={t.id}
                   onClick={() => setSelectedTrade(t)}
                   className={`cursor-pointer transition-colors ${
                     selectedTrade?.id === t.id
-                      ? 'bg-slate-100/80 dark:bg-slate-800/80 font-medium'
-                      : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                      ? 'bg-surface-muted font-medium'
+                      : 'hover:bg-surface-muted/60'
                   }`}
                 >
-                  <td className="py-2.5 text-slate-900 dark:text-slate-200 font-semibold">{t.id}</td>
-                  <td className="py-2.5 text-slate-500 dark:text-slate-400 text-[11px]">
+                  <td className="py-2.5 text-primary font-semibold">{t.id}</td>
+                  <td className="py-2.5 text-muted text-[11px]">
                     {t.timestamp.slice(0, 16).replace('T', ' ')}
                   </td>
-                  <td className="py-2.5 text-slate-700 dark:text-slate-300">{t.symbol}</td>
+                  <td className="py-2.5 text-secondary">{t.symbol}</td>
                   <td className="py-2.5">
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -262,9 +262,9 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                       {t.side}
                     </span>
                   </td>
-                  <td className="py-2.5 text-right text-slate-600 dark:text-slate-400">{t.entryPrice.toFixed(4)}</td>
-                  <td className="py-2.5 text-right text-slate-600 dark:text-slate-400">{t.exitPrice.toFixed(4)}</td>
-                  <td className="py-2.5 text-right text-slate-500 dark:text-slate-400">{t.durationBars}</td>
+                  <td className="py-2.5 text-right text-secondary">{t.entryPrice.toFixed(4)}</td>
+                  <td className="py-2.5 text-right text-secondary">{t.exitPrice.toFixed(4)}</td>
+                  <td className="py-2.5 text-right text-muted">{t.durationBars}</td>
                   <td
                     className={`py-2.5 text-right font-medium ${
                       t.pnlBps >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'
@@ -295,7 +295,7 @@ export const TradesPage: React.FC<TradesPageProps> = ({
                         e.stopPropagation();
                         setSelectedTrade(t);
                       }}
-                      className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] bg-surface-muted hover:bg-surface-hover text-secondary border border-default transition-colors"
                     >
                       Inspect Chain
                     </button>
@@ -307,22 +307,22 @@ export const TradesPage: React.FC<TradesPageProps> = ({
         </div>
 
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs font-mono-code text-slate-600 dark:text-slate-400">
+        <div className="flex items-center justify-between pt-3 border-t border-subtle text-xs font-mono-code text-secondary">
           <div>
-            Page <span className="font-semibold text-slate-900 dark:text-slate-100">{currentPage}</span> of {totalPages}
+            Page <span className="font-semibold text-primary">{currentPage}</span> of {totalPages}
           </div>
           <div className="flex items-center space-x-1">
             <button
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300"
+              className="p-1 rounded border border-default hover:bg-surface-muted disabled:opacity-30 disabled:cursor-not-allowed text-secondary"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300"
+              className="p-1 rounded border border-default hover:bg-surface-muted disabled:opacity-30 disabled:cursor-not-allowed text-secondary"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -332,20 +332,20 @@ export const TradesPage: React.FC<TradesPageProps> = ({
 
       {/* 3. Trade Detail & Causal Evidence Chain Modal / Drawer */}
       {selectedTrade && (
-        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-300 dark:border-slate-700 p-5 shadow-md space-y-4 animate-in fade-in duration-100 transition-colors">
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="bg-surface rounded-lg border border-strong p-5 shadow-md space-y-4 animate-in fade-in duration-100 transition-colors">
+          <div className="flex items-center justify-between border-b border-subtle pb-3">
             <div className="flex items-center space-x-3">
-              <span className="font-mono-code font-bold text-sm text-slate-900 dark:text-slate-100">
+              <span className="font-mono-code font-bold text-sm text-primary">
                 Evidence Audit: {selectedTrade.id}
               </span>
-              <span className="text-xs font-mono-code px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="text-xs font-mono-code px-2 py-0.5 rounded bg-surface-muted text-secondary border border-default">
                 {selectedTrade.symbol} · {selectedTrade.side}
               </span>
               <StatusBadge status={selectedTrade.status === 'CLOSED_WIN' ? 'CLOSED_WIN' : 'CLOSED_LOSS'} />
             </div>
             <button
               onClick={() => setSelectedTrade(null)}
-              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="p-1 rounded text-muted hover:text-primary hover:bg-surface-muted"
             >
               <X className="w-4 h-4" />
             </button>
@@ -353,51 +353,51 @@ export const TradesPage: React.FC<TradesPageProps> = ({
 
           {/* 6-Stage Causal Evidence Flow for this trade */}
           <div>
-            <div className="text-xs font-mono-code font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
+            <div className="text-xs font-mono-code font-semibold text-secondary uppercase tracking-wider mb-3">
               Causal Evidence Chain (Signal → Fill → Portfolio)
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Stage A: Signal & Feature State */}
-              <div className="rounded border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-3 space-y-1.5 font-mono-code text-xs">
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+              <div className="rounded border border-subtle bg-surface-muted p-3 space-y-1.5 font-mono-code text-xs">
+                <div className="flex items-center justify-between text-muted text-[11px]">
                   <span>1. Signal Generation</span>
-                  <Sparkles className="w-3 h-3 text-slate-400" />
+                  <Sparkles className="w-3 h-3 text-muted" />
                 </div>
-                <div className="font-semibold text-slate-900 dark:text-slate-200">{selectedTrade.evidenceChain.signalId}</div>
-                <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                <div className="font-semibold text-primary">{selectedTrade.evidenceChain.signalId}</div>
+                <div className="text-[11px] text-secondary">
                   Value: <span className="font-semibold">{selectedTrade.evidenceChain.signalValue > 0 ? '+1.0' : '-1.0'}</span>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-500 truncate">
+                <div className="text-[11px] text-muted truncate">
                   Feature Hash: {selectedTrade.evidenceChain.featureHash.slice(0, 16)}...
                 </div>
               </div>
 
               {/* Stage B: Risk Gate & Order Intent */}
-              <div className="rounded border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-3 space-y-1.5 font-mono-code text-xs">
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+              <div className="rounded border border-subtle bg-surface-muted p-3 space-y-1.5 font-mono-code text-xs">
+                <div className="flex items-center justify-between text-muted text-[11px]">
                   <span>2. Risk Approval & Intent</span>
                   <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <div className="font-semibold text-slate-900 dark:text-slate-200">{selectedTrade.evidenceChain.orderIntentId}</div>
+                <div className="font-semibold text-primary">{selectedTrade.evidenceChain.orderIntentId}</div>
                 <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                   Verdict: {selectedTrade.evidenceChain.riskVerdict}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-500">
+                <div className="text-[11px] text-muted">
                   Approval ID: {selectedTrade.evidenceChain.riskDecisionId}
                 </div>
               </div>
 
               {/* Stage C: Fill Simulation & Portfolio Impact */}
-              <div className="rounded border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-3 space-y-1.5 font-mono-code text-xs">
-                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px]">
+              <div className="rounded border border-subtle bg-surface-muted p-3 space-y-1.5 font-mono-code text-xs">
+                <div className="flex items-center justify-between text-muted text-[11px]">
                   <span>3. Execution & Impact</span>
-                  <Layers className="w-3 h-3 text-slate-400" />
+                  <Layers className="w-3 h-3 text-muted" />
                 </div>
-                <div className="font-semibold text-slate-900 dark:text-slate-200">{selectedTrade.evidenceChain.simulatedFillId}</div>
-                <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                <div className="font-semibold text-primary">{selectedTrade.evidenceChain.simulatedFillId}</div>
+                <div className="text-[11px] text-secondary">
                   Slippage: <span className="font-semibold">{selectedTrade.evidenceChain.slippageDeductedBps} bps</span>
                 </div>
-                <div className="text-[11px] text-slate-700 dark:text-slate-300">
+                <div className="text-[11px] text-secondary">
                   Portfolio Impact: <span className={selectedTrade.pnlBps >= 0 ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-rose-700 dark:text-rose-400 font-semibold'}>
                     {selectedTrade.evidenceChain.portfolioImpactBps} bps
                   </span>
@@ -408,27 +408,27 @@ export const TradesPage: React.FC<TradesPageProps> = ({
 
           {/* Trade Execution Metrics Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 font-mono-code text-xs">
-            <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Entry Price</div>
-              <div className="font-semibold text-slate-900 dark:text-slate-200 text-sm mt-0.5">
+            <div className="p-2.5 rounded bg-surface-muted border border-subtle">
+              <div className="text-[11px] text-muted">Entry Price</div>
+              <div className="font-semibold text-primary text-sm mt-0.5">
                 {selectedTrade.entryPrice.toFixed(4)}
               </div>
             </div>
-            <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Exit Price</div>
-              <div className="font-semibold text-slate-900 dark:text-slate-200 text-sm mt-0.5">
+            <div className="p-2.5 rounded bg-surface-muted border border-subtle">
+              <div className="text-[11px] text-muted">Exit Price</div>
+              <div className="font-semibold text-primary text-sm mt-0.5">
                 {selectedTrade.exitPrice.toFixed(4)}
               </div>
             </div>
-            <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Net Realized PnL</div>
+            <div className="p-2.5 rounded bg-surface-muted border border-subtle">
+              <div className="text-[11px] text-muted">Net Realized PnL</div>
               <div className={`font-semibold text-sm mt-0.5 ${selectedTrade.pnlUsd >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
                 ${selectedTrade.pnlUsd.toLocaleString()} ({selectedTrade.pnlBps.toFixed(1)} bps)
               </div>
             </div>
-            <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Holding Duration</div>
-              <div className="font-semibold text-slate-900 dark:text-slate-200 text-sm mt-0.5">
+            <div className="p-2.5 rounded bg-surface-muted border border-subtle">
+              <div className="text-[11px] text-muted">Holding Duration</div>
+              <div className="font-semibold text-primary text-sm mt-0.5">
                 {selectedTrade.durationBars} H4 Bars ({(selectedTrade.durationBars * 4)}h)
               </div>
             </div>

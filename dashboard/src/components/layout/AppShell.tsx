@@ -33,7 +33,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   }, []);
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 antialiased selection:bg-slate-200 dark:selection:bg-slate-800">
+    <div className="min-h-screen w-full bg-app flex flex-col font-sans text-primary antialiased selection:bg-accent-subtle">
       {/* 1. Primary Header */}
       <Header
         metadata={researchRun.metadata}
@@ -54,7 +54,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         />
 
         {/* Dynamic Content Pane: Expands into all available width */}
-        <main className="flex-1 min-w-0 p-4 lg:p-6 overflow-x-hidden bg-slate-50 dark:bg-slate-950">
+        <main className="flex-1 min-w-0 p-4 lg:p-6 overflow-x-hidden bg-app">
           {children}
         </main>
       </div>

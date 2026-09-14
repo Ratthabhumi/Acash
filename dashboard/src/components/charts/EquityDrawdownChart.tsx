@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { EquityPoint } from '../../types/research';
-import { useTheme } from '../../context/ThemeContext';
 
 interface EquityDrawdownChartProps {
   data: EquityPoint[];
@@ -9,8 +8,6 @@ interface EquityDrawdownChartProps {
 type TimeframeOption = '1W' | '1M' | '3M' | 'ALL';
 
 export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
   const [activeTimeframe, setActiveTimeframe] = useState<TimeframeOption>('ALL');
   const [hoveredPoint, setHoveredPoint] = useState<EquityPoint | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
@@ -150,14 +147,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg border border-enterprise-border dark:border-slate-800 p-4 shadow-xs transition-colors">
+    <div className="bg-surface rounded-lg border border-default p-4 shadow-xs transition-colors">
       {/* Chart Controls Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-subtle mb-3">
         <div>
-          <h3 className="text-xs font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+          <h3 className="text-xs font-semibold text-primary tracking-tight">
             Portfolio Valuation & Drawdown Profile
           </h3>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-code mt-0.5">
+          <p className="text-[11px] text-secondary font-mono-code mt-0.5">
             Simulated Reference Notional ($100,000) · Mark-to-Market Valuation Profile
           </p>
         </div>
@@ -165,13 +162,13 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
         {/* Legend and Timeframe Filters */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Legend */}
-          <div className="flex items-center space-x-3 text-[11px] font-mono-code text-slate-600 dark:text-slate-400">
+          <div className="flex items-center space-x-3 text-[11px] font-mono-code text-secondary">
             <div className="flex items-center space-x-1.5">
-              <span className="w-2.5 h-0.5 bg-slate-900 dark:bg-slate-100 rounded-full" />
+              <span className="w-2.5 h-0.5 bg-primary rounded-full" />
               <span>Net Equity</span>
             </div>
             <div className="flex items-center space-x-1.5">
-              <span className="w-2.5 h-0.5 bg-slate-400 dark:bg-slate-500 stroke-dasharray rounded-full" />
+              <span className="w-2.5 h-0.5 bg-secondary stroke-dasharray rounded-full" />
               <span>Gross (Pre-Friction)</span>
             </div>
             <div className="flex items-center space-x-1.5">
@@ -181,15 +178,15 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           </div>
 
           {/* Timeframe Buttons */}
-          <div className="flex items-center rounded bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 text-xs font-mono-code">
+          <div className="flex items-center rounded bg-surface-muted p-0.5 border border-default text-xs font-mono-code">
             {(['1W', '1M', '3M', 'ALL'] as TimeframeOption[]).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setActiveTimeframe(tf)}
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                   activeTimeframe === tf
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    ? 'bg-surface text-primary shadow-xs'
+                    : 'text-secondary hover:text-primary'
                 }`}
               >
                 {tf}
@@ -209,8 +206,8 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
         >
           <defs>
             <linearGradient id="netEquityGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={isDark ? '#38bdf8' : '#0f172a'} stopOpacity={isDark ? 0.12 : 0.08} />
-              <stop offset="100%" stopColor={isDark ? '#38bdf8' : '#0f172a'} stopOpacity={0.0} />
+              <stop offset="0%" stopColor="var(--chart-net)" stopOpacity={0.08} />
+              <stop offset="100%" stopColor="var(--chart-net)" stopOpacity={0.0} />
             </linearGradient>
             <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.05" />
@@ -229,14 +226,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke={isDark ? '#1e293b' : '#f1f5f9'}
+                  stroke="var(--chart-grid)"
                   strokeWidth="1"
                 />
                 <text
                   x={padding.left - 8}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
+                  className="text-[10px] fill-[var(--chart-axis)] font-mono-code"
                 >
                   ${val.toLocaleString()}
                 </text>
@@ -251,16 +248,16 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           <path
             d={grossPath}
             fill="none"
-            stroke={isDark ? '#64748b' : '#94a3b8'}
+            stroke="var(--chart-gross)"
             strokeWidth="1.25"
             strokeDasharray="3 3"
           />
 
-          {/* Net Equity Line (High-contrast charcoal in light, crisp slate-50 in dark) */}
+          {/* Net Equity Line (primary ink — warm-neutral in both themes) */}
           <path
             d={netPath}
             fill="none"
-            stroke={isDark ? '#f8fafc' : '#0f172a'}
+            stroke="var(--chart-net)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -272,7 +269,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
             y1={padding.top + equityHeight + 20}
             x2={width - padding.right}
             y2={padding.top + equityHeight + 20}
-            stroke={isDark ? '#1e293b' : '#e2e8f0'}
+            stroke="var(--chart-divider)"
             strokeWidth="1"
           />
 
@@ -280,7 +277,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
           <text
             x={padding.left}
             y={padding.top + equityHeight + 30}
-            className="text-[10px] font-mono-code fill-slate-500 dark:fill-slate-400 font-medium"
+            className="text-[10px] font-mono-code fill-[var(--chart-axis)] font-medium"
           >
             Drawdown (%)
           </text>
@@ -296,14 +293,14 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                   y1={y}
                   x2={width - padding.right}
                   y2={y}
-                  stroke={isDark ? '#1e293b' : '#f8fafc'}
+                  stroke="var(--chart-grid)"
                   strokeWidth="1"
                 />
                 <text
                   x={padding.left - 8}
                   y={y + 3}
                   textAnchor="end"
-                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
+                  className="text-[10px] fill-[var(--chart-axis)] font-mono-code"
                 >
                   {val}%
                 </text>
@@ -335,7 +332,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                 x={x}
                 y={y}
                 textAnchor="middle"
-                className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono-code"
+                className="text-[10px] fill-[var(--chart-axis)] font-mono-code"
               >
                 {d.date.slice(5)}
               </text>
@@ -350,7 +347,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                 y1={padding.top}
                 x2={hoverX}
                 y2={padding.top + equityHeight + 35 + drawdownHeight}
-                stroke={isDark ? '#475569' : '#64748b'}
+                stroke="var(--chart-crosshair)"
                 strokeWidth="1"
                 strokeDasharray="2 2"
               />
@@ -360,8 +357,8 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                     cx={hoverX}
                     cy={getEquityY(hoveredPoint.netEquity)}
                     r="3.5"
-                    fill={isDark ? '#f8fafc' : '#0f172a'}
-                    stroke={isDark ? '#0f172a' : '#ffffff'}
+                    fill="var(--chart-net)"
+                    stroke="var(--chart-marker-edge)"
                     strokeWidth="1.5"
                   />
                   <circle
@@ -377,7 +374,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
                     }
                     r="3"
                     fill="#f43f5e"
-                    stroke={isDark ? '#0f172a' : '#ffffff'}
+                    stroke="var(--chart-marker-edge)"
                     strokeWidth="1.5"
                   />
                 </>
@@ -389,7 +386,7 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
         {/* Hover Tooltip Box */}
         {hoveredPoint && hoverX !== null && (
           <div
-            className="absolute top-4 pointer-events-none bg-slate-900/95 text-white border border-slate-700/80 rounded-md p-2.5 text-xs shadow-lg backdrop-blur-xs font-mono-code z-20 space-y-1"
+            className="absolute top-4 pointer-events-none bg-[var(--popover-bg)] text-[var(--popover-text)] border border-[var(--popover-border)] rounded-md p-2.5 text-xs shadow-lg backdrop-blur-xs font-mono-code z-20 space-y-1"
             style={{
               left: `${Math.min(
                 Math.max(10, (hoverX / width) * 100),
@@ -397,35 +394,35 @@ export const EquityDrawdownChart: React.FC<EquityDrawdownChartProps> = ({ data }
               )}%`,
             }}
           >
-            <div className="text-[10px] text-slate-400 border-b border-slate-800 pb-1 flex justify-between gap-4">
+            <div className="text-[10px] text-[var(--popover-text-muted)] border-b border-[var(--popover-border)] pb-1 flex justify-between gap-4">
               <span>Day {hoveredPoint.index}</span>
-              <span className="text-slate-300 font-semibold">{hoveredPoint.date}</span>
+              <span className="text-[var(--popover-text)] font-semibold">{hoveredPoint.date}</span>
             </div>
             <div className="flex justify-between gap-4 text-[11px]">
-              <span className="text-slate-400">Simulated Notional:</span>
+              <span className="text-[var(--popover-text-muted)]">Simulated Notional:</span>
               <span className="font-semibold text-emerald-400">
                 ${hoveredPoint.netEquity.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between gap-4 text-[11px]">
-              <span className="text-slate-400">Gross (Pre-Friction):</span>
-              <span className="text-slate-300">
+              <span className="text-[var(--popover-text-muted)]">Gross (Pre-Friction):</span>
+              <span className="text-[var(--popover-text)]">
                 ${hoveredPoint.grossEquity?.toLocaleString()}
               </span>
             </div>
             <div className="flex justify-between gap-4 text-[11px]">
-              <span className="text-slate-400">Drawdown:</span>
+              <span className="text-[var(--popover-text-muted)]">Drawdown:</span>
               <span
                 className={`font-semibold ${
-                  hoveredPoint.drawdownPct < 0 ? 'text-rose-400' : 'text-slate-300'
+                  hoveredPoint.drawdownPct < 0 ? 'text-rose-400' : 'text-[var(--popover-text)]'
                 }`}
               >
                 {hoveredPoint.drawdownPct.toFixed(2)}%
               </span>
             </div>
-            <div className="flex justify-between gap-4 text-[11px] pt-1 border-t border-slate-800/80 text-[10px]">
-              <span className="text-slate-400">Simulated Fills:</span>
-              <span className="text-slate-200">{hoveredPoint.tradeCount}</span>
+            <div className="flex justify-between gap-4 text-[11px] pt-1 border-t border-[var(--popover-border)] text-[10px]">
+              <span className="text-[var(--popover-text-muted)]">Simulated Fills:</span>
+              <span className="text-[var(--popover-text)]">{hoveredPoint.tradeCount}</span>
             </div>
           </div>
         )}

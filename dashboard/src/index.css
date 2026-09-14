@@ -3,25 +3,130 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    background-color: #f8fafc;
-    color: #0f172a;
+  :root {
+    color-scheme: light;
+
+    /* ACASH Warm Neutral Standard — canonical palette (verbatim) */
+    --bg-app: #F5F3EE;
+    --bg-surface: #FBFAF7;
+    --bg-surface-muted: #EFEDE7;
+    --border-default: #D8D3C8;
+    --text-primary: #171613;
+    --text-secondary: #6F6B61;
+    --text-muted: #9A958A;
+    --accent: #78836B;
+    --accent-hover: #6A755E;
+    --accent-subtle: #E5E8DF;
+
+    /* RGB triplets so Tailwind alpha modifiers resolve against the tokens */
+    --bg-app-rgb: 245 243 238;
+    --bg-surface-rgb: 251 250 247;
+    --bg-surface-muted-rgb: 239 237 231;
+    --border-default-rgb: 216 211 200;
+    --text-primary-rgb: 23 22 19;
+    --text-secondary-rgb: 111 107 97;
+    --text-muted-rgb: 154 149 138;
+    --accent-rgb: 120 131 107;
+    --accent-hover-rgb: 106 117 94;
+    --accent-subtle-rgb: 229 232 223;
+
+    /* Derived structural tokens (warm family) */
+    --bg-surface-hover: #E7E3D9;
+    --bg-surface-hover-rgb: 231 227 217;
+    --border-subtle: #E3E0D7;
+    --border-subtle-rgb: 227 224 215;
+    --border-strong: #C6C0B2;
+    --border-strong-rgb: 198 192 178;
+    --scrim-rgb: 23 22 19;
+
+    /* Popover / tooltip (kept dark in both themes for readability) */
+    --popover-bg: #26241E;
+    --popover-border: #4A463C;
+    --popover-text: #F5F3EE;
+    --popover-text-muted: #A9A398;
+
+    /* Code blocks (kept dark in both themes) */
+    --code-bg: #171613;
+    --code-text: #EFEBE1;
+    --code-border: #3A3831;
+
+    /* Chart tokens (derived from canonical text/border tokens) */
+    --chart-grid: #E3E0D7;
+    --chart-gross: #9A958A;
+    --chart-net: #171613;
+    --chart-divider: #D8D3C8;
+    --chart-crosshair: #6F6B61;
+    --chart-axis: #6F6B61;
+    --chart-marker-edge: #FBFAF7;
   }
-  html.dark {
+
+  .dark {
     color-scheme: dark;
-    background-color: #020617;
-    color: #f8fafc;
+
+    /* ACASH Warm Neutral Standard — canonical dark palette (verbatim) */
+    --bg-app: #141412;
+    --bg-surface: #1C1B19;
+    --bg-surface-muted: #24231F;
+    --border-default: #393731;
+    --text-primary: #F5F3EE;
+    --text-secondary: #B6B1A7;
+    --text-muted: #817D74;
+    --accent: #8F9B7F;
+    --accent-hover: #A1AC92;
+    --accent-subtle: #2A2F26;
+
+    /* RGB triplets (dark) */
+    --bg-app-rgb: 20 20 18;
+    --bg-surface-rgb: 28 27 25;
+    --bg-surface-muted-rgb: 36 35 31;
+    --border-default-rgb: 57 55 49;
+    --text-primary-rgb: 245 243 238;
+    --text-secondary-rgb: 182 177 167;
+    --text-muted-rgb: 129 125 116;
+    --accent-rgb: 143 155 127;
+    --accent-hover-rgb: 161 172 146;
+    --accent-subtle-rgb: 42 47 38;
+
+    /* Derived structural tokens (warm family) */
+    --bg-surface-hover: #2C2A25;
+    --bg-surface-hover-rgb: 44 42 37;
+    --border-subtle: #2E2C27;
+    --border-subtle-rgb: 46 44 39;
+    --border-strong: #4A473F;
+    --border-strong-rgb: 74 71 63;
+    --scrim-rgb: 5 5 4;
+
+    /* Popover / tooltip */
+    --popover-bg: #2A2924;
+    --popover-border: #4A463C;
+    --popover-text: #F5F3EE;
+    --popover-text-muted: #A9A398;
+
+    /* Code blocks */
+    --code-bg: #0E0E0C;
+    --code-text: #D6D2C7;
+    --code-border: #2C2A25;
+
+    /* Chart tokens (derived) */
+    --chart-grid: #2E2C27;
+    --chart-gross: #5D5950;
+    --chart-net: #F5F3EE;
+    --chart-divider: #393731;
+    --chart-crosshair: #5D5950;
+    --chart-axis: #B6B1A7;
+    --chart-marker-edge: #141412;
+  }
+
+  html {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
   }
   body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: -0.011em;
     min-height: 100vh;
-  }
-  html.dark body {
-    background-color: #020617;
-    color: #f8fafc;
   }
   #root {
     min-height: 100vh;
@@ -29,35 +134,23 @@
   }
 }
 
-/* Custom subtle scrollbar for enterprise data density */
+/* Custom subtle scrollbar for enterprise data density — theme-driven warm tokens */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-.dark ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: var(--bg-surface-muted);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-strong);
   border-radius: 3px;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
-}
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--text-muted);
 }
 
 /* Monospace font utility for cryptographic hashes and IDs */

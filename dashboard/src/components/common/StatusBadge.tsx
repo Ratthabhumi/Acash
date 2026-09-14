@@ -13,7 +13,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 }) => {
   const norm = status.toUpperCase().replace(/\s+/g, '_');
 
-  let bgClass = 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+  let bgClass = 'bg-surface-muted text-secondary border-default';
 
   if (norm === 'NOT_AUTHORIZED' || norm === 'FAIL' || norm === 'CLOSED_LOSS' || norm === 'REJECTED') {
     bgClass = 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800/60';
@@ -24,7 +24,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   } else if (norm === 'DEMO' || norm === 'DEMO_DATA' || norm === 'INFO') {
     bgClass = 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800/60';
   } else if (norm === 'NOT_EVALUATED' || norm === 'NOT_APPLICABLE') {
-    bgClass = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700';
+    bgClass = 'bg-surface-muted text-secondary border-strong';
   }
 
   const sizeClass = size === 'sm' ? 'text-[11px] px-2 py-0.5' : 'text-xs px-2.5 py-1';

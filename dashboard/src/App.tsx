@@ -33,7 +33,7 @@ export const App: React.FC = () => {
 
   if (loading || !researchRun) {
     return (
-      <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen w-full bg-app">
         <div className="p-8 flex flex-col space-y-4 max-w-6xl mx-auto">
           <SkeletonLoader className="h-10 w-full" />
           <SkeletonLoader className="h-16 w-full" />
