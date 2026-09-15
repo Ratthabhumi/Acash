@@ -84,16 +84,16 @@ earlier suites remain continuously green.
 
 | Test file | Coverage | Status |
 |---|---|---|
-| `tests/unit/paper/test_feed_recovery.py` | Episode lifecycle, reconnect boundary validation, zero orders/signals during recovery, portfolio preservation, journal ordering under one episode correlation id, operator stop during recovery, resume boundary, **exact backoff schedule (journal == actual sleep, no terminal sleep), deterministic bounded bar-wait timeout (fake clock), wall-clock-bounded wait, operator stop mid-wait, FeedContractError bypass, config validation** | 29 passed |
+| `tests/unit/paper/test_feed_recovery.py` | Episode lifecycle, reconnect boundary validation, zero orders/signals during recovery, portfolio preservation, journal ordering under one episode correlation id, operator stop during recovery, resume boundary, **exact backoff schedule (journal == actual sleep, no terminal sleep), deterministic bounded bar-wait timeout (fake clock), wall-clock-bounded wait, operator stop mid-wait, FeedContractError bypass, config validation, non-finite (NaN/+Inf/-Inf) config rejection** | 32 passed |
 | `tests/unit/paper/test_dynamic_candidate_add.py` | Stage/materialize semantics, rejection matrix, batch cohort identity, catalog instance freshness, adversarial double-stage, fail-closed null-builder materialize | 15 passed |
 | `tests/unit/paper/test_safe_sizing.py` | FIXED vs NAV sizing spread, config hashing, dead-config rejection, SESSION_STARTED sizing seal, CLI policy override | 17 passed |
-| `tests/unit/paper/test_v2_cli_options.py` | CLI flag parsing and validation boundaries, **recovery default OFF / positive opt-in flag / removed inverted flag, strict max-attempts & bar-wait & poll-interval validators, auto-mount BooleanOptional default True / explicit True / --no-auto-mount False** | 32 passed |
+| `tests/unit/paper/test_v2_cli_options.py` | CLI flag parsing and validation boundaries, **recovery default OFF / positive opt-in flag / removed inverted flag, strict max-attempts & bar-wait & poll-interval validators, non-finite (NaN/+Inf/-Inf) rejection, auto-mount BooleanOptional default True / explicit True / --no-auto-mount False** | 36 passed |
 
 ### 5.2 Full-repository evidence (this branch tip)
 
 | Check | Result |
 |---|---|
-| `uv run pytest tests/` | **2377 passed / 12 skipped** (0 failures) |
+| `uv run pytest tests/` | **2384 passed / 12 skipped** (0 failures) |
 | `uv run mypy src/ tests/` | **Success — no issues in 423 source files** |
 | `git diff --check` | clean |
 | Dashboard `npm run typecheck` | clean |
@@ -157,7 +157,7 @@ performed in this pass.**
 - Implementation Status: COMPLETE (design commit set + V2 follow-up commit set + final recovery hardening)
 - Contract Enforcement: STRICT FAIL-CLOSED
 - Mathematical Authority: N/A (config/observability changes; accounting contract tests)
-- Local Test Suite: VERIFIED (2377 passed / 12 skipped — full `uv run pytest tests/`)
+- Local Test Suite: VERIFIED (2384 passed / 12 skipped — full `uv run pytest tests/`)
 - Type Checker (MyPy): VERIFIED (423 source files clean, `uv run mypy src/ tests/`)
 - Remote CI Status: NOT AVAILABLE
 - Methodological Caveats:
