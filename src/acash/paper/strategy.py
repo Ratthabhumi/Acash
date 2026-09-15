@@ -409,3 +409,29 @@ def get_infrastructure_candidate(
         strategy_id=spec.strategy_id,
         strategy_version=spec.strategy_version,
     )
+
+
+def get_infrastructure_candidate_by_strategy_id(
+    strategy_id: str,
+    symbol: str = "BTCUSDT",
+    config_hash: str = "0" * 64,
+) -> Optional[InfrastructureTestStrategy]:
+    """Resolve a catalog candidate by its strategy_id (reverse lookup).
+
+    Single authority for dynamic candidate re-construction: an operator-referenced
+    strategy_id is admitted ONLY when it resolves to a catalog spec — the approved
+    INFRASTRUCTURE_TEST catalog is the sole admission source. Returns None when the
+    id is unknown (fail-closed: no fabrication of candidate identities).
+    """
+    for spec in INFRASTRUCTURE_CANDIDATES_10SLOT.values():
+        if spec.strategy_id == strategy_id:
+            return InfrastructureTestStrategy(
+                fast_period=spec.fast_period,
+                slow_period=spec.slow_period,
+                trade_quantity=spec.trade_quantity,
+                symbol=symbol,
+                config_hash=config_hash,
+                strategy_id=spec.strategy_id,
+                strategy_version=spec.strategy_version,
+            )
+    return None
