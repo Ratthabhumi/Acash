@@ -23,11 +23,11 @@
 | Active branch | `feat/tournament-v2-risk-remediation-10slot` |
 | Branch base | `main @ 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` (origin/main verified) |
 | Base message | `docs: refresh canonical session handoff and archive E3.6 checkpoint` |
-| Branch tip | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` (8 commits ahead of main) |
+| Branch tip | `df1bafa` (12 commits ahead of main) — V2 follow-up implemented, pushed, NOT merged |
 | Branch state | PUSHED to `origin/feat/tournament-v2-risk-remediation-10slot` — NOT merged |
 
 **FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` re-verified on 2026-09-15
-after the V2 work completed (see §4.5). Branch remains 8 commits ahead of main.
+after the V2 work completed (see §4.5). Branch remains 12 commits ahead of main.
 
 **ACTIVE BRANCH COMMITS (EVIDENCE — full SHAs):**
 
@@ -41,6 +41,13 @@ after the V2 work completed (see §4.5). Branch remains 8 commits ahead of main.
 | 6 | `139ac62c18fa95621f5685d8a131650b0fff2d40` | feat: dashboard V2 contract, granular states, `SHADOW_RUNTIME` data source |
 | 7 | `56160de912d9f49e7e56bad70a46d216b883f1dc` | test: 10-slot layout state isolation |
 | 8 | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` | docs: V2 10-slot design + validation evidence |
+| 9 | `706168c` | feat(paper): journal event kinds + re-entrant lock integrity + feed-health recovery metrics |
+| 10 | `48aeeec` | feat(paper): transient feed recovery + staged dynamic candidate admission + safe NAV sizing |
+| 11 | `d86eca5` | test(paper): recovery, dynamic candidate admission, and safe sizing suites (69 tests) |
+| 12 | `3aea870` | feat(dashboard): FEED_RECOVERING seat, cohort provenance, null-rank leaderboard |
+| 13 | `df1bafa` | docs(tournament): record recovery / dynamic admission / safe sizing design + evidence |
+
+> A follow-up docs commit (SESSION_HANDOFF refresh) completes the commit set.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -164,17 +171,30 @@ Artifacts on Host: `/data/docker/acash/tournament/`.
 
 | Item | Value |
 |---|---|
-| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `3787cd0` |
+| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `df1bafa` |
 | Defects addressed | A (`MAX_NOTIONAL`), B (funding policy), C (kill-switch policy), D (execution states), E (terminal reason) |
 | V2 readiness | N-slot fanout A..Z (1–26), 10-slot INFRA_TEST catalog, 10-slot isolation proven |
-| Local test suite | **2295 passed / 1 skipped** (full `uv run pytest tests/`) |
-| MyPy | **418 source files clean** (`uv run mypy src/ tests/`) |
-| Dashboard | `npm run typecheck` clean; node contract tests **25/25** |
+| V2 follow-up | transient feed recovery seat (FEED_RECOVERING), staged dynamic candidate admission (SIGHUP / candidate-add file), safe NAV-relative sizing (10% cap), journal re-entrant lock fix |
+| Local test suite | **2353 passed / 12 skipped** (full `uv run pytest tests/`) |
+| MyPy | **423 source files clean** (`uv run mypy src/ tests/`) |
+| Dashboard | `npm run typecheck` clean; node contract tests **27/27**; production build clean |
 | Deployment state | NOT deployed — no image built, no container restarted, no Pi change |
 | Paper/Live | NOT AUTHORIZED |
 
 **Design/validation records:** `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md` and
 `docs/tournament/TOURNAMENT_V2_VALIDATION.md`.
+
+### 4.6 V2 Follow-up Session Summary (EVIDENCE)
+
+Controlled transient feed recovery (shadow only — auto-reconnect remains
+structurally DISABLED, operator resume REQUIRED after exhaustion), staged
+dynamic admission of INFRA_TEST candidates with cohort provenance and
+null-rank single-member cohorts, and NAV-relative sizing bounded to 10% of
+virtual equity. During a recovery episode the slot emits **zero** new simulated
+orders/signals; a failed recovery halts with `FEED_RECOVERY_FAILED` (causal
+reason preserved) and exit code 5. New suites: `test_feed_recovery.py` (18),
+`test_dynamic_candidate_add.py` (15), `test_safe_sizing.py` (17),
+`test_v2_cli_options.py` (19).
 
 **PENDING HUMAN DECISION (D1–D5)** — the branch implements *policies*, it does **not** choose
 them. See §11 step 3.
@@ -462,8 +482,8 @@ Also re-verify: container status (H01 Attempt 1 = EXITED EXIT=2), journal path/s
 **NEXT ACTION — Step 2: V2 remediation is COMPLETE — verify evidence artifacts**
 - Design: `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md`
 - Validation: `docs/tournament/TOURNAMENT_V2_VALIDATION.md`
-- Branch tip `3787cd06fff7423b2e6f4e8efd93051c52d6d808` pushed to origin (NOT merged)
-- Full local evidence: 2295 passed / 1 skipped; mypy 418 files clean; dashboard 25/25
+- Branch tip `df1bafa` pushed to origin (NOT merged)
+- Full local evidence: 2353 passed / 12 skipped; mypy 423 files clean; dashboard 27/27
 
 **NEXT ACTION — Step 3: Obtain HUMAN DECISIONS (D1–D5) before any deployment/run**
 
@@ -508,13 +528,14 @@ Stop and report to the human before proceeding past these boundaries:
 ## 13. Verification Ledger
 
 ```
-Implementation Status:    COMPLETE — V2 remediation delivered on feat/tournament-v2-risk-remediation-10slot
-                           (8 commits, tip 3787cd0, pushed; NOT merged)
+Implementation Status:    COMPLETE — V2 remediation + V2 follow-up delivered on
+                           feat/tournament-v2-risk-remediation-10slot
+                           (13 commits, tip df1bafa, pushed; NOT merged)
 Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
-Mathematical Authority:   N/A (config/observability changes; accounting contract tests)
-Local Test Suite:         VERIFIED (2295 passed / 1 skipped — full `uv run pytest tests/`)
-Type Checker (MyPy):      VERIFIED (418 source files clean)
-Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 25/25)
+Mathematical Authority:   N/A (config/observability + nominal sizing arithmetic)
+Local Test Suite:         VERIFIED (2353 passed / 12 skipped — full `uv run pytest tests/`)
+Type Checker (MyPy):      VERIFIED (423 source files clean — `uv run mypy src/ tests/`)
+Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 27/27; build clean)
 Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
   - Policies are AVAILABLE, not CHOSEN; defaults preserve H01 evidence semantics (D1/D2 pending)
@@ -522,6 +543,8 @@ Methodological Caveats:
   - No deployment, no image build, no container run on Pi from this branch
   - D4 (V2 Homelab resource limits) TEST REQUIRED before any V2 run claim
   - D5 (V2 runtime authorization) NOT granted by this branch
+  - Transient feed recovery is a SHADOW seat only; auto-reconnect structurally DISABLED;
+    exhaustion preserves causal reason and requires operator resume
 ```
 
 ---
@@ -533,15 +556,18 @@ ACASH QUICK START — 2026-09-15 Handoff
 =======================================
 1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
 2. Active work branch: feat/tournament-v2-risk-remediation-10slot
-   (base = main @ 9a58ced; tip 3787cd0; 8 commits; PUSHED, NOT merged)
+   (base = main @ 9a58ced; tip df1bafa; 13 commits; PUSHED, NOT merged)
 3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence archived (docs/tournament/)
 4. V2 REMEDIATION COMPLETE: A (MAX_NOTIONAL), B (funding), C (kill-switch), D (states), E (reason)
 5. V2 READINESS: N-slot fanout A..Z, 10-slot INFRA_TEST catalog, --num-slots,
    --auto-mount-infra-candidates, dashboard V2 contract (SHADOW_RUNTIME)
-6. VERIFICATION: pytest 2295 passed / 1 skipped; mypy 418 files; dashboard 25/25
-7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
-8. PENDING: HUMAN DECISION PACKET D1 (funding) / D2 (kill-switch) / D3 (sizing) /
+6. V2 FOLLOW-UP COMPLETE: transient feed recovery (FEED_RECOVERING, opt-in, fail-closed),
+   staged dynamic candidate admission (SIGHUP / --candidate-add-file), safe NAV sizing (10%),
+   journal re-entrant lock fix
+7. VERIFICATION: pytest 2353 passed / 12 skipped; mypy 423 files; dashboard 27/27 + build
+8. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+9. PENDING: HUMAN DECISION PACKET D1 (funding) / D2 (kill-switch) / D3 (sizing) /
    D4 (Homelab resource-limit TEST REQUIRED) / D5 (NO runtime authorization granted)
-9. DO NOT merge branch, DO NOT build/deploy images, DO NOT restart H01 / start H02
-10. NO run of 24h continuity has been performed on this branch
+10. DO NOT merge branch, DO NOT build/deploy images, DO NOT restart H01 / start H02
+11. NO run of 24h continuity has been performed on this branch
 ```
