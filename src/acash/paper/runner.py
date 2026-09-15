@@ -38,7 +38,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 from enum import Enum
@@ -118,6 +118,27 @@ class KillSwitchPositionPolicy(str, Enum):
     HALT_AND_REQUIRE_OPERATOR_RESOLUTION = "HALT_AND_REQUIRE_OPERATOR_RESOLUTION"
 
 
+class SignalSizingPolicy(str, Enum):
+    """Deterministic policy for deriving the executed quantity from a signal.
+
+    - INFRA_FIXED_QUANTITY: (default, H01-bit-preserving) the strategy's fixed
+      trade_quantity is executed verbatim. Preserves the canonical Slot A regime
+      (1.0 / 1.5 BTC fixed quantities) so historical replay stays bit-compatible.
+    - NAV_RELATIVE_PERCENT: the execution quantity is derived from virtual NAV:
+          target_notional = max(0, equity) * nav_sizing_notional_pct / 100
+          qty = target_notional / reference_price  (ROUND_DOWN, 8dp)
+      This bounds virtual exposure of small-NAV slots. A derived quantity <= 0
+      is REJECTED by the risk gate (fail-closed, no zero/negative orders).
+    """
+
+    INFRA_FIXED_QUANTITY = "INFRA_FIXED_QUANTITY"
+    NAV_RELATIVE_PERCENT = "NAV_RELATIVE_PERCENT"
+
+
+# V2 safe-sizing default: 10% of virtual NAV per executed order notional.
+SAFE_V2_NAV_SIZING_PCT = Decimal("10.0")
+
+
 # ---------------------------------------------------------------------------
 # PaperSessionConfig
 # ---------------------------------------------------------------------------
@@ -154,6 +175,8 @@ class PaperSessionConfig:
     portfolio_funding_policy: PortfolioFundingPolicy = PortfolioFundingPolicy.SIMULATED_LEVERAGED
     max_debt_limit_usd: Decimal = Decimal("0")
     kill_switch_position_policy: KillSwitchPositionPolicy = KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION
+    signal_sizing_policy: SignalSizingPolicy = SignalSizingPolicy.INFRA_FIXED_QUANTITY
+    nav_sizing_notional_pct: Decimal = Decimal("0")
 
     def _validate(self) -> None:
         """Fail-fast config validation for the V2 policy seams."""
@@ -166,6 +189,23 @@ class PaperSessionConfig:
         if self.max_debt_limit_usd < Decimal("0"):
             raise DataContractError(
                 f"PaperSessionConfig: max_debt_limit_usd must be >= 0, got {self.max_debt_limit_usd}"
+            )
+        if (
+            self.signal_sizing_policy == SignalSizingPolicy.NAV_RELATIVE_PERCENT
+            and not (Decimal("0") < self.nav_sizing_notional_pct <= Decimal("100"))
+        ):
+            raise DataContractError(
+                f"PaperSessionConfig: NAV_RELATIVE_PERCENT requires "
+                f"0 < nav_sizing_notional_pct <= 100, got {self.nav_sizing_notional_pct}"
+            )
+        if (
+            self.signal_sizing_policy == SignalSizingPolicy.INFRA_FIXED_QUANTITY
+            and self.nav_sizing_notional_pct != Decimal("0")
+        ):
+            raise DataContractError(
+                f"PaperSessionConfig: INFRA_FIXED_QUANTITY requires "
+                f"nav_sizing_notional_pct == 0 (no dead sizing config), "
+                f"got {self.nav_sizing_notional_pct}"
             )
 
     def __post_init__(self) -> None:
@@ -193,6 +233,16 @@ class PaperSessionConfig:
         }
         if self.max_debt_limit_usd != Decimal("0"):
             canonical["max_debt_limit_usd"] = str(self.max_debt_limit_usd)
+        if (
+            self.signal_sizing_policy
+            != SignalSizingPolicy.INFRA_FIXED_QUANTITY
+        ):
+            canonical["signal_sizing_policy"] = self.signal_sizing_policy.value
+        if (
+            self.signal_sizing_policy
+            == SignalSizingPolicy.NAV_RELATIVE_PERCENT
+        ):
+            canonical["nav_sizing_notional_pct"] = str(self.nav_sizing_notional_pct)
         if self.max_market_data_age_ms is not None:
             canonical["max_market_data_age_ms"] = self.max_market_data_age_ms
         canonical_bytes = CanonicalConfigSerializer.to_canonical_json(
@@ -439,9 +489,25 @@ class PaperSessionRunner:
                 "config_hash": self._config_hash,
                 "git_commit": self._config.git_commit,
                 "GOVERNANCE": "PAPER_ONLY_NO_REAL_ORDERS",
+                **self._sizing_metadata(),
             },
         )
         return event_id
+
+    def _sizing_metadata(self) -> Dict[str, str]:
+        """Sizing seal for SESSION_STARTED when a non-default policy is active.
+
+        Kept empty for the canonical INFRA_FIXED default so legacy session
+        payloads stay byte-identical (H01 replay compatibility).
+        """
+        if self._config.signal_sizing_policy == SignalSizingPolicy.INFRA_FIXED_QUANTITY:
+            return {}
+        meta: Dict[str, str] = {
+            "signal_sizing_policy": self._config.signal_sizing_policy.value,
+        }
+        if self._config.signal_sizing_policy == SignalSizingPolicy.NAV_RELATIVE_PERCENT:
+            meta["nav_sizing_notional_pct"] = str(self._config.nav_sizing_notional_pct)
+        return meta
 
     def stop(
         self,
@@ -864,9 +930,21 @@ class PaperSessionRunner:
         if signal.direction == SignalDirection.FLAT:
             return correlation_id
 
+        # --- Layer 3.5: SIZING (V2 safe-sizing seam) ---
+        # Derive the executed quantity from the configured policy. The returned
+        # execution signal is the single authority downstream
+        # (risk -> order -> fill -> portfolio).
+        exec_signal, sizing_meta = self._apply_signal_sizing(
+            signal, reference_price=bar.close
+        )
+
         # --- Layer 4: RISK ---
         risk_approved, risk_reason, risk_event_id = self._evaluate_risk(
-            signal, correlation_id, signal_event_id, reference_price=bar.close
+            exec_signal,
+            correlation_id,
+            signal_event_id,
+            reference_price=bar.close,
+            sizing_meta=sizing_meta,
         )
 
         if not risk_approved:
@@ -899,20 +977,20 @@ class PaperSessionRunner:
             component=self.COMPONENT,
             payload={
                 "order_intent_id": intent_id,
-                "symbol": signal.symbol,
-                "side": signal.direction.value,
-                "quantity": str(signal.target_quantity),
+                "symbol": exec_signal.symbol,
+                "side": exec_signal.direction.value,
+                "quantity": str(exec_signal.target_quantity),
                 "order_type": "MARKET",
-                "strategy_id": signal.strategy_id,
+                "strategy_id": exec_signal.strategy_id,
                 "GOVERNANCE_LABEL": "SIMULATED_ORDER",
             },
         ).event_id
 
         # --- Layer 6: EXECUTION (simulated fill) ---
-        fill_price = self._compute_fill_price(bar, signal)
+        fill_price = self._compute_fill_price(bar, exec_signal)
         slippage_bps = self._config.fill_slippage_bps
-        commission = signal.target_quantity * self._config.fill_commission_per_unit
-        notional = fill_price * signal.target_quantity
+        commission = exec_signal.target_quantity * self._config.fill_commission_per_unit
+        notional = fill_price * exec_signal.target_quantity
 
         fill_id = str(uuid.uuid4())
         fill_event_id = self._journal.append(
@@ -925,9 +1003,9 @@ class PaperSessionRunner:
             payload={
                 "fill_id": fill_id,
                 "order_intent_id": intent_id,
-                "symbol": signal.symbol,
-                "side": signal.direction.value,
-                "quantity": str(signal.target_quantity),
+                "symbol": exec_signal.symbol,
+                "side": exec_signal.direction.value,
+                "quantity": str(exec_signal.target_quantity),
                 "fill_price": str(fill_price),
                 "reference_price": str(bar.close),
                 "slippage_bps": str(slippage_bps),
@@ -939,7 +1017,7 @@ class PaperSessionRunner:
         ).event_id
 
         # --- Layer 7: PORTFOLIO ---
-        self._update_portfolio(signal, fill_price, commission, bar.timestamp_utc, correlation_id, fill_event_id)
+        self._update_portfolio(exec_signal, fill_price, commission, bar.timestamp_utc, correlation_id, fill_event_id)
 
         return correlation_id
 
@@ -1038,6 +1116,7 @@ class PaperSessionRunner:
         causation_id: str,
         *,
         reference_price: Optional[Decimal] = None,
+        sizing_meta: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, str, str]:
         """Inline risk check. Returns (approved: bool, reason: str, event_id: str).
 
@@ -1046,6 +1125,9 @@ class PaperSessionRunner:
         - MAX_NOTIONAL: |new_position| * reference_price <= max_notional
           (cumulative exposure bound, enforced when a valid reference price is
           available; missing reference price is a contract violation)
+        - SIZING: a non-FLAT execution quantity <= 0 is rejected (fail-closed,
+          no zero/negative orders can ever be emitted)
+        - FUNDING_POLICY: projected cash gate per portfolio_funding_policy
         - MAX_DAILY_LOSS: triggers the kill switch at the daily loss threshold
         """
         new_position = self._portfolio.position
@@ -1055,6 +1137,14 @@ class PaperSessionRunner:
             new_position -= signal.target_quantity
 
         violations: List[str] = []
+
+        # Sizing guard (fail-closed): a sized execution quantity <= 0 is never
+        # allowed to reach the order layer.
+        if signal.direction != SignalDirection.FLAT and signal.target_quantity <= Decimal("0"):
+            violations.append(
+                f"SIZING: execution quantity {signal.target_quantity} <= 0 "
+                "(fail-closed, no zero-size orders)"
+            )
 
         # Max position check
         if abs(new_position) > self._config.max_position_units:
@@ -1146,6 +1236,8 @@ class PaperSessionRunner:
                 "risk_model_version": self._config.risk_model_version,
                 "portfolio_funding_policy": self._config.portfolio_funding_policy.value,
                 "kill_switch_position_policy": self._config.kill_switch_position_policy.value,
+                "signal_sizing_policy": self._config.signal_sizing_policy.value,
+                **(sizing_meta or {}),
             },
         )
         risk_event_id = ev.event_id
@@ -1305,6 +1397,61 @@ class PaperSessionRunner:
             correlation_id,
             fill_event_id,
         )
+
+    def _apply_signal_sizing(
+        self,
+        signal: StrategySignal,
+        reference_price: Decimal,
+    ) -> Tuple[StrategySignal, Dict[str, Any]]:
+        """Derive the executed quantity from the configured sizing policy.
+
+        Returns ``(execution_signal, sizing_meta)``. The execution signal
+        carries the sized ``target_quantity`` and is the single authority
+        downstream (risk -> order -> fill -> portfolio). Sizing never applies to
+        FLAT signals (they carry quantity 0 by construction).
+
+        Fail-closed: an invalid reference price (<= 0) or non-positive equity
+        raises DataContractError — a NAV-relative quantity can never be derived
+        from a fabricated price/equity baseline.
+        """
+        if (
+            signal.direction == SignalDirection.FLAT
+            or self._config.signal_sizing_policy
+            == SignalSizingPolicy.INFRA_FIXED_QUANTITY
+        ):
+            return signal, {
+                "signal_sizing_policy": self._config.signal_sizing_policy.value,
+                "sizing_input_quantity": str(signal.target_quantity),
+                "sizing_output_quantity": str(signal.target_quantity),
+            }
+
+        if reference_price <= Decimal("0"):
+            raise DataContractError(
+                f"PaperSessionRunner: cannot size NAV_RELATIVE order with "
+                f"reference_price <= 0 (got {reference_price}). Fail-closed."
+            )
+
+        equity = self._portfolio.cash + (self._portfolio.position * reference_price)
+        if equity <= Decimal("0"):
+            raise DataContractError(
+                f"PaperSessionRunner: cannot size NAV_RELATIVE order with "
+                f"equity <= 0 (got {equity}). Fail-closed."
+            )
+
+        pct = self._config.nav_sizing_notional_pct
+        target_notional = equity * pct / Decimal("100")
+        raw_qty = target_notional / reference_price
+        qty = raw_qty.quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
+
+        exec_signal = replace(signal, target_quantity=qty)
+        return exec_signal, {
+            "signal_sizing_policy": self._config.signal_sizing_policy.value,
+            "nav_sizing_notional_pct": str(pct),
+            "sizing_reference_equity": str(equity),
+            "sizing_target_notional": str(target_notional),
+            "sizing_input_quantity": str(signal.target_quantity),
+            "sizing_output_quantity": str(qty),
+        }
 
     def _compute_fill_price(self, bar: SyntheticBar, signal: StrategySignal) -> Decimal:
         """Compute deterministic simulated fill price with slippage."""
