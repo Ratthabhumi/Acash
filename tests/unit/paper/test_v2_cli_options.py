@@ -31,10 +31,11 @@ def test_defaults_preserve_legacy_surface() -> None:
     assert ns.infra_mount_count == 3
     assert ns.infra_sizing_policy == "auto"
     assert ns.nav_sizing_notional_pct == Decimal("10.0")
-    assert ns.disable_feed_recovery is False
+    assert ns.enable_feed_recovery is False
     assert ns.max_recovery_attempts == 5
     assert ns.recovery_backoff_seconds == (2.0, 5.0, 10.0, 20.0, 30.0)
     assert ns.recovery_poll_interval_seconds == 2.0
+    assert ns.recovery_bar_wait_timeout_seconds == 90.0
     assert ns.candidate_add_file is None
     assert ns.num_slots == 3
 
@@ -81,11 +82,76 @@ def test_recovery_flags_parse() -> None:
             "1,2,3",
             "--recovery-poll-interval-seconds",
             "0.5",
+            "--recovery-bar-wait-timeout-seconds",
+            "60",
         )
     )
     assert ns.max_recovery_attempts == 3
     assert ns.recovery_backoff_seconds == (1.0, 2.0, 3.0)
     assert ns.recovery_poll_interval_seconds == 0.5
+    assert ns.recovery_bar_wait_timeout_seconds == 60.0
+
+
+def test_recovery_off_by_default() -> None:
+    ns = parse_args(_argv())
+    assert ns.enable_feed_recovery is False
+
+
+def test_enable_feed_recovery_flag() -> None:
+    ns = parse_args(_argv("--enable-feed-recovery"))
+    assert ns.enable_feed_recovery is True
+
+
+def test_disable_feed_recovery_removed() -> None:
+    # The legacy inverted flag is gone: there is exactly one canonical recovery
+    # switch, the positive --enable-feed-recovery (default OFF).
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--disable-feed-recovery"))
+
+
+def test_max_recovery_attempts_zero_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--max-recovery-attempts", "0"))
+
+
+def test_max_recovery_attempts_negative_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--max-recovery-attempts", "-1"))
+
+
+def test_max_recovery_attempts_non_numeric_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--max-recovery-attempts", "abc"))
+
+
+def test_bar_wait_timeout_zero_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--recovery-bar-wait-timeout-seconds", "0"))
+
+
+def test_bar_wait_timeout_negative_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--recovery-bar-wait-timeout-seconds", "-5"))
+
+
+def test_bar_wait_timeout_non_numeric_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--recovery-bar-wait-timeout-seconds", "abc"))
+
+
+def test_poll_interval_negative_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--recovery-poll-interval-seconds", "-1"))
+
+
+def test_poll_interval_zero_allowed() -> None:
+    ns = parse_args(_argv("--recovery-poll-interval-seconds", "0"))
+    assert ns.recovery_poll_interval_seconds == 0.0
+
+
+def test_poll_interval_non_numeric_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--recovery-poll-interval-seconds", "fast"))
 
 
 def test_backoff_valid_multiline_parsing() -> None:
@@ -118,9 +184,19 @@ def test_candidate_add_file_flag() -> None:
     assert str(ns.candidate_add_file).endswith("adds.json")
 
 
-def test_disable_feed_recovery_flag() -> None:
-    ns = parse_args(_argv("--disable-feed-recovery"))
-    assert ns.disable_feed_recovery is True
+def test_auto_mount_default_true() -> None:
+    ns = parse_args(_argv())
+    assert ns.auto_mount_infra_candidates is True
+
+
+def test_auto_mount_explicit_true() -> None:
+    ns = parse_args(_argv("--auto-mount-infra-candidates"))
+    assert ns.auto_mount_infra_candidates is True
+
+
+def test_no_auto_mount_flag_disables() -> None:
+    ns = parse_args(_argv("--no-auto-mount-infra-candidates"))
+    assert ns.auto_mount_infra_candidates is False
 
 
 def test_infra_mount_count_flag() -> None:

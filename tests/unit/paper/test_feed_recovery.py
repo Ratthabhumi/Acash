@@ -14,19 +14,29 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 import pytest
 
 from acash.core.domain.enums import BarTimeframe
 from acash.core.domain.exceptions import DataContractError
-from acash.paper.feed import FeedBar, FeedConnectionError, FeedStatus, IMarketDataFeed
+from acash.paper.feed import (
+    FeedBar,
+    FeedConnectionError,
+    FeedContractError,
+    FeedStatus,
+    IMarketDataFeed,
+)
 from acash.paper.health import HealthEventKind, TerminalReason
 from acash.paper.journal import JournalEventType, JournalLayer
 from acash.paper.recovery import (
     FeedRecoveryConfig,
     FeedRecoveryResult,
     FeedRecoveryState,
+    RECOVERY_PHASE_ABORTED,
+    RECOVERY_PHASE_ATTEMPT,
+    RECOVERY_PHASE_ATTEMPT_FAILED,
+    backoff_delay_seconds,
     run_feed_recovery,
 )
 from acash.paper.runner import SignalSizingPolicy, SyntheticBar
@@ -333,6 +343,263 @@ def test_continuity_gap_fails_closed(tmp_path: Path) -> None:
     )
     assert result.state == FeedRecoveryState.INVALID_BAR
     assert supervisor.to_dict()["global"]["overallStatus"] == "HALTED"
+
+
+# ---------------------------------------------------------------------------
+# Deterministic engine-driven hardening guards (backoff & bounded bar-wait)
+# ---------------------------------------------------------------------------
+
+
+class _FakeClock:
+    """Deterministic monotonic clock advanced by the recorded sleeper."""
+
+    def __init__(self) -> None:
+        self._now = 0.0
+
+    def __call__(self) -> float:
+        return self._now
+
+    def advance(self, amount: float) -> None:
+        self._now += amount
+
+
+def _engine_episode(
+    feed: IMarketDataFeed,
+    config: FeedRecoveryConfig,
+    *,
+    should_stop: Callable[[], bool],
+) -> Tuple[FeedRecoveryResult, List[float], List[Dict[str, Any]], _FakeClock]:
+    """Drive run_feed_recovery directly with a deterministic clock + sleep recorder."""
+    sleeps: List[float] = []
+    events: List[Dict[str, Any]] = []
+    clock = _FakeClock()
+
+    def journal(phase: str, details: Dict[str, Any]) -> None:
+        events.append({"phase": phase, **details})
+
+    def sleeper(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock.advance(seconds)
+
+    result = run_feed_recovery(
+        feed=feed,
+        config=config,
+        last_accepted_utc=None,
+        timeframe=BarTimeframe.M1,
+        max_data_age_ms=65_000,
+        should_stop=should_stop,
+        journal_event=journal,
+        sleeper=sleeper,
+        monotonic=clock,
+    )
+    return result, sleeps, events, clock
+
+
+def test_backoff_schedule_exact_no_terminal_sleep() -> None:
+    result, sleeps, _events, _clock = _engine_episode(
+        ScriptedFeed(connect_failures=99),
+        FeedRecoveryConfig(
+            max_attempts=5,
+            backoff_seconds=(2.0, 5.0, 10.0, 20.0, 30.0),
+            poll_interval_seconds=0.0,
+        ),
+        should_stop=lambda: False,
+    )
+    assert result.state == FeedRecoveryState.BUDGET_EXHAUSTED
+    assert result.attempts_used == 5
+    # Attempt 1 failure sleeps backoff[0]=2.0, ..., attempt 4 failure sleeps
+    # backoff[3]=20.0. The 5th (terminal) failure sleeps NOTHING — there is no
+    # sleep after budget exhaustion.
+    assert sleeps == [2.0, 5.0, 10.0, 20.0]
+
+
+def test_backoff_journaled_equals_actual_sleep() -> None:
+    result, sleeps, events, _clock = _engine_episode(
+        ScriptedFeed(connect_failures=99),
+        FeedRecoveryConfig(
+            max_attempts=5,
+            backoff_seconds=(2.0, 5.0, 10.0, 20.0, 30.0),
+            poll_interval_seconds=0.0,
+        ),
+        should_stop=lambda: False,
+    )
+    assert result.state == FeedRecoveryState.BUDGET_EXHAUSTED
+    failed = [e for e in events if e["phase"] == RECOVERY_PHASE_ATTEMPT_FAILED]
+    failed.sort(key=lambda e: e["attempt"])
+    applied: List[float] = [e["backoff_seconds"] for e in failed]
+    # The journaled post-failure delay is the single authority: it must equal the
+    # recorded actual sleep for every non-terminal attempt, and be 0.0 (no sleep)
+    # for the terminal attempt.
+    assert applied == sleeps + [0.0]
+
+
+def test_backoff_short_schedule_clamps_to_last_entry() -> None:
+    result, sleeps, _events, _clock = _engine_episode(
+        ScriptedFeed(connect_failures=99),
+        FeedRecoveryConfig(
+            max_attempts=5,
+            backoff_seconds=(1.0, 2.0),
+            poll_interval_seconds=0.0,
+        ),
+        should_stop=lambda: False,
+    )
+    assert result.state == FeedRecoveryState.BUDGET_EXHAUSTED
+    # Schedule exercises backoff[0]=1.0, then clamps to the last entry backoff[1]=2.0.
+    assert sleeps == [1.0, 2.0, 2.0, 2.0]
+
+
+def test_backoff_delay_seconds_single_authority() -> None:
+    backoff = (1.0, 2.0, 3.0)
+    assert backoff_delay_seconds(1, backoff) == 1.0
+    assert backoff_delay_seconds(2, backoff) == 2.0
+    assert backoff_delay_seconds(3, backoff) == 3.0
+    # Attempts beyond the schedule length take the last entry (never an index error).
+    assert backoff_delay_seconds(4, backoff) == 3.0
+    assert backoff_delay_seconds(99, backoff) == 3.0
+
+
+def test_bar_wait_timeout_consumes_attempt_then_recovers() -> None:
+    # Attempt 1: connected, no bar within the 1s monotonic budget -> the attempt's
+    # retry budget is consumed and the configured backoff applied.
+    # Attempt 2: connected, a valid bar arrives -> RESUMED with attempts_used=1.
+    feed = ScriptedFeed().queue(None).queue(None).queue(_feed_bar(1))
+    result, sleeps, events, _clock = _engine_episode(
+        feed,
+        FeedRecoveryConfig(
+            max_attempts=2,
+            backoff_seconds=(0.5, 1.0),
+            poll_interval_seconds=1.0,
+            bar_wait_timeout_seconds=1.0,
+        ),
+        should_stop=lambda: False,
+    )
+    assert result.state == FeedRecoveryState.RESUMED
+    assert result.attempts_used == 1
+    assert result.resumed_bar is not None
+    # Attempt 1: poll(None) sleep 1.0 -> poll(None) deadline reached -> timeout,
+    # then backoff 0.5. Attempt 2: poll -> bar immediately.
+    assert sleeps == [1.0, 0.5]
+    timeouts = [e for e in events if e.get("reason") == "BAR_WAIT_TIMEOUT"]
+    assert len(timeouts) == 1
+    assert timeouts[0]["attempt"] == 1
+    assert timeouts[0]["waited_seconds"] == 1.0
+    assert timeouts[0]["backoff_seconds"] == 0.5
+
+
+def test_bar_wait_timeout_all_attempts_exhausted() -> None:
+    result, sleeps, events, _clock = _engine_episode(
+        ScriptedFeed(),  # connected but never any bar
+        FeedRecoveryConfig(
+            max_attempts=2,
+            backoff_seconds=(0.5, 1.0),
+            poll_interval_seconds=1.0,
+            bar_wait_timeout_seconds=1.0,
+        ),
+        should_stop=lambda: False,
+    )
+    assert result.state == FeedRecoveryState.BUDGET_EXHAUSTED
+    assert result.attempts_used == 2
+    failed = [e for e in events if e["phase"] == RECOVERY_PHASE_ATTEMPT_FAILED]
+    assert len(failed) == 2
+    assert all(e["reason"] == "BAR_WAIT_TIMEOUT" for e in failed)
+    # Attempt 1: one poll sleep (0.0->1.0) then BAR_WAIT_TIMEOUT, backoff 0.5;
+    # Attempt 2: one poll sleep (1.5->2.5) then terminal timeout, no sleep.
+    assert sleeps == [1.0, 0.5, 1.0]
+
+
+def test_bar_wait_timeout_budget_wallclock_bounded() -> None:
+    # Even with a no-op sleeper and the real monotonic clock, a never-barring
+    # feed cannot wait indefinitely: the deadline is checked against the wall
+    # clock, so the budget (not the poll count) is the hard bound.
+    events: List[Dict[str, Any]] = []
+
+    def journal(phase: str, details: Dict[str, Any]) -> None:
+        events.append({"phase": phase, **details})
+
+    result = run_feed_recovery(
+        feed=ScriptedFeed(),  # connected, never any bar
+        config=FeedRecoveryConfig(
+            max_attempts=1,
+            backoff_seconds=(0.0,),
+            poll_interval_seconds=0.0,
+            bar_wait_timeout_seconds=0.05,
+        ),
+        last_accepted_utc=None,
+        timeframe=BarTimeframe.M1,
+        max_data_age_ms=65_000,
+        should_stop=lambda: False,
+        journal_event=journal,
+        sleeper=lambda _s: None,
+    )
+    assert result.state == FeedRecoveryState.BUDGET_EXHAUSTED
+    assert result.attempts_used == 1
+    assert any(e.get("reason") == "BAR_WAIT_TIMEOUT" for e in events)
+
+
+def test_operator_stop_during_bar_wait() -> None:
+    stop_after_one_sleep = {"value": 0}
+
+    def should_stop() -> bool:
+        return stop_after_one_sleep["value"] >= 1
+
+    def sleeper(seconds: float) -> None:
+        stop_after_one_sleep["value"] += 1
+
+    clock = _FakeClock()
+    events: List[Dict[str, Any]] = []
+
+    def journal(phase: str, details: Dict[str, Any]) -> None:
+        events.append({"phase": phase, **details})
+
+    result = run_feed_recovery(
+        feed=ScriptedFeed(),  # connected, never a bar
+        config=FeedRecoveryConfig(
+            max_attempts=5,
+            backoff_seconds=(0.5,),
+            poll_interval_seconds=1.0,
+            bar_wait_timeout_seconds=60.0,
+        ),
+        last_accepted_utc=None,
+        timeframe=BarTimeframe.M1,
+        max_data_age_ms=65_000,
+        should_stop=should_stop,
+        journal_event=journal,
+        sleeper=sleeper,
+        monotonic=clock,
+    )
+    assert result.state == FeedRecoveryState.OPERATOR_STOP
+    assert result.attempts_used == 0
+    assert any(e["phase"] == RECOVERY_PHASE_ABORTED for e in events)
+
+
+def test_feed_contract_error_bypasses_recovery() -> None:
+    class ContractBreakingFeed(ScriptedFeed):
+        def connect(self) -> None:
+            raise FeedContractError("structural feed contract violation")
+
+    # FeedContractError must NOT be consumed into the retry budget: it propagates
+    # to the caller's fail-closed handler instead of being retried.
+    with pytest.raises(FeedContractError):
+        run_feed_recovery(
+            feed=ContractBreakingFeed(),
+            config=FeedRecoveryConfig(
+                max_attempts=5,
+                backoff_seconds=(0.0,),
+            ),
+            last_accepted_utc=None,
+            timeframe=BarTimeframe.M1,
+            max_data_age_ms=65_000,
+            should_stop=lambda: False,
+            journal_event=lambda _p, _d: None,
+            sleeper=lambda _s: None,
+        )
+
+
+def test_bar_wait_timeout_non_positive_rejected() -> None:
+    with pytest.raises(DataContractError):
+        FeedRecoveryConfig(bar_wait_timeout_seconds=0.0)
+    with pytest.raises(DataContractError):
+        FeedRecoveryConfig(bar_wait_timeout_seconds=-1.0)
 
 
 # ---------------------------------------------------------------------------
