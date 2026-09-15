@@ -19,10 +19,19 @@ BOUNDARY STATEMENTS (non-negotiable):
   state; the supervisor guard is the enforcement point.
 - Budget: ``max_attempts`` reconnect attempts with deterministic backoff. Exhaustion
   is a final, explicitly-labeled outcome (BUDGET_EXHAUSTED) — never a silent resume.
-- Operator stop is respected at every loop boundary and yields OPERATOR_STOP
-  (a clean abort, not a failure).
-- This mechanism is a SHADOW, operator-elected feature. The canonical runtime
-  default remains "Automatic Feed Reconnect | DISABLED".
+- Bar-wait is bounded: once a reconnect succeeds, the episode waits up to
+  ``bar_wait_timeout_seconds`` (monotonic deadline) for the first bar. A timeout
+  consumes the retry budget for that attempt (BAR_WAIT_TIMEOUT) and applies the
+  configured backoff — it is never an unbounded/indefinite wait.
+- Backoff indexing is canonical: the delay applied after attempt ``n`` is
+  ``backoff_delay_seconds(n, backoff)`` = ``backoff[min(n-1, len-1)]``, and the
+  journaled ``backoff_seconds`` value always equals the actual sleep.
+- Operator stop is respected at every loop boundary (connect wait and bar wait)
+  and yields OPERATOR_STOP (a clean abort, not a failure).
+- This mechanism is SHADOW, and CLI recovery is OFF by default: the canonical
+  runtime setting is "Automatic Feed Reconnect | DISABLED" (immediate fail-closed
+  halt, operator resume required). Operators elect recovery explicitly with
+  ``--enable-feed-recovery``.
 """
 
 from __future__ import annotations
@@ -70,11 +79,23 @@ class FeedRecoveryState(str, Enum):
 
 @dataclass(frozen=True)
 class FeedRecoveryConfig:
-    """Deterministic bounds for one transient-recovery episode. Fail-closed."""
+    """Deterministic bounds for one transient-recovery episode. Fail-closed.
+
+    max_attempts:           reconnects attempted per episode (>= 1).
+    backoff_seconds:        per-attempt post-failure delay schedule (>= 0 each;
+                            index n-1 applies after attempt n). Zero delays are
+                            permitted for deterministic tests; the operator CLI
+                            enforces strictly positive delays.
+    poll_interval_seconds:  idle poll cadence while waiting for the first bar.
+    bar_wait_timeout_seconds: monotonic budget for the first bar after a
+                            successful reconnect (must be > 0). A timeout
+                            consumes the retry budget of that attempt.
+    """
 
     max_attempts: int = 5
     backoff_seconds: Tuple[float, ...] = (2.0, 5.0, 10.0, 20.0, 30.0)
     poll_interval_seconds: float = 2.0
+    bar_wait_timeout_seconds: float = 90.0
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:
@@ -93,6 +114,11 @@ class FeedRecoveryConfig:
             raise DataContractError(
                 "FeedRecoveryConfig: poll_interval_seconds must be >= 0, "
                 f"got {self.poll_interval_seconds}"
+            )
+        if self.bar_wait_timeout_seconds <= 0:
+            raise DataContractError(
+                "FeedRecoveryConfig: bar_wait_timeout_seconds must be > 0, "
+                f"got {self.bar_wait_timeout_seconds}"
             )
 
 
@@ -248,6 +274,17 @@ RECOVERY_PHASE_INVALID_BAR = "INVALID_BAR"
 RECOVERY_PHASE_ABORTED = "ABORTED"
 
 
+def backoff_delay_seconds(attempt_no: int, backoff: Tuple[float, ...]) -> float:
+    """Single authority for the post-failure delay scheduled for attempt ``attempt_no``.
+
+    Attempt 1 failing sleeps ``backoff[0]``, attempt 2 sleeping ``backoff[1]``, and
+    any attempt past the schedule length takes the last entry. Because both the
+    journaled ``backoff_seconds`` value and the driver's actual sleep derive from
+    this one function, the recorded schedule always equals the applied delay.
+    """
+    return backoff[min(max(attempt_no, 1) - 1, len(backoff) - 1)]
+
+
 def run_feed_recovery(
     *,
     feed: IMarketDataFeed,
@@ -258,27 +295,70 @@ def run_feed_recovery(
     should_stop: Callable[[], bool],
     journal_event: Callable[[str, Dict[str, Any]], None],
     sleeper: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> FeedRecoveryResult:
     """Run one deterministic transient-feed-recovery episode.
 
     Returns the final episode result. Never raises for bounded transient
-    connection failures (they are consumed into the attempts budget).
+    connection failures (they are consumed into the attempts budget). The
+    monotonic clock is injectable so bar-wait-timeout behavior is testable
+    deterministically without real-time waits.
     """
     attempts_used = 0
     backoff = config.backoff_seconds
     max_attempts = config.max_attempts
+    poll_interval = config.poll_interval_seconds
+    bar_wait_timeout = config.bar_wait_timeout_seconds
+    clock = monotonic
+
+    def _abort_operator_stop() -> FeedRecoveryResult:
+        journal_event(
+            RECOVERY_PHASE_ABORTED,
+            {"attempts_used": attempts_used, "reason": "OPERATOR_STOP"},
+        )
+        return FeedRecoveryResult(
+            state=FeedRecoveryState.OPERATOR_STOP,
+            attempts_used=attempts_used,
+            reason="Operator requested shutdown during recovery episode.",
+        )
+
+    def _fail_attempt(
+        attempt_no: int,
+        *,
+        reason: str,
+        error_category: str = "CONNECTION_ERROR",
+        error: str = "",
+        waited_seconds: Optional[float] = None,
+    ) -> Optional[float]:
+        """Journal one failed attempt and consume retry budget.
+
+        Returns the exact post-failure delay to sleep (identical to the journaled
+        ``backoff_seconds``), or None when the budget is exhausted (terminal — the
+        caller must not sleep after the final attempt).
+        """
+        nonlocal attempts_used
+        attempts_used += 1
+        applied_delay = (
+            0.0
+            if attempts_used >= max_attempts
+            else backoff_delay_seconds(attempt_no, backoff)
+        )
+        details: Dict[str, Any] = {
+            "attempt": attempt_no,
+            "attempts_used": attempts_used,
+            "reason": reason,
+            "error_category": error_category,
+            "error": error[:500],
+            "backoff_seconds": applied_delay,
+        }
+        if waited_seconds is not None:
+            details["waited_seconds"] = waited_seconds
+        journal_event(RECOVERY_PHASE_ATTEMPT_FAILED, details)
+        return None if attempts_used >= max_attempts else applied_delay
 
     while attempts_used < max_attempts:
         if should_stop():
-            journal_event(
-                RECOVERY_PHASE_ABORTED,
-                {"attempts_used": attempts_used, "reason": "OPERATOR_STOP"},
-            )
-            return FeedRecoveryResult(
-                state=FeedRecoveryState.OPERATOR_STOP,
-                attempts_used=attempts_used,
-                reason="Operator requested shutdown during recovery episode.",
-            )
+            return _abort_operator_stop()
 
         attempt_no = attempts_used + 1
         journal_event(
@@ -289,7 +369,7 @@ def run_feed_recovery(
                 "last_accepted_utc": (
                     last_accepted_utc.isoformat() if last_accepted_utc else None
                 ),
-                "backoff_seconds": backoff[min(attempts_used, len(backoff) - 1)],
+                "backoff_seconds": backoff_delay_seconds(attempt_no, backoff),
             },
         )
 
@@ -297,61 +377,65 @@ def run_feed_recovery(
         try:
             feed.connect()
         except FeedConnectionError as exc:
-            attempts_used += 1
-            journal_event(
-                RECOVERY_PHASE_ATTEMPT_FAILED,
-                {
-                    "attempt": attempt_no,
-                    "attempts_used": attempts_used,
-                    "error_category": getattr(exc, "category", "CONNECTION_ERROR"),
-                    "error": str(exc)[:500],
-                },
+            applied_delay = _fail_attempt(
+                attempt_no,
+                reason="CONNECT_FAILED",
+                error_category=getattr(exc, "category", "CONNECTION_ERROR"),
+                error=str(exc),
             )
-            if attempts_used >= max_attempts:
+            if applied_delay is None:
                 break
-            sleeper(backoff[min(attempts_used, len(backoff) - 1)])
+            sleeper(applied_delay)
             continue
 
-        # --- Connected: wait for the next bar within this attempt ---
+        # --- Connected: wait for the next bar within this bounded attempt ---
+        wait_started = clock()
+        wait_deadline = wait_started + bar_wait_timeout
         while True:
             if should_stop():
-                journal_event(
-                    RECOVERY_PHASE_ABORTED,
-                    {"attempts_used": attempts_used, "reason": "OPERATOR_STOP"},
-                )
-                return FeedRecoveryResult(
-                    state=FeedRecoveryState.OPERATOR_STOP,
-                    attempts_used=attempts_used,
-                    reason="Operator requested shutdown during recovery episode.",
-                )
+                return _abort_operator_stop()
 
             journal_event(
                 RECOVERY_PHASE_POLLING,
                 {
                     "attempt": attempt_no,
                     "attempts_used": attempts_used,
+                    "waited_seconds": max(0.0, clock() - wait_started),
+                    "bar_wait_timeout_seconds": bar_wait_timeout,
                 },
             )
             try:
                 bar = feed.poll_next_bar()
             except FeedConnectionError as exc:
-                attempts_used += 1
-                journal_event(
-                    RECOVERY_PHASE_ATTEMPT_FAILED,
-                    {
-                        "attempt": attempt_no,
-                        "attempts_used": attempts_used,
-                        "error_category": getattr(exc, "category", "CONNECTION_ERROR"),
-                        "error": str(exc)[:500],
-                    },
+                applied_delay = _fail_attempt(
+                    attempt_no,
+                    reason="POLL_FAILED",
+                    error_category=getattr(exc, "category", "CONNECTION_ERROR"),
+                    error=str(exc),
                 )
-                if attempts_used >= max_attempts:
+                if applied_delay is None:
                     break
-                sleeper(backoff[min(attempts_used, len(backoff) - 1)])
+                sleeper(applied_delay)
                 break  # back to the reconnect (outer) loop
 
             if bar is None:
-                sleeper(config.poll_interval_seconds)
+                if clock() >= wait_deadline:
+                    waited = max(0.0, clock() - wait_started)
+                    applied_delay = _fail_attempt(
+                        attempt_no,
+                        reason="BAR_WAIT_TIMEOUT",
+                        error_category="BAR_WAIT_TIMEOUT",
+                        error=(
+                            f"no bar within {bar_wait_timeout}s of a successful "
+                            "reconnect"
+                        ),
+                        waited_seconds=waited,
+                    )
+                    if applied_delay is None:
+                        break
+                    sleeper(applied_delay)
+                    break  # back to the reconnect (outer) loop
+                sleeper(poll_interval)
                 continue
 
             # A bar was returned — validate continuity + freshness.
@@ -395,8 +479,8 @@ def run_feed_recovery(
                 reason=validation.reason,
             )
 
-        # If the inner poll loop broke due to connection failure and the budget
-        # was consumed, the outer loop terminates below.
+        # If the inner poll loop broke and the budget was consumed, the outer
+        # loop terminates below.
 
     journal_event(
         RECOVERY_PHASE_BUDGET_EXHAUSTED,

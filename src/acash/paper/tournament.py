@@ -3,7 +3,7 @@
 Governance Invariants (Non-Negotiable):
 - SHADOW / SIMULATED RESEARCH INFRASTRUCTURE ONLY — NOT Paper GO / NOT Live / NOT HYP_003
 - Canonical Capital = $0.00 | Real Orders Dispatched = 0 | NO_REAL_ORDERS = True
-- Isolated virtual portfolio state for each strategy slot (A, B, C)
+- Isolated virtual portfolio state for each active strategy slot (default A, B, C; num_slots-driven A..Z)
 - Zero cross-strategy state leakage (virtual cash, virtual positions, virtual orders, virtual fills)
 - Synchronized shared feed: all active slots receive the exact same market bar
 - Independent flight recorder journals and manifests per slot
@@ -656,7 +656,8 @@ class ShadowTournamentSupervisor:
         )
 
     # ------------------------------------------------------------------
-    # Controlled transient feed recovery (V2 follow-up, opt-in)
+    # Controlled transient feed recovery (V2 follow-up, API-level opt-in /
+    # CLI --enable-feed-recovery explicit opt-in)
     # ------------------------------------------------------------------
 
     def enter_feed_recovery(self, reason: str) -> str:
