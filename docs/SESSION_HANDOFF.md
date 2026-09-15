@@ -23,11 +23,13 @@
 | Active branch | `feat/tournament-v2-risk-remediation-10slot` |
 | Branch base | `main @ 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` (origin/main verified) |
 | Base message | `docs: refresh canonical session handoff and archive E3.6 checkpoint` |
-| Branch tip | `df1bafa` (12 commits ahead of main) — V2 follow-up implemented, pushed, NOT merged |
+| Branch tip | verify with `git rev-parse HEAD` — never trust a hard-coded tip (chain below) |
 | Branch state | PUSHED to `origin/feat/tournament-v2-risk-remediation-10slot` — NOT merged |
 
 **FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` re-verified on 2026-09-15
-after the V2 work completed (see §4.5). Branch remains 12 commits ahead of main.
+after the V2 work completed (see §4.5) and again before the final recovery hardening pass.
+Final recovery hardening added the `fix(shadow)` / `test(shadow)` / `docs(tournament)`
+commits below.
 
 **ACTIVE BRANCH COMMITS (EVIDENCE — full SHAs):**
 
@@ -37,17 +39,23 @@ after the V2 work completed (see §4.5). Branch remains 12 commits ahead of main
 | 2 | `260d32b56668a6d99d1e120e2fa2096b4d4ca350` | fix: enforce `MAX_NOTIONAL` + preserve terminal reason (Defects A & E) |
 | 3 | `c4651ac82fba8e2a382dd01b3ab0248cc2a042e4` | feat: funding + kill-switch position policies + granular execution states (Defects B, C & D) |
 | 4 | `24d5607b380e033015365b60b9e71f29cc76d4af` | feat: N-slot fanout A..Z (1–26), `--num-slots` CLI |
-| 5 | `b169d272d320217996f1dc6b7208a8677db26b65` | feat: 10-slot infrastructure candidate catalog, auto-mount opt-in |
+| 5 | `b169d272d320217996f1dc6b7208a8677db26b65` | feat: 10-slot infrastructure candidate catalog, auto-mount |
 | 6 | `139ac62c18fa95621f5685d8a131650b0fff2d40` | feat: dashboard V2 contract, granular states, `SHADOW_RUNTIME` data source |
 | 7 | `56160de912d9f49e7e56bad70a46d216b883f1dc` | test: 10-slot layout state isolation |
 | 8 | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` | docs: V2 10-slot design + validation evidence |
-| 9 | `706168c` | feat(paper): journal event kinds + re-entrant lock integrity + feed-health recovery metrics |
-| 10 | `48aeeec` | feat(paper): transient feed recovery + staged dynamic candidate admission + safe NAV sizing |
-| 11 | `d86eca5` | test(paper): recovery, dynamic candidate admission, and safe sizing suites (69 tests) |
-| 12 | `3aea870` | feat(dashboard): FEED_RECOVERING seat, cohort provenance, null-rank leaderboard |
-| 13 | `df1bafa` | docs(tournament): record recovery / dynamic admission / safe sizing design + evidence |
+| 9 | `706168ce3ce19ee85bbc281b484bf9ba0d4d6645` | feat(paper): journal event kinds + re-entrant lock integrity + feed-health recovery metrics |
+| 10 | `48aeeec942218f42f7c3d956cecddc9f1724cbd1` | feat(paper): transient feed recovery + staged dynamic candidate admission + safe NAV sizing |
+| 11 | `d86eca535bf06be105265496df36641897d1d75a` | test(paper): recovery, dynamic candidate admission, and safe sizing suites |
+| 12 | `3aea870668be764b03b0c80bac079a79bdf0cd3c` | feat(dashboard): FEED_RECOVERING seat, cohort provenance, null-rank leaderboard |
+| 13 | `df1bafa341dec0a38a1abcc9e2f7d8a467083511` | docs(tournament): record recovery / dynamic admission / safe sizing design + evidence |
+| 14 | `db908b57becc8ab3ea514416cc5f25e30faa22c4` | docs: refresh session handoff with V2 follow-up evidence |
+| 15 | `536e84ebe49fde515c6a93c3929181e674e2313b` | fix(shadow): make feed recovery explicit opt-in and bounded |
+| 16 | `045eb4aab81ce181bbafe64ca9eca70a1ffee284` | fix(shadow): strict recovery CLI validation and symmetric auto-mount |
+| 17 | `7c01998310b972b8c2c9d020ee14d7874a137043` | test(shadow): cover bounded recovery and CLI flag contracts |
+| 18 | (docs commit completing this handoff) | docs(tournament): record final recovery hardening evidence |
 
-> A follow-up docs commit (SESSION_HANDOFF refresh) completes the commit set.
+> Verify the completing docs commit and the final tip with `git rev-parse HEAD`
+> after the push — tools and handoffs never hard-code a self-invalidating tip.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -186,15 +194,35 @@ Artifacts on Host: `/data/docker/acash/tournament/`.
 
 ### 4.6 V2 Follow-up Session Summary (EVIDENCE)
 
-Controlled transient feed recovery (shadow only — auto-reconnect remains
-structurally DISABLED, operator resume REQUIRED after exhaustion), staged
-dynamic admission of INFRA_TEST candidates with cohort provenance and
-null-rank single-member cohorts, and NAV-relative sizing bounded to 10% of
-virtual equity. During a recovery episode the slot emits **zero** new simulated
-orders/signals; a failed recovery halts with `FEED_RECOVERY_FAILED` (causal
-reason preserved) and exit code 5. New suites: `test_feed_recovery.py` (18),
+Controlled transient feed recovery (shadow only — **Automatic Feed Reconnect
+DISABLED BY DEFAULT**; the runtime only ever recovers when the operator passes
+`--enable-feed-recovery`), staged dynamic admission of INFRA_TEST candidates
+with cohort provenance and null-rank single-member cohorts, and NAV-relative
+sizing bounded to 10% of virtual equity. During a recovery episode the slot
+emits **zero** new simulated orders/signals; a failed recovery halts with
+`FEED_RECOVERY_FAILED` (causal reason preserved) and exit code 5.
+
+**Final recovery hardening (YELLOW-item closure, 2026-09-15):**
+- Recovery CLI default is **OFF** (`--enable-feed-recovery` is the single
+  canonical positive opt-in; the inverted `--disable-feed-recovery` was removed).
+- Backoff indexing corrected to a single authority
+  `backoff_delay_seconds(attempt_no, backoff)` — attempt 1 sleeps the first
+  backoff entry, journaled `backoff_seconds` equals the actual sleep, and the
+  terminal attempt sleeps nothing.
+- Bar-wait is bounded by a monotonic deadline `bar_wait_timeout_seconds`
+  (default 90.0, `--recovery-bar-wait-timeout-seconds`) — a `BAR_WAIT_TIMEOUT`
+  consumes that attempt's retry budget and applies backoff; never unbounded.
+- Strict CLI validation (`max_attempts >= 1`, poll interval `>= 0`, bar-wait
+  `> 0`, backoff `> 0`) replaces the silent `max(1, ...)` clamp.
+- `--auto-mount-infra-candidates` is symmetric (`BooleanOptionalAction`,
+  default `True` = default operational layout exercises the 3-slot INFRA_TEST
+  layout); `--no-auto-mount-infra-candidates` runs slot-A-injected alone and
+  must NOT silently create catalog candidates. Auto-mount is not alpha
+  authorization.
+
+New/updated suites after hardening: `test_feed_recovery.py` (29),
 `test_dynamic_candidate_add.py` (15), `test_safe_sizing.py` (17),
-`test_v2_cli_options.py` (19).
+`test_v2_cli_options.py` (32).
 
 **PENDING HUMAN DECISION (D1–D5)** — the branch implements *policies*, it does **not** choose
 them. See §11 step 3.
@@ -482,8 +510,12 @@ Also re-verify: container status (H01 Attempt 1 = EXITED EXIT=2), journal path/s
 **NEXT ACTION — Step 2: V2 remediation is COMPLETE — verify evidence artifacts**
 - Design: `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md`
 - Validation: `docs/tournament/TOURNAMENT_V2_VALIDATION.md`
-- Branch tip `df1bafa` pushed to origin (NOT merged)
-- Full local evidence: 2353 passed / 12 skipped; mypy 423 files clean; dashboard 27/27
+- Final recovery hardening recorded in the validation doc §5.4 (YELLOW-item closure);
+  recovery default OFF, explicit `--enable-feed-recovery` opt-in, corrected backoff,
+  bounded bar-wait, strict CLI validation, symmetric auto-mount
+- Branch tip: run `git rev-parse HEAD` and `git rev-parse origin/HEAD` — never trust a
+  hard-coded tip; branch is PUSHED to origin (NOT merged)
+- Full local evidence: see TOURNAMENT_V2_VALIDATION.md §5.2 for the current pass counts
 
 **NEXT ACTION — Step 3: Obtain HUMAN DECISIONS (D1–D5) before any deployment/run**
 
@@ -528,13 +560,14 @@ Stop and report to the human before proceeding past these boundaries:
 ## 13. Verification Ledger
 
 ```
-Implementation Status:    COMPLETE — V2 remediation + V2 follow-up delivered on
+Implementation Status:    COMPLETE — V2 remediation + V2 follow-up + final recovery
+                           hardening delivered on
                            feat/tournament-v2-risk-remediation-10slot
-                           (13 commits, tip df1bafa, pushed; NOT merged)
+                           (commits pushed; NOT merged; verify tip with `git rev-parse HEAD`)
 Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
 Mathematical Authority:   N/A (config/observability + nominal sizing arithmetic)
-Local Test Suite:         VERIFIED (2353 passed / 12 skipped — full `uv run pytest tests/`)
-Type Checker (MyPy):      VERIFIED (423 source files clean — `uv run mypy src/ tests/`)
+Local Test Suite:         VERIFIED — see TOURNAMENT_V2_VALIDATION.md §5.2 (full `uv run pytest tests/`)
+Type Checker (MyPy):      VERIFIED — see TOURNAMENT_V2_VALIDATION.md §5.2 (`uv run mypy src/ tests/`)
 Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 27/27; build clean)
 Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
@@ -543,8 +576,10 @@ Methodological Caveats:
   - No deployment, no image build, no container run on Pi from this branch
   - D4 (V2 Homelab resource limits) TEST REQUIRED before any V2 run claim
   - D5 (V2 runtime authorization) NOT granted by this branch
-  - Transient feed recovery is a SHADOW seat only; auto-reconnect structurally DISABLED;
-    exhaustion preserves causal reason and requires operator resume
+  - Automatic Feed Reconnect DISABLED BY DEFAULT; controlled shadow recovery is
+    AVAILABLE / EXPLICIT OPT-IN only (`--enable-feed-recovery`), bounded by
+    attempts / backoff / bar-wait timeout; operator resume REQUIRED after
+    terminal recovery failure or any ordinary fail-closed halt
 ```
 
 ---
@@ -554,17 +589,20 @@ Methodological Caveats:
 ```
 ACASH QUICK START — 2026-09-15 Handoff
 =======================================
-1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
+1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce;
+   verify current branch tip with `git rev-parse HEAD` (hard-coded tips self-invalidate)
 2. Active work branch: feat/tournament-v2-risk-remediation-10slot
-   (base = main @ 9a58ced; tip df1bafa; 13 commits; PUSHED, NOT merged)
+   (base = main @ 9a58ced; PUSHED, NOT merged)
 3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence archived (docs/tournament/)
 4. V2 REMEDIATION COMPLETE: A (MAX_NOTIONAL), B (funding), C (kill-switch), D (states), E (reason)
 5. V2 READINESS: N-slot fanout A..Z, 10-slot INFRA_TEST catalog, --num-slots,
-   --auto-mount-infra-candidates, dashboard V2 contract (SHADOW_RUNTIME)
-6. V2 FOLLOW-UP COMPLETE: transient feed recovery (FEED_RECOVERING, opt-in, fail-closed),
-   staged dynamic candidate admission (SIGHUP / --candidate-add-file), safe NAV sizing (10%),
-   journal re-entrant lock fix
-7. VERIFICATION: pytest 2353 passed / 12 skipped; mypy 423 files; dashboard 27/27 + build
+   --auto-mount-infra-candidates / --no-auto-mount-infra-candidates (default True),
+   dashboard V2 contract (SHADOW_RUNTIME)
+6. V2 FOLLOW-UP + FINAL HARDENING COMPLETE: transient feed recovery DISABLED BY DEFAULT
+   (explicit opt-in --enable-feed-recovery; bounded attempts/backoff/bar-wait; backoff
+   journal==actual sleep; strict CLI validation), staged dynamic candidate admission
+   (SIGHUP / --candidate-add-file), safe NAV sizing (10%), journal re-entrant lock fix
+7. VERIFICATION: see docs/tournament/TOURNAMENT_V2_VALIDATION.md §5.2 for current pass counts
 8. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
 9. PENDING: HUMAN DECISION PACKET D1 (funding) / D2 (kill-switch) / D3 (sizing) /
    D4 (Homelab resource-limit TEST REQUIRED) / D5 (NO runtime authorization granted)

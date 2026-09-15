@@ -44,11 +44,16 @@
   windows and quantity, all labeled `INFRASTRUCTURE_TEST_STRATEGY_ONLY`.
 - Slot A is bit-compatible with the historical canonical default
   (`INFRA-TEST-MOMENTUM-SYNTHETIC-001`; fast=3, slow=5, qty=1.0).
-- Mounting is **explicit opt-in only**:
+- Mounting is **explicit** (API opt-in, CLI symmetric):
   - API: `create_default_shadow_tournament(..., auto_mount_infrastructure_candidates=True)`
-  - CLI: `--auto-mount-infra-candidates`
-  - Default `False`. The flag mounts only INFRA_TEST candidates; zero alpha
-    candidates are ever auto-mounted.
+    (library default `False` — explicit opt-in).
+  - CLI: `--auto-mount-infra-candidates` / `--no-auto-mount-infra-candidates`
+    (default `True` = the default operational layout exercises the 3-slot
+    INFRA_TEST layout; `--no-auto-mount-infra-candidates` runs slot-A-injected
+    alone and must NOT silently create catalog candidates).
+  - Infra auto-mount only ever mounts INFRA_TEST candidates; zero alpha
+    candidates are ever auto-mounted, and auto-mount alone does NOT authorize
+    or constitute runtime strategy trading.
 
 ## 4. Portfolio & Risk Policies (Defects D1/D2)
 
@@ -133,9 +138,10 @@ This adds a *controlled, operator-visible* recovery seat for **transient**
 | During recovery | **zero** new simulated orders and **zero** new signals; portfolio, cash, journal, and closed-position history are preserved untouched |
 | Reconnect boundary | on the next supervisor poll, `recovery.validate_reconnect_bar()` compares the live bar time against the authoritative `last_accepted_bar_utc`: equal-gap or pending bars are backfilled into an in-memory window; an older-than-boundary resume is rejected |
 | Journaling | every episode runs under a single episode correlation id created by `enter_feed_recovery`; phases `FEED_RECOVERING` → `FEED_RECOVERY_ATTEMPTED` → `FEED_RECOVERY_SUCCEEDED` (or `FEED_RECOVERY_EXHAUSTED`), plus `SESSION_STOPPED reason=FEED_RECOVERY_FAILED` on exhaustion |
-| Backoff | `FeedRecoveryConfig.backoff_seconds` is a `Tuple[float, ...]` (one delay per attempt); default `(1.0, 2.0, 4.0, 8.0)` |
+| Backoff | `FeedRecoveryConfig.backoff_seconds` is a `Tuple[float, ...]` (one delay per attempt). Single authority: `backoff_delay_seconds(n, backoff) = backoff[min(n-1, len-1)]` — attempt 1 failure sleeps the first entry, and the journaled `backoff_seconds` value is exactly the applied sleep. CLI default `2,5,10,20,30` (each > 0). The terminal attempt sleeps nothing |
+| Bar-wait | after a successful reconnect the episode waits for its first bar under a **monotonic deadline** `bar_wait_timeout_seconds` (config default `90.0`, CLI `--recovery-bar-wait-timeout-seconds`, must be > 0). Every `None` poll consumes elapsed budget; a deadline expiry is `BAR_WAIT_TIMEOUT`, consumes that attempt's retry budget, and applies the configured backoff — never an unbounded wait, never a busy-loop |
 | Exhaustion | after `max_attempts` failures the failure reason is **preserved** (never rewritten as `NORMAL_SHUTDOWN`) and the tournament halts fail-closed; operator resume is **required** — there is no automatic reconnect |
-| Opt-in | CLI `--disable-feed-recovery` turns the whole engine off; default enabled but only as a *shadow* seat (automatic reconnect remains structurally disabled) |
+| Opt-in | CLI recovery default is **OFF**: **`--enable-feed-recovery`** is the single canonical positive switch (the inverted `--disable-feed-recovery` was removed). Default OFF means any transient `FeedConnectionError` immediately halts fail-closed (exit 2, operator resume required). When enabled, controlled shadow recovery applies only to transient `FeedConnectionError` inside the bounded attempts / backoff / bar-wait budget above. The supervisor API path remains available programmatically |
 
 ### 9.2 Dynamic Shadow Candidate Admission (SIGHUP / candidate-add file)
 

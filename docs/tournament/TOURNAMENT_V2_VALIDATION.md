@@ -84,16 +84,16 @@ earlier suites remain continuously green.
 
 | Test file | Coverage | Status |
 |---|---|---|
-| `tests/unit/paper/test_feed_recovery.py` | Episode lifecycle, reconnect boundary validation, zero orders/signals during recovery, portfolio preservation, journal ordering under one episode correlation id, operator stop during recovery, resume boundary | 18 passed |
+| `tests/unit/paper/test_feed_recovery.py` | Episode lifecycle, reconnect boundary validation, zero orders/signals during recovery, portfolio preservation, journal ordering under one episode correlation id, operator stop during recovery, resume boundary, **exact backoff schedule (journal == actual sleep, no terminal sleep), deterministic bounded bar-wait timeout (fake clock), wall-clock-bounded wait, operator stop mid-wait, FeedContractError bypass, config validation** | 29 passed |
 | `tests/unit/paper/test_dynamic_candidate_add.py` | Stage/materialize semantics, rejection matrix, batch cohort identity, catalog instance freshness, adversarial double-stage, fail-closed null-builder materialize | 15 passed |
 | `tests/unit/paper/test_safe_sizing.py` | FIXED vs NAV sizing spread, config hashing, dead-config rejection, SESSION_STARTED sizing seal, CLI policy override | 17 passed |
-| `tests/unit/paper/test_v2_cli_options.py` | CLI flag parsing and validation boundaries | 19 passed |
+| `tests/unit/paper/test_v2_cli_options.py` | CLI flag parsing and validation boundaries, **recovery default OFF / positive opt-in flag / removed inverted flag, strict max-attempts & bar-wait & poll-interval validators, auto-mount BooleanOptional default True / explicit True / --no-auto-mount False** | 32 passed |
 
 ### 5.2 Full-repository evidence (this branch tip)
 
 | Check | Result |
 |---|---|
-| `uv run pytest tests/` | **2353 passed / 12 skipped** (0 failures) |
+| `uv run pytest tests/` | **2377 passed / 12 skipped** (0 failures) |
 | `uv run mypy src/ tests/` | **Success — no issues in 423 source files** |
 | `git diff --check` | clean |
 | Dashboard `npm run typecheck` | clean |
@@ -124,13 +124,40 @@ earlier suites remain continuously green.
    wrapper / `_journal_system_event_unlocked`) is exercised by the recovery and
    candidate-admission paths with no deadlock across the suite.
 
+### 5.4 Final Recovery Hardening Evidence (YELLOW-item closure)
+
+Third validation pass: closes the five audited YELLOW items from the V2 branch
+review. Each item is recorded with its confirmed root cause, the remediation,
+and the test evidence. **No runtime, deployment, or live/long-run execution was
+performed in this pass.**
+
+| YELLOW item | Confirmed root cause | Remediation | Test evidence |
+|---|---|---|---|
+| #1 recovery default OFF | CLI enabled recovery by default via the inverted `--disable-feed-recovery` (default `False` → `recovery_enabled = True`) | Single canonical positive switch `--enable-feed-recovery` (default `False`); the inverted flag was removed; default OFF now immediately halts fail-closed (exit 2, operator resume) | `test_recovery_off_by_default`, `test_enable_feed_recovery_flag`, `test_disable_feed_recovery_removed` |
+| #2 backoff off-by-one | Driver slept `backoff[min(attempts_used, len-1)]` *after* incrementing → attempt 1 failure slept the 2nd entry (5s instead of 2s) | Single authority `backoff_delay_seconds(attempt_no, backoff) = backoff[min(attempt_no-1, len-1)]`; journaled `backoff_seconds` is literally the value slept; terminal attempt sleeps nothing | `test_backoff_schedule_exact_no_terminal_sleep`, `test_backoff_journaled_equals_actual_sleep`, `test_backoff_short_schedule_clamps_to_last_entry`, `test_backoff_delay_seconds_single_authority` |
+| #3 unbounded bar-wait | Connected-recovery poll loop (`bar is None → sleep → poll…`) had no deadline | `bar_wait_timeout_seconds` default `90.0` (> 0) with an injectable monotonic deadline; every `None` consumes elapsed budget; `BAR_WAIT_TIMEOUT` consumes the attempt's retry budget + configured backoff; operator stop still interrupts mid-wait | `test_bar_wait_timeout_consumes_attempt_then_recovers`, `test_bar_wait_timeout_all_attempts_exhausted`, `test_bar_wait_timeout_budget_wallclock_bounded`, `test_operator_stop_during_bar_wait`, `test_bar_wait_timeout_non_positive_rejected` |
+| #4 silent CLI clamp | `FeedRecoveryConfig(max_attempts=max(1, int(...)))` silently raised 0/negative operator input to 1 | Strict argparse types: `_positive_int` (max attempts >= 1), `_non_negative_float` (poll interval >= 0), `_positive_float` (bar-wait > 0), `_parse_backoff_seconds` (backoff > 0); any violation is a parse-time `SystemExit` — never a silent correction | `test_max_recovery_attempts_zero_rejected`, `test_max_recovery_attempts_negative_rejected`, `test_bar_wait_timeout_zero_rejected`, `test_poll_interval_negative_rejected`, `test_poll_interval_zero_allowed`, plus backoff rejection suite |
+| #5 auto-mount symmetry | `--auto-mount-infra-candidates` was `store_true` default `True` — impossible to disable | `argparse.BooleanOptionalAction` default `True` (`--auto-mount-infra-candidates` / `--no-auto-mount-infra-candidates`); default operational layout exercises 3 INFRA_TEST candidates; auto-mount is explicitly *not* alpha authorization; when disabled, `infra_mount_count` cannot silently create candidates | `test_auto_mount_default_true`, `test_auto_mount_explicit_true`, `test_no_auto_mount_flag_disables` |
+
+**Final recovery semantics recorded after this pass**
+
+- **Automatic Feed Reconnect: DISABLED BY DEFAULT** — any transient feed
+  connection failure immediately halts fail-closed (exit code 2) with operator
+  resume required.
+- **Controlled Shadow Feed Recovery: AVAILABLE / EXPLICIT OPT-IN**
+  (`--enable-feed-recovery`), and only ever handles transient
+  `FeedConnectionError` inside a bounded attempts / backoff / bar-wait budget;
+  `FeedContractError` and staleness still bypass recovery and halt immediately.
+- **Operator Resume: REQUIRED** after terminal recovery failure (`BUDGET_EXHAUSTED`
+  → `FEED_RECOVERING` halt, exit 5) or an ordinary fail-closed halt.
+
 ---
 
 ### Verification Ledger
-- Implementation Status: COMPLETE (design commit set + V2 follow-up commit set)
+- Implementation Status: COMPLETE (design commit set + V2 follow-up commit set + final recovery hardening)
 - Contract Enforcement: STRICT FAIL-CLOSED
 - Mathematical Authority: N/A (config/observability changes; accounting contract tests)
-- Local Test Suite: VERIFIED (2353 passed / 12 skipped — full `uv run pytest tests/`)
+- Local Test Suite: VERIFIED (2377 passed / 12 skipped — full `uv run pytest tests/`)
 - Type Checker (MyPy): VERIFIED (423 source files clean, `uv run mypy src/ tests/`)
 - Remote CI Status: NOT AVAILABLE
 - Methodological Caveats:
@@ -142,3 +169,5 @@ earlier suites remain continuously green.
   - The 12 skipped tests and 3 pydantic serializer warnings (pre-existing
     `mt5_reconciliation` invalid-enum fixtures) are unrelated to this branch's
     scope and classified as accepted risk
+  - This hardening pass performed NO runtime, deployment, image build, or
+    long-run execution; Homelab validation remains a separate human step
