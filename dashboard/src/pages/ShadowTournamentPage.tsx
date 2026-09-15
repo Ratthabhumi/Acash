@@ -101,6 +101,7 @@ interface FeedHealthBadgeProps { health: FeedHealth }
 const FeedHealthBadge: React.FC<FeedHealthBadgeProps> = ({ health }) => {
   const cfg: Record<FeedHealth, { label: string; cls: string; Icon: React.FC<{ className?: string }> }> = {
     HEALTHY:      { label: 'Feed HEALTHY',      cls: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60', Icon: Wifi },
+    RECOVERING:   { label: 'Feed RECOVERING',   cls: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60', Icon: RefreshCw },
     STALE:        { label: 'Feed STALE',        cls: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60', Icon: AlertTriangle },
     HALTED:       { label: 'Feed HALTED',       cls: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/60', Icon: WifiOff },
     DISCONNECTED: { label: 'Feed DISCONNECTED', cls: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/60', Icon: WifiOff },
@@ -118,13 +119,14 @@ const FeedHealthBadge: React.FC<FeedHealthBadgeProps> = ({ health }) => {
 interface StatusDotProps { status: SlotStatus }
 const StatusDot: React.FC<StatusDotProps> = ({ status }) => {
   const cfg: Record<SlotStatus, string> = {
-    RUNNING:      'bg-emerald-500',
-    RISK_HALTED:  'bg-rose-500',
-    FEED_HALTED:  'bg-amber-600',
-    STOPPED:      'bg-rose-700',
-    UNASSIGNED:   'bg-muted',
-    ERROR:        'bg-rose-600 animate-pulse',
-    INITIALIZING: 'bg-amber-500 animate-pulse',
+    RUNNING:        'bg-emerald-500',
+    FEED_RECOVERING: 'bg-amber-500 animate-pulse',
+    RISK_HALTED:    'bg-rose-500',
+    FEED_HALTED:    'bg-amber-600',
+    STOPPED:        'bg-rose-700',
+    UNASSIGNED:     'bg-muted',
+    ERROR:          'bg-rose-600 animate-pulse',
+    INITIALIZING:   'bg-amber-500 animate-pulse',
   };
   return <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${cfg[status] ?? cfg.UNASSIGNED}`} />;
 };
@@ -139,8 +141,9 @@ interface SlotCardProps {
 }
 
 export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
-  const { slotId, strategyName, strategyVersion, status, metrics, haltReason, acashCommitSha, lastBarUtc } = slot;
+  const { slotId, strategyName, strategyVersion, status, metrics, haltReason, acashCommitSha, lastBarUtc, observationKind, cohortId } = slot;
   const isUnassigned = status === 'UNASSIGNED';
+  const isRecovering = status === 'FEED_RECOVERING';
   const isHalted = status === 'RISK_HALTED' || status === 'FEED_HALTED' || status === 'STOPPED' || status === 'ERROR';
 
   const pnlPositive = metrics.pnlPct >= 0;
@@ -177,6 +180,7 @@ export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
         </div>
         <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold border
           ${isUnassigned ? 'bg-surface-muted text-muted border-default'
+          : isRecovering ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 animate-pulse'
           : isHalted ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800'
           : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'}`}>
           {status}
@@ -190,6 +194,17 @@ export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
           <div>
             <div className="font-semibold mb-0.5">HALTED — OPERATOR RESUME REQUIRED</div>
             <div className="font-mono">{haltReason}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Feed recovery notice — transient, opt-in, operator resumes ONLY on failure */}
+      {isRecovering && (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-700 dark:text-amber-400">
+          <RefreshCw className="w-3.5 h-3.5 shrink-0 mt-0.5 animate-spin" />
+          <div>
+            <div className="font-semibold mb-0.5">FEED RECOVERING — TRANSIENT BACKFILL</div>
+            <div className="font-mono">Joining live feed asynchronously. No new simulated orders or signals until recovery completes.</div>
           </div>
         </div>
       )}
@@ -251,6 +266,13 @@ export const SlotCard: React.FC<SlotCardProps> = ({ slot, rank }) => {
             <span className="text-primary font-medium">{value}</span>
           </div>
         ))}
+      </div>
+
+      {/* Provenance / cohort lineage */}
+      <div className="text-[10px] font-mono text-muted truncate">
+        {observationKind}
+        {cohortId ? ` · Cohort: ${cohortId}` : ' · No cohort'}
+        {slot.firstMarketBarUtc && <span className="ml-2">· First bar: {timeSince(slot.firstMarketBarUtc)}</span>}
       </div>
 
       {/* Commit SHA */}
@@ -369,7 +391,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ tournament }) => {
                 className="flex items-center gap-3 p-3 rounded-lg bg-surface-muted border border-subtle"
               >
                 <div className="w-7 h-7 flex items-center justify-center rounded-full bg-surface-hover text-secondary font-bold text-sm">
-                  {rank}
+                  {rank ?? '—'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -471,8 +493,8 @@ export const ShadowTournamentPage: React.FC = () => {
   const slots: SlotId[] = Object.keys(tournament.slots) as SlotId[];
   const isMock = tournament._meta.isMockData;
 
-  // Build rank map from leaderboard
-  const rankMap = new Map<SlotId, number>();
+  // Build rank map from leaderboard (rank is null for single-member cohorts)
+  const rankMap = new Map<SlotId, number | null>();
   tournament.leaderboard.rankedSlots.forEach(({ rank, slotId }) => rankMap.set(slotId, rank));
 
   return (
@@ -540,7 +562,8 @@ export const ShadowTournamentPage: React.FC = () => {
             ['Broker Dispatch', 'STRUCTURALLY DISABLED'],
             ['Real Credentials', 'NOT PRESENT in tournament runtime'],
             ['Auto Code Sync', 'DISABLED — builds are pinned'],
-            ['Auto Feed Reconnect', 'DISABLED — operator resume required'],
+            ['Auto Feed Reconnect', 'DISABLED — OPT-IN transient shadow recovery'],
+            ['Transient Recovery', 'FAIL-CLOSED on exhaustion — operator resume required'],
             ['Public Internet', 'DISABLED — Tailscale private tailnet only'],
             ['Watchtower', 'DISABLED for ACASH containers'],
             ['G7 / S11', 'CLOSED / PASS — unchanged'],

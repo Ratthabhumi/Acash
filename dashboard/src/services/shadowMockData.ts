@@ -42,6 +42,13 @@ function makeInfraSlot(slotId: SlotId): StrategySlot {
     haltReason: null,
     operatorResolutionRequired: false,
     lastBarUtc: null,
+    // Provenance / cohort lineage — mock slots are unattributed
+    observationKind: 'NONE',
+    cohortId: null,
+    comparisonWindowId: null,
+    baselineNavUsd: 1000.00,
+    startedAtUtc: null,
+    firstMarketBarUtc: null,
     openPositions: [],
     recentFills: [],
     equityCurve: [],

@@ -33,6 +33,7 @@ export const SHADOW_GOVERNANCE = {
 export type SlotId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
 export type SlotStatus =
   | 'RUNNING'
+  | 'FEED_RECOVERING'
   | 'RISK_HALTED'
   | 'FEED_HALTED'
   | 'STOPPED'
@@ -42,13 +43,22 @@ export type SlotStatus =
 
 export type ExecutionState =
   | 'RUNNING'
+  | 'FEED_RECOVERING'
   | 'RISK_HALTED'
   | 'FEED_HALTED'
   | 'STOPPED'
   | 'UNASSIGNED'
   | 'NOT_STARTED';
 
-export type FeedHealth = 'HEALTHY' | 'STALE' | 'HALTED' | 'DISCONNECTED' | 'UNKNOWN';
+export type FeedHealth =
+  | 'HEALTHY'
+  | 'RECOVERING'
+  | 'STALE'
+  | 'HALTED'
+  | 'DISCONNECTED'
+  | 'UNKNOWN';
+
+export type ObservationKind = 'NONE' | 'CONTINUOUS' | 'LATE_JOIN';
 
 export type SimulatedOrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED';
 export type SimulatedPositionSide = 'LONG' | 'SHORT';
@@ -120,6 +130,13 @@ export interface StrategySlot {
   sessionId: string;
   configHash: string;
   acashCommitSha: string;
+  // Provenance / cohort lineage (V2 dynamic candidate add)
+  observationKind: ObservationKind;
+  cohortId: string | null;                 // null = unattributed (pre-V2 / unassigned)
+  comparisonWindowId: string | null;       // null until first cohort comparison window opens
+  baselineNavUsd: number;                  // NAV observed at slot admission
+  startedAtUtc: string | null;             // Admission time of the current candidate
+  firstMarketBarUtc: string | null;        // First CONTINUOUS bar under the current candidate
   haltReason: string | null;                      // Populated when halted
   operatorResolutionRequired: boolean;            // Kill-switch operator-resolution flag
 }
@@ -149,7 +166,7 @@ export interface TournamentGlobalStatus {
 
 export interface TournamentLeaderboard {
   rankedSlots: Array<{
-    rank: number;
+    rank: number | null; // null = single-member cohort (no comparison possible)
     slotId: SlotId;
     strategyId: string;
     navUsd: number;
@@ -158,6 +175,10 @@ export interface TournamentLeaderboard {
     winRatePct: number | null;
     maxDrawdownPct: number;
     simulatedFills: number;
+    observationKind: ObservationKind;
+    cohortId: string | null;
+    comparisonWindowId: string | null;
+    observationDurationSeconds: number;
   }>;
   comparisonAvailability: 'INSUFFICIENT_SAMPLE' | 'INDICATIVE_ONLY' | 'AVAILABLE';
   comparisonNote: string;

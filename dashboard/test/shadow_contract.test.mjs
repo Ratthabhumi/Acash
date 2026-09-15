@@ -124,3 +124,32 @@ test('Shadow Alpha Tournament Contract: Relative Base and Path Routing Compatibi
   assert.match(repoContent, /pathname\.startsWith\('\/acash'\)/, 'Must detect /acash prefix dynamically from window.location');
   assert.match(repoContent, /\$\{prefix\}\/api\/shadow\/status/, 'Must resolve API to prefix-safe path');
 });
+
+test('Shadow Alpha Tournament Contract: V2 Transient Feed Recovery Seat', () => {
+  // Backend may enter a controlled FEED_RECOVERING seat during transient feed
+  // loss (opt-in, shadow). Frontend must declare and render it without implying
+  // a halt, and feed health must expose an explicit RECOVERING state.
+  assert.match(typesContent, /FEED_RECOVERING/, 'Slot status / execution state must include FEED_RECOVERING');
+  assert.match(typesContent, /\| 'RECOVERING'/, 'FeedHealth must include RECOVERING');
+  assert.match(pageContent, /FEED_RECOVERING:\s*'bg-amber-500 animate-pulse'/, 'FEED_RECOVERING must render an amber pulsing status dot');
+  assert.match(pageContent, /FEED RECOVERING — TRANSIENT BACKFILL/, 'Recovering slot must display the transient backfill notice');
+  assert.match(
+    pageContent,
+    /No new simulated orders or signals until recovery completes/,
+    'Recovery notice must state zero orders/signals during recovery'
+  );
+});
+
+test('Shadow Alpha Tournament Contract: V2 Cohort Provenance and Null Rank', () => {
+  // Single-member (late-join) cohorts have no statistical comparison: rank = null.
+  // Frontend must declare rank nullable and render an em dash instead of faking a rank.
+  assert.match(typesContent, /rank:\s*number \| null/, 'Leaderboard rank must be declared number | null');
+  assert.match(typesContent, /observationKind: ObservationKind/, 'Slots must declare observationKind');
+  assert.match(typesContent, /cohortId: string \| null/, 'Slots must declare nullable cohortId');
+  assert.match(typesContent, /comparisonWindowId: string \| null/, 'Slots must declare nullable comparisonWindowId');
+  assert.match(typesContent, /baselineNavUsd: number/, 'Slots must declare baselineNavUsd');
+  assert.match(typesContent, /ObservationKind = 'NONE' \| 'CONTINUOUS' \| 'LATE_JOIN'/, 'Observation kind must be NONE | CONTINUOUS | LATE_JOIN');
+  assert.match(mockContent, /observationKind: 'NONE'/, 'Mock slots must declare NONE observation kind');
+  assert.match(mockContent, /cohortId: null/, 'Mock slots must declare null cohortId');
+  assert.match(pageContent, /\{rank \?\? '—'\}/, 'Leaderboard must render em dash when rank is null');
+});
