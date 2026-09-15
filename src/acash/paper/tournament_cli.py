@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import signal
 import subprocess
@@ -93,9 +94,9 @@ def _parse_backoff_seconds(value: str) -> Tuple[float, ...]:
         raise argparse.ArgumentTypeError(
             f"recovery backoff must be comma-separated positive numbers, got {value!r}"
         ) from exc
-    if not parts or any(part <= 0 for part in parts):
+    if not parts or any(not math.isfinite(part) or part <= 0 for part in parts):
         raise argparse.ArgumentTypeError(
-            f"recovery backoff must be comma-separated positive numbers, got {value!r}"
+            f"recovery backoff must be finite positive numbers, got {value!r}"
         )
     return parts
 
@@ -131,13 +132,17 @@ def _positive_int(value: str) -> int:
 
 
 def _positive_float(value: str) -> float:
-    """Strict float validator: reject zero, negatives, and non-numerics."""
+    """Strict float validator: reject zero, negatives, non-numerics, and non-finite values."""
     try:
         parsed = float(value)
     except (ValueError, TypeError) as exc:
         raise argparse.ArgumentTypeError(
             f"must be a positive number, got {value!r}"
         ) from exc
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError(
+            f"must be a finite number, got {value!r}"
+        )
     if parsed <= 0:
         raise argparse.ArgumentTypeError(
             f"must be a positive number (> 0), got {value!r}"
@@ -146,13 +151,17 @@ def _positive_float(value: str) -> float:
 
 
 def _non_negative_float(value: str) -> float:
-    """Strict float validator: reject negatives and non-numerics (zero allowed)."""
+    """Strict float validator: reject negatives, non-numerics, and non-finite values (zero allowed)."""
     try:
         parsed = float(value)
     except (ValueError, TypeError) as exc:
         raise argparse.ArgumentTypeError(
             f"must be a non-negative number, got {value!r}"
         ) from exc
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError(
+            f"must be a finite number, got {value!r}"
+        )
     if parsed < 0:
         raise argparse.ArgumentTypeError(
             f"must be a non-negative number (>= 0), got {value!r}"

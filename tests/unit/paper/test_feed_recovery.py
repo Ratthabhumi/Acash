@@ -602,6 +602,33 @@ def test_bar_wait_timeout_non_positive_rejected() -> None:
         FeedRecoveryConfig(bar_wait_timeout_seconds=-1.0)
 
 
+def test_config_rejects_non_finite_backoff_seconds() -> None:
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(DataContractError):
+            FeedRecoveryConfig(backoff_seconds=(bad,))
+        with pytest.raises(DataContractError):
+            FeedRecoveryConfig(backoff_seconds=(2.0, bad, 10.0))
+
+
+def test_config_rejects_non_finite_poll_interval() -> None:
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(DataContractError):
+            FeedRecoveryConfig(poll_interval_seconds=bad)
+
+
+def test_config_rejects_non_finite_bar_wait_timeout() -> None:
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(DataContractError):
+            FeedRecoveryConfig(bar_wait_timeout_seconds=bad)
+
+
+def test_config_finite_zero_poll_interval_remains_valid() -> None:
+    # The library contract permits a finite zero poll interval (deterministic
+    # tests / busy-poll); only non-finite or negative values are rejected.
+    config = FeedRecoveryConfig(poll_interval_seconds=0.0)
+    assert config.poll_interval_seconds == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Quiescence contract
 # ---------------------------------------------------------------------------

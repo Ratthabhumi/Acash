@@ -178,6 +178,28 @@ def test_backoff_non_numeric_rejected() -> None:
         parse_args(_argv("--recovery-backoff-seconds", "1,x,5"))
 
 
+def test_bar_wait_timeout_non_finite_rejected() -> None:
+    for bad in ("nan", "NaN", "NAN", "inf", "+inf", "-inf", "Infinity", "-Infinity"):
+        with pytest.raises(SystemExit):
+            parse_args(_argv("--recovery-bar-wait-timeout-seconds", bad))
+
+
+def test_poll_interval_non_finite_rejected() -> None:
+    for bad in ("nan", "NaN", "NAN", "inf", "+inf", "-inf", "Infinity", "-Infinity"):
+        with pytest.raises(SystemExit):
+            parse_args(_argv("--recovery-poll-interval-seconds", bad))
+
+
+def test_backoff_non_finite_rejected() -> None:
+    for bad in ("nan", "NaN", "NAN", "inf", "+inf", "-inf", "Infinity", "-Infinity"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _parse_backoff_seconds(bad)
+    for bad in ("2,nan,10", "2,NaN,10", "2,inf,10", "2,+inf,10", "2,-inf,10",
+                "2,Infinity,10", "2,-Infinity,10"):
+        with pytest.raises(SystemExit):
+            parse_args(_argv("--recovery-backoff-seconds", bad))
+
+
 def test_candidate_add_file_flag() -> None:
     ns = parse_args(_argv("--candidate-add-file", "C:/tmp/adds.json"))
     assert ns.candidate_add_file is not None

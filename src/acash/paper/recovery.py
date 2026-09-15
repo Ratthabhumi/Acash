@@ -36,6 +36,7 @@ BOUNDARY STATEMENTS (non-negotiable):
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -106,18 +107,20 @@ class FeedRecoveryConfig:
             raise DataContractError(
                 "FeedRecoveryConfig: backoff_seconds must be a non-empty sequence."
             )
-        if any(b < 0 for b in self.backoff_seconds):
+        if any(b < 0 or not math.isfinite(b) for b in self.backoff_seconds):
             raise DataContractError(
-                f"FeedRecoveryConfig: backoff_seconds must be >= 0, got {self.backoff_seconds}"
+                f"FeedRecoveryConfig: backoff_seconds must be finite and >= 0, got {self.backoff_seconds}"
             )
-        if self.poll_interval_seconds < 0:
+        if (self.poll_interval_seconds < 0
+                or not math.isfinite(self.poll_interval_seconds)):
             raise DataContractError(
-                "FeedRecoveryConfig: poll_interval_seconds must be >= 0, "
+                "FeedRecoveryConfig: poll_interval_seconds must be finite and >= 0, "
                 f"got {self.poll_interval_seconds}"
             )
-        if self.bar_wait_timeout_seconds <= 0:
+        if (self.bar_wait_timeout_seconds <= 0
+                or not math.isfinite(self.bar_wait_timeout_seconds)):
             raise DataContractError(
-                "FeedRecoveryConfig: bar_wait_timeout_seconds must be > 0, "
+                "FeedRecoveryConfig: bar_wait_timeout_seconds must be finite and > 0, "
                 f"got {self.bar_wait_timeout_seconds}"
             )
 
