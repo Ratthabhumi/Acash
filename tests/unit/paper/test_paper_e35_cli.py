@@ -97,13 +97,12 @@ class TestArgParsing:
 
 
 class TestTournamentArgParsing:
-    """Regression: top-level `tournament` subparser must expose --max-data-age-ms.
+    """Regression: top-level `tournament` command routes to the canonical V2 CLI.
 
     E3.6/H01: the Docker ENTRYPOINT runs `python -m acash.paper tournament`
-    (cli.py parser). tournament_cli.py defines and consumes args.max_data_age_ms
-    for the fail-closed stale-bar halt, but cli.py did not define the option,
-    so Homelab startup failed with exit 2 (unrecognized argument). This suite
-    pins that wiring.
+    (cli.py main). `python -m acash.paper tournament ...` must delegate the
+    remaining argv to `acash.paper.tournament_cli` (the single tournament
+    parsing authority) so V2 flags are reachable in the deployed command.
     """
 
     def test_tournament_help_displays_max_data_age_ms(
@@ -154,6 +153,89 @@ class TestTournamentArgParsing:
         code = main(["tournament", "--provider", "stooq", "--symbol", "X"])
         assert code == 0
         assert captured["max_data_age_ms"] == 65000
+
+    def test_tournament_delegates_v2_flags_to_canonical_cli(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """V2 operational flags must reach tournament_cli through the top-level
+        `python -m acash.paper tournament` command (the deployed route)."""
+        captured: dict[str, object] = {}
+
+        def fake_run_tournament(args: argparse.Namespace) -> int:
+            captured["num_slots"] = args.num_slots
+            captured["enable_feed_recovery"] = args.enable_feed_recovery
+            captured["auto_mount_infra_candidates"] = args.auto_mount_infra_candidates
+            captured["infra_mount_count"] = args.infra_mount_count
+            captured["infra_sizing_policy"] = args.infra_sizing_policy
+            captured["nav_sizing_notional_pct"] = str(args.nav_sizing_notional_pct)
+            captured["recovery_bar_wait_timeout_seconds"] = (
+                args.recovery_bar_wait_timeout_seconds
+            )
+            return 0
+
+        monkeypatch.setattr(
+            "acash.paper.tournament_cli.run_tournament", fake_run_tournament
+        )
+        code = main(
+            [
+                "tournament",
+                "--num-slots",
+                "10",
+                "--enable-feed-recovery",
+                "--auto-mount-infra-candidates",
+                "--infra-mount-count",
+                "10",
+                "--infra-sizing-policy",
+                "nav-relative",
+                "--nav-sizing-notional-pct",
+                "10",
+                "--recovery-bar-wait-timeout-seconds",
+                "90",
+                "--max-recovery-attempts=5",
+                "--recovery-backoff-seconds=2,5,10,20,30",
+            ]
+        )
+        assert code == 0
+        assert captured["num_slots"] == 10
+        assert captured["enable_feed_recovery"] is True
+        assert captured["auto_mount_infra_candidates"] is True
+        assert captured["infra_mount_count"] == 10
+        assert captured["infra_sizing_policy"] == "nav-relative"
+        assert captured["nav_sizing_notional_pct"] == "10"
+        assert captured["recovery_bar_wait_timeout_seconds"] == 90.0
+
+    def test_tournament_help_parity_with_canonical_cli(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """`python -m acash.paper tournament --help` must expose the same V2
+        option surface as `python -m acash.paper.tournament_cli --help`."""
+        with pytest.raises(SystemExit) as excinfo:
+            main(["tournament", "--help"])
+        assert excinfo.value.code == 0
+        routed_help = capsys.readouterr().out
+        for flag in (
+            "--num-slots",
+            "--auto-mount-infra-candidates",
+            "--infra-mount-count",
+            "--infra-sizing-policy",
+            "--nav-sizing-notional-pct",
+            "--enable-feed-recovery",
+            "--max-recovery-attempts",
+            "--recovery-backoff-seconds",
+            "--recovery-bar-wait-timeout-seconds",
+        ):
+            assert flag in routed_help
+
+    def test_no_stale_tournament_subparser_in_cli(self) -> None:
+        """The canonical E3.5 CLI must NOT redefine its own tournament parser;
+        a stale shim would reintroduce two-parser drift and hide V2 flags."""
+        import inspect
+
+        import acash.paper.cli as cli_module
+
+        source = inspect.getsource(cli_module)
+        assert 'add_parser("tournament"' not in source
+        assert "argparse.ArgumentParser" in source
 
 
 class TestStatus:

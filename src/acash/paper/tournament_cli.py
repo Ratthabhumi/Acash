@@ -25,7 +25,6 @@ import math
 import os
 import signal
 import subprocess
-import sys
 import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -862,10 +861,10 @@ def run_tournament(args: argparse.Namespace) -> int:
     return exit_code
 
 
-def main() -> None:
-    args = parse_args()
-    sys.exit(run_tournament(args))
+def main(argv: Optional[list[str]] = None) -> int:
+    args = parse_args(argv)
+    return run_tournament(args)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

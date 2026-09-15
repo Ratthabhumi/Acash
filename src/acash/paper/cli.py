@@ -439,6 +439,20 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Canonical V2 Tournament routing: `python -m acash.paper tournament ...`
+    # delegates the remaining argv to the V2 tournament CLI, the single
+    # parsing/behavior authority for Shadow Alpha Tournament runs. The stale
+    # duplicated tournament subparser was removed so there is no two-parser
+    # drift; V2 flags (--num-slots, --enable-feed-recovery, recovery bounds,
+    # sizing, catalog auto-mount) only ever parse in acash.paper.tournament_cli.
+    if argv and argv[0] == "tournament":
+        from acash.paper import tournament_cli
+
+        return tournament_cli.main(argv[1:])
+
     parser = argparse.ArgumentParser(prog="acash.paper", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -458,22 +472,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     review_p.add_argument("--session-id", required=True)
     review_p.add_argument("--storage", default="var/paper")
 
-    tournament_p = sub.add_parser("tournament", help="Run Shadow Alpha Tournament multi-strategy simulation.")
-    tournament_p.add_argument("--provider", choices=["binance", "stooq"], default="binance")
-    tournament_p.add_argument("--symbol", default="BTCUSDT")
-    tournament_p.add_argument("--timeframe", choices=[tf.value for tf in BarTimeframe], default=BarTimeframe.M1.value)
-    tournament_p.add_argument("--storage", type=Path, default=Path("/data/docker/acash/tournament"))
-    tournament_p.add_argument("--api-port", type=int, default=9103)
-    tournament_p.add_argument("--metrics-port", type=int, default=9102)
-    tournament_p.add_argument("--poll-interval-seconds", type=float, default=2.0)
-    tournament_p.add_argument("--git-commit", default="unknown")
-    tournament_p.add_argument(
-        "--max-data-age-ms",
-        type=int,
-        default=65_000,
-        help="Max allowed market data staleness in milliseconds before fail-closed halt",
-    )
-
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -487,10 +485,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         _integrity_session(args)
     elif args.command == "review":
         _review_session(args)
-    elif args.command == "tournament":
-        from acash.paper.tournament_cli import run_tournament
-        args.timeframe = BarTimeframe(args.timeframe)
-        return run_tournament(args)
     else:
         parser.print_help()
         return 2
