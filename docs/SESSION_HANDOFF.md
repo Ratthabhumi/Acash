@@ -1,4 +1,4 @@
-﻿# ACASH SESSION HANDOFF — H01 Closure → Tournament V2 Risk Remediation → HUMAN DECISION PENDING
+﻿# ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → HOMELAB CAPACITY DRILL PENDING
 ## Canonical Current Session Handoff — 2026-09-15
 
 > [!CAUTION]
@@ -20,18 +20,16 @@
 | Item | Value |
 |---|---|
 | Repository | `Ratthabhumi/Acash` |
-| Active branch | `feat/tournament-v2-risk-remediation-10slot` |
-| Branch base | `main @ 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` (origin/main verified) |
-| Base message | `docs: refresh canonical session handoff and archive E3.6 checkpoint` |
-| Branch tip | verify with `git rev-parse HEAD` — never trust a hard-coded tip (chain below) |
-| Branch state | PUSHED to `origin/feat/tournament-v2-risk-remediation-10slot` — NOT merged |
+| Active branch | **`main`** (V2 merged here via `--ff-only`) |
+| Current main / HEAD | **`243412d36592fc57a8801dade8579b6e2ff713a5`** (verify with `git rev-parse HEAD`) |
+| Feature branch | `feat/tournament-v2-risk-remediation-10slot` — same SHA as main (0/0) |
+| Base before V2 merge | `9a58ced5011e15c7bcf3975f0e83acf339fa53ce` |
 
-**FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` re-verified on 2026-09-15
-after the V2 work completed (see §4.5) and again before the final recovery hardening pass.
-Final recovery hardening added the `fix(shadow)` / `test(shadow)` / `docs(tournament)`
-commits below.
+**FACT:** `origin/main == 243412d36592fc57a8801dade8579b6e2ff713a5` as of 2026-09-15.
+V2 remediation + final numeric hardening + operator ratification were ff-only merged
+to `main` and pushed. The feature branch is now at the same commit as `main`.
 
-**ACTIVE BRANCH COMMITS (EVIDENCE — full SHAs):**
+**MERGED COMMIT CHAIN (22 commits, all full SHAs):**
 
 | # | Commit | Scope |
 |---|---|---|
@@ -52,10 +50,12 @@ commits below.
 | 15 | `536e84ebe49fde515c6a93c3929181e674e2313b` | fix(shadow): make feed recovery explicit opt-in and bounded |
 | 16 | `045eb4aab81ce181bbafe64ca9eca70a1ffee284` | fix(shadow): strict recovery CLI validation and symmetric auto-mount |
 | 17 | `7c01998310b972b8c2c9d020ee14d7874a137043` | test(shadow): cover bounded recovery and CLI flag contracts |
-| 18 | (docs commit completing this handoff) | docs(tournament): record final recovery hardening evidence |
+| 18 | `f95670793ae9540767ca3e84907112a7715f7739` | docs(tournament): record final recovery hardening evidence |
+| 19 | `173cc81bbff3d19bbc5f608da90b52e770bbfba8` | fix(shadow): reject non-finite recovery timing values at CLI and config layers |
+| 20 | `8db9bf5fa1ac6cb276f7ca38ea9c93afba566e03` | docs(tournament): record numeric hardening evidence in validation ledger |
+| 21 | `243412d36592fc57a8801dade8579b6e2ff713a5` | docs: record V2 operator ratification D1-D5 |
 
-> Verify the completing docs commit and the final tip with `git rev-parse HEAD`
-> after the push — tools and handoffs never hard-code a self-invalidating tip.
+> Verify the final SHA with `git rev-parse HEAD` — never trust a hard-coded tip.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -179,13 +179,14 @@ Artifacts on Host: `/data/docker/acash/tournament/`.
 
 | Item | Value |
 |---|---|
-| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `df1bafa` |
+| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `243412d` — **MERGED to main** |
 | Defects addressed | A (`MAX_NOTIONAL`), B (funding policy), C (kill-switch policy), D (execution states), E (terminal reason) |
 | V2 readiness | N-slot fanout A..Z (1–26), 10-slot INFRA_TEST catalog, 10-slot isolation proven |
 | V2 follow-up | transient feed recovery seat (FEED_RECOVERING), staged dynamic candidate admission (SIGHUP / candidate-add file), safe NAV-relative sizing (10% cap), journal re-entrant lock fix |
-| Local test suite | **2353 passed / 12 skipped** (full `uv run pytest tests/`) |
+| Local test suite | **2384 passed / 12 skipped** (full `uv run pytest tests/`) |
 | MyPy | **423 source files clean** (`uv run mypy src/ tests/`) |
 | Dashboard | `npm run typecheck` clean; node contract tests **27/27**; production build clean |
+| Merge state | ff-only merged and pushed to `main` @ `243412d36592fc57a8801dade8579b6e2ff713a5` |
 | Deployment state | NOT deployed — no image built, no container restarted, no Pi change |
 | Paper/Live | NOT AUTHORIZED |
 
@@ -220,12 +221,21 @@ emits **zero** new simulated orders/signals; a failed recovery halts with
   must NOT silently create catalog candidates. Auto-mount is not alpha
   authorization.
 
-New/updated suites after hardening: `test_feed_recovery.py` (29),
-`test_dynamic_candidate_add.py` (15), `test_safe_sizing.py` (17),
-`test_v2_cli_options.py` (32).
+- Strict float validators now also reject **non-finite** IEEE-754 values
+  (`NaN`/`+Inf`/`-Inf`) at both the CLI layer (`_positive_float`,
+  `_non_negative_float`, `_parse_backoff_seconds`) and the config layer
+  (`FeedRecoveryConfig.__post_init__`, DataContractError), closing the
+  non-finite timing hole that could poison `monotonic() + bar_wait_timeout`.
 
-**PENDING HUMAN DECISION (D1–D5)** — the branch implements *policies*, it does **not** choose
-them. See §11 step 3.
+New/updated suites after hardening: `test_feed_recovery.py` (32),
+`test_dynamic_candidate_add.py` (15), `test_safe_sizing.py` (17),
+`test_v2_cli_options.py` (36).
+
+**HUMAN DECISIONS D1–D5 = RATIFIED** (2026-09-15). See
+`docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md` and §11.
+D1=CASH_CONSTRAINED_SPOT, D2=HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
+D3=NAV_RELATIVE_PERCENT 10%, D4=10-slot capacity drill AUTHORIZED,
+D5=3-slot 24h Shadow V2 AUTHORIZED **only after D4 PASS**.
 
 ---
 
@@ -502,46 +512,62 @@ UNASSIGNED Slot B/C now render N/A as em dash instead of crashing.
 **NEXT ACTION — Step 1: Verify current state**
 ```bash
 git fetch origin
-git rev-parse origin/main  # must == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
+git rev-parse origin/main  # must == 243412d36592fc57a8801dade8579b6e2ff713a5
 git status --short --branch
 ```
-Also re-verify: container status (H01 Attempt 1 = EXITED EXIT=2), journal path/size, feed health.
 
-**NEXT ACTION — Step 2: V2 remediation is COMPLETE — verify evidence artifacts**
-- Design: `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md`
-- Validation: `docs/tournament/TOURNAMENT_V2_VALIDATION.md`
-- Final recovery hardening recorded in the validation doc §5.4 (YELLOW-item closure);
-  recovery default OFF, explicit `--enable-feed-recovery` opt-in, corrected backoff,
-  bounded bar-wait, strict CLI validation, symmetric auto-mount
-- Branch tip: run `git rev-parse HEAD` and `git rev-parse origin/HEAD` — never trust a
-  hard-coded tip; branch is PUSHED to origin (NOT merged)
-- Full local evidence: see TOURNAMENT_V2_VALIDATION.md §5.2 for the current pass counts
+**NEXT ACTION — Step 2: D1–D5 are RATIFIED — proceed to Homelab**
 
-**NEXT ACTION — Step 3: Obtain HUMAN DECISIONS (D1–D5) before any deployment/run**
+The V2 branch is merged to `main` and all source-level blockers are closed
+(recovery default OFF, explicit `--enable-feed-recovery`, bounded attempts,
+corrected backoff, bounded bar-wait, strict CLI + finite-number validation,
+symmetric auto-mount).
 
-The V2 branch makes *policies available*; it does **not** choose them. The following
-only become effective after explicit Human authorization:
+**Current Homelab blocker (2026-09-15):** Tailscale `BackendState=Stopped` on
+the Windows workstation — SSH to `mew@homelab` unreachable (`homelab` /
+`homelab.tail35e4b4.ts.net` unresolvable; LAN `192.168.1.10:22` timed out).
+The Homelab build/drill/start is the ONLY pending step.
 
-| Packet | Decision | Options | Default (recommended) |
-|---|---|---|---|
-| D1 | Portfolio funding model | `SIMULATED_LEVERAGED` / `CASH_CONSTRAINED_SPOT` / `EXPLICIT_BOUNDED_LEVERAGE` | `SIMULATED_LEVERAGED` (H01-evidence preserving) |
-| D2 | Kill-switch position policy | `HALT_AND_PRESERVE_POSITION` / `HALT_AND_FORCE_SIMULATED_FLATTEN` / `HALT_AND_REQUIRE_OPERATOR_RESOLUTION` | `HALT_AND_PRESERVE_POSITION` |
-| D3 | Candidate sizing | Confirm Slot A bit-compatible with historical canonical default; catalog A..J is INFRA_TEST-only | Confirm |
-| D4 | V2 Homelab resource limits | **TEST REQUIRED** — 10-slot mount is unit-proven; container-level resource-limit soak/drill NOT yet performed | Perform before any V2 run claim |
-| D5 | V2 runtime authorization | No run authorized; design commit set does not unlock H02 / Paper / Live | NO RUN |
+| Packet | Decision | Value |
+|---|---|---|
+| D1 | Portfolio funding model | **RATIFIED = `CASH_CONSTRAINED_SPOT`** |
+| D2 | Kill-switch position policy | **RATIFIED = `HALT_AND_REQUIRE_OPERATOR_RESOLUTION`** |
+| D3 | Candidate sizing | **RATIFIED = `NAV_RELATIVE_PERCENT` / 10.0%** |
+| D4 | V2 Homelab capacity drill | **RATIFIED = 10-slot / 15 min INFRA_TEST drill** (pending network access) |
+| D5 | V2 runtime | **CONDITIONAL = 3-slot 24h Shadow V2 only after D4 PASS** |
 
-**NEXT ACTION — Step 4: Only after D1–D5 are authorized**
+Record: `docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md`.
 
-Deployment on Homelab (build image from branch tip, run `acash-shadow` with chosen
-`--num-slots` and `--auto-mount-infra-candidates` per authorized layout), observe a V2
-soak, then reconcile against journal/manifests. Do NOT auto-merge the branch.
+**NEXT ACTION — Step 3: Unblock Homelab, then execute capacity gate**
+1. Reconnect Tailscale on the workstation (or run from a machine with SSH to `mew@homelab`).
+2. Homelab pre-flight (read-only): hostname/date/free/df/docker; confirm prior
+   H01 container is EXITED/exit 2 (do NOT erase H01 evidence).
+3. Build exact V2 image from `main @ 243412d` with `ACASH_GIT_COMMIT=<full SHA>`,
+   tag `acash:shadow-v2-<short SHA>` (do NOT tag over `bb6d49c`).
+4. 10-slot capacity drill (15 min, isolated CAPACITY-DRILL storage path):
+   `--num-slots 10 --auto-mount-infra-candidates --infra-mount-count 10
+   --infra-sizing-policy nav-relative --nav-sizing-notional-pct 10
+   --enable-feed-recovery`, CASH_CONSTRAINED_SPOT,
+   HALT_AND_REQUIRE_OPERATOR_RESOLUTION.
+5. Evaluate vs the D4 PASS gate list (healthy, RestartCount=0, capital $0,
+   10 independent slots, reconciliation PASS, no hash-chain failure, bounded
+   cardinality, no host resource exhaustion). Report, do not invent thresholds.
+6. D4 PASS → start 3-slot 24h run; D4 FAIL → STOP (no D5).
+
+**NEXT ACTION — Step 4 (D5, ONLY IF D4 PASS):**
+3-slot 24h Shadow V2: BTCUSDT M1, 3 INFRA_TEST candidates,
+NAV 10% sizing, CASH_CONSTRAINED_SPOT, HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
+`--enable-feed-recovery` with validated defaults (5 attempts, backoff
+2,5,10,20,30, bar-wait 90s). Verify immediately after start: running/healthy,
+RestartCount=0, exactly 3 slots, capital 0, realOrderCount 0, noRealOrders true,
+V2 git SHA correct. Then verify metrics/VM/dashboard/Tailscale health.
 
 **NEXT ACTION — Step 5: Do NOT**
-- Merge `feat/tournament-v2-risk-remediation-10slot` to `main` without explicit instruction
+- Merge anything further without instruction (main is at the ratified tip)
 - Create HYP_003, start R1, authorize Paper/Live, unlock backtesting
 - Introduce real capital or broker credentials
-- Restart H01 or start H02 without Human authorization
-- Build/deploy images or touch Pi infrastructure without explicit request
+- Restart the drill container or auto-restart after terminal halt (operator resume)
+- Tag the new image over `bb6d49c` or erase H01 evidence
 
 ---
 
@@ -561,25 +587,26 @@ Stop and report to the human before proceeding past these boundaries:
 
 ```
 Implementation Status:    COMPLETE — V2 remediation + V2 follow-up + final recovery
-                           hardening delivered on
-                           feat/tournament-v2-risk-remediation-10slot
-                           (commits pushed; NOT merged; verify tip with `git rev-parse HEAD`)
+                           hardening + numeric hardening MERGED to main
+                           main = 243412d36592fc57a8801dade8579b6e2ff713a5
+                           (ff-only merge, pushed; verify tip with `git rev-parse HEAD`)
 Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
 Mathematical Authority:   N/A (config/observability + nominal sizing arithmetic)
-Local Test Suite:         VERIFIED — see TOURNAMENT_V2_VALIDATION.md §5.2 (full `uv run pytest tests/`)
-Type Checker (MyPy):      VERIFIED — see TOURNAMENT_V2_VALIDATION.md §5.2 (`uv run mypy src/ tests/`)
+Local Test Suite:         VERIFIED — 2384 passed / 12 skipped (full `uv run pytest tests/`)
+Type Checker (MyPy):      VERIFIED — 423 source files clean (`uv run mypy src/ tests/`)
 Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 27/27; build clean)
 Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
-  - Policies are AVAILABLE, not CHOSEN; defaults preserve H01 evidence semantics (D1/D2 pending)
+  - D1–D5 RATIFIED (V2_OPERATOR_RATIFICATION_20260915.md); D5 is CONDITIONAL on D4 PASS
   - 10-slot catalog is INFRA_TEST only; zero alpha authority
-  - No deployment, no image build, no container run on Pi from this branch
-  - D4 (V2 Homelab resource limits) TEST REQUIRED before any V2 run claim
-  - D5 (V2 runtime authorization) NOT granted by this branch
+  - No deployment on Homelab yet — Homelab SSH unreachable (Tailscale Stopped on
+    workstation, 2026-09-15); build/drill/start are the only pending steps
+  - D4 (10-slot capacity drill) NOT yet performed -> D5 runtime NOT started
   - Automatic Feed Reconnect DISABLED BY DEFAULT; controlled shadow recovery is
     AVAILABLE / EXPLICIT OPT-IN only (`--enable-feed-recovery`), bounded by
-    attempts / backoff / bar-wait timeout; operator resume REQUIRED after
-    terminal recovery failure or any ordinary fail-closed halt
+    attempts / backoff / bar-wait timeout; non-finite values rejected at CLI and
+    config layers; operator resume REQUIRED after terminal recovery failure or
+    any ordinary fail-closed halt
 ```
 
 ---
@@ -589,23 +616,28 @@ Methodological Caveats:
 ```
 ACASH QUICK START — 2026-09-15 Handoff
 =======================================
-1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce;
-   verify current branch tip with `git rev-parse HEAD` (hard-coded tips self-invalidate)
-2. Active work branch: feat/tournament-v2-risk-remediation-10slot
-   (base = main @ 9a58ced; PUSHED, NOT merged)
-3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence archived (docs/tournament/)
+1. git fetch origin; verify origin/main = 243412d36592fc57a8801dade8579b6e2ff713a5;
+   verify current tip with `git rev-parse HEAD` (hard-coded tips self-invalidate)
+2. V2 branch feat/tournament-v2-risk-remediation-10slot is MERGED to main (ff-only), pushed
+3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence preserved, do NOT erase
 4. V2 REMEDIATION COMPLETE: A (MAX_NOTIONAL), B (funding), C (kill-switch), D (states), E (reason)
-5. V2 READINESS: N-slot fanout A..Z, 10-slot INFRA_TEST catalog, --num-slots,
-   --auto-mount-infra-candidates / --no-auto-mount-infra-candidates (default True),
-   dashboard V2 contract (SHADOW_RUNTIME)
-6. V2 FOLLOW-UP + FINAL HARDENING COMPLETE: transient feed recovery DISABLED BY DEFAULT
-   (explicit opt-in --enable-feed-recovery; bounded attempts/backoff/bar-wait; backoff
-   journal==actual sleep; strict CLI validation), staged dynamic candidate admission
-   (SIGHUP / --candidate-add-file), safe NAV sizing (10%), journal re-entrant lock fix
-7. VERIFICATION: see docs/tournament/TOURNAMENT_V2_VALIDATION.md §5.2 for current pass counts
-8. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
-9. PENDING: HUMAN DECISION PACKET D1 (funding) / D2 (kill-switch) / D3 (sizing) /
-   D4 (Homelab resource-limit TEST REQUIRED) / D5 (NO runtime authorization granted)
-10. DO NOT merge branch, DO NOT build/deploy images, DO NOT restart H01 / start H02
-11. NO run of 24h continuity has been performed on this branch
+5. V2 READINESS: N-slot fanout, 10-slot INFRA_TEST catalog, dashboard V2 contract,
+   recovery default OFF (--enable-feed-recovery opt-in), bounded/backoff-corrected bar-wait,
+   strict CLI + non-finite rejection, staged dynamic admission, safe NAV sizing (10%)
+6. VERIFICATION: 2384 passed / 12 skipped; mypy 423 clean; dashboard 27/27 + typecheck + build
+7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+8. D1-D5 RATIFIED (docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md):
+   D1=CASH_CONSTRAINED_SPOT, D2=HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
+   D3=NAV_RELATIVE_PERCENT/10%, D4=10-slot drill AUTHORIZED, D5=3-slot 24h ONLY after D4 PASS
+9. BLOCKER: Homelab unreachable from this workstation (Tailscale Stopped).
+   NEXT: reconnect Tailscale -> build image from main@243412d -> 10-slot drill (15 min) -> D4 gate -> conditional 3-slot 24h
+10. DO NOT create HYP_003 / start R1 / authorize Paper/Live / unlock backtest / use real capital
 ```
+
+### Verification Ledger
+- Implementation Status: MERGED TO MAIN — D1-D5 RATIFIED
+- Contract Enforcement: STRICT FAIL-CLOSED
+- Local Test Suite: VERIFIED (2384 passed / 12 skipped)
+- Type Checker (MyPy): VERIFIED (423 source files clean)
+- Homelab Access: BLOCKED (Tailscale not connected from this machine)
+- Methodological Caveats: D4 capacity drill NOT yet performed; D5 runtime NOT started; deployment pending
