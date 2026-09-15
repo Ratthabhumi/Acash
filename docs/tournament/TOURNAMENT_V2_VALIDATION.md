@@ -73,15 +73,72 @@ node tests 25/25 (`dashboard/test/shadow_contract.test.mjs`).
 
 ---
 
+## 5. V2 Follow-up Evidence — Recovery / Dynamic Admission / Safe Sizing
+
+Second validation pass on the same branch after the follow-up feature set
+(transient feed recovery, staged dynamic candidate admission, NAV-relative
+sizing). Records replace the §1 scope snapshot for the newest suites; the
+earlier suites remain continuously green.
+
+### 5.1 Test inventory (additions)
+
+| Test file | Coverage | Status |
+|---|---|---|
+| `tests/unit/paper/test_feed_recovery.py` | Episode lifecycle, reconnect boundary validation, zero orders/signals during recovery, portfolio preservation, journal ordering under one episode correlation id, operator stop during recovery, resume boundary | 18 passed |
+| `tests/unit/paper/test_dynamic_candidate_add.py` | Stage/materialize semantics, rejection matrix, batch cohort identity, catalog instance freshness, adversarial double-stage, fail-closed null-builder materialize | 15 passed |
+| `tests/unit/paper/test_safe_sizing.py` | FIXED vs NAV sizing spread, config hashing, dead-config rejection, SESSION_STARTED sizing seal, CLI policy override | 17 passed |
+| `tests/unit/paper/test_v2_cli_options.py` | CLI flag parsing and validation boundaries | 19 passed |
+
+### 5.2 Full-repository evidence (this branch tip)
+
+| Check | Result |
+|---|---|
+| `uv run pytest tests/` | **2353 passed / 12 skipped** (0 failures) |
+| `uv run mypy src/ tests/` | **Success — no issues in 423 source files** |
+| `git diff --check` | clean |
+| Dashboard `npm run typecheck` | clean |
+| Dashboard node contract tests | **27 / 27 passed** (incl. FEED_RECOVERING seat, provenance, null-rank) |
+| Dashboard `npm run build` | clean (tsc + vite production build) |
+
+### 5.3 What the follow-up tests prove
+
+1. **Recovery is a strict seat, not a reconnect.** During an episode the
+   journal receives no new EXECUTION or SIGNAL events, portfolio cash/position
+   and closed-position history are byte-identical before/after, and all episode
+   phases share the single correlation id minted by `enter_feed_recovery`.
+2. **Recovery fails closed.** Budget exhaustion preserves the causal reason
+   (`FEED_RECOVERY_FAILED`), halts the tournament, and requires operator resume;
+   an older-than-boundary reconnect bar is rejected, and a fresh runner refuses
+   to join mid-window (drops the bar, halts feed-seam first).
+3. **Dynamic admission is staged and explicit.** Unconfigured slots,
+   occupied slots, unknown/duplicate strategies, unknown slot ids, and
+   capacity-exceeded states are all rejected with named results; admission
+   happens only on the next bar; late-join cohorts carry rank `null` on the
+   leaderboard (single-member — no fabricated comparison).
+4. **Sizing is safe and sealed.** NAV-relative sizing produces a bounded
+   fraction of current equity with 8-dp `ROUND_DOWN`, fixed policy remains
+   bit-compatible with the canonical qty=1.0, dead sizing configs are rejected,
+   and non-positive derived quantity is rejected by the SIZING gate (never
+   silently clamped).
+5. **Journal lock integrity.** The re-entrant lock split (`journal_system_event`
+   wrapper / `_journal_system_event_unlocked`) is exercised by the recovery and
+   candidate-admission paths with no deadlock across the suite.
+
+---
+
 ### Verification Ledger
-- Implementation Status: COMPLETE (design commit set)
+- Implementation Status: COMPLETE (design commit set + V2 follow-up commit set)
 - Contract Enforcement: STRICT FAIL-CLOSED
 - Mathematical Authority: N/A (config/observability changes; accounting contract tests)
-- Local Test Suite: VERIFIED (229 passed — paper unit + integration)
-- Type Checker (MyPy): VERIFIED (24 source files clean, `src/acash/paper/`)
+- Local Test Suite: VERIFIED (2353 passed / 12 skipped — full `uv run pytest tests/`)
+- Type Checker (MyPy): VERIFIED (423 source files clean, `uv run mypy src/ tests/`)
 - Remote CI Status: NOT AVAILABLE
 - Methodological Caveats:
-  - Dashboard evidence (`npm run typecheck`, node contract tests) is a separate
-    toolchain; counts reported from local run
-  - Full-repository `uv run pytest` beyond the paper scope was not the gate for
-    this branch; paper/tournament scope is the audit boundary
+  - Dashboard evidence (`npm run typecheck`, node contract tests, production
+    build) is a separate toolchain; counts reported from local run
+  - Recovery/candidate/sizing behavior is verified at the Python/unit level;
+    container-level operator-recovery drill remains operator-verified at
+    deployment
+  - The 12 skipped tests and 3 pydantic serializer warnings (pre-existing
+    `mt5_reconciliation` invalid-enum fixtures) are unrelated to this branch's
+    scope and classified as accepted risk

@@ -113,6 +113,83 @@ metric/leaderboard/equity point is explicitly tagged as simulated.
 **GOVERNANCE BOUNDARY:** nothing in this design authorizes H02, a new run,
 paper, live, or backtesting. All such decisions remain with the Human.
 
+## 9. V2 Follow-up — Transient Feed Recovery, Dynamic Admission, Safe Sizing
+
+Two follow-up capability groups were added to the same branch and are recorded
+here with their exact contracts. Both remain **shadow-only instruments**: they
+do NOT unlock auto-reconnect, paper, live, or research admission.
+
+### 9.1 Transient Feed Recovery (opt-in, shadow)
+
+Motivation: H01 Attempt 1 ended `EXIT=2` because a transient feed `ReadTimeout`
+halted the whole tournament fail-closed with no operator-understandable path.
+This adds a *controlled, operator-visible* recovery seat for **transient**
+`FeedConnectionError` only.
+
+| Contract | Rule |
+|---|---|
+| Trigger | feed poll raises `FeedConnectionError` (transient). `FeedContractError` / staleness remain **immediate fail-closed halt** — no recovery path |
+| Seat | slot enters `FEED_RECOVERING`; supervisor `feeds_health` becomes `RECOVERING` |
+| During recovery | **zero** new simulated orders and **zero** new signals; portfolio, cash, journal, and closed-position history are preserved untouched |
+| Reconnect boundary | on the next supervisor poll, `recovery.validate_reconnect_bar()` compares the live bar time against the authoritative `last_accepted_bar_utc`: equal-gap or pending bars are backfilled into an in-memory window; an older-than-boundary resume is rejected |
+| Journaling | every episode runs under a single episode correlation id created by `enter_feed_recovery`; phases `FEED_RECOVERING` → `FEED_RECOVERY_ATTEMPTED` → `FEED_RECOVERY_SUCCEEDED` (or `FEED_RECOVERY_EXHAUSTED`), plus `SESSION_STOPPED reason=FEED_RECOVERY_FAILED` on exhaustion |
+| Backoff | `FeedRecoveryConfig.backoff_seconds` is a `Tuple[float, ...]` (one delay per attempt); default `(1.0, 2.0, 4.0, 8.0)` |
+| Exhaustion | after `max_attempts` failures the failure reason is **preserved** (never rewritten as `NORMAL_SHUTDOWN`) and the tournament halts fail-closed; operator resume is **required** — there is no automatic reconnect |
+| Opt-in | CLI `--disable-feed-recovery` turns the whole engine off; default enabled but only as a *shadow* seat (automatic reconnect remains structurally disabled) |
+
+### 9.2 Dynamic Shadow Candidate Admission (SIGHUP / candidate-add file)
+
+Motivation (D3-era design constraint reversed): allowed **staged** admission of
+new INFRA_TEST shadow candidates without a full tournament restart, while frozen
+slots and comparison integrity stay explicit.
+
+| Contract | Rule |
+|---|---|
+| Stage | `stage_candidate_add(slot_id, strategy_id)` returns an explicit `ShadowCandidateStageResult` |
+| Rejection matrix | `TOURNAMENT_NOT_RUNNING` · `INVALID_SLOT_ID` · `UNKNOWN_SLOT` · `SLOT_OCCUPIED` · `CANDIDATE_ADD_UNCONFIGURED` · `UNKNOWN_STRATEGY_ID` · `DUPLICATE_STRATEGY_ID` · `CAPACITY_EXCEEDED` — all fail-closed, none silent |
+| Materialization | staged candidates are admitted on the **next** bar into a new runner + fresh config hash; cohort id is `"<strategy_id>:ADD:<YYYYMMDD_HHMMSS_ffffff>"` |
+| Provenance | `observation_kind` `NONE` / `CONTINUOUS` / `LATE_JOIN`; `comparison_window_id`; `baseline_nav_usd = 1000.00` (slot NAV at admission) — all carried in the slot/API JSON |
+| Leaderboard | each cohort's observation window feeds a per-slot comparison; **single-member cohorts report rank `null`** (no statistical comparison exists — never fabricated) |
+| Operator surface | `last_operator_action_results` / `clear_operator_action_results`; CLI `--candidate-add-file` + `SIGHUP` triggers a staged restage from the file |
+
+### 9.3 Safe NAV-Relative Sizing (shadow bound, no leverage surprise)
+
+| Contract | Rule |
+|---|---|
+| Policy | `SignalSizingPolicy.INFRA_FIXED_QUANTITY` (default, bit-compatible with historical canonical qty=1.0) / `NAV_RELATIVE_PERCENT` |
+| Formula | `qty = (equity × SAFE_V2_NAV_SIZING_PCT / 100) / price`, `SAFE_V2_NAV_SIZING_PCT = 10.0`, 8-dp `ROUND_DOWN`, `exec_signal(target_quantity=qty)` |
+| Fail-closed | non-positive quantity, zero price, zero/negative equity → `DataContractError` / `SIZING` gate rejection; a dead sizing config is rejected at admission |
+| Sealing | `SESSION_STARTED` payload carries `sizing` metadata **only when** sizing was actually applied (fixed policy → empty, H01-replay bit-compatible) |
+
+### 9.4 Journal Integrity Fix Sourced While Wiring Recovery
+
+`journal_system_event` re-acquired the journal lock while internal callers
+(`enter_feed_recovery`, `_materialize_candidate_adds`, …) already held it —
+a re-entrant deadlock on a plain `threading.Lock`. Split into the public
+wrapper `journal_system_event()` (acquires the lock) and the internal
+`_journal_system_event_unlocked()` (no lock); all internal call sites use the
+unlocked variant. Also fixed UTF-8 mojibake (`—`/`·` corruption) that this
+branch had previously introduced into tournament wording.
+
+---
+
+### Verification Ledger
+- Implementation Status: DESIGN RECORD — reflects commits `c4651ac`,
+  `24d5607`, `b169d27`, `139ac62`, `56160de` plus the V2 follow-up commit set
+  (recovery / candidate admission / sizing)
+- Contract Enforcement: STRICT FAIL-CLOSED (prescribed above)
+- Mathematical Authority: N/A (config/observability design; sizing arithmetic is
+  nominal, not statistical)
+- Local Test Suite: SEE `./TOURNAMENT_V2_VALIDATION.md`
+- Type Checker (MyPy): SEE `./TOURNAMENT_V2_VALIDATION.md`
+- Remote CI Status: NOT AVAILABLE
+- Methodological Caveats:
+  - Recovery is a *shadow* seat, not auto-reconnect; `NO_REAL_ORDERS` and
+    operator-resume boundaries are preserved
+  - Candidate admission is INFRA_TEST-only; dynamic admission is *not* alpha
+    qualification and carries no research admission
+  - Sizing is nominal-share math verified by unit tests, not a statistical model
+
 ---
 
 ### Verification Ledger
