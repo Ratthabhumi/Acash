@@ -1,4 +1,4 @@
-﻿# ACASH SESSION HANDOFF — H01 Closure → Tournament V2 Risk Remediation
+﻿# ACASH SESSION HANDOFF — H01 Closure → Tournament V2 Risk Remediation → HUMAN DECISION PENDING
 ## Canonical Current Session Handoff — 2026-09-15
 
 > [!CAUTION]
@@ -23,10 +23,24 @@
 | Active branch | `feat/tournament-v2-risk-remediation-10slot` |
 | Branch base | `main @ 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` (origin/main verified) |
 | Base message | `docs: refresh canonical session handoff and archive E3.6 checkpoint` |
+| Branch tip | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` (8 commits ahead of main) |
+| Branch state | PUSHED to `origin/feat/tournament-v2-risk-remediation-10slot` — NOT merged |
 
-**FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` CONFIRMED by `git fetch`
-+ `git rev-parse` on 2026-09-15, then `git switch main` + `git pull --ff-only origin main`
-(`638388e..9a58ced`), then branch created at exact main SHA.
+**FACT:** `origin/main == 9a58ced5011e15c7bcf3975f0e83acf339fa53ce` re-verified on 2026-09-15
+after the V2 work completed (see §4.5). Branch remains 8 commits ahead of main.
+
+**ACTIVE BRANCH COMMITS (EVIDENCE — full SHAs):**
+
+| # | Commit | Scope |
+|---|---|---|
+| 1 | `ad6642fb5dd9f65c406194daacd3b31a0953f40d` | docs: H01 Attempt 1 evidence preserved, H01 closure recorded (EXIT=2, ReadTimeout) |
+| 2 | `260d32b56668a6d99d1e120e2fa2096b4d4ca350` | fix: enforce `MAX_NOTIONAL` + preserve terminal reason (Defects A & E) |
+| 3 | `c4651ac82fba8e2a382dd01b3ab0248cc2a042e4` | feat: funding + kill-switch position policies + granular execution states (Defects B, C & D) |
+| 4 | `24d5607b380e033015365b60b9e71f29cc76d4af` | feat: N-slot fanout A..Z (1–26), `--num-slots` CLI |
+| 5 | `b169d272d320217996f1dc6b7208a8677db26b65` | feat: 10-slot infrastructure candidate catalog, auto-mount opt-in |
+| 6 | `139ac62c18fa95621f5685d8a131650b0fff2d40` | feat: dashboard V2 contract, granular states, `SHADOW_RUNTIME` data source |
+| 7 | `56160de912d9f49e7e56bad70a46d216b883f1dc` | test: 10-slot layout state isolation |
+| 8 | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` | docs: V2 10-slot design + validation evidence |
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -145,6 +159,25 @@ Everything remains simulated-only. Canonical real capital remains $0.
 **EVIDENCE PRESERVATION:** Full evidence archived at
 [`docs/tournament/H01_ATTEMPT1_EVIDENCE.md`](tournament/H01_ATTEMPT1_EVIDENCE.md).
 Artifacts on Host: `/data/docker/acash/tournament/`.
+
+### 4.5 Tournament V2 Remediation — COMPLETED (EVIDENCE)
+
+| Item | Value |
+|---|---|
+| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `3787cd0` |
+| Defects addressed | A (`MAX_NOTIONAL`), B (funding policy), C (kill-switch policy), D (execution states), E (terminal reason) |
+| V2 readiness | N-slot fanout A..Z (1–26), 10-slot INFRA_TEST catalog, 10-slot isolation proven |
+| Local test suite | **2295 passed / 1 skipped** (full `uv run pytest tests/`) |
+| MyPy | **418 source files clean** (`uv run mypy src/ tests/`) |
+| Dashboard | `npm run typecheck` clean; node contract tests **25/25** |
+| Deployment state | NOT deployed — no image built, no container restarted, no Pi change |
+| Paper/Live | NOT AUTHORIZED |
+
+**Design/validation records:** `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md` and
+`docs/tournament/TOURNAMENT_V2_VALIDATION.md`.
+
+**PENDING HUMAN DECISION (D1–D5)** — the branch implements *policies*, it does **not** choose
+them. See §11 step 3.
 
 ---
 
@@ -426,39 +459,37 @@ git status --short --branch
 ```
 Also re-verify: container status (H01 Attempt 1 = EXITED EXIT=2), journal path/size, feed health.
 
-**NEXT ACTION — Step 2: Preserve current H01 evidence**
-- Do NOT restart H01 merely to clear or "reset" observed state
-- Do NOT discard journal; it is the primary audit evidence for this run
-- Preserve journal at `/data/docker/acash/tournament/SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl`
-- Evidence snapshot: `docs/tournament/H01_ATTEMPT1_EVIDENCE.md`
+**NEXT ACTION — Step 2: V2 remediation is COMPLETE — verify evidence artifacts**
+- Design: `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md`
+- Validation: `docs/tournament/TOURNAMENT_V2_VALIDATION.md`
+- Branch tip `3787cd06fff7423b2e6f4e8efd93051c52d6d808` pushed to origin (NOT merged)
+- Full local evidence: 2295 passed / 1 skipped; mypy 418 files clean; dashboard 25/25
 
-**NEXT ACTION — Step 3: Remediation (branch `feat/tournament-v2-risk-remediation-10slot`)**
+**NEXT ACTION — Step 3: Obtain HUMAN DECISIONS (D1–D5) before any deployment/run**
 
-Address these defects in isolation, in this recommended order (design + tests BEFORE code):
+The V2 branch makes *policies available*; it does **not** choose them. The following
+only become effective after explicit Human authorization:
 
-1. **Defect A** — max_notional enforcement in `PaperSessionRunner._evaluate_risk()`
-2. **Defect B** — insolvency/margin semantics — define the virtual portfolio boundary policy seam
-3. **Defect C** — kill-switch position policy — halt+preserve vs halt+liquidate vs halt+operator-gate (HUMAN DECISION)
-4. **Defect D** — kill-switch execution-state propagation to supervisor/API/dashboard
-5. **Defect E** — terminal shutdown reason preserving causality (FEED_DISCONNECTED / RISK_KILL_SWITCH / OPERATOR_STOP / NORMAL_COMPLETION / INTERNAL_ERROR)
+| Packet | Decision | Options | Default (recommended) |
+|---|---|---|---|
+| D1 | Portfolio funding model | `SIMULATED_LEVERAGED` / `CASH_CONSTRAINED_SPOT` / `EXPLICIT_BOUNDED_LEVERAGE` | `SIMULATED_LEVERAGED` (H01-evidence preserving) |
+| D2 | Kill-switch position policy | `HALT_AND_PRESERVE_POSITION` / `HALT_AND_FORCE_SIMULATED_FLATTEN` / `HALT_AND_REQUIRE_OPERATOR_RESOLUTION` | `HALT_AND_PRESERVE_POSITION` |
+| D3 | Candidate sizing | Confirm Slot A bit-compatible with historical canonical default; catalog A..J is INFRA_TEST-only | Confirm |
+| D4 | V2 Homelab resource limits | **TEST REQUIRED** — 10-slot mount is unit-proven; container-level resource-limit soak/drill NOT yet performed | Perform before any V2 run claim |
+| D5 | V2 runtime authorization | No run authorized; design commit set does not unlock H02 / Paper / Live | NO RUN |
 
-**NEXT ACTION — Step 4: Tests before implementation**
+**NEXT ACTION — Step 4: Only after D1–D5 are authorized**
 
-Write adversarial tests for each defect BEFORE implementing the fix.
-Priority order per AGENTS.md:
-Boundary -> Malformed -> Contradictory -> Adversarial -> Numerical Stability -> Golden Reference.
+Deployment on Homelab (build image from branch tip, run `acash-shadow` with chosen
+`--num-slots` and `--auto-mount-infra-candidates` per authorized layout), observe a V2
+soak, then reconcile against journal/manifests. Do NOT auto-merge the branch.
 
-**NEXT ACTION — Step 5: Scope isolation**
-
-Keep execution-risk remediation strictly isolated from:
-- H02 / research strategy work
-- Any alpha qualification path
-- Any research governance boundary
-
-**NEXT ACTION — Step 6: Authorization before new run**
-
-Only after remediation is reviewed and explicitly authorized should a new execution-infrastructure
-run be considered. Do NOT auto-authorize H02 from this handoff.
+**NEXT ACTION — Step 5: Do NOT**
+- Merge `feat/tournament-v2-risk-remediation-10slot` to `main` without explicit instruction
+- Create HYP_003, start R1, authorize Paper/Live, unlock backtesting
+- Introduce real capital or broker credentials
+- Restart H01 or start H02 without Human authorization
+- Build/deploy images or touch Pi infrastructure without explicit request
 
 ---
 
@@ -477,20 +508,20 @@ Stop and report to the human before proceeding past these boundaries:
 ## 13. Verification Ledger
 
 ```
-Implementation Status:    DOCUMENTATION ONLY — H01 closure preserved on feat/tournament-v2 branch
-Contract Enforcement:     N/A (doc-only commit)
-Mathematical Authority:   N/A
-Local Test Suite:         NOT RUN (doc-only; no code changed)
-Type Checker (MyPy):      NOT RUN (doc-only; no code changed)
+Implementation Status:    COMPLETE — V2 remediation delivered on feat/tournament-v2-risk-remediation-10slot
+                           (8 commits, tip 3787cd0, pushed; NOT merged)
+Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
+Mathematical Authority:   N/A (config/observability changes; accounting contract tests)
+Local Test Suite:         VERIFIED (2295 passed / 1 skipped — full `uv run pytest tests/`)
+Type Checker (MyPy):      VERIFIED (418 source files clean)
+Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 25/25)
 Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
-  - All performance metrics are infrastructure-test accounting state only
-  - Kill-switch stop is confirmed but position remains open
-  - max_notional enforcement gap is confirmed defect (Defect A)
-  - Drawdown >200% reflects real accounting state, not display bug
-  - Dashboard route validation used --resolve; direct DNS resolution failed once
-  - H01 Attempt 1 terminal cause (feed ReadTimeout, EXIT=2) is NOT preserved in
-    SESSION_STOPPED reason (NORMAL_SHUTDOWN) — Defect E
+  - Policies are AVAILABLE, not CHOSEN; defaults preserve H01 evidence semantics (D1/D2 pending)
+  - 10-slot catalog is INFRA_TEST only; zero alpha authority
+  - No deployment, no image build, no container run on Pi from this branch
+  - D4 (V2 Homelab resource limits) TEST REQUIRED before any V2 run claim
+  - D5 (V2 runtime authorization) NOT granted by this branch
 ```
 
 ---
@@ -501,16 +532,16 @@ Methodological Caveats:
 ACASH QUICK START — 2026-09-15 Handoff
 =======================================
 1. git fetch origin; verify origin/main = 9a58ced5011e15c7bcf3975f0e83acf339fa53ce
-2. Active work branch: feat/tournament-v2-risk-remediation-10slot (base = main @ 9a58ced)
-3. Verify H01 Attempt 1 terminal state: container EXITED EXIT=2, ReadTimeout after ~7h36m54s
-4. Journal preserved: SHADOW-20260914_073303_142fd6e0_slot_a.journal.jsonl (~156814 bytes final)
-5. Governance: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
-6. H01 STATUS: feed/container continuity FAIL (24h not achieved); execution-risk semantics FAIL (5 defects A-E)
-7. DO NOT restart H01 to clear state — preserve journal evidence
-8. Defect A: max_notional not enforced in _evaluate_risk() — ~$702k notional at $100k limit
-9. Defect B: virtual insolvency semantics — cash=-$699k, drawdown >200%
-10. Defect C: kill switch halts decisions but 9 BTC position stays open (HUMAN DECISION needed)
-11. Branch path: remediate A-E, then N-slot fanout (target 10), 10 infra candidates,
-    dashboard/API/metrics/manifest V2, validation evidence, then report + Human Decision Packet.
-12. Do NOT merge to main, do NOT deploy, do NOT start any runtime from this branch.
+2. Active work branch: feat/tournament-v2-risk-remediation-10slot
+   (base = main @ 9a58ced; tip 3787cd0; 8 commits; PUSHED, NOT merged)
+3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence archived (docs/tournament/)
+4. V2 REMEDIATION COMPLETE: A (MAX_NOTIONAL), B (funding), C (kill-switch), D (states), E (reason)
+5. V2 READINESS: N-slot fanout A..Z, 10-slot INFRA_TEST catalog, --num-slots,
+   --auto-mount-infra-candidates, dashboard V2 contract (SHADOW_RUNTIME)
+6. VERIFICATION: pytest 2295 passed / 1 skipped; mypy 418 files; dashboard 25/25
+7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+8. PENDING: HUMAN DECISION PACKET D1 (funding) / D2 (kill-switch) / D3 (sizing) /
+   D4 (Homelab resource-limit TEST REQUIRED) / D5 (NO runtime authorization granted)
+9. DO NOT merge branch, DO NOT build/deploy images, DO NOT restart H01 / start H02
+10. NO run of 24h continuity has been performed on this branch
 ```
