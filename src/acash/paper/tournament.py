@@ -30,8 +30,10 @@ from acash.paper.health import HealthEventKind, PaperHealthMonitor, TerminalReas
 from acash.paper.metrics import MetricsRegistry
 from acash.paper.runner import (
     SAFE_V2_NAV_SIZING_PCT,
+    KillSwitchPositionPolicy,
     PaperSessionConfig,
     PaperSessionRunner,
+    PortfolioFundingPolicy,
     SignalSizingPolicy,
     SyntheticBar,
 )
@@ -188,6 +190,20 @@ class TournamentSlot:
                 "Must be a single uppercase letter (A..Z)."
             )
 
+    def _effective_policies(self) -> Optional[Dict[str, str]]:
+        """Sealed effective runtime policies from the single authority
+        (runner._config). Returns None for UNASSIGNED slots (no runner, no
+        effective policy)."""
+        if self.runner is None:
+            return None
+        cfg = self.runner._config
+        return {
+            "portfolioFundingPolicy": cfg.portfolio_funding_policy.value,
+            "killSwitchPositionPolicy": cfg.kill_switch_position_policy.value,
+            "signalSizingPolicy": cfg.signal_sizing_policy.value,
+            "navSizingNotionalPct": str(cfg.nav_sizing_notional_pct),
+        }
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize slot to dictionary matching TypeScript StrategySlot contract."""
         is_unassigned = self.status == "UNASSIGNED" or self.runner is None
@@ -214,6 +230,7 @@ class TournamentSlot:
             "sessionId": self.session_id,
             "configHash": self.config_hash,
             "acashCommitSha": self.acash_commit_sha,
+            "effectivePolicies": self._effective_policies(),
             "haltReason": self.halt_reason,
             "operatorResolutionRequired": (
                 self.runner.operator_resolution_required
@@ -1224,6 +1241,8 @@ def build_slot_runner(
     max_market_data_age_ms: Optional[int],
     signal_sizing_policy: SignalSizingPolicy,
     nav_sizing_notional_pct: Decimal,
+    portfolio_funding_policy: PortfolioFundingPolicy = PortfolioFundingPolicy.SIMULATED_LEVERAGED,
+    kill_switch_position_policy: KillSwitchPositionPolicy = KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION,
     baseline_nav_usd: Decimal = Decimal("1000.00"),
 ) -> Tuple[TournamentSlot, PaperSessionRunner]:
     """Single authority that builds a slot runner for a strategy.
@@ -1252,6 +1271,8 @@ def build_slot_runner(
         data_source=data_source,
         market_domain=market_domain,
         max_market_data_age_ms=max_market_data_age_ms,
+        portfolio_funding_policy=portfolio_funding_policy,
+        kill_switch_position_policy=kill_switch_position_policy,
         signal_sizing_policy=signal_sizing_policy,
         nav_sizing_notional_pct=nav_sizing_notional_pct,
     )
@@ -1285,6 +1306,8 @@ def create_default_shadow_tournament(
     infra_mount_count: Optional[int] = None,
     signal_sizing_policy: Optional[SignalSizingPolicy] = None,
     nav_sizing_notional_pct: Decimal = SAFE_V2_NAV_SIZING_PCT,
+    portfolio_funding_policy: PortfolioFundingPolicy = PortfolioFundingPolicy.SIMULATED_LEVERAGED,
+    kill_switch_position_policy: KillSwitchPositionPolicy = KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION,
     instrument: str = "BTCUSDT",
     data_source: str = "binance.public.klines",
     market_domain: str = "SPOT",
@@ -1318,10 +1341,21 @@ def create_default_shadow_tournament(
       rejected fail-closed.
     - signal_sizing_policy: Tournament sizing policy. None resolves to
       NAV_RELATIVE_PERCENT for auto-mounted catalog candidates (safe 10% of NAV)
-      and INFRA_FIXED_QUANTITY otherwise (legacy canonical layout).
+      and INFRA_FIXED_QUANTITY otherwise (legacy canonical layout). When the
+      caller explicitly provides a policy (including via the CLI), the resolved
+      policy governs ALL slots — injected and catalog — so an explicit V2
+      operator choice (e.g. --infra-sizing-policy=nav-relative) can never be
+      silently overridden by a historical injected-slot default.
     - nav_sizing_notional_pct: NAV-relative notional share in (0, 100]. Normalized
       to 0.0 when the resolved policy is INFRA_FIXED_QUANTITY (the runner rejects
       any dead sizing config).
+    - portfolio_funding_policy: V2 funding seam (default SIMULATED_LEVERAGED,
+      H01-preserving). Passed to every slot PaperSessionConfig. The ratified V2
+      operator contract is CASH_CONSTRAINED_SPOT.
+    - kill_switch_position_policy: V2 kill-switch seam (default
+      HALT_AND_PRESERVE_POSITION, H01-preserving). Passed to every slot
+      PaperSessionConfig. The ratified V2 operator contract is
+      HALT_AND_REQUIRE_OPERATOR_RESOLUTION.
     - instrument: Target symbol (default BTCUSDT).
     - data_source: Feed data source provider string for manifest provenance.
     - market_domain: Market domain string (e.g. SPOT, CRYPTO_SPOT).
@@ -1370,7 +1404,14 @@ def create_default_shadow_tournament(
     )
 
     strategies = slot_strategies or {}
-    _INJECTED_SIZING = SignalSizingPolicy.INFRA_FIXED_QUANTITY  # canonical fixed qty
+    # Explicit V2 operator choice governs ALL slots (injected + catalog);
+    # None/historical keeps the legacy canonical fixed Slot A while the catalog
+    # resolves NAV when auto-mounting.
+    _INJECTED_SIZING = (
+        resolved_policy
+        if signal_sizing_policy is not None
+        else SignalSizingPolicy.INFRA_FIXED_QUANTITY  # canonical fixed qty
+    )
 
     def _mount(
         slot_id: str, strategy: PaperStrategyProtocol, sizing: SignalSizingPolicy
@@ -1385,6 +1426,8 @@ def create_default_shadow_tournament(
             data_source=data_source,
             market_domain=market_domain,
             max_market_data_age_ms=max_market_data_age_ms,
+            portfolio_funding_policy=portfolio_funding_policy,
+            kill_switch_position_policy=kill_switch_position_policy,
             signal_sizing_policy=(
                 sizing if sizing is not None else resolved_policy
             ),
@@ -1443,6 +1486,8 @@ def create_default_shadow_tournament(
                 data_source=data_source,
                 market_domain=market_domain,
                 max_market_data_age_ms=max_market_data_age_ms,
+                portfolio_funding_policy=portfolio_funding_policy,
+                kill_switch_position_policy=kill_switch_position_policy,
                 signal_sizing_policy=resolved_policy,
                 nav_sizing_notional_pct=effective_nav_pct,
             )

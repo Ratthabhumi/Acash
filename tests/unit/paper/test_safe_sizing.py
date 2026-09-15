@@ -321,8 +321,10 @@ def test_end_to_end_nav_sized_position_matches_derivation(tmp_path: Path) -> Non
 
 
 def test_tournament_canonical_a_keeps_fixed_quantity_under_nav_policy(tmp_path: Path) -> None:
-    """Injected/canonical Slot A stays legacy-fixed even when the tournament
-    resolves a NAV-relative policy for auto-mounted catalog candidates."""
+    """Explicit operator sizing choice governs ALL slots, including injected
+    canonical Slot A. When the caller explicitly provides NAV sizing, Slot A
+    must ALSO use NAV_RELATIVE_PERCENT (all mounted slots share the resolved
+    policy) — no silent legacy override of an explicit V2 operator choice."""
     supervisor = create_default_shadow_tournament(
         storage_dir=tmp_path,
         acash_commit_sha=_GIT,
@@ -339,15 +341,76 @@ def test_tournament_canonical_a_keeps_fixed_quantity_under_nav_policy(tmp_path: 
     assert slot_a["strategyId"] == "INFRA-TEST-MOMENTUM-SYNTHETIC-001"
     assert slot_a["observationKind"] == "CONTINUOUS"
 
-    # A runs the canonical fixed 1.0 quantity; B is catalog NAV-sized.
+    # A and B are BOTH NAV-sized under the explicit policy (uniform contract).
+    # A NAV-sized long accumulates ~0.002 per entry, never the legacy fixed 1.0.
     runner_a = supervisor._slots["A"].runner
     runner_b = supervisor._slots["B"].runner
     assert runner_a is not None
     assert runner_b is not None
+    assert (
+        runner_a._config.signal_sizing_policy == SignalSizingPolicy.NAV_RELATIVE_PERCENT
+    )
+    assert (
+        runner_b._config.signal_sizing_policy == SignalSizingPolicy.NAV_RELATIVE_PERCENT
+    )
+    if runner_a._portfolio.position > Decimal("0"):
+        assert runner_a._portfolio.position < Decimal("1.0")
+    if runner_b._portfolio.position > Decimal("0"):
+        assert runner_b._portfolio.position < Decimal("1.0")
+
+
+def test_tournament_legacy_boot_preserves_fixed_slot_a(tmp_path: Path) -> None:
+    """Historical default boot (signal_sizing_policy=None) keeps injected
+    canonical Slot A on INFRA_FIXED_QUANTITY while catalog candidates resolve
+    NAV when auto-mounting — the historical mixed layout is preserved."""
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha=_GIT,
+        num_slots=2,
+        auto_mount_infrastructure_candidates=True,
+        infra_mount_count=1,  # only B from the catalog
+    )
+    supervisor.start()
+    for bar in _bars(6):
+        supervisor.process_bar(bar)
+
+    runner_a = supervisor._slots["A"].runner
+    runner_b = supervisor._slots["B"].runner
+    assert runner_a is not None
+    assert runner_b is not None
+    assert (
+        runner_a._config.signal_sizing_policy == SignalSizingPolicy.INFRA_FIXED_QUANTITY
+    )
+    assert (
+        runner_b._config.signal_sizing_policy == SignalSizingPolicy.NAV_RELATIVE_PERCENT
+    )
     if runner_a._portfolio.position > Decimal("0"):
         assert runner_a._portfolio.position >= Decimal("1.0")
     if runner_b._portfolio.position > Decimal("0"):
         assert runner_b._portfolio.position <= Decimal("0.0021")
+
+
+def test_tournament_explicit_legacy_fixed_all_slots_fixed(tmp_path: Path) -> None:
+    """Explicit legacy-fixed policy keeps every mounted slot on fixed quantity."""
+    supervisor = create_default_shadow_tournament(
+        storage_dir=tmp_path,
+        acash_commit_sha=_GIT,
+        num_slots=2,
+        auto_mount_infrastructure_candidates=True,
+        infra_mount_count=1,
+        signal_sizing_policy=SignalSizingPolicy.INFRA_FIXED_QUANTITY,
+    )
+    supervisor.start()
+    for bar in _bars(6):
+        supervisor.process_bar(bar)
+
+    for slot_id in ("A", "B"):
+        runner = supervisor._slots[slot_id].runner
+        assert runner is not None
+        assert (
+            runner._config.signal_sizing_policy
+            == SignalSizingPolicy.INFRA_FIXED_QUANTITY
+        )
 
 
 def test_infra_mount_count_dead_config_rejected(tmp_path: Path) -> None:

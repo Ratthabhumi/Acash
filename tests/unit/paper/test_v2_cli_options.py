@@ -10,10 +10,15 @@ from decimal import Decimal
 
 import pytest
 
-from acash.paper.runner import SignalSizingPolicy
+from acash.paper.runner import (
+    KillSwitchPositionPolicy,
+    PortfolioFundingPolicy,
+    SignalSizingPolicy,
+)
 from acash.paper.tournament_cli import (
     _parse_backoff_seconds,
     _parse_nav_sizing_pct,
+    _resolve_runtime_policies,
     _resolve_sizing,
     parse_args,
 )
@@ -38,6 +43,55 @@ def test_defaults_preserve_legacy_surface() -> None:
     assert ns.recovery_bar_wait_timeout_seconds == 90.0
     assert ns.candidate_add_file is None
     assert ns.num_slots == 3
+    assert ns.portfolio_funding_policy == "SIMULATED_LEVERAGED"
+    assert ns.kill_switch_position_policy == "HALT_AND_PRESERVE_POSITION"
+
+
+def test_ratified_runtime_policies_parse() -> None:
+    ns = parse_args(
+        _argv(
+            "--portfolio-funding-policy",
+            "CASH_CONSTRAINED_SPOT",
+            "--kill-switch-position-policy",
+            "HALT_AND_REQUIRE_OPERATOR_RESOLUTION",
+        )
+    )
+    assert ns.portfolio_funding_policy == "CASH_CONSTRAINED_SPOT"
+    assert ns.kill_switch_position_policy == "HALT_AND_REQUIRE_OPERATOR_RESOLUTION"
+
+
+def test_explicit_bounded_leverage_parses() -> None:
+    ns = parse_args(
+        _argv("--portfolio-funding-policy", "EXPLICIT_BOUNDED_LEVERAGE")
+    )
+    assert ns.portfolio_funding_policy == "EXPLICIT_BOUNDED_LEVERAGE"
+
+
+def test_invalid_funding_policy_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--portfolio-funding-policy", "SHORT_GAMMA"))
+
+
+def test_invalid_kill_switch_policy_rejected() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(_argv("--kill-switch-position-policy", "ROBIN_HOOD"))
+
+
+def test_resolve_runtime_policies_getattr_safe_bare_namespace() -> None:
+    ns = argparse.Namespace()
+    funding, kill = _resolve_runtime_policies(ns)
+    assert funding == PortfolioFundingPolicy.SIMULATED_LEVERAGED
+    assert kill == KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION
+
+
+def test_resolve_runtime_policies_ratified_values() -> None:
+    ns = argparse.Namespace(
+        portfolio_funding_policy="CASH_CONSTRAINED_SPOT",
+        kill_switch_position_policy="HALT_AND_REQUIRE_OPERATOR_RESOLUTION",
+    )
+    funding, kill = _resolve_runtime_policies(ns)
+    assert funding == PortfolioFundingPolicy.CASH_CONSTRAINED_SPOT
+    assert kill == KillSwitchPositionPolicy.HALT_AND_REQUIRE_OPERATOR_RESOLUTION
 
 
 def test_explicit_sizing_policies_parse() -> None:

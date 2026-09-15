@@ -54,7 +54,11 @@ from acash.paper.recovery import (
     RECOVERY_PHASE_RESUMED,
     run_feed_recovery,
 )
-from acash.paper.runner import SignalSizingPolicy
+from acash.paper.runner import (
+    KillSwitchPositionPolicy,
+    PortfolioFundingPolicy,
+    SignalSizingPolicy,
+)
 from acash.paper.tournament import (
     CANONICAL_CAPITAL_USD,
     NO_REAL_ORDERS,
@@ -213,6 +217,27 @@ def _resolve_sizing(
         else Decimal("0")
     )
     return policy, effective_pct
+
+
+def _resolve_runtime_policies(
+    args: argparse.Namespace,
+) -> Tuple[PortfolioFundingPolicy, KillSwitchPositionPolicy]:
+    """Resolve the V2 runtime policy seam flags (getattr-safe for hand-built
+    Namespaces in tests). Historical values are the default so existing runs
+    and H01 replay stay byte-compatible unless the operator explicitly opts
+    into the ratified D1 (CASH_CONSTRAINED_SPOT) / D2
+    (HALT_AND_REQUIRE_OPERATOR_RESOLUTION) contract."""
+    funding_raw = getattr(
+        args,
+        "portfolio_funding_policy",
+        PortfolioFundingPolicy.SIMULATED_LEVERAGED.value,
+    )
+    kill_raw = getattr(
+        args,
+        "kill_switch_position_policy",
+        KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION.value,
+    )
+    return PortfolioFundingPolicy(funding_raw), KillSwitchPositionPolicy(kill_raw)
 
 
 def _load_candidate_requests(path: Path) -> List[Dict[str, str]]:
@@ -462,6 +487,33 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         help="NAV-relative notional share in (0, 100] (default 10%% of virtual NAV).",
     )
     parser.add_argument(
+        "--portfolio-funding-policy",
+        choices=[p.value for p in PortfolioFundingPolicy],
+        default=PortfolioFundingPolicy.SIMULATED_LEVERAGED.value,
+        help=(
+            "Virtual portfolio funding policy. SIMULATED_LEVERAGED is the "
+            "H01-preserving default (no cash floor, leverage is simulated). "
+            "The ratified V2 operator contract is CASH_CONSTRAINED_SPOT (fill "
+            "rejected when projected cash would go negative). "
+            "EXPLICIT_BOUNDED_LEVERAGE permits leverage only within the "
+            "config-sealed max_debt_limit_usd."
+        ),
+    )
+    parser.add_argument(
+        "--kill-switch-position-policy",
+        choices=[p.value for p in KillSwitchPositionPolicy],
+        default=KillSwitchPositionPolicy.HALT_AND_PRESERVE_POSITION.value,
+        help=(
+            "Position handling on the daily-loss kill switch. "
+            "HALT_AND_PRESERVE_POSITION is the H01-preserving default (halt, "
+            "keep position, mark-to-market continues). The ratified V2 operator "
+            "contract is HALT_AND_REQUIRE_OPERATOR_RESOLUTION (mandatory "
+            "journaled operator resolution before any resume; no automatic "
+            "flatten). HALT_AND_FORCE_SIMULATED_FLATTEN closes at mark via a "
+            "synthetic fill chain."
+        ),
+    )
+    parser.add_argument(
         "--enable-feed-recovery",
         action="store_true",
         default=False,
@@ -546,6 +598,7 @@ def run_tournament(args: argparse.Namespace) -> int:
     metrics_reg = MetricsRegistry()
 
     sizing_policy, effective_nav_pct = _resolve_sizing(args)
+    funding_policy, kill_switch_policy = _resolve_runtime_policies(args)
     infra_mount_count = (
         getattr(args, "infra_mount_count", None)
         if bool(getattr(args, "auto_mount_infra_candidates", False))
@@ -563,6 +616,8 @@ def run_tournament(args: argparse.Namespace) -> int:
         infra_mount_count=infra_mount_count,
         signal_sizing_policy=sizing_policy,
         nav_sizing_notional_pct=effective_nav_pct,
+        portfolio_funding_policy=funding_policy,
+        kill_switch_position_policy=kill_switch_policy,
         instrument=args.symbol,
         data_source=data_source,
         market_domain=market_domain,
