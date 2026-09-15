@@ -7,9 +7,12 @@ GOVERNANCE:
 - SHADOW / SIMULATED RESEARCH INFRASTRUCTURE ONLY — NOT Paper GO / NOT Live
 - NO_REAL_ORDERS=True | CANONICAL_CAPITAL_USD=$0.00
 - Credential-free feed only (Binance public klines / Stooq CSV)
-- Fail-closed on feed disconnect or stale data. Controlled transient feed
-  recovery (OPT-IN) resumes deterministically from the first unapplied bar via
-  the recovery line of provenance; every phase is journaled fail-closed.
+- Fail-closed on feed disconnect or stale data. Automatic Feed Reconnect is
+  DISABLED BY DEFAULT: any transient feed connection failure immediately halts
+  (exit code 2) and requires operator resume. Operators elect the controlled
+  shadow recovery path explicitly with --enable-feed-recovery; it then resumes
+  deterministically from the first unapplied bar within a bounded attempts /
+  backoff / bar-wait budget, with every phase journaled fail-closed.
 - Graceful shutdown with journal & manifest sealing on SIGINT/SIGTERM
 """
 
@@ -110,6 +113,51 @@ def _parse_nav_sizing_pct(value: str) -> Decimal:
             f"nav-sizing-notional-pct must be in (0, 100], got {value!r}"
         )
     return pct
+
+
+def _positive_int(value: str) -> int:
+    """Strict integer validator: reject 0, negatives, and non-integers."""
+    try:
+        parsed = int(value)
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"must be a positive integer, got {value!r}"
+        ) from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(
+            f"must be a positive integer (>= 1), got {value!r}"
+        )
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    """Strict float validator: reject zero, negatives, and non-numerics."""
+    try:
+        parsed = float(value)
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"must be a positive number, got {value!r}"
+        ) from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(
+            f"must be a positive number (> 0), got {value!r}"
+        )
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    """Strict float validator: reject negatives and non-numerics (zero allowed)."""
+    try:
+        parsed = float(value)
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            f"must be a non-negative number, got {value!r}"
+        ) from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(
+            f"must be a non-negative number (>= 0), got {value!r}"
+        )
+    return parsed
 
 
 def _detect_git_commit() -> Optional[str]:
@@ -368,12 +416,15 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--auto-mount-infra-candidates",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help=(
-            "Explicit opt-in: mount deterministic INFRASTRUCTURE_TEST catalog "
-            "candidates (A..J) for an infrastructure-exercise layout. "
-            "Zero alpha candidates are ever mounted by this flag."
+            "Default operational layout: mount the deterministic "
+            "INFRASTRUCTURE_TEST catalog candidates (A..J) so the default run "
+            "exercises an infrastructure-testing tournament (3 candidate slots). "
+            "Zero alpha candidates are ever mounted by this flag, and auto-mount "
+            "alone does NOT authorize or constitute runtime strategy trading. "
+            "Pass --no-auto-mount-infra-candidates to run slot-A-injected alone."
         ),
     )
     parser.add_argument(
@@ -403,18 +454,21 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         help="NAV-relative notional share in (0, 100] (default 10%% of virtual NAV).",
     )
     parser.add_argument(
-        "--disable-feed-recovery",
+        "--enable-feed-recovery",
         action="store_true",
         default=False,
         help=(
-            "Disable the controlled transient feed-recovery mechanism; any "
-            "transient feed connection failure immediately halts fail-closed "
-            "(legacy strict operator-resume behavior)."
+            "EXPLICIT OPT-IN: enable the controlled transient feed-recovery "
+            "mechanism. Default OFF — any transient feed connection failure "
+            "immediately halts fail-closed with operator resume required. "
+            "When enabled, recovery only ever handles transient "
+            "FeedConnectionError events inside a bounded attempts / backoff / "
+            "bar-wait budget."
         ),
     )
     parser.add_argument(
         "--max-recovery-attempts",
-        type=int,
+        type=_positive_int,
         default=5,
         help="Max consecutive reconnect attempts per recovery episode (>= 1).",
     )
@@ -422,13 +476,21 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         "--recovery-backoff-seconds",
         type=_parse_backoff_seconds,
         default="2,5,10,20,30",
-        help="Comma-separated backoff schedule (seconds) between recovery attempts.",
+        help="Comma-separated backoff schedule (seconds, each > 0) applied "
+        "between recovery attempts (attempt n uses the n-th entry).",
     )
     parser.add_argument(
         "--recovery-poll-interval-seconds",
-        type=float,
+        type=_non_negative_float,
         default=2.0,
-        help="Poll interval used while waiting for a bar during a recovery episode.",
+        help="Poll interval (>= 0) while waiting for a bar during a recovery episode.",
+    )
+    parser.add_argument(
+        "--recovery-bar-wait-timeout-seconds",
+        type=_positive_float,
+        default=90.0,
+        help="Monotonic budget (> 0) for the first bar after a successful "
+        "reconnect; a timeout consumes that attempt's retry budget.",
     )
     parser.add_argument(
         "--candidate-add-file",
@@ -481,7 +543,7 @@ def run_tournament(args: argparse.Namespace) -> int:
         if bool(getattr(args, "auto_mount_infra_candidates", False))
         else None
     )
-    recovery_enabled = not bool(getattr(args, "disable_feed_recovery", False))
+    recovery_enabled = bool(getattr(args, "enable_feed_recovery", False))
     candidate_file = getattr(args, "candidate_add_file", None)
 
     supervisor = create_default_shadow_tournament(
@@ -541,11 +603,17 @@ def run_tournament(args: argparse.Namespace) -> int:
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, handle_sighup)
 
+    # Note: argparse types already enforce strict bounds (max_attempts >= 1,
+    # poll interval >= 0, bar-wait timeout > 0, backoff values > 0), so the
+    # config cannot receive silently-clamped values from the CLI surface.
     recovery_config = FeedRecoveryConfig(
-        max_attempts=max(1, int(getattr(args, "max_recovery_attempts", 5))),
+        max_attempts=int(getattr(args, "max_recovery_attempts", 5)),
         backoff_seconds=tuple(getattr(args, "recovery_backoff_seconds", (2.0, 5.0, 10.0, 20.0, 30.0))),
         poll_interval_seconds=float(
             getattr(args, "recovery_poll_interval_seconds", 2.0)
+        ),
+        bar_wait_timeout_seconds=float(
+            getattr(args, "recovery_bar_wait_timeout_seconds", 90.0)
         ),
     )
     recovery_totals = {"success": 0, "failure": 0}
