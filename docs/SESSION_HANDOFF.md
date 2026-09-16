@@ -1,5 +1,5 @@
-﻿# ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → HOMELAB CAPACITY DRILL PENDING
-## Canonical Current Session Handoff — 2026-09-15
+﻿# ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → D4 PASS → D5 24h IN PROGRESS
+## Canonical Current Session Handoff — 2026-09-16
 
 > [!CAUTION]
 > **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
@@ -10,8 +10,39 @@
 > **Document:** `docs/SESSION_HANDOFF.md`
 > **This is the single canonical ACASH session handoff.**
 > For the archived E3.6 historical checkpoint, see `E3.6-SESSION-HANDOFF.md`.
-> **Date:** 2026-09-15 (UTC)
+> **Date:** 2026-09-16 (UTC)
 > **Status labels used:** FACT | EVIDENCE | INFERENCE | DEFECT | GOVERNANCE BOUNDARY | NEXT ACTION
+
+---
+
+## 0. Current Operator Checkpoint — 2026-09-16
+
+> [!IMPORTANT]
+> **D5 IS IN PROGRESS. Read this checkpoint before acting.**
+
+| Gate | State |
+|---|---|
+| D1 `CASH_CONSTRAINED_SPOT` | **RATIFIED + WIRED END-TO-END** (`4b2269d`) |
+| D2 `HALT_AND_REQUIRE_OPERATOR_RESOLUTION` | **RATIFIED + WIRED END-TO-END** (`4b2269d`) |
+| D3 `NAV_RELATIVE_PERCENT` 10% | **RATIFIED + WIRED END-TO-END** (`4b2269d`) — all slots incl. injected A |
+| D4 10-slot capacity drill | **COMPLETE / PASS** (2026-09-16, `acash:shadow-v2-4b2269d`) |
+| D5 3-slot 24h Shadow V2 | **RUNNING — NOT YET PASS** (endpoint ~`2026-09-17T00:07:16Z`) |
+| Dashboard backend routing | **TEMPORARY workaround active; permanent fix deferred until after D5** |
+| Feed recovery (D5) | EXPLICIT OPT-IN, Shadow-only, bounded (5/2,5,10,20,30/2s/90s), restart policy `no` |
+
+**FACT — Repository:** `origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`
+(verified 2026-09-16). This is the exact commit behind the deployed D5 image.
+
+**FACT — D5 runtime:** container `acash-shadow-v2-d5-24h`, tournament
+`SHADOW-20260916_000715_849306fb`, 3 INFRA_TEST slots A/B/C, `acashCommitSha =
+4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`, `noRealOrders=true`, capital $0.
+
+**GOVERNANCE BOUNDARY — unchanged:** HYP_003 NOT CREATED, R1 NOT STARTED,
+Backtesting LOCKED, Paper NOT AUTHORIZED, Live LOCKED, capital $0.00,
+`NO_REAL_ORDERS=true`, SHADOW-only.
+
+**NEXT ACTION:** Wait for the 24h endpoint; do NOT mark D5 PASS early; do NOT
+disturb the D5 container or dashboard workaround mid-run.
 
 ---
 
@@ -21,32 +52,34 @@
 |---|---|
 | Repository | `Ratthabhumi/Acash` |
 | Active branch | **`main`** (V2 merged here via `--ff-only`) |
-| Current main / HEAD | **`243412d36592fc57a8801dade8579b6e2ff713a5`** (verify with `git rev-parse HEAD`) |
-| Feature branch | `feat/tournament-v2-risk-remediation-10slot` — same SHA as main (0/0) |
+| Current main / HEAD = `origin/main` | **`4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`** (verify with `git rev-parse HEAD`) |
+| Tip commit message | `fix(shadow): wire ratified V2 runtime policies end to end` |
+| Feature branch | `feat/tournament-v2-risk-remediation-10slot` — `938b4a4` equivalent content, merged to `main` |
 | Base before V2 merge | `9a58ced5011e15c7bcf3975f0e83acf339fa53ce` |
 
-**FACT:** `origin/main == 243412d36592fc57a8801dade8579b6e2ff713a5` as of 2026-09-15.
-V2 remediation + final numeric hardening + operator ratification were ff-only merged
-to `main` and pushed. The feature branch is now at the same commit as `main`.
+**FACT:** `origin/main == 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` as of 2026-09-16.
+V2 remediation + V2 follow-up hardening + operator ratification + V2 CLI routing +
+runtime-policy wiring were merged to `main` and pushed. **This exact commit is the one
+deployed as the D5 Shadow runtime image** (see §4.8).
 
-**MERGED COMMIT CHAIN (22 commits, all full SHAs):**
+**MERGED COMMIT CHAIN (25 commits, base → tip, all full SHAs):**
 
 | # | Commit | Scope |
 |---|---|---|
 | 1 | `ad6642fb5dd9f65c406194daacd3b31a0953f40d` | docs: H01 Attempt 1 evidence preserved, H01 closure recorded (EXIT=2, ReadTimeout) |
-| 2 | `260d32b56668a6d99d1e120e2fa2096b4d4ca350` | fix: enforce `MAX_NOTIONAL` + preserve terminal reason (Defects A & E) |
-| 3 | `c4651ac82fba8e2a382dd01b3ab0248cc2a042e4` | feat: funding + kill-switch position policies + granular execution states (Defects B, C & D) |
-| 4 | `24d5607b380e033015365b60b9e71f29cc76d4af` | feat: N-slot fanout A..Z (1–26), `--num-slots` CLI |
-| 5 | `b169d272d320217996f1dc6b7208a8677db26b65` | feat: 10-slot infrastructure candidate catalog, auto-mount |
-| 6 | `139ac62c18fa95621f5685d8a131650b0fff2d40` | feat: dashboard V2 contract, granular states, `SHADOW_RUNTIME` data source |
-| 7 | `56160de912d9f49e7e56bad70a46d216b883f1dc` | test: 10-slot layout state isolation |
-| 8 | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` | docs: V2 10-slot design + validation evidence |
+| 2 | `260d32b56668a6d99d1e120e2fa2096b4d4ca350` | fix(paper): enforce `MAX_NOTIONAL` + preserve terminal reason (Defects A & E) |
+| 3 | `c4651ac82fba8e2a382dd01b3ab0248cc2a042e4` | feat(paper): funding + kill-switch position policies + granular execution states (Defects B, C & D) |
+| 4 | `24d5607b380e033015365b60b9e71f29cc76d4af` | feat(paper): parameterize slot fanout for N-slot tournament (V2 10-slot readiness) |
+| 5 | `b169d272d320217996f1dc6b7208a8677db26b65` | feat(paper): add 10-slot infrastructure candidate catalog with explicit auto-mount opt-in |
+| 6 | `139ac62c18fa95621f5685d8a131650b0fff2d40` | feat(dashboard): align V2 10-slot contract, granular execution states, `SHADOW_RUNTIME` data source |
+| 7 | `56160de912d9f49e7e56bad70a46d216b883f1dc` | test(paper): prove 10-slot layout state isolation (independent journals, hashes, portfolios) |
+| 8 | `3787cd06fff7423b2e6f4e8efd93051c52d6d808` | docs(tournament): record V2 10-slot design + validation evidence |
 | 9 | `706168ce3ce19ee85bbc281b484bf9ba0d4d6645` | feat(paper): journal event kinds + re-entrant lock integrity + feed-health recovery metrics |
 | 10 | `48aeeec942218f42f7c3d956cecddc9f1724cbd1` | feat(paper): transient feed recovery + staged dynamic candidate admission + safe NAV sizing |
-| 11 | `d86eca535bf06be105265496df36641897d1d75a` | test(paper): recovery, dynamic candidate admission, and safe sizing suites |
+| 11 | `d86eca535bf06be105265496df36641897d1d75a` | test(paper): transient recovery, dynamic candidate admission, and safe sizing suites |
 | 12 | `3aea870668be764b03b0c80bac079a79bdf0cd3c` | feat(dashboard): FEED_RECOVERING seat, cohort provenance, null-rank leaderboard |
-| 13 | `df1bafa341dec0a38a1abcc9e2f7d8a467083511` | docs(tournament): record recovery / dynamic admission / safe sizing design + evidence |
-| 14 | `db908b57becc8ab3ea514416cc5f25e30faa22c4` | docs: refresh session handoff with V2 follow-up evidence |
+| 13 | `df1bafa341dec0a38a1abcc9e2f7d8a467083511` | docs(tournament): record transient recovery, dynamic admission, and safe sizing design + evidence |
+| 14 | `db908b57becc8ab3ea514416cc5f25e30faa22c4` | docs: refresh session handoff with V2 follow-up evidence (recovery / dynamic admission / sizing) |
 | 15 | `536e84ebe49fde515c6a93c3929181e674e2313b` | fix(shadow): make feed recovery explicit opt-in and bounded |
 | 16 | `045eb4aab81ce181bbafe64ca9eca70a1ffee284` | fix(shadow): strict recovery CLI validation and symmetric auto-mount |
 | 17 | `7c01998310b972b8c2c9d020ee14d7874a137043` | test(shadow): cover bounded recovery and CLI flag contracts |
@@ -54,8 +87,16 @@ to `main` and pushed. The feature branch is now at the same commit as `main`.
 | 19 | `173cc81bbff3d19bbc5f608da90b52e770bbfba8` | fix(shadow): reject non-finite recovery timing values at CLI and config layers |
 | 20 | `8db9bf5fa1ac6cb276f7ca38ea9c93afba566e03` | docs(tournament): record numeric hardening evidence in validation ledger |
 | 21 | `243412d36592fc57a8801dade8579b6e2ff713a5` | docs: record V2 operator ratification D1-D5 |
+| 22 | `a79e0c70d63bd8142bbcd3d4b626f4624d74be8a` | docs: refresh session handoff with V2 merge, D1-D5 ratification, and Homelab blocker |
+| 23 | `938b4a46332e1fdfe8ea924689044fe05839ed14` | fix(shadow): route paper tournament command to V2 CLI |
+| 24 | `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` | fix(shadow): wire ratified V2 runtime policies end to end |
 
 > Verify the final SHA with `git rev-parse HEAD` — never trust a hard-coded tip.
+> Tip commit `4b2269d` adds the two ratified runtime-policy CLI flags
+> (`--portfolio-funding-policy`, `--kill-switch-position-policy`), threads D1/D2/D3
+> through every slot's `PaperSessionConfig`, fixes injected/slot-A sizing so an
+> explicit NAV choice governs ALL slots, adds per-slot `effectivePolicies`
+> provenance, and is the exact image source for the D5 run.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -69,7 +110,11 @@ every session.
 | Repository | `Ratthabhumi/Pi_Personal-Infrastructure` |
 | Current main | `3ce27f09e742768633c23a5d0746a004bc3a1727` |
 | Dashboard pin deployed | `acash-dashboard:ec86a85` |
-| Shadow runtime pin | `acash:shadow-tournament-bb6d49c` |
+| Shadow runtime (D4/D5 Homelab image) | `acash:shadow-v2-4b2269d` (replaces the H01-era `acash:shadow-tournament-bb6d49c`) |
+
+**FACT:** The D4 capacity drill and the running D5 24h run both use the Homelab-hosted
+image `acash:shadow-v2-4b2269d`. The `bb6d49c` H01-era tag is historical and was not
+overwritten/re-tagged; it remains preserved.
 
 **VERIFY** Pi main and deployed image tags at start of next session before any Pi action.
 
@@ -90,7 +135,7 @@ every session.
 | Live Trading | LOCKED |
 | Canonical Capital | $0.00 |
 | NO_REAL_ORDERS | true |
-| Automatic Feed Reconnect | DISABLED |
+| Automatic Feed Reconnect | DISABLED (controlled Shadow recovery is EXPLICIT OPT-IN only — currently active for the D5 run) |
 | Operator Resume | REQUIRED |
 | Shadow Tournament | SIMULATED / INFRASTRUCTURE-TEST ONLY |
 | Dashboard | READ ONLY |
@@ -179,15 +224,16 @@ Artifacts on Host: `/data/docker/acash/tournament/`.
 
 | Item | Value |
 |---|---|
-| Branch | `feat/tournament-v2-risk-remediation-10slot` @ `243412d` — **MERGED to main** |
+| Branch | `feat/tournament-v2-risk-remediation-10slot` — **MERGED to main** |
 | Defects addressed | A (`MAX_NOTIONAL`), B (funding policy), C (kill-switch policy), D (execution states), E (terminal reason) |
 | V2 readiness | N-slot fanout A..Z (1–26), 10-slot INFRA_TEST catalog, 10-slot isolation proven |
 | V2 follow-up | transient feed recovery seat (FEED_RECOVERING), staged dynamic candidate admission (SIGHUP / candidate-add file), safe NAV-relative sizing (10% cap), journal re-entrant lock fix |
-| Local test suite | **2384 passed / 12 skipped** (full `uv run pytest tests/`) |
-| MyPy | **423 source files clean** (`uv run mypy src/ tests/`) |
+| Runtime-policy wiring (Fix 2) | `--portfolio-funding-policy`, `--kill-switch-position-policy` CLI flags; D1/D2/D3 threaded into every slot `PaperSessionConfig`; injected/slot-A sizing honors explicit NAV choice; per-slot `effectivePolicies` provenance in status |
+| Local test suite | **2408 passed / 1 skipped** (full `uv run pytest tests/`) |
+| MyPy | **424 source files clean** (`uv run mypy src/ tests/`) |
 | Dashboard | `npm run typecheck` clean; node contract tests **27/27**; production build clean |
-| Merge state | ff-only merged and pushed to `main` @ `243412d36592fc57a8801dade8579b6e2ff713a5` |
-| Deployment state | NOT deployed — no image built, no container restarted, no Pi change |
+| Merge state | ff-only merged and pushed to `main` @ `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` |
+| Deployment state | **DEPLOYED** to Homelab as `acash:shadow-v2-4b2269d` — D4 drill ran on it, D5 24h run is using it now (§4.7, §4.8) |
 | Paper/Live | NOT AUTHORIZED |
 
 **Design/validation records:** `docs/tournament/TOURNAMENT_V2_10SLOT_DESIGN.md` and
@@ -227,15 +273,163 @@ emits **zero** new simulated orders/signals; a failed recovery halts with
   (`FeedRecoveryConfig.__post_init__`, DataContractError), closing the
   non-finite timing hole that could poison `monotonic() + bar_wait_timeout`.
 
-New/updated suites after hardening: `test_feed_recovery.py` (32),
-`test_dynamic_candidate_add.py` (15), `test_safe_sizing.py` (17),
-`test_v2_cli_options.py` (36).
+New/updated suites after hardening and Fix 2 (runtime-policy wiring):
+`test_feed_recovery.py` (32), `test_dynamic_candidate_add.py` (15),
+`test_safe_sizing.py` (19), `test_v2_cli_options.py` (42),
+`tests/unit/paper/test_v2_runtime_policy_wiring.py` (6 collected as part of the
+paper suite; full suite totals after Fix 2: **2408 passed / 1 skipped**).
 
-**HUMAN DECISIONS D1–D5 = RATIFIED** (2026-09-15). See
+**HUMAN DECISIONS D1–D5 = RATIFIED** (2026-09-15, updated 2026-09-16). See
 `docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md` and §11.
 D1=CASH_CONSTRAINED_SPOT, D2=HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
-D3=NAV_RELATIVE_PERCENT 10%, D4=10-slot capacity drill AUTHORIZED,
-D5=3-slot 24h Shadow V2 AUTHORIZED **only after D4 PASS**.
+D3=NAV_RELATIVE_PERCENT 10%, D4=10-slot capacity drill AUTHORIZED and now
+**COMPLETE / PASS** (2026-09-16, see §4.7),
+D5=3-slot 24h Shadow V2 AUTHORIZED **only after D4 PASS** — D5 is now
+**RUNNING and NOT yet classified PASS** (see §4.8).
+
+---
+
+### 4.7 D4 Capacity Drill — COMPLETE / PASS (EVIDENCE, 2026-09-16)
+
+**D4 = 10-slot V2 Homelab capacity drill, CLASSIFIED PASS.**
+
+| Item | Value |
+|---|---|
+| Image tag | `acash:shadow-v2-4b2269d` |
+| Image ID | `sha256:f0f62153faa3a7a5b7161a9d5ea28dd8712fd44a78356e92c372380c48398bae` |
+| Exact ACASH commit | `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` |
+| Slots | **10, concurrent — A through J, all `RUNNING` during the drill** |
+| Slot A strategy | `INFRA-TEST-MOMENTUM-SYNTHETIC-001` |
+
+**Effective policies observed on ALL slots during D4:**
+
+| Policy field | Effective value |
+|---|---|
+| `portfolioFundingPolicy` | `CASH_CONSTRAINED_SPOT` (D1) |
+| `killSwitchPositionPolicy` | `HALT_AND_REQUIRE_OPERATOR_RESOLUTION` (D2) |
+| `signalSizingPolicy` | `NAV_RELATIVE_PERCENT` (D3) |
+| `navSizingNotionalPct` | `10` (D3) |
+
+**Safety state held throughout D4 (FACT):**
+
+| Item | Value |
+|---|---|
+| `canonicalCapitalUsd` | `0.0` |
+| `realOrderCount` | `0` |
+| `noRealOrders` | `true` |
+| `feedHealth` | `HEALTHY` |
+
+**Terminal result (FACT — operator-recorded runtime evidence):**
+- Ran through **T+900 seconds** and was **gracefully stopped**.
+- Final container state: **ExitCode=0, RestartCount=0, OOM=false**.
+- Final artifacts: **manifests=10, journals=10, snapshots=10**.
+
+**GOVERNANCE BOUNDARY — What D4 PASS unlocks:**
+- D4 PASS unlocked **previously ratified D5 only** (3-slot 24h Shadow V2 infra-test run).
+- It did **NOT** authorize Paper, Live, backtesting, HYP_003, R1, broker
+  connectivity, or any real capital.
+
+---
+
+### 4.8 D5 24h Shadow V2 Run — CURRENT / RUNNING / NOT YET PASS
+
+> [!CAUTION]
+> **D5 IS STILL IN PROGRESS AND IS NOT YET CLASSIFIED PASS.**
+> It must NOT be marked PASS until the full 24h endpoint is reached and the
+> final evidence / artifact integrity is reviewed.
+
+| Item | Value |
+|---|---|
+| Container | `acash-shadow-v2-d5-24h` |
+| Storage | `/data/docker/acash/shadow-v2-4b2269d-d5-24h` |
+| Image | `acash:shadow-v2-4b2269d` (commit `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`) |
+| Tournament ID | `SHADOW-20260916_000715_849306fb` |
+| Tournament start (UTC) | `2026-09-16T00:07:16.204711+00:00` |
+| Target 24h completion (UTC) | approximately `2026-09-17T00:07:16Z` |
+| Slots active | **Exactly 3 infrastructure-test slots** |
+
+| Slot | Strategy |
+|---|---|
+| A | `INFRA-TEST-MOMENTUM-SYNTHETIC-001` (fast/slow SMA 3/5) |
+| B | `INFRA-TEST-MOMENTUM-SYNTHETIC-002` (fast/slow SMA 4/6) |
+| C | `INFRA-TEST-MOMENTUM-SYNTHETIC-003` (fast/slow SMA 5/7) |
+
+**FACT:** A/B/C are all `INFRASTRUCTURE_TEST_STRATEGY_ONLY` — deterministic
+SMA-crossover variants of the same infrastructure-test strategy family.
+They are **not** research alpha strategies, carry zero alpha authority,
+and are not research evidence.
+
+**Effective policies observed on A/B/C (FACT):**
+- `portfolioFundingPolicy=CASH_CONSTRAINED_SPOT` (D1)
+- `killSwitchPositionPolicy=HALT_AND_REQUIRE_OPERATOR_RESOLUTION` (D2)
+- `signalSizingPolicy=NAV_RELATIVE_PERCENT` (D3)
+- `navSizingNotionalPct=10` (D3)
+
+**Controlled Shadow-only feed recovery — EXPLICITLY enabled for this D5 run**
+(this opt-in applies to the D5 Shadow infrastructure run only; **Automatic Feed
+Reconnect remains DISABLED** and this does NOT authorize broker reconnect or
+autonomous Paper/Live recovery):
+
+| Recovery knob | Value |
+|---|---|
+| Max attempts | `5` |
+| Backoff (seconds) | `2, 5, 10, 20, 30` |
+| Poll interval (seconds) | `2` |
+| Bar wait timeout (seconds) | `90` |
+| Docker restart policy | `no` (no auto-restart on exit) |
+
+**Observed global state (FACT — operator-recorded during D5):**
+
+| Item | Value |
+|---|---|
+| `overallStatus` | `RUNNING` |
+| `executionState` | `RUNNING` |
+| `feedHealth` | `HEALTHY` |
+| `canonicalCapitalUsd` | `0.0` |
+| `realOrderCount` | `0` |
+| `noRealOrders` | `true` |
+| `acashCommitSha` | `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` |
+
+**GOVERNANCE BOUNDARY:** D5 remains **Shadow / simulated-only**. No Paper, no
+Live, no real capital, no real orders, no broker connectivity.
+
+**NEXT ACTION (D5):** Wait for the full 24h endpoint (~`2026-09-17T00:07:16Z`)
+and the watchdog's graceful `docker stop --timeout 20`. Only after final
+evidence / artifact integrity review may D5 be classified PASS.
+
+---
+
+### 4.9 D5 Watchdog (FACT — operator-recorded)
+
+| Item | Value |
+|---|---|
+| Watchdog script | `/tmp/acash-d5-watch.sh` |
+| Watchdog PID (observed) | `3627856` |
+| Watchdog log | `/tmp/acash-d5-watch-20260916T001302Z.log` |
+
+**Behaviour (FACT):**
+- Checks the D5 container periodically.
+- If D5 exits early, it records the early termination and does **NOT** restart it.
+- At the 24h endpoint it is intended to issue a graceful `docker stop --timeout 20`.
+- **No automatic Docker restart is permitted** (restart policy remains `no`;
+  operator resume is required after any fail-closed halt).
+
+---
+
+### 4.10 Dashboard Routing Observation (FACT — temporary, cleanup deferred)
+
+| Item | Value |
+|---|---|
+| Dashboard URL (Tailscale/private) | `https://homelab.tail35e4b4.ts.net/acash/` |
+| Initial symptom | Frontend reachable but Shadow API returned **HTTP 502** |
+| Root cause | Backend hostname mismatch — dashboard Nginx expects `acash-shadow:9103` while the D5 container is named `acash-shadow-v2-d5-24h` |
+| Verified working path | Direct: `http://acash-shadow-v2-d5-24h:9103/api/shadow/status` returned live Shadow runtime JSON |
+| Workaround | Temporary Docker network alias restored the dashboard |
+
+**FACT / GOVERNANCE BOUNDARY:** The dashboard routing fix is **temporary**.
+The permanent cleanup (intended stable network alias or configurable backend
+hostname) is **deferred until AFTER D5 completes**. Do **not** alter the D5
+evidence run merely to clean up dashboard routing.
 
 ---
 
@@ -509,65 +703,56 @@ UNASSIGNED Slot B/C now render N/A as em dash instead of crashing.
 > [!IMPORTANT]
 > **Perform read-only verification FIRST before any action.**
 
+**FACT — Current state to verify:** `origin/main ==
+4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`; **D4 = COMPLETE / PASS**;
+**D5 = RUNNING, NOT yet PASS** (24h endpoint ~`2026-09-17T00:07:16Z`).
+
 **NEXT ACTION — Step 1: Verify current state**
 ```bash
 git fetch origin
-git rev-parse origin/main  # must == 243412d36592fc57a8801dade8579b6e2ff713a5
+git rev-parse origin/main  # must == 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6
 git status --short --branch
 ```
 
-**NEXT ACTION — Step 2: D1–D5 are RATIFIED — proceed to Homelab**
+**NEXT ACTION — Step 2: D5 is running — do NOT disturb it**
+- D5 (`acash-shadow-v2-d5-24h`) has **not** reached its 24h endpoint yet and
+  must **not** be marked PASS until the endpoint is reached and final
+  evidence / artifact integrity is reviewed (§4.8).
+- Do NOT restart the container, do NOT reconfigure the D5 run, do NOT clean up
+  dashboard routing mid-run. Operator + human decision gates remain required.
 
-The V2 branch is merged to `main` and all source-level blockers are closed
-(recovery default OFF, explicit `--enable-feed-recovery`, bounded attempts,
-corrected backoff, bounded bar-wait, strict CLI + finite-number validation,
-symmetric auto-mount).
+**NEXT ACTION — Step 3: D1–D5 are RATIFIED (2026-09-15)**
 
-**Current Homelab blocker (2026-09-15):** Tailscale `BackendState=Stopped` on
-the Windows workstation — SSH to `mew@homelab` unreachable (`homelab` /
-`homelab.tail35e4b4.ts.net` unresolvable; LAN `192.168.1.10:22` timed out).
-The Homelab build/drill/start is the ONLY pending step.
-
-| Packet | Decision | Value |
-|---|---|---|
-| D1 | Portfolio funding model | **RATIFIED = `CASH_CONSTRAINED_SPOT`** |
-| D2 | Kill-switch position policy | **RATIFIED = `HALT_AND_REQUIRE_OPERATOR_RESOLUTION`** |
-| D3 | Candidate sizing | **RATIFIED = `NAV_RELATIVE_PERCENT` / 10.0%** |
-| D4 | V2 Homelab capacity drill | **RATIFIED = 10-slot / 15 min INFRA_TEST drill** (pending network access) |
-| D5 | V2 runtime | **CONDITIONAL = 3-slot 24h Shadow V2 only after D4 PASS** |
+| Packet | Decision | Value | Status |
+|---|---|---|---|
+| D1 | Portfolio funding model | **RATIFIED = `CASH_CONSTRAINED_SPOT`** | Wired end-to-end (`4b2269d`) |
+| D2 | Kill-switch position policy | **RATIFIED = `HALT_AND_REQUIRE_OPERATOR_RESOLUTION`** | Wired end-to-end (`4b2269d`) |
+| D3 | Candidate sizing | **RATIFIED = `NAV_RELATIVE_PERCENT` / 10.0%** | Wired end-to-end (`4b2269d`); applies to ALL slots incl. injected A |
+| D4 | V2 Homelab capacity drill | **RATIFIED = 10-slot / 15 min INFRA_TEST drill** | **COMPLETE / PASS (2026-09-16, §4.7)** |
+| D5 | V2 runtime | **CONDITIONAL = 3-slot 24h Shadow V2 only after D4 PASS** | **RUNNING (§4.8)** |
 
 Record: `docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md`.
 
-**NEXT ACTION — Step 3: Unblock Homelab, then execute capacity gate**
-1. Reconnect Tailscale on the workstation (or run from a machine with SSH to `mew@homelab`).
-2. Homelab pre-flight (read-only): hostname/date/free/df/docker; confirm prior
-   H01 container is EXITED/exit 2 (do NOT erase H01 evidence).
-3. Build exact V2 image from `main @ 243412d` with `ACASH_GIT_COMMIT=<full SHA>`,
-   tag `acash:shadow-v2-<short SHA>` (do NOT tag over `bb6d49c`).
-4. 10-slot capacity drill (15 min, isolated CAPACITY-DRILL storage path):
-   `--num-slots 10 --auto-mount-infra-candidates --infra-mount-count 10
-   --infra-sizing-policy nav-relative --nav-sizing-notional-pct 10
-   --enable-feed-recovery`, CASH_CONSTRAINED_SPOT,
-   HALT_AND_REQUIRE_OPERATOR_RESOLUTION.
-5. Evaluate vs the D4 PASS gate list (healthy, RestartCount=0, capital $0,
-   10 independent slots, reconciliation PASS, no hash-chain failure, bounded
-   cardinality, no host resource exhaustion). Report, do not invent thresholds.
-6. D4 PASS → start 3-slot 24h run; D4 FAIL → STOP (no D5).
+**NEXT ACTION — Step 4 (after D5 24h endpoint):**
+1. Watchdog issues graceful `docker stop --timeout 20` (§4.9).
+2. Review final D5 evidence: journal/manifest/snapshot integrity, ExitCode=0,
+   RestartCount=0, OOM=false, feed HEALTHY, capital $0, realOrderCount 0,
+   noRealOrders true, exactly 3 INFRA_TEST slots, config-hash provenance.
+3. Only then classify D5 PASS (or FAIL / interrupted / operator-recovered per
+   the ratified continuous-run criteria).
 
-**NEXT ACTION — Step 4 (D5, ONLY IF D4 PASS):**
-3-slot 24h Shadow V2: BTCUSDT M1, 3 INFRA_TEST candidates,
-NAV 10% sizing, CASH_CONSTRAINED_SPOT, HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
-`--enable-feed-recovery` with validated defaults (5 attempts, backoff
-2,5,10,20,30, bar-wait 90s). Verify immediately after start: running/healthy,
-RestartCount=0, exactly 3 slots, capital 0, realOrderCount 0, noRealOrders true,
-V2 git SHA correct. Then verify metrics/VM/dashboard/Tailscale health.
+**NEXT ACTION — Step 5 (after D5 classification):**
+1. Perform the **permanent dashboard backend-routing fix** (§4.10) — intended
+   stable network alias or configurable backend hostname (deferred until D5
+   completes; the temporary alias workaround covers the interim).
+2. Re-verify dashboard/Tailscale/VictoriaMetrics health after the fix.
 
-**NEXT ACTION — Step 5: Do NOT**
-- Merge anything further without instruction (main is at the ratified tip)
+**NEXT ACTION — Step 6: Do NOT**
 - Create HYP_003, start R1, authorize Paper/Live, unlock backtesting
 - Introduce real capital or broker credentials
-- Restart the drill container or auto-restart after terminal halt (operator resume)
-- Tag the new image over `bb6d49c` or erase H01 evidence
+- Mark D5 PASS early, restart D5, or auto-restart after terminal halt (operator resume)
+- Restart the D4 drill container or erase H01 / D4 failure evidence
+- Tag the new image over the preserved H01-era `bb6d49c` tag
 
 ---
 
@@ -587,26 +772,33 @@ Stop and report to the human before proceeding past these boundaries:
 
 ```
 Implementation Status:    COMPLETE — V2 remediation + V2 follow-up + final recovery
-                           hardening + numeric hardening MERGED to main
-                           main = 243412d36592fc57a8801dade8579b6e2ff713a5
+                           hardening + numeric hardening + V2 CLI routing +
+                           runtime-policy wiring MERGED to main
+                           origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6
                            (ff-only merge, pushed; verify tip with `git rev-parse HEAD`)
+                           D4 = COMPLETE / PASS; D5 = RUNNING (NOT yet PASS)
 Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
 Mathematical Authority:   N/A (config/observability + nominal sizing arithmetic)
-Local Test Suite:         VERIFIED — 2384 passed / 12 skipped (full `uv run pytest tests/`)
-Type Checker (MyPy):      VERIFIED — 423 source files clean (`uv run mypy src/ tests/`)
+Local Test Suite:         VERIFIED — 2408 passed / 1 skipped (full `uv run pytest tests/`)
+Type Checker (MyPy):      VERIFIED — 424 source files clean (`uv run mypy src/ tests/`)
 Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 27/27; build clean)
 Remote CI Status:         NOT AVAILABLE
 Methodological Caveats:
-  - D1–D5 RATIFIED (V2_OPERATOR_RATIFICATION_20260915.md); D5 is CONDITIONAL on D4 PASS
-  - 10-slot catalog is INFRA_TEST only; zero alpha authority
-  - No deployment on Homelab yet — Homelab SSH unreachable (Tailscale Stopped on
-    workstation, 2026-09-15); build/drill/start are the only pending steps
-  - D4 (10-slot capacity drill) NOT yet performed -> D5 runtime NOT started
+  - D1–D3 RATIFIED & wired end-to-end (4b2269d): CASH_CONSTRAINED_SPOT,
+    HALT_AND_REQUIRE_OPERATOR_RESOLUTION, NAV_RELATIVE_PERCENT 10% (incl. slot A)
+  - D4 (10-slot capacity drill) COMPLETE / PASS 2026-09-16 on
+    acash:shadow-v2-4b2269d (T+900s, graceful stop, ExitCode=0, RestartCount=0,
+    OOM=false, 10 manifests/journals/snapshots) — operator-recorded evidence
+  - D5 (3-slot 24h Shadow V2) RUNNING, NOT yet PASS; 24h endpoint ~2026-09-17T00:07:16Z;
+    all D5 metrics are mid-run observations, NOT a PASS classification
+  - Dashboard backend routing workaround is TEMPORARY (nginx expects
+    acash-shadow:9103; D5 container is acash-shadow-v2-d5-24h); permanent fix
+    deferred until after D5 completes — do NOT alter the D5 evidence run
   - Automatic Feed Reconnect DISABLED BY DEFAULT; controlled shadow recovery is
-    AVAILABLE / EXPLICIT OPT-IN only (`--enable-feed-recovery`), bounded by
-    attempts / backoff / bar-wait timeout; non-finite values rejected at CLI and
-    config layers; operator resume REQUIRED after terminal recovery failure or
-    any ordinary fail-closed halt
+    EXPLICIT OPT-IN only (`--enable-feed-recovery`), bounded by attempts /
+    backoff / bar-wait timeout; non-finite values rejected at CLI and config
+    layers; operator resume REQUIRED after terminal recovery failure or any
+    ordinary fail-closed halt
 ```
 
 ---
@@ -614,30 +806,38 @@ Methodological Caveats:
 ## 14. NEXT SESSION QUICK START
 
 ```
-ACASH QUICK START — 2026-09-15 Handoff
+ACASH QUICK START — 2026-09-16 Handoff
 =======================================
-1. git fetch origin; verify origin/main = 243412d36592fc57a8801dade8579b6e2ff713a5;
+1. git fetch origin; verify origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6;
    verify current tip with `git rev-parse HEAD` (hard-coded tips self-invalidate)
-2. V2 branch feat/tournament-v2-risk-remediation-10slot is MERGED to main (ff-only), pushed
+2. V2 branch feat/tournament-v2-risk-remediation-10slot MERGED to main (ff-only), pushed.
+   Runtime-policy wiring (D1/D2/D3) shipped end-to-end at 4b2269d.
 3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence preserved, do NOT erase
-4. V2 REMEDIATION COMPLETE: A (MAX_NOTIONAL), B (funding), C (kill-switch), D (states), E (reason)
-5. V2 READINESS: N-slot fanout, 10-slot INFRA_TEST catalog, dashboard V2 contract,
-   recovery default OFF (--enable-feed-recovery opt-in), bounded/backoff-corrected bar-wait,
-   strict CLI + non-finite rejection, staged dynamic admission, safe NAV sizing (10%)
-6. VERIFICATION: 2384 passed / 12 skipped; mypy 423 clean; dashboard 27/27 + typecheck + build
-7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0
+4. D4 = COMPLETE / PASS (2026-09-16): 10 slots A-J, acash:shadow-v2-4b2269d,
+   T+900s graceful stop, ExitCode=0, RestartCount=0, OOM=false, 10 manifests/journals/snapshots
+5. D5 = RUNNING, NOT yet PASS: acash-shadow-v2-d5-24h, 3 INFRA_TEST slots,
+   tournament SHADOW-20260916_000715_849306fb, 24h endpoint ~2026-09-17T00:07:16Z.
+   D5 MUST NOT be marked PASS before the endpoint + evidence integrity review.
+6. VERIFICATION: 2408 passed / 1 skipped; mypy 424 clean; dashboard 27/27 + typecheck + build
+7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0, NO_REAL_ORDERS=true
 8. D1-D5 RATIFIED (docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md):
    D1=CASH_CONSTRAINED_SPOT, D2=HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
-   D3=NAV_RELATIVE_PERCENT/10%, D4=10-slot drill AUTHORIZED, D5=3-slot 24h ONLY after D4 PASS
-9. BLOCKER: Homelab unreachable from this workstation (Tailscale Stopped).
-   NEXT: reconnect Tailscale -> build image from main@243412d -> 10-slot drill (15 min) -> D4 gate -> conditional 3-slot 24h
-10. DO NOT create HYP_003 / start R1 / authorize Paper/Live / unlock backtest / use real capital
+   D3=NAV_RELATIVE_PERCENT/10%, D4=dry-run COMPLETE/PASS, D5=24h run RUNNING
+9. DASHBOARD: routing workaround is TEMPORARY (nginx expects acash-shadow:9103,
+   D5 container is acash-shadow-v2-d5-24h). Permanent fix deferred until AFTER D5.
+10. NEXT (after D5 24h endpoint + review): classify D5 PASS; then perform permanent
+    dashboard backend-routing fix; re-verify Tailscale/dashboard/VictoriaMetrics
+11. WATCHDOG: /tmp/acash-d5-watch.sh (graceful docker stop --timeout 20 at endpoint,
+    no auto-restart) — do NOT start a second watchdog or restart D5
+12. DO NOT create HYP_003 / start R1 / authorize Paper/Live / unlock backtest /
+    use real capital / reconnect broker / touch EIMS_11-8-2026.md
 ```
 
 ### Verification Ledger
-- Implementation Status: MERGED TO MAIN — D1-D5 RATIFIED
+- Implementation Status: MERGED TO MAIN — D1-D5 RATIFIED, D4 PASS, D5 RUNNING
 - Contract Enforcement: STRICT FAIL-CLOSED
-- Local Test Suite: VERIFIED (2384 passed / 12 skipped)
-- Type Checker (MyPy): VERIFIED (423 source files clean)
-- Homelab Access: BLOCKED (Tailscale not connected from this machine)
-- Methodological Caveats: D4 capacity drill NOT yet performed; D5 runtime NOT started; deployment pending
+- Local Test Suite: VERIFIED (2408 passed / 1 skipped)
+- Type Checker (MyPy): VERIFIED (424 source files clean)
+- Homelab Access: OPERATIONAL (D4 PASS evidence recorded; D5 running)
+- Methodological Caveats: D5 NOT yet PASS (24h endpoint ~2026-09-17T00:07:16Z);
+  dashboard routing fix TEMPORARY, permanent cleanup deferred until after D5
