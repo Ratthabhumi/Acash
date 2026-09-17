@@ -459,7 +459,18 @@ class PaperSessionRunner:
         self._start_time_utc: Optional[datetime] = None
         self._end_time_utc: Optional[datetime] = None
         self._started = False
+        self._stopped = False
         self._manifest: Optional[PaperSessionManifest] = None
+
+    @property
+    def is_started(self) -> bool:
+        """True if the runner session has been started."""
+        return self._started
+
+    @property
+    def is_finalized(self) -> bool:
+        """True if the runner session has been stopped and finalized."""
+        return self._stopped
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -524,6 +535,15 @@ class PaperSessionRunner:
         if not self._started:
             raise DataContractError(
                 "PaperSessionRunner: session not started."
+            )
+
+        # Idempotent finalization: a runner finalized once must not be
+        # finalized twice, duplicate daily snapshots, or overwrite its manifest.
+        if self._stopped:
+            if self._manifest is not None:
+                return self._manifest
+            raise DataContractError(
+                "PaperSessionRunner: session marked stopped but manifest is missing."
             )
 
         self._end_time_utc = datetime.now(timezone.utc)
@@ -608,6 +628,7 @@ class PaperSessionRunner:
             ) from exc
 
         self._manifest = manifest
+        self._stopped = True
         return manifest
 
     @property
@@ -848,6 +869,8 @@ class PaperSessionRunner:
             raise DataContractError(
                 "PaperSessionRunner: session not started. Call start() first."
             )
+        if self._stopped:
+            return None  # Session is finalized/stopped — no new decisions
         if self._kill_switch_active:
             return None  # Hard stop — no new decisions while kill switch active
 

@@ -454,38 +454,50 @@ class ShadowTournamentSupervisor:
             self._feed_recovery_active = False
 
             for slot_id, slot in self._slots.items():
-                if slot.status not in (
-                    SlotExecutionState.RUNNING.value,
-                    SlotExecutionState.FEED_RECOVERING.value,
+                if (
+                    slot.runner is None
+                    or not slot.runner.is_started
+                    or slot.runner.is_finalized
                 ):
                     continue
+
                 # Granular execution state derived from the CAUSAL terminal
                 # reason (single authority): an already risk-halted slot stays
                 # RISK_HALTED; feed-terminal causes (disconnect/stale/recovery
                 # failure) -> FEED_HALTED; everything else -> STOPPED (operator).
-                if slot.runner is not None and slot.runner.kill_switch_active:
+                is_risk_halted = (
+                    slot.status == SlotExecutionState.RISK_HALTED.value
+                    or slot.runner.kill_switch_active
+                )
+                if is_risk_halted:
                     slot.status = SlotExecutionState.RISK_HALTED.value
+                    if not slot.halt_reason:
+                        slot.halt_reason = "Kill switch active (max daily loss breached)"
+                    slot_terminal_reason = TerminalReason.RISK_KILL_SWITCH
                 elif terminal_reason in (
                     TerminalReason.FEED_DISCONNECTED,
                     TerminalReason.FEED_RECOVERY_FAILED,
                 ):
                     slot.status = SlotExecutionState.FEED_HALTED.value
+                    slot.halt_reason = reason
+                    slot_terminal_reason = terminal_reason
                 else:
                     slot.status = SlotExecutionState.STOPPED.value
-                slot.halt_reason = reason
-                if slot.runner is not None and slot.runner._started:
-                    try:
-                        slot.runner.stop(terminal_reason=terminal_reason)
-                        logger.info(
-                            "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
-                            slot_id,
-                        )
-                    except Exception as exc:
-                        logger.error(
-                            "ShadowTournamentSupervisor: error stopping slot %s runner: %s",
-                            slot_id,
-                            exc,
-                        )
+                    slot.halt_reason = reason
+                    slot_terminal_reason = terminal_reason
+
+                try:
+                    slot.runner.stop(terminal_reason=slot_terminal_reason)
+                    logger.info(
+                        "ShadowTournamentSupervisor: sealed manifest for slot %s on halt",
+                        slot_id,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "ShadowTournamentSupervisor: error stopping slot %s runner: %s",
+                        slot_id,
+                        exc,
+                    )
 
             self._update_metrics()
 
