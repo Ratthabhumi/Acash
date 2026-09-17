@@ -1,5 +1,5 @@
-﻿# ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → D4 PASS → D5 24h IN PROGRESS
-## Canonical Current Session Handoff — 2026-09-16
+# ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → D4 PASS → D5 CLOSED (ACCEPTED WITH EXCEPTION)
+## Canonical Current Session Handoff — 2026-09-17
 
 > [!CAUTION]
 > **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
@@ -10,15 +10,15 @@
 > **Document:** `docs/SESSION_HANDOFF.md`
 > **This is the single canonical ACASH session handoff.**
 > For the archived E3.6 historical checkpoint, see `E3.6-SESSION-HANDOFF.md`.
-> **Date:** 2026-09-16 (UTC)
+> **Date:** 2026-09-17 (UTC)
 > **Status labels used:** FACT | EVIDENCE | INFERENCE | DEFECT | GOVERNANCE BOUNDARY | NEXT ACTION
 
 ---
 
-## 0. Current Operator Checkpoint — 2026-09-16
+## 0. Current Operator Checkpoint — 2026-09-17
 
 > [!IMPORTANT]
-> **D5 IS IN PROGRESS. Read this checkpoint before acting.**
+> **D5 IS CLOSED (ACCEPTED WITH EXCEPTION). Read this checkpoint before acting.**
 
 | Gate | State |
 |---|---|
@@ -26,23 +26,33 @@
 | D2 `HALT_AND_REQUIRE_OPERATOR_RESOLUTION` | **RATIFIED + WIRED END-TO-END** (`4b2269d`) |
 | D3 `NAV_RELATIVE_PERCENT` 10% | **RATIFIED + WIRED END-TO-END** (`4b2269d`) — all slots incl. injected A |
 | D4 10-slot capacity drill | **COMPLETE / PASS** (2026-09-16, `acash:shadow-v2-4b2269d`) |
-| D5 3-slot 24h Shadow V2 | **RUNNING — NOT YET PASS** (endpoint ~`2026-09-17T00:07:16Z`) |
-| Dashboard backend routing | **TEMPORARY workaround active; permanent fix deferred until after D5** |
+| D5 3-slot 24h Shadow V2 | **CLOSED — ACCEPTED WITH EXCEPTION** (2026-09-17; finalization fix verified at `fd5a35d`) |
+| Dashboard backend routing | **TEMPORARY workaround active; permanent fix deferred to next milestone** |
 | Feed recovery (D5) | EXPLICIT OPT-IN, Shadow-only, bounded (5/2,5,10,20,30/2s/90s), restart policy `no` |
 
-**FACT — Repository:** `origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`
-(verified 2026-09-16). This is the exact commit behind the deployed D5 image.
+**FACT — Repository:** `origin/main = fd5a35d82bc5b7510ecf84590ed9d36f2041b025`
+(verified 2026-09-17). Contains surgical finalization fix for RISK_HALTED runners.
 
-**FACT — D5 runtime:** container `acash-shadow-v2-d5-24h`, tournament
+**FACT — D5 Attempt 1 runtime:** container `acash-shadow-v2-d5-24h`, tournament
 `SHADOW-20260916_000715_849306fb`, 3 INFRA_TEST slots A/B/C, `acashCommitSha =
 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`, `noRealOrders=true`, capital $0.
+Completed full 24h wall-clock container lifecycle; ~21h active execution before
+all slots entered fail-closed RISK_HALTED on MAX_DAILY_LOSS. Missing snapshots/manifests
+traced to shutdown lifecycle skip bug, which is now fixed and closure-verified.
+
+**FACT — Homelab Closure Verification:** Image `acash:shadow-v2-fd5a35d`
+(`sha256:5e78425de64e7d2ccb8e8bb63a4c8ee54e284eca1e1b3a44b505badafe4f565f`),
+verified exactly 1 journal, 1 snapshot, 1 manifest (sealed, PASS/PASS), terminal reason
+`RISK_KILL_SWITCH`.
+
+**HUMAN DECISION:** No second 24h rerun required. D5 closed as ACCEPTED WITH EXCEPTION.
 
 **GOVERNANCE BOUNDARY — unchanged:** HYP_003 NOT CREATED, R1 NOT STARTED,
 Backtesting LOCKED, Paper NOT AUTHORIZED, Live LOCKED, capital $0.00,
 `NO_REAL_ORDERS=true`, SHADOW-only.
 
-**NEXT ACTION:** Wait for the 24h endpoint; do NOT mark D5 PASS early; do NOT
-disturb the D5 container or dashboard workaround mid-run.
+**NEXT ACTION:** Address permanent dashboard backend routing fix; align with human
+operator on next authorized milestone (D5 closure does NOT auto-unlock trading/research gates).
 
 ---
 
@@ -51,18 +61,17 @@ disturb the D5 container or dashboard workaround mid-run.
 | Item | Value |
 |---|---|
 | Repository | `Ratthabhumi/Acash` |
-| Active branch | **`main`** (V2 merged here via `--ff-only`) |
-| Current main / HEAD = `origin/main` | **`4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`** (verify with `git rev-parse HEAD`) |
-| Tip commit message | `fix(shadow): wire ratified V2 runtime policies end to end` |
-| Feature branch | `feat/tournament-v2-risk-remediation-10slot` — `938b4a4` equivalent content, merged to `main` |
+| Active branch | **`main`** |
+| Current main / HEAD = `origin/main` | **`fd5a35d82bc5b7510ecf84590ed9d36f2041b025`** (verify with `git rev-parse HEAD`) |
+| Tip commit message | `fix(shadow): finalize risk-halted runners on shutdown` |
+| Feature branch | `feat/tournament-v2-risk-remediation-10slot` — merged to `main` |
 | Base before V2 merge | `9a58ced5011e15c7bcf3975f0e83acf339fa53ce` |
 
-**FACT:** `origin/main == 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` as of 2026-09-16.
+**FACT:** `origin/main == fd5a35d82bc5b7510ecf84590ed9d36f2041b025` as of 2026-09-17.
 V2 remediation + V2 follow-up hardening + operator ratification + V2 CLI routing +
-runtime-policy wiring were merged to `main` and pushed. **This exact commit is the one
-deployed as the D5 Shadow runtime image** (see §4.8).
+runtime-policy wiring + RISK_HALTED finalization fix were merged to `main` and pushed.
 
-**MERGED COMMIT CHAIN (25 commits, base → tip, all full SHAs):**
+**MERGED COMMIT CHAIN (26 commits, base → tip, all full SHAs):**
 
 | # | Commit | Scope |
 |---|---|---|
@@ -90,13 +99,11 @@ deployed as the D5 Shadow runtime image** (see §4.8).
 | 22 | `a79e0c70d63bd8142bbcd3d4b626f4624d74be8a` | docs: refresh session handoff with V2 merge, D1-D5 ratification, and Homelab blocker |
 | 23 | `938b4a46332e1fdfe8ea924689044fe05839ed14` | fix(shadow): route paper tournament command to V2 CLI |
 | 24 | `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` | fix(shadow): wire ratified V2 runtime policies end to end |
+| 25 | `fd5a35d82bc5b7510ecf84590ed9d36f2041b025` | fix(shadow): finalize risk-halted runners on shutdown |
 
 > Verify the final SHA with `git rev-parse HEAD` — never trust a hard-coded tip.
-> Tip commit `4b2269d` adds the two ratified runtime-policy CLI flags
-> (`--portfolio-funding-policy`, `--kill-switch-position-policy`), threads D1/D2/D3
-> through every slot's `PaperSessionConfig`, fixes injected/slot-A sizing so an
-> explicit NAV choice governs ALL slots, adds per-slot `effectivePolicies`
-> provenance, and is the exact image source for the D5 run.
+> Tip commit `fd5a35d` fixes the RISK_HALTED shutdown lifecycle finalization defect,
+> introduces PaperSessionRunner stop idempotency, and seals manifests for risk-halted slots.
 
 **VERIFY, do not assume.** Run `git fetch origin` and `git rev-parse origin/main` at start of
 every session.
@@ -110,11 +117,12 @@ every session.
 | Repository | `Ratthabhumi/Pi_Personal-Infrastructure` |
 | Current main | `3ce27f09e742768633c23a5d0746a004bc3a1727` |
 | Dashboard pin deployed | `acash-dashboard:ec86a85` |
-| Shadow runtime (D4/D5 Homelab image) | `acash:shadow-v2-4b2269d` (replaces the H01-era `acash:shadow-tournament-bb6d49c`) |
+| Shadow runtime (D4 / D5 Attempt 1) | `acash:shadow-v2-4b2269d` (replaces historical `acash:shadow-tournament-bb6d49c`) |
+| Shadow runtime (D5 closure smoke) | `acash:shadow-v2-fd5a35d` (`sha256:5e78425de64e7d2ccb8e8bb63a4c8ee54e284eca1e1b3a44b505badafe4f565f`) |
 
-**FACT:** The D4 capacity drill and the running D5 24h run both use the Homelab-hosted
-image `acash:shadow-v2-4b2269d`. The `bb6d49c` H01-era tag is historical and was not
-overwritten/re-tagged; it remains preserved.
+**FACT:** The D4 capacity drill and the D5 24h Attempt 1 run both used the Homelab-hosted
+image `acash:shadow-v2-4b2269d`. The subsequent short closure smoke verifying the RISK_HALTED
+finalization fix used `acash:shadow-v2-fd5a35d`. The historical `bb6d49c` H01-era tag remains preserved.
 
 **VERIFY** Pi main and deployed image tags at start of next session before any Pi action.
 
@@ -331,88 +339,79 @@ D5=3-slot 24h Shadow V2 AUTHORIZED **only after D4 PASS** — D5 is now
 
 ---
 
-### 4.8 D5 24h Shadow V2 Run — CURRENT / RUNNING / NOT YET PASS
+### 4.8 D5 Shadow V2 Run — CLOSED (ACCEPTED WITH EXCEPTION)
 
-> [!CAUTION]
-> **D5 IS STILL IN PROGRESS AND IS NOT YET CLASSIFIED PASS.**
-> It must NOT be marked PASS until the full 24h endpoint is reached and the
-> final evidence / artifact integrity is reviewed.
+> [!IMPORTANT]
+> **D5 Attempt 1 is CLOSED as ACCEPTED WITH EXCEPTION.**
+> Full 24h container/wall-clock lifecycle was achieved (~21h active execution before expected
+> fail-closed RISK_HALTED on MAX_DAILY_LOSS). Missing snapshots/manifests were traced to a
+> shutdown lifecycle finalization defect, which was surgically remediated in `fd5a35d` and
+> closure-verified via a Homelab smoke test. Per Human Decision: no 24h rerun required.
 
 | Item | Value |
 |---|---|
+| Classification | **ACCEPTED WITH EXCEPTION** (Human Decision 2026-09-17) |
 | Container | `acash-shadow-v2-d5-24h` |
-| Storage | `/data/docker/acash/shadow-v2-4b2269d-d5-24h` |
-| Image | `acash:shadow-v2-4b2269d` (commit `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`) |
+| Storage (Preserved) | `/data/docker/acash/shadow-v2-4b2269d-d5-24h` (DO NOT touch, move, or overwrite) |
+| Attempt 1 Image | `acash:shadow-v2-4b2269d` (commit `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`) |
 | Tournament ID | `SHADOW-20260916_000715_849306fb` |
 | Tournament start (UTC) | `2026-09-16T00:07:16.204711+00:00` |
-| Target 24h completion (UTC) | approximately `2026-09-17T00:07:16Z` |
-| Slots active | **Exactly 3 infrastructure-test slots** |
+| 24h Wall-Clock completion | `2026-09-17T00:07:16Z` (gracefully stopped by watchdog `docker stop --timeout 20`) |
+| Container terminal state | ExitCode=0, RestartCount=0, OOM=false |
+| Active execution duration | Approximately 21h before all slots (A/B/C) entered RISK_HALTED on MAX_DAILY_LOSS |
+| Safety boundaries | `canonicalCapitalUsd=0.0`, `realOrderCount=0`, `noRealOrders=true`, capital $0 |
+| Active slots | Exactly 3 INFRA_TEST slots (A: fast/slow 3/5, B: 4/6, C: 5/7) |
 
-| Slot | Strategy |
-|---|---|
-| A | `INFRA-TEST-MOMENTUM-SYNTHETIC-001` (fast/slow SMA 3/5) |
-| B | `INFRA-TEST-MOMENTUM-SYNTHETIC-002` (fast/slow SMA 4/6) |
-| C | `INFRA-TEST-MOMENTUM-SYNTHETIC-003` (fast/slow SMA 5/7) |
+**FACT — D5 Attempt 1 Evidence & Risk Semantics:**
+- All three slots correctly halted on `MAX_DAILY_LOSS` fail-closed limit per ratified D2 policy (`HALT_AND_REQUIRE_OPERATOR_RESOLUTION`).
+- This was expected fail-closed risk policy execution, NOT an infrastructure crash or feed instability.
+- In Attempt 1, `status.json` correctly reflected `operatorResolutionRequired=true` and slots in `RISK_HALTED`.
+- However, final manifests (0) and daily snapshots (0) were missing because `ShadowTournamentSupervisor.halt()` skipped slots not in `(RUNNING, FEED_RECOVERING)`, omitting `runner.stop()` for already-halted slots.
 
-**FACT:** A/B/C are all `INFRASTRUCTURE_TEST_STRATEGY_ONLY` — deterministic
-SMA-crossover variants of the same infrastructure-test strategy family.
-They are **not** research alpha strategies, carry zero alpha authority,
-and are not research evidence.
+**FACT — Defect Remediation (`fd5a35d`):**
+- Commit: `fd5a35d82bc5b7510ecf84590ed9d36f2041b025` (`fix(shadow): finalize risk-halted runners on shutdown`).
+- Root cause: Supervisor shutdown loop checked presentation status rather than lifecycle status, skipping unfinalized runners.
+- Fix: Loop checks `slot.runner is None or not slot.runner.is_started or slot.runner.is_finalized`. RISK_HALTED status and reason provenance are preserved; causal terminal reason `TerminalReason.RISK_KILL_SWITCH` is propagated. PaperSessionRunner `stop()` is made strictly idempotent.
+- Local verification: Full repository suite **2418 passed, 1 skipped**; MyPy clean on **425 source files**.
 
-**Effective policies observed on A/B/C (FACT):**
-- `portfolioFundingPolicy=CASH_CONSTRAINED_SPOT` (D1)
-- `killSwitchPositionPolicy=HALT_AND_REQUIRE_OPERATOR_RESOLUTION` (D2)
-- `signalSizingPolicy=NAV_RELATIVE_PERCENT` (D3)
-- `navSizingNotionalPct=10` (D3)
+**FACT — Homelab Closure Verification (`acash:shadow-v2-fd5a35d`):**
+- Deployed Image: `acash:shadow-v2-fd5a35d` (Image ID: `sha256:5e78425de64e7d2ccb8e8bb63a4c8ee54e284eca1e1b3a44b505badafe4f565f`).
+- Short Homelab closure smoke executed to test risk-halt finalization on Docker.
+- Produced exact artifacts:
+  - 1 journal (`.journal.jsonl`)
+  - 1 snapshot (`.snapshots.jsonl`)
+  - 1 sealed manifest (`.manifest.json`)
+  - 1 `status.json`
+- Manifest verification:
+  - `final_reconciliation_status=PASS`
+  - `journal_integrity_status=PASS`
+  - `no_real_orders=true`, `simulated_fills_only=true`
+  - `git_commit=fd5a35d82bc5b7510ecf84590ed9d36f2041b025`
+- Journal verification:
+  - Exactly one `SESSION_STOPPED` event with `reason=RISK_KILL_SWITCH`.
+- The RISK_HALTED finalization defect is thus closure-verified on the Homelab Docker environment.
 
-**Controlled Shadow-only feed recovery — EXPLICITLY enabled for this D5 run**
-(this opt-in applies to the D5 Shadow infrastructure run only; **Automatic Feed
-Reconnect remains DISABLED** and this does NOT authorize broker reconnect or
-autonomous Paper/Live recovery):
+**CAVEAT — Smoke Harness Wrapper Observation:**
+- The temporary Python smoke wrapper script exited non-zero because its internal assertion assumed a specific session-id filename format for the journal.
+- The actual runtime artifacts were produced cleanly, validated independently, and verified with PASS reconciliation and PASS integrity.
+- This was an assertion bug in the ephemeral test harness, NOT an ACASH runtime or finalization failure.
 
-| Recovery knob | Value |
-|---|---|
-| Max attempts | `5` |
-| Backoff (seconds) | `2, 5, 10, 20, 30` |
-| Poll interval (seconds) | `2` |
-| Bar wait timeout (seconds) | `90` |
-| Docker restart policy | `no` (no auto-restart on exit) |
+**HUMAN DECISION (2026-09-17):**
+- No second 24-hour D5 rerun is required.
+- D5 is formally closed as **ACCEPTED WITH EXCEPTION** (not an unqualified PASS).
+- D5 Attempt 1 evidence directory (`/data/docker/acash/shadow-v2-4b2269d-d5-24h`) is permanently preserved as evidence.
 
-**Observed global state (FACT — operator-recorded during D5):**
-
-| Item | Value |
-|---|---|
-| `overallStatus` | `RUNNING` |
-| `executionState` | `RUNNING` |
-| `feedHealth` | `HEALTHY` |
-| `canonicalCapitalUsd` | `0.0` |
-| `realOrderCount` | `0` |
-| `noRealOrders` | `true` |
-| `acashCommitSha` | `4b2269d49cc36be94d4f7fb93a8b5e120a292cf6` |
-
-**GOVERNANCE BOUNDARY:** D5 remains **Shadow / simulated-only**. No Paper, no
-Live, no real capital, no real orders, no broker connectivity.
-
-**NEXT ACTION (D5):** Wait for the full 24h endpoint (~`2026-09-17T00:07:16Z`)
-and the watchdog's graceful `docker stop --timeout 20`. Only after final
-evidence / artifact integrity review may D5 be classified PASS.
+**GOVERNANCE BOUNDARY:** D5 closure does NOT authorize HYP_003, R1, Paper, Live, backtesting, real capital, or broker connectivity. These remain strictly locked.
 
 ---
 
-### 4.9 D5 Watchdog (FACT — operator-recorded)
+### 4.9 D5 Watchdog (FACT — Historical Execution)
 
 | Item | Value |
 |---|---|
 | Watchdog script | `/tmp/acash-d5-watch.sh` |
-| Watchdog PID (observed) | `3627856` |
-| Watchdog log | `/tmp/acash-d5-watch-20260916T001302Z.log` |
-
-**Behaviour (FACT):**
-- Checks the D5 container periodically.
-- If D5 exits early, it records the early termination and does **NOT** restart it.
-- At the 24h endpoint it is intended to issue a graceful `docker stop --timeout 20`.
-- **No automatic Docker restart is permitted** (restart policy remains `no`;
-  operator resume is required after any fail-closed halt).
+| Execution | Monitored D5 container through full 24h wall-clock run; issued graceful `docker stop --timeout 20` at endpoint |
+| Restarts | 0 (restart policy `no` enforced throughout) |
 
 ---
 
@@ -704,24 +703,24 @@ UNASSIGNED Slot B/C now render N/A as em dash instead of crashing.
 > **Perform read-only verification FIRST before any action.**
 
 **FACT — Current state to verify:** `origin/main ==
-4b2269d49cc36be94d4f7fb93a8b5e120a292cf6`; **D4 = COMPLETE / PASS**;
-**D5 = RUNNING, NOT yet PASS** (24h endpoint ~`2026-09-17T00:07:16Z`).
+fd5a35d82bc5b7510ecf84590ed9d36f2041b025`; **D4 = COMPLETE / PASS**;
+**D5 = CLOSED — ACCEPTED WITH EXCEPTION** (Human Decision 2026-09-17; no 24h rerun required;
+finalization fix verified via Homelab closure smoke).
 
 **NEXT ACTION — Step 1: Verify current state**
 ```bash
 git fetch origin
-git rev-parse origin/main  # must == 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6
+git rev-parse origin/main  # must == fd5a35d82bc5b7510ecf84590ed9d36f2041b025
 git status --short --branch
 ```
 
-**NEXT ACTION — Step 2: D5 is running — do NOT disturb it**
-- D5 (`acash-shadow-v2-d5-24h`) has **not** reached its 24h endpoint yet and
-  must **not** be marked PASS until the endpoint is reached and final
-  evidence / artifact integrity is reviewed (§4.8).
-- Do NOT restart the container, do NOT reconfigure the D5 run, do NOT clean up
-  dashboard routing mid-run. Operator + human decision gates remain required.
+**NEXT ACTION — Step 2: D5 is closed — do NOT restart or rerun D5**
+- D5 Attempt 1 completed its 24h wall-clock container lifecycle and is closed as
+  **ACCEPTED WITH EXCEPTION** per Human Decision (§4.8).
+- Do NOT restart the D5 container, do NOT initiate another 24h run, do NOT touch
+  or overwrite `/data/docker/acash/shadow-v2-4b2269d-d5-24h`.
 
-**NEXT ACTION — Step 3: D1–D5 are RATIFIED (2026-09-15)**
+**NEXT ACTION — Step 3: D1–D5 Status Summary**
 
 | Packet | Decision | Value | Status |
 |---|---|---|---|
@@ -729,30 +728,26 @@ git status --short --branch
 | D2 | Kill-switch position policy | **RATIFIED = `HALT_AND_REQUIRE_OPERATOR_RESOLUTION`** | Wired end-to-end (`4b2269d`) |
 | D3 | Candidate sizing | **RATIFIED = `NAV_RELATIVE_PERCENT` / 10.0%** | Wired end-to-end (`4b2269d`); applies to ALL slots incl. injected A |
 | D4 | V2 Homelab capacity drill | **RATIFIED = 10-slot / 15 min INFRA_TEST drill** | **COMPLETE / PASS (2026-09-16, §4.7)** |
-| D5 | V2 runtime | **CONDITIONAL = 3-slot 24h Shadow V2 only after D4 PASS** | **RUNNING (§4.8)** |
+| D5 | V2 runtime | **3-slot 24h Shadow V2** | **CLOSED — ACCEPTED WITH EXCEPTION (2026-09-17, §4.8)** |
 
 Record: `docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md`.
 
-**NEXT ACTION — Step 4 (after D5 24h endpoint):**
-1. Watchdog issues graceful `docker stop --timeout 20` (§4.9).
-2. Review final D5 evidence: journal/manifest/snapshot integrity, ExitCode=0,
-   RestartCount=0, OOM=false, feed HEALTHY, capital $0, realOrderCount 0,
-   noRealOrders true, exactly 3 INFRA_TEST slots, config-hash provenance.
-3. Only then classify D5 PASS (or FAIL / interrupted / operator-recovered per
-   the ratified continuous-run criteria).
+**NEXT ACTION — Step 4: Permanent dashboard backend-routing fix**
+- Address the permanent dashboard backend-routing fix (§4.10) — configure stable network alias
+  or configurable backend hostname (the temporary alias workaround covers interim).
+- Re-verify dashboard/Tailscale/VictoriaMetrics health after the fix.
 
-**NEXT ACTION — Step 5 (after D5 classification):**
-1. Perform the **permanent dashboard backend-routing fix** (§4.10) — intended
-   stable network alias or configurable backend hostname (deferred until D5
-   completes; the temporary alias workaround covers the interim).
-2. Re-verify dashboard/Tailscale/VictoriaMetrics health after the fix.
+**NEXT ACTION — Step 5: Open Governance Milestone Alignment**
+- Align with human operator on the next authorized governance milestone.
+- **GOVERNANCE INVARIANT:** D5 closure does NOT grant trading authority, does NOT create HYP_003,
+  does NOT start R1, and does NOT authorize Backtest, Paper, or Live. R1 and hypothesis creation
+  remain separate, human-authorized governance steps.
 
 **NEXT ACTION — Step 6: Do NOT**
 - Create HYP_003, start R1, authorize Paper/Live, unlock backtesting
 - Introduce real capital or broker credentials
-- Mark D5 PASS early, restart D5, or auto-restart after terminal halt (operator resume)
-- Restart the D4 drill container or erase H01 / D4 failure evidence
-- Tag the new image over the preserved H01-era `bb6d49c` tag
+- Start another D5 or overwrite H01 / D4 / D5 Attempt 1 failure/evidence directories
+- Tag new images over preserved historical tags (`bb6d49c`, `4b2269d`)
 
 ---
 
@@ -760,7 +755,7 @@ Record: `docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md`.
 
 Stop and report to the human before proceeding past these boundaries:
 
-- Any request to restart H01, start H02, or start `acash-shadow` fresh
+- Any request to restart H01, start H02, or start another D5 rerun
 - Any request to create HYP_003, start R1, authorize Paper, authorize Live, or unlock Backtest
 - Any request to introduce real capital or real broker credentials
 - Any conflict between this handoff and actual repository/runtime state
@@ -773,32 +768,35 @@ Stop and report to the human before proceeding past these boundaries:
 ```
 Implementation Status:    COMPLETE — V2 remediation + V2 follow-up + final recovery
                            hardening + numeric hardening + V2 CLI routing +
-                           runtime-policy wiring MERGED to main
-                           origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6
-                           (ff-only merge, pushed; verify tip with `git rev-parse HEAD`)
-                           D4 = COMPLETE / PASS; D5 = RUNNING (NOT yet PASS)
+                           runtime-policy wiring + RISK_HALTED finalization fix
+                           MERGED to main @ fd5a35d82bc5b7510ecf84590ed9d36f2041b025
+                           (verify tip with `git rev-parse HEAD`)
+                           D4 = COMPLETE / PASS; D5 = CLOSED (ACCEPTED WITH EXCEPTION)
 Contract Enforcement:     STRICT FAIL-CLOSED (no max(1e-12,..) floors, no silent clamps)
-Mathematical Authority:   N/A (config/observability + nominal sizing arithmetic)
-Local Test Suite:         VERIFIED — 2408 passed / 1 skipped (full `uv run pytest tests/`)
-Type Checker (MyPy):      VERIFIED — 424 source files clean (`uv run mypy src/ tests/`)
+Mathematical Authority:   CANONICAL SPEC (nominal sizing arithmetic & fail-closed lifecycle)
+Local Test Suite:         VERIFIED — 2418 passed / 1 skipped (full `uv run pytest`)
+Type Checker (MyPy):      VERIFIED — 425 source files clean (`uv run mypy src/ tests/`)
 Dashboard:                VERIFIED (npm run typecheck clean; node contract tests 27/27; build clean)
-Remote CI Status:         NOT AVAILABLE
+Homelab Closure Smoke:    VERIFIED on acash:shadow-v2-fd5a35d (sha256:5e78425d...)
+                           Exact artifacts: 1 journal, 1 snapshot, 1 manifest (PASS/PASS),
+                           terminal reason RISK_KILL_SWITCH
 Methodological Caveats:
   - D1–D3 RATIFIED & wired end-to-end (4b2269d): CASH_CONSTRAINED_SPOT,
     HALT_AND_REQUIRE_OPERATOR_RESOLUTION, NAV_RELATIVE_PERCENT 10% (incl. slot A)
   - D4 (10-slot capacity drill) COMPLETE / PASS 2026-09-16 on
     acash:shadow-v2-4b2269d (T+900s, graceful stop, ExitCode=0, RestartCount=0,
     OOM=false, 10 manifests/journals/snapshots) — operator-recorded evidence
-  - D5 (3-slot 24h Shadow V2) RUNNING, NOT yet PASS; 24h endpoint ~2026-09-17T00:07:16Z;
-    all D5 metrics are mid-run observations, NOT a PASS classification
+  - D5 CLOSED as ACCEPTED WITH EXCEPTION (Human Decision 2026-09-17):
+    24h container wall-clock achieved; ~21h active execution before expected
+    fail-closed RISK_HALTED; finalization defect fixed at fd5a35d and closure-verified
+    on Homelab; literal continuous 24h active execution not achieved; no 24h rerun required
+  - Homelab smoke harness wrapper had ephemeral filename assertion error; actual
+    runtime artifacts were fully produced and verified PASS
   - Dashboard backend routing workaround is TEMPORARY (nginx expects
-    acash-shadow:9103; D5 container is acash-shadow-v2-d5-24h); permanent fix
-    deferred until after D5 completes — do NOT alter the D5 evidence run
+    acash-shadow:9103); permanent fix scheduled next
   - Automatic Feed Reconnect DISABLED BY DEFAULT; controlled shadow recovery is
     EXPLICIT OPT-IN only (`--enable-feed-recovery`), bounded by attempts /
-    backoff / bar-wait timeout; non-finite values rejected at CLI and config
-    layers; operator resume REQUIRED after terminal recovery failure or any
-    ordinary fail-closed halt
+    backoff / bar-wait timeout; operator resume REQUIRED after terminal halt
 ```
 
 ---
@@ -806,38 +804,33 @@ Methodological Caveats:
 ## 14. NEXT SESSION QUICK START
 
 ```
-ACASH QUICK START — 2026-09-16 Handoff
+ACASH QUICK START — 2026-09-17 Handoff
 =======================================
-1. git fetch origin; verify origin/main = 4b2269d49cc36be94d4f7fb93a8b5e120a292cf6;
+1. git fetch origin; verify origin/main = fd5a35d82bc5b7510ecf84590ed9d36f2041b025;
    verify current tip with `git rev-parse HEAD` (hard-coded tips self-invalidate)
-2. V2 branch feat/tournament-v2-risk-remediation-10slot MERGED to main (ff-only), pushed.
-   Runtime-policy wiring (D1/D2/D3) shipped end-to-end at 4b2269d.
-3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence preserved, do NOT erase
-4. D4 = COMPLETE / PASS (2026-09-16): 10 slots A-J, acash:shadow-v2-4b2269d,
-   T+900s graceful stop, ExitCode=0, RestartCount=0, OOM=false, 10 manifests/journals/snapshots
-5. D5 = RUNNING, NOT yet PASS: acash-shadow-v2-d5-24h, 3 INFRA_TEST slots,
-   tournament SHADOW-20260916_000715_849306fb, 24h endpoint ~2026-09-17T00:07:16Z.
-   D5 MUST NOT be marked PASS before the endpoint + evidence integrity review.
-6. VERIFICATION: 2408 passed / 1 skipped; mypy 424 clean; dashboard 27/27 + typecheck + build
+2. RISK_HALTED finalization fix committed and pushed to main at fd5a35d.
+3. H01 Attempt 1: EXITED EXIT=2 (ReadTimeout ~7h36m54s); evidence preserved
+4. D4 = COMPLETE / PASS (2026-09-16): 10 slots A-J, acash:shadow-v2-4b2269d
+5. D5 = CLOSED — ACCEPTED WITH EXCEPTION (Human Decision 2026-09-17):
+   24h container lifecycle achieved, ~21h active execution, fail-closed RISK_HALTED,
+   finalization defect fixed and closure-verified at fd5a35d; no 24h rerun required.
+6. VERIFICATION: 2418 passed / 1 skipped; mypy 425 clean; Homelab closure smoke verified
 7. GOVERNANCE: HYP_003=NOT CREATED, R1=NOT STARTED, Paper=NOT AUTHORIZED, capital=$0, NO_REAL_ORDERS=true
-8. D1-D5 RATIFIED (docs/tournament/V2_OPERATOR_RATIFICATION_20260915.md):
+8. D1-D5 RATIFIED & CLOSED:
    D1=CASH_CONSTRAINED_SPOT, D2=HALT_AND_REQUIRE_OPERATOR_RESOLUTION,
-   D3=NAV_RELATIVE_PERCENT/10%, D4=dry-run COMPLETE/PASS, D5=24h run RUNNING
-9. DASHBOARD: routing workaround is TEMPORARY (nginx expects acash-shadow:9103,
-   D5 container is acash-shadow-v2-d5-24h). Permanent fix deferred until AFTER D5.
-10. NEXT (after D5 24h endpoint + review): classify D5 PASS; then perform permanent
-    dashboard backend-routing fix; re-verify Tailscale/dashboard/VictoriaMetrics
-11. WATCHDOG: /tmp/acash-d5-watch.sh (graceful docker stop --timeout 20 at endpoint,
-    no auto-restart) — do NOT start a second watchdog or restart D5
-12. DO NOT create HYP_003 / start R1 / authorize Paper/Live / unlock backtest /
-    use real capital / reconnect broker / touch EIMS_11-8-2026.md
+   D3=NAV_RELATIVE_PERCENT/10%, D4=dry-run COMPLETE/PASS, D5=ACCEPTED WITH EXCEPTION
+9. DASHBOARD: routing workaround is TEMPORARY. Permanent fix scheduled next.
+10. NEXT: address permanent dashboard backend-routing fix; open governance alignment
+    on next authorized milestone (D5 closure does NOT auto-unlock trading/research).
+11. DO NOT create HYP_003 / start R1 / authorize Paper/Live / unlock backtest /
+    use real capital / reconnect broker / rerun D5 / touch EIMS_11-8-2026.md
 ```
 
 ### Verification Ledger
-- Implementation Status: MERGED TO MAIN — D1-D5 RATIFIED, D4 PASS, D5 RUNNING
+- Implementation Status: MERGED TO MAIN — D1-D5 RATIFIED & CLOSED (D4 PASS, D5 ACCEPTED WITH EXCEPTION)
 - Contract Enforcement: STRICT FAIL-CLOSED
-- Local Test Suite: VERIFIED (2408 passed / 1 skipped)
-- Type Checker (MyPy): VERIFIED (424 source files clean)
-- Homelab Access: OPERATIONAL (D4 PASS evidence recorded; D5 running)
-- Methodological Caveats: D5 NOT yet PASS (24h endpoint ~2026-09-17T00:07:16Z);
-  dashboard routing fix TEMPORARY, permanent cleanup deferred until after D5
+- Local Test Suite: VERIFIED (2418 passed / 1 skipped)
+- Type Checker (MyPy): VERIFIED (425 source files clean)
+- Homelab Access: OPERATIONAL (D4 PASS, D5 Attempt 1 preserved, closure smoke verified)
+- Methodological Caveats: D5 CLOSED with exception (no 24h rerun); literal 24h active execution
+  not achieved due to expected fail-closed risk halt; finalization defect fixed and verified.
