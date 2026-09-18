@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Dict, List, Optional, Sequence
 
+from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.data.qualification.models import (
     HistoricalSipBar,
     QualityFinding,
@@ -20,13 +21,19 @@ from acash.data.qualification.session import (
 class HistoricalBarValidator:
     """Validates temporal monotonicity, OHLC invariants, volume, and session alignment."""
 
-    def __init__(self, check_rth_hours: bool = True) -> None:
+    def __init__(
+        self,
+        check_rth_hours: bool = True,
+        calendar: Optional[NyseCa1Calendar] = None,
+    ) -> None:
         self.check_rth_hours = check_rth_hours
+        self.calendar = calendar
 
     def validate_bars(
         self,
         bars: Sequence[HistoricalSipBar],
         verified_schedules: Optional[Dict[date, VerifiedSessionSchedule]] = None,
+        calendar: Optional[NyseCa1Calendar] = None,
     ) -> List[QualityFinding]:
         """Validate a sequence of historical bars and collect quality findings.
 
@@ -126,9 +133,12 @@ class HistoricalBarValidator:
             prev_bar = bar
 
         # 5. Session completeness checks per trading date
-        schedules = verified_schedules or {}
+        cal = calendar or self.calendar
+        schedules = dict(verified_schedules) if verified_schedules else {}
         for session_date, session_bars in sorted(bars_by_date.items()):
             sched = schedules.get(session_date)
+            if sched is None and cal is not None:
+                sched = cal.get_verified_schedule(session_date)
             completeness_findings = RthSessionBounds.evaluate_session_completeness(
                 session_date=session_date,
                 bars=session_bars,

@@ -25,8 +25,8 @@
 | **10** | **Anti-HARKing Grid Constraint** | `PROVISIONAL` | Mandate established that any future pre-registration must freeze $K \le 6$ hypothesis cells derived ex-ante. |
 | **11** | **Survivorship Controls** | `RESOLVED (CONDITIONAL)` | SPY single-instrument testing is immune to constituent survivorship; dynamic equity universes remain blocked. |
 | **12** | **Corporate Action Treatment** | `RESOLVED` | Intraday boundaries require unadjusted price levels on trade day; forward returns account for cash distributions. |
-| **13** | **1-Minute Consolidated SIP Data** | `BLOCKED` | **NO source at $0 provides multi-year, point-in-time consolidated 1m data.** Free feeds are truncated or IEX-only. |
-| **14** | **Point-in-Time VWAP Authority** | `BLOCKED` | Free feeds lack consolidated market-wide volume, producing distorted intraday VWAP values. |
+| **13** | **1-Minute Consolidated SIP Data** | `PARTIALLY RESOLVED (AVAILABILITY/DEPTH: RETIRED; PIT/VINTAGE: OPEN)` | Human Ratification 2026-09-18 (Decision C1 Option B): $0 historical access availability, multi-year depth (9 years, 2017–2026), and SPY 1m SIP continuous 390-bar sessions verified. PIT vintage authority & release-state immutability remain OPEN. MEC-0013 remains ARCHIVED; empirical backtest LOCKED. |
+| **14** | **Point-in-Time VWAP Authority** | `BLOCKED (AUTHORITY-CONDITIONAL / OPEN)` | Provider VWAP populated in probes but independent trade reconstruction and restatement policy remain unverified. Decoupled from price-only ORB lane. |
 | **15** | **Quarantine Data Protection** | `RESOLVED` | Isolated from quarantined HYP_001 (2026 M5 Holdout) and HYP_002 (H4 Validation/OOS partitions). |
 | **16** | **MACRO-001 Independence** | `RESOLVED` | Completely decoupled from MACRO-001 mainline and parked D17 SPX close authority. |
 | **17** | **Candidate Formal Promotion** | `HUMAN DECISION REQUIRED` | MEC-0013 is not promoted to an approved research candidate in `free_data_research_registry.md`. |
@@ -39,9 +39,9 @@
 ## 2. Summary Status
 
 - **Theoretical & Microstructural Specifications:** **12/12 RESOLVED**
-- **Data-Plane Authority at $0:** **0/2 RESOLVED (CRITICAL DATA BLOCKER)**
+- **Data-Plane Authority at $0:** **1/2 PARTIALLY RESOLVED** (Availability/depth blocker retired; PIT/vintage open; VWAP authority-conditional)
 - **Governance & Candidate Standing:** **0/6 AUTHORIZED (STRICTLY LOCKED)**
-- **Overall Disposition:** **NOT READY FOR EMPIRICAL BACKTESTING (DATA & GOVERNANCE BLOCKED)**
+- **Overall Disposition:** **PRICE-ONLY PRE-REGISTRATION SCAFFOLD ACCEPTED (EMPIRICAL BACKTESTING HARD-LOCKED)**
 
 ---
 
@@ -55,6 +55,21 @@ Decision Rationale: Maintain MEC-0013 as an archived, formal, complete theoretic
                     do NOT truncate to 30-day Yahoo 1m sample; keep empirical backtest LOCKED.
                     Preserve $0 free-data discipline and prioritize MACRO-001 mainline resolution.
 Authority:          HUMAN GOVERNANCE
+
+-------------------------------------------------------------------------------
+Decision ID:        MEC-0013-D02
+Ratified Selection: C1 = OPTION B (PARTIAL D13 RECLASSIFICATION)
+                    C2 = OPTION A (ACCEPT OPERATIONAL CA-1 ENGINE FOR 2013-2026)
+                    C3 = OPTION A (ACCEPT PRICE-ONLY SCAFFOLD FOR PRE-REGISTRATION COMPLETION)
+Ratification Date:  2026-09-18
+Decision Rationale: Retire the prior D13 blocker specifically for $0 availability, multi-year depth,
+                    SPY 1m SIP continuous access, and reproducible archival framing.
+                    Keep OPEN: PIT historical vintage authority and immutable tape release state.
+                    Accept NyseCa1Calendar as operational CA-1 authority for 2013-2026 coverage.
+                    Accept MEC-0013-PRICE-ONLY-DRAFT (K=4 cells) for pre-registration completion only.
+                    MEC-0013 remains ARCHIVED; HYP_003 NOT CREATED; R1 NOT STARTED;
+                    empirical backtesting and validation remain STRICTLY LOCKED.
+Authority:          HUMAN GOVERNANCE (Human Operator Directive 2026-09-18)
 ```
 
 ---
