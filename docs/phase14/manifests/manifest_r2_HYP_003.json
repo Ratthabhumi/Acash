@@ -1,0 +1,96 @@
+{
+  "calendar_authority": {
+    "authority_code": "CA-1",
+    "calendar_name": "NyseCa1Calendar",
+    "regular_session_expected_minutes": {
+      "__type__": "int",
+      "value": 390
+    },
+    "timezone": "America/New_York"
+  },
+  "capital_authority_usd": "0.00",
+  "data_contract": {
+    "adjustment": "raw",
+    "feed": "sip",
+    "provider": "Alpaca",
+    "symbol": "SPY",
+    "timeframe": "1Min"
+  },
+  "dataset_integrity": {
+    "canonical_dataset_sha256": "2a70922156f3d724fffbf7030d791d0da3b0fa1c44f839eea794c2fb2d689ddc",
+    "first_timestamp_utc": "2017-01-03T14:30:00+00:00",
+    "last_timestamp_utc": "2022-12-30T20:59:00+00:00",
+    "raw_evidence_aggregate_sha256": "a3d03ea208d65de68d07d377b4b2321173036fd8112ad245353f097992fbe093",
+    "total_canonical_bars": {
+      "__type__": "int",
+      "value": 581880
+    }
+  },
+  "generated_at_utc": "2026-09-18T23:16:03.896259+00:00",
+  "hypothesis_id": "HYP_003",
+  "hypothesis_ordinal": {
+    "__type__": "int",
+    "value": 3
+  },
+  "hypothesis_ordinal_alias": "HYP_003",
+  "hypothesis_sha256": "f59010d14f466e9681325a314fd3e7ef30af43ffd69bc6cecbad1b5e6aab4ee0",
+  "live_authorized": {
+    "__type__": "bool",
+    "value": false
+  },
+  "manifest_type": "HISTORICAL_DATA_QUALIFICATION_MANIFEST",
+  "mechanism_id": "MEC-0013",
+  "next_required_step": "STEP_R3_IN_SAMPLE_SEARCH_CENSUS_LOCKED",
+  "paper_authorized": {
+    "__type__": "bool",
+    "value": false
+  },
+  "preregistration_sha256": "3c04f617b9877a85a07043e67b7554034ebd703fe823d3d2de777a7722a3150c",
+  "semantic_clarification_commit": "9b12040e2d4654da32f737be5b4ba84123b23e58",
+  "session_census": {
+    "exclusion_breakdown": {
+      "EXCLUDED_EARLY_CLOSE": {
+        "__type__": "int",
+        "value": 12
+      },
+      "EXCLUDED_HOLIDAY": {
+        "__type__": "int",
+        "value": 55
+      },
+      "EXCLUDED_INCOMPLETE_DATA": {
+        "__type__": "int",
+        "value": 6
+      },
+      "EXCLUDED_INVALID_DATA": {
+        "__type__": "int",
+        "value": 0
+      },
+      "EXCLUDED_WEEKEND": {
+        "__type__": "int",
+        "value": 626
+      }
+    },
+    "total_excluded_sessions": {
+      "__type__": "int",
+      "value": 699
+    },
+    "total_expected_regular_sessions": {
+      "__type__": "int",
+      "value": 1498
+    },
+    "total_included_sessions": {
+      "__type__": "int",
+      "value": 1492
+    }
+  },
+  "source_git_sha": "9b12040e2d4654da32f737be5b4ba84123b23e58",
+  "status": "STEP_R2_HISTORICAL_DATA_QUALIFIED_PASS",
+  "temporal_partitions": {
+    "in_sample_window_utc": [
+      "2017-01-01T00:00:00Z",
+      "2022-12-31T23:59:59Z"
+    ],
+    "out_of_sample_boundary": ">= 2023-01-01T00:00:00Z (STRICTLY FORBIDDEN)",
+    "out_of_sample_state": "SEALED_UNREAD"
+  }
+}
