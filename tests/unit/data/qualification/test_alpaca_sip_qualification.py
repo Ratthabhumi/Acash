@@ -34,12 +34,17 @@ from acash.data.qualification.manifest import (
     compute_canonical_bars_sha256,
     compute_framed_composite_sha256,
     compute_page_sha256,
+    save_evidence_package,
     serialize_manifest_to_json,
+    verify_persisted_evidence_package,
 )
 from acash.data.qualification.models import (
     HistoricalSipBar,
     MarketDataFeed,
+    OFFICIAL_CONTRACT_FEED,
+    OFFICIAL_CONTRACT_PROVIDER,
     PriceAdjustment,
+    ProvenanceBasis,
     QualificationCheckStatus,
     QualityFinding,
     QualityRuleCode,
@@ -390,14 +395,23 @@ def test_out_of_hours_bars_flagged() -> None:
 
 
 # =============================================================================
-# 7. Qualification Ceiling & Engine Tests (Human Correction 1)
+# 7. Qualification Ceiling & Engine Tests (Documented Contract & Persistence)
 # =============================================================================
 
 def test_engine_enforces_qualification_ceiling_when_provenance_is_unverified() -> None:
-    # HTTP 200 OK without feed proof in headers/body
+    # HTTP 200 OK but retrieval feed was not SIP (e.g. IEX fallback)
     raw_json = make_single_page_bars_json("SPY", count=5)
     t = httpx.MockTransport(lambda req: httpx.Response(200, text=raw_json))
     client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+
+    # Monkeypatch client fetch to simulate non-SIP retrieval to verify ceiling
+    original_fetch = client.fetch_historical_bars
+    def mock_fetch(*args: Any, **kwargs: Any) -> Any:
+        res = original_fetch(*args, **kwargs)
+        object.__setattr__(res, "feed_requested", "iex")
+        return res
+    client.fetch_historical_bars = mock_fetch  # type: ignore[method-assign]
+
     engine = HistoricalSipQualificationEngine(client=client)
 
     start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
@@ -410,8 +424,9 @@ def test_engine_enforces_qualification_ceiling_when_provenance_is_unverified() -
     assert report.network_access_status == QualificationCheckStatus.PASS
     assert report.data_integrity_status == QualificationCheckStatus.PASS
 
-    # Provider provenance is UNVERIFIED (Alpaca body does not verify feed)
+    # Provider provenance is UNVERIFIED (feed was not SIP)
     assert report.provider_provenance_status == QualificationCheckStatus.UNVERIFIED
+    assert report.manifest.provenance_basis == ProvenanceBasis.UNVERIFIED
 
     # Ceiling enforced: CANNOT be DATA_SOURCE_TECHNICALLY_QUALIFIED
     assert report.overall_status == SourceQualificationStatus.CONTRACT_VERIFIED
@@ -419,7 +434,36 @@ def test_engine_enforces_qualification_ceiling_when_provenance_is_unverified() -
     assert report.manifest.source_qualification_status == SourceQualificationStatus.CONTRACT_VERIFIED
 
 
-def test_engine_promotes_to_technically_qualified_only_when_provenance_is_confirmed() -> None:
+def test_documented_contract_provenance_basis_pass(tmp_path: Path) -> None:
+    # HTTP 200 OK WITHOUT response-side feed echo
+    raw_json = make_single_page_bars_json("SPY", count=5)
+    t = httpx.MockTransport(lambda req: httpx.Response(200, text=raw_json))
+    client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification("SPY", start_utc, end_utc, output_dir=tmp_path)
+
+    assert report.request_contract_status == QualificationCheckStatus.PASS
+    assert report.network_access_status == QualificationCheckStatus.PASS
+    assert report.data_integrity_status == QualificationCheckStatus.PASS
+    assert report.provider_provenance_status == QualificationCheckStatus.PASS
+
+    # Documented contract basis established
+    assert report.manifest.provenance_basis == ProvenanceBasis.DOCUMENTED_API_CONTRACT
+    assert report.manifest.feed_response_provenance == "UNVERIFIED"  # not faked
+    assert report.manifest.source_contract_provider == OFFICIAL_CONTRACT_PROVIDER
+    assert report.manifest.source_contract_feed == OFFICIAL_CONTRACT_FEED
+    assert "https://docs.alpaca.markets/us/reference/stockbars" in report.manifest.source_contract_references
+
+    # Promoted via documented contract
+    assert report.overall_status == SourceQualificationStatus.DATA_SOURCE_TECHNICALLY_QUALIFIED
+    assert report.vwap_authority_status == VwapAuthorityStatus.QUALIFIED
+
+
+def test_response_side_feed_echo_promotes_to_response_explicit() -> None:
     # HTTP 200 OK WITH feed confirmed in header
     raw_json = make_single_page_bars_json("SPY", count=5)
     t = httpx.MockTransport(lambda req: httpx.Response(200, text=raw_json, headers={"X-Feed": "sip"}))
@@ -431,14 +475,140 @@ def test_engine_promotes_to_technically_qualified_only_when_provenance_is_confir
 
     report = engine.run_qualification("SPY", start_utc, end_utc)
 
-    assert report.request_contract_status == QualificationCheckStatus.PASS
-    assert report.network_access_status == QualificationCheckStatus.PASS
-    assert report.data_integrity_status == QualificationCheckStatus.PASS
+    assert report.manifest.provenance_basis == ProvenanceBasis.RESPONSE_EXPLICIT
+    assert report.manifest.feed_response_provenance == "FEED_CONFIRMED_IN_HEADER"
     assert report.provider_provenance_status == QualificationCheckStatus.PASS
-
-    # All 4 PASS -> Now qualified
     assert report.overall_status == SourceQualificationStatus.DATA_SOURCE_TECHNICALLY_QUALIFIED
     assert report.vwap_authority_status == VwapAuthorityStatus.QUALIFIED
+
+
+def test_raw_response_bytes_persisted_exactly_and_verified(tmp_path: Path) -> None:
+    # Unique raw JSON with irregular spacing to prove exact un-reformatted byte persistence
+    unique_raw = b'{\n  "bars": [\n    {"t": "2024-01-02T14:30:00Z", "o": 470.0, "h": 471.0, "l": 469.0, "c": 470.5, "v": 1000, "n": 100, "vw": 470.2}\n  ],\n  "symbol": "SPY",\n  "next_page_token": null\n}'
+    t = httpx.MockTransport(lambda req: httpx.Response(200, content=unique_raw))
+    client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification("SPY", start_utc, end_utc, output_dir=tmp_path)
+    evidence_dir = tmp_path / report.manifest.manifest_id
+
+    # Verify exact files exist
+    assert evidence_dir.exists()
+    page_file = evidence_dir / "page-0001.raw.json"
+    manifest_file = evidence_dir / "manifest.json"
+    assert page_file.exists()
+    assert manifest_file.exists()
+
+    # Exact bytes check (bit-for-bit, not re-serialized)
+    persisted_bytes = page_file.read_bytes()
+    assert persisted_bytes == unique_raw
+
+    # Length and SHA-256 in manifest match
+    assert report.manifest.pages[0].byte_length == len(unique_raw)
+    assert report.manifest.pages[0].raw_sha256 == compute_page_sha256(unique_raw)
+    assert report.manifest.pages[0].relative_artifact_path == "page-0001.raw.json"
+
+    # Verification function passes
+    is_valid, errors = verify_persisted_evidence_package(evidence_dir)
+    assert is_valid is True, f"Validation errors: {errors}"
+    assert errors == []
+
+
+def test_verify_persisted_evidence_package_detects_tampering(tmp_path: Path) -> None:
+    raw_json = make_single_page_bars_json("SPY", count=2).encode("utf-8")
+    t = httpx.MockTransport(lambda req: httpx.Response(200, content=raw_json))
+    client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification("SPY", start_utc, end_utc, output_dir=tmp_path)
+    evidence_dir = tmp_path / report.manifest.manifest_id
+
+    page_file = evidence_dir / "page-0001.raw.json"
+    # Tamper with 1 byte
+    page_file.write_bytes(raw_json + b" ")
+
+    is_valid, errors = verify_persisted_evidence_package(evidence_dir)
+    assert is_valid is False
+    assert any("SHA-256 mismatch" in err or "length mismatch" in err for err in errors)
+
+
+def test_secrets_absent_from_artifacts_manifest_and_errors(tmp_path: Path) -> None:
+    secret_key = "TOP_SECRET_ALPACA_KEY_DO_NOT_LEAK"
+    provider = MockCredentialProvider(key_id="KEY_123", secret=secret_key)
+    raw_json = make_single_page_bars_json("SPY", count=2)
+    t = httpx.MockTransport(lambda req: httpx.Response(200, text=raw_json))
+    client = AlpacaHistoricalSipClient(credential_provider=provider, transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification("SPY", start_utc, end_utc, output_dir=tmp_path)
+    evidence_dir = tmp_path / report.manifest.manifest_id
+
+    for file_path in evidence_dir.iterdir():
+        assert secret_key not in file_path.name
+        content = file_path.read_text(encoding="utf-8")
+        assert secret_key not in content
+
+
+def test_asof_parameter_passed_in_client_and_manifest(tmp_path: Path) -> None:
+    captured_requests: List[httpx.Request] = []
+    raw_json = make_single_page_bars_json("SPY", count=2)
+
+    def handle_request(req: httpx.Request) -> httpx.Response:
+        captured_requests.append(req)
+        return httpx.Response(200, text=raw_json)
+
+    t = httpx.MockTransport(handle_request)
+    client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification(
+        "SPY", start_utc, end_utc, output_dir=tmp_path, asof="2026-09-15"
+    )
+
+    # Check query params sent to Alpaca
+    assert len(captured_requests) == 1
+    assert "asof=2026-09-15" in str(captured_requests[0].url)
+    assert report.manifest.asof == "2026-09-15"
+
+
+def test_qualification_ceiling_fail_closed_when_data_integrity_fails(tmp_path: Path) -> None:
+    # Duplicate bar timestamps -> integrity FAIL
+    t1 = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    dup_bars_json = json.dumps({
+        "bars": [
+            {"t": t1.strftime("%Y-%m-%dT%H:%M:%SZ"), "o": 470.0, "h": 471.0, "l": 469.0, "c": 470.5, "v": 1000, "n": 100, "vw": 470.2},
+            {"t": t1.strftime("%Y-%m-%dT%H:%M:%SZ"), "o": 470.0, "h": 471.0, "l": 469.0, "c": 470.5, "v": 1000, "n": 100, "vw": 470.2},
+        ],
+        "symbol": "SPY",
+        "next_page_token": None,
+    })
+    t = httpx.MockTransport(lambda req: httpx.Response(200, text=dup_bars_json))
+    client = AlpacaHistoricalSipClient(credential_provider=MockCredentialProvider(), transport=t)
+    engine = HistoricalSipQualificationEngine(client=client)
+
+    start_utc = datetime(2024, 1, 2, 14, 30, 0, tzinfo=timezone.utc)
+    end_utc = datetime(2024, 1, 2, 21, 0, 0, tzinfo=timezone.utc)
+
+    report = engine.run_qualification("SPY", start_utc, end_utc, output_dir=tmp_path)
+
+    assert report.data_integrity_status == QualificationCheckStatus.FAIL
+    # Provenance cannot PASS under DOCUMENTED_API_CONTRACT when integrity fails
+    assert report.provider_provenance_status == QualificationCheckStatus.UNVERIFIED
+    assert report.manifest.provenance_basis == ProvenanceBasis.UNVERIFIED
+    assert report.overall_status == SourceQualificationStatus.REJECTED
+    assert report.vwap_authority_status == VwapAuthorityStatus.UNVERIFIED
 
 
 # =============================================================================

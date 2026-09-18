@@ -55,6 +55,7 @@ class SipRetrievalResult:
     response_headers: Dict[str, str]
     feed_requested: str
     feed_response_provenance: str
+    asof: Optional[str] = None
 
 
 class AlpacaHistoricalSipClient:
@@ -99,6 +100,7 @@ class AlpacaHistoricalSipClient:
         adjustment: PriceAdjustment = PriceAdjustment.RAW,
         timeframe: str = "1Min",
         limit: int = 10000,
+        asof: Optional[str] = None,
     ) -> SipRetrievalResult:
         """Fetch historical bars with strict SIP request contract and 15m guard.
 
@@ -110,6 +112,7 @@ class AlpacaHistoricalSipClient:
             adjustment: Must explicitly be PriceAdjustment.RAW.
             timeframe: Default '1Min'.
             limit: Page size limit (default 10000).
+            asof: Optional symbol mapping as-of date (YYYY-MM-DD).
 
         Returns:
             SipRetrievalResult with parsed bars, raw payloads per page, and provenance.
@@ -166,6 +169,8 @@ class AlpacaHistoricalSipClient:
                     "limit": limit,
                     "sort": "asc",
                 }
+                if asof:
+                    params["asof"] = asof.strip()
                 if next_page_token:
                     params["page_token"] = next_page_token
 
@@ -214,6 +219,8 @@ class AlpacaHistoricalSipClient:
                         page_index=page_index,
                         bar_count=len(parsed_page_bars),
                         raw_sha256=page_sha256,
+                        byte_length=len(raw_bytes),
+                        relative_artifact_path=f"page-{page_index:04d}.raw.json",
                         page_token=next_page_token,
                         next_page_token=token,
                     )
@@ -240,6 +247,7 @@ class AlpacaHistoricalSipClient:
             response_headers=last_headers,
             feed_requested=feed.value,
             feed_response_provenance=feed_provenance,
+            asof=asof,
         )
 
     def _execute_request_with_retry(

@@ -60,6 +60,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Explicit end UTC timestamp (ISO-8601, e.g. 2024-01-02T21:00:00Z). Must be >= 15m old.",
     )
     parser.add_argument(
+        "--asof",
+        type=str,
+        default=None,
+        help="Explicit symbol mapping as-of date in YYYY-MM-DD format (defaults to probed date if supplied).",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("var/data/qualification"),
@@ -77,10 +83,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
 def run_probe(args: argparse.Namespace) -> int:
     """Execute the qualification probe command."""
     symbol = args.symbol.strip().upper()
+    asof = args.asof or (args.date if args.date else None)
+
     print("=" * 70)
     print("ACASH HISTORICAL SIP SOURCE QUALIFICATION PROBE")
     print("=" * 70)
     print(f"Target Symbol:            {symbol}")
+    if asof:
+        print(f"Symbol As-Of Date:        {asof}")
     print(f"Network Execution Flag:   {args.execute_network}")
     print(f"Output Directory:         {args.output_dir}")
 
@@ -90,7 +100,7 @@ def run_probe(args: argparse.Namespace) -> int:
         end_utc = datetime.fromisoformat(args.end_utc.replace("Z", "+00:00")).astimezone(timezone.utc)
     elif args.date:
         d = datetime.strptime(args.date, "%Y-%m-%d").date()
-        # Nominal regular hours: 09:30 - 16:00 ET -> UTC 14:30 - 21:00 (EDT) or 13:30 - 20:00 (EST)
+        # Nominal regular hours: 09:30 - 16:00 ET -> UTC 13:30 - 20:00 (EDT) or 14:30 - 21:00 (EST)
         # Using America/New_York zoneinfo for exact conversion
         from zoneinfo import ZoneInfo
         ny_tz = ZoneInfo("America/New_York")
@@ -137,6 +147,7 @@ def run_probe(args: argparse.Namespace) -> int:
         start_utc=start_utc,
         end_utc=end_utc,
         output_dir=args.output_dir,
+        asof=asof,
     )
 
     print("-" * 70)
@@ -144,10 +155,12 @@ def run_probe(args: argparse.Namespace) -> int:
     print(f"Network Access:           {report.network_access_status.value}")
     print(f"Data Integrity:           {report.data_integrity_status.value}")
     print(f"Provider Provenance:      {report.provider_provenance_status.value}")
+    print(f"Provenance Basis:         {report.manifest.provenance_basis.value}")
     print(f"Overall Source Status:    {report.overall_status.value}")
     print(f"VWAP Authority Status:    {report.vwap_authority_status.value}")
     print(f"Bars Retrieved:           {report.bars_count}")
     print(f"Manifest ID:              {report.manifest.manifest_id}")
+    print(f"Evidence Directory:       {args.output_dir / report.manifest.manifest_id}")
     print(f"Manifest Payload Digest:  {report.manifest.composite_raw_payload_sha256}")
     print("-" * 70)
 

@@ -18,12 +18,15 @@ from acash.data.qualification.manifest import (
     compute_canonical_bars_sha256,
     compute_framed_composite_sha256,
     compute_page_sha256,
+    save_evidence_package,
     serialize_manifest_to_json,
+    verify_persisted_evidence_package,
 )
 from acash.data.qualification.models import (
     HistoricalSipBar,
     MarketDataFeed,
     PriceAdjustment,
+    ProvenanceBasis,
     QualificationCheckStatus,
     QualityFinding,
     QualityRuleCode,
@@ -52,6 +55,7 @@ __all__ = [
     "MarketDataFeed",
     "PriceAdjustment",
     "ProtectedWindowViolationError",
+    "ProvenanceBasis",
     "QualificationCheckStatus",
     "QualityFinding",
     "QualityRuleCode",
@@ -69,5 +73,7 @@ __all__ = [
     "compute_canonical_bars_sha256",
     "compute_framed_composite_sha256",
     "compute_page_sha256",
+    "save_evidence_package",
     "serialize_manifest_to_json",
+    "verify_persisted_evidence_package",
 ]

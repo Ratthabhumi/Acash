@@ -24,6 +24,26 @@ class QualificationCheckStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class ProvenanceBasis(str, Enum):
+    """Epistemic basis for asserting provider data source provenance."""
+    RESPONSE_EXPLICIT = "RESPONSE_EXPLICIT"
+    DOCUMENTED_API_CONTRACT = "DOCUMENTED_API_CONTRACT"
+    UNVERIFIED = "UNVERIFIED"
+
+
+OFFICIAL_CONTRACT_PROVIDER: str = "Alpaca"
+OFFICIAL_CONTRACT_FEED: str = "sip"
+OFFICIAL_CONTRACT_REFERENCES: List[str] = [
+    "https://docs.alpaca.markets/us/reference/stockbars",
+    "https://docs.alpaca.markets/us/docs/market-data-faq",
+]
+OFFICIAL_CONTRACT_SEMANTICS: str = (
+    "feed=sip => all US exchanges / SIP consolidated feed; "
+    "historical SIP requires end >= 15 minutes old for unsubscribed access"
+)
+OFFICIAL_CONTRACT_RECORDED_AT_UTC: str = "2026-09-18T00:00:00Z"
+
+
 class SourceQualificationStatus(str, Enum):
     """Overall state of the historical market data source qualification."""
     UNVERIFIED = "UNVERIFIED"
@@ -194,6 +214,8 @@ class SipPageMetadata(BaseModel):
     page_index: int
     bar_count: int
     raw_sha256: str
+    byte_length: int
+    relative_artifact_path: str
     page_token: Optional[str] = None
     next_page_token: Optional[str] = None
 
@@ -208,8 +230,10 @@ class SipProvenanceManifest(BaseModel):
     symbol: str
     feed_requested: str = "sip"
     feed_response_provenance: str = "UNVERIFIED"
+    provenance_basis: ProvenanceBasis = ProvenanceBasis.UNVERIFIED
     timeframe: str = "1Min"
     adjustment: str = "raw"
+    asof: Optional[str] = None
     requested_start_utc: str
     requested_end_utc: str
     retrieval_timestamp_utc: str
@@ -225,6 +249,13 @@ class SipProvenanceManifest(BaseModel):
     schema_version: str = "1.0.0"
     source_qualification_status: SourceQualificationStatus
     vwap_authority_status: VwapAuthorityStatus
+    source_contract_provider: str = OFFICIAL_CONTRACT_PROVIDER
+    source_contract_feed: str = OFFICIAL_CONTRACT_FEED
+    source_contract_references: List[str] = Field(
+        default_factory=lambda: list(OFFICIAL_CONTRACT_REFERENCES)
+    )
+    source_contract_recorded_at_utc: str = OFFICIAL_CONTRACT_RECORDED_AT_UTC
+    source_contract_semantics: str = OFFICIAL_CONTRACT_SEMANTICS
     warnings: List[str] = Field(default_factory=list)
     failure_reason: Optional[str] = None
     governance_disclaimer: str = (

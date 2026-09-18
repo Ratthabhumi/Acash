@@ -13,6 +13,12 @@ from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.qualification.models import (
     HistoricalSipBar,
+    OFFICIAL_CONTRACT_FEED,
+    OFFICIAL_CONTRACT_PROVIDER,
+    OFFICIAL_CONTRACT_RECORDED_AT_UTC,
+    OFFICIAL_CONTRACT_REFERENCES,
+    OFFICIAL_CONTRACT_SEMANTICS,
+    ProvenanceBasis,
     SipPageMetadata,
     SipProvenanceManifest,
     SourceQualificationStatus,
@@ -83,8 +89,10 @@ def build_sip_provenance_manifest(
     symbol: str,
     feed_requested: str,
     feed_response_provenance: str,
+    provenance_basis: ProvenanceBasis = ProvenanceBasis.UNVERIFIED,
     timeframe: str,
     adjustment: str,
+    asof: Optional[str] = None,
     requested_start_utc: str,
     requested_end_utc: str,
     retrieval_timestamp_utc: str,
@@ -97,6 +105,11 @@ def build_sip_provenance_manifest(
     failure_reason: Optional[str] = None,
     git_commit_sha: Optional[str] = None,
     git_dirty: Optional[bool] = None,
+    source_contract_provider: str = OFFICIAL_CONTRACT_PROVIDER,
+    source_contract_feed: str = OFFICIAL_CONTRACT_FEED,
+    source_contract_references: Sequence[str] = OFFICIAL_CONTRACT_REFERENCES,
+    source_contract_recorded_at_utc: str = OFFICIAL_CONTRACT_RECORDED_AT_UTC,
+    source_contract_semantics: str = OFFICIAL_CONTRACT_SEMANTICS,
 ) -> SipProvenanceManifest:
     """Construct a frozen SipProvenanceManifest with complete cryptographic provenance."""
     if len(pages_metadata) != len(pages_raw_bytes):
@@ -125,8 +138,10 @@ def build_sip_provenance_manifest(
         symbol=symbol,
         feed_requested=feed_requested,
         feed_response_provenance=feed_response_provenance,
+        provenance_basis=provenance_basis,
         timeframe=timeframe,
         adjustment=adjustment,
+        asof=asof,
         requested_start_utc=requested_start_utc,
         requested_end_utc=requested_end_utc,
         retrieval_timestamp_utc=retrieval_timestamp_utc,
@@ -142,11 +157,124 @@ def build_sip_provenance_manifest(
         schema_version="1.0.0",
         source_qualification_status=source_qualification_status,
         vwap_authority_status=vwap_authority_status,
+        source_contract_provider=source_contract_provider,
+        source_contract_feed=source_contract_feed,
+        source_contract_references=list(source_contract_references),
+        source_contract_recorded_at_utc=source_contract_recorded_at_utc,
+        source_contract_semantics=source_contract_semantics,
         warnings=list(warnings),
         failure_reason=failure_reason,
     )
 
 
 def serialize_manifest_to_json(manifest: SipProvenanceManifest) -> str:
-    """Serialize manifest deterministically to JSON using CanonicalConfigSerializer."""
-    return CanonicalConfigSerializer.to_canonical_json(manifest.model_dump())
+    """Serialize manifest deterministically to formatted JSON."""
+    return json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True)
+
+
+def save_evidence_package(
+    *,
+    evidence_dir: Path,
+    manifest: SipProvenanceManifest,
+    pages_raw_bytes: Sequence[bytes],
+) -> Path:
+    """Persist exact raw response page bytes and manifest.json using atomic writes.
+
+    Layout:
+      evidence_dir/
+        page-0001.raw.json
+        page-0002.raw.json
+        ...
+        manifest.json
+
+    Requirements:
+    - Writes exact raw bytes without parsing or re-serializing.
+    - Uses atomic write pattern (.tmp rename).
+    - Verifies raw byte length and raw SHA-256 against manifest page metadata.
+
+    Returns:
+      Path to saved manifest.json.
+    """
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    if len(pages_raw_bytes) != len(manifest.pages):
+        raise DataContractError(
+            f"pages_raw_bytes count ({len(pages_raw_bytes)}) must equal manifest.pages count ({len(manifest.pages)})."
+        )
+
+    for i, raw_bytes in enumerate(pages_raw_bytes, start=1):
+        filename = f"page-{i:04d}.raw.json"
+        raw_path = evidence_dir / filename
+        tmp_path = evidence_dir / f"{filename}.tmp"
+
+        page_meta = manifest.pages[i - 1]
+        calc_sha = compute_page_sha256(raw_bytes)
+        if calc_sha != page_meta.raw_sha256:
+            raise DataContractError(
+                f"Page {i} raw byte SHA-256 ({calc_sha}) does not match manifest ({page_meta.raw_sha256})."
+            )
+        if len(raw_bytes) != page_meta.byte_length:
+            raise DataContractError(
+                f"Page {i} raw byte length ({len(raw_bytes)}) does not match manifest ({page_meta.byte_length})."
+            )
+
+        tmp_path.write_bytes(raw_bytes)
+        tmp_path.replace(raw_path)
+
+    manifest_path = evidence_dir / "manifest.json"
+    manifest_tmp = evidence_dir / "manifest.json.tmp"
+    manifest_json = serialize_manifest_to_json(manifest)
+    manifest_tmp.write_text(manifest_json, encoding="utf-8")
+    manifest_tmp.replace(manifest_path)
+
+    return manifest_path
+
+
+def verify_persisted_evidence_package(evidence_dir: Path) -> Tuple[bool, List[str]]:
+    """Verify persisted raw artifacts against manifest.json.
+
+    Reads back persisted raw page bytes, recomputes SHA-256 digests and length-prefixed
+    framed composite SHA-256, and confirms equality with manifest values.
+
+    Returns:
+        (is_valid, list_of_error_messages)
+    """
+    manifest_path = evidence_dir / "manifest.json"
+    if not manifest_path.exists():
+        return False, [f"Manifest file not found: {manifest_path}"]
+
+    try:
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest = SipProvenanceManifest.model_validate_json(manifest_text)
+    except Exception as e:
+        return False, [f"Failed to read or parse manifest.json: {e}"]
+
+    errors: List[str] = []
+    reloaded_raw_bytes: List[bytes] = []
+
+    for page_meta in manifest.pages:
+        page_file = evidence_dir / page_meta.relative_artifact_path
+        if not page_file.exists():
+            errors.append(f"Missing raw page file: {page_file}")
+            continue
+
+        raw_bytes = page_file.read_bytes()
+        if len(raw_bytes) != page_meta.byte_length:
+            errors.append(
+                f"Page {page_meta.page_index} length mismatch: disk {len(raw_bytes)} != manifest {page_meta.byte_length}"
+            )
+        calc_sha = compute_page_sha256(raw_bytes)
+        if calc_sha != page_meta.raw_sha256:
+            errors.append(
+                f"Page {page_meta.page_index} SHA-256 mismatch: disk {calc_sha} != manifest {page_meta.raw_sha256}"
+            )
+        reloaded_raw_bytes.append(raw_bytes)
+
+    if not errors and len(reloaded_raw_bytes) == len(manifest.pages):
+        calc_composite_sha = compute_framed_composite_sha256(reloaded_raw_bytes)
+        if calc_composite_sha != manifest.composite_raw_payload_sha256:
+            errors.append(
+                f"Composite framed SHA-256 mismatch: disk {calc_composite_sha} != manifest {manifest.composite_raw_payload_sha256}"
+            )
+
+    return (len(errors) == 0, errors)

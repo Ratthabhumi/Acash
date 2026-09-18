@@ -17,12 +17,14 @@ from acash.data.qualification.client import (
 from acash.data.qualification.guard import FifteenMinuteAccessGuard, ProtectedWindowViolationError
 from acash.data.qualification.manifest import (
     build_sip_provenance_manifest,
+    save_evidence_package,
     serialize_manifest_to_json,
 )
 from acash.data.qualification.models import (
     HistoricalSipBar,
     MarketDataFeed,
     PriceAdjustment,
+    ProvenanceBasis,
     QualificationCheckStatus,
     QualityFinding,
     QualitySeverity,
@@ -56,6 +58,7 @@ class HistoricalSipQualificationEngine:
         verified_schedules: Optional[Dict[date, VerifiedSessionSchedule]] = None,
         output_dir: Optional[Path] = None,
         manifest_id: Optional[str] = None,
+        asof: Optional[str] = None,
     ) -> SourceQualificationReport:
         """Run complete source qualification workflow.
 
@@ -66,6 +69,7 @@ class HistoricalSipQualificationEngine:
             verified_schedules: Optional certified session schedules.
             output_dir: Optional local directory to save the JSON manifest outside git.
             manifest_id: Optional custom manifest ID.
+            asof: Optional symbol mapping as-of date (YYYY-MM-DD).
 
         Returns:
             SourceQualificationReport with decomposed sub-statuses and frozen manifest.
@@ -110,6 +114,7 @@ class HistoricalSipQualificationEngine:
                 feed_provenance="UNVERIFIED",
                 failure_reason=failure_reason,
                 output_dir=output_dir,
+                asof=asof,
             )
 
         # 2. Network Retrieval
@@ -122,6 +127,7 @@ class HistoricalSipQualificationEngine:
                 feed=MarketDataFeed.SIP,
                 adjustment=PriceAdjustment.RAW,
                 timeframe="1Min",
+                asof=asof,
             )
             net_status = QualificationCheckStatus.PASS
             bars = retrieval.bars
@@ -147,6 +153,7 @@ class HistoricalSipQualificationEngine:
                 feed_provenance="UNVERIFIED",
                 failure_reason=failure_reason,
                 output_dir=output_dir,
+                asof=asof,
             )
         except Exception as e:
             net_status = QualificationCheckStatus.FAIL
@@ -170,6 +177,7 @@ class HistoricalSipQualificationEngine:
                 feed_provenance="UNVERIFIED",
                 failure_reason=failure_reason,
                 output_dir=output_dir,
+                asof=asof,
             )
 
         # 3. Data Integrity & Validation
@@ -183,8 +191,19 @@ class HistoricalSipQualificationEngine:
         # 4. Provider Provenance Check
         feed_provenance = retrieval.feed_response_provenance
         if feed_provenance == "FEED_CONFIRMED_IN_HEADER":
+            prov_basis = ProvenanceBasis.RESPONSE_EXPLICIT
+            prov_status = QualificationCheckStatus.PASS
+        elif (
+            retrieval.feed_requested == "sip"
+            and retrieval.http_status_code == 200
+            and req_status == QualificationCheckStatus.PASS
+            and net_status == QualificationCheckStatus.PASS
+            and integ_status == QualificationCheckStatus.PASS
+        ):
+            prov_basis = ProvenanceBasis.DOCUMENTED_API_CONTRACT
             prov_status = QualificationCheckStatus.PASS
         else:
+            prov_basis = ProvenanceBasis.UNVERIFIED
             prov_status = QualificationCheckStatus.UNVERIFIED
 
         # 5. Determine Overall Qualification Status (Strict Ceiling Enforced)
@@ -199,7 +218,7 @@ class HistoricalSipQualificationEngine:
                 overall_status = SourceQualificationStatus.DATA_SOURCE_TECHNICALLY_QUALIFIED
                 vwap_status = VwapAuthorityStatus.QUALIFIED
             else:
-                # Ceiling: cannot claim DATA_SOURCE_TECHNICALLY_QUALIFIED if provider provenance is unverified
+                # Ceiling: cannot claim DATA_SOURCE_TECHNICALLY_QUALIFIED if provider provenance is not PASS
                 overall_status = SourceQualificationStatus.CONTRACT_VERIFIED
                 vwap_status = VwapAuthorityStatus.UNVERIFIED
         else:
@@ -215,8 +234,10 @@ class HistoricalSipQualificationEngine:
             symbol=symbol,
             feed_requested="sip",
             feed_response_provenance=feed_provenance,
+            provenance_basis=prov_basis,
             timeframe="1Min",
             adjustment="raw",
+            asof=asof,
             requested_start_utc=start_str,
             requested_end_utc=end_str,
             retrieval_timestamp_utc=now_str,
@@ -230,7 +251,12 @@ class HistoricalSipQualificationEngine:
         )
 
         if output_dir is not None:
-            self._save_manifest(manifest, output_dir)
+            evidence_dir = output_dir / mid
+            save_evidence_package(
+                evidence_dir=evidence_dir,
+                manifest=manifest,
+                pages_raw_bytes=retrieval.pages_raw_bytes,
+            )
 
         return SourceQualificationReport(
             request_contract_status=req_status,
@@ -264,14 +290,18 @@ class HistoricalSipQualificationEngine:
         feed_provenance: str,
         failure_reason: Optional[str],
         output_dir: Optional[Path],
+        asof: Optional[str] = None,
+        prov_basis: ProvenanceBasis = ProvenanceBasis.UNVERIFIED,
     ) -> SourceQualificationReport:
         manifest = build_sip_provenance_manifest(
             manifest_id=manifest_id,
             symbol=symbol,
             feed_requested="sip",
             feed_response_provenance=feed_provenance,
+            provenance_basis=prov_basis,
             timeframe="1Min",
             adjustment="raw",
+            asof=asof,
             requested_start_utc=start_str,
             requested_end_utc=end_str,
             retrieval_timestamp_utc=retrieval_ts,
@@ -284,7 +314,17 @@ class HistoricalSipQualificationEngine:
             failure_reason=failure_reason,
         )
         if output_dir is not None:
-            self._save_manifest(manifest, output_dir)
+            evidence_dir = output_dir / manifest_id
+            if pages_raw_bytes and len(pages_raw_bytes) == len(pages_metadata):
+                save_evidence_package(
+                    evidence_dir=evidence_dir,
+                    manifest=manifest,
+                    pages_raw_bytes=pages_raw_bytes,
+                )
+            else:
+                evidence_dir.mkdir(parents=True, exist_ok=True)
+                manifest_path = evidence_dir / "manifest.json"
+                manifest_path.write_text(serialize_manifest_to_json(manifest), encoding="utf-8")
 
         return SourceQualificationReport(
             request_contract_status=req_status,
@@ -297,10 +337,3 @@ class HistoricalSipQualificationEngine:
             findings=findings,
             bars_count=len(bars),
         )
-
-    def _save_manifest(self, manifest: SipProvenanceManifest, output_dir: Path) -> Path:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        manifest_path = output_dir / f"{manifest.manifest_id}.manifest.json"
-        manifest_json = serialize_manifest_to_json(manifest)
-        manifest_path.write_text(manifest_json, encoding="utf-8")
-        return manifest_path
