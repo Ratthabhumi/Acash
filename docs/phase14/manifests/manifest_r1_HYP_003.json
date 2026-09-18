@@ -1,0 +1,21 @@
+{
+  "manifest_type": "HYPOTHESIS_REGISTRATION_MANIFEST",
+  "hypothesis_id": "HYP_003",
+  "hypothesis_ordinal": 3,
+  "hypothesis_ordinal_alias": "HYP_003",
+  "mechanism_id": "MEC-0013",
+  "hypothesis_version": "v1.0",
+  "hypothesis_sha256": "f59010d14f466e9681325a314fd3e7ef30af43ffd69bc6cecbad1b5e6aab4ee0",
+  "registered_at_utc": "2026-09-18T23:00:00Z",
+  "author": "human_operator_ratified",
+  "target_symbol": "SPY",
+  "primary_timeframe": "1m",
+  "search_trial_count_k": 4,
+  "inception_token_id": "AUTH_INCEPTION_HYP_003_845fda6b9ec7dc77",
+  "proposal_sha256": "845fda6b9ec7dc77520c690f7618e86e18484b787db6aa421340ce71e6e55d33",
+  "preregistration_sha256": "3c04f617b9877a85a07043e67b7554034ebd703fe823d3d2de777a7722a3150c",
+  "status": "SEALED_STEP_R1_PASS",
+  "capital_authority_usd": "0.00",
+  "next_required_step": "STEP_R2_HISTORICAL_DATA_QUALIFICATION_LOCKED",
+  "manifest_sha256": "27952f476cf96f75dc47ca0eb68a4b74d1f8dc6bf2f0848d1a877740cc32b372"
+}

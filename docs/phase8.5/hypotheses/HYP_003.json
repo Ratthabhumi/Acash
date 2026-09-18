@@ -1,0 +1,27 @@
+{
+  "hypothesis_id": "HYP_003",
+  "hypothesis_version": "v1.0",
+  "parent_hypothesis_id": null,
+  "economic_rationale": "Opening Range Breakout (ORB) in US benchmark equity ETF (SPY) under MEC-0013 price-only mechanics. Early regular-session price discovery establishes an initial range reflecting overnight order assimilation and opening auction balance; completed 1-minute close-through breakouts beyond this range capture directional momentum driven by institutional order flow imbalance through the remainder of the regular trading session.",
+  "target_symbol": "SPY",
+  "feature_dependencies": [
+    "opening_range_high",
+    "opening_range_low",
+    "bar_close"
+  ],
+  "parameter_config_json": "{\"all_14_frozen_parameters\":{\"10_closing_auction_handling\":\"EXCLUDE_1600_BAR_EXIT_1559_CLOSE\",\"11_is_oos_partition\":{\"in_sample_dates\":[\"2017-01-01\",\"2022-12-31\"],\"oos_state\":\"SEALED_UNREAD\",\"out_of_sample_dates\":[\"2023-01-01\",\"2026-12-31\"]},\"12_embargo_purge_days\":{\"__type__\":\"int\",\"value\":0},\"13_data_quality_threshold\":\"100% COMPLETE CA-1 390-MINUTE GRID\",\"14_session_exclusion_policy\":\"REGULAR 390-MIN SESSIONS ONLY\",\"1_breakout_confirmation\":\"CLOSE-THROUGH\",\"2_entry_timing\":\"NEXT-BAR OPEN\",\"3_directional_lane\":\"SYMMETRIC LONG + SHORT\",\"4_stop_loss_rule\":\"OPPOSITE OPENING-RANGE BOUNDARY\",\"5_exit_holding_horizon\":\"END-OF-DAY FLATTEN\",\"6_transaction_cost_bps\":\"1.6 bps ROUND-TRIP (0.8 entry + 0.8 exit)\",\"7_slippage_bps\":\"0.5 bps ADVERSE PER SIDE (1.0 roundtrip)\",\"8_execution_price_convention\":\"CONSERVATIVE_EXECUTABLE\",\"9_opening_auction_handling\":\"INCLUDE_0930_BAR\"},\"bar_frequency\":\"1m\",\"calendar_authority\":{\"calendar_name\":\"NyseCa1Calendar\",\"code\":\"CA-1\",\"regular_session_bars\":{\"__type__\":\"int\",\"value\":390},\"timezone\":\"America/New_York\"},\"data_contract\":{\"adjustment\":\"raw\",\"d13_status\":\"PARTIALLY RESOLVED (AVAILABILITY/DEPTH: RETIRED; PIT/VINTAGE: OPEN)\",\"d14_status\":\"BLOCKED (AUTHORITY-CONDITIONAL / DECOUPLED FROM PRICE-ONLY LANE)\",\"feed\":\"sip\",\"symbol\":\"SPY\",\"timeframe\":\"1Min\"},\"governance_lineage\":{\"freeze_ratification\":\"D-PREREG-1 (Option A, 2026-09-18)\",\"hypothesis_ordinal\":{\"__type__\":\"int\",\"value\":3},\"hypothesis_ordinal_alias\":\"HYP_003\",\"inception_token_id\":\"AUTH_INCEPTION_HYP_003_845fda6b9ec7dc77\",\"preregistration_doc\":\"docs/phase14/mec_0013_price_only_preregistration.md\",\"preregistration_sha256\":\"3c04f617b9877a85a07043e67b7554034ebd703fe823d3d2de777a7722a3150c\",\"proposal_sha256\":\"845fda6b9ec7dc77520c690f7618e86e18484b787db6aa421340ce71e6e55d33\",\"source_git_sha\":\"5ec7d8b52333c71ab89b32426e4f80bd1aea2784\",\"validation_auth\":\"D-EMP-1 (Option A, 2026-09-18)\"},\"mechanism_id\":\"MEC-0013\",\"nominal_trials_k\":{\"__type__\":\"int\",\"value\":4},\"primary_cells\":[{\"cell_id\":\"ORB_5M_LONG\",\"direction\":\"LONG\",\"opening_range_minutes\":{\"__type__\":\"int\",\"value\":5}},{\"cell_id\":\"ORB_5M_SHORT\",\"direction\":\"SHORT\",\"opening_range_minutes\":{\"__type__\":\"int\",\"value\":5}},{\"cell_id\":\"ORB_15M_LONG\",\"direction\":\"LONG\",\"opening_range_minutes\":{\"__type__\":\"int\",\"value\":15}},{\"cell_id\":\"ORB_15M_SHORT\",\"direction\":\"SHORT\",\"opening_range_minutes\":{\"__type__\":\"int\",\"value\":15}}],\"signal_type\":\"PRICE_ONLY_OPENING_RANGE_BREAKOUT\",\"strategy_id\":\"STRAT-ORB-SPY-PRICE-ONLY-V1\"}",
+  "expected_direction": "LONG",
+  "target_horizons": [
+    1,
+    390
+  ],
+  "primary_horizon": 390,
+  "invalidation_criteria": {
+    "min_in_sample_rank_ic": "0.010",
+    "min_hac_t_stat": "1.50",
+    "max_feature_autocorrelation": "0.98",
+    "min_cost_adjusted_spread_ratio": "1.50"
+  },
+  "registered_at_utc": "2026-09-18T23:00:00Z",
+  "author": "human_operator_ratified"
+}
