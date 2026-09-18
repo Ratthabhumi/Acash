@@ -21,6 +21,7 @@ from typing import List, Optional
 from acash.data.qualification.client import AlpacaHistoricalSipClient
 from acash.data.qualification.engine import HistoricalSipQualificationEngine
 from acash.data.qualification.guard import FifteenMinuteAccessGuard
+from acash.data.qualification.session import RthSessionBounds
 from acash.data.qualification.models import (
     HistoricalSipBar,
     QualificationCheckStatus,
@@ -100,14 +101,11 @@ def run_probe(args: argparse.Namespace) -> int:
         end_utc = datetime.fromisoformat(args.end_utc.replace("Z", "+00:00")).astimezone(timezone.utc)
     elif args.date:
         d = datetime.strptime(args.date, "%Y-%m-%d").date()
-        # Nominal regular hours: 09:30 - 16:00 ET -> UTC 13:30 - 20:00 (EDT) or 14:30 - 21:00 (EST)
-        # Using America/New_York zoneinfo for exact conversion
-        from zoneinfo import ZoneInfo
-        ny_tz = ZoneInfo("America/New_York")
-        start_dt = datetime.combine(d, time(9, 30, 0), tzinfo=ny_tz)
-        end_dt = datetime.combine(d, time(16, 0, 0), tzinfo=ny_tz)
-        start_utc = start_dt.astimezone(timezone.utc)
-        end_utc = end_dt.astimezone(timezone.utc)
+        # Conceptual session: [09:30, 16:00) America/New_York (390 1-minute buckets).
+        # Alpaca historical API `end` is inclusive on bar start timestamp [T, T+1m).
+        # Query interval end is adapted to 15:59:59 ET so exactly the 390 regular-session
+        # minute buckets (09:30:00 through 15:59:00 ET) are retrieved without the 16:00 ET bar.
+        start_utc, end_utc = RthSessionBounds.get_rth_query_interval(d)
     else:
         # Default: 2 business days ago
         now = datetime.now(timezone.utc)
@@ -115,12 +113,7 @@ def run_probe(args: argparse.Namespace) -> int:
         while target_day.weekday() >= 5:  # Saturday or Sunday
             target_day -= timedelta(days=1)
         d = target_day.date()
-        from zoneinfo import ZoneInfo
-        ny_tz = ZoneInfo("America/New_York")
-        start_dt = datetime.combine(d, time(9, 30, 0), tzinfo=ny_tz)
-        end_dt = datetime.combine(d, time(16, 0, 0), tzinfo=ny_tz)
-        start_utc = start_dt.astimezone(timezone.utc)
-        end_utc = end_dt.astimezone(timezone.utc)
+        start_utc, end_utc = RthSessionBounds.get_rth_query_interval(d)
 
     print(f"Requested Start UTC:      {start_utc.isoformat()}")
     print(f"Requested End UTC:        {end_utc.isoformat()}")

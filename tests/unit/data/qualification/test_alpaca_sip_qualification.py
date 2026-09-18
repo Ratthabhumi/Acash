@@ -394,6 +394,70 @@ def test_out_of_hours_bars_flagged() -> None:
     assert any(f.rule == QualityRuleCode.OUTSIDE_REGULAR_HOURS and f.severity == QualitySeverity.WARNING for f in findings)
 
 
+def test_rth_session_query_interval_adapts_inclusive_provider_end() -> None:
+    # 2026-09-15 is EDT (UTC-4)
+    d_edt = date(2026, 9, 15)
+    start_utc, end_utc = RthSessionBounds.get_rth_query_interval(d_edt)
+
+    # 09:30:00 EDT -> 13:30:00Z
+    assert start_utc == datetime(2026, 9, 15, 13, 30, 0, tzinfo=timezone.utc)
+    # 16:00:00 EDT - 1s -> 15:59:59 EDT -> 19:59:59Z
+    assert end_utc == datetime(2026, 9, 15, 19, 59, 59, tzinfo=timezone.utc)
+
+    # In standard Alpaca RFC3339 serialization:
+    start_str = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_str = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert start_str == "2026-09-15T13:30:00Z"
+    assert end_str == "2026-09-15T19:59:59Z"
+
+    # Winter date (EST, UTC-5): 2024-01-16
+    d_est = date(2024, 1, 16)
+    start_est, end_est = RthSessionBounds.get_rth_query_interval(d_est)
+    assert start_est == datetime(2024, 1, 16, 14, 30, 0, tzinfo=timezone.utc)
+    assert end_est == datetime(2024, 1, 16, 20, 59, 59, tzinfo=timezone.utc)
+
+
+def test_rth_logical_interval_and_390_continuous_minutes() -> None:
+    # Verify exactly 390 1-minute buckets [09:30, 16:00) ET for 2026-09-15
+    validator = HistoricalBarValidator()
+    bars_390 = [
+        HistoricalSipBar(
+            timestamp_utc=datetime(2026, 9, 15, 13, 30, 0, tzinfo=timezone.utc) + timedelta(minutes=i),
+            open=Decimal("760"),
+            high=Decimal("761"),
+            low=Decimal("759"),
+            close=Decimal("760.5"),
+            volume=Decimal("1000"),
+        )
+        for i in range(390)
+    ]
+
+    assert len(bars_390) == 390
+    assert bars_390[0].timestamp_utc == datetime(2026, 9, 15, 13, 30, 0, tzinfo=timezone.utc)
+    assert bars_390[-1].timestamp_utc == datetime(2026, 9, 15, 19, 59, 0, tzinfo=timezone.utc)
+
+    # All 390 bars must be strictly within RTH
+    for b in bars_390:
+        assert RthSessionBounds.is_within_rth(b.timestamp_utc) is True
+    findings = validator.validate_bars(bars_390)
+    assert not any(f.rule == QualityRuleCode.OUTSIDE_REGULAR_HOURS for f in findings)
+
+    # A 391st bar at 20:00:00Z (16:00 ET) is OUTSIDE continuous RTH
+    bar_1600 = HistoricalSipBar(
+        timestamp_utc=datetime(2026, 9, 15, 20, 0, 0, tzinfo=timezone.utc),
+        open=Decimal("757.38"),
+        high=Decimal("757.72"),
+        low=Decimal("757.38"),
+        close=Decimal("757.66"),
+        volume=Decimal("1749372"),
+    )
+    assert RthSessionBounds.is_within_rth(bar_1600.timestamp_utc) is False
+    findings_with_391 = validator.validate_bars([*bars_390, bar_1600])
+    out_of_hours = [f for f in findings_with_391 if f.rule == QualityRuleCode.OUTSIDE_REGULAR_HOURS]
+    assert len(out_of_hours) == 1
+    assert out_of_hours[0].timestamp_utc == datetime(2026, 9, 15, 20, 0, 0, tzinfo=timezone.utc)
+
+
 # =============================================================================
 # 7. Qualification Ceiling & Engine Tests (Documented Contract & Persistence)
 # =============================================================================

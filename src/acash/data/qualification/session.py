@@ -63,6 +63,39 @@ class RthSessionBounds:
         return RTH_OPEN_TIME <= ny_time < RTH_CLOSE_TIME
 
     @classmethod
+    def get_rth_query_interval(
+        cls,
+        session_date: date,
+        inclusive_end_offset_seconds: int = 1,
+    ) -> tuple[datetime, datetime]:
+        """Compute UTC start and end bounds for querying a standard RTH session.
+
+        Conceptual session:
+            [09:30:00, 16:00:00) America/New_York (half-open, exactly 390 1-minute buckets).
+
+        Provider query boundary adaptation:
+            Alpaca's historical endpoint treats `end` as INCLUSIVE on bar start timestamps [T, T+1m).
+            A query with `end = 16:00:00 ET` would inclusively match the 16:00 ET bar [16:00, 16:01),
+            resulting in 391 bars including post-close / closing-auction crosses.
+            To query strictly the regular session buckets [09:30:00, 15:59:00 ET] (390 bars),
+            the inclusive `end` parameter must be set immediately prior to 16:00:00 ET
+            (default offset: 1 second -> 15:59:59 ET -> 19:59:59Z on EDT / 20:59:59Z on EST).
+
+        Returns:
+            (start_utc, end_query_utc) as timezone-aware UTC datetimes.
+        """
+        from datetime import timedelta
+        if inclusive_end_offset_seconds < 1:
+            raise DataContractError("inclusive_end_offset_seconds must be at least 1 second.")
+
+        open_et = datetime.combine(session_date, RTH_OPEN_TIME, tzinfo=NY_TZ)
+        close_et = datetime.combine(session_date, RTH_CLOSE_TIME, tzinfo=NY_TZ)
+
+        start_utc = open_et.astimezone(timezone.utc)
+        end_query_utc = (close_et - timedelta(seconds=inclusive_end_offset_seconds)).astimezone(timezone.utc)
+        return (start_utc, end_query_utc)
+
+    @classmethod
     def validate_bar_intraday_hours(cls, bar: HistoricalSipBar) -> Optional[QualityFinding]:
         """Flag bars that fall outside standard Regular Trading Hours."""
         if not cls.is_within_rth(bar.timestamp_utc):
