@@ -1,0 +1,147 @@
+{
+  "hypothesis_id": "HYP_003",
+  "is_sealed": {
+    "__type__": "bool",
+    "value": true
+  },
+  "ledger_digest": "bbae61b99f4668e62ed2c1ab2980d194ed90143eb34886e6f71f9d6c88eeb547",
+  "ledger_id": "search_trial_ledger_HYP_003",
+  "sealed_at_utc": "2026-09-18T23:51:33.761825+00:00",
+  "sealed_by_owner": "OPERATOR_HUMAN_AUTHORITY_STEP_R3",
+  "sharpe_space": "ANNUAL",
+  "strategy_id": "HYP_003_ORB_PRICE_ONLY",
+  "trials": [
+    {
+      "config_sha256": "63d50ed210ac4591ef13d754715c617188fc2c6201b083031860d843205c8b78",
+      "execution_manifest_id": "manifest_r3_HYP_003",
+      "failure_reason": null,
+      "feature_names": [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ],
+      "hypothesis_id": "HYP_003",
+      "in_sample_return_series_sha256": "2b36444a5cf5257c9c9b486abf607006778f6d5c75fce7d921d17d9d0ea9da45",
+      "in_sample_sharpe": "-0.271506293642230112",
+      "p_value": "0.508844013649000000",
+      "p_value_input_hash": "9453d409b22e33fe6f0b44728706079db7722bf3ca0f050eacf18454219b9978",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "parameters": {
+        "direction": "LONG",
+        "entry_rule": "NEXT_BAR_OPEN",
+        "eod_exit_time": "15:59",
+        "opening_range_window_minutes": {
+          "__type__": "int",
+          "value": 5
+        },
+        "slippage_bps_per_side": "0.5",
+        "stop_rule": "OPPOSITE_OR_BOUNDARY",
+        "transaction_cost_bps_round_trip": "1.6"
+      },
+      "strategy_id": "HYP_003_ORB_PRICE_ONLY",
+      "trial_id": "ORB_5M_LONG",
+      "trial_status": "EXECUTED_SUCCESSFULLY"
+    },
+    {
+      "config_sha256": "1f1929a17890d031884dcd6d79a697b75c3d78f17a8c6eff4143d33a94ce848d",
+      "execution_manifest_id": "manifest_r3_HYP_003",
+      "failure_reason": null,
+      "feature_names": [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ],
+      "hypothesis_id": "HYP_003",
+      "in_sample_return_series_sha256": "9fbc97a46687b3e650afe6fd5f8a8f56105596986edd6d1cea020cdd97461a5f",
+      "in_sample_sharpe": "-1.370520679277281051",
+      "p_value": "0.000853609077000000",
+      "p_value_input_hash": "8dca6c6c148db12b91f01414d5fe34109fa3e2b0397427244ce21f36deb3ed4a",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "parameters": {
+        "direction": "SHORT",
+        "entry_rule": "NEXT_BAR_OPEN",
+        "eod_exit_time": "15:59",
+        "opening_range_window_minutes": {
+          "__type__": "int",
+          "value": 5
+        },
+        "slippage_bps_per_side": "0.5",
+        "stop_rule": "OPPOSITE_OR_BOUNDARY",
+        "transaction_cost_bps_round_trip": "1.6"
+      },
+      "strategy_id": "HYP_003_ORB_PRICE_ONLY",
+      "trial_id": "ORB_5M_SHORT",
+      "trial_status": "EXECUTED_SUCCESSFULLY"
+    },
+    {
+      "config_sha256": "d797dd01d859bce8f3536cf8db126f5ef52680051b4c8c6a12ea98750e665897",
+      "execution_manifest_id": "manifest_r3_HYP_003",
+      "failure_reason": null,
+      "feature_names": [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ],
+      "hypothesis_id": "HYP_003",
+      "in_sample_return_series_sha256": "976a84227be2fdaaab0fd28e567cf2adb64d580c92973d854af3413b8b0bd6f0",
+      "in_sample_sharpe": "0.027910510684133159",
+      "p_value": "0.945855013552000000",
+      "p_value_input_hash": "05cad372f21206d71d8e9e258ec3f018429877e4a1a4776064e3fcc0d6a868da",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "parameters": {
+        "direction": "LONG",
+        "entry_rule": "NEXT_BAR_OPEN",
+        "eod_exit_time": "15:59",
+        "opening_range_window_minutes": {
+          "__type__": "int",
+          "value": 15
+        },
+        "slippage_bps_per_side": "0.5",
+        "stop_rule": "OPPOSITE_OR_BOUNDARY",
+        "transaction_cost_bps_round_trip": "1.6"
+      },
+      "strategy_id": "HYP_003_ORB_PRICE_ONLY",
+      "trial_id": "ORB_15M_LONG",
+      "trial_status": "EXECUTED_SUCCESSFULLY"
+    },
+    {
+      "config_sha256": "c8fec197b4e427e20d5c1eca8a0e3fece99bd1b14a6d9d02074f3d0d2e8e8c68",
+      "execution_manifest_id": "manifest_r3_HYP_003",
+      "failure_reason": null,
+      "feature_names": [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ],
+      "hypothesis_id": "HYP_003",
+      "in_sample_return_series_sha256": "afcd54aab7427cc21c4d3aee2ffdbdc49b49c0eee15a38232450c13024692c6e",
+      "in_sample_sharpe": "-0.977001352371079435",
+      "p_value": "0.017441110151000000",
+      "p_value_input_hash": "10a9147b7fa720cd2fdcf8195a8b4c607d2fc14bc26d422d64c469226af95555",
+      "p_value_method": "ASYMPTOTIC_TWO_SIDED_ZERO_SHARPE_NORMAL_TEST_V1",
+      "parameters": {
+        "direction": "SHORT",
+        "entry_rule": "NEXT_BAR_OPEN",
+        "eod_exit_time": "15:59",
+        "opening_range_window_minutes": {
+          "__type__": "int",
+          "value": 15
+        },
+        "slippage_bps_per_side": "0.5",
+        "stop_rule": "OPPOSITE_OR_BOUNDARY",
+        "transaction_cost_bps_round_trip": "1.6"
+      },
+      "strategy_id": "HYP_003_ORB_PRICE_ONLY",
+      "trial_id": "ORB_15M_SHORT",
+      "trial_status": "EXECUTED_SUCCESSFULLY"
+    }
+  ]
+}
