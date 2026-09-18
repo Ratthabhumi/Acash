@@ -61,10 +61,10 @@ Sovereign calendar authority `NyseCa1Calendar` was used to classify all 2191 day
 
 ---
 
-## 3. Data Ingestion & Validation Integrity
+## 3. Data Ingestion, Validation & Incomplete Sessions Audit
 
 - **Provider:** Alpaca Markets Historical Data API v2 (`/v2/stocks/SPY/bars`)
-- **Feed:** Consolidated Tape (`feed=sip`)
+- **Feed Contract:** Consolidated Tape (`feed=sip`, CTA/UTP coverage under SEC Rule 603)
 - **Price Adjustment:** Raw unadjusted (`adjustment=raw`)
 - **Bar Invariant:** Exactly 390 bars per regular session. Every bar validated for:
   1. Time alignment strictly within regular trading hours (`09:30:00` to `15:59:00` America/New_York)
@@ -72,26 +72,64 @@ Sovereign calendar authority `NyseCa1Calendar` was used to classify all 2191 day
   3. Price positivity (`open > 0`, `high > 0`, `low > 0`, `close > 0`)
   4. OHLC geometric consistency (`high >= low`, `high >= open`, `high >= close`, `low <= open`, `low <= close`)
   5. Non-negative volume (`volume >= 0`)
-- **Arrow Canonical Schema:** `CANONICAL_ARROW_SCHEMA` (`timestamp[us, tz=UTC]`, `decimal128(38,18)`, `int64`)
+
+### 3.1 Targeted Revalidation of Six Incomplete Sessions (Audit A & B)
+
+Each of the 6 excluded sessions was audited against stored raw evidence and subjected to an independent, fresh 1-day API re-fetch:
+
+| Session Date | Stored Bars | Fresh Re-fetch | Missing Bars | Exact Missing Intervals (America/New_York) | Audit Classification |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **2019-08-12** | 360 | 360 | 30 | `15:29`, `15:30`, `15:32`–`15:59` (30 mins) | `VERIFIED_PROVIDER_SOURCE_GAP` |
+| **2020-03-09** | 376 | 376 | 14 | `09:35`–`09:48` (14 mins) | `VERIFIED_MARKET_STRUCTURE_GAP` (MWCB Level 1 Halt) |
+| **2020-03-12** | 376 | 376 | 14 | `09:36`–`09:49` (14 mins) | `VERIFIED_MARKET_STRUCTURE_GAP` (MWCB Level 1 Halt) |
+| **2020-03-16** | 376 | 376 | 14 | `09:31`–`09:44` (14 mins) | `VERIFIED_MARKET_STRUCTURE_GAP` (MWCB Level 1 Halt) |
+| **2020-03-18** | 376 | 376 | 14 | `12:57`–`13:10` (14 mins) | `VERIFIED_MARKET_STRUCTURE_GAP` (MWCB Level 1 Halt) |
+| **2021-05-05** | 385 | 385 | 5 | `11:27`–`11:31` (5 mins) | `VERIFIED_PROVIDER_SOURCE_GAP` |
+
+**Audit Findings:**
+- For all 6 dates, fresh re-fetch bar count matched stored bar count identically.
+- Timestamp sets and OHLC values on shared timestamps matched 100%.
+- Single-page response (`pages_count = 1`), `next_page_token = null` (token exhausted, no truncation, no rate limit).
+- All 4 dates in March 2020 perfectly align with documented SEC Rule 80B 15-minute Level 1 Market-Wide Circuit Breaker trading halts.
+- Zero local ingestion or pagination defects detected.
 
 ---
 
-## 4. Cryptographic Lineage & Sealing
+## 4. Provenance Field Semantics & Schema Adapters (Audit C)
 
-- **Canonical Parquet SHA-256:** `2a70922156f3d724fffbf7030d791d0da3b0fa1c44f839eea794c2fb2d689ddc`
-- **Raw Evidence Aggregate SHA-256:** `a3d03ea208d65de68d07d377b4b2321173036fd8112ad245353f097992fbe093`
+The canonical PyArrow table construction (`CANONICAL_ARROW_SCHEMA`) includes three fields that are **schema adapters** rather than provider-native facts:
+
+1. `knowledge_time_utc` ($\equiv \text{event\_end\_utc} = t + 1\text{m}$):
+   - **Origin:** Schema-derived adapter.
+   - **Classification:** `SCHEMA-DERIVED / NON-AUTHORITATIVE`.
+   - **Semantic Binding:** Enforces causal non-anticipation ($[t, t+1\text{m})$ bar cannot be observed before $t+1\text{m}$). It does **NOT** represent a provider-reported point-in-time publication timestamp or historical receipt. D13 PIT/vintage authority remains **OPEN**.
+2. `revision_seq` ($\equiv 1$):
+   - **Origin:** Schema-derived constant.
+   - **Classification:** `SCHEMA-DERIVED / NON-AUTHORITATIVE`.
+   - **Semantic Binding:** Satisfies schema typing. It does **NOT** prove or imply that historical aggregates have never undergone retrospective tape corrections.
+3. `quote_volume` ($\equiv \text{close} \times \text{volume}$):
+   - **Origin:** Synthetic approximation.
+   - **Classification:** `SCHEMA-DERIVED / NON-AUTHORITATIVE`.
+   - **Semantic Binding:** Synthetic product of close price and share volume. It is **NOT** a provider-reported dollar turnover figure.
+
+---
+
+## 5. Cryptographic Lineage & Sealing (Audit E)
+
+- **Canonical Parquet SHA-256:** `2a70922156f3d724fffbf7030d791d0da3b0fa1c44f839eea794c2fb2d689ddc` (Bitwise Re-verified: MATCH)
+- **Raw Evidence Aggregate SHA-256:** `a3d03ea208d65de68d07d377b4b2321173036fd8112ad245353f097992fbe093` (Bitwise Re-verified: MATCH)
 - **Manifest Location:** `docs/phase14/manifests/manifest_r2_HYP_003.json`
 - **Session Ledger Location:** `data/manifests/research/HYP_003_session_ledger.json`
 
 ---
 
-## 5. Boundary Preservation & Governance Invariants
+## 6. Boundary Preservation & Governance Invariants
 
 ```markdown
 ### Verification Ledger
 - Implementation Status: COMPLETE
 - Contract Enforcement: STRICT FAIL-CLOSED
-- Mathematical Authority: NyseCa1Calendar (CA-1) & SEC SIP Consolidated Tape
+- Mathematical Authority: NyseCa1Calendar (CA-1) & Alpaca Historical SIP Feed (CTA/UTP Coverage under SEC Rule 603)
 - Temporal Scope: 2017-01-01 to 2022-12-31 (In-Sample ONLY)
 - Out-of-Sample Window: 2023-01-01 to 2026-12-31 (SEALED / UNREAD / FORBIDDEN)
 - Step R3 Status: LOCKED (NOT INVOKED)
@@ -99,3 +137,4 @@ Sovereign calendar authority `NyseCa1Calendar` was used to classify all 2191 day
 - Capital Authority: $0.00
 - Execution Policy: NO_REAL_ORDERS=true
 ```
+
