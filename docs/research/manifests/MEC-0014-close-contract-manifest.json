@@ -1,0 +1,79 @@
+{
+  "adjustment": "raw",
+  "alpaca_endpoint_names": [
+    "/v2/stocks/{symbol}/auctions",
+    "/v2/stocks/{symbol}/bars?timeframe=1Day",
+    "/v2/stocks/{symbol}/bars?timeframe=1Min",
+    "/v2/stocks/{symbol}/trades",
+    "/v2/stocks/meta/conditions/trade?tape=B"
+  ],
+  "comparison_result_hash": "f96ccef802ce487bd862547c0048bbbad51abc9bb9c8dda11ba249e882a663a0",
+  "feed": "sip",
+  "generated_at_utc": "2026-09-19T00:57:56Z",
+  "governance_invariants": {
+    "OOS_accessed": false,
+    "capital_authority_usd": "0.00",
+    "empirical_strategy_calculation": false,
+    "live_authorized": false,
+    "no_real_orders": true,
+    "paper_authorized": false
+  },
+  "manifest_type": "MEC_0014_CLOSE_AUCTION_CONTRACT_MANIFEST",
+  "mec_id": "MEC-0014",
+  "previous_close_authority": "RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE",
+  "raw_evidence_aggregate_hash": "099b6a0b9c7f70a7deb951d803a7ce6e5351ef953f5d33da8f15b7a547590a62",
+  "response_schema_fingerprints": {
+    "auctions": [
+      "t",
+      "p",
+      "s",
+      "x",
+      "c"
+    ],
+    "daily_bars": [
+      "t",
+      "o",
+      "h",
+      "l",
+      "c",
+      "v",
+      "n",
+      "vw"
+    ],
+    "minute_bars": [
+      "t",
+      "o",
+      "h",
+      "l",
+      "c",
+      "v",
+      "n",
+      "vw"
+    ],
+    "trades": [
+      "t",
+      "p",
+      "s",
+      "x",
+      "c",
+      "z",
+      "i"
+    ]
+  },
+  "selected_six_dates": [
+    "2017-06-01",
+    "2018-06-01",
+    "2019-06-03",
+    "2020-06-01",
+    "2021-06-01",
+    "2022-06-01"
+  ],
+  "source_git_sha": "0992de360defaca2451214b882277b96a46bd612",
+  "target_close_authority": "RESOLVED_AUCTION_AUTHORITY",
+  "temporal_bounds": {
+    "is_end": "2022-12-31",
+    "is_start": "2017-01-01",
+    "oos_sealed_boundary": "2023-01-01"
+  },
+  "topic": "Market Intraday Momentum \u2014 Previous-Close / Auction Contract Qualification"
+}
