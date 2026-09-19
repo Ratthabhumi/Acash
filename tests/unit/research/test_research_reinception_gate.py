@@ -142,10 +142,46 @@ def test_reusing_hyp_002_terminally_falsified_id_fails_closed(
         ResearchReInceptionGate.evaluate_reinception_proposal(proposal=falsified_proposal)
 
 
+def test_reusing_hyp_003_terminally_falsified_id_fails_closed(
+    valid_proposal: ResearchInceptionProposal,
+    tmp_path: Path,
+) -> None:
+    """Invariant: HYP_003 is registered as terminally falsified and cannot be resurrected."""
+    assert "HYP_003" in TERMINAL_HYPOTHESIS_REGISTRY
+    falsified_proposal = valid_proposal.model_copy(
+        update={"candidate_hypothesis_id": "HYP_003"}
+    )
+    # Even in an empty directory where no HYP_003.json exists on disk:
+    assert not (tmp_path / "HYP_003.json").exists()
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+        ResearchReInceptionGate.evaluate_reinception_proposal(
+            proposal=falsified_proposal,
+            hypotheses_dir=tmp_path,
+        )
+
+
 def test_terminal_registry_contains_all_falsified_hypotheses() -> None:
     """Invariant: Every sealed terminally-falsified hypothesis is explicitly registered."""
     assert "HYP_TSMOM_EURUSD_001" in TERMINAL_HYPOTHESIS_REGISTRY
     assert "HYP_TSMOM_EURUSD_HTF_002" in TERMINAL_HYPOTHESIS_REGISTRY
+    assert "HYP_003" in TERMINAL_HYPOTHESIS_REGISTRY
+
+
+def test_hyp_004_id_fresh_and_eligible(
+    valid_proposal: ResearchInceptionProposal,
+    tmp_path: Path,
+) -> None:
+    """Invariant: HYP_004 is NOT in terminal registry and is structurally eligible for de novo inception."""
+    assert "HYP_004" not in TERMINAL_HYPOTHESIS_REGISTRY
+    fresh_proposal = valid_proposal.model_copy(
+        update={"candidate_hypothesis_id": "HYP_004"}
+    )
+    token = ResearchReInceptionGate.evaluate_reinception_proposal(
+        proposal=fresh_proposal,
+        hypotheses_dir=tmp_path,
+    )
+    assert token.decision == InceptionDecision.INCEPTION_AUTHORIZED
+    assert token.authorized_hypothesis_id == "HYP_004"
 
 
 def test_sealed_id_collision_fails_closed(

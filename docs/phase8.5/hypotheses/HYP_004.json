@@ -1,0 +1,29 @@
+{
+  "hypothesis_id": "HYP_004",
+  "hypothesis_version": "v1.0",
+  "parent_hypothesis_id": null,
+  "economic_rationale": "The first half-hour SPY return, including overnight information from the previous market close through 10:00 ET, may predict the final half-hour return because institutional portfolio rebalancing and late-day order-flow continuation can induce intraday return persistence near the market close.",
+  "target_symbol": "SPY",
+  "feature_dependencies": [
+    "spy_previous_primary_close",
+    "spy_transaction_price_1000_et",
+    "spy_transaction_price_1530_et",
+    "spy_primary_close",
+    "r1_simple_return",
+    "r13_simple_return"
+  ],
+  "parameter_config_json": "{\"calendar_authority\":{\"calendar_name\":\"NyseCa1Calendar\",\"code\":\"CA-1\",\"regular_session_minutes\":{\"__type__\":\"int\",\"value\":390},\"timezone\":\"America/New_York\"},\"data_contract\":{\"adjustment\":\"raw\",\"data_window\":[\"2017-01-01\",\"2022-12-31\"],\"feed\":\"sip\",\"symbol\":\"SPY\"},\"governance_lineage\":{\"canonical_preregistration_commit\":\"ccd42a50be935cacb22b7681d5b806c449495057\",\"hypothesis_id\":\"HYP_004\",\"hypothesis_ordinal\":{\"__type__\":\"int\",\"value\":4},\"inception_token_id\":\"AUTH_INCEPTION_HYP_004_148ac7aa2e59f25d\",\"preregistration_doc\":\"docs/research/MEC-0014A-statistical-preregistration-draft.md\",\"preregistration_sha256\":\"1e5100f6733951c61d52494028b347164c7ae457794df23fa3766b7a738782ce\",\"proposal_sha256\":\"148ac7aa2e59f25dadd1173250254bef42037525646fe1b7f39284d256ad13d7\",\"source_git_sha\":\"ccd42a50be935cacb22b7681d5b806c449495057\"},\"hypothesis_ordinal\":{\"__type__\":\"int\",\"value\":4},\"mechanism_id\":\"MEC-0014A\",\"partition_policy\":{\"external_holdout\":{\"end_date\":\"2026-12-31\",\"label\":\"MEC_0014_STRATEGY_UNEXPOSED_HOLDOUT / TECHNICALLY_PROBED_IN_ISOLATED_INFRASTRUCTURE_SESSIONS\",\"start_date\":\"2023-01-01\",\"state\":\"SEALED_UNREAD\"},\"internal_secondary_oos_diagnostic\":{\"forecast_evaluation\":[\"2020-01-01\",\"2022-12-31\"],\"initial_estimation\":[\"2017-01-01\",\"2019-12-31\"],\"re_estimation_frequency\":\"monthly_expanding\",\"role\":\"SECONDARY_PREREGISTERED_DIAGNOSTIC\"},\"primary_replication_sample\":{\"end_date\":\"2022-12-31\",\"label\":\"MEC_0014A_MECHANISM_SPECIFIC_REPLICATION_SAMPLE\",\"start_date\":\"2017-01-01\"}},\"planned_trial_count_k\":{\"__type__\":\"int\",\"value\":1},\"primary_specification\":\"GAO_R1_TO_R13_BASELINE\",\"provider_caveats\":{\"endpoint_mapping\":\"ACASH_QUALIFIED_PROVIDER_OPERATIONALIZATION\",\"session_interval_classification\":\"ACASH_PROVIDER_OPERATIONALIZATION_CHOICE\",\"taq_record_equivalence\":\"NOT_ESTABLISHED\"},\"schema_compatibility_classification\":{\"binding\":[\"expected_direction_LONG_as_positive_beta\",\"preregistered_regression_r13_on_r1\",\"simple_return_semantics\",\"deterministic_newey_west_lag_rule\",\"two_sided_p_005_acceptance_criterion\",\"date_partition_2017_2022\"],\"non_binding_metadata\":[\"target_horizons=[1]\",\"primary_horizon=1\",\"min_in_sample_rank_ic=0.000001\",\"max_feature_autocorrelation=0.999999\",\"min_cost_adjusted_spread_ratio=1.0\",\"proposal_SplitPolicy\",\"zero_CostModelConfig\"]},\"statistical_specification\":{\"corporate_action_baseline\":\"RAW_OBSERVED_TRANSACTION_PRICE_SEMANTICS (no dividend adjustment)\",\"daily_trade_filter\":\"raw regular-session SIP trade count >= 500\",\"expected_slope\":\"beta > 0\",\"intraday_endpoint_authority\":\"QUALIFIED_LAST_SIP_TRANSACTION_PRICE_AT_OR_BEFORE_BOUNDARY with distinct-price fail-closed rule\",\"market_close_authority\":\"unique NYSE Arca x=P, c=6 qualifying closing auction\",\"missing_endpoint_policy\":\"EXCLUDE_SESSION_FAIL_CLOSED\",\"newey_west_lag_rule\":\"floor(4 * (T / 100)^(2/9))\",\"predictor_r1\":\"p1000 / previous_primary_close - 1\",\"primary_acceptance_criterion\":\"beta > 0 AND two-sided Newey-West-HAC p-value < 0.05\",\"regression_equation\":\"r13 = alpha + beta * r1 + epsilon\",\"return_convention\":\"SIMPLE_RETURN\",\"session_interval_predicate\":\"09:30:00 <= timestamp <= 16:00:00 America/New_York\",\"target_r13\":\"current_primary_close / p1530 - 1\"}}",
+  "expected_direction": "LONG",
+  "target_horizons": [
+    1
+  ],
+  "primary_horizon": 1,
+  "invalidation_criteria": {
+    "min_in_sample_rank_ic": "0.000001",
+    "min_hac_t_stat": "1.96",
+    "max_feature_autocorrelation": "0.999999",
+    "min_cost_adjusted_spread_ratio": "1.0"
+  },
+  "registered_at_utc": "2026-09-19T05:00:00Z",
+  "author": "human_operator_ratified"
+}
