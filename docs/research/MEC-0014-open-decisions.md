@@ -18,14 +18,52 @@
 
 Before any hypothetical `HYP_004` can be proposed or submitted to `ResearchReInceptionGate`, three architectural decisions must be formally ratified by the Human Operator:
 
-### 1. Decision 1: `PREVIOUS_CLOSE_AUTHORITY = PROVISIONALLY_RESOLVABLE_PENDING_CONTRACT_TEST`
-- **Problem:** Gao et al. (2018) define $r_1 \equiv \ln(P_{10:00, t} / P_{\text{close}, t-1})$. The current ACASH dataset only has bars up to 15:59:00 ET.
-- **Mandate:** The 15:59 minute close **MUST NOT** be treated as exact previous official close.
-- **Provider Discovery:** Alpaca provides dedicated historical stock auction endpoints (`/v2/stocks/{symbol}/auctions` and `/v2/stocks/auctions`) that supply historical auction cross prints. Alpaca documentation explicitly distinguishes minute-bar close, daily-bar close, and market-center closing/auction trades, documenting that the official daily close can differ from the final continuous minute bar.
-- **Resolution State:** $\mathbf{PROVISIONALLY\_RESOLVABLE\_PENDING\_CONTRACT\_TEST}$.
-  - *Preferred Candidate:* Alpaca historical closing-auction / official-close record under SIP semantics.
-  - *Fallback Candidate:* Alpaca SIP daily bar close.
-  - *Future Contract Test Requirement:* Before HYP_004 pre-registration, an authorized contract test on a small historical sample must retrieve auction closes vs. daily bar closes, inspect trade condition semantics, and compare exact differences. No market data is fetched in this intake.
+### 1. Decision 1: Close Authority & Literature Methodology Contract Freeze
+
+Following the empirical market-data probe and Gao et al. (2018) methodology audit, the relationship between published literature, historical data extraction, and the ACASH provider is frozen across **three strictly separated layers**:
+
+```mermaid
+flowchart TD
+    subgraph L1["Layer 1: LITERATURE_SEMANTIC_CONTRACT (Economic & Methodological)"]
+        direction TB
+        P_TYPE["GAO_BASELINE_PRICE_TYPE = RESOLVED_TAQ_TRANSACTION_PRICE\n(TAQ transaction prices; midquotes are robustness checks)"]
+        R1_INT["GAO_R1_INTERVAL = RESOLVED_PREVIOUS_MARKET_CLOSE_TO_10_00_ET\n(Includes overnight; NOT 09:30->10:00)"]
+        R13_INT["GAO_R13_INTERVAL = RESOLVED_15_30_ET_TO_MARKET_CLOSE\n(Holding 15:30 through market close)"]
+        TGT_SEM["GAO_TARGET_CLOSE_SEMANTICS = STRONGLY_RESOLVED_MARKET_CLEARING_CLOSE\n(Common clearing price at 16:00; zero closing spread)"]
+    end
+
+    subgraph L2["Layer 2: ORIGINAL_TAQ_FIELD_MAPPING (Historical Data Extraction)"]
+        direction TB
+        TAQ_PREV["GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN\n(Primary auction vs consolidated last sale unobservable)"]
+        TAQ_TGT["GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN\n(Exact TAQ condition code/algorithm unstated)"]
+    end
+
+    subgraph L3["Layer 3: ACASH_PROVIDER_IMPLEMENTATION (Alpaca SIP Contract)"]
+        direction TB
+        ACASH_PRIM["ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION\n(Alpaca SIP Historical Auctions: x=P, c=6)"]
+        ACASH_FALL["PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC\n(Fail-closed fallback to consolidated last sale)"]
+        REJ_59["15_59_PROXY = REJECTED\n(Empirical divergence 0.73 to 4.26 bps across 6/6 sessions)"]
+        REJ_DAILY["DAILY_SIP_BAR_EQUIVALENCE = REJECTED\n(Empirical divergence in 4/6 sessions; Condition M does not update OHLC)"]
+    end
+
+    L1 -.-> L2
+    L2 -.-> L3
+```
+
+#### Detailed Layer Classifications:
+1. **`LITERATURE_SEMANTIC_CONTRACT` (What Gao et al. describe economically):**
+   - **`GAO_BASELINE_PRICE_TYPE = RESOLVED_TAQ_TRANSACTION_PRICE`:** Gao et al.'s baseline half-hour return construction uses TAQ transaction-price returns. Bid-to-bid, ask-to-ask, and midquote-to-midquote returns are robustness analyses for microstructure/bid-ask bounce evaluation and must **NOT** be represented as the baseline Gao construction.
+   - **`GAO_R1_INTERVAL = RESOLVED_PREVIOUS_MARKET_CLOSE_TO_10_00_ET`:** The first-half-hour predictor explicitly incorporates the overnight component: $r_{1,t} := \ln(P_{10:00, t} / P_{\text{close}, t-1})$. It is *not* merely 09:30 $\to$ 10:00 ET.
+   - **`GAO_R13_INTERVAL = RESOLVED_15_30_ET_TO_MARKET_CLOSE`:** The holding interval covers the beginning of the final half-hour through regular market close.
+   - **`GAO_TARGET_CLOSE_SEMANTICS = STRONGLY_RESOLVED_MARKET_CLEARING_CLOSE`:** Gao's transaction-cost methodology treats the 16:00 close as a common market-clearing price rather than applying the 15:30 bid/ask spread to the close.
+2. **`ORIGINAL_TAQ_FIELD_MAPPING` (Historical TAQ implementation detail):**
+   - **`GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN`:** The literature establishes a TAQ transaction-price baseline from previous market close, but the accessible methodology does *not* establish whether the original extraction code selected the primary-listing official closing auction, the consolidated final eligible transaction, or another TAQ-derived close.
+   - **`GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`:** Exact historical TAQ condition codes remain unstated in published texts.
+3. **`ACASH_PROVIDER_IMPLEMENTATION` (Alpaca SIP execution contract):**
+   - **`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`:** Qualified Alpaca SIP Historical Auctions record (`x=P, c=6`).
+   - **`PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC`:** Fail-closed fallback to most recent eligible consolidated last sale per NYSE Arca Rule 1.1 for sessions lacking a qualifying auction.
+   - **`15_59_PROXY = REJECTED`:** 15:59 continuous close is strictly rejected as an official close proxy.
+   - **`DAILY_SIP_BAR_EQUIVALENCE = REJECTED`:** Daily SIP bar close and primary closing auction are distinct semantic objects; calling them equivalent is rejected.
 
 ---
 
@@ -91,7 +129,7 @@ Before any hypothetical `HYP_004` can be proposed or submitted to `ResearchReInc
 4. Corporate action adjustment tables (splits/cash dividends).
 
 ### Q10. What would ACASH need beyond its existing HYP_003 dataset?
-**Answer:** ACASH requires an authoritative source for the **previous-day 16:00 close print** and the **current-day 16:00 close print**, because the `HYP_003` dataset terminates at 15:59:00 ET and excluded the 16:00 closing cross. Alpaca's historical auction endpoint provides a viable resolution path.
+**Answer:** ACASH requires an authoritative source for the **previous-day 16:00 close print** and the **current-day 16:00 close print**, because the `HYP_003` dataset terminates at 15:59:00 ET and excluded the 16:00 closing cross. The qualified Alpaca historical auction endpoint (`x=P, c=6`) resolves this primary close authority for SPY under the ACASH provider contract (`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`).
 
 ### Q11. What parts of the literature are statistical predictability rather than demonstrated after-cost tradability?
 **Answer:** The literature contains both predictive-regression evidence and an explicit market-timing translation. However, ACASH has not yet audited whether the original execution, spread, cost, auction, and slippage assumptions map cleanly to the current Alpaca SIP data contract and contemporary execution environment. Tradability after realistic institutional frictions remains unproven in ACASH.
@@ -118,10 +156,11 @@ Before any hypothetical `HYP_004` can be proposed or submitted to `ResearchReInc
 
 ### Q15. What must remain OPEN before HYP_004 can legally be preregistered?
 **Answer:**
-1. `PREVIOUS_CLOSE_AUTHORITY` (contract test of Alpaca auction endpoint vs. daily bar close);
-2. `EXECUTION_MAPPING` (MEC-0014A statistical replication vs. MEC-0014B market-timing strategy);
-3. `HYP_004_PARTITION_POLICY` (formal date boundaries preserving pristine 2023–2026 holdout);
-4. Explicit Human governance pre-registration decision.
+1. `PREVIOUS_CLOSE_FALLBACK_POLICY` (formalization of NYSE Arca Rule 1.1 consolidated last-sale fallback for zero-auction sessions; normal primary close authority is `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE`);
+2. `GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING` & `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING` (unobservable historical TAQ algorithm details preserved as OPEN);
+3. `EXECUTION_MAPPING` (MEC-0014A statistical replication vs. MEC-0014B market-timing strategy);
+4. `HYP_004_PARTITION_POLICY` (formal date boundaries preserving pristine 2023–2026 holdout);
+5. Explicit Human governance pre-registration decision.
 
 ---
 

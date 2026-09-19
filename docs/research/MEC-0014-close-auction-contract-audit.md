@@ -145,20 +145,32 @@ Provider implementation: Alpaca SIP historical auctions endpoint with `x=P` and 
 
 ### Q12. What unresolved ambiguity remains?
 **Answer:**
-1. **Literature TAQ Mapping (OPEN):** Gao et al. (2018) define returns from 'previous market close' on SPY 1993–2013. Whether Gao's TAQ code extracted the primary-listing official closing auction or the consolidated final eligible trade remains an open research question that cannot be settled from published text alone.
-2. **Historical NYSE Arca Cutoff Rules (MEC-0014B):** MOC/LOC submission rules across historical years (2017–2022) must be audited separately before evaluating executable tradability.
-3. **Fail-Closed Fallback Rule:** Formalizing the Rule 1.1 consolidated last-sale fallback for zero-auction sessions.
+1. **Historical TAQ Field Mapping (OPEN):** The Gao methodology audit resolved that Gao's baseline uses TAQ transaction prices (`GAO_BASELINE_PRICE_TYPE = RESOLVED_TAQ_TRANSACTION_PRICE`), $r_1$ spans previous market close to 10:00 ET (`GAO_R1_INTERVAL`), and the 16:00 close is treated as a common clearing price (`GAO_TARGET_CLOSE_SEMANTICS = STRONGLY_RESOLVED_MARKET_CLEARING_CLOSE`). However, whether Gao's original TAQ extraction code selected the primary-listing official closing auction, the consolidated final eligible trade, or another TAQ construction remains an open, unobservable question without published replication code (`GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN`, `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`).
+2. **Historical NYSE Arca Cutoff Rules (MEC-0014B):** MOC/LOC submission and freeze rules across historical years (2017–2022) must be audited separately before evaluating executable tradability.
+3. **Fail-Closed Fallback Rule:** Formalizing the Rule 1.1 consolidated last-sale fallback for zero-auction sessions (`PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC`).
 
 ---
 
-## 6. Authority Classifications
+## 6. Authority & Methodology Classifications
 
-- **`PREVIOUS_CLOSE_AUTHORITY`**: `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE`
-- **`TARGET_CLOSE_AUTHORITY`**: `RESOLVED_AUCTION_AUTHORITY`
-- **`PREVIOUS_CLOSE_FALLBACK_POLICY`**: `PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC` (Consolidated last sale fallback for sessions lacking qualifying auction)
-- **`GAO_TAQ_CLOSE_MAPPING`**: `OPEN_PENDING_METHODOLOGY_AUDIT`
-- **`EXECUTION_MAPPING`**: `PARTIALLY_RESOLVED / ACASH CONTRACT OPEN`
-- **`D13_PIT_VINTAGE_STATUS`**: `OPEN` (Alpaca raw feeds do not guarantee point-in-time vintage immutability; retained as open research risk).
+The research rulings from the Gao et al. (2018) methodology audit and ACASH close-contract qualification are frozen across **three strictly separated layers**:
+
+| Layer | Contract / Parameter Key | Frozen Status / Ruling | Evidentiary Basis & Semantic Meaning |
+| :--- | :--- | :---: | :--- |
+| **Layer 1: Literature Semantic Contract** | `GAO_BASELINE_PRICE_TYPE` | `RESOLVED_TAQ_TRANSACTION_PRICE` | Gao et al. baseline uses TAQ transaction prices; midquotes are microstructure robustness checks only. |
+| | `GAO_R1_INTERVAL` | `RESOLVED_PREVIOUS_MARKET_CLOSE_TO_10_00_ET` | Predictor $r_{1,t}$ incorporates overnight return from previous regular close; not merely 09:30 $\to$ 10:00 ET. |
+| | `GAO_R13_INTERVAL` | `RESOLVED_15_30_ET_TO_MARKET_CLOSE` | Holding interval spans 15:30:00 ET through official market close. |
+| | `GAO_TARGET_CLOSE_SEMANTICS` | `STRONGLY_RESOLVED_MARKET_CLEARING_CLOSE` | Transaction-cost treatment regards 16:00 close as common market-clearing price with zero closing bid/ask spread. |
+| **Layer 2: Original TAQ Field Mapping** | `GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING` | `OPEN` | Literature establishes previous close from TAQ transaction prices, but exact primary auction vs consolidated sale code is unstated. |
+| | `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING` | `OPEN` | Exact historical TAQ condition code algorithm unstated in published texts without proprietary code appendix. |
+| **Layer 3: ACASH Provider Implementation** | `ACASH_SPY_PROVIDER_PRIMARY_CLOSE` | `RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION` | Qualified Alpaca SIP Historical Auctions record (`x=P, c=6`) on primary listing market (NYSE Arca). |
+| | `PREVIOUS_CLOSE_AUTHORITY` | `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE` | Canonical candidate: previous qualified session NYSE Arca Official Closing Price. |
+| | `TARGET_CLOSE_AUTHORITY` | `RESOLVED_AUCTION_AUTHORITY` | Canonical candidate: regular session NYSE Arca qualifying Closing Auction price (`x=P, c=6`). |
+| | `PREVIOUS_CLOSE_FALLBACK_POLICY` | `PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC` | Fail-closed fallback to most recent eligible consolidated last sale for sessions lacking a qualifying auction. |
+| | `15_59_PROXY` | `REJECTED` | Continuous 15:59 close diverged in 6/6 probed sessions (0.73 to 4.26 bps); strictly rejected as official close proxy. |
+| | `DAILY_SIP_BAR_EQUIVALENCE` | `REJECTED` | Daily bar close diverged in 4/6 sessions (2017–2020) and Condition M does not update OHLC; calling them equivalent is rejected. |
+| | `EXECUTION_MAPPING` | `PARTIALLY_RESOLVED / ACASH CONTRACT OPEN` | Decoupled econometric replication (MEC-0014A) from institutional trading strategy (MEC-0014B). |
+| | `D13_PIT_VINTAGE_STATUS` | `OPEN` | Alpaca raw feeds do not guarantee point-in-time vintage immutability; retained as open research risk. |
 
 ---
 
