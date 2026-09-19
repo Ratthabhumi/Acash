@@ -163,7 +163,7 @@ def test_gate6_raw_trade_condition_parsing() -> None:
 
 
 def test_gate7_multiple_closing_candidates_preserved() -> None:
-    """Verify that multiple closing candidates are never silently dropped."""
+    """Verify that multiple closing candidates are preserved and unique NYSE Arca x=P, c=6 is selected."""
     session_d = date(2017, 6, 1)
     daily_b = DailyBarRecord(
         timestamp_utc="2017-06-01T04:00:00Z",
@@ -208,10 +208,13 @@ def test_gate7_multiple_closing_candidates_preserved() -> None:
 
     res = compare_session_close_contract(session_d, daily_b, minute_bars, auctions, trades)
 
-    # Verify both venues are preserved in candidates
+    # Verify both venues are preserved in candidate diagnostics
     assert len(res.auction_closing_candidates) == 2
     venues = {c["exchange"] for c in res.auction_closing_candidates}
     assert venues == {"P", "T"}
+
+    # Verify primary auction selection strictly selected NYSE Arca x=P, c=6 price
+    assert res.comparisons["daily_vs_auction"]["price_b"] == "243.36"
 
     # Verify 15:59 and 16:00 are preserved
     assert res.p_1559_close == Decimal("243.32")
@@ -261,3 +264,156 @@ def test_gate10_deterministic_manifest_structure() -> None:
     assert manifest["adjustment"] == "raw"
     assert manifest["governance_invariants"]["OOS_accessed"] is False
     assert manifest["governance_invariants"]["capital_authority_usd"] == "0.00"
+
+
+def test_gate11_missing_primary_arca_auction_fails_closed() -> None:
+    """Verify that absence of qualifying NYSE Arca x=P, c=6 auction raises DataContractError."""
+    session_d = date(2017, 6, 1)
+    daily_b = DailyBarRecord(
+        "2017-06-01T04:00:00Z",
+        Decimal("241.96"),
+        Decimal("243.38"),
+        Decimal("241.64"),
+        Decimal("243.30"),
+        72957360,
+        230852,
+        Decimal("242.589"),
+    )
+    minute_bars = [
+        MinuteBarRecord(
+            "2017-06-01T19:59:00Z",
+            Decimal("243.15"),
+            Decimal("243.34"),
+            Decimal("243.15"),
+            Decimal("243.32"),
+            2143147,
+            5689,
+            Decimal("243.21"),
+        )
+    ]
+    trades: list[ClosingTradeRecord] = []
+
+    # Completely empty auctions
+    with pytest.raises(DataContractError, match="Zero qualifying NYSE Arca \\(x=P, c=6\\)"):
+        compare_session_close_contract(session_d, daily_b, minute_bars, [], trades)
+
+
+def test_gate12_nasdaq_only_closing_auction_fails_closed() -> None:
+    """Verify that secondary venue closing auction (NASDAQ T, c=6) cannot be substituted for Arca."""
+    session_d = date(2017, 6, 1)
+    daily_b = DailyBarRecord(
+        "2017-06-01T04:00:00Z",
+        Decimal("241.96"),
+        Decimal("243.38"),
+        Decimal("241.64"),
+        Decimal("243.30"),
+        72957360,
+        230852,
+        Decimal("242.589"),
+    )
+    minute_bars = [
+        MinuteBarRecord(
+            "2017-06-01T19:59:00Z",
+            Decimal("243.15"),
+            Decimal("243.34"),
+            Decimal("243.15"),
+            Decimal("243.32"),
+            2143147,
+            5689,
+            Decimal("243.21"),
+        )
+    ]
+    trades: list[ClosingTradeRecord] = []
+
+    # Only NASDAQ auction present
+    nasdaq_only = [
+        AuctionRecord("2017-06-01T20:00:00.305Z", Decimal("243.30"), 1695, "T", "6", "c")
+    ]
+    with pytest.raises(DataContractError, match="Zero qualifying NYSE Arca \\(x=P, c=6\\)"):
+        compare_session_close_contract(session_d, daily_b, minute_bars, nasdaq_only, trades)
+
+
+def test_gate13_ambiguous_multiple_arca_auctions_fails_closed() -> None:
+    """Verify that ambiguous multiple qualifying x=P, c=6 records strictly fail closed."""
+    session_d = date(2017, 6, 1)
+    daily_b = DailyBarRecord(
+        "2017-06-01T04:00:00Z",
+        Decimal("241.96"),
+        Decimal("243.38"),
+        Decimal("241.64"),
+        Decimal("243.30"),
+        72957360,
+        230852,
+        Decimal("242.589"),
+    )
+    minute_bars = [
+        MinuteBarRecord(
+            "2017-06-01T19:59:00Z",
+            Decimal("243.15"),
+            Decimal("243.34"),
+            Decimal("243.15"),
+            Decimal("243.32"),
+            2143147,
+            5689,
+            Decimal("243.21"),
+        )
+    ]
+    trades: list[ClosingTradeRecord] = []
+
+    # Two competing Arca c=6 records
+    multiple_arca = [
+        AuctionRecord("2017-06-01T20:00:00.100Z", Decimal("243.36"), 2000000, "P", "6", "c"),
+        AuctionRecord("2017-06-01T20:00:00.104Z", Decimal("243.38"), 1929774, "P", "6", "c"),
+    ]
+    with pytest.raises(DataContractError, match="Ambiguous multiple \\(2\\) qualifying NYSE Arca"):
+        compare_session_close_contract(session_d, daily_b, minute_bars, multiple_arca, trades)
+
+
+def test_gate14_no_silent_daily_or_1559_substitution_when_auction_missing() -> None:
+    """Verify that neither Daily Bar Close nor 15:59 close is ever substituted when auction is absent."""
+    session_d = date(2017, 6, 1)
+    daily_b = DailyBarRecord(
+        "2017-06-01T04:00:00Z",
+        Decimal("241.96"),
+        Decimal("243.38"),
+        Decimal("241.64"),
+        Decimal("243.30"),
+        72957360,
+        230852,
+        Decimal("242.589"),
+    )
+    minute_bars = [
+        MinuteBarRecord(
+            "2017-06-01T19:59:00Z",
+            Decimal("243.15"),
+            Decimal("243.34"),
+            Decimal("243.15"),
+            Decimal("243.32"),
+            2143147,
+            5689,
+            Decimal("243.21"),
+        ),
+        MinuteBarRecord(
+            "2017-06-01T20:00:00Z",
+            Decimal("243.33"),
+            Decimal("243.43"),
+            Decimal("243.22"),
+            Decimal("243.23"),
+            9461783,
+            1363,
+            Decimal("243.35"),
+        ),
+    ]
+    # In an invalid configuration where auction is missing, it must raise DataContractError,
+    # proving it NEVER silently substitutes daily_b.close ($243.30) or p_1559 ($243.32)
+    with pytest.raises(DataContractError):
+        compare_session_close_contract(session_d, daily_b, minute_bars, [], [])
+
+
+def test_gate15_rejected_legacy_classification_absent() -> None:
+    """Verify that PARTIALLY_RESOLVED_MULTIPLE_EQUIVALENT_AUTHORITIES is removed from active code."""
+    assert not hasattr(
+        CloseAuthorityClassification, "PARTIALLY_RESOLVED_MULTIPLE_EQUIVALENT_AUTHORITIES"
+    )
+    all_enum_values = [e.value for e in CloseAuthorityClassification]
+    assert "PARTIALLY_RESOLVED_MULTIPLE_EQUIVALENT_AUTHORITIES" not in all_enum_values

@@ -50,9 +50,6 @@ class CloseAuthorityClassification(str, Enum):
     RESOLVED_AUCTION_AUTHORITY = "RESOLVED_AUCTION_AUTHORITY"
     RESOLVED_DAILY_BAR_AUTHORITY = "RESOLVED_DAILY_BAR_AUTHORITY"
     RESOLVED_CLOSING_TRADE_AUTHORITY = "RESOLVED_CLOSING_TRADE_AUTHORITY"
-    PARTIALLY_RESOLVED_MULTIPLE_EQUIVALENT_AUTHORITIES = (
-        "PARTIALLY_RESOLVED_MULTIPLE_EQUIVALENT_AUTHORITIES"
-    )
     UNRESOLVED_PROVIDER_SEMANTIC_AMBIGUITY = "UNRESOLVED_PROVIDER_SEMANTIC_AMBIGUITY"
 
 
@@ -365,20 +362,26 @@ def compare_session_close_contract(
         for a in closing_auctions
     ]
 
-    # Primary auction candidate (listing exchange P = NYSE Arca for SPY)
-    # Prioritize condition '6' (actual closing auction trade) over off-hours/midnight summary reports
-    primary_auction_price: Optional[Decimal] = None
-    for a in closing_auctions:
-        if a.exchange == "P" and a.condition == "6":
-            primary_auction_price = a.price
-            break
-    if primary_auction_price is None:
-        for a in closing_auctions:
-            if a.exchange == "P" and "T00:00" not in a.timestamp_utc:
-                primary_auction_price = a.price
-                break
-    if primary_auction_price is None and closing_auctions:
-        primary_auction_price = closing_auctions[0].price
+    # Primary auction candidate (listing exchange P = NYSE Arca for SPY with condition '6' Market Center Closing Trade)
+    # Fail closed: must have exactly one deterministically qualifying NYSE Arca x=P, c=6 closing auction.
+    qualifying_arca_auctions = [
+        a for a in closing_auctions if a.exchange == "P" and a.condition == "6"
+    ]
+    if len(qualifying_arca_auctions) == 0:
+        available_venues = [f"{a.exchange}:{a.condition}" for a in closing_auctions]
+        raise DataContractError(
+            f"Close contract failure for session {session_date.isoformat()}: "
+            f"Zero qualifying NYSE Arca (x=P, c=6) closing auction candidates found. "
+            f"Available closing auction venues/conditions: {available_venues}. "
+            f"Fail-closed: silent fallback to secondary crosses, daily bars, or minute bars is strictly prohibited."
+        )
+    if len(qualifying_arca_auctions) > 1:
+        raise DataContractError(
+            f"Close contract failure for session {session_date.isoformat()}: "
+            f"Ambiguous multiple ({len(qualifying_arca_auctions)}) qualifying NYSE Arca (x=P, c=6) "
+            f"closing auction candidates found for session {session_date.isoformat()}."
+        )
+    primary_auction_price: Decimal = qualifying_arca_auctions[0].price
 
     # 3. Extract trade candidates by condition
     c6_trades = [t for t in trades if "6" in t.conditions]
