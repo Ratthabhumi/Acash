@@ -69,7 +69,9 @@ Furthermore, Daily SIP Bar close differed from NYSE Arca primary auction cross i
    - `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`: Exact TAQ extraction code remains unobservable without published code.
 3. **`ACASH_PROVIDER_IMPLEMENTATION` (Alpaca SIP execution contract):**
    - `NORMAL_CLOSE_PATH = RESOLVED`: Unique qualifying NYSE Arca `x=P, c=6` closing auction cross (`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`).
-   - `PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT`:
+   - `SPY_PRIMARY_CLOSE_COVERAGE_2017_2022 = COMPLETE_NORMAL_PATH`: Full-sample coverage census across all 1498 regular sessions (2017–2022) revealed **100.0000% unique primary closing crosses** (`x=P, c=6`). Zero missing sessions, zero ambiguous sessions.
+   - `HISTORICAL_EXCEPTIONAL_CLOSE_FALLBACK = NOT_REQUIRED_FOR_OBSERVED_2017_2022_SPY_SESSIONS`: Because normal-path coverage is complete across all observed sessions, complex historical AOCP engine reconstruction is bypassed for MEC-0014A dataset preparation.
+   - `PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT`: Preserved as open for unobserved/future sessions:
      - `NO_AUCTION_FALLBACK = REGIME_DEPENDENT / NOT_YET_IMPLEMENTABLE`: NYSE Arca's official-closing-price methodology for ETPs changed during the MEC-0014 historical window:
        - *Pre-2018-06-04:* Historical ETP no-auction handling used consolidated last sale semantics (subject to formal historical-rule qualification).
        - *Post-2018-06-04:* Beginning June 4, 2018, NYSE Arca introduced a revised Official Closing Price (AOCP) methodology for NYSE Arca-listed ETPs without an eligible closing auction, incorporating NBBO midpoint TWAP and consolidated last-sale weighting. Exact historical formulas, timing buckets, and amendment boundaries must be qualified before implementation.

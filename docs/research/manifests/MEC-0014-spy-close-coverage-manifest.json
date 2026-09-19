@@ -1,0 +1,35 @@
+{
+  "calendar_authority": "NyseCa1Calendar",
+  "created_utc": "2026-09-19T01:53:35.668981+00:00",
+  "git_head": "3aa87e26655789d10a028b5ec7cab9ad5dd1b870",
+  "in_sample_window": {
+    "end": "2022-12-31",
+    "oos_boundary_strictly_forbidden": ">= 2023-01-01",
+    "start": "2017-01-01"
+  },
+  "manifest_type": "MEC_0014_SPY_CLOSE_COVERAGE_CENSUS",
+  "primary_venue_qualified": "x=P, c=6 (NYSE Arca Market Center Closing Trade)",
+  "raw_payload_hashes": {
+    "auctions_SPY_2017_p1.json": "899221dde496d77a77eaf2f80f954c6ae6c5f0929449114195dccd564ac5e937",
+    "auctions_SPY_2018_p1.json": "5ca0c3f888baa0c6c9a2cff90753563f3da5b23d4855c812717761e0a582dad1",
+    "auctions_SPY_2019_p1.json": "169e22a1dc5e5fba184ba6fb751089336e2cff5e340842283716dc14a39d1a79",
+    "auctions_SPY_2020_p1.json": "9f983c997356224999b0a901effa8cb7a29076a2b63ac97710d168c5871fe434",
+    "auctions_SPY_2021_p1.json": "144d2c32d2bb9c461f9b28a3ecee2efb57ae712f9f751358e9e3e617c9fb6b4c",
+    "auctions_SPY_2022_p1.json": "e9f7a6621c3b6a77ab9fa1ce6f460fa2eb7999ea9de5b9d925a87ca0fe5d8a9a"
+  },
+  "session_type": "REGULAR (390m)",
+  "summary": {
+    "ambiguous_count": 0,
+    "ambiguous_dates": [],
+    "anomalous_sessions": [],
+    "coverage_percentage": "100.0000%",
+    "decision": "COMPLETE_NORMAL_PATH",
+    "historical_fallback_requirement": "NOT_REQUIRED_FOR_OBSERVED_2017_2022_SPY_SESSIONS",
+    "missing_count": 0,
+    "missing_dates": [],
+    "total_qualified_sessions": 1498,
+    "total_queried_sessions": 1498,
+    "unique_count": 1498
+  },
+  "target_symbol": "SPY"
+}
