@@ -3,7 +3,7 @@
 ```text
 [GOVERNANCE ARTIFACT: STATISTICAL PRE-REGISTRATION — RATIFIED CHOICES]
 [PREREGISTRATION_STATUS: FINAL_PENDING_HYPOTHESIS_REGISTRATION]
-[CANONICAL BASE COMMIT: 0590301b180389a15f598903425132b9b0386897]
+[CANONICAL BASE COMMIT: 542d9954befb962e23906df8d1b2880e6775e19f]
 [HYP_004: NOT CREATED]
 [EMPIRICAL EXECUTION: NOT AUTHORIZED]
 [MARKET DATA RETRIEVAL: ZERO OPERATIONS THIS DOCUMENT]
@@ -14,9 +14,9 @@
 ```
 
 - **Document ID:** `docs/research/MEC-0014A-statistical-preregistration-draft.md`
-- **Mechanism:** `MEC-0014A` — Market Intraday Momentum: Exact Predictive-Relation Econometric Replication
+- **Mechanism:** `MEC-0014A` — Market Intraday Momentum: Gao Baseline Predictive-Relation Econometric Replication
 - **Revision:** 3 (Human-Ratified Statistical Preregistration — 2026-09-19)
-- **Base Canonical Commit:** `0590301b180389a15f598903425132b9b0386897`
+- **Base Canonical Commit:** `542d9954befb962e23906df8d1b2880e6775e19f`
 - **Governing Standard:** ACASH AGENTS.md (Zero Unverified Claims; Strict Fail-Closed)
 - **Upstream Intake:** [`docs/research/MEC-0014-market-intraday-momentum-research-intake.md`](docs/research/MEC-0014-market-intraday-momentum-research-intake.md)
 - **Upstream Close Authority:** [`docs/research/MEC-0014-close-auction-contract-audit.md`](docs/research/MEC-0014-close-auction-contract-audit.md)
@@ -60,10 +60,11 @@
 > [!WARNING]
 > The calendar period `2017-01-01` through `2022-12-31` was previously consumed as the In-Sample window for `HYP_003` (MEC-0013, Price-Only Opening Range Breakout). The following disclosures apply:
 >
-> 1. `HYP_003` tested a mechanically distinct phenomenon: local ORB price breakout from the 09:30–09:34 opening range. MEC-0014A tests the predictive relation between the first-half-hour return (including overnight) and the final-half-hour return. These phenomena involve non-overlapping price intervals, non-overlapping inference windows, and distinct theoretical mechanisms.
-> 2. `HYP_003` is permanently `TERMINALLY_FALSIFIED_REJECTED` and sealed. No HYP_003 result is used to construct or parameterize MEC-0014A.
-> 3. **Zero MEC-0014-specific returns, regressions, or signals have been computed on this period.** The close-contract qualification probes and transaction-contract qualification probes executed date-isolated API calls solely to qualify auction and endpoint semantics.
-> 4. Despite the above, this partition is **NOT** labeled a globally pristine discovery sample, because researchers had aggregate prior exposure to SPY market behavior during HYP_003.
+> 1. **Mechanism & Hypothesis Distinction:** `HYP_003` and MEC-0014A are mechanically, statistically, and theoretically distinct hypotheses (`HYP_003` evaluated local price breakout from the 09:30–09:34 opening range; MEC-0014A evaluates the predictive relation between the first-half-hour return including overnight and the final-half-hour return).
+> 2. **Temporal Overlap Disclosure:** Their observed market-time intervals are **NOT disjoint**. The MEC-0014A $r_{1,t}$ predictor interval (previous market close through 10:00 ET) temporally contains the 09:30–09:34 opening-range window previously observed by `HYP_003`.
+> 3. **Independence from Prior Results:** `HYP_003` is permanently `TERMINALLY_FALSIFIED_REJECTED` and sealed. No `HYP_003` return, parameter, optimization result, signal, or outcome is used to construct or tune MEC-0014A.
+> 4. **Zero Prior MEC-0014 Return Computation:** Zero MEC-0014-specific returns, regressions, or signals have been computed on this period. The close-contract and transaction-contract qualification probes executed date-isolated API calls solely to qualify auction and endpoint semantics.
+> 5. **Sample Purity Classification:** Despite the absence of prior MEC-0014 computation, the shared historical price path and prior aggregate market exposure mean this partition is **NOT** labeled a globally pristine discovery sample.
 
 ### 2.2 Holdout
 
