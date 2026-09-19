@@ -1,0 +1,51 @@
+{
+  "manifest_type": "HISTORICAL_DATA_QUALIFICATION_MANIFEST",
+  "hypothesis_id": "HYP_004",
+  "hypothesis_ordinal": 4,
+  "mechanism_id": "MEC-0014A",
+  "hypothesis_sha256": "fc07b8aff8c580edd437a299be704a5d19b0cb3dcce65024d01a0dc3f771667d",
+  "r1_manifest_sha256": "eacd98963f51b759b43ba8565aecbc43432f93acd9386b3c20bec8184712bd5b",
+  "preregistration_sha256": "1e5100f6733951c61d52494028b347164c7ae457794df23fa3766b7a738782ce",
+  "source_git_sha": "fc5af17f6e335bb25722f142c6bce58e31f38632",
+  "dataset_id": "HYP_004_MEC0014A_R2_session_endpoints",
+  "calendar_authority": "NyseCa1Calendar",
+  "temporal_bounds": {
+    "start": "2017-01-01",
+    "end": "2022-12-31",
+    "oos_sealed_boundary": ">= 2023-01-01"
+  },
+  "session_census": {
+    "total_enumerated_regular_sessions": 1498,
+    "eligible_regression_sessions": 1489,
+    "excluded_sessions": 9,
+    "exclusion_reason_census": {
+      "AMBIGUOUS_P12_BOUNDARY_PRICE": 5,
+      "AMBIGUOUS_P1_BOUNDARY_PRICE": 3,
+      "FIRST_SESSION_NO_PRIOR_IN_SAMPLE_CLOSE": 1
+    }
+  },
+  "provider_contracts": {
+    "feed": "sip",
+    "symbol": "SPY",
+    "intraday_endpoint_rule": "QUALIFIED_LAST_SIP_TRANSACTION_PRICE_AT_OR_BEFORE_BOUNDARY",
+    "daily_trade_count_rule": "RAW_REGULAR_SESSION_SIP_TRADE_COUNT >= 500",
+    "closing_authority_rule": "NYSE_ARCA_PRIMARY_CLOSING_AUCTION_X_P_C_6"
+  },
+  "provenance_digests": {
+    "total_raw_pages_count": 68100,
+    "raw_evidence_aggregate_sha256": "2e359c58fe949a7f0e5d62c864db6b214ec13da4d8b071a71388e313b4e14386",
+    "local_page_manifest_sha256": "560815d3cac7230b2449bc814d9520094608633cfa91608b4b55b47ca7f07802",
+    "local_session_ledger_sha256": "2d07419b1dc9ba34f600e484df17eef90724fc6cbfeb65aa29484b50d8a8ffc2",
+    "local_endpoint_dataset_sha256": "096e1c254897747f39b63b6b4125cb29bf94461ddf3f76f3d620f0bd36e05776"
+  },
+  "governance_assertions": {
+    "no_returns_computed": true,
+    "no_regressions_computed": true,
+    "oos_holdout_sealed": true,
+    "capital_authority_usd": "0.00",
+    "trading_authorized": false
+  },
+  "status": "STEP_R2_HISTORICAL_DATA_QUALIFIED_PASS",
+  "next_required_step": "STEP_R3_MEC0014A_PRIMARY_RETURN_AND_REGRESSION_LOCKED_PENDING_SEPARATE_HUMAN_AUTHORIZATION",
+  "manifest_sha256": "25b5ae6c4769064459709bb09bbc759e02f7b340c4d4e94b4ff9442e3082ef71"
+}
