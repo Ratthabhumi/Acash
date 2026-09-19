@@ -1,0 +1,83 @@
+{
+  "decision_type": "PHASE_14_TERMINAL_FALSIFICATION_DECISION",
+  "decision_id": "DEC_FALSIFIED_HYP_003",
+  "hypothesis_id": "HYP_003",
+  "hypothesis_ordinal": 3,
+  "mechanism_id": "MEC-0013",
+  "hypothesis_sha256": "f59010d14f466e9681325a314fd3e7ef30af43ffd69bc6cecbad1b5e6aab4ee0",
+  "preregistration_sha256": "3c04f617b9877a85a07043e67b7554034ebd703fe823d3d2de777a7722a3150c",
+  "r1_manifest_sha256": "27952f476cf96f75dc47ca0eb68a4b74d1f8dc6bf2f0848d1a877740cc32b372",
+  "r2_manifest_sha256": "6bc92493f56fecf56715d44e7944bf54d4243a30c12e47e3ebb000d126442c34",
+  "r3_manifest_sha256": "dbc4607e56657d9b3c9300f8f32b92f944c247f6b5fea15f192cc4e9044824cf",
+  "r3_ledger_digest": "bbae61b99f4668e62ed2c1ab2980d194ed90143eb34886e6f71f9d6c88eeb547",
+  "canonical_dataset_sha256": "2a70922156f3d724fffbf7030d791d0da3b0fa1c44f839eea794c2fb2d689ddc",
+  "selected_option": "OPTION_A",
+  "lifecycle_state": "TERMINALLY_FALSIFIED_REJECTED",
+  "governance_action": "EARLY_TERMINATION_AT_STEP_R3",
+  "r4_status": "EARLY_TERMINATED",
+  "r5_status": "EARLY_TERMINATED",
+  "r6_status": "TERMINATED",
+  "r7_status": "INELIGIBLE",
+  "oos_state": "UNEXPOSED_PRISTINE",
+  "step_progression_audit": {
+    "R1_hypothesis_registration": {
+      "status": "PASS_AND_SEALED",
+      "manifest_sha256": "27952f476cf96f75dc47ca0eb68a4b74d1f8dc6bf2f0848d1a877740cc32b372"
+    },
+    "R2_data_preparation": {
+      "status": "PASS_AND_VERIFIED",
+      "dataset_sha256": "2a70922156f3d724fffbf7030d791d0da3b0fa1c44f839eea794c2fb2d689ddc",
+      "total_bars": 581880,
+      "in_sample_sessions": 1492
+    },
+    "R3_trial_census": {
+      "status": "PASS_AND_SEALED",
+      "census_trials_count": 4,
+      "ledger_digest": "bbae61b99f4668e62ed2c1ab2980d194ed90143eb34886e6f71f9d6c88eeb547",
+      "empirical_result": "ALL_PRIMARY_CELLS_NET_NEGATIVE_OR_ZERO",
+      "passing_trials": 0,
+      "falsified_trials": 4
+    },
+    "R4_statistical_validation": {
+      "status": "EARLY_TERMINATED",
+      "reason": "Deterministic In-Sample failure across all K=4 primary cells under institutional friction model renders multiple testing validation scientifically redundant."
+    },
+    "R5_economic_hurdle": {
+      "status": "EARLY_TERMINATED",
+      "reason": "All cells demonstrate negative or near-zero net compounded returns."
+    },
+    "R6_qualification_dossier": {
+      "status": "TERMINATED",
+      "dossier_path": "docs/phase14/hyp_003_terminal_falsification_dossier.md"
+    },
+    "R7_runtime_eligibility": {
+      "status": "INELIGIBLE",
+      "reason": "Hypothesis terminally falsified; ineligible for paper or live execution."
+    }
+  },
+  "strategy_qualification_verdict": {
+    "is_qualified": false,
+    "paper_trading_eligible": false,
+    "live_trading_eligible": false,
+    "capital_authority_usd": "0.00",
+    "execution_policy": "NO_REAL_ORDERS=true"
+  },
+  "protected_oos_discipline_certificate": {
+    "oos_window_utc": [
+      "2023-01-01T00:00:00Z",
+      "2026-12-31T23:59:59Z"
+    ],
+    "oos_exposure_state": "UNEXPOSED_PRISTINE",
+    "zero_snooping_certified": true,
+    "oos_files_opened_count": 0,
+    "oos_bars_read_count": 0
+  },
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "NO_REAL_ORDERS": true,
+  "source_git_sha": "93ab9cfa670a0be7edd7df43090dcb301c482840",
+  "governance_verdict_author": "human_quantitative_governance_lead",
+  "executed_by": "antigravity_verification_agent",
+  "recorded_at_utc": "2026-09-19T07:00:00Z"
+}
