@@ -247,7 +247,7 @@ def register_step_r1_hyp_004() -> InceptionAuthorizationToken:
     hyp_sha256 = calculate_hypothesis_spec_sha256(hyp_spec)
     print(f"\n[Step 2] Computed Canonical Hypothesis SHA-256: {hyp_sha256}")
 
-    # 4. Persist Sealed JSON in Canonical Locations
+    # 4. Persist Sealed JSON in Canonical Tracked Locations and Local Runtime Mirror
     p85_hyp_dir = Path("docs/phase8.5/hypotheses")
     p85_hyp_dir.mkdir(parents=True, exist_ok=True)
     p85_hyp_file = p85_hyp_dir / f"{hyp_spec.hypothesis_id}.json"
@@ -267,17 +267,17 @@ def register_step_r1_hyp_004() -> InceptionAuthorizationToken:
     p14_hyp_file.write_text(formatted_spec_json, encoding="utf-8")
     data_hyp_file.write_text(formatted_spec_json, encoding="utf-8")
 
-    # Verify byte equality across all three mirrors
+    # Verify byte equality across canonical and local runtime mirrors
     b85 = p85_hyp_file.read_bytes()
     b14 = p14_hyp_file.read_bytes()
     bdata = data_hyp_file.read_bytes()
     if not (b85 == b14 == bdata):
         raise DataContractError("CRITICAL: Sealed hypothesis mirrors are not byte-identical.")
 
-    print(f" -> Persisted Sealed Hypothesis to: {p85_hyp_file}")
-    print(f" -> Persisted Sealed Hypothesis to: {p14_hyp_file}")
-    print(f" -> Persisted Sealed Hypothesis to: {data_hyp_file}")
-    print(" -> Mirror byte equality verified across all 3 locations.")
+    print(f" -> Persisted Canonical Tracked Sealed Hypothesis to: {p85_hyp_file}")
+    print(f" -> Persisted Canonical Tracked Sealed Hypothesis to: {p14_hyp_file}")
+    print(f" -> Persisted Local Runtime Gitignored Mirror to: {data_hyp_file}")
+    print(" -> Mirror byte equality verified across canonical and local mirrors.")
 
     # 5. Persist R1 Registration Manifest
     manifest_payload = {
@@ -321,10 +321,10 @@ def register_step_r1_hyp_004() -> InceptionAuthorizationToken:
     if not (m14 == mdata):
         raise DataContractError("CRITICAL: R1 manifest mirrors are not byte-identical.")
 
-    print(f" -> Persisted R1 Manifest to: {p14_man_file}")
-    print(f" -> Persisted R1 Manifest to: {data_man_file}")
+    print(f" -> Persisted Canonical Tracked R1 Manifest to: {p14_man_file}")
+    print(f" -> Persisted Local Runtime Gitignored Mirror to: {data_man_file}")
     print(f" -> Manifest SHA-256: {manifest_digest}")
-    print(" -> Manifest mirror byte equality verified across both locations.")
+    print(" -> Manifest mirror byte equality verified across canonical and local mirrors.")
 
     print("\n================================================================================")
     print("HYP_004 CANONICAL REGISTRATION COMPLETED & SEALED!")

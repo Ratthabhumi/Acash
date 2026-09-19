@@ -48,19 +48,30 @@ Prior to gate invocation:
 
 ---
 
-## 2. Canonical Artifact Paths & Exact Hashes
+## 2. Artifact Paths & Exact Hashes
 
-| Artifact Description | Canonical Filesystem Path | SHA-256 Digest |
+### 2.1 Canonical Git-Tracked Research Artifacts
+
+These artifacts are committed to canonical Git and provide the sovereign versioned authority:
+
+| Artifact Description | Canonical Git-Tracked Path | SHA-256 Digest |
 | :--- | :--- | :--- |
 | **Preregistration Document** | `docs/research/MEC-0014A-statistical-preregistration-draft.md` | `1e5100f6733951c61d52494028b347164c7ae457794df23fa3766b7a738782ce` |
 | **Sealed Hypothesis (Phase 8.5 Mirror)** | `docs/phase8.5/hypotheses/HYP_004.json` | `fc07b8aff8c580edd437a299be704a5d19b0cb3dcce65024d01a0dc3f771667d` |
 | **Sealed Hypothesis (Phase 14 Mirror)** | `docs/phase14/hypotheses/HYP_004.json` | `fc07b8aff8c580edd437a299be704a5d19b0cb3dcce65024d01a0dc3f771667d` |
-| **Sealed Hypothesis (Data Mirror)** | `data/manifests/research/hypotheses/HYP_004.json` | `fc07b8aff8c580edd437a299be704a5d19b0cb3dcce65024d01a0dc3f771667d` |
 | **R1 Manifest (Phase 14 Mirror)** | `docs/phase14/manifests/manifest_r1_HYP_004.json` | `eacd98963f51b759b43ba8565aecbc43432f93acd9386b3c20bec8184712bd5b` |
-| **R1 Manifest (Data Mirror)** | `data/manifests/research/manifest_r1_HYP_004.json` | `eacd98963f51b759b43ba8565aecbc43432f93acd9386b3c20bec8184712bd5b` |
 | **Semantic Conformance Record** | `docs/phase14/phase14_r1_semantic_conformance_record_HYP_004.md` | Tracked markdown |
 
-*Note: All 3 hypothesis mirrors and both manifest mirrors are byte-identical.*
+*Note: The two canonical Git-tracked hypothesis mirrors (`docs/phase8.5/` and `docs/phase14/`) are 100% byte-identical.*
+
+### 2.2 Local Runtime / Gitignored Mirrors
+
+The following files are generated locally by the R1 registration script for local execution harness compatibility. Because `/data/` is excluded by `.gitignore`, these paths are **not** tracked in Git and do not constitute independent Git repository authorities; their contents are strictly reproducible from the tracked R1 registration process:
+
+| Local Runtime Description | Local Filesystem Path (Gitignored) | SHA-256 Digest | Status |
+| :--- | :--- | :--- | :--- |
+| **Local Hypothesis Mirror** | `data/manifests/research/hypotheses/HYP_004.json` | `fc07b8aff8c580edd437a299be704a5d19b0cb3dcce65024d01a0dc3f771667d` | Byte-identical to tracked mirrors |
+| **Local R1 Manifest Mirror** | `data/manifests/research/manifest_r1_HYP_004.json` | `eacd98963f51b759b43ba8565aecbc43432f93acd9386b3c20bec8184712bd5b` | Byte-identical to tracked manifest |
 
 ---
 

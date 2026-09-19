@@ -12,8 +12,8 @@ Verifies:
 9. Preregistration SHA-256 is binding and matches disk bytes.
 10. Semantic adapter precedence hierarchy is defined and explicit.
 11. Registration script has zero market-data / Alpaca / network imports.
-12. All 3 sealed hypothesis mirrors are byte-identical.
-13. Both R1 manifest mirrors are byte-identical and link to valid files.
+12. Canonical Git-tracked hypothesis mirrors and local runtime mirror are byte-identical.
+13. Canonical Git-tracked R1 manifest and local runtime mirror are byte-identical.
 14. Sealed HYP_003 artifacts remain completely unmodified.
 15. Generic legacy horizon / rank-IC fields are explicitly classified as non-binding metadata.
 """
@@ -109,7 +109,7 @@ def test_11_no_market_data_network_imports_in_registration_script() -> None:
 
 
 def test_12_sealed_mirrors_byte_identical() -> None:
-    """Invariant 12: All three hypothesis mirror files are byte-identical."""
+    """Invariant 12: Canonical Git-tracked hypothesis mirrors and local runtime mirror are byte-identical."""
     p85 = Path("docs/phase8.5/hypotheses/HYP_004.json").read_bytes()
     p14 = Path("docs/phase14/hypotheses/HYP_004.json").read_bytes()
     data = Path("data/manifests/research/hypotheses/HYP_004.json").read_bytes()
@@ -123,7 +123,7 @@ def test_12_sealed_mirrors_byte_identical() -> None:
 
 
 def test_13_manifest_mirrors_byte_identical_and_valid() -> None:
-    """Invariant 13: Both manifest mirrors are byte-identical."""
+    """Invariant 13: Canonical Git-tracked manifest and local runtime manifest mirror are byte-identical."""
     m14 = Path("docs/phase14/manifests/manifest_r1_HYP_004.json").read_bytes()
     mdata = Path("data/manifests/research/manifest_r1_HYP_004.json").read_bytes()
     assert m14 == mdata

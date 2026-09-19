@@ -13,8 +13,10 @@
 - **Document ID:** `docs/phase14/phase14_r1_semantic_conformance_record_HYP_004.md`
 - **Subject:** Governance clarification and schema adapter binding for sealed hypothesis `HYP_004` (Market Intraday Momentum: Gao Baseline Predictive-Relation Econometric Replication on `SPY`).
 - **Governance Basis:** Human-Ratified Preregistration (`docs/research/MEC-0014A-statistical-preregistration-draft.md`, SHA-256: `1e5100f6733951c61d52494028b347164c7ae457794df23fa3766b7a738782ce`), Canonical Commit `ccd42a50be935cacb22b7681d5b806c449495057`.
-- **Target Sealed Hypothesis:** `HYP_004` (stored at `docs/phase14/hypotheses/HYP_004.json`, `docs/phase8.5/hypotheses/HYP_004.json`, and `data/manifests/research/hypotheses/HYP_004.json`).
-- **Target R1 Manifest:** `docs/phase14/manifests/manifest_r1_HYP_004.json` and `data/manifests/research/manifest_r1_HYP_004.json`.
+- **Canonical Git-Tracked Sealed Hypothesis Mirrors:** `docs/phase8.5/hypotheses/HYP_004.json` and `docs/phase14/hypotheses/HYP_004.json`.
+- **Local Runtime / Gitignored Hypothesis Mirror:** `data/manifests/research/hypotheses/HYP_004.json` (reproducible from registration script; excluded by `.gitignore`).
+- **Canonical Git-Tracked R1 Manifest:** `docs/phase14/manifests/manifest_r1_HYP_004.json`.
+- **Local Runtime / Gitignored Manifest Mirror:** `data/manifests/research/manifest_r1_HYP_004.json` (reproducible from registration script; excluded by `.gitignore`).
 - **Operating Environment:** Windows 10/11 x64, Python 3.14.x (`.venv`).
 - **Authority:** Strict Fail-Closed (`AGENTS.md`). Zero empirical claims, zero market data loaded, zero backtests executed, OOS strictly sealed.
 
