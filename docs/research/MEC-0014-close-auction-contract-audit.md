@@ -34,9 +34,12 @@ for Gao et al. (2018)'s $P_{\text{close}, t-1}$ (prior regular market close) and
 > 4. **NYSE Arca Primary Closing Auction is strongly supported as the official close candidate for SPY.**
 >    Under NYSE Arca Rule 1.1 / ETP rules, the Official Closing Price is established in the Closing Auction
 >    (Condition '6', Exchange 'P'). In Alpaca Historical Auctions, this print is directly identifiable.
-> 5. **Fail-Closed Fallback Requirement:** A formal fail-closed fallback policy following NYSE Arca Rule 1.1
->    (most recent eligible consolidated last sale) must be defined for any session lacking a qualifying
->    Arca closing auction before production dataset preparation.
+> 5. **Regime-Dependent Fallback Requirement (`OPEN_REGIME_DEPENDENT`):** A formal fail-closed fallback
+>    policy for sessions lacking a qualifying Arca closing auction cannot be a single universal rule.
+>    NYSE Arca ETP Official Closing Price methodology underwent a structural regime change on June 4, 2018
+>    (pre-change consolidated last sale vs. post-change AOCP incorporating NBBO midpoint TWAP and last sale).
+>    Furthermore, exchange technical/system failures follow a separate contingency hierarchy and must not be
+>    collapsed into the ordinary no-auction path. Fallback logic remains OPEN_REGIME_DEPENDENT and NOT YET IMPLEMENTABLE.
 
 ---
 
@@ -138,7 +141,7 @@ For each session, prices from all available authorities were extracted and compa
 ### Q10. Can Alpaca provide a deterministic source for Gao's 'previous market close' without using 15:59 as proxy?
 **Answer:** **YES.** The preferred authority is resolved to the primary listing official closing auction:
 $$P_{\text{prev\_close}} := \text{Previous qualified session NYSE Arca Official Closing Price / qualifying Closing Auction price}$$
-Provider implementation: Alpaca SIP historical auctions endpoint with `x=P` and closing auction semantics (`c=6`). A fail-closed fallback policy adhering to NYSE Arca Rule 1.1 (most recent eligible consolidated last sale) must be formally specified for dates lacking a qualifying auction.
+Provider implementation: Alpaca SIP historical auctions endpoint with `x=P` and closing auction semantics (`c=6`). A fail-closed fallback policy adhering to NYSE Arca Rule 1.1 must be formally specified for dates lacking a qualifying auction; this policy is historically regime-dependent (`OPEN_REGIME_DEPENDENT`: pre-2018-06-04 consolidated last sale vs. post-2018-06-04 AOCP methodology, plus a separate technical contingency hierarchy) and is not yet implementable.
 
 ### Q11. Can the same authority be used for current-day P_16:00 target endpoint?
 **Answer:** **YES, FOR ECONOMETRIC REPLICATION.** For econometric replication of Gao et al. ($r_{13}$), the NYSE Arca closing auction cross represents the official regular close. However, for executable trading strategy translation (MEC-0014B), historical and contemporary NYSE Arca MOC/LOC submission, freeze, and cancellation rules remain to be separately qualified before live or paper tradability analysis.
@@ -147,7 +150,7 @@ Provider implementation: Alpaca SIP historical auctions endpoint with `x=P` and 
 **Answer:**
 1. **Historical TAQ Field Mapping (OPEN):** The Gao methodology audit resolved that Gao's baseline uses TAQ transaction prices (`GAO_BASELINE_PRICE_TYPE = RESOLVED_TAQ_TRANSACTION_PRICE`), $r_1$ spans previous market close to 10:00 ET (`GAO_R1_INTERVAL`), and the 16:00 close is treated as a common clearing price (`GAO_TARGET_CLOSE_SEMANTICS = STRONGLY_RESOLVED_MARKET_CLEARING_CLOSE`). However, whether Gao's original TAQ extraction code selected the primary-listing official closing auction, the consolidated final eligible trade, or another TAQ construction remains an open, unobservable question without published replication code (`GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN`, `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`).
 2. **Historical NYSE Arca Cutoff Rules (MEC-0014B):** MOC/LOC submission and freeze rules across historical years (2017–2022) must be audited separately before evaluating executable tradability.
-3. **Fail-Closed Fallback Rule:** Formalizing the Rule 1.1 consolidated last-sale fallback for zero-auction sessions (`PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC`).
+3. **Historical No-Auction Fallback Policy (`OPEN_REGIME_DEPENDENT`):** NYSE Arca Rule 1.1 Official Closing Price methodology for ETPs underwent a structural regime change on 2018-06-04 (pre-change consolidated last sale vs. post-change AOCP incorporating NBBO midpoint TWAP and last sale). Furthermore, technical/system failure contingency rules form a separate hierarchy. Implementation is not yet authorized until the exact historical specification is frozen.
 
 ---
 
@@ -166,7 +169,7 @@ The research rulings from the Gao et al. (2018) methodology audit and ACASH clos
 | **Layer 3: ACASH Provider Implementation** | `ACASH_SPY_PROVIDER_PRIMARY_CLOSE` | `RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION` | Qualified Alpaca SIP Historical Auctions record (`x=P, c=6`) on primary listing market (NYSE Arca). |
 | | `PREVIOUS_CLOSE_AUTHORITY` | `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE` | Canonical candidate: previous qualified session NYSE Arca Official Closing Price. |
 | | `TARGET_CLOSE_AUTHORITY` | `RESOLVED_AUCTION_AUTHORITY` | Canonical candidate: regular session NYSE Arca qualifying Closing Auction price (`x=P, c=6`). |
-| | `PREVIOUS_CLOSE_FALLBACK_POLICY` | `PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC` | Fail-closed fallback to most recent eligible consolidated last sale for sessions lacking a qualifying auction. |
+| | `PREVIOUS_CLOSE_FALLBACK_POLICY` | `OPEN_REGIME_DEPENDENT` | Regime-dependent fallback: pre-2018-06-04 consolidated last sale; post-2018-06-04 AOCP (NBBO-TWAP + last sale); technical outage rules separate. Not yet implementable. |
 | | `15_59_PROXY` | `REJECTED` | Continuous 15:59 close diverged in 6/6 probed sessions (0.73 to 4.26 bps); strictly rejected as official close proxy. |
 | | `DAILY_SIP_BAR_EQUIVALENCE` | `REJECTED` | Daily bar close diverged in 4/6 sessions (2017–2020) and Condition M does not update OHLC; calling them equivalent is rejected. |
 | | `EXECUTION_MAPPING` | `PARTIALLY_RESOLVED / ACASH CONTRACT OPEN` | Decoupled econometric replication (MEC-0014A) from institutional trading strategy (MEC-0014B). |

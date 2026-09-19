@@ -28,7 +28,7 @@ Every data element under consideration for MEC-0014 is categorized under four st
 | **SPY Regular-Session 1m Bars** | `REQUIRED_PRIMARY` | Consolidated SIP (Alpaca raw feed) | 1-minute (09:30:00–15:59:59 ET) | Core price series required to construct 10:00 ET predictor and 15:30–15:59 target interval. Already verified in CA-1 dataset. |
 | **Baseline Price Type** | `REQUIRED_PRIMARY / RESOLVED_TAQ_TRANSACTION_PRICE` | TAQ Transaction Prices / SIP Trades | Half-hour intervals | Gao et al.'s baseline half-hour return construction uses TAQ transaction-price returns. Midquotes are robustness checks only. |
 | **Historical Closing Auction Records** | `REQUIRED_PRIMARY / RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE` | Alpaca Historical Auctions (`/v2/stocks/auctions`) | Daily closing cross (`x=P, c=6`) | Canonical primary closing auction cross print on primary listing exchange (NYSE Arca). Verified across 2017–2022 sample. |
-| **Official Previous-Close Authority ($P_{\text{close}, t-1}$)** | `REQUIRED_PRIMARY / RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION` | Qualified Alpaca Auction Cross (`x=P, c=6`) | Daily (at $t-1$ Close) | Required for exact Gao et al. $r_1$ calculation ($\ln(P_{10:00,t} / P_{\text{close},t-1})$). 15:59 close is strictly rejected. |
+| **Official Previous-Close Authority ($P_{\text{close}, t-1}$)** | `REQUIRED_PRIMARY / RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION` | Qualified Alpaca Auction Cross (`x=P, c=6`) | Daily (at $t-1$ Close) | ACASH provider implementation of the supported Gao previous-market-close economic semantic ($\ln(P_{10:00,t} / P_{\text{close},t-1})$); exact original Gao TAQ field mapping remains OPEN. 15:59 close is strictly rejected. |
 | **Exact 15:30 Entry Price Authority** | `REQUIRED_PRIMARY / OPEN` | Consolidated SIP 15:30:00 Open | Per session at 15:30:00 | Required for non-anticipating execution translation. Must execute at open of 15:30 bar. |
 | **Exact Final-Half-Hour Exit Authority** | `REQUIRED_PRIMARY / OPEN` | SIP 15:59:59 Close vs. 16:00:00 Auction | Per session at 16:00:00 | Requires unambiguous rule: continuous trading exit vs. MOC closing auction cross. |
 | **Bid/Ask Spread / Quotes (if evaluating tradability)** | `REQUIRED_PRIMARY / OPEN` | Consolidated SIP Top-of-Book (NBBO) | At 15:30 and 16:00 prints | Required if moving from econometric replication to executable trading strategy evaluation. |
@@ -68,8 +68,12 @@ Furthermore, Daily SIP Bar close differed from NYSE Arca primary auction cross i
    - `GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN`: Accessible literature does not specify whether original TAQ extraction selected primary auction cross or consolidated last sale.
    - `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`: Exact TAQ extraction code remains unobservable without published code.
 3. **`ACASH_PROVIDER_IMPLEMENTATION` (Alpaca SIP execution contract):**
-   - `ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`: Qualified Alpaca SIP Historical Auctions record (`x=P, c=6`).
-   - `PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC`: Fail-closed fallback to consolidated last sale for zero-auction sessions.
+   - `NORMAL_CLOSE_PATH = RESOLVED`: Unique qualifying NYSE Arca `x=P, c=6` closing auction cross (`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`).
+   - `PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT`:
+     - `NO_AUCTION_FALLBACK = REGIME_DEPENDENT / NOT_YET_IMPLEMENTABLE`: NYSE Arca's official-closing-price methodology for ETPs changed during the MEC-0014 historical window:
+       - *Pre-2018-06-04:* Historical ETP no-auction handling used consolidated last sale semantics (subject to formal historical-rule qualification).
+       - *Post-2018-06-04:* Beginning June 4, 2018, NYSE Arca introduced a revised Official Closing Price (AOCP) methodology for NYSE Arca-listed ETPs without an eligible closing auction, incorporating NBBO midpoint TWAP and consolidated last-sale weighting. Exact historical formulas, timing buckets, and amendment boundaries must be qualified before implementation.
+     - `TECHNICAL_FAILURE_FALLBACK = SEPARATE_RULE_HIERARCHY / OPEN`: Technical or system inability to conduct a Closing Auction (e.g. March 20, 2017 incident) follows a separate rule hierarchy and must not be collapsed into the ordinary no-auction path.
    - `15_59_PROXY = REJECTED`.
    - `DAILY_SIP_BAR_EQUIVALENCE = REJECTED`.
 

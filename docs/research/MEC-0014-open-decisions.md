@@ -41,7 +41,7 @@ flowchart TD
     subgraph L3["Layer 3: ACASH_PROVIDER_IMPLEMENTATION (Alpaca SIP Contract)"]
         direction TB
         ACASH_PRIM["ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION\n(Alpaca SIP Historical Auctions: x=P, c=6)"]
-        ACASH_FALL["PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC\n(Fail-closed fallback to consolidated last sale)"]
+        ACASH_FALL["PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT\n(Pre-2018 last sale vs Post-2018 AOCP; tech failure separate)"]
         REJ_59["15_59_PROXY = REJECTED\n(Empirical divergence 0.73 to 4.26 bps across 6/6 sessions)"]
         REJ_DAILY["DAILY_SIP_BAR_EQUIVALENCE = REJECTED\n(Empirical divergence in 4/6 sessions; Condition M does not update OHLC)"]
     end
@@ -60,8 +60,12 @@ flowchart TD
    - **`GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING = OPEN`:** The literature establishes a TAQ transaction-price baseline from previous market close, but the accessible methodology does *not* establish whether the original extraction code selected the primary-listing official closing auction, the consolidated final eligible transaction, or another TAQ-derived close.
    - **`GAO_TAQ_EXACT_TARGET_FIELD_MAPPING = OPEN`:** Exact historical TAQ condition codes remain unstated in published texts.
 3. **`ACASH_PROVIDER_IMPLEMENTATION` (Alpaca SIP execution contract):**
-   - **`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`:** Qualified Alpaca SIP Historical Auctions record (`x=P, c=6`).
-   - **`PREVIOUS_CLOSE_FALLBACK_POLICY = PENDING_NYSE_ARCA_RULE_1_1_CONTRACT_SPEC`:** Fail-closed fallback to most recent eligible consolidated last sale per NYSE Arca Rule 1.1 for sessions lacking a qualifying auction.
+   - **`NORMAL_CLOSE_PATH = RESOLVED`:** Unique qualifying NYSE Arca `x=P, c=6` closing auction cross (`ACASH_SPY_PROVIDER_PRIMARY_CLOSE = RESOLVED_NYSE_ARCA_QUALIFYING_CLOSING_AUCTION`).
+   - **`PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT`:**
+     - **`NO_AUCTION_FALLBACK = REGIME_DEPENDENT / NOT_YET_IMPLEMENTABLE`:** NYSE Arca's official-closing-price methodology for ETPs underwent a structural regime shift during the MEC-0014 historical sample:
+       - *Pre-2018-06-04:* Historical ETP no-auction handling used consolidated last sale semantics (subject to formal historical-rule qualification).
+       - *Post-2018-06-04:* Effective June 4, 2018, NYSE Arca introduced a revised Official Closing Price (AOCP) methodology for NYSE Arca-listed ETPs without an eligible closing auction, incorporating NBBO midpoint TWAP and consolidated last-sale weighting. Exact historical formulas, timing buckets, and amendment boundaries must be qualified before implementation.
+     - **`TECHNICAL_FAILURE_FALLBACK = SEPARATE_RULE_HIERARCHY / OPEN`:** Technical or system inability to conduct a Closing Auction (e.g. March 20, 2017 incident) follows a separate exchange contingency hierarchy and must not be collapsed into the ordinary no-auction path.
    - **`15_59_PROXY = REJECTED`:** 15:59 continuous close is strictly rejected as an official close proxy.
    - **`DAILY_SIP_BAR_EQUIVALENCE = REJECTED`:** Daily SIP bar close and primary closing auction are distinct semantic objects; calling them equivalent is rejected.
 
@@ -156,7 +160,7 @@ flowchart TD
 
 ### Q15. What must remain OPEN before HYP_004 can legally be preregistered?
 **Answer:**
-1. `PREVIOUS_CLOSE_FALLBACK_POLICY` (formalization of NYSE Arca Rule 1.1 consolidated last-sale fallback for zero-auction sessions; normal primary close authority is `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE`);
+1. `PREVIOUS_CLOSE_FALLBACK_POLICY = OPEN_REGIME_DEPENDENT` (qualifying the historical pre- and post-2018-06-04 NYSE Arca ETP AOCP methodology and separate technical contingency hierarchy for zero-auction sessions; normal primary close authority is `RESOLVED_FOR_SPY_TO_PRIMARY_LISTING_OFFICIAL_CLOSE`);
 2. `GAO_TAQ_PREVIOUS_CLOSE_FIELD_MAPPING` & `GAO_TAQ_EXACT_TARGET_FIELD_MAPPING` (unobservable historical TAQ algorithm details preserved as OPEN);
 3. `EXECUTION_MAPPING` (MEC-0014A statistical replication vs. MEC-0014B market-timing strategy);
 4. `HYP_004_PARTITION_POLICY` (formal date boundaries preserving pristine 2023–2026 holdout);
