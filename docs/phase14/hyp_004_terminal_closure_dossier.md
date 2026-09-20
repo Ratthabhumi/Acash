@@ -15,7 +15,8 @@
 - **Mechanism ID:** `MEC-0014A`
 - **Registered Ordinal:** 4
 - **Terminal Decision Manifest:** `docs/phase14/manifests/terminal_decision_HYP_004.json`
-- **Terminal Decision Manifest SHA-256:** `05f9b3ccf3cdf476ee24b0f2329458cfcf63ff183331ef22a8a39e610a2d4128`
+- **Manifest Canonical Payload SHA-256 (`MANIFEST_CANONICAL_PAYLOAD_SHA256`):** `05f9b3ccf3cdf476ee24b0f2329458cfcf63ff183331ef22a8a39e610a2d4128`
+- **Manifest File Bytes SHA-256 (`MANIFEST_FILE_BYTES_SHA256`):** `bc6d99bb69373acd9fd2964fa603e91dfa47f5d0e574ce56cc0f662e79893853`
 - **Reconciliation Base Commit:** `38310091a2a8588ee22aea139b606e0e6d02df6d`
 - **Next Research Action:** `RETURN_TO_NEW_MECHANISM_INCEPTION`
 
@@ -177,8 +178,11 @@ The baseline replication line is closed cleanly on 2017–2022 evidence without 
 
 ---
 
-## 13. Terminal Decision Manifest Lineage
+## 13. Terminal Decision Manifest Lineage & Digest Disambiguation
 
 - **Canonical Manifest Path:** `docs/phase14/manifests/terminal_decision_HYP_004.json`
-- **Canonical Manifest SHA-256:** `bc6d99bb69373acd9fd2964fa603e91dfa47f5d0e574ce56cc0f662e79893853`
+- **Manifest Canonical Payload SHA-256 (`MANIFEST_CANONICAL_PAYLOAD_SHA256`):** `05f9b3ccf3cdf476ee24b0f2329458cfcf63ff183331ef22a8a39e610a2d4128`
+  *(Computed over the canonical JSON serialization of the manifest payload excluding its self-referential `manifest_sha256` field, matching `terminal_decision_HYP_004.json["manifest_sha256"]`).*
+- **Manifest File Bytes SHA-256 (`MANIFEST_FILE_BYTES_SHA256`):** `bc6d99bb69373acd9fd2964fa603e91dfa47f5d0e574ce56cc0f662e79893853`
+  *(Computed over the raw UTF-8 serialized file bytes on disk).*
 - **Terminal Decision Manifest Type:** `TERMINAL_RESEARCH_DECISION_MANIFEST`

@@ -106,7 +106,7 @@ def test_02_hyp_004_resurrection_rejected(
 ) -> None:
     """2. Verify that attempting to re-register or resurrect HYP_004 fails closed immediately."""
     proposal = valid_proposal.model_copy(update={"candidate_hypothesis_id": "HYP_004"})
-    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently terminally closed"):
         ResearchReInceptionGate.evaluate_reinception_proposal(
             proposal=proposal,
             hypotheses_dir=tmp_path,
@@ -120,7 +120,7 @@ def test_03_hyp_003_terminal_behavior_unchanged(
     """3. Verify that HYP_003 remains in terminal registry and is strictly rejected."""
     assert "HYP_003" in TERMINAL_HYPOTHESIS_REGISTRY
     proposal = valid_proposal.model_copy(update={"candidate_hypothesis_id": "HYP_003"})
-    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently terminally closed"):
         ResearchReInceptionGate.evaluate_reinception_proposal(
             proposal=proposal,
             hypotheses_dir=tmp_path,

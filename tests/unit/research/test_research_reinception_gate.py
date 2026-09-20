@@ -153,7 +153,7 @@ def test_reusing_hyp_003_terminally_falsified_id_fails_closed(
     )
     # Even in an empty directory where no HYP_003.json exists on disk:
     assert not (tmp_path / "HYP_003.json").exists()
-    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently terminally closed"):
         ResearchReInceptionGate.evaluate_reinception_proposal(
             proposal=falsified_proposal,
             hypotheses_dir=tmp_path,
@@ -179,7 +179,7 @@ def test_reusing_hyp_004_terminally_closed_id_fails_closed(
     )
     # Even in an empty directory where no HYP_004.json exists on disk:
     assert not (tmp_path / "HYP_004.json").exists()
-    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently terminally closed"):
         ResearchReInceptionGate.evaluate_reinception_proposal(
             proposal=falsified_proposal,
             hypotheses_dir=tmp_path,

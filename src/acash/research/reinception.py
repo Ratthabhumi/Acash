@@ -304,7 +304,7 @@ class ResearchReInceptionGate:
         # Anti-Resurrection check
         if hyp_id in TERMINAL_HYPOTHESIS_REGISTRY:
             raise DataContractError(
-                f"BLOCKED_MUTATION_VIOLATION: Hypothesis ID '{hyp_id}' is permanently TERMINALLY_FALSIFIED. "
+                f"BLOCKED_MUTATION_VIOLATION: Hypothesis ID '{hyp_id}' is permanently terminally closed. "
                 f"Resurrecting or modifying a terminally closed hypothesis is strictly forbidden. "
                 f"De novo research requires a distinct hypothesis ID."
             )
