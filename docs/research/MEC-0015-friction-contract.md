@@ -85,6 +85,10 @@ Calculation is implemented via pure Decimal arithmetic in `src/acash/execution/r
 ### 6.1. SEC Section 31 Fee
 - Applies strictly to covered **SELL** transactions (equity/ETF).
 - Zero fee on BUY transactions.
+- Authority & Operationalization Distinction:
+  - `SEC31_RATE_AUTHORITY = OFFICIAL_SEC_FEE_RATE_ADVISORY` (Sovereign schedule).
+  - `SEC31_CUSTOMER_PASS_THROUGH = ACASH_CONSERVATIVE_OPERATIONALIZATION` (Broker pass-through practice).
+  - `SEC31_ROUNDING = ROUND_CEILING_TO_CENT` (Conservative rounding up to nearest cent; naturally yields $0.01 for positive sub-cent fees).
 - Historical Schedule: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (20 effective schedule segments covering 2007-05-01 through 2024-04-30, sourced from official SEC Fee Rate Advisories).
 - Pure function: `compute_sec31_fee(date, sale_principal)`.
 

@@ -2,17 +2,27 @@
 
 ## 1. Executive Summary & Legal Authority
 
-Under Section 31 of the Securities Exchange Act of 1934, national securities exchanges and FINRA pay transaction fees to the SEC based on the aggregate dollar amount of covered sales of securities. Broker-dealers typically pass these costs through to the selling client on covered equity sales.
+Under Section 31 of the Securities Exchange Act of 1934, national securities exchanges and FINRA pay transaction fees to the SEC based on the aggregate dollar amount of covered sales of securities. While the statutory obligation rests on self-regulatory organizations (SROs), member broker-dealers pass these transaction costs through to the selling client on covered equity sales.
 
 In accordance with ACASH quantitative research standards:
+- **Authority Distinction:**
+  - `SEC31_RATE_AUTHORITY = OFFICIAL_SEC_FEE_RATE_ADVISORY` (Sovereign regulatory rate schedule published pursuant to Section 31).
+  - `SEC31_CUSTOMER_PASS_THROUGH = ACASH_CONSERVATIVE_OPERATIONALIZATION` (Broker pass-through practice).
+  - The SEC does not directly impose a customer fee nor prescribe customer-level rounding; historical SEC rulemaking (e.g. Release No. 34-49928) notes that broker-dealers typically round customer pass-through charges up to the next whole cent.
+- **Rounding Policy:**
+  - `SEC31_ROUNDING = ROUND_CEILING_TO_CENT`.
+  - ACASH operationalizes customer pass-through using ceiling rounding to the nearest cent (`ROUND_CEILING`). This conservative model ensures friction is never underestimated and naturally produces `$0.01` for any positive sub-cent fee without an artificial special case.
+  - Rounding itself is classified as an **ACASH conservative operationalization**, not an SEC statutory mandate.
 - **No Retroactive Contemporary Rates:** Historical backtests must NEVER apply modern rates (e.g. FY2026 $20.60/million) retroactively across 2007–2024.
-- **Fail-Closed Contract:** Any covered trade date outside the authoritative schedule or falling into an unresolved interval raises `DataContractError`.
+- **Fail-Closed Contract:** Any covered trade date outside the authoritative schedule raises `DataContractError`.
 - **Side Discipline:** Section 31 fees apply **strictly to covered SELL transactions**. Buy transactions incur exactly `$0.00`.
 - **Pure Arithmetic:** Fee calculations use `Decimal` arithmetic exclusively; floating-point representation is prohibited.
 
 ---
 
 ## 2. Historical Effective Schedule (2007-05-01 to 2024-04-30)
+
+The canonical Section 31 schedule comprises exactly **20 effective schedule segments** covering the MEC-0015 M1 replication window:
 
 | Seg | Effective Start | Effective End | Rate ($ / $1M) | Rate ($ / $1) | Official SEC Source | SEC Release / Reference |
 |---|---|---|---|---|---|---|
@@ -42,10 +52,11 @@ In accordance with ACASH quantitative research standards:
 ## 3. Mathematical Formula & Implementation Contract
 
 For any executed order on trade date $t$:
-$$\text{Fee}_{\text{SEC31}}(t) = \begin{cases} 0.00 & \text{if BUY} \\ \max\left(0.01, \text{round}_{\text{half\_up}}\left(\text{Principal} \times r(t), 2\right)\right) & \text{if SELL and Principal} > 0 \\ 0.00 & \text{if SELL and Principal} = 0 \end{cases}$$
+$$\text{Fee}_{\text{SEC31}}(t) = \begin{cases} 0.00 & \text{if BUY} \\ \text{ceil}_{\text{cents}}\left(\text{Principal} \times r(t)\right) & \text{if SELL and Principal} > 0 \\ 0.00 & \text{if SELL and Principal} = 0 \end{cases}$$
 
 Where:
 - $\text{Principal} = \text{shares} \times \text{fill\_price}$
-- $r(t)$ is the exact statutory rate per dollar from the table above.
+- $r(t)$ is the exact statutory rate per dollar from the sovereign schedule above.
+- $\text{ceil}_{\text{cents}}$ rounds up to the next whole cent (`ROUND_CEILING_TO_CENT`).
 - Machine-readable definition: [MEC-0015-sec31-fee-schedule.json](./manifests/MEC-0015-sec31-fee-schedule.json).
 - Executable Python function: `acash.execution.regulatory_fees.compute_sec31_fee`.

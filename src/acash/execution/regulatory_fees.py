@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING
 from typing import Sequence
 
 from acash.core.domain.exceptions import DataContractError
@@ -323,14 +323,21 @@ def compute_sec31_fee(
     sale_principal: Decimal,
     is_sell: bool = True,
 ) -> Decimal:
-    """Compute SEC Section 31 transaction fee.
+    """Compute SEC Section 31 customer pass-through transaction fee.
 
     Requirements:
     - Pure function with Decimal arithmetic.
     - Buy side fee is exactly Decimal("0.00").
     - Sell side calculates sale_principal * rate_per_dollar.
     - Fails closed on negative principal or date outside [2007-05-01, 2024-04-30].
-    - Standard rounding: ROUND_HALF_UP to 2 decimal places (cents).
+    - Rounding: ACASH conservative broker pass-through operationalization uses
+      ROUND_CEILING to the next full cent (ROUND_CEILING_TO_CENT), consistent with
+      standard broker-dealer pass-through practice noted in SEC rulemaking (Release No. 34-49928).
+      SEC Section 31 governs SRO statutory obligations; the SEC does not directly
+      prescribe customer rounding rules.
+    - Classification: ACASH_CONSERVATIVE_BROKER_PASS_THROUGH_OPERATIONALIZATION (not SEC statutory mandate).
+    - Note: ROUND_CEILING naturally yields Decimal("0.01") for any positive sub-cent
+      raw fee without requiring a separate artificial minimum-cent special case.
     """
     if not is_sell:
         return Decimal("0.00")
@@ -347,11 +354,7 @@ def compute_sec31_fee(
 
     segment = get_sec31_segment(trade_date)
     raw_fee = sale_principal * segment.rate_per_dollar
-    fee = raw_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    # If principal > 0 but raw fee rounds to 0.00, broker minimum pass-through is 0.01
-    if fee == Decimal("0.00") and sale_principal > Decimal("0.00"):
-        fee = Decimal("0.01")
-    return fee
+    return raw_fee.quantize(Decimal("0.01"), rounding=ROUND_CEILING)
 
 
 def compute_finra_taf(

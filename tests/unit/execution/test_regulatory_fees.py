@@ -148,18 +148,49 @@ def test_buy_side_regulatory_fees_are_strictly_zero() -> None:
 
 
 def test_sec31_calculation_and_rounding() -> None:
-    """Verify Section 31 calculations for known rates."""
+    """Verify Section 31 calculations and conservative ROUND_CEILING_TO_CENT operationalization.
+
+    Proves:
+    A. exact-cent raw fee remains exact.
+    B. fractional fee below one cent (0.00008 -> 0.01).
+    C. fractional fee (0.011 -> 0.02).
+    D. value where HALF_UP differs from CEILING (0.014 -> 0.02, NOT 0.01).
+    E. zero principal -> 0.00.
+    F. buy side -> 0.00.
+    """
     # Segment 20 (2023-02-27 to 2024-05-21): $8.00 per $1,000,000 (rate 0.000008)
     d = date(2024, 3, 1)
-    principal = Decimal("100000.00")  # $100k -> fee = $0.80
-    assert compute_sec31_fee(d, principal) == Decimal("0.80")
 
-    # Minimum cent floor on tiny positive principal
-    tiny_principal = Decimal("10.00")  # 10 * 0.000008 = 0.00008 -> min $0.01
-    assert compute_sec31_fee(d, tiny_principal) == Decimal("0.01")
+    # A. Exact-cent raw fee remains exact
+    # $100,000 * 0.000008 = $0.800000 -> $0.80
+    assert compute_sec31_fee(d, Decimal("100000.00")) == Decimal("0.80")
+    # $125,000 * 0.000008 = $1.000000 -> $1.00
+    assert compute_sec31_fee(d, Decimal("125000.00")) == Decimal("1.00")
 
-    # Zero principal -> zero fee
+    # B. Fractional fee below one cent
+    # $10.00 * 0.000008 = $0.000080 -> ceil to cent -> $0.01
+    assert compute_sec31_fee(d, Decimal("10.00")) == Decimal("0.01")
+    # $1.00 * 0.000008 = $0.000008 -> ceil to cent -> $0.01
+    assert compute_sec31_fee(d, Decimal("1.00")) == Decimal("0.01")
+
+    # C. Fractional fee
+    # $1,375.00 * 0.000008 = $0.011000 -> ceil to cent -> $0.02
+    assert compute_sec31_fee(d, Decimal("1375.00")) == Decimal("0.02")
+
+    # D. Value where HALF_UP would differ from CEILING
+    # $1,750.00 * 0.000008 = $0.014000
+    # Under ROUND_HALF_UP: 0.014 -> 0.01
+    # Under ROUND_CEILING: 0.014 -> 0.02 (conservative broker pass-through)
+    raw_014 = Decimal("1750.00") * Decimal("0.000008")
+    assert raw_014 == Decimal("0.014000")
+    assert compute_sec31_fee(d, Decimal("1750.00")) == Decimal("0.02")
+
+    # E. Zero principal
     assert compute_sec31_fee(d, Decimal("0.00")) == Decimal("0.00")
+
+    # F. Buy side
+    assert compute_sec31_fee(d, Decimal("1750.00"), is_sell=False) == Decimal("0.00")
+    assert compute_sec31_fee(d, Decimal("100000.00"), is_sell=False) == Decimal("0.00")
 
 
 def test_fail_closed_outside_scope_and_malformed() -> None:
