@@ -474,14 +474,21 @@ def execute_internal_oos_diagnostic(
     mean_forecast_dec = sum((r.model_forecast_r13 for r in forecast_rows), Decimal("0")) / t_eval
     mean_actual_dec = sum((r.actual_r13 for r in forecast_rows), Decimal("0")) / t_eval
 
-    # Quantize metrics to Decimal18
-    sse_model_q = to_decimal18(sse_model_dec) or Decimal("0")
-    sse_bench_q = to_decimal18(sse_bench_dec) or Decimal("0")
-    r2_os_q = to_decimal18(r2_os_dec) or Decimal("0")
-    rmse_model_q = to_decimal18(rmse_model_dec) or Decimal("0")
-    rmse_bench_q = to_decimal18(rmse_bench_dec) or Decimal("0")
-    mean_forecast_q = to_decimal18(mean_forecast_dec) or Decimal("0")
-    mean_actual_q = to_decimal18(mean_actual_dec) or Decimal("0")
+    # Quantize metrics to Decimal18 with explicit None-coalescing (anti-pattern hardening)
+    dec_sse_m = to_decimal18(sse_model_dec)
+    sse_model_q = dec_sse_m if dec_sse_m is not None else Decimal("0")
+    dec_sse_b = to_decimal18(sse_bench_dec)
+    sse_bench_q = dec_sse_b if dec_sse_b is not None else Decimal("0")
+    dec_r2 = to_decimal18(r2_os_dec)
+    r2_os_q = dec_r2 if dec_r2 is not None else Decimal("0")
+    dec_rmse_m = to_decimal18(rmse_model_dec)
+    rmse_model_q = dec_rmse_m if dec_rmse_m is not None else Decimal("0")
+    dec_rmse_b = to_decimal18(rmse_bench_dec)
+    rmse_bench_q = dec_rmse_b if dec_rmse_b is not None else Decimal("0")
+    dec_mean_f = to_decimal18(mean_forecast_dec)
+    mean_forecast_q = dec_mean_f if dec_mean_f is not None else Decimal("0")
+    dec_mean_a = to_decimal18(mean_actual_dec)
+    mean_actual_q = dec_mean_a if dec_mean_a is not None else Decimal("0")
 
     fit_counts = [f.estimation_observation_count for f in monthly_fits.values()]
 

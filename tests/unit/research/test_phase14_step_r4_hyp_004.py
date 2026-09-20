@@ -305,3 +305,28 @@ def test_21_sealed_r1_r2_r3_artifacts_remain_unchanged() -> None:
     assert json.loads(r3_p.read_text(encoding="utf-8"))["manifest_sha256"] == EXPECTED_R3_MANIFEST_SHA256
     assert hashlib.sha256(r2_pq.read_bytes()).hexdigest() == EXPECTED_R2_PARQUET_SHA256
     assert hashlib.sha256(r3_pq.read_bytes()).hexdigest() == EXPECTED_R3_PARQUET_SHA256
+
+
+def test_22_legitimate_decimal_zero_preservation() -> None:
+    """Test 22: Regression test for legitimate Decimal('0') preservation against truthiness anti-pattern.
+
+    In Python, bool(Decimal('0')) is False. Naive `to_decimal18(val) or fallback` replaces
+    a legitimate quantized Decimal('0') with fallback. Explicit `x if x is not None else fallback`
+    correctly preserves Decimal('0').
+    """
+    zero_val = Decimal("0")
+    quantized_zero = to_decimal18(zero_val)
+    assert quantized_zero is not None
+    assert bool(quantized_zero) is False  # Demonstrating Python Decimal truthiness trap
+
+    fallback_sentinel = Decimal("999.999")
+
+    # Anti-pattern behavior (vulnerable):
+    vulnerable_res = quantized_zero or fallback_sentinel
+    assert vulnerable_res == fallback_sentinel  # Truthiness trap triggered
+
+    # Hardened behavior (correct):
+    hardened_res = quantized_zero if quantized_zero is not None else fallback_sentinel
+    assert hardened_res == quantized_zero
+    assert hardened_res == Decimal("0.000000000000000000")
+    assert hardened_res != fallback_sentinel
