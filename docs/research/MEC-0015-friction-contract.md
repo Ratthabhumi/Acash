@@ -85,13 +85,13 @@ Calculation is implemented via pure Decimal arithmetic in `src/acash/execution/r
 ### 6.1. SEC Section 31 Fee
 - Applies strictly to covered **SELL** transactions (equity/ETF).
 - Zero fee on BUY transactions.
-- Historical Schedule: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (25 distinct rate tiers covering 2007-05-01 through 2024-04-30, sourced from official SEC Fee Rate Advisories).
+- Historical Schedule: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (20 effective schedule segments covering 2007-05-01 through 2024-04-30, sourced from official SEC Fee Rate Advisories).
 - Pure function: `compute_sec31_fee(date, sale_principal)`.
 
 ### 6.2. FINRA Trading Activity Fee (TAF)
 - Applies strictly to covered **SELL** transactions.
 - Zero fee on BUY transactions.
-- Historical Schedule: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (5 distinct tiers covering 2007-05-01 through 2024-04-30 with per-trade caps, sourced from official FINRA Notices 04-70, 11-27, 12-06, 12-31).
+- Historical Schedule: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (7 distinct tiers covering 2007-05-01 through 2024-04-30 with per-trade caps, including SR-FINRA-2020-032 phased increases in 2022, 2023, and 2024).
 - Pure function: `compute_finra_taf(date, shares_sold)`.
 
 ---

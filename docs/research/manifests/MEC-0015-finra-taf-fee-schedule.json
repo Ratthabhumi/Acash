@@ -41,12 +41,42 @@
     {
       "segment_index": 4,
       "effective_start": "2012-07-01",
-      "effective_end": "2024-12-31",
+      "effective_end": "2021-12-31",
       "rate_per_share": "0.000119",
       "max_fee_per_trade": "5.95",
       "rounding_rule": "ROUND_CEILING_TO_CENT",
       "official_source": "FINRA Regulatory Notice 12-31",
       "source_reference": "SEC Release No. 34-67242 / Effective July 1, 2012"
+    },
+    {
+      "segment_index": 5,
+      "effective_start": "2022-01-01",
+      "effective_end": "2022-12-31",
+      "rate_per_share": "0.000130",
+      "max_fee_per_trade": "6.49",
+      "rounding_rule": "ROUND_CEILING_TO_CENT",
+      "official_source": "FINRA SR-FINRA-2020-032 (Phase 1)",
+      "source_reference": "SEC Release No. 34-90176 / Effective January 1, 2022"
+    },
+    {
+      "segment_index": 6,
+      "effective_start": "2023-01-01",
+      "effective_end": "2023-12-31",
+      "rate_per_share": "0.000145",
+      "max_fee_per_trade": "7.27",
+      "rounding_rule": "ROUND_CEILING_TO_CENT",
+      "official_source": "FINRA SR-FINRA-2020-032 (Phase 2)",
+      "source_reference": "SEC Release No. 34-90176 / Effective January 1, 2023"
+    },
+    {
+      "segment_index": 7,
+      "effective_start": "2024-01-01",
+      "effective_end": "2024-12-31",
+      "rate_per_share": "0.000166",
+      "max_fee_per_trade": "8.30",
+      "rounding_rule": "ROUND_CEILING_TO_CENT",
+      "official_source": "FINRA SR-FINRA-2020-032 (Phase 3 Full Implementation)",
+      "source_reference": "SEC Release No. 34-90176 / Effective January 1, 2024"
     }
   ]
 }

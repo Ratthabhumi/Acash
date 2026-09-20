@@ -212,7 +212,7 @@ $$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}
 - 2× Friction Stress: Retain NBBO fill + $2\times$ non-spread explicit costs + half-spread adverse slippage + short borrow stress.
 
 ### 9.3. Regulatory Fees & Short Borrow
-- `ACASH_REGULATORY_FEE_MODEL = RESOLVED_HISTORICAL_SCHEDULES`: SEC Section 31 (25 tiers) and FINRA TAF (5 tiers) pinned to historical schedules (sales only).
+- `ACASH_REGULATORY_FEE_MODEL = RESOLVED_HISTORICAL_SCHEDULES`: SEC Section 31 (20 segments) and FINRA TAF (7 tiers) pinned to historical schedules (sales only).
 - `SHORT_LOCATE_ASSUMPTION = SPY_AVAILABLE_UNLESS_PROVIDER_OR_BROKER_MARKS_UNAVAILABLE` (0 bps baseline + 50 bps annualized mandatory stress).
 
 ---

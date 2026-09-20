@@ -63,8 +63,8 @@ This document tracks the status of all architectural, mathematical, and executio
 - **Governing Specification:**
   - Literature baseline commission: $\max(\$0.35, \$0.0035 \times \text{shares})$ per order execution side.
   - Regulatory fees: Governed by exact historical effective-date schedules.
-    - SEC Section 31 Fee: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (covers 2007-05-01 through 2024-04-30 across 25 distinct regulatory rate intervals; sales only).
-    - FINRA TAF: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (covers 2007-05-01 through 2024-04-30 across 5 distinct fee tiers with per-trade caps; sales only).
+    - SEC Section 31 Fee: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (20 effective SEC Section 31 schedule segments covering 2007-05-01 through 2024-04-30; sales only).
+    - FINRA TAF: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (7 distinct tiers covering 2007-05-01 through 2024-04-30 with per-trade caps, incorporating SR-FINRA-2020-032 phased increases in 2022, 2023, and 2024; sales only).
   - Pure deterministic Decimal calculation implemented in `src/acash/execution/regulatory_fees.py` (`compute_sec31_fee`, `compute_finra_taf`). Fail-closed outside schedule boundaries.
 
 ---

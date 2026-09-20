@@ -240,8 +240,8 @@ Auditing both canonical author implementations reveals:
 ### 12.1. Regulatory Fees (SEC Section 31 & FINRA TAF)
 - `ACASH_REGULATORY_FEE_MODEL = RESOLVED_HISTORICAL_SCHEDULES`.
 - Sourced and pinned across 2007-05-01 through 2024-04-30:
-  - SEC Section 31: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (25 rate intervals, covered sales only).
-  - FINRA TAF: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (5 rate tiers, per-trade caps, covered sales only).
+  - SEC Section 31: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (20 effective schedule segments, covered sales only).
+  - FINRA TAF: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (7 rate tiers including SR-FINRA-2020-032 phased increases in 2022, 2023, and 2024, per-trade caps, covered sales only).
 - Implemented in `src/acash/execution/regulatory_fees.py` using pure Decimal arithmetic.
 
 ### 12.2. Short Borrow Mechanics

@@ -217,7 +217,8 @@ SEC_SECTION_31_SCHEDULE: Sequence[Sec31ScheduleSegment] = (
 # ---------------------------------------------------------------------------
 # Authoritative FINRA Trading Activity Fee (TAF) Schedule (2007-05-01 to 2024-04-30)
 # Sources: Section 1 of Schedule A to the FINRA By-Laws;
-# FINRA Notice to Members 04-70, Regulatory Notices 11-27, 12-06, 12-31.
+# FINRA Notice to Members 04-70, Regulatory Notices 11-27, 12-06, 12-31;
+# SR-FINRA-2020-032 (SEC Release No. 34-90176, phased implementation 2022-2024).
 # ---------------------------------------------------------------------------
 FINRA_TAF_SCHEDULE: Sequence[FinraTafScheduleSegment] = (
     FinraTafScheduleSegment(
@@ -246,11 +247,35 @@ FINRA_TAF_SCHEDULE: Sequence[FinraTafScheduleSegment] = (
     ),
     FinraTafScheduleSegment(
         effective_start=date(2012, 7, 1),
-        effective_end=date(2024, 12, 31),
+        effective_end=date(2021, 12, 31),
         rate_per_share=Decimal("0.000119"),
         max_fee_per_trade=Decimal("5.95"),
         official_source="FINRA Regulatory Notice 12-31",
         source_reference="SEC Release No. 34-67242 / Effective July 1, 2012",
+    ),
+    FinraTafScheduleSegment(
+        effective_start=date(2022, 1, 1),
+        effective_end=date(2022, 12, 31),
+        rate_per_share=Decimal("0.000130"),
+        max_fee_per_trade=Decimal("6.49"),
+        official_source="FINRA SR-FINRA-2020-032 (Phase 1)",
+        source_reference="SEC Release No. 34-90176 / Effective January 1, 2022",
+    ),
+    FinraTafScheduleSegment(
+        effective_start=date(2023, 1, 1),
+        effective_end=date(2023, 12, 31),
+        rate_per_share=Decimal("0.000145"),
+        max_fee_per_trade=Decimal("7.27"),
+        official_source="FINRA SR-FINRA-2020-032 (Phase 2)",
+        source_reference="SEC Release No. 34-90176 / Effective January 1, 2023",
+    ),
+    FinraTafScheduleSegment(
+        effective_start=date(2024, 1, 1),
+        effective_end=date(2024, 12, 31),
+        rate_per_share=Decimal("0.000166"),
+        max_fee_per_trade=Decimal("8.30"),
+        official_source="FINRA SR-FINRA-2020-032 (Phase 3 Full Implementation)",
+        source_reference="SEC Release No. 34-90176 / Effective January 1, 2024",
     ),
 )
 
@@ -340,7 +365,11 @@ def compute_finra_taf(
     - Pure function with Decimal arithmetic.
     - Buy side fee is exactly Decimal("0.00").
     - Sell side calculates min(shares_sold * rate_per_share, max_fee_per_trade).
-    - FINRA By-Laws Schedule A mandates rounding UP to nearest cent (ROUND_CEILING).
+    - FINRA By-Laws Schedule A Section 1(b)(1) mandates rounding UP to nearest cent (ROUND_CEILING).
+    - Low-price exemption: FINRA Schedule A Section 1(b)(2) exempts transactions where
+      execution price < per-share TAF rate. This MEC-0015 SPY-scoped function intentionally
+      omits execution price because SPY prices ($100-$500+) are orders of magnitude above
+      the sub-cent TAF rate, and this function is not a generic statutory penny-stock engine.
     - Fails closed on negative shares or date outside [2007-05-01, 2024-04-30].
     """
     if not is_sell:

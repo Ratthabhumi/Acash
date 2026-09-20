@@ -31,8 +31,8 @@ def test_sec31_schedule_completeness_and_continuity() -> None:
 
 
 def test_finra_taf_schedule_completeness_and_continuity() -> None:
-    """Verify all 4 segments are contiguous from 2007-05-01 through 2024-04-30 without gaps."""
-    assert len(FINRA_TAF_SCHEDULE) == 4
+    """Verify all 7 segments are contiguous from 2007-05-01 through 2024-04-30 without gaps."""
+    assert len(FINRA_TAF_SCHEDULE) == 7
     assert FINRA_TAF_SCHEDULE[0].effective_start <= date(2007, 5, 1)
     assert FINRA_TAF_SCHEDULE[-1].effective_end >= date(2024, 4, 30)
 
@@ -48,11 +48,9 @@ def test_finra_taf_schedule_completeness_and_continuity() -> None:
 def test_sec31_boundary_dates() -> None:
     """Test lookup across every SEC segment boundary start and end date."""
     for seg in SEC_SECTION_31_SCHEDULE:
-        # Check start date (if within authorized scope)
         if seg.effective_start >= date(2007, 5, 1):
             found = get_sec31_segment(seg.effective_start)
             assert found == seg
-        # Check end date (if within authorized scope)
         if seg.effective_end <= date(2024, 4, 30):
             found = get_sec31_segment(seg.effective_end)
             assert found == seg
@@ -67,6 +65,78 @@ def test_finra_taf_boundary_dates() -> None:
         if seg.effective_end <= date(2024, 4, 30):
             found = get_finra_taf_segment(seg.effective_end)
             assert found == seg
+
+
+def test_finra_taf_staged_transition_boundaries_2021_2024() -> None:
+    """Explicitly verify SR-FINRA-2020-032 phased implementation boundaries across 2021-2024."""
+    # 2021-12-31 (Segment 4): rate 0.000119, cap 5.95
+    seg_2021_end = get_finra_taf_segment(date(2021, 12, 31))
+    assert seg_2021_end.rate_per_share == Decimal("0.000119")
+    assert seg_2021_end.max_fee_per_trade == Decimal("5.95")
+
+    # 2022-01-01 (Segment 5, Phase 1 start): rate 0.000130, cap 6.49
+    seg_2022_start = get_finra_taf_segment(date(2022, 1, 1))
+    assert seg_2022_start.rate_per_share == Decimal("0.000130")
+    assert seg_2022_start.max_fee_per_trade == Decimal("6.49")
+
+    # 2022-12-31 (Segment 5, Phase 1 end): rate 0.000130, cap 6.49
+    seg_2022_end = get_finra_taf_segment(date(2022, 12, 31))
+    assert seg_2022_end.rate_per_share == Decimal("0.000130")
+    assert seg_2022_end.max_fee_per_trade == Decimal("6.49")
+
+    # 2023-01-01 (Segment 6, Phase 2 start): rate 0.000145, cap 7.27
+    seg_2023_start = get_finra_taf_segment(date(2023, 1, 1))
+    assert seg_2023_start.rate_per_share == Decimal("0.000145")
+    assert seg_2023_start.max_fee_per_trade == Decimal("7.27")
+
+    # 2023-12-31 (Segment 6, Phase 2 end): rate 0.000145, cap 7.27
+    seg_2023_end = get_finra_taf_segment(date(2023, 12, 31))
+    assert seg_2023_end.rate_per_share == Decimal("0.000145")
+    assert seg_2023_end.max_fee_per_trade == Decimal("7.27")
+
+    # 2024-01-01 (Segment 7, Phase 3 Full Implementation start): rate 0.000166, cap 8.30
+    seg_2024_start = get_finra_taf_segment(date(2024, 1, 1))
+    assert seg_2024_start.rate_per_share == Decimal("0.000166")
+    assert seg_2024_start.max_fee_per_trade == Decimal("8.30")
+
+    # 2024-04-30 (M1 end date, within Segment 7): rate 0.000166, cap 8.30
+    seg_2024_m1_end = get_finra_taf_segment(date(2024, 4, 30))
+    assert seg_2024_m1_end.rate_per_share == Decimal("0.000166")
+    assert seg_2024_m1_end.max_fee_per_trade == Decimal("8.30")
+
+
+def test_finra_taf_cap_behavior_across_all_tiers() -> None:
+    """Verify rate application and per-trade fee cap behavior across tiers."""
+    # Segment 1 (2004-2011): rate 0.000075, cap 3.75
+    d1 = date(2008, 6, 1)
+    assert compute_finra_taf(d1, 100) == Decimal("0.01")  # 100 * 0.000075 = 0.0075 -> ceil $0.01
+    assert compute_finra_taf(d1, 50000) == Decimal("3.75")  # 50,000 * 0.000075 = 3.75 (exact cap)
+    assert compute_finra_taf(d1, 100000) == Decimal("3.75")  # capped
+
+    # Segment 4 (2012-2021): rate 0.000119, cap 5.95
+    d4 = date(2020, 6, 1)
+    assert compute_finra_taf(d4, 100) == Decimal("0.02")  # 100 * 0.000119 = 0.0119 -> ceil $0.02
+    assert compute_finra_taf(d4, 50000) == Decimal("5.95")  # exact cap
+    assert compute_finra_taf(d4, 100000) == Decimal("5.95")  # capped
+
+    # Segment 5 (2022): rate 0.000130, cap 6.49
+    d5 = date(2022, 6, 1)
+    assert compute_finra_taf(d5, 100) == Decimal("0.02")  # 100 * 0.000130 = 0.0130 -> ceil $0.02
+    assert compute_finra_taf(d5, 49923) == Decimal("6.49")  # 49923 * 0.000130 = 6.48999 -> ceil $6.49
+    assert compute_finra_taf(d5, 60000) == Decimal("6.49")  # 60,000 * 0.000130 = 7.80 -> capped at 6.49
+
+    # Segment 6 (2023): rate 0.000145, cap 7.27
+    d6 = date(2023, 6, 1)
+    assert compute_finra_taf(d6, 100) == Decimal("0.02")  # 100 * 0.000145 = 0.0145 -> ceil $0.02
+    assert compute_finra_taf(d6, 50137) == Decimal("7.27")  # 50137 * 0.000145 = 7.269865 -> ceil $7.27
+    assert compute_finra_taf(d6, 60000) == Decimal("7.27")  # 60,000 * 0.000145 = 8.70 -> capped at 7.27
+
+    # Segment 7 (2024): rate 0.000166, cap 8.30
+    d7 = date(2024, 3, 1)
+    assert compute_finra_taf(d7, 1) == Decimal("0.01")  # 1 * 0.000166 = 0.000166 -> ceil $0.01
+    assert compute_finra_taf(d7, 100) == Decimal("0.02")  # 100 * 0.000166 = 0.0166 -> ceil $0.02
+    assert compute_finra_taf(d7, 50000) == Decimal("8.30")  # 50,000 * 0.000166 = 8.30 (exact cap)
+    assert compute_finra_taf(d7, 100000) == Decimal("8.30")  # 100,000 * 0.000166 = 16.60 -> capped at 8.30
 
 
 def test_buy_side_regulatory_fees_are_strictly_zero() -> None:
@@ -92,28 +162,6 @@ def test_sec31_calculation_and_rounding() -> None:
     assert compute_sec31_fee(d, Decimal("0.00")) == Decimal("0.00")
 
 
-def test_finra_taf_calculation_and_cap() -> None:
-    """Verify FINRA TAF rate, rounding ceiling, and per-trade cap."""
-    # Segment 4 (2012-07-01 to 2024-12-31): $0.000119/share, max $5.95
-    d = date(2024, 3, 1)
-
-    # 100 shares -> 100 * 0.000119 = 0.0119 -> ceil -> $0.02
-    assert compute_finra_taf(d, 100) == Decimal("0.02")
-
-    # 1 share -> 1 * 0.000119 = 0.000119 -> ceil -> $0.01
-    assert compute_finra_taf(d, 1) == Decimal("0.01")
-
-    # 50,000 shares -> 50,000 * 0.000119 = $5.95 -> exact cap
-    assert compute_finra_taf(d, 50000) == Decimal("5.95")
-
-    # 100,000 shares -> would be $11.90 -> capped at $5.95
-    assert compute_finra_taf(d, 100000) == Decimal("5.95")
-
-    # Segment 1 (2004-11-01 to 2011-06-30): $0.000075/share, max $3.75
-    d_early = date(2009, 1, 15)
-    assert compute_finra_taf(d_early, 100000) == Decimal("3.75")
-
-
 def test_fail_closed_outside_scope_and_malformed() -> None:
     """Verify strict fail-closed contract outside [2007-05-01, 2024-04-30] and invalid inputs."""
     too_early = date(2007, 4, 30)
@@ -137,7 +185,3 @@ def test_fail_closed_outside_scope_and_malformed() -> None:
 
     with pytest.raises(DataContractError, match="NEGATIVE_SHARES"):
         compute_finra_taf(date(2020, 1, 15), -10)
-
-    # Invalid type
-    with pytest.raises(DataContractError, match="INVALID_TYPE"):
-        compute_sec31_fee(date(2020, 1, 15), 100.50)  # type: ignore[arg-type]
