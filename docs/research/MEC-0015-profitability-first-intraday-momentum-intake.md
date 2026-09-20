@@ -1,17 +1,18 @@
 # MEC-0015: Profitability-First Intraday Momentum Strategy Research Intake
 
-**Mechanism ID:** `MEC-0015`  
-**Mechanism Name:** Noise-Area Intraday Momentum Strategy Replication  
-**Target Instrument:** `SPY` (SPDR S&P 500 ETF Trust)  
-**Target Timeframe:** 1-minute Regular Trading Hours (RTH) OHLCV  
-**Strategic Research Objective:** `NET_ECONOMIC_PERFORMANCE_AFTER_REALISTIC_FRICTION`  
-**Classification:** `STRATEGY_NATIVE_EXECUTABLE_REPLICATION_CANDIDATE`  
-**Current Governance State:** `RESEARCH_INTAKE_ONLY`  
+**Mechanism ID:** `MEC-0015`
+**Mechanism Name:** Noise-Area Intraday Momentum Strategy Replication
+**Target Instrument:** `SPY` (SPDR S&P 500 ETF Trust)
+**Target Timeframe:** 1-minute Regular Trading Hours (RTH) OHLCV (`America/New_York` / ET)
+**Strategic Research Objective:** `NET_ECONOMIC_PERFORMANCE_AFTER_REALISTIC_FRICTION`
+**Classification:** `STRATEGY_NATIVE_EXECUTABLE_REPLICATION_CANDIDATE`
+**Current Governance State:** `INTAKE_COMPLETE_CONTRACTS_AUDITED`
 
 > [!IMPORTANT]
 > **Governance & Authority Boundary:**
 > - `MEC-0015` is an external literature intake and strategy-native specification candidate ONLY.
 > - `HYP_005` is **NOT CREATED**.
+> - `ResearchReInceptionGate` is **NOT INVOKED**.
 > - Empirical candidate backtesting is **NOT STARTED**.
 > - New market data access is **ZERO** (No Alpaca queries, no historical tick/bar fetching).
 > - 2023–2026 market observations remain **NOT ACCESSED** and strictly sealed.
@@ -28,249 +29,256 @@
 The overarching objective of the ACASH Phase 15 research line is:
 $$\mathbf{DISCOVER\_AND\_VALIDATE\_A\_TRADING\_MECHANISM\_WITH\_POSITIVE\_NET\_ECONOMIC\_PERFORMANCE\_AFTER\_REALISTIC\_FRICTION}$$
 
-Unlike econometric predictive lines (such as `MEC-0014A` / `HYP_004`), which evaluated whether the slope coefficient $\beta$ in a predictive return regression was statistically distinguishable from zero ($p < 0.05$), `MEC-0015` is formulated as a **strategy-native executable mechanism**. A candidate hypothesis within this family can only be qualified by proving tradeable economic profitability after deducting all explicit commissions, bid-ask spread crossing, market impact, slippage, and execution latencies.
+Unlike econometric predictive lines (such as `MEC-0014A` / `HYP_004`), which evaluated whether the slope coefficient $\beta$ in a predictive return regression was statistically distinguishable from zero ($p < 0.05$), `MEC-0015` is formulated as a **strategy-native executable mechanism**. A candidate hypothesis within this family can only be qualified by proving tradeable economic profitability after deducting all explicit commissions, bid-ask spread crossing, market impact, slippage, borrow fees, and execution latencies.
 
 ---
 
-## 2. External Evidence Record (Literature Layer)
+## 2. External Evidence Record (Literature Layer & Authority Hierarchy)
 
-All statements in this section represent external literature claims, **NOT** empirical facts verified or reproduced by ACASH.
+All statements in this section represent external literature claims and author reference implementations, **NOT** empirical facts verified or reproduced by ACASH.
 
-- **Primary Source:**  
-  Zarattini, Carlo; Aziz, Andrew; Barbon, Andrea.  
-  *"Beat the Market: An Effective Intraday Momentum Strategy for S&P500 ETF (SPY)"*  
-  SSRN Working Paper 4824172 / Swiss Finance Institute Research Paper Series No. 24-97 (May 2024).
-- **Reported Underlying Asset:** SPDR S&P 500 ETF Trust (`SPY`).
-- **Reported Source Data:** 1-minute regular-session OHLCV bars sourced from IQFeed over the sample period May 2007 through April 2024.
-- **Core Concept (Noise Area):**
-  The authors define an intraday "Noise Area" representing the typical price variation of SPY during the trading day, measured as the trailing 14-day rolling average of absolute open-to-timestamp percentage moves.
-- **Reported Strategy Mechanics:**
-  1. Calculate intraday Noise Area boundaries dynamically for each minute using a 14-day trailing lookback of same-time-of-day moves.
-  2. Adjust upper and lower boundaries for overnight gap behavior between prior 16:00 close and today's 09:30 open.
-  3. Restrict trading entry/reversal decisions to 30-minute discrete epochs ($HH:00$ and $HH:30$).
-  4. Establish long exposure when price exceeds the upper Noise Area boundary; establish short exposure when price falls below the lower boundary.
-  5. Employ an intraday trailing stop using the combination of the Noise Area boundary and the session Volume-Weighted Average Price (VWAP).
-  6. Force liquidation of all open positions at market close (16:00 EST); strictly zero overnight exposure.
-  7. Apply dynamic volatility sizing targeting 2% daily volatility, capped at a maximum leverage of 4.0×.
-- **Reported Literature Friction Model:**
-  - Broker Commission: $\$0.0035$ per share.
-  - Slippage: $\$0.0010$ per share.
-- **Reported Full Strategy Performance (May 2007 – April 2024):**
-  - Total Cumulative Return: $\approx 1,985\%$
-  - Annualized Return (CAGR): $\approx 19.6\%$
-  - Annualized Volatility: $\approx 14.3\%$
-  - Sharpe Ratio: $\approx 1.33$
-  - Maximum Drawdown: $\approx 25.0\%$
+### 2.1. Authority Hierarchy
+1. **Primary Academic Paper:**
+   Zarattini, Carlo; Aziz, Andrew; Barbon, Andrea.
+   *"Beat the Market: An Effective Intraday Momentum Strategy for S&P500 ETF (SPY)"*
+   SSRN Working Paper 4824172 / Swiss Finance Institute Research Paper Series No. 24-97.
+   - **Originally Posted:** 14 May 2024.
+   - **Current SSRN Revision:** 22 September 2025.
+2. **Author Reference Implementation:**
+   Concretum Group technical publications and reference implementations:
+   - *"Backtesting Riding Intraday Trends in US Markets Using MATLAB"* (Concretum Group).
+   - *"Backtesting 7 Years of Free Data: Beat the Market — An Effective Intraday Momentum Strategy for the S&P500 ETF (SPY)"* (Concretum Group).
+   *Authority Rule:* Primary operational authority for implementation details omitted from the paper text.
+3. **Independent External Replications:**
+   - Delgado, M. (2026). *"Replicating Intraday Momentum in US Equities: Implementation Sensitivity and Regime Dynamics"*, SSRN 7323419.
+   - Paz Sheimy (2024–2026). Public Python replication repository.
+   *Authority Rule:* Ambiguity detection and cross-checking only; cannot override author reference implementation.
+4. **ACASH Operationalization:**
+   Applies strictly where literature and reference code are silent (e.g., realistic broker friction, borrow locate fees, regulatory fee schedules, feed qualification).
+
+### 2.2. Reported Strategy Core Mechanics (Author Reference Specification)
+1. **Underlying Asset:** SPDR S&P 500 ETF Trust (`SPY`).
+2. **Source Data:** 1-minute regular-session OHLCV bars sourced from IQFeed (May 2007 through April 2024).
+3. **Noise Area Boundaries:** Calculated for each minute of the regular session using the trailing 14-day rolling average of absolute open-to-timestamp percentage moves.
+4. **Dividend-Adjusted Gap Anchor:** Overnight gap adjusted using prior 16:00 close minus current-day dividend: $\text{prev\_close\_adjusted} = \text{Close}[t-1] - \text{dividend}[t]$.
+5. **Rebalance Epochs:** Evaluated strictly at 30-minute discrete intervals ($\text{min\_from\_open} \pmod{30} == 0$, $10:00, 10:30, \dots, 15:30$ ET).
+6. **Entry Condition:** Requires joint confirmation of Noise Band breach AND session VWAP:
+   - **Long:** $\text{Close}_t > \text{UpperBand}_t \quad \mathbf{AND} \quad \text{Close}_t > \text{VWAP}_t$
+   - **Short:** $\text{Close}_t < \text{LowerBand}_t \quad \mathbf{AND} \quad \text{Close}_t < \text{VWAP}_t$
+7. **VWAP Definition:** Cumulative regular-session VWAP using Typical Price $(H+L+C)/3$.
+8. **Execution Lag:** Signal evaluated at 1-minute Close of epoch $t$; exposure lagged by 1 minute; P&L accrues starting at minute $t+1$.
+9. **Position State & Trailing Exit:** Evaluated at 30-minute epochs; flat signal closes exposure; opposite signal flips exposure.
+10. **Forced EOD Flat:** Forced liquidation of all open positions at market close (16:00 ET); strictly zero overnight exposure.
+11. **Dynamic Sizing:** Sizing at session Open targeting 2% daily volatility, capped at 4.0× leverage, rounded to nearest integer shares.
+12. **Reported Literature Friction:** Commission of $\$0.0035$/share with a minimum ticket charge of $\$0.35$/order ($\max(\$0.35, \$0.0035 \times \text{shares})$). Text mentions $\$0.0010$/share slippage, though standalone slippage is not implemented in the author reference backtest code.
+
+### 2.3. Reported Performance (May 2007 – April 2024)
+- Total Cumulative Return: $\approx 1,985\%$
+- Annualized Return (CAGR): $\approx 19.6\%$
+- Annualized Volatility: $\approx 14.3\%$
+- Sharpe Ratio: $\approx 1.33$
+- Maximum Drawdown: $\approx 25.0\%$
 - **Classification:** `LITERATURE_REPORTED_RESULTS`.
 
 ---
 
-## 3. Independent Replication & Decay Evidence
+## 3. Independent Replication & Edge-Decay Evidence
 
-A critical prerequisite for ACASH intake is auditing independent post-publication replication attempts. The literature family for Zarattini et al. presents compelling initial historical replication alongside notable recent decay signals:
+Audit of independent post-publication replications reveals critical nuances regarding edge persistence:
 
-- **Replication A (Public Independent Python Replication / GitHub, Paz Sheimy, 2024–2026):**
-  - Successfully reproduced historical in-sample performance (May 2007 – April 2024) with a reported Sharpe ratio of $\approx 1.34$, closely corroborating the paper's primary findings.
-  - Extended the evaluation out-of-sample (OOS) from May 2024 to March 2026.
-  - **OOS Result:** Annualized Sharpe ratio dropped precipitously to $\approx 0.39$, underperforming SPY buy-and-hold over the same window.
-  - Concluded that the edge decayed substantially post-publication.
-- **Replication B (Cross-Asset & Parameter Stability Evaluation, 2025–2026):**
-  - Replicated the strategy on SPY ETF and E-mini S&P 500 futures (`ES`).
-  - Corroborated historical in-sample Sharpe around $\approx 1.11$ to $1.15$ with standard execution assumptions.
-  - Observed severe edge compression starting around 2025.
-  - Demonstrated that simple walk-forward parameter optimization or re-tuning did not robustly restore the decaying edge.
-- **Classification:** `EXTERNAL_REPLICATION_EVIDENCE_MIXED_WITH_RECENT_EDGE_DECAY`.
+- **Replication A (Public Independent Python Replication, Paz Sheimy, 2024–2026):**
+  - Reproduced historical in-sample performance (May 2007 – April 2024) with a reported Sharpe ratio of $\approx 1.34$.
+  - Extended evaluation out-of-sample (OOS) from May 2024 to March 2026: annualized Sharpe ratio dropped to $\approx 0.39$.
+- **Replication B (Delgado 2026, SSRN 7323419):**
+  - Replicated strategy with granular attention to implementation details: confirmed that **Typical Price VWAP** and **VWAP entry confirmation** are material determinants of reproduction accuracy.
+  - Observed that out-of-sample performance remained **strong through roughly August 2025**, before deteriorating sharply thereafter.
+  - Concluded that the evidence is more consistent with **regime-specific recent degradation** (e.g. shifts in opening gap distribution and intraday volatility clustering) than immediate post-publication market arbitrage collapse.
+- **Replication C (Cross-Asset SPY/ES Evaluation, 2025–2026):**
+  - Confirmed historical Sharpe $\approx 1.11$ to $1.15$ on SPY and ES.
+  - Observed compression around 2025, with walk-forward parameter re-tuning failing to rescue performance.
+- **Classification:**
+  - `CURRENT_EDGE_PERSISTENCE = NOT_ESTABLISHED`
+  - `RECENT_EDGE_DEGRADATION_EVIDENCE = MATERIAL`
+  - `IMMEDIATE_POST_PUBLICATION_DECAY = NOT_ESTABLISHED`
 
 > [!WARNING]
-> **Scientific Implication:**  
-> The presence of published edge degradation does NOT mean the mechanism should be rejected ex-ante without testing. Rather, it serves as explicit evidence that **the mechanism is vulnerable to post-publication alpha decay**. This requires any future ACASH test protocol to enforce strict out-of-sample partitioning, rigorous friction stress-testing, and zero data leakage.
+> **Scientific Implication:**
+> The presence of material recent edge degradation does NOT justify unprincipled parameter curve-fitting. Rather, it mandates that any future ACASH test protocol enforce strict out-of-sample partitioning, rigorous friction stress-testing, and fail-closed termination criteria.
 
 ---
 
-## 4. Noise Area Mathematical Contract (Literature Layer)
+## 4. Noise Area Mathematical Contract (Audited)
 
-For trading day $t$ and regular-session time $HH:MM$ (where $HH:MM \in [09:30, 16:00]$):
+For trading day $t$ and regular-session minute $m$ (where $m \in [09:30, 16:00]$ ET):
 
 ### 4.1. Historical Move Magnitude
-For each of the preceding $i = 1, \dots, 14$ completed trading days:
-$$\text{move}[t-i, HH:MM] = \left| \frac{\text{Close}[t-i, HH:MM]}{\text{Open}[t-i, 09:30]} - 1 \right|$$
+For each completed trading day $t-i$ ($i = 1, \dots, 14$):
+$$\text{move\_open}[t-i, m] = \left| \frac{\text{Close}[t-i, m]}{\text{Open}[t-i, 09:30]} - 1 \right|$$
 
-### 4.2. Time-Specific Expected Volatility ($\sigma$)
-$$\sigma[t, HH:MM] = \frac{1}{14} \sum_{i=1}^{14} \text{move}[t-i, HH:MM]$$
+### 4.2. Time-Specific Expected Volatility ($\sigma_{\text{open}}$)
+$$\sigma_{\text{open}}[t, m] = \frac{1}{14} \sum_{i=1}^{14} \text{move\_open}[t-i, m]$$
+- `NOISE_AREA_LOOKBACK = 14_PRIOR_SESSIONS`
+- `NOISE_AREA_CURRENT_SESSION_LEAKAGE = PROHIBITED` (Strictly enforced via `.shift(1)`).
+- `NOISE_AREA_WARMUP_MIN_PERIODS = OPEN_NARROW_DECISION` (Author Python uses `min_periods=13` for early 1-session acceleration; ACASH must decide between 13 vs. strict 14).
 
-### 4.3. Gap-Aware Price Anchor & Boundaries
-The anchor price adjusts for the direction and magnitude of the overnight gap:
-$$\text{UpperAnchor}[t] = \max(\text{Open}[t, 09:30], \text{Close}[t-1, 16:00])$$
-$$\text{LowerAnchor}[t] = \min(\text{Open}[t, 09:30], \text{Close}[t-1, 16:00])$$
+### 4.3. Dividend-Adjusted Gap Anchor & Boundaries
+Author reference code explicitly adjusts the prior regular close for current-day cash dividends:
+$$\text{prev\_close\_adjusted} = \text{Close}[t-1, 16:00] - \text{dividend}[t]$$
+$$\text{UpperAnchor}[t] = \max(\text{Open}[t, 09:30], \text{prev\_close\_adjusted})$$
+$$\text{LowerAnchor}[t] = \min(\text{Open}[t, 09:30], \text{prev\_close\_adjusted})$$
 
-The upper and lower boundaries of the Noise Area at timestamp $HH:MM$ are:
-$$\text{UpperBand}[t, HH:MM] = \text{UpperAnchor}[t] \cdot (1 + \sigma[t, HH:MM])$$
-$$\text{LowerBand}[t, HH:MM] = \text{LowerAnchor}[t] \cdot (1 - \sigma[t, HH:MM])$$
-
-- **Lookback Parameter:** 14 trading days.
-- **Band Multiplier:** $1.0$.
-- **Classification:** `LITERATURE_EXPLICIT_OR_DIRECTLY_RECONSTRUCTED_FROM_METHODOLOGY_TEXT`.
-
----
-
-## 5. Entry Contract (Literature Layer)
-
-1. **Observation Epochs:**  
-   Trading decisions are evaluated strictly at 30-minute intervals:
-   $$\{10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30\}$$
-   The first eligible evaluation occurs at 10:00 EST (after the initial 30-minute opening range).
-2. **Directional Condition:**
-   - If $\text{Price}[t, HH:MM] > \text{UpperBand}[t, HH:MM] \implies \mathbf{LONG}$
-   - If $\text{Price}[t, HH:MM] < \text{LowerBand}[t, HH:MM] \implies \mathbf{SHORT}$
-   - If $\text{LowerBand}[t, HH:MM] \le \text{Price}[t, HH:MM] \le \text{UpperBand}[t, HH:MM] \implies \mathbf{FLAT / NEUTRAL}$
-3. **Open Semantic Items:**
-   - `ENTRY_PRICE_FIELD`: Literature references the 30-minute interval, but does not explicitly distinguish between the 30-minute bar's Close vs. the subsequent bar's Open vs. the prevailing midpoint quote.
-   - Status: `OPEN_BLOCKER` (must be frozen ex-ante before hypothesis registration).
+The upper and lower boundaries at minute $m$ are:
+$$\text{UpperBand}[t, m] = \text{UpperAnchor}[t] \cdot (1 + \sigma_{\text{open}}[t, m])$$
+$$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}[t, m])$$
+- `BAND_PREVIOUS_CLOSE_DIVIDEND_TREATMENT = RESOLVED_AUTHOR_IMPLEMENTATION`.
+- Intraday bars remain unadjusted.
 
 ---
 
-## 6. Exit & Trailing Stop Contract (Literature Layer)
+## 5. Entry Contract & Signal Semantics (Audited)
 
-1. **Trailing Stop Mechanics (Refined Model):**  
-   The refined strategy incorporating session VWAP establishes dynamic trailing barriers:
-   - For an existing **Long** position:
-     $$\text{LongStopLevel}[t, HH:MM] = \max(\text{UpperBand}[t, HH:MM], \text{VWAP}[t, HH:MM])$$
-     A long position exits if $\text{Price}[t, HH:MM] < \text{LongStopLevel}[t, HH:MM]$.
-   - For an existing **Short** position:
-     $$\text{ShortStopLevel}[t, HH:MM] = \min(\text{LowerBand}[t, HH:MM], \text{VWAP}[t, HH:MM])$$
-     A short position exits if $\text{Price}[t, HH:MM] > \text{ShortStopLevel}[t, HH:MM]$.
-2. **Position Reversal (Flip):**  
-   If an exit condition is met and the price simultaneously satisfies the opposite directional entry rule, a position reversal occurs.
-3. **Forced End-of-Day (EOD) Flat:**  
-   All open positions must be fully closed by 16:00 EST. No overnight inventory is permitted.
-4. **Open Semantic Items:**
-   - Stop evaluation frequency: Methodology text specifies semi-hourly checks; continuous 1-minute stop monitoring was not the primary canonical paper specification.
-   - Auction vs. Continuous Exit: Exact timestamp for EOD liquidation (e.g. 15:59 continuous vs 16:00 closing cross).
-   - Status: `OPEN_BLOCKER`.
+1. **Observation Epochs:**
+   Evaluated strictly at 30-minute intervals: $\text{min\_from\_open} \pmod{30} == 0$
+   $$\{10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30\} \text{ America/New_York (ET)}$$
+   The first eligible evaluation occurs at 10:00 ET.
+2. **Directional Condition (Joint Confirmation):**
+   - $\mathbf{LONG}: \quad \text{Close}_t > \text{UpperBand}_t \quad \mathbf{AND} \quad \text{Close}_t > \text{VWAP}_t \implies \text{Signal}_t = +1$
+   - $\mathbf{SHORT}: \quad \text{Close}_t < \text{LowerBand}_t \quad \mathbf{AND} \quad \text{Close}_t < \text{VWAP}_t \implies \text{Signal}_t = -1$
+   - $\mathbf{FLAT / NEUTRAL}: \quad \text{otherwise} \implies \text{Signal}_t = 0$
+3. **Classifications:**
+   - `SIGNAL_PRICE_FIELD = RESOLVED_AUTHOR_REFERENCE_IMPLEMENTATION` (1-minute Close).
+   - `ENTRY_REQUIRES_VWAP_CONFIRMATION = RESOLVED_TRUE`.
+4. **Execution Exposure Lag:**
+   - `SIGNAL_OBSERVATION = ONE_MINUTE_CLOSE_AT_DECISION_EPOCH`.
+   - `EXECUTION_EFFECTIVE_EXPOSURE = NEXT_ONE_MINUTE_PERIOD` (Signal forward-filled, lagged by 1 minute: P&L begins at $t+1$).
+   - `REFERENCE_BACKTEST_EXPOSURE_LAG = RESOLVED_1_MINUTE`.
+   - `ACASH_EXECUTION_FILL_PRICE_MODEL = OPEN` (Real execution fill model remains open).
 
 ---
 
-## 7. VWAP Contract & Provider Sensitivity
+## 6. Exit & Trailing Stop Contract (Audited)
 
-1. **Session Scope:**  
-   $$\text{VWAP\_SESSION} = \text{REGULAR\_TRADING\_HOURS\_ONLY (09:30–16:00 EST)}$$
+1. **Stop & Rebalance Evaluation Frequency:**
+   Because position states are sampled every 30 minutes and forward-filled:
+   - `STOP_EVALUATION_FREQUENCY = RESOLVED_30_MINUTE_DECISION_EPOCHS`.
+   - `INTRAEPOCH_CONTINUOUS_STOP = NOT_BASELINE`.
+2. **Flat & Flip Transitions:**
+   - If price violates the joint condition at an epoch: $\text{Signal}_t = 0 \implies$ `FLAT_SIGNAL_AT_REBALANCE_CLOSES_POSITION = RESOLVED_AUTHOR_IMPLEMENTATION`.
+   - If price satisfies the opposite condition: $\text{Signal}_t = -\text{Signal}_{t-1} \implies$ `OPPOSITE_SIGNAL_FLIPS_POSITION = RESOLVED_AUTHOR_IMPLEMENTATION`.
+3. **Forced EOD Flat:**
+   All open positions must be fully closed by 16:00 ET. Strictly zero overnight exposure.
+
+---
+
+## 7. VWAP Contract (Audited)
+
+1. **Session Scope:** Cumulative regular session (09:30–16:00 ET), resetting daily.
 2. **Mathematical Definition:**
-   $$\text{VWAP}[t, \tau] = \frac{\sum_{k=1}^{\tau} P_k \cdot V_k}{\sum_{k=1}^{\tau} V_k}$$
-   where $P_k$ is the bar representative price and $V_k$ is the bar trading volume.
-3. **Sensitivity & Open Items:**  
-   External replication audits demonstrate that differences in VWAP computation (e.g., bar Close vs. Typical Price $(H+L+C)/3$ vs. tick-level SIP VWAP) materially alter trade execution and trailing stop triggers.
-4. **Status:** `VWAP_EXACT_PROVIDER_MAPPING = OPEN_BLOCKER`.
+   $$\text{TypicalPrice}_i = \frac{\text{High}_i + \text{Low}_i + \text{Close}_i}{3}$$
+   $$\text{VWAP}_t = \frac{\sum_{i=1}^t \text{TypicalPrice}_i \cdot \text{Volume}_i}{\sum_{i=1}^t \text{Volume}_i}$$
+3. **Classifications:**
+   - `VWAP_NUMERATOR = RESOLVED_TYPICAL_PRICE_HLC3`.
+   - `VWAP_SESSION = RESOLVED_REGULAR_SESSION_CUMULATIVE`.
+   - `VWAP_REFERENCE_IMPLEMENTATION_AUTHORITY = AUTHOR_CODE`.
+4. **Prohibition:** Close-only VWAP, provider-native synthesized VWAP, and tick SIP VWAP are prohibited for baseline replication.
 
 ---
 
-## 8. Dynamic Volatility Sizing Contract
+## 8. Dynamic Volatility Sizing Contract (Audited)
 
-1. **Target Volatility:**
-   $$\text{DAILY\_VOL\_TARGET} = 2.0\% \quad (\sigma_{\text{target}} = 0.02)$$
-2. **Historical Realized Volatility ($\sigma_{\text{SPY}, t}$):**
-   Calculated from the sample standard deviation of SPY daily returns over the preceding 14 trading days:
-   $$\sigma_{\text{SPY}, t} = \sqrt{\frac{1}{13} \sum_{j=1}^{14} (R_{t-j} - \bar{R}_t)^2}$$
-3. **Exposure Multiplier ($L_t$):**
-   $$L_t = \min\left(4.0, \frac{\sigma_{\text{target}}}{\sigma_{\text{SPY}, t}}\right)$$
-   Maximum allowable strategy leverage is strictly capped at $4.0\times$.
-4. **Nominal Share Allocation:**
-   $$\text{Shares}_t = \frac{\text{AUM}_{t-1} \cdot L_t}{\text{Price}_t}$$
-5. **ACASH Invariant Notice:**  
-   This formula represents an abstract replication specification. ACASH sovereign capital authority remains `$0.00` and `NO_REAL_ORDERS = true`.
-6. **Open Semantic Items:** Simple vs. log daily returns; dividend/split adjustment of historical returns; share rounding policy; portfolio cash buffer.
+1. **Formula & Parameters:**
+   $$\text{Shares}_t = \text{round}\left(\frac{\text{AUM}_{t-1}}{\text{Open}[t, 09:30]} \cdot \min\left(4.0, \frac{\sigma_{\text{target}}}{\sigma_{\text{realized}, t}}\right), 0\right)$$
+   - `TARGET_DAILY_VOL = 0.02` (2.0% daily volatility)
+   - `MAX_LEVERAGE_MULTIPLIER = 4` (4.0× leverage cap)
+   - `SIZING_PRICE = SESSION_OPEN` (`Open[t, 09:30]`)
+   - `SHARE_ROUNDING = NEAREST_INTEGER_AUTHOR_IMPLEMENTATION` (`round(..., 0)`)
+   - `AUM_REFERENCE = PRIOR_DAY_ENDING_AUM`
+2. **Daily Volatility Window Status:**
+   - `DAILY_VOL_RETURN_TYPE = SIMPLE_CLOSE_TO_CLOSE` ($\text{Close}_t / \text{Close}_{t-1} - 1$).
+   - `CURRENT_DAY_RETURN_IN_VOL = PROHIBITED` (Completed prior sessions only).
+   - `DAILY_VOL_WINDOW_EXACT_CARDINALITY = OPEN_BLOCKER` (14 vs 15 days cardinality and `ddof` normalization remain an open precision blocker).
 
 ---
 
-## 9. Friction & Transaction Cost Contract
+## 9. Friction & Transaction Cost Contract (Audited & Corrected)
 
-1. **Literature Model:**
-   - Broker Commission: $\$0.0035$ / share
-   - Execution Slippage: $\$0.0010$ / share
-2. **ACASH Realistic Friction Requirement:**  
-   The literature friction model assumes extremely low execution drag that may not reflect real retail or institutional prime-brokerage conditions. ACASH requires an independent, conservative friction contract:
-   - Commission schedule (per-share or per-dollar).
-   - Full bid-ask spread crossing penalty.
-   - SEC section 31 fees & FINRA TAF on sell legs.
-   - Short borrowing cost / locate fees for short legs.
-   - Market-impact / liquidity-tier degradation for sizing.
-3. **Status:** `ACASH_REALISTIC_FRICTION_MODEL = OPEN_BLOCKER`.
+### 9.1. Literature Friction Model
+- Commission: $\max(\$0.35, \$0.0035 \times \text{shares})$ per order side.
+- Standalone slippage: `PAPER_REPORTED_SLIPPAGE = 0.0010`, but `AUTHOR_REFERENCE_CODE_APPLIED_SLIPPAGE = NONE_STANDALONE`.
+
+### 9.2. Spread & Tick Terminology Correction
+- **Correction:** Under standard US equity market structure for securities priced $> \$1.00$, the minimum quoting increment under SEC Rule 612 is $\$0.01$. In a one-tick market:
+  $$\text{Full Spread} = \$0.01/\text{share} \implies \text{Half-Spread} = \$0.005/\text{share}$$
+- Claiming a "$0.01 half-spread" was an erroneous conflation of tick size with half-spread.
+- SEC Rule 612 amendments ($0.005 tick) have been delayed to **November 2026**.
+- `FIXED_MINIMUM_HALF_SPREAD = NOT_A_VALID_UNIVERSAL_COST_MODEL`.
+- `ACASH_SPREAD_MODEL = OPEN_BLOCKER` (Contemporaneous NBBO quote width vs conservative proxy).
+
+### 9.3. Regulatory Fees & Short Borrow
+- `REGULATORY_FEES = TIME_VARYING`: SEC Section 31 (FY2026 rate $\$20.60$ per $\$1M$ sales) and FINRA TAF change by effective date.
+- `ACASH_REGULATORY_FEE_MODEL = OPEN_BLOCKER`.
+- `SHORT_AVAILABILITY_MODEL = OPEN`, `BORROW_FEE_MODEL = OPEN` (Long-only substitution is prohibited).
 
 ---
 
 ## 10. Data Contract Requirements
 
-To execute a strategy-level backtest or paper simulation, the following data feeds must be formally qualified:
-1. **1-Minute RTH OHLCV Bars:** Unadjusted and corporate-action-adjusted intraday bars for SPY from 09:30 to 16:00 EST.
-2. **Daily Close / Open History:** At least 14 days of warmup data prior to any simulated trade date.
-3. **Official Exchange Calendars:** Explicit identification of half-days, early closes, and holidays.
-4. **Trade Execution Quotes:** National Best Bid and Offer (NBBO) or executable minute snapshots.
-5. **Status:** `ALPACA_MAPPING = NOT_YET_QUALIFIED_FOR_MEC_0015`. No data may be queried during this phase.
+1. **1-Minute RTH OHLCV Bars:** Regular-session SPY bars (09:30–16:00 ET).
+2. **Warmup History:** At least 14 days of prior sessions.
+3. **Calendar Authority:** NYSE regular session calendar.
+4. **Status:** `ALPACA_SIP_BAR_MAPPING = UNQUALIFIED`. No data fetch authorized.
 
 ---
 
 ## 11. Early-Close Days Policy
 
-US equity markets operate shortened sessions (closing at 13:00 EST) on specific dates (e.g. day after Thanksgiving, Christmas Eve).
-- The literature methodology is silent on early-close handling.
-- ACASH Policy Options:
-  1. Full exclusion of early-close sessions from evaluation.
-  2. Shortened-session protocol (adjusting trailing stops and forced exit to 13:00 EST).
-- **Status:** `EARLY_CLOSE_POLICY = OPEN_BLOCKER`.
+- Literature is silent on non-standard sessions (closing at 13:00 ET).
+- `EARLY_CLOSE_POLICY = OPEN_BLOCKER` (Exclusion vs truncated schedule).
 
 ---
 
 ## 12. Strategy Degrees of Freedom & Anti-HARKING
 
-To prevent parameter overfitting, the baseline replication candidate fixes all degrees of freedom to the original literature specification:
-- Lookback Period: $N = 14$ days
+- Lookback: $N = 14$ days
 - Noise Multiplier: $M = 1.0$
 - Decision Interval: $\Delta t = 30$ minutes
-- Daily Volatility Target: $2.0\%$
+- Volatility Target: $2.0\%$
 - Leverage Cap: $4.0\times$
-- Trailing Stop: Noise Band + VWAP
-- Exit: Forced Flat at 16:00 EST
-- Search Space Cardinality: $K = 1$ (Single baseline specification).
-
-No parameter tuning, grid searches, or alternative thresholds are authorized.
+- Search Space Cardinality: $K = 1$ (Single fixed baseline replication).
+- Post-publication parameter optimizations are strictly excluded.
 
 ---
 
-## 13. Anti-Overfitting & Post-Publication Optimization Evidence
+## 13. Profitability-First Acceptance Dimensions (Future HYP_005)
 
-Subsequent academic and practitioner work (e.g. Maróy, 2025) has explored optimizing the Noise Area parameters, reporting Sharpe ratios exceeding $3.0$ on in-sample data. However, independent replications indicate that optimized parameter vectors suffer severe out-of-sample fragility.
-- **ACASH Policy:** `POST_PUBLICATION_PARAMETER_OPTIMIZATION_EVIDENCE` is explicitly excluded from baseline intake. The baseline candidate must evaluate the original fixed literature configuration before any variant is considered.
-
----
-
-## 14. Profitability-First Acceptance Dimensions (Future HYP_005)
-
-When a hypothesis candidate is eventually registered, qualification must be governed by economic criteria rather than statistical regression metrics:
-1. `NET_RETURN_POSITIVE`: Realized cumulative net return after all fees > 0.
-2. `NET_SHARPE`: Net annualized Sharpe ratio exceeding hurdle threshold.
-3. `MAX_DRAWDOWN`: Maximum peak-to-trough drawdown within risk tolerance.
-4. `MINIMUM_TRADE_COUNT`: Statistically sufficient sample of trade executions.
-5. `COST_STRESS_SURVIVABILITY`: Strategy remains net-positive when friction assumptions are doubled.
-6. `BENCHMARK_RELATIVE_PERFORMANCE`: Outperformance vs. SPY buy-and-hold on risk-adjusted basis.
-7. `INTERNAL_VALIDATION_STABILITY`: Positive net performance across independent validation folds.
-8. `EXTERNAL_HOLDOUT_PRESERVATION`: Zero exposure to clean holdout partitions until final ratification.
+When a hypothesis is registered, qualification requires satisfying economic criteria:
+1. `NET_RETURN_POSITIVE`: Realized net return after all frictions $> 0$.
+2. `NET_SHARPE`: Net annualized Sharpe exceeding ratified hurdle.
+3. `MAX_DRAWDOWN`: Peak-to-trough drawdown within tolerance.
+4. `COST_STRESS_SURVIVABILITY`: Positive net return when frictions are multiplied by $2.0\times$.
+5. `MINIMUM_TRADE_COUNT`: Statistically sufficient sample.
+6. `BENCHMARK_RELATIVE_PERFORMANCE`: Outperformance vs SPY buy-and-hold.
 
 ---
 
-## 15. Partition Contamination & Holdout Governance
+## 14. Partition Contamination Governance
 
-1. **Contamination Audit:**
-   - The 2017–2022 SPY historical path was extensively analyzed in `HYP_003` and `HYP_004`.
-   - The external Zarattini et al. paper sampled data through April 2024.
-   - Public replications have already exposed performance through March 2026.
-2. **Implication:**  
-   Treating 2023–2026 as a "pristine blind holdout" for an intraday SPY momentum strategy is scientifically compromised because external literature and replications have already published results over this period.
-3. **Status:** `MEC_0015_PARTITION_POLICY = OPEN_MAJOR_GOVERNANCE_DECISION`.
+- 2007–2024 is exposed in the original paper (SSRN revision Sept 2025).
+- May 2024–March 2026 is exposed in public replications (Paz Sheimy, Delgado).
+- 2017–2022 was exposed in ACASH `HYP_003` and `HYP_004`.
+- **Conclusion:** 2023–2026 cannot be honestly claimed as a pristine external holdout.
+- `MEC_0015_PARTITION_POLICY = OPEN_MAJOR_GOVERNANCE_DECISION`.
 
 ---
 
-## 16. Critical Recency Risk & Summary
+## 15. Summary of Governance States
 
-- **Historical Evidence:** Robust and verified in literature (2007–2024, Sharpe $\approx 1.33$).
-- **Current Evidence:** Significant performance decay documented post-publication (May 2024–March 2026, Sharpe $\approx 0.39$).
-- **Conclusion:** `CURRENT_EDGE_PERSISTENCE = NOT_ESTABLISHED`.
-- **Verdict:** `MEC-0015` represents a high-priority, strategy-native research candidate precisely because it possesses clear executable rules, documented historical profitability, and active real-world edge decay that ACASH's fail-closed empirical engine can rigorously test.
+- `HYP_005 = NOT_CREATED`
+- `ResearchReInceptionGate = NOT_INVOKED`
+- `BACKTEST = NOT_STARTED`
+- `NEW_MARKET_DATA_ACCESS = ZERO`
+- `2023–2026 = NOT_ACCESSED`
+- `PAPER = NOT_AUTHORIZED`
+- `LIVE = LOCKED`
+- `CAPITAL = $0.00`
+- `NO_REAL_ORDERS = true`
