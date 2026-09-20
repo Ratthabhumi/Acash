@@ -101,15 +101,23 @@ def test_03_sample_t_equals_1489() -> None:
 
 
 def test_04_exact_same_eligible_dates_as_r3() -> None:
-    """4. Verify that eligible dates match R3 primary returns Parquet dates exactly."""
+    """4. Verify that eligible dates match R3 primary returns and R2 eligibility exactly."""
     assert R3_PARQUET_PATH.exists()
+    assert R2_PARQUET_PATH.exists()
     r3_table = pq.read_table(R3_PARQUET_PATH)
     r3_dates = sorted(r3_table["trading_date"].to_pylist())
+
+    r2_table = pq.read_table(R2_PARQUET_PATH)
+    r2_df = r2_table.to_pandas()
+    r2_eligible_dates = sorted(r2_df[r2_df["primary_regression_eligible"]]["trading_date"].tolist())
 
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
     log_dates = [r.trading_date for r in rows]
 
     assert log_dates == r3_dates
+    assert log_dates == r2_eligible_dates
+    assert set(log_dates) == set(r3_dates)
+    assert set(log_dates) == set(r2_eligible_dates)
 
 
 def test_05_exact_same_9_exclusions() -> None:

@@ -36,9 +36,14 @@
 - **Total In-Sample Regular Sessions (2017–2022):** 1,498
 - **Primary-Regression Eligible Observations ($T$):** **1489**
 - **Quarantined Excluded Observations:** 9
-  - `AMBIGUOUS_P12_BOUNDARY_PRICE`: 5 sessions (`2017-01-20`, `2017-04-18`, `2017-10-31`, `2018-05-18`, `2020-04-22`)
-  - `AMBIGUOUS_P1_BOUNDARY_PRICE`: 3 sessions (`2017-08-17`, `2019-06-11`, `2021-02-04`)
+  - `AMBIGUOUS_P12_BOUNDARY_PRICE`: 5 sessions (`2017-06-07`, `2017-08-08`, `2017-08-23`, `2017-09-12`, `2021-03-24`)
+  - `AMBIGUOUS_P1_BOUNDARY_PRICE`: 3 sessions (`2017-03-31`, `2017-06-02`, `2022-02-14`)
   - `FIRST_SESSION_NO_PRIOR_IN_SAMPLE_CLOSE`: 1 session (`2017-01-03`)
+
+> [!NOTE]
+> **Lineage Reconciliation (`EXACT_EXCLUSION_DATE_ENUMERATION_CORRECTED_FROM_LOCAL_HASHED_R2_AUTHORITY`):**
+> In the initial drafting of this audit record, 8 ambiguous sessions were errantly enumerated with draft dates (`2017-01-20`, `2017-04-18`, `2017-10-31`, `2018-05-18`, `2020-04-22` and `2017-08-17`, `2019-06-11`, `2021-02-04`). Authoritative local hashed R2 Parquet (`096e1c254897747f39b63b6b4125cb29bf94461ddf3f76f3d620f0bd36e05776`) and session ledger (`2d07419b1dc9ba34f600e484df17eef90724fc6cbfeb65aa29484b50d8a8ffc2`) establish the true canonical 9 excluded dates above. Because all R3 calculations filtered on `primary_regression_eligible == True` from the hashed R2 Parquet directly, zero empirical calculations were affected.
+
 - **Chronological Date Range:** `2017-01-04` to `2022-12-30`
 - **Derived Primary Return Dataset:** `data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet`
 - **Derived Return Dataset SHA-256:** `2b37cba80a845102be6a322af7ff12ff34ecd7a7947e10cf663a3bacdd93d8b9`

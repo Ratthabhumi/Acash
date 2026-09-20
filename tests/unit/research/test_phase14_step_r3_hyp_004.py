@@ -20,6 +20,7 @@ import math
 from pathlib import Path
 import tempfile
 from typing import Any, Dict, List, Sequence
+import pyarrow.parquet as pq
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
@@ -253,3 +254,51 @@ def test_11_r3_manifest_structure_and_hashing() -> None:
     assert manifest["econometric_estimates"]["beta_hat"] == "0.0500"
     assert "manifest_sha256" in manifest
     assert len(manifest["manifest_sha256"]) == 64
+
+
+def test_12_exclusion_lineage_and_admitted_dates_invariants() -> None:
+    """Invariant 12: R3 admitted dates equal R2 primary_regression_eligible dates exactly.
+
+    Also verifies:
+    - Authoritative exclusion reason census (1 first session, 3 P1 ambiguous, 5 P12 ambiguous).
+    - Set differences are strictly empty.
+    - Exact 9 excluded dates match authoritative local hashed R2 evidence.
+    """
+    r2_path = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet"
+    r3_path = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet"
+
+    assert r2_path.is_file(), "R2 parquet missing"
+    assert r3_path.is_file(), "R3 parquet missing"
+
+    r2_table = pq.read_table(r2_path)
+    r3_table = pq.read_table(r3_path)
+
+    r2_df = r2_table.to_pandas()
+    r2_eligible_dates = set(r2_df[r2_df["primary_regression_eligible"]]["trading_date"])
+    r3_admitted_dates = set(r3_table["trading_date"].to_pylist())
+
+    # Invariant: R3 admitted dates == R2 primary_regression_eligible dates
+    assert r3_admitted_dates == r2_eligible_dates
+    assert len(r2_eligible_dates - r3_admitted_dates) == 0
+    assert len(r3_admitted_dates - r2_eligible_dates) == 0
+
+    # Invariant: Exact 9 excluded dates derived from R2
+    excluded_df = r2_df[~r2_df["primary_regression_eligible"]].sort_values("trading_date")
+    assert len(excluded_df) == 9
+
+    reconciled_dates = excluded_df["trading_date"].tolist()
+    expected_dates = [
+        "2017-01-03", "2017-03-31", "2017-06-02", "2017-06-07",
+        "2017-08-08", "2017-08-23", "2017-09-12", "2021-03-24", "2022-02-14"
+    ]
+    assert reconciled_dates == expected_dates
+
+    # Invariant: Exclusion reason census
+    reason_counts: Dict[str, int] = {}
+    for reasons in excluded_df["exclusion_reason_codes"]:
+        for r in reasons:
+            reason_counts[r] = reason_counts.get(r, 0) + 1
+
+    assert reason_counts.get("FIRST_SESSION_NO_PRIOR_IN_SAMPLE_CLOSE") == 1
+    assert reason_counts.get("AMBIGUOUS_P1_BOUNDARY_PRICE") == 3
+    assert reason_counts.get("AMBIGUOUS_P12_BOUNDARY_PRICE") == 5

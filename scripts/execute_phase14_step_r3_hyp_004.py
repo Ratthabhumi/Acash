@@ -172,8 +172,8 @@ def run_r3_execution() -> int:
 - **Total In-Sample Regular Sessions (2017–2022):** 1,498
 - **Primary-Regression Eligible Observations ($T$):** **{reg_result.sample_size_t}**
 - **Quarantined Excluded Observations:** 9
-  - `AMBIGUOUS_P12_BOUNDARY_PRICE`: 5 sessions (`2017-01-20`, `2017-04-18`, `2017-10-31`, `2018-05-18`, `2020-04-22`)
-  - `AMBIGUOUS_P1_BOUNDARY_PRICE`: 3 sessions (`2017-08-17`, `2019-06-11`, `2021-02-04`)
+  - `AMBIGUOUS_P12_BOUNDARY_PRICE`: 5 sessions (`2017-06-07`, `2017-08-08`, `2017-08-23`, `2017-09-12`, `2021-03-24`)
+  - `AMBIGUOUS_P1_BOUNDARY_PRICE`: 3 sessions (`2017-03-31`, `2017-06-02`, `2022-02-14`)
   - `FIRST_SESSION_NO_PRIOR_IN_SAMPLE_CLOSE`: 1 session (`2017-01-03`)
 - **Chronological Date Range:** `{reg_result.earliest_trading_date}` to `{reg_result.latest_trading_date}`
 - **Derived Primary Return Dataset:** `data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet`
