@@ -3,7 +3,8 @@
 ```text
 [GOVERNANCE ARTIFACT: FRICTION AND TRANSACTION COST CONTRACT]
 [GENERATED: 2026-09-20]
-[CANONICAL HEAD: 5b09ccadeccbc250a88f881b80b2845d5c2f7ec9]
+[UPDATED: 2026-09-21]
+[CANONICAL STARTING HEAD: dd249d54e59c471bfdc98bc3c6d17781cbc2a08e]
 [HYP_005: NOT CREATED]
 [BACKTEST: NOT STARTED]
 [CAPITAL: $0.00 | NO_REAL_ORDERS: true]
@@ -14,8 +15,8 @@
 ## 1. Purpose
 
 This document establishes the complete, pre-registered friction and transaction cost
-contracts for **MEC-0015** that must be frozen before `HYP_005` is registered.
-All thresholds are declared prior to observing any strategy results.
+contracts for **MEC-0015** that are frozen prior to `HYP_005` registration.
+All parameters, schedules, and models are declared prior to observing any strategy results.
 
 ---
 
@@ -33,160 +34,108 @@ establish:
 
 **`LITERATURE_COMMISSION_MODEL = max($0.35, $0.0035 × shares)`**
 
-> [!IMPORTANT]
-> These are the **literature baseline** friction parameters. They represent the minimum
-> cost model necessary to reproduce published results. They are **insufficient** for ACASH
-> economic qualification, which requires an independent, conservative model.
-
 ---
 
 ## 3. Commission Model (RESOLVED — ACASH Baseline)
 
 **`ACASH_COMMISSION_MODEL = LITERATURE_BASELINE_CONSERVATIVE`**
 
-For the ACASH economic qualification baseline, adopt the literature commission as the
-conservative minimum:
+For the ACASH economic qualification baseline:
 $$\text{Commission} = \max(\$0.35, \$0.0035 \times \text{shares}) \quad \text{per order execution side}$$
 
-Rationale:
-- Prevents granting an artificial zero-commission advantage.
-- Equivalent to Interactive Brokers' tiered commission for retail-size orders.
-- May be upgraded prospectively via a separate broker qualification.
+- Applied symmetrically to all buy and sell order executions.
+- Eliminates any artificial zero-commission bias.
 
 ---
 
-## 4. Spread Model (OPEN_BLOCKER)
+## 4. Spread Model (RESOLVED)
 
-**`ACASH_SPREAD_MODEL = OPEN_BLOCKER`**
+**`ACASH_SPREAD_MODEL = EMBEDDED_IN_NBBO_FILL`**
 
-### 4.1. Terminology (Corrected)
+### 4.1. Execution Fill Mechanics
+Orders are executed against the contemporaneous SIP National Best Bid and Offer (NBBO):
+- Long entry / Short cover (BUY): fills at NBBO **Ask**.
+- Short entry / Long exit (SELL): fills at NBBO **Bid**.
 
-Under SEC Rule 612, US equities priced above $\$1.00$ have a minimum quoting increment of $\$0.01$:
-$$\text{One-tick full spread} = \$0.01 / \text{share}$$
-$$\text{Half-spread (cost per share per trade side)} = \$0.005 / \text{share}$$
+Because the quoted spread $(\text{Ask} - \text{Bid})$ is naturally captured by crossing the spread:
+**`EXPLICIT_HALF_SPREAD_DEDUCTION_WITH_NBBO = PROHIBITED`**
+Zero additional half-spread deduction may be applied, strictly preventing double-counting.
 
-Claiming "$0.01 half-spread" is factually incorrect; it implies a $\$0.02$ full spread.
-
-### 4.2. SEC Rule 612 Amendment Status
-
-The SEC adopted amendments to Rule 612 creating sub-penny quote increments for qualifying NMS stocks.
-As of September 2026, the compliance date is formally delayed to the **first business day of November 2026**.
-No historical backtest may assume sub-penny quoting for pre-November 2026 data.
-
-### 4.3. Model Options
-
-| Model | Classification | Pros | Cons |
-| :--- | :--- | :--- | :--- |
-| NBBO Bid/Ask fills (buy at Ask, sell at Bid) | Preferred | Naturally incorporates contemporaneous spread | Requires Alpaca quote history qualification |
-| Conservative fixed proxy ($0.01 full spread) | Fallback | Deterministic | Does not capture historical spread variation |
-
-When using NBBO fills: **do NOT add a separate half-spread deduction** (mutual exclusivity rule).
-When using Next-Minute-Open fills: a separate explicit spread cost MUST be added.
-
-**`DOUBLE_COUNTING_PROHIBITION = ENFORCED`**
+### 4.2. SEC Rule 612 Status
+Under SEC Rule 612, US equities priced $> \$1.00$ have a minimum quotation increment of $\$0.01$. The SEC Rule 612 amendments introducing sub-penny tick categories have compliance delayed to **November 2026**. Historical backtests strictly use prevailing penny increments.
 
 ---
 
-## 5. Slippage Model (OPEN)
+## 5. Slippage Model (RESOLVED)
 
-| Classification | Value | Notes |
-| :--- | :--- | :--- |
-| `PAPER_REPORTED_SLIPPAGE` | `$0.001/share` | Paper text approximation only |
-| `AUTHOR_REFERENCE_CODE_APPLIED_SLIPPAGE` | None standalone | Reference code does not apply this |
-| `ACASH_SLIPPAGE_POLICY` | Embedded in spread model | No standalone deduction when using NBBO fills |
+**`BASELINE_STANDALONE_SLIPPAGE = $0.001/share` per executed side.**
 
-**`ACASH_SLIPPAGE_MODEL = OPEN`** (resolved when execution fill model is finalized).
+To preserve the literature-reported adverse execution penalty without double-deducting spread:
+- BUY: Execution price adjusted adversely to $\text{Ask} + \$0.001$.
+- SELL: Execution price adjusted adversely to $\text{Bid} - \$0.001$.
+- No negative or non-positive execution prices permitted.
 
 ---
 
-## 6. Regulatory Fee Model (OPEN_BLOCKER)
+## 6. Regulatory Fee Model (RESOLVED)
 
-Regulatory fees are **time-varying** and MUST use effective-date schedules.
-Hardcoding contemporary rates into historical years is prohibited.
+Regulatory fees are **time-varying** and follow exact historical effective-date schedules.
+Calculation is implemented via pure Decimal arithmetic in `src/acash/execution/regulatory_fees.py`.
 
 ### 6.1. SEC Section 31 Fee
-
-- Applies to: sell transactions only (equity and ETF).
-- Calculation: `fee = principal_sold × applicable_rate`.
-- Rates vary by fiscal year and SEC rule revision.
-- `REGULATORY_FEE_HISTORICAL_SCHEDULE_SEC31 = OPEN_BLOCKER` (schedule must be sourced and pinned).
+- Applies strictly to covered **SELL** transactions (equity/ETF).
+- Zero fee on BUY transactions.
+- Historical Schedule: `docs/research/manifests/MEC-0015-sec31-fee-schedule.json` (25 distinct rate tiers covering 2007-05-01 through 2024-04-30, sourced from official SEC Fee Rate Advisories).
+- Pure function: `compute_sec31_fee(date, sale_principal)`.
 
 ### 6.2. FINRA Trading Activity Fee (TAF)
-
-- Applies to: covered equity sells and certain agency trades.
-- Calculation: `fee = shares_sold × per_share_rate`, capped at per-trade maximum.
-
-| Period | FINRA TAF Rate | Cap | Source |
-| :--- | :--- | :--- | :--- |
-| **2026 (effective from NOF-IMM-EFF-FINRA-2024-019)** | `$0.000195 / share` | `$9.79 / trade` | FINRA.org |
-| **Prior years (2007–2025)** | `OPEN_BLOCKER` | `OPEN_BLOCKER` | Historical schedule required |
-
-> [!CAUTION]
-> The 2026 FINRA TAF rate of $0.000195/share with a $9.79 cap **cannot** be applied to
-> historical years 2007–2025. Historical rates differ and must be sourced from FINRA
-> archived Notice announcements.
-
-**`ACASH_REGULATORY_FEE_MODEL = OPEN_BLOCKER`**
-
-Until the complete historical effective-date schedule is sourced:
-- No strategy execution is authorized under a regulatory fee model.
-- Sensitivity analysis MUST be run to characterize regulatory fee impact.
+- Applies strictly to covered **SELL** transactions.
+- Zero fee on BUY transactions.
+- Historical Schedule: `docs/research/manifests/MEC-0015-finra-taf-fee-schedule.json` (5 distinct tiers covering 2007-05-01 through 2024-04-30 with per-trade caps, sourced from official FINRA Notices 04-70, 11-27, 12-06, 12-31).
+- Pure function: `compute_finra_taf(date, shares_sold)`.
 
 ---
 
-## 7. Short Borrow Contract (PROVISIONALLY RESOLVED)
+## 7. Short Borrow Contract (RESOLVED)
 
-| Item | Status | Value |
+- **`SHORT_LOCATE_ASSUMPTION = SPY_AVAILABLE_UNLESS_PROVIDER_OR_BROKER_MARKS_UNAVAILABLE`**
+- **`HISTORICAL_BORROW_RATE = UNOBSERVED`**
+- **Baseline Borrow Cost:** `0 bps` (justified by SPY extreme liquidity and strictly intraday holding durations).
+- **Mandatory Friction Stress:** `50 bps annualized`, pro-rated to actual intraday holding duration:
+  $$\text{Borrow Stress Fee} = \text{Principal} \times 0.0050 \times \frac{\text{holding\_minutes}}{390 \times 252}$$
+- Must be included in all 2× friction stress evaluations for short positions.
+- Long-only substitution is strictly prohibited.
+
+---
+
+## 8. Complete Friction Stack & 2× Friction Stress Specification
+
+### 8.1. Baseline Trade Leg Friction
+$$\text{Cost Per Trade Leg} = \text{NBBO Spread Crossing} + \$0.001/\text{share Slippage} + \text{Commission} + \text{Regulatory Fees (sells only)}$$
+
+### 8.2. 2× Friction Stress Test Specification
+To stress-test economic survivability without double-subtracting the quoted spread:
+1. Retain observed NBBO bid/ask fill.
+2. Multiply all non-spread explicit transaction costs by 2.0:
+   $$\text{Stressed Commission} = 2.0 \times \text{Commission}$$
+   $$\text{Stressed Regulatory Fees} = 2.0 \times \text{Regulatory Fees}$$
+3. Add an additional adverse slippage stress component equal to **one observed half-spread per side**:
+   $$\text{Additional Adverse Slippage Stress} = \frac{\text{Ask} - \text{Bid}}{2} \times \text{shares}$$
+4. For short positions: Add the pro-rated 50 bps annualized short borrow fee.
+
+---
+
+## 9. Friction Contracts Resolution Summary
+
+| Contract Item | Status | Governing Specification |
 | :--- | :--- | :--- |
-| SPY borrow availability | `PROVISIONAL` | Generally Easy-To-Borrow (ETB) |
-| Locate confirmation | `REQUIRED` | Must be confirmed before short orders |
-| Hard-to-borrow override | `RESOLVED` | `FAIL_CLOSED_NO_SHORT` |
-| Borrow fee | `OPEN` | Pro-rated intraday |
-| Long-only substitution | `PROHIBITED` | Cannot silently substitute long-only when short unavailable |
+| Baseline Commission | `RESOLVED` | $\max(\$0.35, \$0.0035 \times \text{shares})$ |
+| Spread Model | `RESOLVED` | Embedded in NBBO fills (`Ask` for buy, `Bid` for sell) |
+| Standalone Slippage | `RESOLVED` | $\$0.001/\text{share}$ adverse per side |
+| SEC Section 31 Fee | `RESOLVED` | Pinned historical schedule (`MEC-0015-sec31-fee-schedule.json`) |
+| FINRA TAF Fee | `RESOLVED` | Pinned historical schedule (`MEC-0015-finra-taf-fee-schedule.json`) |
+| Short Borrow Baseline | `RESOLVED` | 0 bps baseline (SPY ETB locate assumed) |
+| Short Borrow Stress | `RESOLVED` | 50 bps annualized pro-rated stress |
+| 2× Friction Stress Formula | `RESOLVED` | Retain NBBO + $2\times$ explicit costs + half-spread adverse + short stress |
 
-**`SHORT_AVAILABILITY_MODEL = REQUIRED_LOCATE_CONFIRMATION`**
-**`BORROW_FEE_STATUS = BORROW_COST_UNOBSERVED_SENSITIVITY_REQUIRED`**
-
-If authoritative historical SPY borrow rates are unavailable:
-- A conservative borrow-cost stress scenario must be included in the acceptance gate analysis.
-- Sensitivity range: 0 bps to 50 bps annualized (pro-rated per holding minute).
-
----
-
-## 8. Complete Friction Stack
-
-When fully resolved, the ACASH MEC-0015 friction stack per trade leg:
-
-$$\text{Total Cost Per Leg} = \text{Commission} + \text{Spread Cost} + \text{Regulatory Fees} + \text{Borrow Fee (shorts only)}$$
-
-Where:
-- Commission: $\max(\$0.35, \$0.0035 \times \text{shares})$
-- Spread Cost: half-spread (if using next-minute-Open fills) OR embedded in bid/ask (if NBBO)
-- Regulatory Fees: time-varying SEC Section 31 (sells) + FINRA TAF (sells), per effective-date schedule
-- Borrow Fee: time-prorated daily borrow rate × intraday holding duration (shorts only)
-
-> [!IMPORTANT]
-> The $2\times$ friction stress test (Part O of the authorization) must also be applied to
-> the complete friction stack, not only the commission component.
-
----
-
-## 9. Anti-Overcounting Constraint
-
-| Rule | Enforcement |
-| :--- | :--- |
-| Spread embedding + half-spread deduction | PROHIBITED (double-counting) |
-| Commission-free execution assumption | PROHIBITED |
-| Zero borrow fee without stress test | PROHIBITED |
-| Contemporary rate retroactive application | PROHIBITED |
-
----
-
-## 10. Open Blockers Summary
-
-| Blocker | Blocks HYP_005? | Next Action |
-| :--- | :--- | :--- |
-| `ACASH_SPREAD_MODEL = OPEN_BLOCKER` | Yes | Qualify NBBO or ratify conservative proxy |
-| `ACASH_REGULATORY_FEE_MODEL = OPEN_BLOCKER` | Yes | Source historical SEC/FINRA schedules |
-| `ACASH_EXECUTION_FILL_PRICE_MODEL = OPEN` | Yes | Separate qualification probe |
-| `BORROW_FEE_STATUS = OPEN (stress required)` | Partial | Sensitivity analysis required |
+**TOTAL REMAINING OPEN FRICTION BLOCKERS: 0**

@@ -119,7 +119,7 @@ $$\text{move\_open}[t-i, m] = \left| \frac{\text{Close}[t-i, m]}{\text{Open}[t-i
 $$\sigma_{\text{open}}[t, m] = \frac{1}{14} \sum_{i=1}^{14} \text{move\_open}[t-i, m]$$
 - `NOISE_AREA_LOOKBACK = 14_PRIOR_SESSIONS`
 - `NOISE_AREA_CURRENT_SESSION_LEAKAGE = PROHIBITED` (Strictly enforced via `.shift(1)`).
-- `NOISE_AREA_WARMUP_MIN_PERIODS = OPEN_NARROW_DECISION` (Author Python uses `min_periods=13` for early 1-session acceleration; ACASH must decide between 13 vs. strict 14).
+- `NOISE_AREA_WARMUP_POLICY = REQUIRE_FULL_14_PRIOR_COMPLETED_SESSIONS` (Author Python `min_periods=13` variant documented as `AUTHOR_CODE_WARMUP_VARIANT = MIN_PERIODS_13` and excluded from baseline).
 
 ### 4.3. Dividend-Adjusted Gap Anchor & Boundaries
 Author reference code explicitly adjusts the prior regular close for current-day cash dividends:
@@ -148,11 +148,10 @@ $$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}
 3. **Classifications:**
    - `SIGNAL_PRICE_FIELD = RESOLVED_AUTHOR_REFERENCE_IMPLEMENTATION` (1-minute Close).
    - `ENTRY_REQUIRES_VWAP_CONFIRMATION = RESOLVED_TRUE`.
-4. **Execution Exposure Lag:**
+4. **Execution Exposure Lag & Real Fill Model:**
    - `SIGNAL_OBSERVATION = ONE_MINUTE_CLOSE_AT_DECISION_EPOCH`.
-   - `EXECUTION_EFFECTIVE_EXPOSURE = NEXT_ONE_MINUTE_PERIOD` (Signal forward-filled, lagged by 1 minute: P&L begins at $t+1$).
    - `REFERENCE_BACKTEST_EXPOSURE_LAG = RESOLVED_1_MINUTE`.
-   - `ACASH_EXECUTION_FILL_PRICE_MODEL = OPEN` (Real execution fill model remains open).
+   - `PRIMARY_EXECUTION_MODEL = FIRST_VALID_SIP_NBBO_AT_OR_AFTER_EXECUTION_BOUNDARY` (BUY at Ask, SELL at Bid).
 
 ---
 
@@ -196,7 +195,7 @@ $$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}
 2. **Daily Volatility Window Status:**
    - `DAILY_VOL_RETURN_TYPE = SIMPLE_CLOSE_TO_CLOSE` ($\text{Close}_t / \text{Close}_{t-1} - 1$).
    - `CURRENT_DAY_RETURN_IN_VOL = PROHIBITED` (Completed prior sessions only).
-   - `DAILY_VOL_WINDOW_EXACT_CARDINALITY = OPEN_BLOCKER` (14 vs 15 days cardinality and `ddof` normalization remain an open precision blocker).
+   - `DAILY_VOL_WINDOW_RETURNS_COUNT = 15` (Canonical MATLAB authority: 15 simple returns ending at $t-1$, `ddof=1`, shift 1).
 
 ---
 
@@ -206,34 +205,31 @@ $$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}
 - Commission: $\max(\$0.35, \$0.0035 \times \text{shares})$ per order side.
 - Standalone slippage: `PAPER_REPORTED_SLIPPAGE = 0.0010`, but `AUTHOR_REFERENCE_CODE_APPLIED_SLIPPAGE = NONE_STANDALONE`.
 
-### 9.2. Spread & Tick Terminology Correction
-- **Correction:** Under standard US equity market structure for securities priced $> \$1.00$, the minimum quoting increment under SEC Rule 612 is $\$0.01$. In a one-tick market:
-  $$\text{Full Spread} = \$0.01/\text{share} \implies \text{Half-Spread} = \$0.005/\text{share}$$
-- Claiming a "$0.01 half-spread" was an erroneous conflation of tick size with half-spread.
-- SEC Rule 612 amendments ($0.005 tick) have been delayed to **November 2026**.
-- `FIXED_MINIMUM_HALF_SPREAD = NOT_A_VALID_UNIVERSAL_COST_MODEL`.
-- `ACASH_SPREAD_MODEL = OPEN_BLOCKER` (Contemporaneous NBBO quote width vs conservative proxy).
+### 9.2. Spread & Slippage Contract
+- `ACASH_SPREAD_MODEL = EMBEDDED_IN_NBBO_FILL` (BUY at Ask, SELL at Bid).
+- `EXPLICIT_HALF_SPREAD_DEDUCTION_WITH_NBBO = PROHIBITED` (No double-counting).
+- `BASELINE_STANDALONE_SLIPPAGE = $0.001/share` per executed side (adverse direction: BUY at $\text{Ask} + \$0.001$, SELL at $\text{Bid} - \$0.001$).
+- 2× Friction Stress: Retain NBBO fill + $2\times$ non-spread explicit costs + half-spread adverse slippage + short borrow stress.
 
 ### 9.3. Regulatory Fees & Short Borrow
-- `REGULATORY_FEES = TIME_VARYING`: SEC Section 31 (FY2026 rate $\$20.60$ per $\$1M$ sales) and FINRA TAF change by effective date.
-- `ACASH_REGULATORY_FEE_MODEL = OPEN_BLOCKER`.
-- `SHORT_AVAILABILITY_MODEL = OPEN`, `BORROW_FEE_MODEL = OPEN` (Long-only substitution is prohibited).
+- `ACASH_REGULATORY_FEE_MODEL = RESOLVED_HISTORICAL_SCHEDULES`: SEC Section 31 (25 tiers) and FINRA TAF (5 tiers) pinned to historical schedules (sales only).
+- `SHORT_LOCATE_ASSUMPTION = SPY_AVAILABLE_UNLESS_PROVIDER_OR_BROKER_MARKS_UNAVAILABLE` (0 bps baseline + 50 bps annualized mandatory stress).
 
 ---
 
 ## 10. Data Contract Requirements
 
-1. **1-Minute RTH OHLCV Bars:** Regular-session SPY bars (09:30–16:00 ET).
-2. **Warmup History:** At least 14 days of prior sessions.
-3. **Calendar Authority:** NYSE regular session calendar.
-4. **Status:** `ALPACA_SIP_BAR_MAPPING = UNQUALIFIED`. No data fetch authorized.
+1. **1-Minute RTH OHLCV Bars:** Regular-session SPY bars (09:30–16:00 ET, 390 bars). `ALPACA_SIP_BAR_MAPPING = QUALIFIED` (manifest sealed).
+2. **Historical SIP Quotes:** NBBO quotes qualified for execution boundaries. `MEC-0015-quote-provider-contract-manifest.json` sealed.
+3. **Cash Dividends:** Corporate actions qualified. `MEC-0015-dividend-provider-contract-manifest.json` sealed.
+4. **Missing Bar Policy:** `MISSING_REQUIRED_MINUTE_POLICY = FAIL_CLOSED_SESSION_EXCLUSION`. Zero silent imputation.
 
 ---
 
 ## 11. Early-Close Days Policy
 
-- Literature is silent on non-standard sessions (closing at 13:00 ET).
-- `EARLY_CLOSE_POLICY = OPEN_BLOCKER` (Exclusion vs truncated schedule).
+- `EARLY_CLOSE_POLICY = EXCLUDE_NON_STANDARD_REGULAR_SESSIONS`.
+- Non-standard sessions (closing at 13:00 ET, 210 minutes) are strictly excluded from baseline `HYP_005`.
 
 ---
 
@@ -253,10 +249,10 @@ $$\text{LowerBand}[t, m] = \text{LowerAnchor}[t] \cdot (1 - \sigma_{\text{open}}
 
 When a hypothesis is registered, qualification requires satisfying economic criteria:
 1. `NET_RETURN_POSITIVE`: Realized net return after all frictions $> 0$.
-2. `NET_SHARPE`: Net annualized Sharpe exceeding ratified hurdle.
-3. `MAX_DRAWDOWN`: Peak-to-trough drawdown within tolerance.
-4. `COST_STRESS_SURVIVABILITY`: Positive net return when frictions are multiplied by $2.0\times$.
-5. `MINIMUM_TRADE_COUNT`: Statistically sufficient sample.
+2. `NET_SHARPE`: Net annualized Sharpe $\ge 1.00$ (M1), $\ge 0.50$ (M2).
+3. `MAX_DRAWDOWN`: Peak-to-trough drawdown $\le 30\%$ (M1), $\le 35\%$ (M2).
+4. `COST_STRESS_SURVIVABILITY`: Positive net return under 2× friction stress.
+5. `MINIMUM_TRADE_COUNT`: `MINIMUM_COMPLETED_TRADES = 100` (`HUMAN_RATIFIED_SAMPLE_ADEQUACY_FLOOR`).
 6. `BENCHMARK_RELATIVE_PERFORMANCE`: Outperformance vs SPY buy-and-hold.
 
 ---
@@ -267,7 +263,7 @@ When a hypothesis is registered, qualification requires satisfying economic crit
 - May 2024–March 2026 is exposed in public replications (Paz Sheimy, Delgado).
 - 2017–2022 was exposed in ACASH `HYP_003` and `HYP_004`.
 - **Conclusion:** 2023–2026 cannot be honestly claimed as a pristine external holdout.
-- `MEC_0015_PARTITION_POLICY = OPEN_MAJOR_GOVERNANCE_DECISION`.
+- `MEC_0015_PARTITION_POLICY = RESOLVED` (M1: 2007-05 to 2024-04; M2: 2024-05 to exposed date; M3: prospective).
 
 ---
 
@@ -276,9 +272,13 @@ When a hypothesis is registered, qualification requires satisfying economic crit
 - `HYP_005 = NOT_CREATED`
 - `ResearchReInceptionGate = NOT_INVOKED`
 - `BACKTEST = NOT_STARTED`
-- `NEW_MARKET_DATA_ACCESS = ZERO`
-- `2023–2026 = NOT_ACCESSED`
+- `STRATEGY_PNL = NOT_COMPUTED`
+- `MARKET_DATA_ACCESS = QUALIFICATION_PROBES_ONLY (< 2024-05-01)`
+- `MAX_ACCESSED_DATE = 2024-03-01`
+- `2024-05-01_ONWARD = NOT_ACCESSED`
 - `PAPER = NOT_AUTHORIZED`
 - `LIVE = LOCKED`
 - `CAPITAL = $0.00`
 - `NO_REAL_ORDERS = true`
+- `PRE_INCEPTION_BLOCKERS_REMAINING = 0`
+- `HYP_005_READINESS = READY_FOR_HUMAN_INCEPTION_AUTHORIZATION`

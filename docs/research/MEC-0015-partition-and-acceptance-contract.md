@@ -3,7 +3,8 @@
 ```text
 [GOVERNANCE ARTIFACT: PARTITION GOVERNANCE AND ECONOMIC ACCEPTANCE CONTRACT]
 [GENERATED: 2026-09-20]
-[CANONICAL HEAD: 5b09ccadeccbc250a88f881b80b2845d5c2f7ec9]
+[UPDATED: 2026-09-21]
+[CANONICAL STARTING HEAD: dd249d54e59c471bfdc98bc3c6d17781cbc2a08e]
 [HYP_005: NOT CREATED]
 [BACKTEST: NOT STARTED]
 [ALL THRESHOLDS DECLARED PRIOR TO OBSERVING ANY STRATEGY RESULTS]
@@ -53,7 +54,7 @@ and friction contract. Not out-of-sample. Not blind.
 
 ```
 STRESS_WINDOW_START = 2024-05-01
-STRESS_WINDOW_END   = [LAST PUBLICLY EXPOSED REPLICATION DATE, approx. 2026-03-31]
+STRESS_WINDOW_END   = [LAST PUBLICLY EXPOSED REPLICATION DATE]
 ROLE = PUBLICLY_EXPOSED_POST_PUBLICATION_STRESS_SAMPLE
 ```
 
@@ -81,7 +82,7 @@ or ACASH internal evaluation may be labeled "pristine". The true holdout can onl
 | Stage | Name | Description |
 | :--- | :--- | :--- |
 | **R1** | Registration & Strategy Freeze | Exact strategy specification sealed via HYP_005 preregistration |
-| **R2** | Data Provider Qualification | Alpaca SIP bar feed and corporate actions formally qualified; dataset hash sealed |
+| **R2** | Dataset Build & Lineage Seal | Alpaca SIP bars, quotes, dividends dataset built and lineage sealed |
 | **R3** | Replication (M1 window) | Publication-exposed historical replication (2007-05 — 2024-04) |
 | **R4** | Stress Evaluation (M2 window) | Post-publication stress evaluation (2024-05 onward, exposed dates only) |
 | **R5** | Evidence Decision Gate | Human ratification: is evidence sufficient to authorize prospective Paper/shadow? |
@@ -97,14 +98,14 @@ Thresholds apply to the **net** (after all frictions) strategy performance over 
 | Gate Criterion | Threshold | Rationale |
 | :--- | :--- | :--- |
 | `NET_TOTAL_RETURN > 0` | Strictly positive | Strategy must generate positive net wealth |
-| `NET_SHARPE >= 1.00` | Annualized | Paper reports ≈1.33; threshold is meaningfully below but demands usable performance |
+| `NET_SHARPE >= 1.00` | Annualized | Paper reports ≈1.33; threshold demands usable economic performance |
 | `MAX_DRAWDOWN <= 30%` | Peak-to-trough | Paper reports ≈25%; threshold provides margin above reported value |
-| `TRADE_COUNT >= LITERATURE_MINIMUM` | Determined from author sample | Statistically sufficient trade sample |
+| `MINIMUM_COMPLETED_TRADES >= 100` | Exact floor | `HUMAN_RATIFIED_SAMPLE_ADEQUACY_FLOOR` (non-result-dependent floor) |
 | `NO_MATERIAL_CONTRACT_FAILURE` | Zero | Zero silent imputation or contract breach in dataset |
-| `2X_FRICTION_STRESS_NET_RETURN > 0` | Strictly positive | Strategy survives doubled friction |
-| `2X_FRICTION_STRESS_NET_SHARPE >= 0.75` | Annualized | Economic viability under cost stress |
+| `2X_FRICTION_STRESS_NET_RETURN > 0` | Strictly positive | Strategy survives doubled friction stack |
+| `2X_FRICTION_STRESS_NET_SHARPE >= 0.75` | Annualized | Viability under adverse transaction cost stress |
 
-**`PRIMARY_HISTORICAL_REPLICATION_GATE = [NET_SHARPE >= 1.00, MDD <= 30%, 2X_STRESS > 0]`**
+**`PRIMARY_HISTORICAL_REPLICATION_GATE = [NET_SHARPE >= 1.00, MDD <= 30%, TRADES >= 100, 2X_STRESS > 0]`**
 
 If R3 gate fails: `HYP_005_REPLICATION_FAILED` → no further authorization.
 
@@ -118,7 +119,7 @@ Thresholds apply to the **net** strategy performance over M2 (publicly exposed p
 | :--- | :--- | :--- |
 | `NET_TOTAL_RETURN > 0` | Strictly positive | Edge must survive recent period |
 | `NET_SHARPE >= 0.50` | Annualized | Below R3 threshold; acknowledges public evidence of degradation |
-| `MAX_DRAWDOWN <= 35%` | Peak-to-trough | Slightly relaxed from R3; captures regime deterioration |
+| `MAX_DRAWDOWN <= 35%` | Peak-to-trough | Captures regime deterioration |
 | `NO_CATASTROPHIC_RISK_FAILURE` | Zero | No extreme leverage or blow-up events |
 | `2X_FRICTION_STRESS_TOTAL_RETURN >= 0` | Non-negative | Cost-stress survivability |
 
@@ -132,18 +133,7 @@ Thresholds apply to the **net** strategy performance over M2 (publicly exposed p
 
 ---
 
-## 6. Prospective Paper/Shadow Gate (R6 — Pre-Declared Separately)
-
-The prospective gate must be ratified separately after:
-- R4 is evaluated.
-- M3 holdout window has accumulated sufficient prospective observations.
-- Human ratification of Paper/shadow authority.
-
-**Live trading gate is NOT defined here.** Requires separate independent human authorization.
-
----
-
-## 7. Benchmark Contract (RESOLVED)
+## 6. Benchmark Contract (RESOLVED)
 
 | Benchmark | Definition | Purpose |
 | :--- | :--- | :--- |
@@ -155,14 +145,9 @@ The prospective gate must be ratified separately after:
 
 **`PRIMARY_BENCHMARK = SPY_BUY_AND_HOLD_TOTAL_RETURN`**
 
-> [!IMPORTANT]
-> Strategy qualification is NOT permitted solely because SPY performed poorly during the
-> evaluation period. **Absolute net profitability gates (Net Return > 0, Net Sharpe >= 1.00)
-> remain mandatory regardless of benchmark performance.**
-
 ---
 
-## 8. Anti-Harking Invariants
+## 7. Anti-Harking Invariants
 
 All thresholds above are declared before observing any ACASH strategy results:
 
@@ -175,16 +160,17 @@ All thresholds above are declared before observing any ACASH strategy results:
 
 ---
 
-## 9. Summary of Open and Resolved Items
+## 8. Summary of Partition & Acceptance Decisions
 
-| Item | Status |
-| :--- | :--- |
-| Replication window (M1) definition | `RESOLVED` |
-| Stress window (M2) definition | `RESOLVED` |
-| True holdout policy (M3) | `RESOLVED: PROSPECTIVE_ONLY` |
-| HYP_005 staged research design (R1–R6) | `RESOLVED` |
-| Primary historical replication gate (R3) | `RESOLVED` (pre-declared) |
-| Recent stress gate (R4) | `RESOLVED` (pre-declared) |
-| Benchmark contract | `RESOLVED` |
-| Prospective Paper gate (R6) | `PENDING_SEPARATE_RATIFICATION` |
-| Live trading gate | `NOT_DEFINED — requires separate authorization` |
+| Item | Status | Governing Specification |
+| :--- | :--- | :--- |
+| Replication window (M1) definition | `RESOLVED` | 2007-05-01 through 2024-04-30 |
+| Stress window (M2) definition | `RESOLVED` | 2024-05-01 through last exposed date |
+| True holdout policy (M3) | `RESOLVED` | `PROSPECTIVE_ONLY` |
+| HYP_005 staged research design (R1–R6) | `RESOLVED` | Staged research plan locked |
+| Primary historical replication gate (R3) | `RESOLVED` | Net Sharpe $\ge 1.00$, MDD $\le 30\%$, Trades $\ge 100$, 2× stress |
+| Recent stress gate (R4) | `RESOLVED` | Net Sharpe $\ge 0.50$, MDD $\le 35\%$, Return $> 0$ |
+| Benchmark contract | `RESOLVED` | Primary: SPY buy-and-hold total return |
+| Minimum trade count floor | `RESOLVED` | `MINIMUM_COMPLETED_TRADES = 100` (`HUMAN_RATIFIED_SAMPLE_ADEQUACY_FLOOR`) |
+
+**TOTAL REMAINING OPEN PARTITION/GATE BLOCKERS: 0**

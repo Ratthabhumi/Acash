@@ -1,0 +1,192 @@
+{
+  "manifest_schema": "acash.research.mec_0015_sec31_schedule.v1",
+  "authority": "SEC_SECTION_31_OFFICIAL_FEE_RATE_ADVISORIES",
+  "scope": {
+    "start_date": "2007-05-01",
+    "end_date": "2024-04-30",
+    "applicable_sides": ["SELL"],
+    "asset_class": "US_EQUITY"
+  },
+  "schedule": [
+    {
+      "segment_index": 1,
+      "effective_start": "2007-03-17",
+      "effective_end": "2008-01-24",
+      "rate_per_million": "15.30",
+      "rate_per_dollar": "0.00001530",
+      "official_source": "SEC Fee Rate Advisory #4 for Fiscal Year 2007",
+      "source_reference": "SEC Release No. 34-55365"
+    },
+    {
+      "segment_index": 2,
+      "effective_start": "2008-01-25",
+      "effective_end": "2008-03-31",
+      "rate_per_million": "11.00",
+      "rate_per_dollar": "0.00001100",
+      "official_source": "SEC Fee Rate Advisory #3 for Fiscal Year 2008",
+      "source_reference": "SEC Release No. 34-57142"
+    },
+    {
+      "segment_index": 3,
+      "effective_start": "2008-04-01",
+      "effective_end": "2009-04-09",
+      "rate_per_million": "5.60",
+      "rate_per_dollar": "0.00000560",
+      "official_source": "SEC Fee Rate Advisory #4 for Fiscal Year 2008 (Mid-Year)",
+      "source_reference": "SEC Release No. 34-57419"
+    },
+    {
+      "segment_index": 4,
+      "effective_start": "2009-04-10",
+      "effective_end": "2010-01-14",
+      "rate_per_million": "25.70",
+      "rate_per_dollar": "0.00002570",
+      "official_source": "SEC Fee Rate Advisory #4 for Fiscal Year 2009 (Mid-Year)",
+      "source_reference": "SEC Release No. 34-59543"
+    },
+    {
+      "segment_index": 5,
+      "effective_start": "2010-01-15",
+      "effective_end": "2010-03-31",
+      "rate_per_million": "12.70",
+      "rate_per_dollar": "0.00001270",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2010",
+      "source_reference": "SEC Release No. 34-61268"
+    },
+    {
+      "segment_index": 6,
+      "effective_start": "2010-04-01",
+      "effective_end": "2011-01-20",
+      "rate_per_million": "16.90",
+      "rate_per_dollar": "0.00001690",
+      "official_source": "SEC Fee Rate Advisory #4 for Fiscal Year 2010 (Mid-Year)",
+      "source_reference": "SEC Release No. 34-61614"
+    },
+    {
+      "segment_index": 7,
+      "effective_start": "2011-01-21",
+      "effective_end": "2012-02-20",
+      "rate_per_million": "19.20",
+      "rate_per_dollar": "0.00001920",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2011",
+      "source_reference": "SEC Release No. 34-63595"
+    },
+    {
+      "segment_index": 8,
+      "effective_start": "2012-02-21",
+      "effective_end": "2012-03-31",
+      "rate_per_million": "18.00",
+      "rate_per_dollar": "0.00001800",
+      "official_source": "SEC Fee Rate Advisory #5 for Fiscal Year 2012",
+      "source_reference": "SEC Release No. 34-66205"
+    },
+    {
+      "segment_index": 9,
+      "effective_start": "2012-04-01",
+      "effective_end": "2013-05-24",
+      "rate_per_million": "22.40",
+      "rate_per_dollar": "0.00002240",
+      "official_source": "SEC Fee Rate Advisory #6 for Fiscal Year 2012 (Mid-Year)",
+      "source_reference": "SEC Release No. 34-66490"
+    },
+    {
+      "segment_index": 10,
+      "effective_start": "2013-05-25",
+      "effective_end": "2014-03-17",
+      "rate_per_million": "17.40",
+      "rate_per_dollar": "0.00001740",
+      "official_source": "SEC Fee Rate Advisory #3 for Fiscal Year 2013",
+      "source_reference": "SEC Release No. 34-69446"
+    },
+    {
+      "segment_index": 11,
+      "effective_start": "2014-03-18",
+      "effective_end": "2015-02-13",
+      "rate_per_million": "22.10",
+      "rate_per_dollar": "0.00002210",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2014",
+      "source_reference": "SEC Release No. 34-71556"
+    },
+    {
+      "segment_index": 12,
+      "effective_start": "2015-02-14",
+      "effective_end": "2016-02-15",
+      "rate_per_million": "18.40",
+      "rate_per_dollar": "0.00001840",
+      "official_source": "SEC Fee Rate Advisory #3 for Fiscal Year 2015",
+      "source_reference": "SEC Release No. 34-74070"
+    },
+    {
+      "segment_index": 13,
+      "effective_start": "2016-02-16",
+      "effective_end": "2017-07-03",
+      "rate_per_million": "21.80",
+      "rate_per_dollar": "0.00002180",
+      "official_source": "SEC Fee Rate Advisory #3 for Fiscal Year 2016",
+      "source_reference": "SEC Release No. 34-76852"
+    },
+    {
+      "segment_index": 14,
+      "effective_start": "2017-07-04",
+      "effective_end": "2018-05-21",
+      "rate_per_million": "23.10",
+      "rate_per_dollar": "0.00002310",
+      "official_source": "SEC Fee Rate Advisory #3 for Fiscal Year 2017",
+      "source_reference": "SEC Release No. 34-80830"
+    },
+    {
+      "segment_index": 15,
+      "effective_start": "2018-05-22",
+      "effective_end": "2019-04-15",
+      "rate_per_million": "13.00",
+      "rate_per_dollar": "0.00001300",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2018",
+      "source_reference": "SEC Release No. 34-83083"
+    },
+    {
+      "segment_index": 16,
+      "effective_start": "2019-04-16",
+      "effective_end": "2020-02-17",
+      "rate_per_million": "20.70",
+      "rate_per_dollar": "0.00002070",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2019",
+      "source_reference": "SEC Release No. 34-85377"
+    },
+    {
+      "segment_index": 17,
+      "effective_start": "2020-02-18",
+      "effective_end": "2021-02-24",
+      "rate_per_million": "22.10",
+      "rate_per_dollar": "0.00002210",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2020",
+      "source_reference": "SEC Release No. 34-88062"
+    },
+    {
+      "segment_index": 18,
+      "effective_start": "2021-02-25",
+      "effective_end": "2022-05-13",
+      "rate_per_million": "5.10",
+      "rate_per_dollar": "0.00000510",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2021",
+      "source_reference": "SEC Release No. 34-90924"
+    },
+    {
+      "segment_index": 19,
+      "effective_start": "2022-05-14",
+      "effective_end": "2023-02-26",
+      "rate_per_million": "22.90",
+      "rate_per_dollar": "0.00002290",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2022",
+      "source_reference": "SEC Release No. 34-94420"
+    },
+    {
+      "segment_index": 20,
+      "effective_start": "2023-02-27",
+      "effective_end": "2024-05-21",
+      "rate_per_million": "8.00",
+      "rate_per_dollar": "0.00000800",
+      "official_source": "SEC Fee Rate Advisory #2 for Fiscal Year 2023",
+      "source_reference": "SEC Release No. 34-96791"
+    }
+  ]
+}

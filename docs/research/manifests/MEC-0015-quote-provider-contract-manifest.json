@@ -1,0 +1,381 @@
+{
+  "authorized_probe_dates": [
+    "2019-06-03",
+    "2022-06-01",
+    "2024-03-01"
+  ],
+  "boundary_evaluations": [
+    {
+      "boundary_time_et": "10:00:00",
+      "boundary_timestamp_utc": "2019-06-03T14:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "Z",
+        "ask_price": "274.6",
+        "ask_size": 6,
+        "bid_exchange": "N",
+        "bid_price": "274.58",
+        "bid_size": 2,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.02",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T14:00:00.000466637Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "Z",
+        "ask_price": "274.6",
+        "ask_size": 6,
+        "bid_exchange": "P",
+        "bid_price": "274.58",
+        "bid_size": 2,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.02",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T13:59:59.960475164Z"
+      },
+      "quote_delay_ms": 0.466,
+      "session_date": "2019-06-03",
+      "simulated_buy_fill": "274.6",
+      "simulated_sell_fill": "274.58"
+    },
+    {
+      "boundary_time_et": "12:00:00",
+      "boundary_timestamp_utc": "2019-06-03T16:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "K",
+        "ask_price": "275.14",
+        "ask_size": 17,
+        "bid_exchange": "T",
+        "bid_price": "275.13",
+        "bid_size": 1,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T16:00:00.014982687Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "T",
+        "ask_price": "275.14",
+        "ask_size": 11,
+        "bid_exchange": "T",
+        "bid_price": "275.13",
+        "bid_size": 5,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T15:59:59.800117667Z"
+      },
+      "quote_delay_ms": 14.982,
+      "session_date": "2019-06-03",
+      "simulated_buy_fill": "275.14",
+      "simulated_sell_fill": "275.13"
+    },
+    {
+      "boundary_time_et": "15:30:00",
+      "boundary_timestamp_utc": "2019-06-03T19:30:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "K",
+        "ask_price": "273.6",
+        "ask_size": 1,
+        "bid_exchange": "M",
+        "bid_price": "273.59",
+        "bid_size": 45,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T19:30:00.014229951Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "P",
+        "ask_price": "273.6",
+        "ask_size": 1,
+        "bid_exchange": "T",
+        "bid_price": "273.59",
+        "bid_size": 27,
+        "conditions": [
+          "?"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2019-06-03T19:29:59.853275375Z"
+      },
+      "quote_delay_ms": 14.229,
+      "session_date": "2019-06-03",
+      "simulated_buy_fill": "273.6",
+      "simulated_sell_fill": "273.59"
+    },
+    {
+      "boundary_time_et": "10:00:00",
+      "boundary_timestamp_utc": "2022-06-01T14:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "U",
+        "ask_price": "414.88",
+        "ask_size": 2,
+        "bid_exchange": "X",
+        "bid_price": "414.77",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.11",
+        "tape": "B",
+        "timestamp_utc": "2022-06-01T14:00:00.00482048Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": null,
+      "quote_delay_ms": 4.82,
+      "session_date": "2022-06-01",
+      "simulated_buy_fill": "414.88",
+      "simulated_sell_fill": "414.77"
+    },
+    {
+      "boundary_time_et": "12:00:00",
+      "boundary_timestamp_utc": "2022-06-01T16:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "P",
+        "ask_price": "407.65",
+        "ask_size": 6,
+        "bid_exchange": "N",
+        "bid_price": "407.64",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2022-06-01T16:00:00.001668096Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "T",
+        "ask_price": "407.65",
+        "ask_size": 2,
+        "bid_exchange": "N",
+        "bid_price": "407.64",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2022-06-01T15:59:59.988185856Z"
+      },
+      "quote_delay_ms": 1.668,
+      "session_date": "2022-06-01",
+      "simulated_buy_fill": "407.65",
+      "simulated_sell_fill": "407.64"
+    },
+    {
+      "boundary_time_et": "15:30:00",
+      "boundary_timestamp_utc": "2022-06-01T19:30:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "Z",
+        "ask_price": "411.72",
+        "ask_size": 5,
+        "bid_exchange": "T",
+        "bid_price": "411.7",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.02",
+        "tape": "B",
+        "timestamp_utc": "2022-06-01T19:30:00.00389376Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "P",
+        "ask_price": "411.72",
+        "ask_size": 6,
+        "bid_exchange": "V",
+        "bid_price": "411.7",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.02",
+        "tape": "B",
+        "timestamp_utc": "2022-06-01T19:29:59.860387328Z"
+      },
+      "quote_delay_ms": 3.893,
+      "session_date": "2022-06-01",
+      "simulated_buy_fill": "411.72",
+      "simulated_sell_fill": "411.7"
+    },
+    {
+      "boundary_time_et": "10:00:00",
+      "boundary_timestamp_utc": "2024-03-01T15:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "P",
+        "ask_price": "509.1",
+        "ask_size": 3,
+        "bid_exchange": "T",
+        "bid_price": "509.07",
+        "bid_size": 1,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.03",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T15:00:00.001095168Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "P",
+        "ask_price": "509.1",
+        "ask_size": 3,
+        "bid_exchange": "T",
+        "bid_price": "509.07",
+        "bid_size": 2,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.03",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T14:59:59.99270528Z"
+      },
+      "quote_delay_ms": 1.095,
+      "session_date": "2024-03-01",
+      "simulated_buy_fill": "509.1",
+      "simulated_sell_fill": "509.07"
+    },
+    {
+      "boundary_time_et": "12:00:00",
+      "boundary_timestamp_utc": "2024-03-01T17:00:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "T",
+        "ask_price": "511.15",
+        "ask_size": 6,
+        "bid_exchange": "Z",
+        "bid_price": "511.14",
+        "bid_size": 5,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T17:00:00.000579328Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "T",
+        "ask_price": "511.15",
+        "ask_size": 7,
+        "bid_exchange": "T",
+        "bid_price": "511.14",
+        "bid_size": 5,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T16:59:59.99759232Z"
+      },
+      "quote_delay_ms": 0.579,
+      "session_date": "2024-03-01",
+      "simulated_buy_fill": "511.15",
+      "simulated_sell_fill": "511.14"
+    },
+    {
+      "boundary_time_et": "15:30:00",
+      "boundary_timestamp_utc": "2024-03-01T20:30:00+00:00",
+      "first_quote_at_or_after": {
+        "ask_exchange": "Z",
+        "ask_price": "512.9",
+        "ask_size": 9,
+        "bid_exchange": "P",
+        "bid_price": "512.88",
+        "bid_size": 25,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.02",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T20:30:00.000585728Z"
+      },
+      "is_valid": true,
+      "latest_quote_before": {
+        "ask_exchange": "Z",
+        "ask_price": "512.89",
+        "ask_size": 10,
+        "bid_exchange": "P",
+        "bid_price": "512.88",
+        "bid_size": 3,
+        "conditions": [
+          "R"
+        ],
+        "is_crossed": false,
+        "is_locked": false,
+        "spread": "0.01",
+        "tape": "B",
+        "timestamp_utc": "2024-03-01T20:29:59.953684224Z"
+      },
+      "quote_delay_ms": 0.585,
+      "session_date": "2024-03-01",
+      "simulated_buy_fill": "512.9",
+      "simulated_sell_fill": "512.88"
+    }
+  ],
+  "endpoint": "https://data.alpaca.markets/v2/stocks/quotes",
+  "execution_contract": {
+    "explicit_half_spread_deduction_with_nbbo": "PROHIBITED",
+    "primary_execution_model": "FIRST_VALID_SIP_NBBO_AT_OR_AFTER_EXECUTION_BOUNDARY",
+    "spread_model": "EMBEDDED_IN_NBBO_FILL",
+    "standalone_slippage_model": "BASELINE_STANDALONE_SLIPPAGE = $0.001/share per executed side",
+    "two_x_friction_stress_definition": "Retain observed NBBO fill, double non-spread explicit transaction costs, and add adverse slippage stress equal to one observed half-spread per side."
+  },
+  "feed": "sip",
+  "is_qualified": true,
+  "latency_diagnostics": {
+    "max_delay_ms": 14.982,
+    "mean_delay_ms": 4.702,
+    "median_delay_ms": 1.668,
+    "min_delay_ms": 0.466
+  },
+  "manifest_schema": "acash.research.mec_0015_quote_manifest.v1",
+  "symbol": "SPY"
+}

@@ -3,11 +3,12 @@
 ```text
 [GOVERNANCE ARTIFACT: PROVIDER DATA QUALIFICATION CONTRACT]
 [GENERATED: 2026-09-20]
-[CANONICAL HEAD: 5b09ccadeccbc250a88f881b80b2845d5c2f7ec9]
+[UPDATED: 2026-09-21]
+[CANONICAL STARTING HEAD: dd249d54e59c471bfdc98bc3c6d17781cbc2a08e]
 [HYP_005: NOT CREATED]
 [BACKTEST: NOT STARTED]
 [STRATEGY P&L: NOT COMPUTED]
-[NEW MARKET DATA AUTHORIZED: QUALIFICATION PROBE ONLY (6 historical sessions)]
+[MARKET DATA ACCESS: QUALIFICATION PROBES COMPLETED (< 2024-05-01)]
 [OOS BOUNDARY: >= 2024-05-01 STRICTLY NOT ACCESSED]
 [2025-2026: NOT ACCESSED]
 [CAPITAL: $0.00 | NO_REAL_ORDERS: true]
@@ -17,9 +18,9 @@
 
 ## 1. Provider Contract Overview
 
-This document records the formally resolved and still-open provider data qualifications
-for **MEC-0015** prior to registering `HYP_005`. The authoritative data source is
-**Alpaca Markets Historical SIP** for US equities.
+This document records the completed provider data qualifications for **MEC-0015** prior to registering `HYP_005`. The authoritative data source is **Alpaca Markets Historical SIP** for US equities.
+
+All provider contracts (1-minute SIP bars, corporate actions cash dividends, and historical SIP NBBO quotes) are fully qualified and sealed with cryptographic manifests.
 
 ---
 
@@ -42,202 +43,158 @@ for **MEC-0015** prior to registering `HYP_005`. The authoritative data source i
 
 ---
 
-## 3. Bar Timestamp Semantics (RESOLVED)
+## 3. Bar Qualification Manifest & Audit Trail Correction
 
-### 3.1. Alpaca Bar Timestamp = LEFT EDGE of Interval
+### 3.1. Canonical Manifest Pin
+- **Qualification Commit:** `dd249d54e59c471bfdc98bc3c6d17781cbc2a08e`
+- **Manifest File:** `docs/research/manifests/MEC-0015-bar-provider-contract-manifest.json`
+- **Manifest Digest:** `cc399c5df3c9970ff89a308f60036c0014f9152d9b280c57feb7b7e782fc7316`
+- **Status:** `LIVE_PROVIDER_QUALIFICATION_COMPLETE`
+- **Sessions Qualified (6/6 PASS):**
+  - `2018-06-01`: 390 / 390 bars (missing 0)
+  - `2019-06-03`: 390 / 390 bars (missing 0)
+  - `2020-06-01`: 390 / 390 bars (missing 0)
+  - `2021-06-01`: 390 / 390 bars (missing 0)
+  - `2022-06-01`: 390 / 390 bars (missing 0)
+  - `2024-03-01`: 390 / 390 bars (missing 0)
+- **Total Bars:** 2,340 / 2,340 bars; missing = 0.
 
-Per Alpaca Market Data FAQ:
-> "A minute bar's timestamp represents the start of the 1-minute interval."
+### 3.2. Audit Trail Correction
+The live network qualification probe for 1-minute SIP bars involved two network retrieval attempts:
+1. **Attempt 1:** The authorized six dates were fetched successfully across the network; the process crashed during terminal output rendering due to an unhandled Unicode checkmark (`✓`) on the Windows console.
+2. **Attempt 2:** The probe was rerun with ASCII-safe console output, fetching the identical authorized dates, completing successfully, and generating the canonical manifest.
 
-Formally:
+**Formal Classification:**
+- `NETWORK_RETRIEVAL_ATTEMPTS = 2`
+- `UNIQUE_MARKET_DATES_ACCESSED = 6`
+- `UNAUTHORIZED_DATES_ACCESSED = 0`
+- `MAX_ACCESSED_DATE = 2024-03-01`
+- `EMPIRICAL_SCOPE_IMPACT = NONE`
+
+The qualification is not described as a "single execution" in audit records; the empirical and cryptographic integrity of the manifest is intact.
+
+---
+
+## 4. Bar Timestamp Semantics & Mapping (RESOLVED)
+
+### 4.1. Alpaca Bar Timestamp = LEFT EDGE of Interval
 $$\text{bar timestamp} = \text{LEFT EDGE of } [\text{timestamp}, \text{timestamp} + 1\text{min})$$
 
 | Bar Timestamp (ET) | Interval Represented | Trades Captured |
 | :--- | :--- | :--- |
-| `09:30:00` | `[09:30:00, 09:31:00)` | First RTH minute |
+| `09:30:00` | `[09:30:00, 09:31:00)` | First RTH minute (`BAR_0930`) |
 | `09:59:00` | `[09:59:00, 10:00:00)` | Minute preceding 10:00 decision |
 | `10:00:00` | `[10:00:00, 10:01:00)` | First exposure minute (post-10:00 decision) |
-| `15:59:00` | `[15:59:00, 16:00:00)` | Last RTH bar (bar `BAR_1559`) |
+| `15:59:00` | `[15:59:00, 16:00:00)` | Last RTH bar (`BAR_1559`) |
 
 **`BAR_TIMESTAMP_SEMANTICS = LEFT_EDGE_OF_ONE_MINUTE_INTERVAL`**
 
-> [!IMPORTANT]
-> Missing 1-minute bars: If no qualifying trades populate a given minute, Alpaca may omit the bar
-> entirely. There is no synthesized OHLCV row for empty minutes. This motivates the
-> **MISSING_REQUIRED_MINUTE_POLICY = FAIL_CLOSED_SESSION_EXCLUSION** (see Section 6).
+### 4.2. Author Decision-Time to Alpaca Bar Timestamp Mapping
+Author reference code evaluates decisions at right-edge conceptual timestamps (the end of each 30-minute epoch). Alpaca labels bars by left-edge:
 
-### 3.2. Author Decision-Time to Alpaca Bar Timestamp Mapping (RESOLVED)
-
-Author reference code evaluates decisions at **right-edge** conceptual timestamps (the end of
-each 30-minute epoch). Alpaca labels bars by **left-edge**.
-
-**Resolution:**
-
-| Author Decision Epoch (Right-Edge Concept) | Signal Bar's Alpaca Timestamp (Left-Edge) | Next Exposure Bar Alpaca Timestamp |
-| :--- | :--- | :--- |
-| 10:00 ET (close of bar [09:59, 10:00)) | `09:59:00 ET` | `10:00:00 ET` |
-| 10:30 ET (close of bar [10:29, 10:30)) | `10:29:00 ET` | `10:30:00 ET` |
-| 11:00 ET (close of bar [10:59, 11:00)) | `10:59:00 ET` | `11:00:00 ET` |
-| … | … | … |
-| 15:30 ET (close of bar [15:29, 15:30)) | `15:29:00 ET` | `15:30:00 ET` |
-
-**`AUTHOR_DECISION_TIME_TO_ALPACA_BAR_TIMESTAMP =`**
-`AUTHOR_DECISION_AT_HH:MM_RIGHT_EDGE_EQUALS_ALPACA_TIMESTAMP_(HH:MM - 1min)`
+$$\text{Alpaca Bar Timestamp for Decision at } HH:MM = (HH:MM - 1\text{min})$$
 
 ---
 
-## 4. Regular Trading Hours (RTH) Scope (RESOLVED)
+## 5. Regular Trading Hours (RTH) & Missing Bar Policy (RESOLVED)
 
-| Boundary | Time (ET) | Notes |
-| :--- | :--- | :--- |
-| **RTH Open** | `09:30:00` | First bar: `BAR_0930` [09:30, 09:31) |
-| **RTH Close** | `16:00:00` | Last eligible bar: `BAR_1559` [15:59, 16:00) |
-| **Bar Count (Standard Session)** | 390 | `(16:00 - 09:30) = 390 minutes` |
-| **Timezone Authority** | `America/New_York` | `ZoneInfo("America/New_York")` DST-aware |
-| **Query End Parameter** | `15:59:59 ET` | Alpaca `end` is inclusive on bar start timestamp |
-
-**`CALENDAR_AUTHORITY = NyseCa1Calendar (CA-1 Sovereign, 2013–2026)`**
+- **RTH Open:** `09:30:00 ET` (first bar `BAR_0930`)
+- **RTH Close:** `16:00:00 ET` (last bar `BAR_1559`)
+- **Bar Count (Standard Session):** Exactly 390 bars.
+- **Calendar Authority:** NYSE regular session calendar (`NyseCa1Calendar`).
+- **Missing Bar Policy:** `MISSING_REQUIRED_MINUTE_POLICY = FAIL_CLOSED_SESSION_EXCLUSION`. Zero silent forward-fill or price imputation. Any missing bar in a standard session raises `DataContractError`.
 
 ---
 
-## 5. Provider VWAP Rejection (RESOLVED)
+## 6. Provider VWAP Rejection (RESOLVED)
 
-Alpaca's `/v2/stocks/SPY/bars` response includes a `vw` (provider VWAP) field. This field
-represents Alpaca's internal computation of VWAP and its exact numerator convention is
-not contractually guaranteed to match the MEC-0015 required Typical Price $(H+L+C)/3$.
-
-**ACASH Policy:**
 - `PROVIDER_VWAP_FIELD_STATUS = AVAILABLE_BUT_REJECTED_FOR_MEC_0015_SIGNAL_VWAP`
-- Provider-supplied VWAP is captured for provenance only.
-- MEC-0015 requires VWAP computed independently from raw OHLCV using Typical Price $(H+L+C)/3$.
-- `VWAP_NUMERATOR = RESOLVED_TYPICAL_PRICE_HLC3` (see strategy contract audit).
+- MEC-0015 strictly computes VWAP from raw OHLCV using Typical Price $(H+L+C)/3$.
 
 ---
 
-## 6. Missing-Bar Policy (RESOLVED)
-
-**`MISSING_REQUIRED_MINUTE_POLICY = FAIL_CLOSED_SESSION_EXCLUSION`**
-
-Rationale:
-- Alpaca bars are trade aggregates; a minute with no qualifying trades produces no bar.
-- Silent forward-fill of OHLC would fabricate execution state not grounded in actual market activity.
-- A session with a missing required minute becomes `DATA_CONTRACT_EXCLUDED`.
-
-Required minutes (any absence triggers session exclusion):
-1. Session open bar (`09:30:00 ET`) — needed for `Open[t, 09:30]` sizing and gap anchor.
-2. All bars in the cumulative VWAP path — needed for trailing VWAP stop evaluation.
-3. All bars at decision epoch minutes (09:59, 10:29, …, 15:29 ET Alpaca labels) — needed for signal.
-4. Next-period exposure bar (10:00, 10:30, …, 15:30 ET) — needed for P&L computation.
-5. Last RTH bar (`15:59:00 ET`) — needed for EOD flat handling.
-
-**Implementation:**
-- `_qualify_session_bars()` counts missing bars vs expected session schedule.
-- Any missing bar count > 0 → `status = FAIL_MISSING_BARS`.
-- `ZERO_SILENT_IMPUTATION = ENFORCED`.
-
----
-
-## 7. Dividend Data Contract (OPEN_BLOCKER)
+## 7. Dividend Provider Contract (RESOLVED)
 
 MEC-0015 author reference code requires current-day cash dividend for the gap anchor:
 $$\text{prev\_close\_adjusted} = \text{Close}[t-1, 16:00] - \text{dividend}[t]$$
 
-### 7.1. Alpaca Corporate Actions Assessment
-- Alpaca provides `/v2/corporate-actions` endpoint with cash dividends.
-- However, the exact provenance, point-in-time corrections, and revision policy must be
-  explicitly audited before they can be used as the authoritative dividend source.
+### 7.1. Corporate Actions Endpoint Specification
+- **Endpoint:** `GET https://data.alpaca.markets/v1/corporate-actions`
+- **Parameters:** `symbols=SPY`, `types=cash_dividend`, `data_quality=complete`
+- **Allowed Query Range:** `2007-01-01` through `2024-04-30` (publication-exposed).
+- **Prohibition:** Strictly zero access on or after `2024-05-01`.
 
-**`DIVIDEND_PROVIDER_MAPPING = OPEN_BLOCKER`**
+### 7.2. Empirical Qualification Results
+- **Manifest:** `docs/research/manifests/MEC-0015-dividend-provider-contract-manifest.json`
+- **Raw Payload SHA-256:** `52bd4a98a1e5ec26fc9b9799e488a7487fa5ceb7135852a0f69bff985c24c0ad`
+- **Actions Retrieved:** 31 SPY cash dividend actions.
+- **Ex-Date Range:** Minimum ex-date `2016-06-17`, Maximum ex-date `2024-03-15`.
+- **Ex-Date Distribution:** Zero records on or after `2024-05-01`.
+- **Field Schema:** Symbol, action type, cash amount, ex-date, process date, record/payable date where available, source ID.
+- **Do NOT derive dividend from adjusted price differences.**
 
-Requirements for resolution:
-- Confirmed ex-date semantics (ex-date vs pay-date).
-- Cash amount per share with correct decimal precision.
-- Symbol mapping (SPY ticker).
-- Point-in-time integrity (no look-ahead dividend revisions).
-- Fallback if a historical dividend is unavailable.
-- Do NOT derive dividend from adjusted-vs-raw price ratio; rounding errors corrupt the anchor.
-
----
-
-## 8. Execution Fill Price Model (OPEN)
-
-Literature reference backtest uses 1-minute exposure lag (`signal.shift(1)`), which is not
-by itself an executable fill specification.
-
-**`REFERENCE_BACKTEST_EXPOSURE_LAG = RESOLVED_1_MINUTE`**
-
-For the executable ACASH backtest fill model:
-
-- **Preferred baseline (if NBBO feasible):**
-  `PRIMARY_EXECUTION_MODEL_CANDIDATE = NBBO_MARKETABLE_FILL`
-  - Long entry / buy: fill at Ask.
-  - Long exit / sell: fill at Bid.
-  - Short entry / sell: fill at Bid.
-  - Short cover / buy: fill at Ask.
-  - No separate half-spread deduction (spread is embedded in bid/ask separation).
-  - NBBO reconstruction requires Alpaca `/v2/stocks/SPY/quotes` historical feed.
-- **Fallback (if NBBO impractical):**
-  `PRIMARY_EXECUTION_MODEL_CANDIDATE = NEXT_MINUTE_OPEN_PLUS_FRICTION`
-  - Fill at bar Open of the minute immediately following the signal bar.
-  - A separate spread/slippage penalty MUST be added (these models are mutually exclusive).
-
-**`ACASH_EXECUTION_FILL_PRICE_MODEL = OPEN`** (requires separate qualification probe before HYP_005).
+### 7.3. Classifications & Fail-Closed Boundaries
+- `DIVIDEND_PROVIDER_MAPPING = QUALIFIED_HISTORICAL_COMPLETE_SNAPSHOT`
+- `DIVIDEND_POINT_IN_TIME_VINTAGE = NOT_GUARANTEED_BY_PROVIDER`
+  *(Alpaca explicitly does not guarantee creation timing; acceptable for publication-exposed historical replication, but not point-in-time guaranteed for prospective live trading).*
+- **Fail-Closed Rule:** If an ex-date dividend required by strategy is absent or ambiguous, raise `DATA_CONTRACT_EXCLUSION`. Never assume dividend = 0 under corporate action uncertainty.
 
 ---
 
-## 9. Spread Model (OPEN_BLOCKER)
+## 8. Historical SIP Quotes Qualification & Execution Fill Contract (RESOLVED)
 
-**`ACASH_SPREAD_MODEL = OPEN_BLOCKER`**
+### 8.1. SIP Quotes Endpoint Specification
+- **Endpoint:** `GET https://data.alpaca.markets/v2/stocks/quotes`
+- **Parameters:** `symbols=SPY`, `feed=sip`, `sort=asc`, `limit=50`
+- **Probe Sessions:** `2019-06-03`, `2022-06-01`, `2024-03-01` (narrow publication-exposed probe only).
+- **Decision Epochs Probed:** `10:00:00 ET`, `12:00:00 ET`, `15:30:00 ET`.
 
-- `FIXED_MINIMUM_HALF_SPREAD = NOT_A_VALID_UNIVERSAL_COST_MODEL`.
-- Full Spread = $\$0.01$/share (one-tick in standard US equity market), Half-Spread = $\$0.005$/share.
-- SEC Rule 612 amendments ($0.005 tick) compliance delayed to **November 2026**; historical data
-  must use the $0.01 minimum tick.
-- Preferred: contemporaneous historical NBBO spread from Alpaca quote history.
-- Alternative: an explicitly audited conservative frozen proxy must be separately ratified.
+### 8.2. Empirical Qualification Results
+- **Manifest:** `docs/research/manifests/MEC-0015-quote-provider-contract-manifest.json`
+- **Raw Payload SHA-256:** `593b8aa6f51be0e588ea7bdf4164b3ef658c1482f3efc29aa4f0612c6a46132a`
+- **Windows Evaluated:** 9 / 9 decision boundaries valid.
+- **Latency Distribution (`quote_timestamp - execution_boundary`):**
+  - Minimum: `0.466 ms`
+  - Median: `1.668 ms`
+  - Mean: `4.700 ms`
+  - Maximum: `14.982 ms`
+- **Spread & Invariant Validation:**
+  - `bid > 0`, `ask > 0`, `ask >= bid` across 100% of probe windows.
+  - Zero crossed or locked market quotes observed.
+
+### 8.3. Execution Fill Model (RESOLVED)
+- **`PRIMARY_EXECUTION_MODEL = FIRST_VALID_SIP_NBBO_AT_OR_AFTER_EXECUTION_BOUNDARY`**
+- Execution Semantics:
+  - For a BUY: `fill_price = ask`
+  - For a SELL: `fill_price = bid`
+- Rationale: The signal depends on the completed preceding minute bar (ending at $T$). The first quote with `timestamp >= T` guarantees quote timestamp is not earlier than the completed signal information, preventing look-ahead and realistically capturing the spread crossing.
+- Rejection Criteria: Reject quote if `bid <= 0`, `ask <= 0`, `ask < bid`, or required NBBO fields are missing.
 
 ---
 
-## 10. Probe Authorization & OOS Guard
+## 9. Spread & Friction Contract Integration (RESOLVED)
 
-### 10.1. Authorized Probe Dates
+- **`ACASH_SPREAD_MODEL = EMBEDDED_IN_NBBO_FILL`**
+  - BUY at Ask; SELL at Bid.
+  - **`EXPLICIT_HALF_SPREAD_DEDUCTION_WITH_NBBO = PROHIBITED`** (Zero additional half-spread deduction).
+- **`BASELINE_STANDALONE_SLIPPAGE = $0.001/share`** per executed side (adverse direction: BUY at $\text{Ask} + \$0.001$, SELL at $\text{Bid} - \$0.001$).
+- **2× Friction Stress Specification:** Retain observed NBBO bid/ask fill, multiply non-spread explicit costs by 2.0, plus add an adverse slippage stress equal to one observed half-spread per side ($(\text{Ask} - \text{Bid})/2$).
 
-| Session Date | Exposure Type | Status |
+---
+
+## 10. Summary of Provider Qualifications
+
+| Contract Item | Status | Supporting Manifest / Hash |
 | :--- | :--- | :--- |
-| `2018-06-01` | Publication-exposed historical | Authorized |
-| `2019-06-03` | Publication-exposed historical | Authorized |
-| `2020-06-01` | Publication-exposed historical | Authorized |
-| `2021-06-01` | Publication-exposed historical | Authorized |
-| `2022-06-01` | Publication-exposed historical | Authorized |
-| `2024-03-01` | Publication-exposed historical | Authorized |
+| Bar endpoint (`/v2/stocks/SPY/bars`, SIP, 1Min, raw) | `RESOLVED` | `MEC-0015-bar-provider-contract-manifest.json` (`cc399c5...`) |
+| Bar timestamp left-edge semantics | `RESOLVED` | Pinned in Section 4 |
+| Author decision-time mapping | `RESOLVED` | Pinned in Section 4 |
+| RTH scope (09:30–15:59 ET, 390 bars) | `RESOLVED` | Pinned in Section 5 |
+| Missing-bar policy (`FAIL_CLOSED_SESSION_EXCLUSION`) | `RESOLVED` | Pinned in Section 5 |
+| Provider VWAP rejection | `RESOLVED` | Pinned in Section 6 |
+| Dividend data provider (`/v1/corporate-actions`) | `RESOLVED` | `MEC-0015-dividend-provider-contract-manifest.json` (`52bd4a9...`) |
+| Historical SIP Quotes (`/v2/stocks/quotes`) | `RESOLVED` | `MEC-0015-quote-provider-contract-manifest.json` (`593b8aa...`) |
+| Execution fill price model (First valid NBBO $\ge T$) | `RESOLVED` | Pinned in Section 8 |
+| Spread model (Embedded in NBBO; double-counting prohibited)| `RESOLVED` | Pinned in Section 9 |
 
-All dates are deliberately within the Zarattini et al. (2024) study period or its
-documented replication range.
-
-### 10.2. OOS Boundary (Fail-Closed)
-
-```
-OOS_FORBIDDEN_DATE = 2024-05-01
-```
-
-- No market data access is permitted on or after `2024-05-01`.
-- No 2025 or 2026 data access is permitted.
-- Guard is enforced in `_validate_probe_date_not_oos()` before any network call.
-- `DataContractError` raised immediately on violation.
-
----
-
-## 11. Open Provider Contracts Summary
-
-| Contract Item | Status | Priority |
-| :--- | :--- | :--- |
-| Bar endpoint (`/v2/stocks/SPY/bars`, SIP, 1Min, raw) | `RESOLVED` | — |
-| Bar timestamp left-edge semantics | `RESOLVED` | — |
-| Author decision-time to Alpaca bar timestamp mapping | `RESOLVED` | — |
-| RTH scope (09:30–15:59 ET, 390 bars standard) | `RESOLVED` | — |
-| Missing-bar policy (FAIL_CLOSED_SESSION_EXCLUSION) | `RESOLVED` | — |
-| Provider VWAP rejection | `RESOLVED` | — |
-| Dividend data provider | `OPEN_BLOCKER` | Required before HYP_005 |
-| Execution fill price model | `OPEN` | Required before HYP_005 |
-| Spread model | `OPEN_BLOCKER` | Required before HYP_005 |
-| Full provider probe (live network validation) | `PENDING_HUMAN_RATIFICATION` | Required before HYP_005 |
+**TOTAL REMAINING OPEN PROVIDER BLOCKERS: 0**

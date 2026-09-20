@@ -1,0 +1,308 @@
+{
+  "action_type": "cash_dividend",
+  "cash_dividends": [
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2016-06-17",
+      "process_date": "2016-06-17",
+      "rate": "1.078442",
+      "record_id": "c3b774ec-c4d6-4ef7-b262-c1ed32867b37",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2016-09-16",
+      "process_date": "2016-09-16",
+      "rate": "1.082068",
+      "record_id": "74a2365b-6208-40b1-916a-986de2305df8",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2016-12-16",
+      "process_date": "2016-12-16",
+      "rate": "1.32893",
+      "record_id": "623ffd40-1246-4262-8b22-f551b550697c",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2017-03-17",
+      "process_date": "2017-03-17",
+      "rate": "1.033118",
+      "record_id": "80059a76-66b9-4d92-b282-2660524b4479",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2017-06-16",
+      "process_date": "2017-06-16",
+      "rate": "1.183108",
+      "record_id": "74dd6dd6-d8b1-4bc3-8e74-668d5b68600f",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2017-09-15",
+      "process_date": "2017-09-15",
+      "rate": "1.234574",
+      "record_id": "6e241cab-e311-4a61-bb60-9b26ab595a7b",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2017-12-15",
+      "process_date": "2017-12-15",
+      "rate": "1.351333",
+      "record_id": "b4ef9c15-5209-4829-8c1c-74f73aec0cfa",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2018-03-16",
+      "process_date": "2018-03-16",
+      "rate": "1.096775",
+      "record_id": "4336bcd9-00b9-46e6-bba9-04cd20c44936",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2018-09-21",
+      "process_date": "2018-09-21",
+      "rate": "1.322611",
+      "record_id": "8fb7aaec-2195-4176-a89b-7942b7e69602",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2018-12-21",
+      "process_date": "2018-12-21",
+      "rate": "1.435429",
+      "record_id": "4eaa648c-5372-43a9-aac4-4a60b395a524",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2019-03-15",
+      "process_date": "2019-03-15",
+      "rate": "1.233119",
+      "record_id": "fadf42b1-1b5d-4765-9ac2-36dd86f125f5",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2019-06-21",
+      "process_date": "2019-06-21",
+      "rate": "1.43164",
+      "record_id": "cfb55a30-351a-4130-a4b2-1530dc86ccbb",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2019-09-20",
+      "process_date": "2019-09-20",
+      "rate": "1.383619",
+      "record_id": "7b229d73-8fbc-43bd-b260-07afae8831d2",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2019-12-20",
+      "process_date": "2019-12-20",
+      "rate": "1.569992",
+      "record_id": "761b1081-fe3c-4eb5-942c-724bbeb4d9f8",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2020-03-20",
+      "process_date": "2020-04-30",
+      "rate": "1.405559",
+      "record_id": "e06f1a82-04b5-4b90-9c7b-06d22b720db1",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2020-06-19",
+      "process_date": "2020-07-31",
+      "rate": "1.3662419",
+      "record_id": "a6587d80-e08a-4b1a-aa94-857549880c59",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2020-09-18",
+      "process_date": "2020-10-30",
+      "rate": "1.339224",
+      "record_id": "ffb8940e-53fe-4b3e-a475-e15e39561d3d",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2020-12-18",
+      "process_date": "2021-01-29",
+      "rate": "1.58",
+      "record_id": "4d35e709-773b-46d4-b292-34d14c46f287",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2021-03-19",
+      "process_date": "2021-04-30",
+      "rate": "1.277788",
+      "record_id": "f1ddda1e-b10c-4576-8253-4d8d5a149de6",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2021-06-18",
+      "process_date": "2021-07-30",
+      "rate": "1.375875",
+      "record_id": "a06ac608-4210-4e4f-94f0-4fa342a8e1fd",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2021-09-17",
+      "process_date": "2021-10-29",
+      "rate": "1.428117",
+      "record_id": "d2b09118-e4c0-4b93-9f46-10b211400773",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2021-12-17",
+      "process_date": "2022-01-31",
+      "rate": "1.636431",
+      "record_id": "7cdc9442-1a32-4f40-9d2a-b721edfef9e9",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2022-03-18",
+      "process_date": "2022-04-29",
+      "rate": "1.366009",
+      "record_id": "f5ca31fd-da0d-4651-be6b-6ac78542259e",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2022-06-17",
+      "process_date": "2022-07-29",
+      "rate": "1.576871",
+      "record_id": "1f5b9849-96be-4d48-8c3a-b383dc2c544c",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2022-09-16",
+      "process_date": "2022-10-31",
+      "rate": "1.596398",
+      "record_id": "377f7022-91cc-44da-9a8e-8bb00083d5a5",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2022-12-16",
+      "process_date": "2023-01-31",
+      "rate": "1.7814",
+      "record_id": "0451d145-f55a-482f-9e11-8dad5910a801",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2023-03-17",
+      "process_date": "2023-04-28",
+      "rate": "1.506204",
+      "record_id": "4bedbc95-3ce2-40fb-9a38-7d08717a69fc",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2023-06-16",
+      "process_date": "2023-07-31",
+      "rate": "1.638367",
+      "record_id": "bbbff9be-c5e0-467e-87e0-396b636388b7",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2023-09-15",
+      "process_date": "2023-10-31",
+      "rate": "1.583169",
+      "record_id": "774bf420-19e4-4ac1-b8b6-39e170496bd1",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2023-12-15",
+      "process_date": "2024-01-31",
+      "rate": "1.906073",
+      "record_id": "0b715f27-57cc-4e72-975f-800ac009ecbd",
+      "special": false,
+      "symbol": "SPY"
+    },
+    {
+      "action_type": "cash_dividend",
+      "ex_date": "2024-03-15",
+      "process_date": "2024-04-30",
+      "rate": "1.594937",
+      "record_id": "1788732d-92bc-47ba-89c8-dc3435a09b2a",
+      "special": false,
+      "symbol": "SPY"
+    }
+  ],
+  "data_quality": "complete",
+  "endpoint": "https://data.alpaca.markets/v1/corporate-actions",
+  "manifest_schema": "acash.research.mec_0015_dividend_manifest.v1",
+  "pagination": {
+    "completed": true,
+    "next_page_token": null
+  },
+  "payload_hashes": {
+    "raw_payload_sha256": "52bd4a98a1e5ec26fc9b9799e488a7487fa5ceb7135852a0f69bff985c24c0ad"
+  },
+  "qualification": {
+    "fail_closed_rule": "If an ex-date dividend required by strategy is absent or ambiguous: DATA_CONTRACT_EXCLUSION. Never assume dividend = zero when uncertain.",
+    "is_qualified": true,
+    "point_in_time_vintage": "NOT_GUARANTEED_BY_PROVIDER",
+    "provider_mapping": "QUALIFIED_HISTORICAL_COMPLETE_SNAPSHOT",
+    "record_count": 31
+  },
+  "query_range": {
+    "end": "2024-04-30",
+    "forbidden_oos_boundary": "2024-05-01",
+    "maximum_allowed_date": "2024-04-30",
+    "start": "2007-01-01"
+  },
+  "symbol": "SPY"
+}
