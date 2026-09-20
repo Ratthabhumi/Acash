@@ -27,6 +27,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.qualification.client import AlpacaHistoricalSipClient
+from acash.data.qualification.guard import FifteenMinuteAccessGuard
 from acash.data.qualification.mec_0015_bar_contract import (
     MEC_0015_AUTHORIZED_PROBE_DATES,
     MEC_0015_BAR_TIMESTAMP_SEMANTICS,
@@ -38,12 +40,66 @@ from acash.data.qualification.mec_0015_bar_contract import (
     Mec0015BarContractProbe,
     Mec0015BarContractProbeReport,
     Mec0015ProbeSessionStatus,
+    Mec0015SessionProbeResult,
 )
+from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+
+def _load_credentials_from_env_file() -> EnvAlpacaCredentialProvider:
+    """Bridge APCA_API_KEY_ID / APCA_API_SECRET_KEY from .env into ACASH credential provider.
+
+    Credential values are NEVER printed, logged, or returned as strings.
+    Only the resolved provider handle is returned. Fails closed if absent.
+    """
+    import os
+    from acash.execution.alpaca.credentials import AlpacaCredentialError
+
+    # First try raw environment (already set by operator)
+    key_id = os.environ.get("ACASH_ALPACA_API_KEY_ID", "") or os.environ.get("APCA_API_KEY_ID", "")
+    secret = os.environ.get("ACASH_ALPACA_API_SECRET", "") or os.environ.get("APCA_API_SECRET_KEY", "")
+
+    # Fallback: read from .env file
+    if not key_id or not secret:
+        env_path = Path(".env")
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.strip()
+                if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                    v = v[1:-1]
+                if k in ("ACASH_ALPACA_API_KEY_ID", "APCA_API_KEY_ID") and not key_id:
+                    key_id = v
+                if k in ("ACASH_ALPACA_API_SECRET", "APCA_API_SECRET_KEY") and not secret:
+                    secret = v
+
+    if not key_id or not secret:
+        raise AlpacaCredentialError(
+            "CREDENTIAL_ABSENT: Neither ACASH_ALPACA_API_KEY_ID/APCA_API_KEY_ID nor "
+            "ACASH_ALPACA_API_SECRET/APCA_API_SECRET_KEY found in environment or .env. "
+            "STOP: PROVIDER_PROBE_NOT_EXECUTED_MISSING_LOCAL_CREDENTIALS"
+        )
+
+    provider = EnvAlpacaCredentialProvider(
+        venue="ALPACA_PAPER",
+        api_key_id=key_id,
+        api_secret=secret,
+    )
+    creds = provider.load()  # Validates; raises AlpacaCredentialError if invalid
+    # Safety: confirm resolved without printing values
+    if not creds.resolved:
+        raise AlpacaCredentialError(
+            "CREDENTIAL_NOT_RESOLVED: provider loaded but credential handle is unresolved. Fail-closed."
+        )
+    return provider
+
 
 
 def _print_banner() -> None:
     print("=" * 72)
-    print("ACASH — MEC-0015 Alpaca SIP Bar Contract Probe")
+    print("ACASH - MEC-0015 Alpaca SIP Bar Contract Probe")
     print("Governance Scope: DATA INFRASTRUCTURE QUALIFICATION ONLY")
     print(f"  HYP_005 Created:         {MEC_0015_HYP_005_CREATED}")
     print(f"  Backtest Started:        {MEC_0015_BACKTEST_STARTED}")
@@ -54,10 +110,9 @@ def _print_banner() -> None:
     print()
 
 
-def _print_session_result(result: object) -> None:
-    from acash.data.qualification.mec_0015_bar_contract import Mec0015SessionProbeResult
-    r: Mec0015SessionProbeResult = result
-    status_icon = "✓" if r.status == Mec0015ProbeSessionStatus.PASS else "✗"
+def _print_session_result(result: "Mec0015SessionProbeResult") -> None:
+    r = result
+    status_icon = "[PASS]" if r.status == Mec0015ProbeSessionStatus.PASS else "[FAIL]"
     print(f"  {status_icon} {r.session_date}  bars={r.bar_count}/{r.expected_bar_count}"
           f"  missing={r.missing_bar_count}"
           f"  first={r.first_bar_timestamp_et}  last={r.last_bar_timestamp_et}"
@@ -163,7 +218,13 @@ def main() -> int:
     print()
 
     try:
-        probe = Mec0015BarContractProbe()
+        cred_provider = _load_credentials_from_env_file()
+        guard = FifteenMinuteAccessGuard()
+        client = AlpacaHistoricalSipClient(
+            credential_provider=cred_provider,
+            guard=guard,
+        )
+        probe = Mec0015BarContractProbe(client=client)
         print("Running bar contract probe...")
         report = probe.run_probe()
 
