@@ -70,6 +70,7 @@ TERMINAL_HYPOTHESIS_REGISTRY: Tuple[str, ...] = (
     "HYP_TSMOM_EURUSD_001",
     "HYP_TSMOM_EURUSD_HTF_002",
     "HYP_003",
+    "HYP_004",
 )
 
 # Quarantined time windows that cannot be reused without valid governance exception

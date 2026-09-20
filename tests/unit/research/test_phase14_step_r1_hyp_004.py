@@ -2,7 +2,7 @@
 
 Verifies:
 1. HYP_003 is enrolled in TERMINAL_HYPOTHESIS_REGISTRY (anti-resurrection).
-2. HYP_004 is fresh and not in TERMINAL_HYPOTHESIS_REGISTRY.
+2. HYP_004 is enrolled in TERMINAL_HYPOTHESIS_REGISTRY upon terminal closure.
 3. K = 1 parameter search grid cardinality equality.
 4. Proposal data window strictly terminates on or before 2022-12-31 (zero OOS >= 2023).
 5. Inception token hard-locks capital_authority_usd == 0.00.
@@ -40,9 +40,9 @@ def test_1_hyp_003_terminal_registry_enforcement(tmp_path: Path) -> None:
     assert "HYP_003" in TERMINAL_HYPOTHESIS_REGISTRY
 
 
-def test_2_hyp_004_id_fresh_and_not_in_terminal_registry() -> None:
-    """Invariant 2: HYP_004 is fresh, valid ID format, and not in terminal registry."""
-    assert "HYP_004" not in TERMINAL_HYPOTHESIS_REGISTRY
+def test_2_hyp_004_terminal_registry_enforcement() -> None:
+    """Invariant 2: HYP_004 is enrolled in TERMINAL_HYPOTHESIS_REGISTRY upon terminal closure."""
+    assert "HYP_004" in TERMINAL_HYPOTHESIS_REGISTRY
 
 
 def test_3_k_equals_1_grid_cardinality() -> None:

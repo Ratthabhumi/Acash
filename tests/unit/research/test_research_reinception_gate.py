@@ -161,27 +161,46 @@ def test_reusing_hyp_003_terminally_falsified_id_fails_closed(
 
 
 def test_terminal_registry_contains_all_falsified_hypotheses() -> None:
-    """Invariant: Every sealed terminally-falsified hypothesis is explicitly registered."""
+    """Invariant: Every sealed terminally-closed/falsified hypothesis is explicitly registered."""
     assert "HYP_TSMOM_EURUSD_001" in TERMINAL_HYPOTHESIS_REGISTRY
     assert "HYP_TSMOM_EURUSD_HTF_002" in TERMINAL_HYPOTHESIS_REGISTRY
     assert "HYP_003" in TERMINAL_HYPOTHESIS_REGISTRY
+    assert "HYP_004" in TERMINAL_HYPOTHESIS_REGISTRY
 
 
-def test_hyp_004_id_fresh_and_eligible(
+def test_reusing_hyp_004_terminally_closed_id_fails_closed(
     valid_proposal: ResearchInceptionProposal,
     tmp_path: Path,
 ) -> None:
-    """Invariant: HYP_004 is NOT in terminal registry and is structurally eligible for de novo inception."""
-    assert "HYP_004" not in TERMINAL_HYPOTHESIS_REGISTRY
-    fresh_proposal = valid_proposal.model_copy(
+    """Invariant: HYP_004 is registered as terminally closed and cannot be resurrected."""
+    assert "HYP_004" in TERMINAL_HYPOTHESIS_REGISTRY
+    falsified_proposal = valid_proposal.model_copy(
         update={"candidate_hypothesis_id": "HYP_004"}
+    )
+    # Even in an empty directory where no HYP_004.json exists on disk:
+    assert not (tmp_path / "HYP_004.json").exists()
+    with pytest.raises(DataContractError, match="BLOCKED_MUTATION_VIOLATION.*permanently TERMINALLY_FALSIFIED"):
+        ResearchReInceptionGate.evaluate_reinception_proposal(
+            proposal=falsified_proposal,
+            hypotheses_dir=tmp_path,
+        )
+
+
+def test_hyp_005_id_fresh_and_eligible(
+    valid_proposal: ResearchInceptionProposal,
+    tmp_path: Path,
+) -> None:
+    """Invariant: HYP_005 is NOT in terminal registry and is structurally eligible for de novo inception."""
+    assert "HYP_005" not in TERMINAL_HYPOTHESIS_REGISTRY
+    fresh_proposal = valid_proposal.model_copy(
+        update={"candidate_hypothesis_id": "HYP_005"}
     )
     token = ResearchReInceptionGate.evaluate_reinception_proposal(
         proposal=fresh_proposal,
         hypotheses_dir=tmp_path,
     )
     assert token.decision == InceptionDecision.INCEPTION_AUTHORIZED
-    assert token.authorized_hypothesis_id == "HYP_004"
+    assert token.authorized_hypothesis_id == "HYP_005"
 
 
 def test_sealed_id_collision_fails_closed(
