@@ -198,11 +198,16 @@ def compute_ols_beta_and_hac(
     t_stat = beta_hat / se_beta if se_beta > 0 else 0.0
     p_val = 2.0 * (1.0 - _normal_cdf(abs(t_stat)))
 
+    dec_beta = to_decimal18(Decimal(f"{beta_hat:.12f}"))
+    dec_se = to_decimal18(Decimal(f"{se_beta:.12f}"))
+    dec_t = to_decimal18(Decimal(f"{t_stat:.12f}"))
+    dec_p = to_decimal18(Decimal(f"{p_val:.12f}"))
+
     return (
-        to_decimal18(Decimal(f"{beta_hat:.12f}")) or Decimal("0"),
-        to_decimal18(Decimal(f"{se_beta:.12f}")) or Decimal("0"),
-        to_decimal18(Decimal(f"{t_stat:.12f}")) or Decimal("0"),
-        to_decimal18(Decimal(f"{p_val:.12f}")) or Decimal("1.0"),
+        dec_beta if dec_beta is not None else Decimal("0"),
+        dec_se if dec_se is not None else Decimal("0"),
+        dec_t if dec_t is not None else Decimal("0"),
+        dec_p if dec_p is not None else Decimal("1.0"),
     )
 
 
