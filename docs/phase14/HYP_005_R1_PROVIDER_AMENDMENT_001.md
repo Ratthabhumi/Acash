@@ -11,8 +11,11 @@
 [STRATEGY_PARAMETERS_CHANGED: NO]
 [FRICTION_STACK_CHANGED: NO]
 [ACCEPTANCE_GATES_CHANGED: NO]
-[AMENDMENT_STATUS: AMENDMENT_SEALED_PROVIDER_AMENDED]
-[R2_DATASET_BUILD: BLOCKED_PENDING_MASSIVE_ENTITLEMENT]
+[AMENDMENT_STATUS: AMENDMENT_SEALED_LINEAGE_ONLY_PROVIDER_QUALIFICATION_PENDING]
+[MASSIVE_MARKET_DATA_PROVIDER_QUALIFICATION: NOT_EXECUTED_ENTITLEMENT_MISSING]
+[R2_READINESS: BLOCKED_PENDING_MASSIVE_ENTITLEMENT_AND_LIVE_QUALIFICATION]
+[R2_DATASET_BUILD: NOT_STARTED]
+[NEXT_ACTION: CONFIGURE_MASSIVE_ENTITLEMENT_THEN_AUTHORIZE_NARROW_PROVIDER_QUALIFICATION]
 [CAPITAL: $0.00 / NO_REAL_ORDERS=true]
 ```
 
@@ -71,8 +74,9 @@ To avoid altering the scientific replication sample (shortening to 2016 is stric
 ### 3.2 Primary Dividend Authority: State Street / SSGA Official Distributions
 - **Sovereign Authority:** State Street Global Advisors (SSGA), fund sponsor and trustee of `SPY`.
 - **Coverage:** Full M1 window (`2007-05-01` through `2024-04-30`) contains **exactly 68 quarterly cash distributions**.
-- **Audit Finding:** All 37 pre-2016 distributions absent from Alpaca are fully supplied by SSGA. All 31 post-2016 distributions in Alpaca exactly match SSGA official notices.
-- **Manifest Reference:** `docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json` (File SHA-256: `cd5ae9e841483d67b8a7e0c6e5ce280a1ac8099cbef23ec350e5887452e68cbb`).
+- **Audit Finding:** All 35 pre-2016 distributions absent from Alpaca are fully supplied by SSGA. Across the 33 post-2016 distributions, 31 Alpaca-present events match SSGA rates exactly (`ALPACA_PRESENT_RATE_RECONCILIATION = 31/31 PASS`), while 2 post-2016 distributions (`2016-03-18` and `2018-06-15`) are classified as `ALPACA_CROSS_CHECK_ABSENT_OR_UNVERIFIED` (total 37 unverified across M1; 36 distributions prior to the first verified Alpaca distribution on `2016-06-17`).
+- **Authority vs. Overlap Distinction:** `FULL_POST_2016_ALPACA_COVERAGE = NOT_ESTABLISHED`, while `SSGA_FULL_M1_DIVIDEND_AUTHORITY = ESTABLISHED`.
+- **Manifest Reference:** `docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json` (File SHA-256: `0f99ab26884e8767d2bade35039770a342e66c0628dbd2b8ff1e03075cc871bc`).
 
 ### 3.3 Reclassification of Alpaca
 - **Amended Role:** `ALPACA_ROLE = CROSS_PROVIDER_VALIDATION_ONLY`.
@@ -116,7 +120,11 @@ To implement `FIRST_VALID_SIP_NBBO_AT_OR_AFTER_EXECUTION_BOUNDARY` using Massive
 
 ## 6. Amendment State & R2 Readiness
 
-- **Amendment Status:** `AMENDMENT_SEALED_PROVIDER_AMENDED`
-- **R2 Readiness Classification:** `BLOCKED_PENDING_MASSIVE_ENTITLEMENT`
-  - Commercial subscription (Stocks Advanced) and local API key configuration are required before R2 dataset construction can be executed.
+- **Amendment Status:** `AMENDMENT_SEALED_LINEAGE_ONLY_PROVIDER_QUALIFICATION_PENDING`
+- **Massive Market-Data Provider Qualification:** `NOT_EXECUTED_ENTITLEMENT_MISSING`
+  - Live qualification on authorized probe dates (`2019-06-03`, `2022-06-01`, `2024-03-01`) has not been executed because Massive API credentials are not configured in local environment.
+- **R2 Readiness Classification:** `BLOCKED_PENDING_MASSIVE_ENTITLEMENT_AND_LIVE_QUALIFICATION`
+- **R2 Dataset Build:** `NOT_STARTED`
+- **Next Action:** `CONFIGURE_MASSIVE_ENTITLEMENT_THEN_AUTHORIZE_NARROW_PROVIDER_QUALIFICATION`
   - Zero strategy data downloaded during this audit.
+  - No backtest, signals, trades, or P&L computed.

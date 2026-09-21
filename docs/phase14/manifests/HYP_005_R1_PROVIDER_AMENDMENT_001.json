@@ -28,12 +28,27 @@
       "quotes": "us_stocks_sip/quotes_v1 (history back to 2003-09-10, nanosecond NBBO)"
     },
     "primary_dividend_authority": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
-    "dividend_authority_manifest_sha256": "cd5ae9e841483d67b8a7e0c6e5ce280a1ac8099cbef23ec350e5887452e68cbb",
+    "dividend_authority_manifest_sha256": "0f99ab26884e8767d2bade35039770a342e66c0628dbd2b8ff1e03075cc871bc",
     "reclassified_alpaca_role": "CROSS_PROVIDER_VALIDATION_ONLY",
-    "cross_provider_overlap_window": "2016-01-01 THROUGH 2024-04-30"
+    "cross_provider_overlap_window": "2016-01-01 THROUGH 2024-04-30",
+    "dividend_reconciliation_summary": {
+      "total_m1_distributions": 68,
+      "pre_2016_distributions": 35,
+      "post_2016_distributions": 33,
+      "alpaca_verified_true": 31,
+      "alpaca_verified_false": 37,
+      "post_2016_unverified_rows": [
+        "2016-03-18",
+        "2018-06-15"
+      ],
+      "preceding_first_verified_alpaca_distribution": 36,
+      "alpaca_present_rate_reconciliation": "31/31 PASS",
+      "full_post_2016_alpaca_coverage": "NOT_ESTABLISHED",
+      "ssga_full_m1_dividend_authority": "ESTABLISHED"
+    }
   },
-  "amendment_document_sha256": "3adf1e74e8c86d6883399a55475c9da7ebabed749a2f5a1e16e679d52a658acc",
-  "status": "AMENDMENT_SEALED_PROVIDER_AMENDED",
+  "amendment_document_sha256": "c844e101a18f25e86205f807dafedaadb6f4d9be70b2aac1c6e8b87ececb78da",
+  "status": "AMENDMENT_SEALED_LINEAGE_ONLY_PROVIDER_QUALIFICATION_PENDING",
   "capital_authority_usd": "0.00",
   "no_real_orders": true,
   "market_data_access": "ZERO",
@@ -42,6 +57,8 @@
   "is_paper_authorized": false,
   "is_live_authorized": false,
   "r2_dataset_status": "NOT_STARTED",
-  "r2_readiness": "BLOCKED_PENDING_MASSIVE_ENTITLEMENT",
-  "manifest_sha256": "9999edc9d4d345aaa9052b6baedfad33c5f39f0ec4dc2210b7c9e180e9586daf"
+  "r2_readiness": "BLOCKED_PENDING_MASSIVE_ENTITLEMENT_AND_LIVE_QUALIFICATION",
+  "massive_market_data_provider_qualification": "NOT_EXECUTED_ENTITLEMENT_MISSING",
+  "next_action": "CONFIGURE_MASSIVE_ENTITLEMENT_THEN_AUTHORIZE_NARROW_PROVIDER_QUALIFICATION",
+  "manifest_sha256": "8968287de91326a66620c006bf6963d7d999fc9ee100ff824acabf3835c77b2d"
 }

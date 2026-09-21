@@ -700,9 +700,11 @@
     }
   ],
   "audit_findings": {
-    "pre_2016_gap_in_alpaca": "Alpaca snapshot lacked all 37 distributions prior to 2016-06-17; SSGA official records fully supply all 37.",
-    "post_2016_reconciliation": "31/31 distributions in Alpaca overlap match SSGA official ex-dates and cash distributions.",
-    "historical_completeness_m1": "100% complete across all 68 quarterly distributions in M1 window."
+    "distribution_census": "Total 68 quarterly distributions in M1 (2007-05-01 through 2024-04-30): 35 pre-2016 events (all absent from Alpaca snapshot) and 33 post-2016 events.",
+    "alpaca_present_rate_reconciliation": "31 Alpaca-present events match SSGA cash distributions (31/31 RATE_MATCH PASS).",
+    "unverified_events": "37 total unverified events against Alpaca: 35 pre-2016 events, plus 2 post-2016 events (2016-03-18 and 2018-06-15 classified as ALPACA_CROSS_CHECK_ABSENT_OR_UNVERIFIED).",
+    "alpaca_coverage_status": "FULL_POST_2016_ALPACA_COVERAGE = NOT_ESTABLISHED (31/33 present), but SSGA_FULL_M1_DIVIDEND_AUTHORITY = ESTABLISHED (68/68 supplied by sovereign fund sponsor).",
+    "historical_completeness_m1": "100% complete across all 68 quarterly distributions in M1 window governed by SSGA."
   },
-  "manifest_sha256": "e7a72c1ecb9a72ca81f3bced2bb98cd4fa83378aa12e0a1fad5cdecad947c356"
+  "manifest_sha256": "180dec7bb84eaabcc8ab58a0e0f4092fbc15aa649d97b7ee52472598c8ed2ded"
 }
