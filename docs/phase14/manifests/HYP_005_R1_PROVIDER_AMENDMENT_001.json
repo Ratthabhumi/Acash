@@ -1,0 +1,47 @@
+{
+  "manifest_type": "HYPOTHESIS_PROVIDER_AMENDMENT_MANIFEST",
+  "amendment_id": "HYP_005_R1_PROVIDER_AMENDMENT_001",
+  "hypothesis_id": "HYP_005",
+  "hypothesis_ordinal": 5,
+  "mechanism_id": "MEC-0015",
+  "canonical_title": "HYP_005 \u2014 SPY Noise-Area Intraday Momentum Net-Profitability Replication",
+  "amended_at_utc": "2026-09-21T08:30:00Z",
+  "author": "human_operator_ratified",
+  "target_symbol": "SPY",
+  "search_trial_count_k": 1,
+  "scientific_hypothesis_changed": false,
+  "m1_sample_window_changed": false,
+  "strategy_parameters_changed": false,
+  "friction_stack_changed": false,
+  "acceptance_gates_changed": false,
+  "upstream_r1_binding": {
+    "original_r1_commit": "333af02424349bfb43ec05c7afc96ca960f6d5d7",
+    "original_hypothesis_sha256": "ec4679751fa1c4d82e2a3a871ca6dc2f7d6bfbc1e1691518ab6261059e14603f",
+    "original_preregistration_sha256": "5036c765cea2f36b95352f5bc0311580c375e8552ec1590c228690b2543cff9e",
+    "original_manifest_sha256": "f0322a049b6990ed2131f28cb33f0f2fd768a982be2e75815d9f999091422e61",
+    "feasibility_audit_commit": "886db67bf88241929a2a32557e3c0ef9bffcc693"
+  },
+  "amended_provider_lineage": {
+    "primary_market_data_provider": "MASSIVE_POLYGON_US_STOCKS_SIP",
+    "primary_market_data_datasets": {
+      "minute_aggs": "us_stocks_sip/minute_aggs_v1 (history back to 2003-09-10)",
+      "quotes": "us_stocks_sip/quotes_v1 (history back to 2003-09-10, nanosecond NBBO)"
+    },
+    "primary_dividend_authority": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
+    "dividend_authority_manifest_sha256": "cd5ae9e841483d67b8a7e0c6e5ce280a1ac8099cbef23ec350e5887452e68cbb",
+    "reclassified_alpaca_role": "CROSS_PROVIDER_VALIDATION_ONLY",
+    "cross_provider_overlap_window": "2016-01-01 THROUGH 2024-04-30"
+  },
+  "amendment_document_sha256": "3adf1e74e8c86d6883399a55475c9da7ebabed749a2f5a1e16e679d52a658acc",
+  "status": "AMENDMENT_SEALED_PROVIDER_AMENDED",
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "market_data_access": "ZERO",
+  "m1_data_access": "ZERO",
+  "m2_data_access": "ZERO",
+  "is_paper_authorized": false,
+  "is_live_authorized": false,
+  "r2_dataset_status": "NOT_STARTED",
+  "r2_readiness": "BLOCKED_PENDING_MASSIVE_ENTITLEMENT",
+  "manifest_sha256": "9999edc9d4d345aaa9052b6baedfad33c5f39f0ec4dc2210b7c9e180e9586daf"
+}
