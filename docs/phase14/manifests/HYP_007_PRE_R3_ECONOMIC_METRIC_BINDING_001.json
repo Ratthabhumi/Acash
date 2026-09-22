@@ -1,0 +1,67 @@
+{
+  "manifest_type": "PRE_R3_ECONOMIC_METRIC_BINDING_MANIFEST",
+  "binding_id": "HYP_007_PRE_R3_ECONOMIC_METRIC_BINDING_001",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "canonical_title": "HYP_007 — Pre-R3 Economic Metric Binding, Starting AUM & Performance Metric Semantics",
+  "binding_timestamp_utc": "2026-09-22T16:08:00Z",
+  "starting_head": "86675074559e3f64bd488a84317c226d31deaaf6",
+  "upstream_lineage_hashes": {
+    "hyp_007_r1_spec_sha256": "e6821bed806cadef6c129f02c45cd244c0e720fca1715fcc480315c95186df7d",
+    "hyp_007_r1_manifest_sha256": "f48a57333675ebeb5a47cfff40108b13abec000ba958a42ba54fc714c30adc02",
+    "hyp_007_amendment_001_sha256": "12b791f0ceecdb5aec5cc742e353b8e42a046dae28228f0a3308ec7edcdbf480",
+    "hyp_007_r2_manifest_sha256": "8064ea49206d99723fa8c93425cb06ca39ba9c2941ec963073998be8df9449f8",
+    "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa"
+  },
+  "starting_aum_binding": {
+    "simulated_starting_aum_usd": "100000.00",
+    "authority_outcome": "C_NO_PRIOR_VALUE_ESTABLISHED",
+    "classification": "HUMAN_RATIFIED_PRE_RESULT_ACCOUNTING_NORMALIZATION",
+    "real_capital_authority_usd": "0.00",
+    "no_real_orders": true,
+    "search_trial_count_k": 1,
+    "aum_sensitivity_search_permitted": false
+  },
+  "performance_metric_semantics": {
+    "daily_net_return_formula": "r_t = EndingAUM_t / EndingAUM_{t-1} - 1",
+    "net_total_return_formula": "FinalAUM / InitialAUM - 1",
+    "daily_sharpe_authority": "acash.validation.deflated_sharpe.calculate_annualized_sharpe",
+    "periods_per_year": 252,
+    "sharpe_ddof": 1,
+    "risk_free_rate": "0.0",
+    "sharpe_zero_variance_behavior": "FAIL_CLOSED_DATA_CONTRACT_ERROR",
+    "max_drawdown_formula": "max(1 - Equity_t / running_max(Equity_0..Equity_t)) from net EOD equity curve",
+    "completed_trade_definition": "ROUND_TRIP_FLAT_TO_FLAT_OR_FLIP_CLOSE",
+    "flip_semantics": "CLOSE_CURRENT_POSITION_OPEN_NEW_POSITION",
+    "target_shares_fixed_for_session": true,
+    "same_direction_repeat_signal_behavior": "NO_CHURN_HOLD_EXISTING",
+    "daily_aum_update_order": "SIZING_FROM_PRIOR_DAY_ENDING_AUM_ACCRUE_FEES_FORCE_FLAT_AT_1600_SEAL_ENDING_AUM",
+    "baseline_and_stress_independent_aum_paths": true
+  },
+  "excluded_session_treatment": {
+    "session_date": "2023-06-05",
+    "strategy_eligible": false,
+    "signal_eligible": false,
+    "trade_eligible": false,
+    "performance_eligible": false,
+    "volatility_eligible": true,
+    "volatility_close_price": "427.10",
+    "volatility_authority_outcome": "OUTCOME_V1"
+  },
+  "secondary_evidence_semantics": {
+    "benchmark_status": "SECONDARY_CONTEXT_ONLY_NOT_BLOCKING",
+    "m2_sample_state": "LOCKED_ZERO_ACCESS"
+  },
+  "governance_assertions": {
+    "strategy_signals_computed": false,
+    "trades_computed": false,
+    "pnl_observed": false,
+    "is_paper_authorized": false,
+    "is_live_authorized": false
+  },
+  "verdict": {
+    "pre_r3_metric_binding": "SEALED_PASS",
+    "r3_readiness": "READY_FOR_SEPARATE_HUMAN_AUTHORIZATION",
+    "next_required_step": "AUTHORIZE_HYP_007_R3_M1_EXECUTION"
+  }
+}
