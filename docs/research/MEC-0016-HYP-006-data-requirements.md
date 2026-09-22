@@ -49,6 +49,13 @@ Each minute bar must contain:
   - In Alpaca SIP, this bar is labeled `09:59:00 ET`.
   - Representative mappings: `10:00 -> 09:59`, `10:30 -> 10:29`, `12:00 -> 11:59`, `15:30 -> 15:29`.
 
+### 2.3 Strict Missing-Bar Policy (Inherited from HYP_005)
+- **Policy:** `FAIL_CLOSED_SESSION_EXCLUSION`.
+- If any required minute is missing in a standard 390-minute eligible session:
+  - Exclude the entire trading session from strategy execution.
+  - Zero forward-filling, zero linear interpolation, zero synthetic bar generation.
+  - No relaxation permitting $\le 5$ missing bars.
+
 ---
 
 ## 3. Historical Quote Data Contract (Alpaca Primary)
@@ -58,9 +65,10 @@ $$\text{Execution Rule: } \text{FIRST\_VALID\_SIP\_NBBO\_AT\_OR\_AFTER\_EXECUTIO
 - Decision evaluation boundary: $T \in \{10:00:00, 10:30:00, \dots, 15:30:00 \text{ ET}\}$.
 - Look for quote records where:
   $$\text{sip\_timestamp} \ge T$$
-- Select the first record satisfying all validity filters.
-- **BUY Fill Price:** $\text{Ask}$.
-- **SELL Fill Price:** $\text{Bid}$.
+- Select the first record satisfying the authoritative quote validity contract.
+- **BUY Fill Price:** $\text{Ask} + \$0.001/\text{share}$ (standalone adverse slippage).
+- **SELL Fill Price:** $\text{Bid} - \$0.001/\text{share}$ (standalone adverse slippage).
+- **Quote Timeout Policy:** No arbitrary timeout is invented. If no valid quote is available within the authoritative query retrieval window, the fill fails closed.
 
 ### 3.2 Quote Validity & Condition Filters
 A quote is valid if and only if:
@@ -68,7 +76,8 @@ A quote is valid if and only if:
 2. `bid_size > 0` and `ask_size > 0`.
 3. `ask_price >= bid_price` (crossed market quotes with `bid > ask` are strictly rejected).
 4. `is_locked` ($\text{bid} == \text{ask}$) is admitted only if marked valid by consolidated SIP conditions.
-5. Non-firm, non-actionable, or cancelled quote condition flags are excluded.
+5. Condition Code Mapping: Bound to existing canonical MEC-0015 quote qualification evidence. Generic condition filters lacking explicit canonical code mapping are classified:
+   $$\text{REQUIRES\_AUTHORITATIVE\_CONDITION\_CODE\_BINDING}$$
 
 ---
 
@@ -85,14 +94,16 @@ A quote is valid if and only if:
 ## 5. Secondary Bar Cross-Check Contract (HF Data Library)
 
 - **Role:** Independent cross-validation of 1-minute OHLCV bars.
-- **Reconciliation Protocol:**
-  - Verify bar counts per session against Alpaca.
-  - Flag any session where $|\text{Alpaca\_Close} - \text{HF\_Close}| > \$0.05$ after accounting for adjustments.
-- **Strict Boundary:** HF Data Library is **never** used for quote execution, trade simulation, or signal generation.
+- **Discrepancy Classification Hierarchy:**
+  - `EXACT_MATCH`: Bars match identically within floating representation.
+  - `EXPECTED_ADJUSTMENT_DIFFERENCE`: Discrepancy explained by verified dividend/split adjustments.
+  - `PROVIDER_SEMANTIC_DIFFERENCE`: Documented exchange feed or volume aggregation difference.
+  - `UNEXPLAINED_DISCREPANCY`: Material discrepancy requiring investigation.
+- **Strict Boundary:** No arbitrary dollar tolerance is assumed. HF Data Library is **never** used for quote execution, trade simulation, or signal generation.
 
 ---
 
-## 6. Fail-Closed Boundaries
-1. **Missing Minute Bars:** If any non-early-close standard session has $> 5$ missing bars, or if any missing bar occurs within the decision window (`[09:59, 10:01)`), raise `DataContractError` and exclude session.
-2. **Missing Quotes:** If no valid SIP quote exists within $30$ seconds of an execution boundary, raise `DataContractError`.
+## 6. Fail-Closed Boundaries & Firewall
+1. **Missing Minute Bars:** Any missing bar in standard session $\implies$ session exclusion.
+2. **Missing Quotes:** Inability to retrieve valid NBBO at/after boundary $\implies$ fail closed.
 3. **M2 Firewall:** Any request for market data on or after `2024-05-01` raises `OutdatedSampleViolation` and immediately halts execution.

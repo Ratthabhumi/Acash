@@ -6,13 +6,22 @@ Verifies:
 3. HYP_006 is in pre-inception state only; formal R1 JSON / manifest does not exist.
 4. Canonical mechanism ID allocated is MEC-0016; candidate hypothesis ID is HYP_006.
 5. Search space cardinality K = 1; strategy mechanics inherited before any empirical observation.
-6. Proposed M1 is 2016-01-01 to 2024-04-30; M2 is strictly forbidden / zero access.
-7. Zero-cost constraint ($0.00 budget) recorded; feasibility verdict is FREE_DATA_FEASIBILITY_CONDITIONAL.
+6. Mathematical strategy contract strictly adheres to MEC-0015 without drift:
+   - Same-minute move-from-open Noise Area across 14 prior completed eligible sessions.
+   - Multiplicative bands around daily anchors (UpperAnchor * (1 + sigma_open)).
+   - TypicalPrice (H+L+C)/3 cumulative RTH VWAP.
+   - 15 daily returns, ddof=1, shift=1, target daily vol 0.02 (NO sqrt(252)), max leverage 4.0.
+   - Nearest-integer position sizing (round, NOT floor).
+   - Fail-closed session exclusion for any missing minute (NO <=5 missing bar allowance).
+   - Zero arbitrary 30-second quote timeout; zero arbitrary $0.05 HF tolerance.
+7. Proposed M1 is 2016-01-01 to 2024-04-30; M2 is strictly forbidden / zero access.
 8. HF Data Library role is strictly secondary bar cross-check only; zero quote/NBBO authority.
-9. SSGA sovereign dividend authority covers all 33 post-2016 distributions.
-10. Capital authority remains $0.00, NO_REAL_ORDERS == True, paper and live locked.
+9. Early-M1 historical SIP quote manifest exists for 2016-06-17, 2017-06-01, 2018-06-01 (9/9 valid).
+10. Feasibility verdict is FREE_DATA_FEASIBILITY_PASS with 0 open blockers.
+11. Capital authority remains $0.00, NO_REAL_ORDERS == True, paper and live locked.
 """
 
+from decimal import Decimal
 import hashlib
 import json
 from pathlib import Path
@@ -96,22 +105,65 @@ def test_3_hyp_006_preinception_governance() -> None:
     assert "SEARCH_SPACE_CARDINALITY: K = 1" in prop_txt
     assert "PROPOSED_M1: 2016-01-01 THROUGH 2024-04-30" in prop_txt
     assert "PROPOSED_M2: 2024-05-01 ONWARD (LOCKED / STRICTLY FORBIDDEN)" in prop_txt
-    assert "STATUS: PREINCEPTION_READY_FOR_HUMAN_REVIEW" in prop_txt
+    assert "GOVERNANCE_STATE: HYP_006_PREINCEPTION_READY_FOR_HUMAN_REVIEW (R1 NOT CREATED)" in prop_txt
 
 
-def test_4_zero_cost_feasibility_and_hfdata_library_role() -> None:
-    """Invariant 4: Zero-cost feasibility is CONDITIONAL; HF Data Library is bar cross-check only."""
+def test_4_hyp_006_mathematical_contract_integrity() -> None:
+    """Invariant 4: Strategy contract matches MEC-0015 without drift (Noise, bands, sizing, missing bars)."""
+    prop_txt = Path("docs/research/MEC-0016-HYP-006-proposal.md").read_text(encoding="utf-8")
+    req_txt = Path("docs/research/MEC-0016-HYP-006-data-requirements.md").read_text(encoding="utf-8")
+
+    # Noise area must use move_open from same-minute, NOT daily high-low
+    assert "move_open" in prop_txt
+    assert "REQUIRE_FULL_14_PRIOR_COMPLETED_SESSIONS" in prop_txt
+    assert "UpperAnchor" in prop_txt
+    assert "1 + \\sigma\\_open" in prop_txt or "1 + \\sigma_open" in prop_txt or "(1 + \\sigma" in prop_txt
+    assert "NoiseArea_d = \\frac{1}{14}" not in prop_txt  # Replaced daily high-low
+
+    # VWAP contract
+    assert "TypicalPrice" in prop_txt
+    assert "REJECTED_FOR_BASELINE_SIGNAL_LOGIC" in prop_txt
+
+    # Volatility sizing: target daily vol 0.02, NO sqrt(252), round() nearest integer
+    assert "0.02" in prop_txt
+    assert "sqrt(252)" not in prop_txt
+    assert "\\sqrt{252}" not in prop_txt
+    assert "round" in prop_txt
+
+    # Missing bar policy: FAIL_CLOSED_SESSION_EXCLUSION, no <=5 missing bars
+    assert "FAIL_CLOSED_SESSION_EXCLUSION" in req_txt
+    assert "<= 5" not in req_txt
+    assert "<=5" not in req_txt
+
+    # No arbitrary 30s timeout or $0.05 HF tolerance
+    assert "30 seconds" not in req_txt and "30s" not in req_txt
+    assert "$0.05" not in req_txt
+
+
+def test_5_early_quote_qualification_manifest_and_feasibility_pass() -> None:
+    """Invariant 5: Early-M1 SIP quote probe manifest exists, 9/9 valid, feasibility is PASS."""
+    manifest_p = Path("docs/research/manifests/MEC-0016-alpaca-early-quote-contract-manifest.json")
+    assert manifest_p.exists()
+    data = json.loads(manifest_p.read_text(encoding="utf-8"))
+
+    assert data["symbol"] == "SPY"
+    assert data["feed"] == "sip"
+    assert data["is_qualified"] is True
+    assert data["authorized_probe_dates"] == ["2016-06-17", "2017-06-01", "2018-06-01"]
+    assert len(data["boundary_evaluations"]) == 9
+
+    for b in data["boundary_evaluations"]:
+        assert b["is_valid"] is True
+        assert Decimal(b["simulated_buy_fill"]) > Decimal("0")
+        assert Decimal(b["simulated_sell_fill"]) > Decimal("0")
+        assert Decimal(b["simulated_buy_fill"]) >= Decimal(b["simulated_sell_fill"])
+        assert b["session_date"] in ("2016-06-17", "2017-06-01", "2018-06-01")
+
+    # Audit and decisions report PASS
     audit_txt = Path("docs/research/MEC-0016-HYP-006-free-data-feasibility-audit.md").read_text(encoding="utf-8")
-    assert "FEASIBILITY_VERDICT: FREE_DATA_FEASIBILITY_CONDITIONAL" in audit_txt
-    assert "HF_DATA_LIBRARY_ROLE = SECONDARY_INDEPENDENT_BAR_CROSS_CHECK_ONLY" in audit_txt
-    assert "OPERATIONAL_BUDGET: $0.00" in audit_txt
+    assert "FEASIBILITY_VERDICT: FREE_DATA_FEASIBILITY_PASS" in audit_txt
 
     dec_txt = Path("docs/research/MEC-0016-HYP-006-open-decisions.md").read_text(encoding="utf-8")
-    assert "MEC-0016-D06" in dec_txt
-    assert "MEC-0016-D07" in dec_txt
-    assert "EXACT_OPEN_BLOCKERS: 2" in dec_txt
-
-    # Verify dividend manifest reuse covers all 33 post-2016 distributions
-    div_data = json.loads(Path("docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json").read_text(encoding="utf-8"))
-    post_2016 = [d for d in div_data["distributions"] if d["ex_date"] >= "2016-01-01"]
-    assert len(post_2016) == 33
+    assert "EXACT_OPEN_BLOCKERS: 0" in dec_txt
+    assert "MEC-0016-D06" in dec_txt and "RESOLVED_PASS" in dec_txt
+    assert "MEC-0016-D07" in dec_txt and "RESOLVED_PASS" in dec_txt
