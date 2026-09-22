@@ -1,0 +1,19 @@
+{
+  "manifest_schema": "acash.research.mec_0017_hyp_007_warmup.v1",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "warmup_window": {
+    "earliest_date": "2021-06-09",
+    "end_date": "2021-06-30",
+    "eligible_regular_sessions_count": 16
+  },
+  "governance_classification": "PRE_M1_STATE_INITIALIZATION_ONLY",
+  "restrictions": {
+    "performance_eligible": false,
+    "signal_eligible": false,
+    "trade_eligible": false,
+    "quotes_required": false
+  },
+  "total_warmup_bars": 6240,
+  "warmup_corpus_sha256": "c1593bc11f34bb18e3c075dff830de005436c9d793262ec9644ba455971f0fe1"
+}

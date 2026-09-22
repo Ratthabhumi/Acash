@@ -1,0 +1,40 @@
+{
+  "manifest_schema": "acash.research.mec_0017_hyp_007_bar_coverage.v1",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "target_symbol": "SPY",
+  "provider": "ALPACA_HISTORICAL_SIP",
+  "feed": "sip",
+  "timeframe": "1Min",
+  "adjustment": "raw",
+  "total_regular_sessions": 724,
+  "complete_390_bar_sessions": 723,
+  "incomplete_sessions_count": 1,
+  "excluded_sessions_from_trading": [
+    "2023-06-05"
+  ],
+  "incomplete_sessions_detail": [
+    {
+      "session_date": "2023-06-05",
+      "observed_bar_count": 386,
+      "expected_bar_count": 390,
+      "missing_bar_count": 4,
+      "missing_bars_et": [
+        "09:52",
+        "09:53",
+        "09:54",
+        "09:55"
+      ],
+      "classification": "BAR_CONTRACT_FAILURE",
+      "policy_action": "FAIL_CLOSED_SESSION_EXCLUSION",
+      "failure_reason": "BAR_CONTRACT_FAILURE: Expected 390 bars, observed 386. Missing ET: ['09:52', '09:53', '09:54', '09:55']"
+    }
+  ],
+  "total_bars_qualified": 281970,
+  "bars_per_session_contract": 390,
+  "missing_bar_sessions": 1,
+  "duplicate_bar_count": 0,
+  "bar_corpus_sha256": "f7be85db027b7decfabbaa5ce82f0f051895090d0f96447c81bd62094dc1ba2c",
+  "warmup_corpus_sha256": "c1593bc11f34bb18e3c075dff830de005436c9d793262ec9644ba455971f0fe1",
+  "raw_files_count": 724
+}

@@ -1,0 +1,28 @@
+{
+  "manifest_schema": "acash.research.mec_0017_hyp_007_quote_evidence.v1",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "target_symbol": "SPY",
+  "provider": "ALPACA_HISTORICAL_SIP",
+  "feed": "sip",
+  "sort": "asc",
+  "m1_regular_sessions": 708,
+  "boundaries_per_session": 13,
+  "total_boundaries_expected": 9204,
+  "total_boundaries_qualified": 9204,
+  "total_boundaries_failed": 0,
+  "condition_r_count": 9204,
+  "question_mark_count": 0,
+  "rejected_special_conditions_census": {},
+  "unknown_conditions_count": 0,
+  "locked_quotes_count": 62,
+  "crossed_quotes_count": 0,
+  "quote_delay_stats_ms": {
+    "min": 0.002,
+    "median": 4.719,
+    "mean": 14.613,
+    "p95": 14.949,
+    "max": 79941.843
+  },
+  "quote_corpus_sha256": "a1201075854a9b3718c454cbd4c7c292588a956fea5fb6a12356af638a432ae6"
+}

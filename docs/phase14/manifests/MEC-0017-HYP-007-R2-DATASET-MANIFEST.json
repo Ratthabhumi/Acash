@@ -1,0 +1,95 @@
+{
+  "manifest_type": "HISTORICAL_DATA_QUALIFICATION_MANIFEST",
+  "dataset_manifest_id": "MEC-0017-HYP-007-R2-DATASET-MANIFEST",
+  "hypothesis_id": "HYP_007",
+  "hypothesis_ordinal": 7,
+  "mechanism_id": "MEC-0017",
+  "canonical_title": "HYP_007 \u2014 SPY Noise-Area Intraday Momentum Direct-SIP Net-Profitability Replication",
+  "upstream_governance_hashes": {
+    "hyp_007_r1_spec_sha256": "e6821bed806cadef6c129f02c45cd244c0e720fca1715fcc480315c95186df7d",
+    "hyp_007_r1_manifest_sha256": "f48a57333675ebeb5a47cfff40108b13abec000ba958a42ba54fc714c30adc02",
+    "hyp_007_preregistration_sha256": "41a0a27f9237371538366546a1761884d636d6c6d2e01ad14a90aa1cc47e16c4",
+    "hyp_007_amendment_001_sha256": "12b791f0ceecdb5aec5cc742e353b8e42a046dae28228f0a3308ec7edcdbf480",
+    "ssga_dividend_authority_manifest_sha256": "0f99ab26884e8767d2bade35039770a342e66c0628dbd2b8ff1e03075cc871bc"
+  },
+  "corpus_digests": {
+    "calendar_census_sha256": "1f3a535be79b4471f19ea137bc1ce4e486265ce7acd8c682035fce4f55327a7d",
+    "bar_corpus_sha256": "f7be85db027b7decfabbaa5ce82f0f051895090d0f96447c81bd62094dc1ba2c",
+    "warmup_corpus_sha256": "c1593bc11f34bb18e3c075dff830de005436c9d793262ec9644ba455971f0fe1",
+    "quote_corpus_sha256": "a1201075854a9b3718c454cbd4c7c292588a956fea5fb6a12356af638a432ae6",
+    "dividend_projection_sha256": "edb637223ec8df024ee883512cb3a58e86306801fadbdbf3c81c65649c64bfdd",
+    "daily_close_lineage_sha256": "0e39ee29b8410a22a84da8cf2cf30285b6c2cc00aad8d805a4b7cd560f012be0",
+    "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa"
+  },
+  "temporal_partitions": {
+    "warmup_earliest_date": "2021-06-09",
+    "warmup_end_date": "2021-06-30",
+    "warmup_regular_sessions_count": 16,
+    "m1_start_date": "2021-07-01",
+    "m1_end_date": "2024-04-30",
+    "m1_regular_sessions_count": 708,
+    "m1_excluded_early_closes_count": 4,
+    "m2_start_date": "2024-05-01",
+    "m2_access_state": "LOCKED_ZERO_ACCESS"
+  },
+  "cardinality": {
+    "total_bars": 281970,
+    "warmup_bars": 6240,
+    "m1_bars": 275730,
+    "total_quote_boundaries": 9204,
+    "qualified_quote_boundaries": 9204,
+    "failed_quote_boundaries": 0,
+    "dividend_distributions_count": 11
+  },
+  "provider_contracts": {
+    "primary_bar_provider": "ALPACA_HISTORICAL_SIP",
+    "primary_bar_endpoint": "/v2/stocks/SPY/bars",
+    "primary_bar_feed": "sip",
+    "primary_bar_timeframe": "1Min",
+    "primary_bar_adjustment": "raw",
+    "primary_quote_provider": "ALPACA_HISTORICAL_SIP",
+    "primary_quote_endpoint": "/v2/stocks/quotes",
+    "primary_quote_feed": "sip",
+    "primary_quote_sort": "asc",
+    "dividend_authority": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
+    "secondary_bar_crosscheck": "SECONDARY_CROSSCHECK_NOT_EXECUTED"
+  },
+  "quote_condition_metrics": {
+    "condition_r_selected_count": 9204,
+    "question_mark_encountered_count": 0,
+    "unknown_conditions_count": 0,
+    "locked_quote_count": 62,
+    "crossed_quote_count": 0,
+    "quote_delay_stats_ms": {
+      "min": 0.002,
+      "median": 4.719,
+      "mean": 14.613,
+      "p95": 14.949,
+      "max": 79941.843
+    }
+  },
+  "provider_network_telemetry": {
+    "provider_401_count": 0,
+    "provider_403_count": 0,
+    "provider_429_count": 0,
+    "retry_count": 0
+  },
+  "governance_assertions": {
+    "raw_market_data_committed_to_git": false,
+    "credentials_serialized": false,
+    "strategy_signals_computed": false,
+    "trades_computed": false,
+    "backtest_run": false,
+    "pnl_observed": false,
+    "capital_authority_usd": "0.00",
+    "no_real_orders": true,
+    "is_paper_authorized": false,
+    "is_live_authorized": false,
+    "search_trial_count_k": 1
+  },
+  "qualification_verdict": "PASS",
+  "hyp_007_r2_dataset_status": "QUALIFIED_SEALED",
+  "hyp_007_r2_qualification": "PASS",
+  "r3_readiness": "READY_FOR_SEPARATE_HUMAN_AUTHORIZATION",
+  "next_required_step": "REQUEST_HUMAN_AUTHORIZATION_FOR_HYP_007_R3_M1_EXECUTION"
+}

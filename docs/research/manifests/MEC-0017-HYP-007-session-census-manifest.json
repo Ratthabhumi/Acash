@@ -1,0 +1,60 @@
+{
+  "calendar_authority": "NyseCa1Calendar (CA-1)",
+  "warmup_range": {
+    "start": "2021-06-09",
+    "end": "2021-06-30",
+    "regular_sessions_count": 16,
+    "sessions": [
+      "2021-06-09",
+      "2021-06-10",
+      "2021-06-11",
+      "2021-06-14",
+      "2021-06-15",
+      "2021-06-16",
+      "2021-06-17",
+      "2021-06-18",
+      "2021-06-21",
+      "2021-06-22",
+      "2021-06-23",
+      "2021-06-24",
+      "2021-06-25",
+      "2021-06-28",
+      "2021-06-29",
+      "2021-06-30"
+    ]
+  },
+  "m1_range": {
+    "start": "2021-07-01",
+    "end": "2024-04-30",
+    "regular_sessions_count": 708,
+    "sessions_by_year": {
+      "2021": 127,
+      "2022": 250,
+      "2023": 248,
+      "2024": 83
+    },
+    "excluded_early_closes": [
+      {
+        "date": "2021-11-26",
+        "type": "EARLY_CLOSE"
+      },
+      {
+        "date": "2022-11-25",
+        "type": "EARLY_CLOSE"
+      },
+      {
+        "date": "2023-07-03",
+        "type": "EARLY_CLOSE"
+      },
+      {
+        "date": "2023-11-24",
+        "type": "EARLY_CLOSE"
+      }
+    ]
+  },
+  "invariants": {
+    "regular_session_hours": "09:30_TO_16:00_ET",
+    "bars_per_regular_session": 390,
+    "early_close_policy": "EXCLUDE_NON_STANDARD_REGULAR_SESSIONS"
+  }
+}
