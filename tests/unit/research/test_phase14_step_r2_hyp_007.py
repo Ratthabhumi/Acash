@@ -29,6 +29,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
+import pyarrow.parquet as pq
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
@@ -326,3 +327,115 @@ def test_13_deterministic_serialization_invariant() -> None:
     d1 = {"b": 2, "a": 1, "c": [3, 2, 1]}
     d2 = {"a": 1, "c": [3, 2, 1], "b": 2}
     assert calculate_deterministic_sha256(d1) == calculate_deterministic_sha256(d2)
+
+
+def test_14_excluded_session_2023_06_05_omitted_from_qualified_trading_bars() -> None:
+    """Invariant 14: Session 2023-06-05 (CTA outage, 386/390 bars) is strictly excluded from qualified trading bars."""
+    bars_path = Path("data/hyp_007/m1_bars_qualified.parquet")
+    if not bars_path.exists():
+        pytest.skip("m1_bars_qualified.parquet not found in local workspace")
+
+    table = pq.read_table(bars_path, columns=["session_date", "performance_eligible", "signal_eligible", "trade_eligible"])
+    sess_dates = set(table.column("session_date").to_pylist())
+
+    # 2023-06-05 must be completely absent from qualified bars
+    assert "2023-06-05" not in sess_dates
+    # Exactly 723 sessions (16 warmup + 707 M1)
+    assert len(sess_dates) == 723
+    assert table.num_rows == 723 * 390  # 281,970 bars
+
+
+def test_15_noise_area_lookback_skips_excluded_session() -> None:
+    """Invariant 15: Noise Area lookback (14 prior eligible sessions) strictly skips 2023-06-05."""
+    bars_path = Path("data/hyp_007/m1_bars_qualified.parquet")
+    if not bars_path.exists():
+        pytest.skip("m1_bars_qualified.parquet not found in local workspace")
+
+    table = pq.read_table(bars_path, columns=["session_date"])
+    unique_dates = sorted(set(table.column("session_date").to_pylist()))
+
+    # Find session 2023-06-06 (first session after excluded 2023-06-05)
+    assert "2023-06-06" in unique_dates
+    idx_june6 = unique_dates.index("2023-06-06")
+
+    # Prior 14 eligible sessions for 2023-06-06
+    lookback_sessions = unique_dates[idx_june6 - 14:idx_june6]
+    assert len(lookback_sessions) == 14
+    # The immediate preceding session must be 2023-06-02 (skipping 2023-06-05)
+    assert lookback_sessions[-1] == "2023-06-02"
+    assert "2023-06-05" not in lookback_sessions
+
+
+def test_16_excluded_session_cannot_generate_signals_or_execute() -> None:
+    """Invariant 16: SESSION_EXCLUDED => NO_SIGNAL => NO_EXECUTION contract enforced."""
+    # Even if quote evidence exists for raw recording, 2023-06-05 has zero qualified bars
+    # and cannot generate signals or execute trades.
+    quotes_path = Path("data/hyp_007/m1_execution_quotes_qualified.parquet")
+    bars_path = Path("data/hyp_007/m1_bars_qualified.parquet")
+    if not quotes_path.exists() or not bars_path.exists():
+        pytest.skip("Parquet artifacts not found")
+
+    bars_table = pq.read_table(bars_path, columns=["session_date"])
+    qualified_bar_sessions = set(bars_table.column("session_date").to_pylist())
+    # Strategy engine requires session to be present in qualified bars
+    assert "2023-06-05" not in qualified_bar_sessions
+
+    # Manifest contract enforces that excluded sessions have zero trade eligibility
+    manifest_path = Path("docs/phase14/manifests/manifest_r2_HYP_007.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["cardinality"]["m1_bars"] == 707 * 390  # Excludes 2023-06-05
+    assert manifest["governance_assertions"]["strategy_signals_computed"] is False
+    assert manifest["governance_assertions"]["trades_computed"] is False
+    assert manifest["governance_assertions"]["capital_authority_usd"] == "0.00"
+    assert manifest["governance_assertions"]["no_real_orders"] is True
+
+
+def test_17_volatility_daily_close_lineage_outcome_v1() -> None:
+    """Invariant 17: Outcome V1 authority — 2023-06-05 15:59 close is retained in continuous market volatility lineage."""
+    manifest_path = Path("docs/phase14/manifests/manifest_r2_HYP_007.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Check daily close lineage digest matches sealed manifest
+    expected_lineage_sha = manifest["corpus_digests"]["daily_close_lineage_sha256"]
+    assert expected_lineage_sha == "0e39ee29b8410a22a84da8cf2cf30285b6c2cc00aad8d805a4b7cd560f012be0"
+
+    # Check raw bars checkpoint for 2023-06-05
+    raw_chk = Path("data/hyp_007/raw_bars/session_2023-06-05.raw.json")
+    if raw_chk.exists():
+        raw_data = json.loads(raw_chk.read_text(encoding="utf-8"))
+        bars = raw_data.get("bars", [])
+        assert len(bars) == 386  # 4 missing minutes
+        # Check 15:59 close bar exists and is valid
+        close_bar = next((b for b in bars if b["t"] == "2023-06-05T19:59:00Z"), None)
+        assert close_bar is not None
+        assert Decimal(str(close_bar["c"])) == Decimal("427.10")
+        assert Decimal(str(close_bar["c"])) > Decimal("0")
+
+
+def test_18_quote_max_delay_outlier_validation() -> None:
+    """Invariant 18: Quote delay max outlier (79,941.843 ms on 2024-02-27 13:30 ET) reflects genuine contract behavior."""
+    manifest_path = Path("docs/phase14/manifests/manifest_r2_HYP_007.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    max_delay = manifest["quote_condition_metrics"]["quote_delay_stats_ms"]["max"]
+    assert max_delay == 79941.843
+
+    # Check execution quotes parquet for this exact boundary
+    quotes_path = Path("data/hyp_007/m1_execution_quotes_qualified.parquet")
+    if quotes_path.exists():
+        table = pq.read_table(quotes_path)
+        pydict = table.to_pydict()
+        delays = pydict["quote_delay_milliseconds"]
+        max_idx = delays.index(max(delays))
+        assert delays[max_idx] == pytest.approx(max_delay, abs=1e-3)
+        assert pydict["session_date"][max_idx] == "2024-02-27"
+        assert pydict["boundary_et"][max_idx] == "13:30:00"
+        assert pydict["boundary_utc"][max_idx] == "2024-02-27T18:30:00Z"
+        assert pydict["selected_first_valid_timestamp_utc"][max_idx] == "2024-02-27T18:31:19.941843968Z"
+        assert pydict["conditions"][max_idx] in (["R"], "R")
+        # Selected quote is well before session close (16:00 ET / 21:00 UTC)
+        selected_dt = datetime.fromisoformat(pydict["selected_first_valid_timestamp_utc"][max_idx].replace("Z", "+00:00"))
+        close_dt = datetime.fromisoformat("2024-02-27T21:00:00+00:00")
+        assert selected_dt < close_dt
+        assert pydict["candidate_rows_examined"][max_idx] > 0
+        assert pydict["rejected_rows_count"][max_idx] == 0

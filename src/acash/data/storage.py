@@ -282,8 +282,10 @@ class ParquetStorageEngine:
                 compression="zstd",
             )
             # Step 3: Validate staged Parquet file
-            staged_table = pq.read_table(temp_part_path)
-            staged_hash = calculate_canonical_batch_sha256(staged_table)
+            with pq.ParquetFile(temp_part_path) as reader:
+                staged_table = reader.read()
+                staged_hash = calculate_canonical_batch_sha256(staged_table)
+                del staged_table
             if staged_hash != canonical_batch_sha256:
                 raise IOError(f"Staged parquet corrupted: expected {canonical_batch_sha256}, got {staged_hash}")
 

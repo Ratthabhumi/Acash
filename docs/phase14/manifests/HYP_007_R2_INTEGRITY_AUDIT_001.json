@@ -1,0 +1,84 @@
+{
+  "manifest_type": "DATASET_INTEGRITY_AUDIT_MANIFEST",
+  "audit_id": "HYP_007_R2_INTEGRITY_AUDIT_001",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "canonical_title": "HYP_007 — R2 Final Integrity Audit, Test Failure Reconciliation, and Excluded-Session State Lineage Verification",
+  "audit_timestamp_utc": "2026-09-22T15:45:00Z",
+  "starting_head": "eeaeeb61e42cbad4e83264b2de943f82a76b71f3",
+  "upstream_r2_manifest_reference": "docs/phase14/manifests/manifest_r2_HYP_007.json",
+  "upstream_r2_manifest_sha256": "8064ea49206d99723fa8c93425cb06ca39ba9c2941ec963073998be8df9449f8",
+  "test_failure_reconciliation": {
+    "previously_failing_suite": "tests/unit/data/ tests/unit/execution/",
+    "previously_reported_result": "792 passed, 1 failed",
+    "exact_failing_test": "tests/unit/data/test_parquet_market_data_provider.py::TestParquetMarketDataProvider::test_m_get_latest_snapshot_fail_closed_and_derived_mode",
+    "failure_classification": "D_NONDETERMINISTIC_OR_ENVIRONMENTAL",
+    "root_cause_summary": "Windows OS file lock on temporary parquet staging file: pq.read_table(temp_part_path) held an open file handle across os.replace(temp_part_path, target_part_path) in ParquetStorageEngine.write_canonical_part, raising PermissionError [WinError 32].",
+    "surgical_fix_applied": "src/acash/data/storage.py was updated to wrap the verification read in `with pq.ParquetFile(temp_part_path) as reader: staged_table = reader.read(); ...; del staged_table` ensuring explicit handle release prior to os.replace.",
+    "suite_result_after_fix": "793 passed, 0 failed (100% green)",
+    "impact_on_hyp_007_execution": "None. The defect was strictly in general parquet storage engine atomic replacement on Windows filesystems."
+  },
+  "session_2023_06_05_audit": {
+    "session_date": "2023-06-05",
+    "observed_bars": 386,
+    "expected_bars": 390,
+    "missing_bars_count": 4,
+    "missing_bars_et": ["09:52", "09:53", "09:54", "09:55"],
+    "underlying_cause": "CTA SIP processing outage on 2023-06-05",
+    "governance_action": "FAIL_CLOSED_SESSION_EXCLUSION",
+    "strategy_eligibility": false,
+    "signal_eligibility": false,
+    "trade_eligibility": false,
+    "presence_in_qualified_bars": false,
+    "noise_area_lookback_rule": {
+      "lookback_window": 14,
+      "eligibility_requirement": "14 PRIOR COMPLETED ELIGIBLE SESSIONS",
+      "skips_excluded_session": true,
+      "first_eligible_session_after_june_5": "2023-06-06",
+      "resolved_lookback_sessions_sequence": "14 valid trading sessions strictly ending on 2023-06-02, skipping 2023-06-05"
+    },
+    "volatility_daily_close_lineage": {
+      "outcome": "OUTCOME_V1_CONFIRMED",
+      "volatility_close_lineage_independent_of_intraday_strategy_eligibility": true,
+      "close_bar_timestamp_utc": "2023-06-05T19:59:00Z",
+      "close_price_usd": "427.10",
+      "raw_sip_unadjusted": true,
+      "price_greater_than_zero": true,
+      "synthetic_construction": false,
+      "dependent_on_missing_bars": false,
+      "authority_reference": "Zarattini, Vercruysse, & Fabozzi (2024) and MEC-0017 preregistration: std(spy_return(d-15:d-1)) computes 15-day return volatility from continuous market daily closing series independent of intraday trade participation."
+    },
+    "execution_quotes_for_excluded_session": {
+      "quotes_stored_in_raw_evidence": true,
+      "can_execute_in_r3": false,
+      "enforcement_contract": "SESSION_EXCLUDED => NO_SIGNAL => NO_EXECUTION"
+    }
+  },
+  "quote_delay_max_outlier_audit": {
+    "session_date": "2024-02-27",
+    "boundary_et": "13:30:00",
+    "boundary_utc": "2024-02-27T18:30:00Z",
+    "selected_quote_timestamp_utc": "2024-02-27T18:31:19.941843968Z",
+    "max_delay_milliseconds": 79941.843,
+    "max_delay_seconds": 79.941843,
+    "condition": "R",
+    "candidate_rows_examined": 50,
+    "rejected_rows_count": 0,
+    "pages_examined": 1,
+    "selected_quote_before_session_close": true,
+    "retrieval_bug": false,
+    "arbitrary_timeout_introduced": false,
+    "reason_for_delay": "Genuine SIP NBBO quoting gap on SPY; Alpaca returned no quotes between 18:30:00Z and 18:31:19Z. Contract FIRST_VALID strictly preserved."
+  },
+  "corpus_digest_continuity": {
+    "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa",
+    "dataset_scientific_content_altered": false,
+    "m2_access_state": "LOCKED_ZERO_ACCESS"
+  },
+  "governance_audit_verdict": {
+    "r2_integrity_audit": "PASS",
+    "r2_qualification_effective": "PASS",
+    "r3_readiness": "READY_FOR_SEPARATE_HUMAN_AUTHORIZATION",
+    "next_required_step": "AUTHORIZE_HYP_007_R3_M1_EXECUTION"
+  }
+}
