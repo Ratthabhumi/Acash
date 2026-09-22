@@ -1,0 +1,44 @@
+{
+  "provider": "ALPACA",
+  "endpoint": "https://data.alpaca.markets/v2/stocks/meta/conditions/quote?tape=B",
+  "tape": "B",
+  "retrieved_at_utc": "2026-09-22T00:38:33Z",
+  "official_conditions": {
+    "4": "On Demand Intra Day Auction",
+    "A": "Slow Quote Offer Side",
+    "B": "Slow Quote Bid Side",
+    "C": "Closing Quote",
+    "E": "Slow Quote LRP Bid Side",
+    "F": "Slow Quote LRP Offer Side",
+    "H": "Slow Quote Bid And Offer Side",
+    "L": "Market Maker Quotes Closed",
+    "N": "Non Firm Quote",
+    "O": "Opening Quote",
+    "R": "Regular Market Maker Open",
+    "U": "Slow Quote LRP Bid And Offer",
+    "W": "Slow Quote Set Slow List"
+  },
+  "legacy_historical_conditions": {
+    "?": "Historical Vendor Unspecified Condition (Alpaca legacy pre-2021 historical SIP archive where granular CTA condition flags were not ingested from third-party vendor data)"
+  },
+  "policy_classification": {
+    "acceptable_executable_conditions": [
+      "R",
+      "?"
+    ],
+    "unacceptable_rejected_conditions": [
+      "N",
+      "C",
+      "L",
+      "A",
+      "B",
+      "H",
+      "E",
+      "F",
+      "U",
+      "W",
+      "4"
+    ],
+    "unknown_condition_policy": "FAIL_CLOSED_REJECT"
+  }
+}

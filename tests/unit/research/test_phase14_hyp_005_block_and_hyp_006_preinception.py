@@ -82,12 +82,7 @@ def test_2_hyp_005_entitlement_block_invariants() -> None:
 
 
 def test_3_hyp_006_preinception_governance() -> None:
-    """Invariant 3: HYP_006 is strictly pre-inception; formal R1 does not exist; K = 1."""
-    # Sealed hypothesis and R1 manifests must NOT exist yet
-    assert not Path("docs/phase8.5/hypotheses/HYP_006.json").exists()
-    assert not Path("docs/phase14/hypotheses/HYP_006.json").exists()
-    assert not Path("docs/phase14/manifests/manifest_r1_HYP_006.json").exists()
-
+    """Invariant 3: HYP_006 governance lineage, search space K = 1, and sealed R1 verification."""
     # Pre-inception artifacts must exist
     audit_p = Path("docs/research/MEC-0016-HYP-006-free-data-feasibility-audit.md")
     prop_p = Path("docs/research/MEC-0016-HYP-006-proposal.md")
@@ -105,7 +100,15 @@ def test_3_hyp_006_preinception_governance() -> None:
     assert "SEARCH_SPACE_CARDINALITY: K = 1" in prop_txt
     assert "PROPOSED_M1: 2016-01-01 THROUGH 2024-04-30" in prop_txt
     assert "PROPOSED_M2: 2024-05-01 ONWARD (LOCKED / STRICTLY FORBIDDEN)" in prop_txt
-    assert "GOVERNANCE_STATE: HYP_006_PREINCEPTION_READY_FOR_HUMAN_REVIEW (R1 NOT CREATED)" in prop_txt
+
+    # When sealed under human authorization, verify R1 manifest adheres to K=1 and zero capital
+    p14_man = Path("docs/phase14/manifests/manifest_r1_HYP_006.json")
+    if p14_man.exists():
+        man = json.loads(p14_man.read_text(encoding="utf-8"))
+        assert man["status"] == "SEALED_STEP_R1_PASS"
+        assert man["capital_authority_usd"] == "0.00"
+        assert man["search_trial_count_k"] == 1
+        assert man["no_real_orders"] is True
 
 
 def test_4_hyp_006_mathematical_contract_integrity() -> None:

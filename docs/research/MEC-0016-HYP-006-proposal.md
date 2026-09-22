@@ -86,9 +86,15 @@ $$\text{VWAP}_{t,m} = \frac{\sum_{i=09:30}^m (\text{TypicalPrice}_{t,i} \times \
 - **FLAT:** Otherwise.
 - **Position State Policy:** Position may change only at designated 30-minute decision epochs. No intraminute stops.
 
-### 3.5 End-of-Day (EOD) Flat Invariant
-- **Policy:** `ZERO_OVERNIGHT_EXPOSURE`. All positions must be flat by end of regular trading hours.
-- **Implementation Detail:** `EOD_EXECUTION_DETAIL = INHERITED_OPEN_IMPLEMENTATION_DETAIL_REQUIRING_PRE_R2_BINDING`. (No arbitrary 15:59 fill rule is invented at pre-inception).
+### 3.5 End-of-Day (EOD) Flat Invariant & Execution Semantics
+- **Policy:** `ZERO_OVERNIGHT_EXPOSURE`. All positions must be completely flat before regular session close (`16:00:00 ET`).
+- **Exact Execution Semantics (`MEC-0016-D09`):**
+  - Final decision epoch: `15:30:00 ET` (reading completed bar `15:29:00`). If signal is FLAT, exit executes at `15:30:00 ET`.
+  - Forced EOD flattening boundary: `15:59:00 ET`. Any position remaining open after 15:30:00 ET is mandatorily flattened at the first valid continuous SIP NBBO quote arriving at or after `15:59:00.000 ET` and before `16:00:00.000 ET`.
+  - Fills: BUY at Ask + $0.001/share; SELL at Bid - $0.001/share.
+  - Closing auction / MOC crosses are strictly excluded.
+  - Bar Close fills are strictly prohibited.
+  - Fail-closed: If no valid quote exists before 16:00:00 ET, session is excluded under `DataContractError`.
 
 ### 3.6 Volatility Targeting & Position Sizing
 - Volatility estimated from 15 prior completed daily simple close-to-close returns of unadjusted closes:
@@ -104,9 +110,15 @@ $$\text{VWAP}_{t,m} = \frac{\sum_{i=09:30}^m (\text{TypicalPrice}_{t,i} \times \
 
 ---
 
-## 4. Realistic Friction Stack
+## 4. Realistic Friction & Quote Execution Stack
 
-1. **Spread Crossing:** Mandatory fill at observed NBBO (BUY at Ask, SELL at Bid).
+1. **Spread Crossing & Quote Condition Policy (`MEC-0016-D08`):**
+   - Mandatory fill at observed NBBO (`FIRST_VALID_SIP_NBBO_AT_OR_AFTER_EXECUTION_BOUNDARY`: BUY at Ask, SELL at Bid).
+   - Authoritative condition code binding to Alpaca Tape B (`docs/research/manifests/MEC-0016-alpaca-quote-conditions-tape-b.json`):
+     - `{'R', '?'}` acceptable provided `bid_price > 0`, `ask_price > 0`, `bid_size > 0`, `ask_size > 0`, and `ask_price >= bid_price`.
+     - Non-firm (`N`), closing (`C`), closed (`L`), slow (`A, B, H, E, F, U, W`), and auction (`4`) quotes strictly rejected.
+     - Crossed markets (`bid > ask`) strictly rejected; locked markets (`bid == ask`) accepted for execution if sizes $> 0$.
+     - Unmapped/unknown conditions fail closed.
 2. **Adverse Slippage:** Standalone $\$0.001/\text{share}$ adverse penalty per side.
 3. **Regulatory Fees:**
    - SEC Section 31 fee (covered sales only, `ROUND_CEILING_TO_CENT`).

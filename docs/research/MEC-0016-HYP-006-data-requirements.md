@@ -75,9 +75,18 @@ A quote is valid if and only if:
 1. `bid_price > 0` and `ask_price > 0`.
 2. `bid_size > 0` and `ask_size > 0`.
 3. `ask_price >= bid_price` (crossed market quotes with `bid > ask` are strictly rejected).
-4. `is_locked` ($\text{bid} == \text{ask}$) is admitted only if marked valid by consolidated SIP conditions.
-5. Condition Code Mapping: Bound to existing canonical MEC-0015 quote qualification evidence. Generic condition filters lacking explicit canonical code mapping are classified:
-   $$\text{REQUIRES\_AUTHORITATIVE\_CONDITION\_CODE\_BINDING}$$
+4. `is_locked` ($\text{bid} == \text{ask}$) is admitted for execution if sizes $> 0$.
+5. Condition Code Policy (`MEC-0016-D08`):
+   - Authoritative mapping sourced from Alpaca Tape B (`GET /v2/stocks/meta/conditions/quote?tape=B`), archived in `docs/research/manifests/MEC-0016-alpaca-quote-conditions-tape-b.json`.
+   - Acceptable condition codes: `{'R', '?'}` where `'R'` is Regular Market Maker Open (direct SIP) and `'?'` is Historical Vendor Unspecified (legacy historical archive).
+   - Unacceptable condition codes: `{'N', 'C', 'L', 'A', 'B', 'H', 'E', 'F', 'U', 'W', '4'}` (non-firm, closing, closed, slow, auction).
+   - Any unknown/unmapped condition code fails closed.
+
+### 3.3 End-of-Day (EOD) Quote Execution Boundary
+- Forced EOD flattening boundary: `15:59:00 ET`.
+- Execution fills on first valid continuous SIP NBBO quote with $t_{\text{quote}} \in [\text{15:59:00.000}, \text{16:00:00.000})\text{ ET}$.
+- Closing auction / MOC crosses are excluded. Bar Close fills are prohibited.
+- If no valid quote exists before 16:00:00 ET, session is excluded under `DataContractError`.
 
 ---
 

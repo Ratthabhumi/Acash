@@ -27,6 +27,8 @@
 | **MEC-0016-D05** | Minimum Trade Count Gate | `RESOLVED` | **Option A** (Preserve $N \ge 100$) | Prevents opportunistic post-hoc relaxation for shorter sample |
 | **MEC-0016-D06** | Alpaca 2016–2018 Quote Depth | `RESOLVED_PASS` | **Option A** (Verified on early dates) | Probed 2016-06-17, 2017-06-01, 2018-06-01 (9/9 HTTP 200) |
 | **MEC-0016-D07** | Zero-Cost SIP Rate & Entitlement | `RESOLVED_PASS` | **Option A** (Documented & Verified) | Alpaca FAQ confirms old historical SIP requires no subscription; 200 req/min is throughput limit |
+| **MEC-0016-D08** | Quote Conditions & Valid Policy | `RESOLVED_PASS` | **Option A** (Authoritative Mapping) | Bound to official Tape B metadata; `{'R', '?'}` acceptable with positive prices/sizes; reject non-firm/closed/crossed |
+| **MEC-0016-D09** | Exact EOD Execution Semantics | `RESOLVED_PASS` | **Option A** (Continuous 15:59 NBBO) | Forced flat boundary 15:59:00 ET first valid NBBO in [15:59, 16:00); auction/MOC excluded; bar close prohibited |
 
 ---
 
@@ -77,3 +79,28 @@
 ### MEC-0016-D07: Zero-Cost SIP Rate Limits & Entitlement Gating
 - **Status:** `RESOLVED_PASS`.
 - **Authority & Audit:** Official Alpaca documentation establishes that historical queries where `end <= current_time - 15 minutes` can query `feed=sip` without paid subscription. Standard account rate limits ($200$ requests/minute) represent an **operational throughput constraint** managed via asynchronous pagination pacing, not an entitlement barrier.
+
+---
+
+### MEC-0016-D08: Alpaca Quote Conditions & Valid-Quote Policy Binding
+- **Status:** `RESOLVED_PASS`.
+- **Authority:** Official Alpaca metadata endpoint (`GET /v2/stocks/meta/conditions/quote?tape=B`), archived in `docs/research/manifests/MEC-0016-alpaca-quote-conditions-tape-b.json`.
+- **Resolution:**
+  - Standard live/direct SIP quotes use condition code `'R'` ("Regular Market Maker Open").
+  - Legacy historical archive quotes (< 2021) use condition code `'?'` ("Historical Vendor Unspecified Condition").
+  - Acceptable executable conditions: `{'R', '?'}` provided all structural NBBO invariants hold: `bid_price > 0`, `ask_price > 0`, `bid_size > 0`, `ask_size > 0`, and `ask_price >= bid_price`.
+  - Unacceptable conditions: `{'N', 'C', 'L', 'A', 'B', 'H', 'E', 'F', 'U', 'W', '4'}`.
+  - Locked markets (`bid == ask`) allowed for execution if sizes > 0; crossed markets (`bid > ask`) strictly rejected.
+  - Any unknown/unmapped condition code fails closed.
+
+---
+
+### MEC-0016-D09: Exact End-of-Day (EOD) Execution Semantics Binding
+- **Status:** `RESOLVED_PASS`.
+- **Authority:** Canonical `DEC-MEC015-11`, `MEC-0015-strategy-contract-audit.md` Section 8, and `MEC-0015-HYP-005-strategy-preregistration.md` Section 7.2.
+- **Resolution:**
+  - Final signal decision epoch: `15:30:00 ET` (evaluating completed bar `15:29:00`). If signal is FLAT, exit executes at `15:30:00 ET`.
+  - Forced EOD flattening boundary: `15:59:00 ET`. Any position remaining open after 15:30:00 ET must be flattened at the first valid continuous SIP NBBO quote with timestamp $t_{\text{quote}} \in [\text{15:59:00.000}, \text{16:00:00.000})\text{ ET}$.
+  - Execution fills: BUY at Ask + $0.001/share adverse slippage; SELL at Bid - $0.001/share adverse slippage.
+  - Strictly zero overnight exposure. Closing auction / MOC crosses are excluded. Bar Close fills are strictly prohibited.
+  - Fail-closed: If no valid quote exists before 16:00:00 ET, session is excluded under `DataContractError`.

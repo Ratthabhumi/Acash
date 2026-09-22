@@ -150,8 +150,21 @@ class Mec0016QuoteContractReport:
         }
 
 
+ACCEPTABLE_QUOTE_CONDITIONS = frozenset({"R", "?"})
+REJECTED_QUOTE_CONDITIONS = frozenset({"N", "C", "L", "A", "B", "H", "E", "F", "U", "W", "4"})
+
+
 def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
-    """Parse raw Alpaca quote record with strict validation."""
+    """Parse raw Alpaca quote record with strict validation.
+
+    Enforces:
+    - bid_price > 0 and ask_price > 0
+    - bid_size > 0 and ask_size > 0
+    - crossed market (bid > ask) is strictly rejected
+    - locked market (bid == ask) is tracked (allowed for execution if liquid)
+    - condition codes must be in ACCEPTABLE_QUOTE_CONDITIONS ({'R', '?'});
+      unacceptable or unknown condition codes raise DataContractError fail-closed.
+    """
     t_str = raw["t"]
     bp = Decimal(str(raw["bp"]))
     ap = Decimal(str(raw["ap"]))
@@ -159,18 +172,27 @@ def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
     as_ = int(raw["as"])
     bx = str(raw.get("bx", ""))
     ax = str(raw.get("ax", ""))
-    cond = list(raw.get("c", []))
+    cond = [str(c) for c in raw.get("c", [])]
     tape = str(raw.get("z", "B"))
 
-    if bp <= 0 or ap <= 0:
-        raise DataContractError(f"Non-positive quote prices: bid={bp}, ask={ap} at {t_str}")
+    if bp <= Decimal("0") or ap <= Decimal("0"):
+        raise DataContractError(f"NONPOSITIVE_NBBO_QUOTE: bid={bp}, ask={ap} at {t_str}")
+
+    if bs <= 0 or as_ <= 0:
+        raise DataContractError(f"NONPOSITIVE_QUOTE_SIZE: bid_size={bs}, ask_size={as_} at {t_str}")
 
     spread = ap - bp
     is_locked = spread == Decimal("0")
     is_crossed = spread < Decimal("0")
 
     if is_crossed:
-        raise DataContractError(f"Crossed market quote encountered: bid={bp} > ask={ap} at {t_str}")
+        raise DataContractError(f"CROSSED_NBBO_QUOTE: bid={bp} > ask={ap} at {t_str}")
+
+    for c_code in cond:
+        if c_code in REJECTED_QUOTE_CONDITIONS:
+            raise DataContractError(f"UNACCEPTABLE_QUOTE_CONDITION: condition '{c_code}' is rejected at {t_str}")
+        if c_code not in ACCEPTABLE_QUOTE_CONDITIONS:
+            raise DataContractError(f"UNKNOWN_QUOTE_CONDITION: condition '{c_code}' is unmapped/fail-closed at {t_str}")
 
     return Mec0016SipQuoteRecord(
         timestamp_utc=t_str,
