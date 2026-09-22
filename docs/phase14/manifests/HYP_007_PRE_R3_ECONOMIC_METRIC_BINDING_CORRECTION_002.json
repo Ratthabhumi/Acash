@@ -1,0 +1,51 @@
+{
+  "manifest_type": "PRE_R3_GATE_RECONCILIATION_MANIFEST",
+  "correction_id": "HYP_007_PRE_R3_ECONOMIC_METRIC_BINDING_CORRECTION_002",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "canonical_title": "HYP_007 — Pre-R3 Acceptance-Gate Reconciliation & Additive Metric Binding Correction 002",
+  "correction_timestamp_utc": "2026-09-22T17:05:00Z",
+  "starting_head": "6ae052746edf3bbfebb86e997b42aa838e253174",
+  "superseded_artifacts": {
+    "superseded_doc": "docs/phase14/HYP_007_PRE_R3_ECONOMIC_METRIC_BINDING_001.md",
+    "superseded_doc_sha256": "c6fd5488bcdc4021833a4d63ef060d23a7f099be4fa5a82a6cd269b7c359af68",
+    "superseded_manifest": "docs/phase14/manifests/HYP_007_PRE_R3_ECONOMIC_METRIC_BINDING_001.json",
+    "superseded_manifest_sha256": "7ced2ba67d3f568248c7983dfa4ed02a121b21534c42d47ade50c6887de672a7"
+  },
+  "upstream_sovereign_hashes": {
+    "r1_preregistration_sha256": "41a0a27f9237371538366546a1761884d636d6c6d2e01ad14a90aa1cc47e16c4",
+    "r1_spec_sha256": "e6821bed806cadef6c129f02c45cd244c0e720fca1715fcc480315c95186df7d",
+    "r1_manifest_sha256": "f48a57333675ebeb5a47cfff40108b13abec000ba958a42ba54fc714c30adc02",
+    "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa"
+  },
+  "defect_reconciliation": {
+    "defect_classification": "PRE_R3_METADATA_GATE_DRIFT",
+    "erroneous_g3_in_binding_001": "<= 20.0%",
+    "effective_g3_reconciled": "<= 30.0% (0.30)",
+    "erroneous_g7_in_binding_001": ">= 0.50",
+    "effective_g7_reconciled": ">= 0.75"
+  },
+  "authoritative_acceptance_gates": {
+    "G1": "NET_TOTAL_RETURN > 0.0",
+    "G2": "NET_ANNUALIZED_SHARPE >= 1.00",
+    "G3": "MAX_DRAWDOWN <= 0.30",
+    "G4": "COMPLETED_TRADES >= 100",
+    "G5": "NO_MATERIAL_CONTRACT_FAILURE == True",
+    "G6": "2X_FRICTION_STRESS_NET_RETURN > 0.0",
+    "G7": "2X_FRICTION_STRESS_NET_SHARPE >= 0.75",
+    "conjunction_rule": "ALL_7_GATES_MUST_PASS_SIMULTANEOUSLY"
+  },
+  "governance_assertions": {
+    "strategy_signals_computed": false,
+    "trades_computed": false,
+    "pnl_observed": false,
+    "real_capital_authority_usd": "0.00",
+    "no_real_orders": true,
+    "m2_access_state": "LOCKED_ZERO_ACCESS"
+  },
+  "verdict": {
+    "pre_r3_gate_reconciliation": "SEALED_PASS",
+    "r3_readiness": "READY_FOR_SEPARATE_HUMAN_AUTHORIZATION",
+    "next_required_step": "AUTHORIZE_HYP_007_R3_M1_EXECUTION"
+  }
+}

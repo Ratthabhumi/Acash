@@ -21,6 +21,7 @@ Strictly Enforces:
 - Secondary benchmark reporting: SPY buy-and-hold does not substitute for or block G1–G7.
 """
 
+from dataclasses import dataclass
 from decimal import Decimal
 import math
 from typing import List, Sequence, Union
@@ -212,3 +213,162 @@ def count_completed_trades_from_position_series(positions: Sequence[int]) -> int
         current_pos = next_pos
 
     return completed_trades
+
+
+# ---------------------------------------------------------------------------
+# Canonical HYP_007 Acceptance Gates Authority (Sovereign R1 Preregistration)
+# ---------------------------------------------------------------------------
+
+G1_NET_TOTAL_RETURN_MIN_EXCLUSIVE: Decimal = Decimal("0.0")
+G2_NET_SHARPE_MIN: Decimal = Decimal("1.00")
+G3_MAX_DRAWDOWN_MAX: Decimal = Decimal("0.30")
+G4_COMPLETED_TRADES_MIN: int = 100
+G5_REQUIRE_NO_MATERIAL_CONTRACT_FAILURE: bool = True
+G6_STRESS_NET_RETURN_MIN_EXCLUSIVE: Decimal = Decimal("0.0")
+G7_STRESS_NET_SHARPE_MIN: Decimal = Decimal("0.75")
+
+
+@dataclass(frozen=True)
+class GateEvaluationResult:
+    passed: bool
+    gate_id: str
+    metric_name: str
+    observed_value: Union[Decimal, int, bool]
+    threshold_value: Union[Decimal, int, bool]
+    comparison_operator: str
+
+
+@dataclass(frozen=True)
+class Hyp007M1AcceptanceReport:
+    all_passed: bool
+    g1: GateEvaluationResult
+    g2: GateEvaluationResult
+    g3: GateEvaluationResult
+    g4: GateEvaluationResult
+    g5: GateEvaluationResult
+    g6: GateEvaluationResult
+    g7: GateEvaluationResult
+    rejection_reasons: List[str]
+
+
+def evaluate_hyp_007_m1_acceptance_gates(
+    net_total_return: Decimal,
+    net_annualized_sharpe: Decimal,
+    max_drawdown: Decimal,
+    completed_trades: int,
+    no_material_contract_failure: bool,
+    stress_net_return: Decimal,
+    stress_net_sharpe: Decimal,
+) -> Hyp007M1AcceptanceReport:
+    """Evaluate the 7 sovereign HYP_007 M1 acceptance criteria fail-closed.
+
+    Authority: docs/research/MEC-0017-HYP-007-strategy-preregistration.md Section 10
+    and docs/phase14/hypotheses/HYP_007.json.
+    All 7 gates must pass simultaneously (zero scoring, zero partial pass).
+    """
+    rejection_reasons: List[str] = []
+
+    # G1: Net Total Return > 0.0
+    g1_pass = net_total_return > G1_NET_TOTAL_RETURN_MIN_EXCLUSIVE
+    if not g1_pass:
+        rejection_reasons.append(f"G1_FAIL: Net total return {net_total_return} <= {G1_NET_TOTAL_RETURN_MIN_EXCLUSIVE}")
+    g1 = GateEvaluationResult(
+        passed=g1_pass,
+        gate_id="G1",
+        metric_name="NET_TOTAL_RETURN",
+        observed_value=net_total_return,
+        threshold_value=G1_NET_TOTAL_RETURN_MIN_EXCLUSIVE,
+        comparison_operator=">",
+    )
+
+    # G2: Net Annualized Sharpe >= 1.00
+    g2_pass = net_annualized_sharpe >= G2_NET_SHARPE_MIN
+    if not g2_pass:
+        rejection_reasons.append(f"G2_FAIL: Net Sharpe {net_annualized_sharpe} < {G2_NET_SHARPE_MIN}")
+    g2 = GateEvaluationResult(
+        passed=g2_pass,
+        gate_id="G2",
+        metric_name="NET_ANNUALIZED_SHARPE",
+        observed_value=net_annualized_sharpe,
+        threshold_value=G2_NET_SHARPE_MIN,
+        comparison_operator=">=",
+    )
+
+    # G3: Max Drawdown <= 30.0% (0.30)
+    g3_pass = max_drawdown <= G3_MAX_DRAWDOWN_MAX
+    if not g3_pass:
+        rejection_reasons.append(f"G3_FAIL: Max drawdown {max_drawdown} > {G3_MAX_DRAWDOWN_MAX}")
+    g3 = GateEvaluationResult(
+        passed=g3_pass,
+        gate_id="G3",
+        metric_name="MAX_DRAWDOWN",
+        observed_value=max_drawdown,
+        threshold_value=G3_MAX_DRAWDOWN_MAX,
+        comparison_operator="<=",
+    )
+
+    # G4: Completed Trades >= 100
+    g4_pass = completed_trades >= G4_COMPLETED_TRADES_MIN
+    if not g4_pass:
+        rejection_reasons.append(f"G4_FAIL: Completed trades {completed_trades} < {G4_COMPLETED_TRADES_MIN}")
+    g4 = GateEvaluationResult(
+        passed=g4_pass,
+        gate_id="G4",
+        metric_name="COMPLETED_TRADES",
+        observed_value=completed_trades,
+        threshold_value=G4_COMPLETED_TRADES_MIN,
+        comparison_operator=">=",
+    )
+
+    # G5: No Material Contract Failure == True
+    g5_pass = no_material_contract_failure is G5_REQUIRE_NO_MATERIAL_CONTRACT_FAILURE
+    if not g5_pass:
+        rejection_reasons.append("G5_FAIL: Material contract failure detected")
+    g5 = GateEvaluationResult(
+        passed=g5_pass,
+        gate_id="G5",
+        metric_name="NO_MATERIAL_CONTRACT_FAILURE",
+        observed_value=no_material_contract_failure,
+        threshold_value=G5_REQUIRE_NO_MATERIAL_CONTRACT_FAILURE,
+        comparison_operator="==",
+    )
+
+    # G6: 2x Friction Stress Net Return > 0.0
+    g6_pass = stress_net_return > G6_STRESS_NET_RETURN_MIN_EXCLUSIVE
+    if not g6_pass:
+        rejection_reasons.append(f"G6_FAIL: Stress net return {stress_net_return} <= {G6_STRESS_NET_RETURN_MIN_EXCLUSIVE}")
+    g6 = GateEvaluationResult(
+        passed=g6_pass,
+        gate_id="G6",
+        metric_name="2X_FRICTION_STRESS_NET_RETURN",
+        observed_value=stress_net_return,
+        threshold_value=G6_STRESS_NET_RETURN_MIN_EXCLUSIVE,
+        comparison_operator=">",
+    )
+
+    # G7: 2x Friction Stress Net Sharpe >= 0.75
+    g7_pass = stress_net_sharpe >= G7_STRESS_NET_SHARPE_MIN
+    if not g7_pass:
+        rejection_reasons.append(f"G7_FAIL: Stress Sharpe {stress_net_sharpe} < {G7_STRESS_NET_SHARPE_MIN}")
+    g7 = GateEvaluationResult(
+        passed=g7_pass,
+        gate_id="G7",
+        metric_name="2X_FRICTION_STRESS_NET_SHARPE",
+        observed_value=stress_net_sharpe,
+        threshold_value=G7_STRESS_NET_SHARPE_MIN,
+        comparison_operator=">=",
+    )
+
+    all_passed = g1_pass and g2_pass and g3_pass and g4_pass and g5_pass and g6_pass and g7_pass
+
+    return Hyp007M1AcceptanceReport(
+        all_passed=all_passed,
+        g1=g1,
+        g2=g2,
+        g3=g3,
+        g4=g4,
+        g5=g5,
+        g6=g6,
+        g7=g7,
+        rejection_reasons=rejection_reasons,
+    )
