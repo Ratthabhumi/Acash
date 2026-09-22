@@ -150,11 +150,20 @@ class Mec0016QuoteContractReport:
         }
 
 
+# Historical R1 acceptable condition set (preserves R1 historical contract authority)
 ACCEPTABLE_QUOTE_CONDITIONS = frozenset({"R", "?"})
+
+# Amendment 001 execution conditions policy
+ACCEPTABLE_EXECUTION_QUOTE_CONDITIONS = frozenset({"R"})
+UNRESOLVED_PROVENANCE_QUOTE_CONDITIONS = frozenset({"?"})
 REJECTED_QUOTE_CONDITIONS = frozenset({"N", "C", "L", "A", "B", "H", "E", "F", "U", "W", "4"})
 
 
-def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
+def parse_alpaca_quote(
+    raw: Dict[str, Any],
+    allow_unresolved_provenance: bool = True,
+    execution_mode: bool = False,
+) -> Mec0016SipQuoteRecord:
     """Parse raw Alpaca quote record with strict validation.
 
     Enforces:
@@ -162,8 +171,13 @@ def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
     - bid_size > 0 and ask_size > 0
     - crossed market (bid > ask) is strictly rejected
     - locked market (bid == ask) is tracked (allowed for execution if liquid)
-    - condition codes must be in ACCEPTABLE_QUOTE_CONDITIONS ({'R', '?'});
-      unacceptable or unknown condition codes raise DataContractError fail-closed.
+    - Under HYP_006_R1_QUOTE_PROVENANCE_AMENDMENT_001:
+      Condition '?' is classified as STRUCTURALLY_USABLE_BUT_CONDITION_PROVENANCE_UNRESOLVED.
+      For dataset execution (allow_unresolved_provenance=False or execution_mode=True), '?' raises
+      DataContractError fail-closed.
+      For historical probe audit (allow_unresolved_provenance=True), '?' parses successfully.
+      Only verified regular condition 'R' is unconditionally acceptable for execution.
+      Unacceptable or unknown condition codes raise DataContractError fail-closed.
     """
     t_str = raw["t"]
     bp = Decimal(str(raw["bp"]))
@@ -188,10 +202,18 @@ def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
     if is_crossed:
         raise DataContractError(f"CROSSED_NBBO_QUOTE: bid={bp} > ask={ap} at {t_str}")
 
+    is_exec = execution_mode or (not allow_unresolved_provenance)
+
     for c_code in cond:
         if c_code in REJECTED_QUOTE_CONDITIONS:
             raise DataContractError(f"UNACCEPTABLE_QUOTE_CONDITION: condition '{c_code}' is rejected at {t_str}")
-        if c_code not in ACCEPTABLE_QUOTE_CONDITIONS:
+        if c_code in UNRESOLVED_PROVENANCE_QUOTE_CONDITIONS:
+            if is_exec:
+                raise DataContractError(
+                    f"UNRESOLVED_QUOTE_CONDITION_PROVENANCE: condition '{c_code}' lacks granular "
+                    f"CTA provenance under Amendment 001 at {t_str}"
+                )
+        elif c_code not in ACCEPTABLE_EXECUTION_QUOTE_CONDITIONS:
             raise DataContractError(f"UNKNOWN_QUOTE_CONDITION: condition '{c_code}' is unmapped/fail-closed at {t_str}")
 
     return Mec0016SipQuoteRecord(
@@ -210,11 +232,20 @@ def parse_alpaca_quote(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
     )
 
 
+def qualify_alpaca_quote_for_r2_execution(raw: Dict[str, Any]) -> Mec0016SipQuoteRecord:
+    """Pre-R2 qualification layer: validate quote for actual R2 dataset execution.
+
+    Rejects '?' fail-closed under HYP_006_R1_QUOTE_PROVENANCE_AMENDMENT_001.
+    """
+    return parse_alpaca_quote(raw, allow_unresolved_provenance=False, execution_mode=True)
+
+
 def evaluate_boundary_quotes(
     session_date: date,
     boundary_time: time,
     quotes_before: List[Dict[str, Any]],
     quotes_after: List[Dict[str, Any]],
+    allow_unresolved_provenance: bool = True,
 ) -> Mec0016BoundaryQuotePair:
     """Evaluate candidate quotes around a decision boundary T."""
     if session_date not in MEC_0016_AUTHORIZED_EARLY_QUOTE_PROBE_DATES:
@@ -229,7 +260,9 @@ def evaluate_boundary_quotes(
     if quotes_before:
         valid_before = [q for q in quotes_before if Decimal(str(q["bp"])) > 0 and Decimal(str(q["ap"])) > 0]
         if valid_before:
-            latest_before = parse_alpaca_quote(valid_before[-1])
+            latest_before = parse_alpaca_quote(
+                valid_before[-1], allow_unresolved_provenance=allow_unresolved_provenance
+            )
 
     if not quotes_after:
         raise DataContractError(f"No quotes returned at or after {session_date} {boundary_time}")
@@ -238,7 +271,9 @@ def evaluate_boundary_quotes(
     if not valid_after:
         raise DataContractError(f"No valid non-zero quotes at or after {session_date} {boundary_time}")
 
-    first_after = parse_alpaca_quote(valid_after[0])
+    first_after = parse_alpaca_quote(
+        valid_after[0], allow_unresolved_provenance=allow_unresolved_provenance
+    )
 
     t_str = first_after.timestamp_utc
     if t_str.endswith("Z"):
