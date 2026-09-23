@@ -1,0 +1,67 @@
+{
+  "manifest_id": "HYP_009_PRE_R2_EXECUTION_ACCOUNTING_CLARIFICATION",
+  "manifest_type": "PRE_R2_EXECUTION_ACCOUNTING_CLARIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_PRE_R2_ACCOUNTING_CLARIFICATION_AND_R2_M1_EXECUTION",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "state_at_seal": "R1_PREREGISTERED_SEALED",
+  "simulated_starting_aum_usd": "100000.00",
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "position_quantity_policy": "WHOLE_SHARES_ONLY",
+  "entry_sizing": "FLOOR_AVAILABLE_CASH_DIV_ADVERSE_FILL",
+  "zero_or_negative_shares": "FAIL_CLOSED",
+  "residual_cash_return": 0.0,
+  "negative_cash_permitted": false,
+  "dividend_accounting": {
+    "signal_series": "G_T_EQ_(P_T_PLUS_D_T)_DIV_P_T-1_EX_DATE_ONLY",
+    "receivable_recognition": "EX_DATE",
+    "receivable_spendable": "OFFICIAL_PAYABLE_DATE_ONLY",
+    "receivable_may_size_purchase_before_payable": false,
+    "missing_payable_date": "BLOCKED_DIVIDEND_PAYMENT_DATE_CONTRACT",
+    "double_counting": "PROHIBITED"
+  },
+  "split_accounting": {
+    "signal_adjustment": "split",
+    "execution_valuation_adjustment": "raw",
+    "unbound_split": "BLOCKED_UNBOUND_SPLIT_AUTHORITY",
+    "no_split_determination": "NO_SPLIT_EVENTS_IN_AUTHORIZED_WINDOW"
+  },
+  "valuation": {
+    "equity": "CASH_PLUS_SHARES_TIMES_RAW_CLOSE_PLUS_DIVIDEND_RECEIVABLES",
+    "daily_net_return": "EQUITY_T_DIV_EQUITY_T-1_MINUS_1",
+    "first_m1_reference_equity": "100000.00",
+    "sharpe_convention": {
+      "periods_per_year": 252,
+      "ddof": 1,
+      "risk_free_rate": 0,
+      "zero_variance": "FAIL_CLOSED"
+    },
+    "total_return": "ENDING_EQUITY_DIV_100000_MINUS_1"
+  },
+  "m1_terminal": {
+    "m1_end": "2020-12-31",
+    "fetch_2021_to_close_or_value": "PROHIBITED",
+    "forced_liquidation": "PROHIBITED",
+    "terminal_exit_friction": "PROHIBITED",
+    "out_of_window_signal": "PENDING_NEXT_PARTITION_EXECUTION_NOT_EXECUTED"
+  },
+  "benchmark": {
+    "contract": "SPY_BUY_AND_HOLD",
+    "starting_equity": "100000.00",
+    "entry": "FIRST_ELIGIBLE_M1_SESSION_OPEN_WHOLE_SHARES_2BPS_ADVERSE",
+    "residual_cash_return": 0.0,
+    "rebalancing": "PROHIBITED",
+    "forced_m1_end_liquidation": "PROHIBITED",
+    "g4_operator": "CORE_MDD_LT_BENCHMARK_MDD_STRICT"
+  },
+  "upstream_pins": {
+    "r1_manifest_sha256": "ded1528d78f92003ab538a1ade7b9e047ed7306feaac4faa3270c67df27fce7c",
+    "preregistration_sha256": "6813f3a5870c9027801f510f61a7a17cae01ebc7706b5b94fcb3334236202177",
+    "hyp_009_record_sha256": "fb855542e86aa91139a0c7cdbedaad60de113ccbf679fe3e12a7465bcae13f2d"
+  },
+  "r1_seal_modified": false,
+  "market_data_access": "ZERO",
+  "paper_authorized": false,
+  "live_authorized": false
+}
