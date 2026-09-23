@@ -1,0 +1,27 @@
+{
+  "manifest_id": "SAT-OPTIONS-001-research-archive",
+  "manifest_type": "SATELLITE_RESEARCH_ARCHIVE_MANIFEST",
+  "authorization": "AUTHORIZE_SAT_OPTIONS_001_RESEARCH_ARCHIVE_DOCUMENTATION",
+  "canonical_head_at_archive": "065a3b4cd81f8d2befb4e61e4348f1061e3f425d",
+  "research_branch_id": "SAT-OPTIONS-001",
+  "working_title": "Dealer-Gamma Intraday Regime Research",
+  "state": "RESEARCH_ARCHIVE_ONLY",
+  "hypothesis_id": null,
+  "mechanism_id": null,
+  "preregistration": null,
+  "backtest_authorization": null,
+  "data_access_authorization": null,
+  "archive_document": "docs/research/SAT-OPTIONS-001-dealer-gamma-intraday-regime-research.md",
+  "future_satellites": [
+    "SATELLITE_A_GAMMA_REGIME_X_FUTURE_INTRADAY_VOLATILITY",
+    "SATELLITE_B_GAMMA_REGIME_X_INTRADAY_MOMENTUM_REVERSAL",
+    "SATELLITE_C_STRIKE_LOCAL_PINNING_OR_WALL_EFFECTS"
+  ],
+  "source_metadata_status": "SOURCE_METADATA_TO_VERIFY_BEFORE_FORMAL_PREREGISTRATION",
+  "core_001_modified": false,
+  "hyp_009_modified": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
