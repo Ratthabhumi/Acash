@@ -98,6 +98,26 @@ def test_special_closure_2018_12_05_bush_mourning(calendar: NyseCa1Calendar) -> 
     assert "George H.W. Bush" in str(calendar.get_holiday_reason(d))
 
 
+def test_special_closure_2025_01_09_carter_mourning(calendar: NyseCa1Calendar) -> None:
+    """Verify 2025-01-09 National Day of Mourning for President Carter is recorded.
+
+    The NYSE was fully closed on 2025-01-09 (unscheduled full market closure). This
+    regression guards against the M2 census counting the closure day as a regular session.
+    """
+    d = date(2025, 1, 9)
+    assert calendar.is_trading_session(d) is False
+    assert calendar.is_holiday(d) is True
+    assert "Jimmy Carter" in str(calendar.get_holiday_reason(d))
+
+    # get_session must fail closed
+    with pytest.raises(NonTradingDayError, match="official NYSE holiday"):
+        calendar.get_session(d)
+
+    # get_session_or_none returns None
+    assert calendar.get_session_or_none(d) is None
+    assert calendar.get_verified_schedule(d) is None
+
+
 # =============================================================================
 # 3. Early Close Tests
 # =============================================================================

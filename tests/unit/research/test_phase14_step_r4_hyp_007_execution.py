@@ -2,7 +2,7 @@
 
 Validates:
 - Stage A freeze required before M2 network access.
-- Exact M2 date bounds and census (569 regular sessions, 6 early closes excluded).
+- Exact M2 date bounds and census (568 regular sessions, 6 early closes excluded).
 - Request rejection for 2026-08-15 and beyond.
 - Quarantine-gap firewall and M3 firewall.
 - M2 starting AUM is exactly $100,000.00.
@@ -26,6 +26,7 @@ from acash.research.step_r4_hyp_007 import (
     build_m2_calendar_census,
     compute_m2_finra_taf,
     compute_m2_sec31_fee,
+    extract_m2_bars_list,
     load_m2_dividend_projection,
     validate_r4_preconditions,
 )
@@ -67,8 +68,13 @@ def test_r4_preconditions_stage_a_verified() -> None:
 def test_m2_census_regular_and_early_closes() -> None:
     census = build_m2_calendar_census()
     assert census.calendar_days_count == 836
-    assert len(census.regular_sessions) == 569
+    assert len(census.regular_sessions) == 568
     assert len(census.early_closes) == 6
+
+    # 2025-01-09 was a full NYSE market closure (National Day of Mourning
+    # for President Jimmy Carter) and must be excluded from regular sessions.
+    assert date(2025, 1, 9) not in census.regular_sessions
+    assert any(d == date(2025, 1, 9) for d, _ in census.holidays)
 
     # Verify excluded early closes
     expected_early_closes = {
@@ -84,6 +90,25 @@ def test_m2_census_regular_and_early_closes() -> None:
     # First and last regular sessions in M2
     assert census.regular_sessions[0] == date(2024, 5, 1)
     assert census.regular_sessions[-1] == date(2026, 8, 14)
+
+
+def test_null_bars_payload_fails_closed_data_contract_error() -> None:
+    """Alpaca 'bars': null (unscheduled closure day) must raise DataContractError, not TypeError."""
+    payload_null = {"bars": None, "next_page_token": None, "symbol": "SPY"}
+    with pytest.raises(DataContractError, match="Null bars payload"):
+        extract_m2_bars_list(payload_null, date(2025, 1, 9))
+
+    payload_missing = {"symbol": "SPY"}
+    with pytest.raises(DataContractError, match="Null bars payload"):
+        extract_m2_bars_list(payload_missing, date(2025, 1, 9))
+
+    payload_malformed = {"bars": {"not": "a list"}, "symbol": "SPY"}
+    with pytest.raises(DataContractError, match="Malformed bars payload"):
+        extract_m2_bars_list(payload_malformed, date(2025, 1, 9))
+
+    payload_valid = {"bars": [{"t": "2025-01-10T14:30:00Z"}], "symbol": "SPY"}
+    extracted = extract_m2_bars_list(payload_valid, date(2025, 1, 10))
+    assert extracted == [{"t": "2025-01-10T14:30:00Z"}]
 
 
 def test_m2_market_data_range_guard_strictly_enforced() -> None:

@@ -9,7 +9,7 @@ Authority:
 - Starting Head: 44b83cc3e69f25890537d74972f2c868a710cd50
 
 Strict Invariants:
-1. M2 Scope: 2024-05-01 through 2026-08-14 (569 regular sessions, 6 early closes excluded).
+1. M2 Scope: 2024-05-01 through 2026-08-14 (568 regular sessions, 6 early closes excluded).
    Classification: PUBLICLY_EXPOSED_POST_PUBLICATION_STRESS_SAMPLE (NOT_PRISTINE_OOS).
 2. Quarantined Historical Gap: [2026-08-15, 2026-09-23) is strictly unreadable under HYP_007.
 3. Prospective M3: >= 2026-09-23 is LOCKED_ZERO_ACCESS.
@@ -355,6 +355,27 @@ def validate_r4_preconditions(repo_root: Path) -> Dict[str, str]:
 # Data Acquisition & Qualification
 # ---------------------------------------------------------------------------
 
+def extract_m2_bars_list(payload: Mapping[str, Any], session_date: date) -> List[Dict[str, Any]]:
+    """Extract the SIP bars list from an Alpaca bar payload, failing closed on null/absent bars.
+
+    Alpaca returns ``"bars": null`` (JSON null) when a surveyed session never traded (e.g. an
+    unscheduled full market closure). A null or non-list payload is a data-contract violation:
+    it must raise ``DataContractError`` rather than leak an unclassified ``TypeError``.
+    """
+    raw = payload.get("bars")
+    if raw is None:
+        raise DataContractError(
+            f"Null bars payload for M2 session {session_date}: SIP reports no bars "
+            f"(possible unscheduled market closure or unclassified data gap)."
+        )
+    if not isinstance(raw, list):
+        raise DataContractError(
+            f"Malformed bars payload for M2 session {session_date}: expected list, got "
+            f"{type(raw).__name__}."
+        )
+    return list(raw)
+
+
 def acquire_and_qualify_m2_bars(
     census: M2CalendarCensus,
     repo_root: Path,
@@ -391,7 +412,7 @@ def acquire_and_qualify_m2_bars(
             raw_bars: List[Dict[str, Any]] = []
             if checkpoint_file.exists():
                 payload = json.loads(checkpoint_file.read_text(encoding="utf-8"))
-                raw_bars = payload.get("bars", [])
+                raw_bars = extract_m2_bars_list(payload, session_date)
             else:
                 dt_open = datetime.combine(session_date, dtime(9, 30), tzinfo=NY_TZ).astimezone(timezone.utc)
                 dt_close = datetime.combine(session_date, dtime(15, 59), tzinfo=NY_TZ).astimezone(timezone.utc)
@@ -423,7 +444,7 @@ def acquire_and_qualify_m2_bars(
                         tmp_path.write_bytes(file_bytes)
                         tmp_path.replace(checkpoint_file)
                         payload = json.loads(file_bytes.decode("utf-8"))
-                        raw_bars = payload.get("bars", [])
+                        raw_bars = extract_m2_bars_list(payload, session_date)
                         break
                     elif resp.status_code == 429:
                         governor.status_429_count += 1

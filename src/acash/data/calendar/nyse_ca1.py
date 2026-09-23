@@ -355,6 +355,7 @@ NYSE_OFFICIAL_HOLIDAYS: Dict[date, str] = {
     date(2024, 12, 25): "Christmas Day",
     # 2025
     date(2025, 1, 1): "New Year's Day",
+    date(2025, 1, 9): "National Day of Mourning for President Jimmy Carter",
     date(2025, 1, 20): "Martin Luther King, Jr. Day",
     date(2025, 2, 17): "Washington's Birthday",
     date(2025, 4, 18): "Good Friday",

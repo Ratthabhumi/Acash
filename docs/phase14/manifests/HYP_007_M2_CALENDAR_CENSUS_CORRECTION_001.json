@@ -1,0 +1,64 @@
+{
+  "authorization": "AUTHORIZE_AMEND_CENSUS_TO_568_AND_FIX_NULL_BARS_CRASH",
+  "correction_id": "HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001",
+  "correction_type": "DATA_QUALIFICATION_CENSUS_CORRECTION",
+  "defect_class": "UNSCHEDULED_FULL_MARKET_CLOSURE_COUNTED_AS_REGULAR_SESSION_AND_NULL_BARS_NON_FAIL_CLOSED",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "manifest_type": "HYP_007_M2_CALENDAR_CENSUS_CORRECTION_MANIFEST",
+  "upstream_canonical_head": "4e4841063d0be611ca8a306baa4473e605ad97f8",
+  "governance_freeze_unchanged": "HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001",
+  "m2_window_unchanged": {
+    "start": "2024-05-01",
+    "end": "2026-08-14"
+  },
+  "census_before": {
+    "calendar_days": 836,
+    "regular_sessions": 569,
+    "early_closes_excluded": 6,
+    "holidays": 23,
+    "weekends": 238
+  },
+  "census_after": {
+    "calendar_days": 836,
+    "regular_sessions": 568,
+    "early_closes_excluded": 6,
+    "holidays": 24,
+    "weekends": 238
+  },
+  "added_holiday": {
+    "date": "2025-01-09",
+    "reason": "National Day of Mourning for President Jimmy Carter",
+    "classification": "UNSCHEDULED_FULL_NYSE_MARKET_CLOSURE",
+    "calendar_file": "src/acash/data/calendar/nyse_ca1.py",
+    "precedent": "2018-12-05 National Day of Mourning for President George H.W. Bush"
+  },
+  "code_defect_fixed": {
+    "location": "src/acash/research/step_r4_hyp_007.py",
+    "before": "payload.get(\"bars\", []) -> returns None on \"bars\":null -> len(None) TypeError",
+    "after": "extract_m2_bars_list() raises DataContractError fail-closed on null/absent/malformed bars",
+    "single_authority_function": "extract_m2_bars_list"
+  },
+  "correction_document": {
+    "path": "docs/phase14/HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001.md",
+    "sha256": "206105a0c3b211e90717b55426c8bf6a157604b5cd0f33bb5afa18b52a5f8106"
+  },
+  "scientific_hypothesis_changed": false,
+  "strategy_parameters_changed": false,
+  "acceptance_gates_changed": false,
+  "m1_sample_window_changed": false,
+  "m2_sample_window_changed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "quarantine_gap_access": "STRICTLY_ZERO_ACCESSED",
+  "m3_access_status": "LOCKED_ZERO_ACCESS",
+  "primary_dividend_authority_unchanged": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
+  "sealed_artifacts_preserved_byte_for_byte": [
+    "docs/phase14/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.md",
+    "docs/phase14/manifests/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.json",
+    "docs/phase14/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json"
+  ],
+  "status": "HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001_SEALED_PASS"
+}
