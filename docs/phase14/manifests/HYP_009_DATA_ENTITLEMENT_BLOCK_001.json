@@ -1,0 +1,40 @@
+{
+  "manifest_id": "HYP_009_DATA_ENTITLEMENT_BLOCK_001",
+  "manifest_type": "OPERATIONAL_DATA_ENTITLEMENT_BLOCK_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_PRE_R2_ACCOUNTING_CLARIFICATION_AND_R2_M1_EXECUTION",
+  "canonical_starting_head": "33b0e3d2e4a098ffbcd229798c9775e7701ee591",
+  "original_r1_commit": "065a3b4cd81f8d2befb4e61e4348f1061e3f425d",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "scientific_status": "UNMODIFIED_INTACT",
+  "hypothesis_falsified": false,
+  "hypothesis_rejected": false,
+  "strategy_pnl_observed": false,
+  "backtest_started": false,
+  "r2_dataset_build": "NOT_STARTED",
+  "current_status": "BLOCKED_NON_FALSIFIED_BY_PRIMARY_DATA_ENTITLEMENT",
+  "resumable": true,
+  "required_resume_condition": "SEPARATE_HUMAN_AUTHORIZATION_WITH_QUALIFYING_PROVIDER_ENTITLEMENT",
+  "missing_credentials": [
+    "ACASH_ALPACA_API_KEY_ID",
+    "ACASH_ALPACA_API_SECRET"
+  ],
+  "credential_provider": "EnvAlpacaCredentialProvider_OS_ENVIRON_ONLY",
+  "credential_check_result": "AlpacaCredentialError_RAISED_FAIL_CLOSED",
+  "network_requests_issued": 0,
+  "hyp_007_empirical_reads": 0,
+  "m2_access": "ZERO",
+  "m3_access": "ZERO",
+  "quarantine_access": "ZERO",
+  "prospective_access": "ZERO",
+  "protected_artifacts_untouched": [
+    "docs/phase14/hypotheses/HYP_009.json",
+    "docs/research/CORE-001-HYP-009-strategy-preregistration.md",
+    "docs/phase14/manifests/manifest_r1_HYP_009.json",
+    "docs/phase14/HYP_009_PRE_R2_EXECUTION_ACCOUNTING_CLARIFICATION.md"
+  ],
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
