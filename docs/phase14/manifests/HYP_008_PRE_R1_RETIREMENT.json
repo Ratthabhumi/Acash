@@ -1,0 +1,36 @@
+{
+  "manifest_id": "HYP_008_PRE_R1_RETIREMENT",
+  "manifest_type": "PRE_R1_ADMINISTRATIVE_RETIREMENT_MANIFEST",
+  "authorization": "AUTHORIZE_RETIRE_HYP_008_AND_OPEN_CORE_001_HYP_009_IMPLEMENTATION",
+  "canonical_head_at_retirement": "47e95def3ad98503f41ce4549986d53f65102cb5",
+  "hypothesis_id": "HYP_008",
+  "mechanism_id": "MEC-0018",
+  "prior_state": "PROPOSED_NOT_PREREGISTERED",
+  "new_state": "RETIRED_BEFORE_PREREGISTRATION",
+  "retirement_reason": "HUMAN_RESEARCH_PRIORITY_CHANGED_TO_CORE_FIRST_ARCHITECTURE",
+  "is_falsification": false,
+  "is_empirical_rejection": false,
+  "is_backtest_failure": false,
+  "r1_opened": false,
+  "backtest_executed": false,
+  "historical_signal_evaluation": false,
+  "m3_accessed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "preserved_artifacts": [
+    "docs/research/MEC-0018-HYP-008-proposal.md",
+    "docs/phase14/HYP_008_RESEARCH_INCEPTION_REVIEW.md",
+    "docs/phase14/HYP_007_POST_R4_OPERATIONAL_CLOSURE.md",
+    "docs/phase14/manifests/HYP_007_POST_R4_OPERATIONAL_CLOSURE.json",
+    "docs/phase14/HYP_007_POST_R4_FAILURE_DECOMPOSITION.md",
+    "docs/phase14/manifests/HYP_007_POST_R4_FAILURE_DECOMPOSITION.json"
+  ],
+  "historical_proposal_mutated": false,
+  "successor_lineage": {
+    "core_id": "CORE-001",
+    "hypothesis_id": "HYP_009"
+  },
+  "next_human_action": "REVIEW_CORE_001_HYP_009_PROPOSAL_AND_AUTHORIZE_R1_PREREGISTRATION"
+}
