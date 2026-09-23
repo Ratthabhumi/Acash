@@ -1,0 +1,41 @@
+{
+  "manifest_id": "HYP_009_PRE_R1_SEMANTIC_CONFORMANCE",
+  "manifest_type": "PRE_R1_SEMANTIC_CONFORMANCE_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_SCHEMA_SEMANTIC_CONFORMANCE_PATCH",
+  "canonical_head_at_record": "92679267cd6943103799df133748f4873e57ef07",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "state": "PROPOSED_NOT_PREREGISTERED",
+  "semantic_conformance_status": "PASS_WITH_NON_BINDING_LEGACY_SCHEMA_ADAPTERS",
+  "non_binding_fields": [
+    "expected_direction",
+    "target_horizons",
+    "primary_horizon"
+  ],
+  "non_binding_classification": "NON_BINDING_SCHEMA_COMPATIBILITY_METADATA_ONLY",
+  "target_horizons_stub_value": [21],
+  "primary_horizon_stub_value": 21,
+  "expected_direction_stub_value": "LONG",
+  "hypothesis_record_mutated": false,
+  "binding_strategy_authority": [
+    "docs/phase14/CORE_001_HYP_009_RESEARCH_INCEPTION.md",
+    "docs/phase14/manifests/CORE_001_HYP_009_RESEARCH_INCEPTION.json",
+    "docs/phase14/hypotheses/HYP_009.json:parameter_config_json"
+  ],
+  "fixed_holding_period": false,
+  "fixed_21_day_exit": false,
+  "fixed_21_day_prediction_target": false,
+  "monthly_signal_cadence": true,
+  "state_persists_until_next_state_change": true,
+  "r1_opened": false,
+  "backtest_authorized": false,
+  "backtest_executed": false,
+  "historical_signals_computed": false,
+  "performance_fields_added": false,
+  "m3_accessed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "next_human_action": "REVIEW_CORE_001_HYP_009_PROPOSAL_AND_AUTHORIZE_R1_PREREGISTRATION"
+}
