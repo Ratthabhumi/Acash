@@ -7,7 +7,7 @@ governance artifacts.
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RETIREMENT_MANIFEST = (
@@ -22,7 +22,7 @@ HISTORICAL_REVIEW = (
 
 def _load_manifest() -> Dict[str, Any]:
     assert RETIREMENT_MANIFEST.is_file(), "retirement manifest missing"
-    return json.loads(RETIREMENT_MANIFEST.read_text(encoding="utf-8"))
+    return cast(Dict[str, Any], json.loads(RETIREMENT_MANIFEST.read_text(encoding="utf-8")))
 
 
 def test_retirement_manifest_prior_state_is_proposed_not_preregistered() -> None:
