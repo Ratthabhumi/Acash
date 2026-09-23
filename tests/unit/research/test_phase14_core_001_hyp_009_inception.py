@@ -159,13 +159,18 @@ def test_predecessor_hyp_008_not_reused() -> None:
 
 
 def test_hypothesis_record_matches_manifest() -> None:
+    # Superseded by the R1 seal (manifest_r1_HYP_009.json): the hypothesis record
+    # transitioned to R1_PREREGISTERED_SEALED with gate lineage, while the inception
+    # manifest itself remains a historical PROPOSED-era record.
     h = _load_hypothesis()
     m = _load_manifest()
     assert h["hypothesis_id"] == "HYP_009"
     assert h["core_id"] == "CORE-001"
-    assert h["state"] == m["state"] == "PROPOSED_NOT_PREREGISTERED"
+    assert h["state"] == "R1_PREREGISTERED_SEALED"
+    assert m["state"] == "PROPOSED_NOT_PREREGISTERED"
+    assert h["registered_at_utc"] == "2026-09-23T22:41:00Z"
+    assert h["r1_manifest"] == "docs/phase14/manifests/manifest_r1_HYP_009.json"
     assert h["target_symbol"] == "SPY"
-    assert h["registered_at_utc"] is None
     params = json.loads(h["parameter_config_json"])
     assert params["signal_name"] == "10_MONTH_SIMPLE_MOVING_AVERAGE"
     assert params["lookback_month_ends"] == 10

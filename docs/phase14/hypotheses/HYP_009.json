@@ -3,7 +3,7 @@
   "hypothesis_version": "v1.0",
   "parent_hypothesis_id": null,
   "core_id": "CORE-001",
-  "state": "PROPOSED_NOT_PREREGISTERED",
+  "state": "R1_PREREGISTERED_SEALED",
   "economic_rationale": "A long-horizon moving-average trend filter on SPY held at monthly decision cadence keeps capital invested only when the current month-end signal level exceeds its trailing 10-month simple moving average and otherwise holds cash, prioritizing drawdown control, risk-adjusted robustness, friction survival, regime persistence, deployability, and operational simplicity over return maximization.",
   "target_symbol": "SPY",
   "feature_dependencies": [
@@ -28,6 +28,10 @@
     "OPEN_BEFORE_R1_LOCKED_OOS_BOUNDARY",
     "OPEN_BEFORE_R1_PROSPECTIVE_BOUNDARY"
   ],
-  "registered_at_utc": null,
-  "author": "external_research_authority_specification__implementation_only_encoding"
+  "registered_at_utc": "2026-09-23T22:41:00Z",
+  "author": "external_research_authority_specification__implementation_only_encoding",
+  "inception_token_id": "AUTH_INCEPTION_HYP_009_e2ee71d26cf5891c",
+  "proposal_sha256": "e2ee71d26cf5891c47f8b7e9716c8778469775d2beb4f0683b811f3588741e92",
+  "preregistration_sha256": "6813f3a5870c9027801f510f61a7a17cae01ebc7706b5b94fcb3334236202177",
+  "r1_manifest": "docs/phase14/manifests/manifest_r1_HYP_009.json"
 }

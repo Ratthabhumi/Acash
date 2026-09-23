@@ -38,10 +38,13 @@ def _load(path: Path) -> Dict[str, Any]:
     return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
-def test_hyp_009_remains_proposed_not_preregistered() -> None:
+def test_hyp_009_r1_sealed_state_recorded() -> None:
+    # Superseded by the R1 seal (manifest_r1_HYP_009.json): the hypothesis record
+    # transitioned PROPOSED_NOT_PREREGISTERED -> R1_PREREGISTERED_SEALED, while the
+    # pre-R1 conformance manifest itself remains a historical PROPOSED-era record.
     h = _load(HYPOTHESIS_RECORD)
     m = _load(CONFORMANCE_MANIFEST)
-    assert h["state"] == "PROPOSED_NOT_PREREGISTERED"
+    assert h["state"] == "R1_PREREGISTERED_SEALED"
     assert m["state"] == "PROPOSED_NOT_PREREGISTERED"
     assert m["semantic_conformance_status"] == (
         "PASS_WITH_NON_BINDING_LEGACY_SCHEMA_ADAPTERS"

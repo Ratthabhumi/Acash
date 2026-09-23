@@ -1,0 +1,154 @@
+{
+  "manifest_type": "HYPOTHESIS_REGISTRATION_MANIFEST",
+  "hypothesis_id": "HYP_009",
+  "hypothesis_ordinal": 9,
+  "hypothesis_ordinal_alias": "HYP_009",
+  "core_id": "CORE-001",
+  "mechanism_id": null,
+  "canonical_title": "HYP_009 \u2014 SPY Monthly 10-Month SMA Long/Cash Core",
+  "hypothesis_version": "v1.0",
+  "hypothesis_sha256": "f927ccd7b2a3adec18d8097fb09eea90a7bbeebe9872c9f563811bdb6b4842fa",
+  "registered_at_utc": "2026-09-23T22:41:00Z",
+  "author": "external_research_authority_specification__implementation_only_encoding",
+  "target_symbol": "SPY",
+  "primary_timeframe": "1Day",
+  "search_trial_count_k": 1,
+  "human_authorization": "AUTHORIZE_CORE_001_HYP_009_R1_PREREGISTRATION",
+  "inception_token_id": "AUTH_INCEPTION_HYP_009_e2ee71d26cf5891c",
+  "proposal_sha256": "e2ee71d26cf5891c47f8b7e9716c8778469775d2beb4f0683b811f3588741e92",
+  "preregistration_sha256": "6813f3a5870c9027801f510f61a7a17cae01ebc7706b5b94fcb3334236202177",
+  "upstream_authority_hashes": {
+    "inception_doc_sha256": "08d95a4cbd89ab80660cd96ef7e7363f3633ecf7e5a0dc515bffb9fedcc23a23",
+    "inception_manifest_sha256": "f0b3560706f62d0c8c9afbc51a7ea5e849ed1aa4b9f7fc825d730c0554348218",
+    "semantic_conformance_record_sha256": "151d41cddf0fdbf68ffbe604775065630e34df6965e0784c109bafa8b3a54de1",
+    "semantic_conformance_manifest_sha256": "25f7a66430548a4db64de162da3375e85c6117b46acfeb39b9bacee1e9af6222",
+    "hyp_008_retirement_manifest_sha256": "a251dc2e0548050d459f290a41d27caf24b4f505e99cb6eb946392e9a970c800",
+    "hyp_009_pre_r1_proposal_record_sha256": "664ea51bafa185ae194204bfa5ac1724e4fbbcd6cc4d63f80e79adf8f29c1875"
+  },
+  "contract_hashes": {
+    "strategy_specification_hash": "c3892a6af4dfaf729218dbf6182f95b9a4c5862032055965c1b9129fbff359e0",
+    "provider_contract_hash": "1ed9892b4871a9c430b0770f6f691244661dec5257059dda9af5effb94ae55d6",
+    "sample_partition_hash": "063ceeb13f30dbbb1ff6610d24baf6aa5a084282a12e698b9403fa42c85a004f",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b"
+  },
+  "strategy_contract": {
+    "core_id": "CORE-001",
+    "hypothesis_id": "HYP_009",
+    "working_title": "SPY Monthly 10-Month SMA Long/Cash Core",
+    "strategy_family": "LONG_HORIZON_MOVING_AVERAGE_TREND_FILTER",
+    "instrument": "SPY",
+    "frequency": "MONTHLY",
+    "decision_date_rule": "LAST_REGULAR_TRADING_SESSION_OF_EACH_CALENDAR_MONTH",
+    "direction_states": [
+      "LONG",
+      "CASH"
+    ],
+    "signal": "LONG_IF_SIGNAL_LEVEL_GT_SMA_10M_ELSE_CASH",
+    "lookback_month_ends": 10,
+    "equality_behavior": "CASH",
+    "tolerance_band": false,
+    "hysteresis": false,
+    "confirmation_indicator": false,
+    "stop_loss": false,
+    "trailing_stop": false,
+    "secondary_filter": false,
+    "volatility_filter": false,
+    "liquidity_filter": false,
+    "macro_filter": false,
+    "machine_learning": false,
+    "discretionary_override": false,
+    "long_state_exposure": "1.00_SPY_NOTIONAL",
+    "cash_state_exposure": "0.00",
+    "max_gross_leverage": 1.0,
+    "volatility_targeting": false,
+    "cash_return": 0.0,
+    "benchmark": "SPY_BUY_AND_HOLD",
+    "execution_timing": "NEXT_ELIGIBLE_REGULAR_SESSION_OPEN_AFTER_SIGNAL",
+    "same_close_execution": false,
+    "rebalance_rule": "TRADE_ONLY_ON_STATE_CHANGE",
+    "warmup_completed_month_end_observations": 10,
+    "pre_warmup_behavior": "NO_SIGNAL_FAIL_CLOSED",
+    "calendar_authority": "CANONICAL_NYSE_CALENDAR_IN_REPOSITORY",
+    "missing_data_policy": "FAIL_CLOSED_NO_INTERPOLATION_NO_FORWARD_FILL"
+  },
+  "provider_contract": {
+    "bars_provider": "ALPACA_HISTORICAL_STOCK_BARS",
+    "bars_endpoint": "/v2/stocks/SPY/bars",
+    "bars_timeframe": "1Day",
+    "bars_feed": "sip",
+    "signal_price_adjustment": "split",
+    "execution_price_adjustment": "raw",
+    "dividend_authority": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
+    "signal_construction": "CAUSAL_TOTAL_RETURN_INDEX_G_T_EQ_(P_T_PLUS_D_T)_DIV_P_T-1_EX_DATE_ONLY",
+    "vendor_adjusted_close_as_authority": false,
+    "no_provider_substitution": true,
+    "no_provider_splicing": true,
+    "missing_coverage_policy": "BLOCKED_DATA_ENTITLEMENT"
+  },
+  "sample_partitions": {
+    "research_start": "2016-01-01",
+    "warmup": {
+      "start": "2016-01-01",
+      "end": "2016-10-31",
+      "pnl": "ZERO"
+    },
+    "m1": {
+      "start": "2016-11-01",
+      "end": "2020-12-31",
+      "role": "DESIGN_AND_IMPLEMENTATION_REPLICATION_SAMPLE",
+      "classification": "HISTORICAL_EXPOSED_REPLICATION"
+    },
+    "m2": {
+      "start": "2021-01-01",
+      "end": "2024-12-31",
+      "role": "LOCKED_HISTORICAL_OOS",
+      "classification": "LOCKED_HISTORICAL_OOS_NOT_PRISTINE_RESEARCHER_BLIND",
+      "firewall": "NO_M2_READS_UNTIL_R1_SEALED_AND_M1_DATASET_COMPLETE_AND_M1_RESULT_SEALED_AND_EXPLICIT_HUMAN_AUTH"
+    },
+    "m3": {
+      "start": "2025-01-01",
+      "end": "2026-08-14",
+      "role": "PUBLICLY_EXPOSED_RECENT_STRESS_SAMPLE",
+      "classification": "NOT_PRISTINE_OOS",
+      "rescue_rule": "M3_MUST_NOT_RESCUE_FAILED_M2"
+    },
+    "quarantine": {
+      "start": "2026-08-15",
+      "end": "PROSPECTIVE_START_EXCLUSIVE",
+      "classification": "STRICT_ZERO_ACCESS_PRE_PROSPECTIVE_GAP"
+    },
+    "prospective": {
+      "rule": "FIRST_NYSE_REGULAR_SESSION_OPEN_STRICTLY_AFTER_R1_COMMIT_TIMESTAMP",
+      "state_at_r1": "LOCKED_ZERO_ACCESS"
+    }
+  },
+  "acceptance_gates": {
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6",
+    "G1_net_total_return": "> 0",
+    "G2_net_annualized_sharpe": ">= 0.50",
+    "sharpe_convention": {
+      "periods_per_year": 252,
+      "ddof": 1,
+      "risk_free_rate": 0,
+      "zero_variance": "FAIL_CLOSED"
+    },
+    "G3_max_drawdown": "<= 0.35",
+    "G4_core_mdd_lt_benchmark_mdd": true,
+    "G5_10bps_stress_net_total_return": "> 0",
+    "G6_no_material_contract_failure": true,
+    "net_of": "BASELINE_FRICTION",
+    "no_discretionary_override": true
+  },
+  "legacy_schema_semantics": "NON_BINDING_SCHEMA_COMPATIBILITY_METADATA_ONLY",
+  "status": "SEALED_STEP_R1_PASS",
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "market_data_access": "ZERO",
+  "m1_data_access": "ZERO",
+  "m2_data_access": "ZERO",
+  "m3_data_access": "ZERO",
+  "is_paper_authorized": false,
+  "is_live_authorized": false,
+  "next_required_step": "AUTHORIZE_CORE_001_HYP_009_R2_M1_DATA_QUALIFICATION_AND_EXECUTION",
+  "manifest_sha256": "ded1528d78f92003ab538a1ade7b9e047ed7306feaac4faa3270c67df27fce7c"
+}
