@@ -108,6 +108,7 @@ class R4GateEvaluationResult:
     contract_valid: bool
     verdict: R4Verdict
     summary_message: str
+    all_passed: bool
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -134,6 +135,7 @@ class R4GateEvaluationResult:
             "contract_valid": self.contract_valid,
             "verdict": self.verdict.value,
             "summary_message": self.summary_message,
+            "all_passed": self.all_passed,
         }
 
 
@@ -163,6 +165,7 @@ def evaluate_r4_gates(
             contract_valid=False,
             verdict=R4Verdict.BLOCKED_INVALID_DATA_OR_EXECUTION_CONTRACT,
             summary_message=contract_failure_reason or "Material data or execution contract failure.",
+            all_passed=False,
         )
 
     g1_pass = net_total_return > R4_G1_NET_TOTAL_RETURN_MIN
@@ -194,6 +197,7 @@ def evaluate_r4_gates(
         contract_valid=True,
         verdict=verdict,
         summary_message=summary,
+        all_passed=all_passed,
     )
 
 

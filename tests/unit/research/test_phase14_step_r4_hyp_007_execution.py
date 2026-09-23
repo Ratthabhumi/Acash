@@ -48,6 +48,7 @@ from acash.research.step_r4_hyp_007_governance import (
     R4_G2_NET_ANNUALIZED_SHARPE_MIN,
     R4_G3_MAX_DRAWDOWN_MAX,
     R4_G4_STRESS_TOTAL_RETURN_MIN,
+    R4GateEvaluationResult,
     R4Verdict,
     enforce_m2_market_data_range_guard,
     enforce_m3_firewall,
@@ -116,7 +117,7 @@ def test_quarantine_and_m3_firewalls() -> None:
 
 def test_m2_dividend_manifest_reconciled() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    divs = load_m2_projected_dividends(repo_root)
+    divs = load_m2_dividend_projection(repo_root)
     assert len(divs) == 9
 
     # Check quarterly sequence
@@ -135,7 +136,7 @@ def test_m2_dividend_manifest_reconciled() -> None:
     for d in divs:
         assert d.cash_distribution > Decimal("0")
         assert d.currency == "USD"
-        assert d.distribution_type == "CASH_DIVIDEND"
+        assert d.distribution_type == "ORDINARY_DIVIDEND"
 
 
 def test_m2_regulatory_fee_schedules() -> None:
@@ -182,3 +183,115 @@ def test_m2_continuation_gates_all_four_required() -> None:
     )
     assert eval_fail.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
     assert eval_fail.all_passed is False
+
+
+def test_r4_execution_module_consumes_sovereign_evaluator_only() -> None:
+    """Guard against evaluator shadowing: execution must use Stage A authority.
+
+    Regression for the defect where step_r4_hyp_007.py locally redefined
+    evaluate_r4_gates / R4GateEvaluationResult with drifted semantics.
+    """
+    import acash.research.step_r4_hyp_007 as exec_mod
+    import acash.research.step_r4_hyp_007_governance as governance
+
+    assert getattr(exec_mod, "evaluate_r4_gates") is governance.evaluate_r4_gates
+    assert getattr(exec_mod, "R4GateEvaluationResult") is governance.R4GateEvaluationResult
+
+
+def _eval_r4(
+    net_total_return: Decimal,
+    annualized_sharpe: Decimal,
+    max_drawdown: Decimal,
+    stress_total_return: Decimal,
+) -> R4GateEvaluationResult:
+    """Shared helper for boundary evals with otherwise-passing economics."""
+    return evaluate_r4_gates(
+        net_total_return=net_total_return,
+        annualized_sharpe=annualized_sharpe,
+        max_drawdown=max_drawdown,
+        stress_total_return=stress_total_return,
+        contract_valid=True,
+    )
+
+
+def test_r4_g1_strict_greater_than_zero_boundary() -> None:
+    """G1 is STRICT > 0.0: 0.0 must FAIL; tiny positive must PASS."""
+    tiny_pass = _eval_r4(
+        Decimal("0.000001"), Decimal("0.80"), Decimal("0.10"), Decimal("0.02")
+    )
+    assert tiny_pass.g1_pass is True
+    assert tiny_pass.verdict == R4Verdict.PASS_RECENT_STRESS_SUPPORTED
+    assert tiny_pass.all_passed is True
+
+    zero_fail = _eval_r4(
+        Decimal("0.000000"), Decimal("0.80"), Decimal("0.10"), Decimal("0.02")
+    )
+    assert zero_fail.g1_pass is False
+    assert zero_fail.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
+    assert zero_fail.all_passed is False
+
+    tiny_neg = _eval_r4(
+        Decimal("-0.000001"), Decimal("0.80"), Decimal("0.10"), Decimal("0.02")
+    )
+    assert tiny_neg.g1_pass is False
+    assert tiny_neg.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
+    assert tiny_neg.all_passed is False
+
+
+def test_r4_g2_sharpe_boundary() -> None:
+    """G2 is >= 0.50: exactly 0.50 passes; one micro below fails."""
+    at = _eval_r4(Decimal("0.05"), Decimal("0.50"), Decimal("0.10"), Decimal("0.02"))
+    assert at.g2_pass is True
+    assert at.verdict == R4Verdict.PASS_RECENT_STRESS_SUPPORTED
+    assert at.all_passed is True
+
+    below = _eval_r4(Decimal("0.05"), Decimal("0.499999"), Decimal("0.10"), Decimal("0.02"))
+    assert below.g2_pass is False
+    assert below.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
+    assert below.all_passed is False
+
+
+def test_r4_g3_max_drawdown_boundary() -> None:
+    """G3 is <= 0.35: exactly 0.35 passes; one micro above fails."""
+    at = _eval_r4(Decimal("0.05"), Decimal("0.80"), Decimal("0.35"), Decimal("0.02"))
+    assert at.g3_pass is True
+    assert at.verdict == R4Verdict.PASS_RECENT_STRESS_SUPPORTED
+    assert at.all_passed is True
+
+    above = _eval_r4(Decimal("0.05"), Decimal("0.80"), Decimal("0.350001"), Decimal("0.02"))
+    assert above.g3_pass is False
+    assert above.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
+    assert above.all_passed is False
+
+
+def test_r4_g4_stress_return_boundary() -> None:
+    """G4 is >= 0.0: exactly 0.0 passes; one micro below fails."""
+    at = _eval_r4(Decimal("0.05"), Decimal("0.80"), Decimal("0.10"), Decimal("0.0"))
+    assert at.g4_pass is True
+    assert at.verdict == R4Verdict.PASS_RECENT_STRESS_SUPPORTED
+    assert at.all_passed is True
+
+    below = _eval_r4(Decimal("0.05"), Decimal("0.80"), Decimal("0.10"), Decimal("-0.000001"))
+    assert below.g4_pass is False
+    assert below.verdict == R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
+    assert below.all_passed is False
+
+
+def test_r4_contract_failure_classified_as_blocked() -> None:
+    """contract_valid=False must be BLOCKED, never FAIL (economic verdict unavailable)."""
+    res = evaluate_r4_gates(
+        net_total_return=Decimal("0.05"),
+        annualized_sharpe=Decimal("0.80"),
+        max_drawdown=Decimal("0.10"),
+        stress_total_return=Decimal("0.02"),
+        contract_valid=False,
+        contract_failure_reason="Missing quote boundaries",
+    )
+    assert res.contract_valid is False
+    assert res.g1_pass is False
+    assert res.g2_pass is False
+    assert res.g3_pass is False
+    assert res.g4_pass is False
+    assert res.verdict == R4Verdict.BLOCKED_INVALID_DATA_OR_EXECUTION_CONTRACT
+    assert res.verdict.value != R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED.value
+    assert res.all_passed is False

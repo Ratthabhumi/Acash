@@ -101,10 +101,6 @@ from acash.research.step_r4_hyp_007_governance import (
     M3_ROLE,
     QUARANTINE_START_DATE,
     QUARANTINE_START_DATE_STR,
-    R4_G1_NET_TOTAL_RETURN_MIN,
-    R4_G2_NET_ANNUALIZED_SHARPE_MIN,
-    R4_G3_MAX_DRAWDOWN_MAX,
-    R4_G4_STRESS_TOTAL_RETURN_MIN,
     R4GateEvaluationResult,
     R4Verdict,
     enforce_m2_market_data_range_guard,
@@ -241,7 +237,7 @@ def compute_m2_finra_taf(shares_sold: int, trade_date: date, is_sell: bool = Tru
 class M2CalendarCensus:
     calendar_days_count: int
     regular_sessions: List[date]
-    early_closes: List[Tuple[date, int]]
+    early_closes: List[date]
     holidays: List[Tuple[date, str]]
     weekends_count: int
     sessions_by_year: Dict[int, int]
@@ -253,7 +249,7 @@ def build_m2_calendar_census() -> M2CalendarCensus:
     cal = NyseCa1Calendar()
     curr = M2_START_DATE
     reg_sessions: List[date] = []
-    early_closes: List[Tuple[date, int]] = []
+    early_closes: List[date] = []
     holidays: List[Tuple[date, str]] = []
     weekends = 0
     total_days = 0
@@ -825,63 +821,6 @@ def write_m2_parquet_datasets(
 # M2 Strategy Execution Engine
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class R4GateEvaluationResult:
-    """Evaluation result across all four frozen R4 gates."""
-    g1_net_return: Decimal
-    g1_pass: bool
-    g2_sharpe: Decimal
-    g2_pass: bool
-    g3_max_drawdown: Decimal
-    g3_pass: bool
-    g4_stress_return: Decimal
-    g4_pass: bool
-    contract_valid: bool
-    verdict: R4Verdict
-    summary_message: str
-    all_passed: bool
-
-
-def evaluate_r4_gates(
-    net_total_return: Decimal,
-    annualized_sharpe: Decimal,
-    max_drawdown: Decimal,
-    stress_total_return: Decimal,
-    contract_valid: bool = True,
-) -> R4GateEvaluationResult:
-    """Evaluate all four frozen R4 governance gates for M2."""
-    g1_pass = net_total_return >= R4_G1_NET_TOTAL_RETURN_MIN
-    g2_pass = annualized_sharpe >= R4_G2_NET_ANNUALIZED_SHARPE_MIN
-    g3_pass = max_drawdown <= R4_G3_MAX_DRAWDOWN_MAX
-    g4_pass = stress_total_return >= R4_G4_STRESS_TOTAL_RETURN_MIN
-
-    all_passed = g1_pass and g2_pass and g3_pass and g4_pass and contract_valid
-    verdict = (
-        R4Verdict.PASS_RECENT_STRESS_SUPPORTED
-        if all_passed
-        else R4Verdict.FAIL_CURRENT_EDGE_NOT_SUPPORTED
-    )
-    summary = (
-        "All four R4 M2 recent stress continuation gates passed."
-        if all_passed
-        else "One or more R4 M2 continuation gates failed; recent edge not supported."
-    )
-
-    return R4GateEvaluationResult(
-        g1_net_return=net_total_return,
-        g1_pass=g1_pass,
-        g2_sharpe=annualized_sharpe,
-        g2_pass=g2_pass,
-        g3_max_drawdown=max_drawdown,
-        g3_pass=g3_pass,
-        g4_stress_return=stress_total_return,
-        g4_pass=g4_pass,
-        contract_valid=contract_valid,
-        verdict=verdict,
-        summary_message=summary,
-        all_passed=all_passed,
-    )
-
 
 @dataclass
 class Hyp007R4ExecutionResult:
@@ -1139,8 +1078,8 @@ def execute_hyp_007_m2_strategy(
                     is_buy = (desired_pos > 0)
                     px = (ask + Decimal("0.001")) if is_buy else (bid - Decimal("0.001"))
                     comm = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh))
-                    sec = compute_m2_sec31_fee(sess_date, Decimal(sh) * px, is_sell=not is_buy)
-                    taf = compute_m2_finra_taf(sess_date, sh, is_sell=not is_buy)
+                    sec = compute_m2_sec31_fee(Decimal(sh) * px, sess_date, is_sell=not is_buy)
+                    taf = compute_m2_finra_taf(sh, sess_date, is_sell=not is_buy)
                     slip = Decimal("0.001") * Decimal(sh)
                     tot_fric = comm + sec + taf
                     cf = (-px * Decimal(sh) - tot_fric) if is_buy else (px * Decimal(sh) - tot_fric)
@@ -1183,8 +1122,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy = (pos_base < 0)
                 px = (ask + Decimal("0.001")) if is_buy else (bid - Decimal("0.001"))
                 comm = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh))
-                sec = compute_m2_sec31_fee(sess_date, Decimal(sh) * px, is_sell=not is_buy)
-                taf = compute_m2_finra_taf(sess_date, sh, is_sell=not is_buy)
+                sec = compute_m2_sec31_fee(Decimal(sh) * px, sess_date, is_sell=not is_buy)
+                taf = compute_m2_finra_taf(sh, sess_date, is_sell=not is_buy)
                 slip = Decimal("0.001") * Decimal(sh)
                 tot_fric = comm + sec + taf
                 cf = (-px * Decimal(sh) - tot_fric) if is_buy else (px * Decimal(sh) - tot_fric)
@@ -1242,8 +1181,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy_close = (pos_base < 0)
                 px_close = (ask + Decimal("0.001")) if is_buy_close else (bid - Decimal("0.001"))
                 comm_close = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_close))
-                sec_close = compute_m2_sec31_fee(sess_date, Decimal(sh_close) * px_close, is_sell=not is_buy_close)
-                taf_close = compute_m2_finra_taf(sess_date, sh_close, is_sell=not is_buy_close)
+                sec_close = compute_m2_sec31_fee(Decimal(sh_close) * px_close, sess_date, is_sell=not is_buy_close)
+                taf_close = compute_m2_finra_taf(sh_close, sess_date, is_sell=not is_buy_close)
                 tot_fric_close = comm_close + sec_close + taf_close
                 cf_close = (-px_close * Decimal(sh_close) - tot_fric_close) if is_buy_close else (px_close * Decimal(sh_close) - tot_fric_close)
                 net_daily_pnl_base += cf_close
@@ -1297,8 +1236,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy_open = (desired_pos > 0)
                 px_open = (ask + Decimal("0.001")) if is_buy_open else (bid - Decimal("0.001"))
                 comm_open = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_open))
-                sec_open = compute_m2_sec31_fee(sess_date, Decimal(sh_open) * px_open, is_sell=not is_buy_open)
-                taf_open = compute_m2_finra_taf(sess_date, sh_open, is_sell=not is_buy_open)
+                sec_open = compute_m2_sec31_fee(Decimal(sh_open) * px_open, sess_date, is_sell=not is_buy_open)
+                taf_open = compute_m2_finra_taf(sh_open, sess_date, is_sell=not is_buy_open)
                 tot_fric_open = comm_open + sec_open + taf_open
                 cf_open = (-px_open * Decimal(sh_open) - tot_fric_open) if is_buy_open else (px_open * Decimal(sh_open) - tot_fric_open)
                 net_daily_pnl_base += cf_open
@@ -1342,8 +1281,8 @@ def execute_hyp_007_m2_strategy(
             is_buy_eod = (pos_base < 0)
             px_eod = (ask_eod + Decimal("0.001")) if is_buy_eod else (bid_eod - Decimal("0.001"))
             comm_eod = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_eod))
-            sec_eod = compute_m2_sec31_fee(sess_date, Decimal(sh_eod) * px_eod, is_sell=not is_buy_eod)
-            taf_eod = compute_m2_finra_taf(sess_date, sh_eod, is_sell=not is_buy_eod)
+            sec_eod = compute_m2_sec31_fee(Decimal(sh_eod) * px_eod, sess_date, is_sell=not is_buy_eod)
+            taf_eod = compute_m2_finra_taf(sh_eod, sess_date, is_sell=not is_buy_eod)
             tot_fric_eod = comm_eod + sec_eod + taf_eod
             cf_eod = (-px_eod * Decimal(sh_eod) - tot_fric_eod) if is_buy_eod else (px_eod * Decimal(sh_eod) - tot_fric_eod)
             net_daily_pnl_base += cf_eod
@@ -1420,8 +1359,8 @@ def execute_hyp_007_m2_strategy(
                     is_buy = (desired_pos_s > 0)
                     px = (ask + Decimal("0.001")) if is_buy else (bid - Decimal("0.001"))
                     comm = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh)) * Decimal("2")
-                    sec = compute_m2_sec31_fee(sess_date, Decimal(sh) * px, is_sell=not is_buy) * Decimal("2")
-                    taf = compute_m2_finra_taf(sess_date, sh, is_sell=not is_buy) * Decimal("2")
+                    sec = compute_m2_sec31_fee(Decimal(sh) * px, sess_date, is_sell=not is_buy) * Decimal("2")
+                    taf = compute_m2_finra_taf(sh, sess_date, is_sell=not is_buy) * Decimal("2")
                     slip = Decimal("0.001") * Decimal(sh)
                     hs_stress = half_spread * Decimal(sh)
                     tot_fric = comm + sec + taf + hs_stress
@@ -1464,8 +1403,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy = (pos_stress < 0)
                 px = (ask + Decimal("0.001")) if is_buy else (bid - Decimal("0.001"))
                 comm = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh)) * Decimal("2")
-                sec = compute_m2_sec31_fee(sess_date, Decimal(sh) * px, is_sell=not is_buy) * Decimal("2")
-                taf = compute_m2_finra_taf(sess_date, sh, is_sell=not is_buy) * Decimal("2")
+                sec = compute_m2_sec31_fee(Decimal(sh) * px, sess_date, is_sell=not is_buy) * Decimal("2")
+                taf = compute_m2_finra_taf(sh, sess_date, is_sell=not is_buy) * Decimal("2")
                 slip = Decimal("0.001") * Decimal(sh)
                 hs_stress = half_spread * Decimal(sh)
 
@@ -1510,8 +1449,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy_close = (pos_stress < 0)
                 px_close = (ask + Decimal("0.001")) if is_buy_close else (bid - Decimal("0.001"))
                 comm_close = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_close)) * Decimal("2")
-                sec_close = compute_m2_sec31_fee(sess_date, Decimal(sh_close) * px_close, is_sell=not is_buy_close) * Decimal("2")
-                taf_close = compute_m2_finra_taf(sess_date, sh_close, is_sell=not is_buy_close) * Decimal("2")
+                sec_close = compute_m2_sec31_fee(Decimal(sh_close) * px_close, sess_date, is_sell=not is_buy_close) * Decimal("2")
+                taf_close = compute_m2_finra_taf(sh_close, sess_date, is_sell=not is_buy_close) * Decimal("2")
                 hs_stress_close = half_spread * Decimal(sh_close)
 
                 borrow_fee_close = Decimal("0.00")
@@ -1552,8 +1491,8 @@ def execute_hyp_007_m2_strategy(
                 is_buy_open = (desired_pos_s > 0)
                 px_open = (ask + Decimal("0.001")) if is_buy_open else (bid - Decimal("0.001"))
                 comm_open = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_open)) * Decimal("2")
-                sec_open = compute_m2_sec31_fee(sess_date, Decimal(sh_open) * px_open, is_sell=not is_buy_open) * Decimal("2")
-                taf_open = compute_m2_finra_taf(sess_date, sh_open, is_sell=not is_buy_open) * Decimal("2")
+                sec_open = compute_m2_sec31_fee(Decimal(sh_open) * px_open, sess_date, is_sell=not is_buy_open) * Decimal("2")
+                taf_open = compute_m2_finra_taf(sh_open, sess_date, is_sell=not is_buy_open) * Decimal("2")
                 hs_stress_open = half_spread * Decimal(sh_open)
                 tot_fric_open = comm_open + sec_open + taf_open + hs_stress_open
                 cf_open = (-px_open * Decimal(sh_open) - tot_fric_open) if is_buy_open else (px_open * Decimal(sh_open) - tot_fric_open)
@@ -1600,8 +1539,8 @@ def execute_hyp_007_m2_strategy(
             is_buy_eod = (pos_stress < 0)
             px_eod = (ask_eod + Decimal("0.001")) if is_buy_eod else (bid_eod - Decimal("0.001"))
             comm_eod = max(Decimal("0.35"), Decimal("0.0035") * Decimal(sh_eod)) * Decimal("2")
-            sec_eod = compute_m2_sec31_fee(sess_date, Decimal(sh_eod) * px_eod, is_sell=not is_buy_eod) * Decimal("2")
-            taf_eod = compute_m2_finra_taf(sess_date, sh_eod, is_sell=not is_buy_eod) * Decimal("2")
+            sec_eod = compute_m2_sec31_fee(Decimal(sh_eod) * px_eod, sess_date, is_sell=not is_buy_eod) * Decimal("2")
+            taf_eod = compute_m2_finra_taf(sh_eod, sess_date, is_sell=not is_buy_eod) * Decimal("2")
             hs_stress_eod = half_spread_eod * Decimal(sh_eod)
 
             borrow_fee_eod = Decimal("0.00")
