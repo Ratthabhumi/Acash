@@ -1,0 +1,29 @@
+{
+  "manifest_id": "HYP_009_DATA_ENTITLEMENT_BLOCK_001_CLARIFICATION",
+  "manifest_type": "BLOCKER_SEMANTIC_CLARIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_HYP_009_PRE_R2_BLOCKER_RESUMABILITY_PATCH",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "original_block_label": "BLOCKED_NON_FALSIFIED_BY_PRIMARY_DATA_ENTITLEMENT",
+  "audited_evidence_actually_established": "MISSING_PRIMARY_PROVIDER_CREDENTIALS_PREVENTED_AUTHENTICATION",
+  "entitlement_check_performed": false,
+  "network_requests_issued": 0,
+  "correct_operational_interpretation": "BLOCKED_PRE_ENTITLEMENT_CHECK_MISSING_CREDENTIALS",
+  "future_resume_state_machine": {
+    "step_a_credentials_absent": "BLOCKED_PRE_ENTITLEMENT_CHECK_MISSING_CREDENTIALS",
+    "step_b_authentication_fails": "BLOCKED_PROVIDER_AUTHENTICATION",
+    "step_b_sip_or_historical_unavailable": "BLOCKED_DATA_ENTITLEMENT",
+    "step_b_m1_coverage_unavailable": "BLOCKED_DATA_COVERAGE",
+    "step_b_all_qualification_passes": "PROCEED_TO_M1_ONLY_DATASET_ACQUISITION"
+  },
+  "hypothesis_falsified": false,
+  "hypothesis_rejected": false,
+  "r2_dataset_build": "NOT_STARTED",
+  "resumable": true,
+  "original_artifact_rewritten": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "next_human_action": "PROVIDE_HYP_009_R2_ALPACA_CREDENTIALS_AND_REAUTHORIZE_PROVIDER_QUALIFICATION"
+}

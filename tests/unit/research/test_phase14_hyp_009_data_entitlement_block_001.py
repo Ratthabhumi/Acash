@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
     EnvAlpacaCredentialProvider,
@@ -37,12 +39,19 @@ def test_block_status_non_falsifying_and_resumable() -> None:
     assert m["resumable"] is True
 
 
-def test_credential_provider_fail_closed_no_secrets_logged() -> None:
+def test_credential_provider_fail_closed_no_secrets_logged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Future-safe: isolate via monkeypatch so this historical fail-closed proof holds
+    # even after real credentials are installed for authorized R2 resumption.
+    # Never reads, prints, hashes, or logs secret values — only removes the names.
     m = _load(BLOCK_MANIFEST)
     assert m["missing_credentials"] == [
         "ACASH_ALPACA_API_KEY_ID",
         "ACASH_ALPACA_API_SECRET",
     ]
+    monkeypatch.delenv("ACASH_ALPACA_API_KEY_ID", raising=False)
+    monkeypatch.delenv("ACASH_ALPACA_API_SECRET", raising=False)
     try:
         EnvAlpacaCredentialProvider().load()
         raise AssertionError("credential provider must fail closed without credentials")
