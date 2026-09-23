@@ -247,10 +247,10 @@ def test_gate_evaluator_fails_on_any_gate() -> None:
 
 
 def test_deterministic_r3_reproducibility() -> None:
-    """Verify that running the strategy reproduces the exact sealed R3 package SHA-256."""
+    """Verify that running the strategy reproduces the exact sealed R3 package SHA-256 after IMPLEMENTATION_CORRECTION_001."""
     repo_root = Path(__file__).resolve().parents[3]
     res = execute_hyp_007_m1_strategy(repo_root, verify_preconditions=False)
     assert res.terminal_verdict == "ACCEPTED_SUPPORTED_ON_REGISTERED_M1"
-    assert res.r3_result_package_sha256 == "2ef78147b22e5b1e836269b215d26417bb4c284d4b767bd70eb11cd843b13113"
+    assert res.r3_result_package_sha256 == "d4bf18bb80ec650e4c4c0600a8cb5aebb762a7169b8b89111e604adf91293a25"
     assert res.baseline_completed_trades_count == 659
     assert res.stress_completed_trades_count == 659

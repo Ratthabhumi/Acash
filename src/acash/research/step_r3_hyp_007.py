@@ -92,6 +92,9 @@ from acash.research.step_r3_hyp_007_metrics import (
 NY_TZ = ZoneInfo("America/New_York")
 
 # Starting Head and Upstream Digests
+# NOTE: CANONICAL_STARTING_HEAD here is the original R1 authorization head, which is the
+# anchor for R2 and R3. The defective R3 was committed at 89345e05f15fdd4d031800d01790fcd3209c08a3.
+# This file is the corrected re-execution, authorized by AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001.
 CANONICAL_STARTING_HEAD: str = "099fb460396b957cb51dd486cfb4be4f11901c0a"
 EXPECTED_R2_DATASET_CONTENT_SHA256: str = "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa"
 EXPECTED_PRE_R3_BINDING_001_SHA256: str = "c6fd5488bcdc4021833a4d63ef060d23a7f099be4fa5a82a6cd269b7c359af68"
@@ -99,6 +102,11 @@ EXPECTED_PRE_R3_BINDING_001_MANIFEST_SHA256: str = "7ced2ba67d3f568248c7983dfa4e
 EXPECTED_PRE_R3_CORRECTION_002_SHA256: str = "d80dd7c2896b23bd4e4d83c4fcb0c1e8fd817fa2a32460f63de9a40001eb9c62"
 EXPECTED_PRE_R3_CORRECTION_002_MANIFEST_SHA256: str = "68f0a0eeb0f96690f04062029447fc6c76912a1e5a71c360c2759f0c55a3a10c"
 EXPECTED_R2_INTEGRITY_AUDIT_001_MANIFEST_SHA256: str = "9e6e412af0ced7533a42ceb6e29706d2ecc0b9618b2e9ce87b7510a1904ffa55"
+
+# Defective R3 historical evidence (must not be deleted or modified — additive supersession only)
+DEFECTIVE_R3_COMMIT_SHA: str = "89345e05f15fdd4d031800d01790fcd3209c08a3"
+DEFECTIVE_R3_RESULT_PACKAGE_SHA256: str = "2ef78147b22e5b1e836269b215d26417bb4c284d4b767bd70eb11cd843b13113"
+DEFECTIVE_R3_DEFECT_CLASS: str = "PREVIOUS_REGULAR_CLOSE_ANCHOR_LINEAGE_IMPLEMENTATION_DEFECT"
 
 DECISION_EPOCHS: Tuple[dtime, ...] = (
     dtime(10, 0),
@@ -131,6 +139,41 @@ def compute_epoch_minute_mappings() -> List[Tuple[str, str, int]]:
         bar_idx = (sig_dt.hour - 9) * 60 + sig_dt.minute - 30
         mappings.append((ep.strftime("%H:%M:%S"), sig_dt.strftime("%H:%M"), bar_idx))
     return mappings
+
+
+def get_previous_regular_close(
+    session_date_str: str,
+    continuous_daily_closes: List[Tuple[str, Decimal]],
+) -> Decimal:
+    """Return the immediately preceding regular-session close from the frozen continuous daily-close lineage.
+
+    Authority: MEC-0017-HYP-007-strategy-preregistration.md Section 5.2:
+        prev_close_adjusted = previous_regular_close - current_day_cash_dividend
+
+    The term 'previous_regular_close' means the immediately preceding entry in the continuous
+    daily-close lineage (continuous_daily_closes), which is the frozen authority derived in R2.
+    This lineage:
+    - INCLUDES 2023-06-05 at $427.10 (Outcome V1, sealed in R2).
+    - EXCLUDES early-close sessions (2021-11-26, 2022-11-25, 2023-07-03, 2023-11-24)
+      because they were never acquired in bars_by_sess.
+
+    This function must NEVER be replaced by prior_14_sessions[-1] from the Noise-Area
+    eligibility list. Those are SEPARATE lineages with different governance.
+
+    Raises:
+        DataContractError: If no previous regular close can be found (fail-closed).
+    """
+    for i, (dt_str, _) in enumerate(continuous_daily_closes):
+        if dt_str == session_date_str:
+            if i == 0:
+                raise DataContractError(
+                    f"No previous regular close available for {session_date_str}: it is the first entry."
+                )
+            return continuous_daily_closes[i - 1][1]
+    raise DataContractError(
+        f"Session {session_date_str} not found in continuous daily-close lineage. "
+        f"Cannot derive previous_regular_close. Fail-closed."
+    )
 
 
 @dataclass(frozen=True)
@@ -467,7 +510,12 @@ def execute_hyp_007_m1_strategy(
             raise DataContractError(f"Excluded session {EXCLUDED_SESSION_DATE} leaked into Noise Area lookback for {dt_str}")
 
         # 4. Anchors with SSGA Cash Dividend
-        prev_close_raw = bars_by_sess[prior_14_sessions[-1]][-1]["close"]
+        # LINEAGE AUTHORITY: previous_regular_close = immediately preceding entry in
+        # continuous_daily_closes (the frozen daily-close lineage from R2).
+        # This is DISTINCT from prior_14_sessions[-1] (Noise-Area eligibility lineage).
+        # For 2023-06-06: continuous lineage gives 2023-06-05 -> $427.10 (Outcome V1).
+        # Using prior_14_sessions[-1] for this was the defect corrected in CORRECTION_001.
+        prev_close_raw = get_previous_regular_close(dt_str, continuous_daily_closes)
         dividend = div_by_date.get(dt_str, Decimal("0.00"))
         prev_close_adjusted = prev_close_raw - dividend
         upper_anchor = max(morning_open, prev_close_adjusted)
@@ -1230,12 +1278,47 @@ def execute_hyp_007_m1_strategy(
     )
 
 
-def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
-    """Execute strategy, write Parquet ledgers, emit manifests and reports, and verify reproducibility."""
-    # 1. Primary Execution
+def execute_and_seal_r3_corrected_001(repo_root: Path) -> Hyp007R3ExecutionResult:
+    """Execute corrected strategy, write Parquet ledgers, emit ADDITIVE corrected artifacts,
+    and verify reproducibility.
+
+    GOVERNANCE: This function writes ONLY additive corrected artifacts with _CORRECTED_001
+    suffix. The following defective historical artifacts MUST remain byte-for-byte unchanged:
+      - docs/phase14/manifests/manifest_r3_HYP_007.json
+      - docs/phase14/manifests/terminal_decision_HYP_007.json
+      - docs/research/MEC-0017-HYP-007-step-r3-execution-report.md
+      - docs/phase14/hyp_007_terminal_m1_decision_dossier.md
+    They are immutable evidence from the defective R3 commit DEFECTIVE_R3_COMMIT_SHA.
+    DO NOT rename, delete, or overwrite them.
+
+    Authorization: AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001
+    """
+    manifests_dir = repo_root / "docs/phase14/manifests"
+
+    # -----------------------------------------------------------------------
+    # ASSERTION 0: Defective historical artifacts must still exist and be intact
+    # -----------------------------------------------------------------------
+    defective_originals = {
+        "manifest_r3_HYP_007.json": manifests_dir / "manifest_r3_HYP_007.json",
+        "terminal_decision_HYP_007.json": manifests_dir / "terminal_decision_HYP_007.json",
+        "step-r3-execution-report.md": repo_root / "docs/research/MEC-0017-HYP-007-step-r3-execution-report.md",
+        "hyp_007_terminal_m1_decision_dossier.md": repo_root / "docs/phase14/hyp_007_terminal_m1_decision_dossier.md",
+    }
+    for name, path in defective_originals.items():
+        if not path.exists():
+            raise DataContractError(
+                f"Defective historical artifact {name} is MISSING from {path}. "
+                f"It must be preserved from defective R3 commit {DEFECTIVE_R3_COMMIT_SHA}."
+            )
+
+    # -----------------------------------------------------------------------
+    # 1. Primary Corrected Execution
+    # -----------------------------------------------------------------------
     result = execute_hyp_007_m1_strategy(repo_root, verify_preconditions=True)
 
+    # -----------------------------------------------------------------------
     # 2. Persist local Parquet ledgers to data/hyp_007 (gitignored)
+    # -----------------------------------------------------------------------
     data_dir = repo_root / "data/hyp_007"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1336,17 +1419,43 @@ def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
     }
     pq.write_table(pa.Table.from_pydict(daily_data), data_dir / "m1_daily_performance.parquet")
 
-    # 3. Write Step R3 Manifest: docs/phase14/manifests/manifest_r3_HYP_007.json
-    manifests_dir = repo_root / "docs/phase14/manifests"
+    # -----------------------------------------------------------------------
+    # 3. Write ADDITIVE Corrected R3 Manifest: manifest_r3_HYP_007_CORRECTED_001.json
+    #    (DO NOT write to manifest_r3_HYP_007.json)
+    # -----------------------------------------------------------------------
     manifests_dir.mkdir(parents=True, exist_ok=True)
 
-    r3_manifest = {
-        "manifest_type": "STEP_R3_STRATEGY_EXECUTION_MANIFEST",
+    corrected_r3_manifest = {
+        "manifest_type": "STEP_R3_STRATEGY_EXECUTION_MANIFEST_CORRECTED_001",
         "hypothesis_id": "HYP_007",
         "mechanism_id": "MEC-0017",
         "strategy_id": "MEC_0017_NOISE_AREA_INTRADAY_MOMENTUM_BASELINE",
         "trial_k": 1,
-        "status": "STEP_R3_M1_EXECUTION_SEALED",
+        "status": "STEP_R3_M1_EXECUTION_SEALED_CORRECTED_001",
+        "correction_id": "IMPLEMENTATION_CORRECTION_001",
+        "authorization": "AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001",
+        "defect_corrected": {
+            "defect_class": DEFECTIVE_R3_DEFECT_CLASS,
+            "defect_description": (
+                "prior_14_sessions[-1] (Noise-Area eligibility list) was incorrectly used as "
+                "previous_regular_close anchor. For session 2023-06-06 this yielded close of "
+                "2023-06-02=$427.91 instead of the correct continuous-lineage value "
+                "2023-06-05=$427.10 (delta=-$0.81). Contract authority: Section 5.2 of "
+                "MEC-0017-HYP-007-strategy-preregistration.md."
+            ),
+            "sessions_affected": ["2023-06-06"],
+            "anchor_defective_date": "2023-06-02",
+            "anchor_defective_close": "427.91",
+            "anchor_corrected_date": "2023-06-05",
+            "anchor_corrected_close": "427.10",
+            "fix_introduced_by": "get_previous_regular_close() reading continuous_daily_closes lineage",
+        },
+        "supersedes": {
+            "defective_commit_sha": DEFECTIVE_R3_COMMIT_SHA,
+            "defective_r3_result_package_sha256": DEFECTIVE_R3_RESULT_PACKAGE_SHA256,
+            "defective_terminal_decision_path": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+            "reason": DEFECTIVE_R3_DEFECT_CLASS,
+        },
         "starting_canonical_head": CANONICAL_STARTING_HEAD,
         "upstream_authorities": {
             "r1_spec_sha256": EXPECTED_HYP_007_R1_SPEC_SHA256,
@@ -1404,6 +1513,7 @@ def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
             "rejection_reasons": result.gate_report.rejection_reasons,
         },
         "terminal_verdict": result.terminal_verdict,
+        "effective_terminal_decision_after_correction": "EFFECTIVE_AFTER_CORRECTION_001",
         "governance_limits": {
             "capital_authority_usd": "0.00",
             "no_real_orders": True,
@@ -1413,16 +1523,20 @@ def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
         },
         "next_required_action": "AWAIT_SEPARATE_HUMAN_GOVERNANCE_RATIFICATION_FOR_M2_OR_PAPER",
     }
-    # Clean Decimal for JSON
-    r3_manifest_clean = json.loads(json.dumps(r3_manifest, default=str))
-    manifest_path = manifests_dir / "manifest_r3_HYP_007.json"
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(r3_manifest_clean, f, indent=2, sort_keys=True)
+    corrected_r3_manifest_clean = json.loads(json.dumps(corrected_r3_manifest, default=str))
+    corrected_manifest_path = manifests_dir / "manifest_r3_HYP_007_CORRECTED_001.json"
+    with open(corrected_manifest_path, "w", encoding="utf-8") as f:
+        json.dump(corrected_r3_manifest_clean, f, indent=2, sort_keys=True)
 
-    # 4. Write Terminal Decision Record: docs/phase14/manifests/terminal_decision_HYP_007.json
-    decision_record = {
-        "decision_type": "PHASE_14_TERMINAL_M1_EXECUTION_DECISION",
-        "decision_id": "DEC_TERMINAL_M1_HYP_007",
+    # -----------------------------------------------------------------------
+    # 4. Write ADDITIVE Corrected Terminal Decision: terminal_decision_HYP_007_CORRECTED_001.json
+    #    (DO NOT write to terminal_decision_HYP_007.json)
+    # -----------------------------------------------------------------------
+    corrected_r3_manifest_sha = calculate_deterministic_sha256(corrected_r3_manifest_clean)
+
+    corrected_decision_record = {
+        "decision_type": "PHASE_14_TERMINAL_M1_EXECUTION_DECISION_CORRECTED_001",
+        "decision_id": "DEC_TERMINAL_M1_HYP_007_CORRECTED_001",
         "hypothesis_id": "HYP_007",
         "hypothesis_ordinal": 7,
         "mechanism_id": "MEC-0017",
@@ -1430,10 +1544,17 @@ def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
         "preregistration_sha256": EXPECTED_HYP_007_PREREG_SHA256,
         "r1_manifest_sha256": EXPECTED_HYP_007_R1_MANIFEST_SHA256,
         "r2_dataset_content_sha256": EXPECTED_R2_DATASET_CONTENT_SHA256,
-        "r3_manifest_sha256": calculate_deterministic_sha256(r3_manifest_clean),
+        "r3_corrected_manifest_sha256": corrected_r3_manifest_sha,
         "r3_result_package_sha256": result.r3_result_package_sha256,
-        "lifecycle_state": "M1_ACCEPTED_SUPPORTED",
+        "lifecycle_state": "M1_ACCEPTED_SUPPORTED_CORRECTED_001",
         "terminal_verdict": result.terminal_verdict,
+        "effective_terminal_decision_after_correction": "EFFECTIVE_AFTER_CORRECTION_001",
+        "supersedes": {
+            "defective_commit_sha": DEFECTIVE_R3_COMMIT_SHA,
+            "defective_r3_result_package_sha256": DEFECTIVE_R3_RESULT_PACKAGE_SHA256,
+            "defective_terminal_decision_path": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+            "reason": DEFECTIVE_R3_DEFECT_CLASS,
+        },
         "economic_summary": {
             "baseline_net_total_return": str(result.baseline_net_total_return),
             "baseline_annualized_sharpe": str(result.baseline_annualized_sharpe),
@@ -1452,42 +1573,77 @@ def execute_and_seal_r3(repo_root: Path) -> Hyp007R3ExecutionResult:
         },
         "next_governance_action": "AWAIT_SEPARATE_HUMAN_GOVERNANCE_RATIFICATION_FOR_M2_OR_PAPER",
     }
-    decision_record_clean = json.loads(json.dumps(decision_record, default=str))
-    decision_path = manifests_dir / "terminal_decision_HYP_007.json"
-    with open(decision_path, "w", encoding="utf-8") as f:
-        json.dump(decision_record_clean, f, indent=2, sort_keys=True)
+    corrected_decision_clean = json.loads(json.dumps(corrected_decision_record, default=str))
+    corrected_decision_path = manifests_dir / "terminal_decision_HYP_007_CORRECTED_001.json"
+    with open(corrected_decision_path, "w", encoding="utf-8") as f:
+        json.dump(corrected_decision_clean, f, indent=2, sort_keys=True)
 
-    # 5. Write R3 Execution Report: docs/research/MEC-0017-HYP-007-step-r3-execution-report.md
-    report_md = f"""# MEC-0017 HYP_007 Step R3 Execution & Terminal Gate Acceptance Report
+    # -----------------------------------------------------------------------
+    # 5. Write ADDITIVE Corrected Execution Report:
+    #    docs/research/MEC-0017-HYP-007-step-r3-corrected-execution-report.md
+    #    (DO NOT write to MEC-0017-HYP-007-step-r3-execution-report.md)
+    # -----------------------------------------------------------------------
+    corrected_report_md = f"""# MEC-0017 HYP_007 Step R3 CORRECTED Execution & Terminal Gate Acceptance Report
 
-[GOVERNANCE ARTIFACT: STEP R3 STRATEGY EXECUTION & G1-G7 ACCEPTANCE]
+[GOVERNANCE ARTIFACT: STEP R3 STRATEGY EXECUTION & G1-G7 ACCEPTANCE — IMPLEMENTATION CORRECTION 001]
 [HYPOTHESIS_ID: HYP_007]
 [MECHANISM_ID: MEC-0017]
-[AUTHORIZATION: AUTHORIZE_HYP_007_R3_M1_EXECUTION]
+[AUTHORIZATION: AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001]
+[CORRECTION_ID: IMPLEMENTATION_CORRECTION_001]
 [STARTING_CANONICAL_HEAD: {CANONICAL_STARTING_HEAD}]
-[R3_EXECUTION_STATUS: COMPLETE_SEALED]
+[DEFECTIVE_R3_COMMIT: {DEFECTIVE_R3_COMMIT_SHA}]
+[DEFECTIVE_R3_RESULT_PACKAGE_SHA256: {DEFECTIVE_R3_RESULT_PACKAGE_SHA256}]
+[R3_EXECUTION_STATUS: CORRECTED_COMPLETE_SEALED]
 [TERMINAL_VERDICT: {result.terminal_verdict}]
+[EFFECTIVE_TERMINAL_DECISION: EFFECTIVE_AFTER_CORRECTION_001]
 
-## 1. Executive Summary
+## 1. Correction Summary
 
-Under explicit human authorization `AUTHORIZE_HYP_007_R3_M1_EXECUTION`, Phase 14 Step R3 has executed the frozen, preregistered HYP_007 strategy (MEC-0017: SPY Noise-Area Intraday Momentum Direct-SIP Net-Profitability Replication) on the qualified M1 empirical dataset (`2021-07-01` through `2024-04-30`).
+### 1.1 Defect Identification
+The prior R3 execution (commit `{DEFECTIVE_R3_COMMIT_SHA}`, result package
+`{DEFECTIVE_R3_RESULT_PACKAGE_SHA256}`) contained a material implementation defect:
 
-The strategy completed execution across both the **Baseline Institutional Model** and the **2× Friction Stress Model** with **ZERO material contract failures**.
+**Defect Class:** `{DEFECTIVE_R3_DEFECT_CLASS}`
 
-All 7 sovereign acceptance gates (G1–G7) passed simultaneously:
-- **G1 (Net Total Return > 0.0):** `{result.baseline_net_total_return}` -> **PASS**
-- **G2 (Net Annualized Sharpe >= 1.00):** `{result.baseline_annualized_sharpe}` -> **PASS**
-- **G3 (Max Drawdown <= 0.30):** `{result.baseline_max_drawdown}` -> **PASS**
-- **G4 (Completed Trades >= 100):** `{result.baseline_completed_trades_count}` -> **PASS**
-- **G5 (No Material Contract Failure == True):** `{result.no_material_contract_failure}` -> **PASS**
-- **G6 (2× Friction Stress Net Return > 0.0):** `{result.stress_net_total_return}` -> **PASS**
-- **G7 (2× Friction Stress Net Sharpe >= 0.75):** `{result.stress_annualized_sharpe}` -> **PASS**
+**Root Cause:** Line `prev_close_raw = bars_by_sess[prior_14_sessions[-1]][-1]["close"]`
+incorrectly derived `previous_regular_close` from the Noise-Area eligibility list
+(`prior_14_sessions[-1]`) instead of from the continuous daily-close lineage
+(`continuous_daily_closes`).
 
-**Terminal M1 Verdict:** `{result.terminal_verdict}`
+**Session Affected:** `2023-06-06` only.
+
+| Anchor Source | Session | Close Used |
+| :--- | :--- | :--- |
+| **Defective** (`prior_14_sessions[-1]`) | `2023-06-02` | `$427.91` |
+| **Correct** (`continuous_daily_closes`) | `2023-06-05` | `$427.10` |
+| **Delta** | — | **-$0.81** |
+
+### 1.2 Contract Authority
+Section 5.2 of `docs/research/MEC-0017-HYP-007-strategy-preregistration.md`:
+> `prev_close_adjusted = previous_regular_close - current_day_cash_dividend`
+
+`previous_regular_close` = immediately preceding entry in `continuous_daily_closes`
+(the frozen R2 daily-close lineage), NOT `prior_14_sessions[-1]`.
+
+### 1.3 Lineage Invariant
+Three SEPARATE lineages:
+- **A — Noise-Area Eligibility** (`prior_14_sessions`): excludes `2023-06-05`. ✓ Unchanged.
+- **B — Daily Volatility Close** (`continuous_daily_closes`): includes `2023-06-05` at `$427.10`. ✓ Unchanged.
+- **C — Previous-Regular-Close Anchor** (`get_previous_regular_close()`): reads B. **CORRECTED.**
+
+### 1.4 Additive Supersession Record
+The defective historical artifacts remain immutable at their original paths:
+- `docs/phase14/manifests/manifest_r3_HYP_007.json`
+- `docs/phase14/manifests/terminal_decision_HYP_007.json`
+- `docs/research/MEC-0017-HYP-007-step-r3-execution-report.md`
+- `docs/phase14/hyp_007_terminal_m1_decision_dossier.md`
+
+This corrected report and associated `_CORRECTED_001` manifests are the effective
+scientific authority after this correction.
 
 ---
 
-## 2. Cryptographic Lineage & Result Hashes
+## 2. Corrected Execution — Cryptographic Lineage & Result Hashes
 
 | Artifact / Evidence Ledger | Authoritative SHA-256 Digest | Status |
 | :--- | :--- | :--- |
@@ -1499,102 +1655,95 @@ All 7 sovereign acceptance gates (G1–G7) passed simultaneously:
 | **Baseline Daily Equity SHA-256** | `{result.baseline_daily_equity_sha256}` | SEALED |
 | **Stress Daily Equity SHA-256** | `{result.stress_daily_equity_sha256}` | SEALED |
 | **Gate Evaluation SHA-256** | `{result.gate_evaluation_sha256}` | SEALED |
-| **Complete R3 Result Package SHA-256** | **`{result.r3_result_package_sha256}`** | **SEALED_TOP_LEVEL** |
+| **Complete R3 Result Package SHA-256 (CORRECTED)** | **`{result.r3_result_package_sha256}`** | **SEALED_CORRECTED_EFFECTIVE** |
 
 ---
 
-## 3. Empirical Economics Summary
+## 3. Corrected Empirical Economics Summary
 
-| Metric | Baseline Institutional Model | 2× Friction Stress Model | Delta / Stress Impact |
-| :--- | :--- | :--- | :--- |
-| **Initial AUM** | `$100,000.00` | `$100,000.00` | `$0.00` |
-| **Final Ending AUM** | `${result.final_baseline_aum:.4f}` | `${result.final_stress_aum:.4f}` | `-${result.final_baseline_aum - result.final_stress_aum:.4f}` |
-| **Net Total Return** | `{float(result.baseline_net_total_return) * 100:.4f}%` | `{float(result.stress_net_total_return) * 100:.4f}%` | `{(float(result.stress_net_total_return) - float(result.baseline_net_total_return)) * 100:.4f}%` |
-| **Annualized Sharpe (252d)** | `{result.baseline_annualized_sharpe}` | `{result.stress_annualized_sharpe}` | `-{float(result.baseline_annualized_sharpe) - float(result.stress_annualized_sharpe):.4f}` |
-| **Max Drawdown** | `{float(result.baseline_max_drawdown) * 100:.4f}%` | `{float(result.stress_max_drawdown) * 100:.4f}%` | `+{float(result.stress_max_drawdown) * 100 - float(result.baseline_max_drawdown) * 100:.4f}%` |
-| **Completed Trades** | `659` | `659` | `0` |
-| **Order Legs Executed** | `1,318` | `1,318` | `0` |
-| **Total Friction Incurred** | `$6,087.8010` | `$16,599.0150` | `+$10,511.2140` |
+| Metric | Baseline Institutional Model | 2× Friction Stress Model |
+| :--- | :--- | :--- |
+| **Initial AUM** | `$100,000.00` | `$100,000.00` |
+| **Final Ending AUM** | `${result.final_baseline_aum:.4f}` | `${result.final_stress_aum:.4f}` |
+| **Net Total Return** | `{float(result.baseline_net_total_return) * 100:.4f}%` | `{float(result.stress_net_total_return) * 100:.4f}%` |
+| **Annualized Sharpe (252d)** | `{result.baseline_annualized_sharpe}` | `{result.stress_annualized_sharpe}` |
+| **Max Drawdown** | `{float(result.baseline_max_drawdown) * 100:.4f}%` | `{float(result.stress_max_drawdown) * 100:.4f}%` |
+| **Completed Trades** | `{result.baseline_completed_trades_count}` | `{result.baseline_completed_trades_count}` |
 
 ---
 
-## 4. Acceptance Gate Details (G1–G7)
+## 4. Corrected Acceptance Gate Details (G1–G7)
 
 1. **G1: Net Total Return > 0.0**
-   - Observed: `{result.baseline_net_total_return}`
-   - Threshold: `> 0.0`
-   - Evaluation: **PASS**
+   - Observed: `{result.baseline_net_total_return}` → **{"PASS" if result.gate_report.g1.passed else "FAIL"}**
 2. **G2: Net Annualized Sharpe >= 1.00**
-   - Observed: `{result.baseline_annualized_sharpe}`
-   - Threshold: `>= 1.00`
-   - Evaluation: **PASS**
+   - Observed: `{result.baseline_annualized_sharpe}` → **{"PASS" if result.gate_report.g2.passed else "FAIL"}**
 3. **G3: Max Drawdown <= 0.30**
-   - Observed: `{result.baseline_max_drawdown}`
-   - Threshold: `<= 0.30`
-   - Evaluation: **PASS**
+   - Observed: `{result.baseline_max_drawdown}` → **{"PASS" if result.gate_report.g3.passed else "FAIL"}**
 4. **G4: Completed Trades >= 100**
-   - Observed: `{result.baseline_completed_trades_count}`
-   - Threshold: `>= 100`
-   - Evaluation: **PASS**
+   - Observed: `{result.baseline_completed_trades_count}` → **{"PASS" if result.gate_report.g4.passed else "FAIL"}**
 5. **G5: No Material Contract Failure == True**
-   - Observed: `{result.no_material_contract_failure}`
-   - Threshold: `== True`
-   - Evaluation: **PASS**
+   - Observed: `{result.no_material_contract_failure}` → **{"PASS" if result.gate_report.g5.passed else "FAIL"}**
 6. **G6: 2× Friction Stress Net Return > 0.0**
-   - Observed: `{result.stress_net_total_return}`
-   - Threshold: `> 0.0`
-   - Evaluation: **PASS**
+   - Observed: `{result.stress_net_total_return}` → **{"PASS" if result.gate_report.g6.passed else "FAIL"}**
 7. **G7: 2× Friction Stress Net Sharpe >= 0.75**
-   - Observed: `{result.stress_annualized_sharpe}`
-   - Threshold: `>= 0.75`
-   - Evaluation: **PASS**
+   - Observed: `{result.stress_annualized_sharpe}` → **{"PASS" if result.gate_report.g7.passed else "FAIL"}**
 
-Conjunction: **ALL 7 GATES PASSED DETERMINISTICALLY.**
+**Conjunction Outcome:** All 7 gates: `{result.gate_report.all_passed}`
 
 ---
 
 ## 5. Methodological & Governance Boundaries
 
-1. **Publication-Exposed Direct-SIP Replication Sample:** M1 is an empirical direct-SIP replication sample. It is NOT pristine OOS.
-2. **M2 Zero Access Invariant:** M2 (`>= 2024-05-01`) remains strictly locked under zero-access firewall. No M2 queries, signals, or returns were generated.
-3. **Sovereign Capital & Execution Boundary:** Real capital authority remains `$0.00`. `NO_REAL_ORDERS = true`. Paper and Live execution remain LOCKED.
-4. **Next Step:** Any advancement to M2 out-of-sample evaluation or paper trading requires an explicit, separate human governance decision record.
+1. **Same R2 dataset:** Identical sealed parquet (SHA `4dcf8546...`) — no new data acquired.
+2. **Trial count K=1:** Corrected re-execution of the same registered trial, NOT a new K.
+3. **M2 Zero Access Invariant:** M2 (`>= 2024-05-01`) strictly locked.
+4. **Sovereign Capital:** `$0.00`. `NO_REAL_ORDERS = true`.
+5. **Next Step:** Human governance decision required before any M2 access or paper/live execution.
 """
-    report_path = repo_root / "docs/research/MEC-0017-HYP-007-step-r3-execution-report.md"
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report_md)
+    corrected_report_path = repo_root / "docs/research/MEC-0017-HYP-007-step-r3-corrected-execution-report.md"
+    with open(corrected_report_path, "w", encoding="utf-8") as f:
+        f.write(corrected_report_md)
 
-    # 6. Write Dossier: docs/phase14/hyp_007_terminal_m1_decision_dossier.md
-    dossier_md = f"""# HYP_007 Terminal M1 Strategy Acceptance Dossier
+    # -----------------------------------------------------------------------
+    # 6. Write ADDITIVE Corrected Dossier:
+    #    docs/phase14/hyp_007_corrected_terminal_m1_decision_dossier.md
+    #    (DO NOT write to hyp_007_terminal_m1_decision_dossier.md)
+    # -----------------------------------------------------------------------
+    corrected_dossier_md = f"""# HYP_007 CORRECTED Terminal M1 Strategy Acceptance Dossier
 
-[DECISION RECORD: PHASE 14 STEP R3 TERMINAL M1 EVALUATION]
+[DECISION RECORD: PHASE 14 STEP R3 TERMINAL M1 EVALUATION — IMPLEMENTATION CORRECTION 001]
 [HYPOTHESIS_ID: HYP_007]
 [MECHANISM_ID: MEC-0017]
-[DECISION_ID: DEC_TERMINAL_M1_HYP_007]
-[LIFECYCLE_STATE: M1_ACCEPTED_SUPPORTED]
+[DECISION_ID: DEC_TERMINAL_M1_HYP_007_CORRECTED_001]
+[LIFECYCLE_STATE: M1_ACCEPTED_SUPPORTED_CORRECTED_001]
 [TERMINAL_VERDICT: {result.terminal_verdict}]
+[EFFECTIVE_TERMINAL_DECISION: EFFECTIVE_AFTER_CORRECTION_001]
 
 ## 1. Decision Authority & Context
 
-Under `AUTHORIZE_HYP_007_R3_M1_EXECUTION` issued on canonical starting commit `{CANONICAL_STARTING_HEAD}`, the registered single trial ($K=1$) of `HYP_007` (MEC-0017: SPY Noise-Area Intraday Momentum Direct-SIP Net-Profitability Replication) was executed on the qualified M1 sample (`2021-07-01` through `2024-04-30`).
+Under `AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001`, the
+registered single trial ($K=1$) of `HYP_007` was re-executed with the corrected
+`previous_regular_close` anchor lineage, superseding the defective result
+at commit `{DEFECTIVE_R3_COMMIT_SHA}` (package `{DEFECTIVE_R3_RESULT_PACKAGE_SHA256}`).
 
 ## 2. Gate Verification Ledger
 
 | Gate | Name | Threshold | Observed | Verdict |
 | :--- | :--- | :--- | :--- | :--- |
-| **G1** | Net Total Return | `> 0.0` | `{result.baseline_net_total_return}` | **PASS** |
-| **G2** | Net Annualized Sharpe | `>= 1.00` | `{result.baseline_annualized_sharpe}` | **PASS** |
-| **G3** | Max Drawdown | `<= 0.30` | `{result.baseline_max_drawdown}` | **PASS** |
-| **G4** | Completed Trades | `>= 100` | `{result.baseline_completed_trades_count}` | **PASS** |
-| **G5** | No Material Contract Failure | `== True` | `{result.no_material_contract_failure}` | **PASS** |
-| **G6** | 2× Friction Stress Net Return | `> 0.0` | `{result.stress_net_total_return}` | **PASS** |
-| **G7** | 2× Friction Stress Net Sharpe | `>= 0.75` | `{result.stress_annualized_sharpe}` | **PASS** |
+| **G1** | Net Total Return | `> 0.0` | `{result.baseline_net_total_return}` | **{"PASS" if result.gate_report.g1.passed else "FAIL"}** |
+| **G2** | Net Annualized Sharpe | `>= 1.00` | `{result.baseline_annualized_sharpe}` | **{"PASS" if result.gate_report.g2.passed else "FAIL"}** |
+| **G3** | Max Drawdown | `<= 0.30` | `{result.baseline_max_drawdown}` | **{"PASS" if result.gate_report.g3.passed else "FAIL"}** |
+| **G4** | Completed Trades | `>= 100` | `{result.baseline_completed_trades_count}` | **{"PASS" if result.gate_report.g4.passed else "FAIL"}** |
+| **G5** | No Material Contract Failure | `== True` | `{result.no_material_contract_failure}` | **{"PASS" if result.gate_report.g5.passed else "FAIL"}** |
+| **G6** | 2× Friction Stress Net Return | `> 0.0` | `{result.stress_net_total_return}` | **{"PASS" if result.gate_report.g6.passed else "FAIL"}** |
+| **G7** | 2× Friction Stress Net Sharpe | `>= 0.75` | `{result.stress_annualized_sharpe}` | **{"PASS" if result.gate_report.g7.passed else "FAIL"}** |
 
-**Conjunction Outcome:** All 7 acceptance gates PASS.
+**Conjunction Outcome:** All 7 acceptance gates `{result.gate_report.all_passed}`.
 
-## 3. Cryptographic Verification
+## 3. Cryptographic Verification (CORRECTED)
 
-- **R3 Result Package SHA-256:** `{result.r3_result_package_sha256}`
+- **Corrected R3 Result Package SHA-256:** `{result.r3_result_package_sha256}`
 - **R2 Dataset Content SHA-256:** `{EXPECTED_R2_DATASET_CONTENT_SHA256}`
 - **Signal Ledger SHA-256:** `{result.signal_ledger_sha256}`
 - **Baseline Execution Ledger SHA-256:** `{result.baseline_execution_ledger_sha256}`
@@ -1610,16 +1759,128 @@ Under `AUTHORIZE_HYP_007_R3_M1_EXECUTION` issued on canonical starting commit `{
 - **Paper & Live Execution:** Locked.
 - **Human Authority Required:** A human governance decision is required before any subsequent phase, M2 access, or runtime authorization can occur.
 """
-    dossier_path = repo_root / "docs/phase14/hyp_007_terminal_m1_decision_dossier.md"
-    with open(dossier_path, "w", encoding="utf-8") as f:
-        f.write(dossier_md)
+    corrected_dossier_path = repo_root / "docs/phase14/hyp_007_corrected_terminal_m1_decision_dossier.md"
+    with open(corrected_dossier_path, "w", encoding="utf-8") as f:
+        f.write(corrected_dossier_md)
 
-    # 7. Reproducibility Rerun Verification
+    # -----------------------------------------------------------------------
+    # 7. Write HYP_007_R3_IMPLEMENTATION_CORRECTION_001.md governance record
+    # -----------------------------------------------------------------------
+    correction_doc_md = f"""# HYP_007 R3 Implementation Correction 001
+
+[GOVERNANCE ARTIFACT: MATERIAL IMPLEMENTATION DEFECT CORRECTION]
+[HYPOTHESIS_ID: HYP_007]
+[MECHANISM_ID: MEC-0017]
+[CORRECTION_ID: IMPLEMENTATION_CORRECTION_001]
+[DEFECTIVE_COMMIT: {DEFECTIVE_R3_COMMIT_SHA}]
+[DEFECTIVE_RESULT_PACKAGE_SHA256: {DEFECTIVE_R3_RESULT_PACKAGE_SHA256}]
+[AUTHORIZATION: AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001]
+[EFFECTIVE_TERMINAL_DECISION: terminal_decision_HYP_007_CORRECTED_001.json]
+
+## 1. Defect Statement
+
+**Defect Class:** `{DEFECTIVE_R3_DEFECT_CLASS}`
+
+The prior R3 execution incorrectly derived `previous_regular_close` from `prior_14_sessions[-1]`
+(the Noise-Area eligibility list) instead of `continuous_daily_closes` (the frozen R2 lineage).
+
+### Affected Session
+
+For session `2023-06-06`:
+- `prior_14_sessions[-1]` = `2023-06-02`, close = `$427.91`
+- Correct `continuous_daily_closes` prev entry = `2023-06-05`, close = `$427.10`
+- Delta: **-$0.81**
+
+### Three Lineages Must Remain Separate
+
+| Lineage | Source | Includes 2023-06-05? |
+| :--- | :--- | :--- |
+| Noise-Area Eligibility | `prior_14_sessions` | NO |
+| Volatility Close | `continuous_daily_closes` | YES ($427.10) |
+| Previous-Regular-Close Anchor | `get_previous_regular_close()` → `continuous_daily_closes` | YES ($427.10) |
+
+## 2. Correction
+
+Added `get_previous_regular_close(session_date_str, continuous_daily_closes) -> Decimal` helper.
+The anchor lineage now reads `continuous_daily_closes[i-1]` where `i` is the current session's
+position — never `prior_14_sessions[-1]`.
+
+## 3. Immutability of Defective Evidence
+
+The following defective artifacts are preserved unchanged:
+- `docs/phase14/manifests/manifest_r3_HYP_007.json`
+- `docs/phase14/manifests/terminal_decision_HYP_007.json`
+- `docs/research/MEC-0017-HYP-007-step-r3-execution-report.md`
+- `docs/phase14/hyp_007_terminal_m1_decision_dossier.md`
+
+## 4. Effective Authority After Correction
+
+- `docs/phase14/manifests/manifest_r3_HYP_007_CORRECTED_001.json`
+- `docs/phase14/manifests/terminal_decision_HYP_007_CORRECTED_001.json`
+- `docs/research/MEC-0017-HYP-007-step-r3-corrected-execution-report.md`
+- `docs/phase14/hyp_007_corrected_terminal_m1_decision_dossier.md`
+- `docs/phase14/HYP_007_R3_IMPLEMENTATION_CORRECTION_001.md` (this document)
+- `docs/phase14/manifests/HYP_007_R3_IMPLEMENTATION_CORRECTION_001.json`
+"""
+    correction_doc_path = repo_root / "docs/phase14/HYP_007_R3_IMPLEMENTATION_CORRECTION_001.md"
+    with open(correction_doc_path, "w", encoding="utf-8") as f:
+        f.write(correction_doc_md)
+
+    # -----------------------------------------------------------------------
+    # 8. Write HYP_007_R3_IMPLEMENTATION_CORRECTION_001.json manifest
+    # -----------------------------------------------------------------------
+    correction_doc_sha = hashlib.sha256(correction_doc_path.read_bytes()).hexdigest()
+    corrected_manifest_sha = hashlib.sha256(corrected_manifest_path.read_bytes()).hexdigest()
+    corrected_decision_sha = hashlib.sha256(corrected_decision_path.read_bytes()).hexdigest()
+
+    correction_manifest = {
+        "manifest_type": "R3_IMPLEMENTATION_CORRECTION_MANIFEST",
+        "correction_id": "IMPLEMENTATION_CORRECTION_001",
+        "hypothesis_id": "HYP_007",
+        "mechanism_id": "MEC-0017",
+        "authorization": "AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001",
+        "defect_class": DEFECTIVE_R3_DEFECT_CLASS,
+        "supersedes": {
+            "defective_commit_sha": DEFECTIVE_R3_COMMIT_SHA,
+            "defective_r3_result_package_sha256": DEFECTIVE_R3_RESULT_PACKAGE_SHA256,
+            "defective_terminal_decision_path": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+            "reason": DEFECTIVE_R3_DEFECT_CLASS,
+        },
+        "corrected_artifacts": {
+            "manifest_r3_corrected_001_sha256": corrected_manifest_sha,
+            "terminal_decision_corrected_001_sha256": corrected_decision_sha,
+            "correction_doc_sha256": correction_doc_sha,
+            "r3_result_package_sha256_corrected": result.r3_result_package_sha256,
+        },
+        "immutable_defective_artifacts": {
+            "manifest_r3_HYP_007_json": "docs/phase14/manifests/manifest_r3_HYP_007.json",
+            "terminal_decision_HYP_007_json": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+            "step_r3_execution_report_md": "docs/research/MEC-0017-HYP-007-step-r3-execution-report.md",
+            "terminal_m1_decision_dossier_md": "docs/phase14/hyp_007_terminal_m1_decision_dossier.md",
+        },
+        "effective_terminal_decision_after_correction": "EFFECTIVE_AFTER_CORRECTION_001",
+    }
+    correction_manifest_clean = json.loads(json.dumps(correction_manifest, default=str))
+    correction_manifest_path = manifests_dir / "HYP_007_R3_IMPLEMENTATION_CORRECTION_001.json"
+    with open(correction_manifest_path, "w", encoding="utf-8") as f:
+        json.dump(correction_manifest_clean, f, indent=2, sort_keys=True)
+
+    # -----------------------------------------------------------------------
+    # 9. Reproducibility Rerun Verification
+    # -----------------------------------------------------------------------
     rerun_result = execute_hyp_007_m1_strategy(repo_root, verify_preconditions=False)
     if rerun_result.r3_result_package_sha256 != result.r3_result_package_sha256:
         raise DataContractError(
             f"Reproducibility rerun failure: {rerun_result.r3_result_package_sha256} != {result.r3_result_package_sha256}"
         )
+
+    # Final assertion: defective originals still intact
+    for name, path in defective_originals.items():
+        if not path.exists():
+            raise DataContractError(
+                f"Defective historical artifact {name} was DELETED during corrected execution — "
+                f"invariant violation. It must be preserved."
+            )
 
     return result
 
@@ -1627,8 +1888,7 @@ Under `AUTHORIZE_HYP_007_R3_M1_EXECUTION` issued on canonical starting commit `{
 if __name__ == "__main__":
     import sys
     root = Path(__file__).resolve().parents[3]
-    res = execute_and_seal_r3(root)
-    print("R3 EXECUTION & SEALING COMPLETE")
+    res = execute_and_seal_r3_corrected_001(root)
+    print("R3 CORRECTED EXECUTION & SEALING COMPLETE")
     print(f"Terminal Verdict: {res.terminal_verdict}")
-    print(f"R3 Result Package SHA: {res.r3_result_package_sha256}")
-
+    print(f"Corrected R3 Result Package SHA: {res.r3_result_package_sha256}")

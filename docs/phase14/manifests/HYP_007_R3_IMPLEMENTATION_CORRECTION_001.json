@@ -1,0 +1,27 @@
+{
+  "authorization": "AUTHORIZE_HYP_007_R3_ANCHOR_LINEAGE_CORRECTION_AND_REEXECUTION_001",
+  "corrected_artifacts": {
+    "correction_doc_sha256": "dd5eb1e72e0b9f64b055f6d74440d0ea279735f53d1dad2e90e3a58acd980ebd",
+    "manifest_r3_corrected_001_sha256": "23facfe036cc401fa22f9aeb6f361ce871821c807a4336b4eda61f00d87e5cd3",
+    "r3_result_package_sha256_corrected": "d4bf18bb80ec650e4c4c0600a8cb5aebb762a7169b8b89111e604adf91293a25",
+    "terminal_decision_corrected_001_sha256": "2d55dc34daa0de97caf6101d3ca342045bdb87d114a86a4dc9b215a59d3366a6"
+  },
+  "correction_id": "IMPLEMENTATION_CORRECTION_001",
+  "defect_class": "PREVIOUS_REGULAR_CLOSE_ANCHOR_LINEAGE_IMPLEMENTATION_DEFECT",
+  "effective_terminal_decision_after_correction": "EFFECTIVE_AFTER_CORRECTION_001",
+  "hypothesis_id": "HYP_007",
+  "immutable_defective_artifacts": {
+    "manifest_r3_HYP_007_json": "docs/phase14/manifests/manifest_r3_HYP_007.json",
+    "step_r3_execution_report_md": "docs/research/MEC-0017-HYP-007-step-r3-execution-report.md",
+    "terminal_decision_HYP_007_json": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+    "terminal_m1_decision_dossier_md": "docs/phase14/hyp_007_terminal_m1_decision_dossier.md"
+  },
+  "manifest_type": "R3_IMPLEMENTATION_CORRECTION_MANIFEST",
+  "mechanism_id": "MEC-0017",
+  "supersedes": {
+    "defective_commit_sha": "89345e05f15fdd4d031800d01790fcd3209c08a3",
+    "defective_r3_result_package_sha256": "2ef78147b22e5b1e836269b215d26417bb4c284d4b767bd70eb11cd843b13113",
+    "defective_terminal_decision_path": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+    "reason": "PREVIOUS_REGULAR_CLOSE_ANCHOR_LINEAGE_IMPLEMENTATION_DEFECT"
+  }
+}

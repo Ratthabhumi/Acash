@@ -1,0 +1,39 @@
+{
+  "all_gates_passed": true,
+  "decision_id": "DEC_TERMINAL_M1_HYP_007_CORRECTED_001",
+  "decision_type": "PHASE_14_TERMINAL_M1_EXECUTION_DECISION_CORRECTED_001",
+  "economic_summary": {
+    "baseline_annualized_sharpe": "1.686202192600117000",
+    "baseline_max_drawdown": "0.1175609627310022972937046720",
+    "baseline_net_total_return": "0.81398619",
+    "completed_trades": 659,
+    "stress_annualized_sharpe": "1.450544137964326000",
+    "stress_net_total_return": "0.664360149877033475783475785"
+  },
+  "effective_terminal_decision_after_correction": "EFFECTIVE_AFTER_CORRECTION_001",
+  "governance_limits": {
+    "capital_authority_usd": "0.00",
+    "live_trading_authorized": false,
+    "m2_sample_state": "LOCKED_ZERO_ACCESS",
+    "no_real_orders": true,
+    "paper_trading_authorized": false
+  },
+  "hypothesis_id": "HYP_007",
+  "hypothesis_ordinal": 7,
+  "hypothesis_sha256": "e6821bed806cadef6c129f02c45cd244c0e720fca1715fcc480315c95186df7d",
+  "lifecycle_state": "M1_ACCEPTED_SUPPORTED_CORRECTED_001",
+  "mechanism_id": "MEC-0017",
+  "next_governance_action": "AWAIT_SEPARATE_HUMAN_GOVERNANCE_RATIFICATION_FOR_M2_OR_PAPER",
+  "preregistration_sha256": "41a0a27f9237371538366546a1761884d636d6c6d2e01ad14a90aa1cc47e16c4",
+  "r1_manifest_sha256": "f48a57333675ebeb5a47cfff40108b13abec000ba958a42ba54fc714c30adc02",
+  "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa",
+  "r3_corrected_manifest_sha256": "6f6de0ca5a4b4469f4a45ed6726abc42672a01020255498439daf13008428e87",
+  "r3_result_package_sha256": "d4bf18bb80ec650e4c4c0600a8cb5aebb762a7169b8b89111e604adf91293a25",
+  "supersedes": {
+    "defective_commit_sha": "89345e05f15fdd4d031800d01790fcd3209c08a3",
+    "defective_r3_result_package_sha256": "2ef78147b22e5b1e836269b215d26417bb4c284d4b767bd70eb11cd843b13113",
+    "defective_terminal_decision_path": "docs/phase14/manifests/terminal_decision_HYP_007.json",
+    "reason": "PREVIOUS_REGULAR_CLOSE_ANCHOR_LINEAGE_IMPLEMENTATION_DEFECT"
+  },
+  "terminal_verdict": "ACCEPTED_SUPPORTED_ON_REGISTERED_M1"
+}
