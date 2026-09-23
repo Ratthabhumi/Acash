@@ -1,0 +1,70 @@
+{
+  "combined_m1_m2_interpretation": "HISTORICAL_REPLICATION_SUPPORTED_BUT_CURRENT_EDGE_NOT_SUPPORTED",
+  "deterministic_rerun_identical": true,
+  "gate_evaluation": {
+    "all_passed": false,
+    "contract_valid": true,
+    "r4_g1_net_total_return": {
+      "observed": "0.03504049",
+      "passed": true,
+      "threshold": "> 0.0"
+    },
+    "r4_g2_net_annualized_sharpe": {
+      "observed": "0.176242825622573350",
+      "passed": false,
+      "threshold": ">= 0.50"
+    },
+    "r4_g3_max_drawdown": {
+      "observed": "0.2169710403541869306199349112",
+      "passed": true,
+      "threshold": "<= 0.35"
+    },
+    "r4_g4_2x_stress_total_return": {
+      "observed": "-0.039577065182962454212454214",
+      "passed": false,
+      "threshold": ">= 0.0"
+    },
+    "summary_message": "One or more R4 M2 continuation gates failed; recent edge not supported.",
+    "verdict": "FAIL_CURRENT_EDGE_NOT_SUPPORTED"
+  },
+  "hashes": {
+    "baseline_daily_equity_sha256": "422da6ff778741f7c25bc2804d6ef65c56ea6ed97332541121ea0688489ef9b6",
+    "baseline_execution_ledger_sha256": "f6eaa04b684a1d00c146fe442c20889899676a157ba04a40a6046e71fbda20a2",
+    "r4_result_package_sha256": "9fbf1413e8ad517d6ee5b7c1a77d0c7324a359396c9e0591beaba0344d3c52b0",
+    "signal_ledger_sha256": "0e60ffe7e1985d25160edb11bae71a8d97353fd30331fea66f9995a67d38a6bb",
+    "stress_daily_equity_sha256": "b16822d5a2474f5f7f13eeb3fab4df7645eb3c9f0af486795c5264ba9961fad6",
+    "stress_execution_ledger_sha256": "3f2963d587adccdf42be38c200143cff3eb0389f871a173d52d926e97e53bfd0",
+    "trade_ledger_sha256": "d6c527127b18803149a6841f65ad2d18fe0355c54f1dc348952ed5194bf12a9a"
+  },
+  "hypothesis_id": "HYP_007",
+  "manifest_type": "HYP_007_R4_M2_RESULT_MANIFEST",
+  "mechanism_id": "MEC-0017",
+  "performance_metrics": {
+    "baseline": {
+      "annualized_sharpe": "0.176242825622573350",
+      "completed_trades_count": 503,
+      "final_aum_usd": "103504.0490",
+      "initial_aum_usd": "100000.00",
+      "max_drawdown": "0.2169710403541869306199349112",
+      "net_total_return": "0.03504049"
+    },
+    "stress_2x": {
+      "annualized_sharpe": "-0.050580489776391410",
+      "completed_trades_count": 503,
+      "final_aum_usd": "96042.2934817037545787545786",
+      "initial_aum_usd": "100000.00",
+      "max_drawdown": "0.2416057014026331111515063381",
+      "net_total_return": "-0.039577065182962454212454214"
+    }
+  },
+  "sample": "M2_POST_PUBLICATION_STRESS_SAMPLE",
+  "sample_classification": "NOT_PRISTINE_OOS",
+  "sample_role": "PUBLICLY_EXPOSED_POST_PUBLICATION_STRESS_SAMPLE",
+  "stage": "STAGE_B_STEP_R4",
+  "upstream_authorities": {
+    "m1_effective_verdict": "ACCEPTED_SUPPORTED_ON_REGISTERED_M1",
+    "m2_dataset_content_sha256": "4b2e997ed825359cb6830b03759fdeebe9ba666426e434ddbb91c771e1ba1284",
+    "stage_a_commit_sha": "44b83cc3e69f25890537d74972f2c868a710cd50"
+  },
+  "verdict": "FAIL_CURRENT_EDGE_NOT_SUPPORTED"
+}

@@ -1,0 +1,35 @@
+{
+  "census": {
+    "calendar_days": 836,
+    "early_closes_excluded": 6,
+    "holidays": 24,
+    "regular_sessions": 568,
+    "weekends": 238
+  },
+  "classification": "NOT_PRISTINE_OOS",
+  "corpus_digests": {
+    "bar_corpus_sha256": "0cbcb8186241a65ed742c3979fd40e8223e2f55265aa334a5863869a0fdf0ae2",
+    "bars_parquet_sha256": "7588699bf22395be8e2d7ec81748a9e511875bb2bb51a22735cf0e9b8acc5188",
+    "dividend_manifest_sha256": "cc92d92dcb20dc01d3d6c2fec799f11328e5f96a8f51850d276d42c6a2f9f228",
+    "m2_dataset_content_sha256": "4b2e997ed825359cb6830b03759fdeebe9ba666426e434ddbb91c771e1ba1284",
+    "quote_corpus_sha256": "cf369b2b9970954b3da62329375e0ff9ed9d660da0d751561ad7fdc25b2cf28e",
+    "quotes_parquet_sha256": "5d35b59520eb469cfb69c5dda0983a80236741383c3a2e25489b26eb3de02fb9"
+  },
+  "date_range": {
+    "end": "2026-08-14",
+    "start": "2024-05-01"
+  },
+  "governance_assertions": {
+    "live_authorized": false,
+    "m3_records_read": 0,
+    "no_real_orders": true,
+    "paper_authorized": false,
+    "quarantine_gap_records_read": 0,
+    "real_capital_authority_usd": "0.00"
+  },
+  "hypothesis_id": "HYP_007",
+  "manifest_type": "M2_QUALIFIED_DATASET_MANIFEST",
+  "mechanism_id": "MEC-0017",
+  "role": "PUBLICLY_EXPOSED_POST_PUBLICATION_STRESS_SAMPLE",
+  "sample": "M2_POST_PUBLICATION_STRESS_SAMPLE"
+}

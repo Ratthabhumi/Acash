@@ -111,7 +111,7 @@ this correction):
 
 - `docs/phase14/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.md`
 - `docs/phase14/manifests/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.json`
-- `docs/phase14/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json`
+- `docs/research/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json`
 
 ## 5. Effective Authority After Correction
 

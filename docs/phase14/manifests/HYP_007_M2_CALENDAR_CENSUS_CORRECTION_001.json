@@ -1,4 +1,4 @@
-{
+﻿{
   "authorization": "AUTHORIZE_AMEND_CENSUS_TO_568_AND_FIX_NULL_BARS_CRASH",
   "correction_id": "HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001",
   "correction_type": "DATA_QUALIFICATION_CENSUS_CORRECTION",
@@ -41,7 +41,7 @@
   },
   "correction_document": {
     "path": "docs/phase14/HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001.md",
-    "sha256": "206105a0c3b211e90717b55426c8bf6a157604b5cd0f33bb5afa18b52a5f8106"
+    "sha256": "9746deb5b14cce79c3847ed7c99e81cc9130bcea89d7e5b7e2ab476d6d2a6f2a"
   },
   "scientific_hypothesis_changed": false,
   "strategy_parameters_changed": false,
@@ -58,7 +58,7 @@
   "sealed_artifacts_preserved_byte_for_byte": [
     "docs/phase14/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.md",
     "docs/phase14/manifests/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.json",
-    "docs/phase14/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json"
+    "docs/research/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json"
   ],
   "status": "HYP_007_M2_CALENDAR_CENSUS_CORRECTION_001_SEALED_PASS"
 }

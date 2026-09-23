@@ -1,0 +1,20 @@
+{
+  "all_four_gates_passed": false,
+  "governance_assertions": {
+    "live_authorized": false,
+    "m1_effective_verdict_unchanged": "ACCEPTED_SUPPORTED_ON_REGISTERED_M1",
+    "m2_classification_preserved": "NOT_PRISTINE_OOS",
+    "m3_access_state": "LOCKED_ZERO_ACCESS",
+    "paper_authorized": false,
+    "quarantine_gap_access_state": "STRICTLY_ZERO_ACCESSED",
+    "real_capital_authority_usd": "0.00"
+  },
+  "hypothesis_id": "HYP_007",
+  "m2_dataset_content_sha256": "4b2e997ed825359cb6830b03759fdeebe9ba666426e434ddbb91c771e1ba1284",
+  "manifest_type": "HYP_007_R4_M2_DECISION_MANIFEST",
+  "mechanism_id": "MEC-0017",
+  "next_required_human_decision": "HYP_007_CURRENT_EDGE_NOT_SUPPORTED_NO_PAPER_AUTHORIZATION",
+  "r4_result_package_sha256": "9fbf1413e8ad517d6ee5b7c1a77d0c7324a359396c9e0591beaba0344d3c52b0",
+  "r4_verdict": "FAIL_CURRENT_EDGE_NOT_SUPPORTED",
+  "stage": "STAGE_B_STEP_R4"
+}
