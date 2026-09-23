@@ -1,0 +1,105 @@
+{
+  "manifest_schema": "acash.research.mec_0017_hyp_007_m2_dividend_projection.v1",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "target_symbol": "SPY",
+  "primary_dividend_authority": "STATE_STREET_SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS",
+  "secondary_cross_check": "ALPACA_CORPORATE_ACTIONS_SNAPSHOT",
+  "m2_date_range": {
+    "start": "2024-05-01",
+    "end": "2026-08-14"
+  },
+  "distributions_count": 9,
+  "distributions": [
+    {
+      "ex_date": "2024-06-21",
+      "record_date": "2024-06-21",
+      "payable_date": "2024-07-31",
+      "cash_distribution": "1.759024",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.759024",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2024-09-20",
+      "record_date": "2024-09-20",
+      "payable_date": "2024-10-31",
+      "cash_distribution": "1.745531",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.745531",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2024-12-20",
+      "record_date": "2024-12-20",
+      "payable_date": "2025-01-31",
+      "cash_distribution": "1.965548",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.965548",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2025-03-21",
+      "record_date": "2025-03-21",
+      "payable_date": "2025-04-30",
+      "cash_distribution": "1.695528",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.695528",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2025-06-20",
+      "record_date": "2025-06-20",
+      "payable_date": "2025-07-31",
+      "cash_distribution": "1.761117",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.761117",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2025-09-19",
+      "record_date": "2025-09-19",
+      "payable_date": "2025-10-31",
+      "cash_distribution": "1.831114",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.831114",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2025-12-19",
+      "record_date": "2025-12-19",
+      "payable_date": "2026-01-30",
+      "cash_distribution": "1.993368",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.993368",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2026-03-20",
+      "record_date": "2026-03-20",
+      "payable_date": "2026-04-30",
+      "cash_distribution": "1.796999",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.796999",
+      "reconciliation_status": "MATCH_VERIFIED"
+    },
+    {
+      "ex_date": "2026-06-18",
+      "record_date": "2026-06-18",
+      "payable_date": "2026-07-31",
+      "cash_distribution": "1.903516",
+      "currency": "USD",
+      "distribution_type": "ORDINARY_DIVIDEND",
+      "alpaca_rate": "1.903516",
+      "reconciliation_status": "MATCH_VERIFIED"
+    }
+  ]
+}
