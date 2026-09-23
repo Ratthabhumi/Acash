@@ -1,0 +1,594 @@
+{
+  "manifest_id": "HYP_007_POST_R4_FAILURE_DECOMPOSITION",
+  "manifest_type": "POST_HOC_DESCRIPTIVE_FAILURE_DECOMPOSITION_MANIFEST",
+  "authorization": "AUTHORIZE_HYP_007_POST_R4_CLOSURE_AND_CONDITIONAL_HYP_008_RESEARCH_INCEPTION",
+  "canonical_head_at_analysis": "653b007e4d5ce73c5022086f40737a4525410a55",
+  "closure_commit": "526a0eb",
+  "analysis_engine": "src/acash/research/step_r4_failure_decomposition.py",
+  "analysis_tests": "tests/unit/research/test_phase14_step_r4_hyp_007_failure_decomposition.py",
+  "engine_tests_passed": 10,
+  "decomposition_classification": "POST_HOC_DESCRIPTIVE_FAILURE_ANALYSIS",
+  "statistical_status": "POST_HOC_DESCRIPTIVE_NO_CONFIRMATORY_CLAIM",
+  "m3_accessed": false,
+  "quarantine_gap_accessed": false,
+  "documents": {
+    "dossier": "docs/phase14/HYP_007_POST_R4_FAILURE_DECOMPOSITION.md"
+  },
+  "canonical_frozen_results": {
+    "M1_BASELINE": {
+      "final_aum_usd": "181398.6190",
+      "net_total_return": "0.81398619",
+      "annualized_sharpe": "1.686202192600117000",
+      "max_drawdown": "0.1175609627310022972937046720",
+      "source": "docs/phase14/manifests/manifest_r3_HYP_007_CORRECTED_001.json"
+    },
+    "M1_STRESS_2X": {
+      "final_aum_usd": "166436.0149877033475783475785",
+      "net_total_return": "0.664360149877033475783475785",
+      "annualized_sharpe": "1.450544137964326000",
+      "max_drawdown": "0.1252904436357030612378531398",
+      "source": "docs/phase14/manifests/manifest_r3_HYP_007_CORRECTED_001.json"
+    },
+    "M2_BASELINE": {
+      "final_aum_usd": "103504.05",
+      "net_total_return": "0.03504",
+      "annualized_sharpe": "0.1762",
+      "max_drawdown": "0.2170",
+      "source": "docs/phase14/manifests/HYP_007_R4_M2_RESULT_MANIFEST.json"
+    },
+    "M2_STRESS_2X": {
+      "final_aum_usd": "96042.29",
+      "net_total_return": "-0.03958",
+      "annualized_sharpe": "-0.0506",
+      "max_drawdown": "0.2416",
+      "source": "docs/phase14/manifests/HYP_007_R4_M2_RESULT_MANIFEST.json"
+    }
+  },
+  "dominant_failure_label": "GROSS_EDGE_DECAY_CONCENTRATED_IN_LONG_CONTINUATION_AND_HIGHER_VOLATILITY_SESSIONS",
+  "secondary_factors": [
+    "CALENDAR_TIME_DETERIORATION_WITHIN_M2",
+    "STATUTORY_SEC31_MIX_AMPLIFIER",
+    "HALF_SPREAD_WIDENING_STRESS_PATH_ONLY"
+  ],
+  "non_claims": [
+    "NO_CLAIM_OF_ALTERNATIVE_FRICTION_PASS",
+    "NO_CLAIM_LOW_VOL_M2_SUBSET_IS_VIABLE_STRATEGY",
+    "NO_CLAIM_OF_STATISTICAL_SIGNIFICANCE",
+    "NO_M3_INFERENCE",
+    "NO_CLAIM_FRICTION_IS_WRONG"
+  ],
+  "samples": {
+    "M1": {
+      "sessions": 707,
+      "starting_aum_usd": "100000.00",
+      "sample": "M1",
+      "trades_count": 659,
+      "gross_pnl": "86571.302",
+      "total_friction": "5172.6830",
+      "net_pnl": "81398.6190",
+      "gross_expectancy_per_trade": "131.3676813353566009104704097",
+      "net_expectancy_per_trade": "123.5183899848254931714719272",
+      "friction_per_trade": "7.849291350531107738998482549",
+      "friction_gross_ratio": "0.05975055105443603008304068247",
+      "gross_made_net_negative_trades": 2,
+      "trades_profitable_net": 277,
+      "win_rate_net": "0.420334"
+    },
+    "M2": {
+      "sessions": 568,
+      "starting_aum_usd": "100000.00",
+      "sample": "M2",
+      "trades_count": 503,
+      "gross_pnl": "7208.102",
+      "total_friction": "3704.0530",
+      "net_pnl": "3504.0490",
+      "gross_expectancy_per_trade": "14.33022266401590457256461233",
+      "net_expectancy_per_trade": "6.966300198807157057654075547",
+      "friction_per_trade": "7.363922465208747514910536779",
+      "friction_gross_ratio": "0.5138735550634549844050486522",
+      "gross_made_net_negative_trades": 3,
+      "trades_profitable_net": 200,
+      "win_rate_net": "0.397614"
+    }
+  },
+  "gross_edge_degradation_fraction_baseline_norm": "0.8909",
+  "friction": {
+    "M1_BASELINE": {
+      "sample": "M1",
+      "path": "BASELINE",
+      "legs_count": 1318,
+      "total_friction": "5172.6830",
+      "commission": "3202.9130",
+      "commission_pct_of_total": "0.6191976194945640395902861242",
+      "sec31_fee": "1901.86",
+      "sec31_fee_pct_of_total": "0.3676737971377716361122458113",
+      "finra_taf": "67.91",
+      "finra_taf_pct_of_total": "0.01312858336766432429746806445",
+      "standalone_slippage": "915.118",
+      "standalone_slippage_pct_of_total": "0.1769136055698754398829388926",
+      "stress_half_spread": "0.00",
+      "stress_half_spread_pct_of_total": "0E+2",
+      "stress_borrow_fee": "0.00",
+      "stress_borrow_fee_pct_of_total": "0E+2",
+      "friction_per_trade": "7.849291350531107738998482549",
+      "friction_gross_pnl_ratio": "0.05975055105443603008304068247",
+      "friction_pct_of_aum": "0.05172683",
+      "friction_bps_of_notional": "0.1276471881595782243617979422"
+    },
+    "M2_BASELINE": {
+      "sample": "M2",
+      "path": "BASELINE",
+      "legs_count": 1006,
+      "total_friction": "3704.0530",
+      "commission": "1605.1630",
+      "commission_pct_of_total": "0.4333531404653227154147092388",
+      "sec31_fee": "2053.68",
+      "sec31_fee_pct_of_total": "0.5544413106399935422090342660",
+      "finra_taf": "45.21",
+      "finra_taf_pct_of_total": "0.01220554889468374237625649525",
+      "standalone_slippage": "458.618",
+      "standalone_slippage_pct_of_total": "0.1238151829900922044042026396",
+      "stress_half_spread": "0.00",
+      "stress_half_spread_pct_of_total": "0E+2",
+      "stress_borrow_fee": "0.00",
+      "stress_borrow_fee_pct_of_total": "0E+2",
+      "friction_per_trade": "7.363922465208747514910536779",
+      "friction_gross_pnl_ratio": "0.5138735550634549844050486522",
+      "friction_pct_of_aum": "0.03704053",
+      "friction_bps_of_notional": "0.1287924696133881310227096369"
+    },
+    "M1_STRESS": {
+      "sample": "M1",
+      "path": "STRESS",
+      "legs_count": 1318,
+      "total_friction": "10336.59201229665242165242166",
+      "commission": "6107.20600",
+      "commission_pct_of_total": "0.5908336125421922842208924022",
+      "sec31_fee": "3622.260",
+      "sec31_fee_pct_of_total": "0.3504307798635057378843893120",
+      "finra_taf": "129.580",
+      "finra_taf_pct_of_total": "0.01253604668210263026813623734",
+      "standalone_slippage": "872.458",
+      "standalone_slippage_pct_of_total": "0.08440480179174175488869891460",
+      "stress_half_spread": "5389.965",
+      "stress_half_spread_pct_of_total": "0.5214450752809021728136667269",
+      "stress_borrow_fee": "477.5460122966524216524216525",
+      "stress_borrow_fee_pct_of_total": "0.04619956091219934762658204772",
+      "friction_per_trade": "15.68526860743042856092931967",
+      "friction_gross_pnl_ratio": "0.1193997522677509507902794584",
+      "friction_pct_of_aum": "0.1033659201229665242165242166",
+      "friction_bps_of_notional": "0.2677972740350337324542505884"
+    },
+    "M2_STRESS": {
+      "sample": "M2",
+      "path": "STRESS",
+      "legs_count": 1006,
+      "total_friction": "11378.92451829624542124542124",
+      "commission": "3085.8940",
+      "commission_pct_of_total": "0.2711938193313587171431333485",
+      "sec31_fee": "3978.30",
+      "sec31_fee_pct_of_total": "0.3496200360239024361856004777",
+      "finra_taf": "86.64",
+      "finra_taf_pct_of_total": "0.007614076344446348206802007236",
+      "standalone_slippage": "440.842",
+      "standalone_slippage_pct_of_total": "0.03874197419019410244901904979",
+      "stress_half_spread": "3879.195",
+      "stress_half_spread_pct_of_total": "0.3409105134463821760397658409",
+      "stress_borrow_fee": "348.8955182962454212454212445",
+      "stress_borrow_fee_pct_of_total": "0.03066155485391032242469832602",
+      "friction_per_trade": "22.62211633856112409790342195",
+      "friction_gross_pnl_ratio": "1.578629786079087868241240376",
+      "friction_pct_of_aum": "0.1137892451829624542124542124",
+      "friction_bps_of_notional": "0.4123989860642866994129892464"
+    }
+  },
+  "long_short": {
+    "M1": {
+      "LONG": {
+        "count": "344",
+        "gross_pnl": "59002.302",
+        "net_pnl": "56262.9590",
+        "gross_expectancy": "171.5183197674418604651162791",
+        "net_expectancy": "163.5551133720930232558139535",
+        "friction": "2739.3430",
+        "win_rate_net": "0.459302"
+      },
+      "SHORT": {
+        "count": "315",
+        "gross_pnl": "27569.000",
+        "net_pnl": "25135.6600",
+        "gross_expectancy": "87.52063492063492063492063492",
+        "net_expectancy": "79.79574603174603174603174603",
+        "friction": "2433.3400",
+        "win_rate_net": "0.377778"
+      }
+    },
+    "M2": {
+      "LONG": {
+        "count": "267",
+        "gross_pnl": "278.720",
+        "net_pnl": "-1635.9900",
+        "gross_expectancy": "1.043895131086142322097378277",
+        "net_expectancy": "-6.127303370786516853932584270",
+        "friction": "1914.7100",
+        "win_rate_net": "0.423221"
+      },
+      "SHORT": {
+        "count": "236",
+        "gross_pnl": "6929.382",
+        "net_pnl": "5140.0390",
+        "gross_expectancy": "29.36178813559322033898305085",
+        "net_expectancy": "21.77982627118644067796610169",
+        "friction": "1789.3430",
+        "win_rate_net": "0.368644"
+      }
+    }
+  },
+  "time_of_day": {
+    "M1": {
+      "10:00:00": {
+        "signal_count": "707",
+        "trade_count": "188",
+        "gross_pnl": "14135.190",
+        "net_pnl": "12712.3300",
+        "avg_trade_return": "19.29033383915022761760242792",
+        "win_rate_net": "0.441489",
+        "share_of_total_trades": "0.285281"
+      },
+      "10:30:00": {
+        "signal_count": "707",
+        "trade_count": "87",
+        "gross_pnl": "3834.710",
+        "net_pnl": "3112.4250",
+        "avg_trade_return": "4.722951441578148710166919575",
+        "win_rate_net": "0.402299",
+        "share_of_total_trades": "0.132018"
+      },
+      "11:00:00": {
+        "signal_count": "707",
+        "trade_count": "53",
+        "gross_pnl": "1525.868",
+        "net_pnl": "1132.9160",
+        "avg_trade_return": "1.719144157814871016691957511",
+        "win_rate_net": "0.283019",
+        "share_of_total_trades": "0.080425"
+      },
+      "11:30:00": {
+        "signal_count": "707",
+        "trade_count": "47",
+        "gross_pnl": "10019.246",
+        "net_pnl": "9649.2420",
+        "avg_trade_return": "14.64224886191198786039453718",
+        "win_rate_net": "0.340426",
+        "share_of_total_trades": "0.071320"
+      },
+      "12:00:00": {
+        "signal_count": "707",
+        "trade_count": "41",
+        "gross_pnl": "3336.514",
+        "net_pnl": "2997.7480",
+        "avg_trade_return": "4.548934749620637329286798179",
+        "win_rate_net": "0.317073",
+        "share_of_total_trades": "0.062215"
+      },
+      "12:30:00": {
+        "signal_count": "707",
+        "trade_count": "48",
+        "gross_pnl": "7866.130",
+        "net_pnl": "7502.0450",
+        "avg_trade_return": "11.38398330804248861911987860",
+        "win_rate_net": "0.354167",
+        "share_of_total_trades": "0.072838"
+      },
+      "13:00:00": {
+        "signal_count": "707",
+        "trade_count": "31",
+        "gross_pnl": "-2744.336",
+        "net_pnl": "-3011.1070",
+        "avg_trade_return": "-4.569206373292867981790591806",
+        "win_rate_net": "0.419355",
+        "share_of_total_trades": "0.047041"
+      },
+      "13:30:00": {
+        "signal_count": "707",
+        "trade_count": "27",
+        "gross_pnl": "9932.150",
+        "net_pnl": "9716.4400",
+        "avg_trade_return": "14.74421851289833080424886191",
+        "win_rate_net": "0.555556",
+        "share_of_total_trades": "0.040971"
+      },
+      "14:00:00": {
+        "signal_count": "707",
+        "trade_count": "38",
+        "gross_pnl": "-1299.516",
+        "net_pnl": "-1581.9620",
+        "avg_trade_return": "-2.400549317147192716236722307",
+        "win_rate_net": "0.394737",
+        "share_of_total_trades": "0.057663"
+      },
+      "14:30:00": {
+        "signal_count": "707",
+        "trade_count": "37",
+        "gross_pnl": "17729.852",
+        "net_pnl": "17419.9240",
+        "avg_trade_return": "26.43387556904400606980273141",
+        "win_rate_net": "0.432432",
+        "share_of_total_trades": "0.056146"
+      },
+      "15:00:00": {
+        "signal_count": "707",
+        "trade_count": "27",
+        "gross_pnl": "13519.054",
+        "net_pnl": "13291.5580",
+        "avg_trade_return": "20.16928376327769347496206373",
+        "win_rate_net": "0.666667",
+        "share_of_total_trades": "0.040971"
+      },
+      "15:30:00": {
+        "signal_count": "707",
+        "trade_count": "35",
+        "gross_pnl": "8716.440",
+        "net_pnl": "8457.0600",
+        "avg_trade_return": "12.83317147192716236722306525",
+        "win_rate_net": "0.600000",
+        "share_of_total_trades": "0.053111"
+      }
+    },
+    "M2": {
+      "10:00:00": {
+        "signal_count": "568",
+        "trade_count": "130",
+        "gross_pnl": "4245.810",
+        "net_pnl": "3293.0200",
+        "avg_trade_return": "6.546759443339960238568588469",
+        "win_rate_net": "0.407692",
+        "share_of_total_trades": "0.258449"
+      },
+      "10:30:00": {
+        "signal_count": "568",
+        "trade_count": "57",
+        "gross_pnl": "822.202",
+        "net_pnl": "420.5290",
+        "avg_trade_return": "0.8360417495029821073558648111",
+        "win_rate_net": "0.438596",
+        "share_of_total_trades": "0.113320"
+      },
+      "11:00:00": {
+        "signal_count": "568",
+        "trade_count": "43",
+        "gross_pnl": "9933.710",
+        "net_pnl": "9641.5650",
+        "avg_trade_return": "19.16812127236580516898608350",
+        "win_rate_net": "0.325581",
+        "share_of_total_trades": "0.085487"
+      },
+      "11:30:00": {
+        "signal_count": "568",
+        "trade_count": "37",
+        "gross_pnl": "-4999.858",
+        "net_pnl": "-5294.6060",
+        "avg_trade_return": "-10.52605566600397614314115308",
+        "win_rate_net": "0.378378",
+        "share_of_total_trades": "0.073559"
+      },
+      "12:00:00": {
+        "signal_count": "568",
+        "trade_count": "35",
+        "gross_pnl": "-7785.238",
+        "net_pnl": "-8028.2360",
+        "avg_trade_return": "-15.96070775347912524850894632",
+        "win_rate_net": "0.257143",
+        "share_of_total_trades": "0.069583"
+      },
+      "12:30:00": {
+        "signal_count": "568",
+        "trade_count": "29",
+        "gross_pnl": "5869.026",
+        "net_pnl": "5636.8170",
+        "avg_trade_return": "11.20639562624254473161033797",
+        "win_rate_net": "0.655172",
+        "share_of_total_trades": "0.057654"
+      },
+      "13:00:00": {
+        "signal_count": "568",
+        "trade_count": "37",
+        "gross_pnl": "-8027.746",
+        "net_pnl": "-8308.7870",
+        "avg_trade_return": "-16.51846322067594433399602386",
+        "win_rate_net": "0.216216",
+        "share_of_total_trades": "0.073559"
+      },
+      "13:30:00": {
+        "signal_count": "568",
+        "trade_count": "31",
+        "gross_pnl": "6537.188",
+        "net_pnl": "6300.8360",
+        "avg_trade_return": "12.52651292246520874751491054",
+        "win_rate_net": "0.354839",
+        "share_of_total_trades": "0.061630"
+      },
+      "14:00:00": {
+        "signal_count": "568",
+        "trade_count": "33",
+        "gross_pnl": "-1978.584",
+        "net_pnl": "-2196.2830",
+        "avg_trade_return": "-4.366367793240556660039761431",
+        "win_rate_net": "0.515152",
+        "share_of_total_trades": "0.065606"
+      },
+      "14:30:00": {
+        "signal_count": "568",
+        "trade_count": "29",
+        "gross_pnl": "5478.308",
+        "net_pnl": "5214.5760",
+        "avg_trade_return": "10.36695029821073558648111332",
+        "win_rate_net": "0.275862",
+        "share_of_total_trades": "0.057654"
+      },
+      "15:00:00": {
+        "signal_count": "568",
+        "trade_count": "22",
+        "gross_pnl": "-8381.394",
+        "net_pnl": "-8508.9180",
+        "avg_trade_return": "-16.91633797216699801192842942",
+        "win_rate_net": "0.363636",
+        "share_of_total_trades": "0.043738"
+      },
+      "15:30:00": {
+        "signal_count": "568",
+        "trade_count": "20",
+        "gross_pnl": "5494.678",
+        "net_pnl": "5333.5360",
+        "avg_trade_return": "10.60345129224652087475149105",
+        "win_rate_net": "0.700000",
+        "share_of_total_trades": "0.039761"
+      }
+    }
+  },
+  "subperiod": {
+    "M1": {
+      "2021": {
+        "trades_count": "107",
+        "gross_pnl": "6221.576",
+        "net_pnl": "5489.8720",
+        "net_expectancy": "51.30721495327102803738317757",
+        "total_return_summary": "0.054898719999999999999999999"
+      },
+      "2022": {
+        "trades_count": "247",
+        "gross_pnl": "21849.522",
+        "net_pnl": "20535.6740",
+        "net_expectancy": "83.14038056680161943319838057",
+        "total_return_summary": "0.194669626672786179890331084"
+      },
+      "2023": {
+        "trades_count": "218",
+        "gross_pnl": "38090.070",
+        "net_pnl": "35919.9650",
+        "net_expectancy": "164.7704816513761467889908257",
+        "total_return_summary": "0.285021300363975411778815066"
+      },
+      "2024": {
+        "trades_count": "87",
+        "gross_pnl": "20410.134",
+        "net_pnl": "19453.1080",
+        "net_expectancy": "223.5989425287356321839080460",
+        "total_return_summary": "0.120121316607534740496758819"
+      }
+    },
+    "M2": {
+      "2024": {
+        "trades_count": "141",
+        "gross_pnl": "12556.012",
+        "net_pnl": "10952.2990",
+        "net_expectancy": "77.67587943262411347517730496",
+        "total_return_summary": "0.109522989999999999999999992"
+      },
+      "2025": {
+        "trades_count": "215",
+        "gross_pnl": "-2037.720",
+        "net_pnl": "-3238.3800",
+        "net_expectancy": "-15.06223255813953488372093023",
+        "total_return_summary": "-0.0291871374382246914955768437"
+      },
+      "2026": {
+        "trades_count": "147",
+        "gross_pnl": "-3310.190",
+        "net_pnl": "-4209.8700",
+        "net_expectancy": "-28.63857142857142857142857143",
+        "total_return_summary": "-0.0390838068012361522191017866"
+      }
+    }
+  },
+  "volatility_state": {
+    "reference_sample": "M1_REGISTERED_REPLICATION",
+    "cutoffs_source": "fixed_quantiles_over_M1",
+    "low_cutoff_realized_vol_15d": "0.007622318485416246974662255683",
+    "high_cutoff_realized_vol_15d": "0.01122940362557601959342358526",
+    "M1": {
+      "LOW": {
+        "count": "218",
+        "gross_pnl": "45877.076",
+        "net_pnl": "43595.2820",
+        "net_expectancy": "199.9783577981651376146788991",
+        "friction": "2281.7940",
+        "win_rate_net": "0.444954"
+      },
+      "MEDIUM": {
+        "count": "232",
+        "gross_pnl": "20360.178",
+        "net_pnl": "18591.5860",
+        "net_expectancy": "80.13614655172413793103448276",
+        "friction": "1768.5920",
+        "win_rate_net": "0.413793"
+      },
+      "HIGH": {
+        "count": "209",
+        "gross_pnl": "20334.048",
+        "net_pnl": "19211.7510",
+        "net_expectancy": "91.92225358851674641148325359",
+        "friction": "1122.2970",
+        "win_rate_net": "0.401914"
+      }
+    },
+    "M2": {
+      "LOW": {
+        "count": "255",
+        "gross_pnl": "22901.552",
+        "net_pnl": "20722.7040",
+        "net_expectancy": "81.26550588235294117647058824",
+        "friction": "2178.8480",
+        "win_rate_net": "0.431373"
+      },
+      "MEDIUM": {
+        "count": "182",
+        "gross_pnl": "-13186.866",
+        "net_pnl": "-14332.7470",
+        "net_expectancy": "-78.75135714285714285714285714",
+        "friction": "1145.8810",
+        "win_rate_net": "0.362637"
+      },
+      "HIGH": {
+        "count": "66",
+        "gross_pnl": "-2506.584",
+        "net_pnl": "-2885.9080",
+        "net_expectancy": "-43.72587878787878787878787879",
+        "friction": "379.3240",
+        "win_rate_net": "0.363636"
+      }
+    }
+  },
+  "liquidity": {
+    "M1": {
+      "count": "9204",
+      "avg_half_spread_usd": "0.006413257492889958433603150295",
+      "pct_locked": "0.006736",
+      "pct_crossed": "0.000000",
+      "avg_quoted_size": "13.322034"
+    },
+    "M2": {
+      "count": "7384",
+      "avg_half_spread_usd": "0.008589987756767786695687661543",
+      "pct_locked": "0.004469",
+      "pct_crossed": "0.000000",
+      "avg_quoted_size": "279.171993"
+    }
+  },
+  "volume": {
+    "M1": {
+      "bar_count": "281970",
+      "median_volume_per_bar": "125402",
+      "mean_volume_per_bar": "183486.6587828492392807745505",
+      "p90_volume": "356961",
+      "p10_volume": "53619"
+    },
+    "M2": {
+      "bar_count": "221520",
+      "median_volume_per_bar": "90313",
+      "mean_volume_per_bar": "138310.4294510653665583243048",
+      "p90_volume": "271232",
+      "p10_volume": "35096"
+    }
+  }
+}
