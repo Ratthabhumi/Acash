@@ -192,7 +192,13 @@ def test_manifest_self_hash_and_pins() -> None:
         CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
     ).hexdigest()
     assert m["preregistration_sha256"] == hashlib.sha256(PREREG_PATH.read_bytes()).hexdigest()
-    assert m["hypothesis_sha256"] == hashlib.sha256(HYP_PATH.read_bytes()).hexdigest()
+    # Post-R1 reconciliation (HYP_009_POST_R1_METADATA_RECONCILIATION): the R1 manifest
+    # historically pins the pre-reconciliation file bytes; the live file carries the
+    # authorized metadata-only transition. See the reconciliation manifest for prior/new SHAs.
+    assert m["hypothesis_sha256"] == "f927ccd7b2a3adec18d8097fb09eea90a7bbeebe9872c9f563811bdb6b4842fa"
+    assert hashlib.sha256(HYP_PATH.read_bytes()).hexdigest() == (
+        "fb855542e86aa91139a0c7cdbedaad60de113ccbf679fe3e12a7465bcae13f2d"
+    )
     up = m["upstream_authority_hashes"]
     assert up["inception_doc_sha256"] == hashlib.sha256(
         (REPO_ROOT / "docs" / "phase14" / "CORE_001_HYP_009_RESEARCH_INCEPTION.md").read_bytes()
@@ -212,13 +218,15 @@ def test_hyp_009_scientific_fields_untouched() -> None:
     assert params["max_gross_leverage"] == 1.0
     assert params["volatility_targeting"] is False
     assert params["cash_return"] == 0.0
-    assert h["open_before_r1"] == [
+    assert h["open_before_r1"] == []
+    assert h["resolved_before_r1"] == [
         "OPEN_BEFORE_R1_TOTAL_RETURN_SIGNAL_CONSTRUCTION",
         "OPEN_BEFORE_R1_EXECUTION_COST_MODEL",
         "OPEN_BEFORE_R1_SAMPLE_PARTITION_DATES",
         "OPEN_BEFORE_R1_LOCKED_OOS_BOUNDARY",
         "OPEN_BEFORE_R1_PROSPECTIVE_BOUNDARY",
     ]
+    assert h["r1_resolution_authority"] == "docs/phase14/manifests/manifest_r1_HYP_009.json"
 
 
 def test_zero_authority_locks() -> None:

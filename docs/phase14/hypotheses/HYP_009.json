@@ -19,15 +19,20 @@
   ],
   "primary_horizon": 21,
   "invalidation_criteria": {
-    "status": "NOT_PREREGISTERED_NO_NUMERICAL_GATES_AUTHORIZED"
+    "status": "R1_NUMERICAL_GATES_SEALED",
+    "authority": "docs/phase14/manifests/manifest_r1_HYP_009.json",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6"
   },
-  "open_before_r1": [
+  "open_before_r1": [],
+  "resolved_before_r1": [
     "OPEN_BEFORE_R1_TOTAL_RETURN_SIGNAL_CONSTRUCTION",
     "OPEN_BEFORE_R1_EXECUTION_COST_MODEL",
     "OPEN_BEFORE_R1_SAMPLE_PARTITION_DATES",
     "OPEN_BEFORE_R1_LOCKED_OOS_BOUNDARY",
     "OPEN_BEFORE_R1_PROSPECTIVE_BOUNDARY"
   ],
+  "r1_resolution_authority": "docs/phase14/manifests/manifest_r1_HYP_009.json",
   "registered_at_utc": "2026-09-23T22:41:00Z",
   "author": "external_research_authority_specification__implementation_only_encoding",
   "inception_token_id": "AUTH_INCEPTION_HYP_009_e2ee71d26cf5891c",
