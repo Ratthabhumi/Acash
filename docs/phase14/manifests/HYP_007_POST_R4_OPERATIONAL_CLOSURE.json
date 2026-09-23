@@ -1,0 +1,51 @@
+{
+  "authorization": "AUTHORIZE_HYP_007_POST_R4_CLOSURE_AND_CONDITIONAL_HYP_008_RESEARCH_INCEPTION",
+  "canonical_head_sha256": "653b007e4d5ce73c5022086f40737a4525410a55",
+  "closure_document": {
+    "path": "docs/phase14/HYP_007_POST_R4_OPERATIONAL_CLOSURE.md",
+    "sha256": "4e32bb601454318a4572770a7bb582436b7078704608c72c3cf510c190687a47"
+  },
+  "closure_type": "OPERATIONAL_CLOSURE_AFTER_R4_CURRENT_EDGE_FAILURE",
+  "governance_state": {
+    "hypothesis_id": "HYP_007",
+    "mechanism_id": "MEC-0017",
+    "m1_historical_replication": "SUPPORTED_ACCEPTED_SUPPORTED_ON_REGISTERED_M1",
+    "m2_current_edge": "NOT_SUPPORTED_FAIL_CURRENT_EDGE_NOT_SUPPORTED",
+    "combined_interpretation": "HISTORICAL_REPLICATION_SUPPORTED_BUT_CURRENT_EDGE_NOT_SUPPORTED",
+    "paper": "NOT_AUTHORIZED",
+    "live": "LOCKED",
+    "real_capital_usd": "0.00",
+    "no_real_orders": true,
+    "m3_state": "PRESERVED_UNTOUCHED_PROSPECTIVE_ONLY_LOCKED_ZERO_ACCESS",
+    "operational_progression": "CLOSED"
+  },
+  "r4_result_package_sha256": "9fbf1413e8ad517d6ee5b7c1a77d0c7324a359396c9e0591beaba0344d3c52b0",
+  "m2_dataset_content_sha256": "4b2e997ed825359cb6830b03759fdeebe9ba666426e434ddbb91c771e1ba1284",
+  "scientific_interpretation": "The frozen HYP_007 implementation is historically supported on M1 but lacks sufficient recent post-publication economic robustness under the registered friction contract. HYP_007 is operationally closed, not universally disproven.",
+  "prohibited_rescue_variants": [
+    "Noise-Area lookback change",
+    "decision-epoch change",
+    "volatility-target change",
+    "leverage-cap change",
+    "VWAP change",
+    "friction change",
+    "quote-policy change",
+    "AUM change",
+    "losing-date exclusion",
+    "regime-filter added to HYP_007",
+    "R4-gate lowering",
+    "M2 alternative-specification rerun",
+    "M3 consumption to rescue HYP_007"
+  ],
+  "sealed_artifacts_preserved_immutable": [
+    "docs/phase14/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.md",
+    "docs/phase14/manifests/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.json",
+    "docs/phase14/HYP_007_R4_M2_STRESS_EVALUATION.md",
+    "docs/phase14/manifests/HYP_007_R4_M2_DATASET_MANIFEST.json",
+    "docs/phase14/manifests/HYP_007_R4_M2_DECISION.json",
+    "docs/phase14/manifests/HYP_007_R4_M2_RESULT_MANIFEST.json",
+    "docs/research/MEC-0017-HYP-007-R4-M2-stress-report.md"
+  ],
+  "manifest_type": "HYP_007_POST_R4_OPERATIONAL_CLOSURE_MANIFEST",
+  "status": "HYP_007_OPERATIONALLY_CLOSED"
+}
