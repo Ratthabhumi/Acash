@@ -1,0 +1,83 @@
+{
+  "manifest_type": "POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_MANIFEST",
+  "governance_freeze_id": "HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001",
+  "hypothesis_id": "HYP_007",
+  "mechanism_id": "MEC-0017",
+  "canonical_title": "HYP_007 — Post-M1 Partition & Step R4 Governance Freeze 001",
+  "stage_a_ratification_timestamp_utc": "2026-09-23T00:30:00Z",
+  "canonical_starting_head": "01345a2a98ddee1729045d366d9c9406448530ac",
+  "upstream_authorities": {
+    "effective_m1_verdict": "ACCEPTED_SUPPORTED_ON_REGISTERED_M1",
+    "corrected_r3_package_sha256": "d4bf18bb80ec650e4c4c0600a8cb5aebb762a7169b8b89111e604adf91293a25",
+    "r2_dataset_content_sha256": "4dcf8546b8583bc214684228e29b329226ece904404768bc921f55991f1777aa",
+    "r1_preregistration_sha256": "41a0a27f9237371538366546a1761884d636d6c6d2e01ad14a90aa1cc47e16c4"
+  },
+  "governance_document": {
+    "path": "docs/phase14/HYP_007_POST_M1_PARTITION_AND_R4_GOVERNANCE_FREEZE_001.md",
+    "sha256": "d05722f57a122dad2a371db15ea0bae78006c2aefb56145a2ff6ad3967d0d6c5"
+  },
+  "partitions": {
+    "M1": {
+      "start_date": "2021-07-01",
+      "end_date": "2024-04-30",
+      "role": "PUBLICATION_EXPOSED_DIRECT_SIP_REPLICATION_SAMPLE",
+      "status": "SEALED_ACCEPTED"
+    },
+    "M2": {
+      "start_date": "2024-05-01",
+      "end_date": "2026-08-14",
+      "role": "PUBLICLY_EXPOSED_POST_PUBLICATION_STRESS_SAMPLE",
+      "classification": "NOT_PRISTINE_OOS",
+      "simulated_starting_aum_usd": "100000.00",
+      "accounting_normalization": "PRE_RESULT_SEGMENT_ACCOUNTING_NORMALIZATION",
+      "warmup_source": "SEALED_M1_R2_HISTORY",
+      "warmup_noise_area_sessions": 14,
+      "warmup_volatility_closes": 16,
+      "warmup_performance_contribution_usd": "0.00"
+    },
+    "QUARANTINED_GAP": {
+      "start_date": "2026-08-15",
+      "end_date": "2026-09-22",
+      "role": "QUARANTINED_HISTORICAL_GAP",
+      "access_policy": "STRICTLY_UNREADABLE_FAIL_CLOSED"
+    },
+    "M3": {
+      "prospective_start_date": "2026-09-23",
+      "prospective_start_open_utc": "2026-09-23T13:30:00Z",
+      "role": "PROSPECTIVE_ONLY",
+      "access_status": "LOCKED_ZERO_ACCESS"
+    }
+  },
+  "r4_continuation_gates": {
+    "R4-G1": {
+      "metric": "NET_TOTAL_RETURN",
+      "threshold": "> 0.0",
+      "description": "Strictly positive net total return"
+    },
+    "R4-G2": {
+      "metric": "NET_ANNUALIZED_SHARPE",
+      "threshold": ">= 0.50",
+      "description": "Net annualized Sharpe ratio >= 0.50 (252 PPY, ddof=1, rf=0)"
+    },
+    "R4-G3": {
+      "metric": "MAX_DRAWDOWN",
+      "threshold": "<= 0.35",
+      "description": "Max net peak-to-trough drawdown <= 35.0%"
+    },
+    "R4-G4": {
+      "metric": "2X_FRICTION_STRESS_TOTAL_RETURN",
+      "threshold": ">= 0.0",
+      "description": "Compounded net return under 2x friction >= 0.0"
+    },
+    "conjunction_rule": "ALL_FOUR_MUST_PASS_SIMULTANEOUSLY"
+  },
+  "governance_assertions": {
+    "m2_market_data_accessed_before_freeze": false,
+    "real_capital_authority_usd": "0.00",
+    "no_real_orders": true,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "stage_a_status": "SEALED_PASS",
+    "stage_b_readiness": "CONDITIONAL_ON_STAGE_A_CANONICAL_PUSH"
+  }
+}
