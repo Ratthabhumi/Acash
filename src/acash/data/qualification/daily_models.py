@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 from acash.core.domain.exceptions import DataContractError, DomainValidationError
 from acash.core.domain.types import ensure_finite_decimal
+from acash.data.schema import validate_decimal128_bounds
 
 class DailyBar(BaseModel):
     """Immutable DTO for a daily SIP bar.
@@ -43,9 +45,10 @@ class DailyBar(BaseModel):
 
     @field_validator("open", "high", "low", "close")
     @classmethod
-    def validate_prices(cls, v: Decimal, info) -> Decimal:
+    def validate_prices(cls, v: Decimal, info: Any) -> Decimal:
         field_name = getattr(info, "field_name", "price") or "price"
         ensure_finite_decimal(v, field_name=field_name)
+        validate_decimal128_bounds(v, field_name=field_name)
         if v <= Decimal("0"):
             raise DomainValidationError(f"{field_name} must be strictly positive (> 0), got: {v}")
         return v
@@ -54,6 +57,7 @@ class DailyBar(BaseModel):
     @classmethod
     def validate_volume(cls, v: Decimal) -> Decimal:
         ensure_finite_decimal(v, field_name="volume")
+        validate_decimal128_bounds(v, field_name="volume")
         if v < Decimal("0"):
             raise DomainValidationError(f"volume must be non‑negative (>= 0), got: {v}")
         return v

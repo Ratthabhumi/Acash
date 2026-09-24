@@ -8,7 +8,12 @@ from acash.data.qualification.client import (
     SipContractViolationError,
     SipRetrievalResult,
 )
-from acash.data.qualification.hyp_009_daily_client import HYP009AlpacaClient
+from acash.data.qualification.hyp_009_daily_client import (
+    HYP009AlpacaClient,
+    Hyp009PreNetworkGuard,
+    Hyp009RetrievalResult,
+    assert_split_raw_alignment,
+)
 
 from acash.data.qualification.engine import HistoricalSipQualificationEngine
 from acash.data.qualification.guard import (
@@ -50,6 +55,8 @@ __all__ = [
     "AlpacaAuthenticationError",
     "AlpacaHistoricalSipClient",
     "HYP009AlpacaClient",
+    "Hyp009PreNetworkGuard",
+    "Hyp009RetrievalResult",
     "AlpacaRateLimitExceededError",
     "FifteenMinuteAccessGuard",
     "HistoricalBarValidator",
@@ -79,4 +86,5 @@ __all__ = [
     "save_evidence_package",
     "serialize_manifest_to_json",
     "verify_persisted_evidence_package",
+    "assert_split_raw_alignment",
 ]

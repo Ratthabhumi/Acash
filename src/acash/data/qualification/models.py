@@ -7,11 +7,6 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-# Import for type checking only – runtime import handled via forward references
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from acash.data.qualification.client import SipContractViolationError, SipRetrievalResult
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from acash.core.domain.enums import BarTimeframe

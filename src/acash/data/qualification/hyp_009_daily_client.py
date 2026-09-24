@@ -1,57 +1,185 @@
 # src/acash/data/qualification/hyp_009_daily_client.py
-"""HYP 009‑specific Alpaca client for daily SIP bars.
+"""HYP 009-specific Alpaca client for daily SIP bars.
 
-This client mirrors :class:`AlpacaHistoricalSipClient` but:
-- enforces ``timeframe='1Day'`` (daily bars)
-- returns a list of :class:`DailyBar` DTOs defined in ``daily_models.py``
-- preserves the strict request contract (feed=SIP, adjustment=RAW)
-- raises the same contract‑violation errors for any deviation.
+Frozen HYP_009 provider contract (CORE-001 / HYP_009 R1 + pre-R2 clarification):
 
-No changes are made to the existing ``AlpacaHistoricalSipClient`` – this
-implementation lives in a separate module so that HYP 003 codepaths are
+- symbol = SPY
+- timeframe = 1Day
+- feed = SIP
+- allowed adjustments = SPLIT, RAW
+  (signal prices adjustment=split; execution/valuation adjustment=raw)
+- authorized request window: 2016-01-01 <= start_date <= end_date <= 2020-12-31
+
+Pre-network enforcement (BEFORE any HTTP execution):
+
+- symbol != SPY -> rejected
+- timeframe != 1Day -> rejected
+- feed != SIP -> rejected
+- unsupported adjustment -> rejected
+- start < 2016-01-01, end > 2020-12-31, or start > end -> rejected
+
+This module deliberately does NOT use FifteenMinuteAccessGuard: the 15-minute
+recency / 390-minute-session / 15:59-final-minute / early-close-exclusion
+semantics belong to the intraday 1Min path. Daily history uses the dedicated
+Hyp009PreNetworkGuard date-boundary authority below.
+
+Response validation fails closed (no silent trimming of provider spill):
+
+- row before requested start / after requested end -> rejected
+- duplicate session -> rejected
+- weekend row / full-holiday row -> rejected
+- legitimate early-close session -> accepted (CA-1 authority)
+- null/malformed values, non-finite numerics, non-positive OHLC,
+  invalid OHLC geometry, negative volume -> rejected
+
+No changes are made to the existing AlpacaHistoricalSipClient - this
+implementation lives in a separate module so that HYP_003 codepaths are
 completely untouched.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from dataclasses import dataclass
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
 import httpx
 import time
+from pydantic import ValidationError
 
-from acash.core.domain.exceptions import DataContractError
-from acash.execution.alpaca.credentials import (
-    AlpacaCredentialError,
-    AlpacaCredentialProvider,
-    EnvAlpacaCredentialProvider,
-    AlpacaCredentials,
-)
-from acash.data.qualification.guard import FifteenMinuteAccessGuard
+from acash.core.domain.exceptions import DataContractError, DomainError
+from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
+from acash.data.qualification.daily_models import DailyBar
 from acash.data.qualification.manifest import compute_page_sha256
 from acash.data.qualification.models import (
     MarketDataFeed,
     PriceAdjustment,
     SipPageMetadata,
 )
-from acash.data.qualification.client import SipRetrievalResult
 from acash.data.qualification.client import SipContractViolationError
-from acash.data.qualification.daily_models import DailyBar
+from acash.execution.alpaca.credentials import (
+    AlpacaCredentialError,
+    AlpacaCredentialProvider,
+    AlpacaCredentials,
+    EnvAlpacaCredentialProvider,
+)
 
 
-class HYP009AlpacaClient:
-    """Client for fetching **daily** SIP bars via Alpaca.
+HYP009_SYMBOL: str = "SPY"
+HYP009_TIMEFRAME: str = "1Day"
+HYP009_FEED: MarketDataFeed = MarketDataFeed.SIP
+HYP009_ALLOWED_ADJUSTMENTS: FrozenSet[PriceAdjustment] = frozenset(
+    {PriceAdjustment.SPLIT, PriceAdjustment.RAW}
+)
+HYP009_MIN_DATE: date = date(2016, 1, 1)
+HYP009_MAX_DATE: date = date(2020, 12, 31)
 
-    The semantics are identical to :class:`AlpacaHistoricalSipClient` except
-    that the ``timeframe`` is fixed to ``'1Day'`` and the returned bar objects
-    are instances of :class:`DailyBar`.
+_REQUIRED_BAR_KEYS: Tuple[str, ...] = ("t", "o", "h", "l", "c", "v")
+
+
+class Hyp009PreNetworkGuard:
+    """Dedicated HYP_009 pre-network temporal guard (date-boundary authority).
+
+    Enforces the frozen authorized window 2016-01-01..2020-12-31 at date
+    granularity. This guard carries NO 15-minute recency semantics, NO
+    390-minute-session requirement, NO 15:59 final-minute requirement, and NO
+    early-close exclusion. It is the sole date-boundary authority for the
+    HYP_009 daily path.
     """
 
     def __init__(
         self,
+        min_date: date = HYP009_MIN_DATE,
+        max_date: date = HYP009_MAX_DATE,
+    ) -> None:
+        if min_date > max_date:
+            raise DataContractError(
+                f"Hyp009PreNetworkGuard min_date ({min_date}) must not exceed "
+                f"max_date ({max_date})."
+            )
+        self.min_date = min_date
+        self.max_date = max_date
+
+    def validate_window(self, start_utc: datetime, end_utc: datetime) -> Tuple[date, date]:
+        """Validate the requested window BEFORE any network execution.
+
+        Returns the normalized (start_date, end_date) pair on success.
+
+        Raises:
+            DataContractError: naive (timezone-unaware) datetimes.
+            SipContractViolationError: any authorized-window violation.
+        """
+        if start_utc.tzinfo is None or end_utc.tzinfo is None:
+            raise DataContractError(
+                "HYP_009 window datetimes must be timezone-aware UTC."
+            )
+        start_date = start_utc.astimezone(timezone.utc).date()
+        end_date = end_utc.astimezone(timezone.utc).date()
+        if start_date > end_date:
+            raise SipContractViolationError(
+                f"HYP_009 window start_date ({start_date}) must not exceed "
+                f"end_date ({end_date})."
+            )
+        if start_date < self.min_date:
+            raise SipContractViolationError(
+                f"HYP_009 window start_date ({start_date}) precedes the authorized "
+                f"lower bound ({self.min_date})."
+            )
+        if end_date > self.max_date:
+            raise SipContractViolationError(
+                f"HYP_009 window end_date ({end_date}) exceeds the authorized "
+                f"upper bound ({self.max_date})."
+            )
+        return start_date, end_date
+
+
+@dataclass(frozen=True)
+class Hyp009RetrievalResult:
+    """Result of a completed paginated HYP_009 daily bars retrieval."""
+
+    bars: List[DailyBar]
+    pages_raw_bytes: List[bytes]
+    pages_metadata: List[SipPageMetadata]
+    http_status_code: int
+    response_headers: Dict[str, str]
+    feed_requested: str
+    feed_response_provenance: str
+    asof: Optional[str] = None
+
+
+def assert_split_raw_alignment(
+    split_bars: Sequence[DailyBar],
+    raw_bars: Sequence[DailyBar],
+) -> List[date]:
+    """Require split/raw session-date sets to be exactly equal (fail closed).
+
+    Per the frozen pre-R2 accounting clarification, split history is qualified
+    only against the same authorized window as raw valuation data. Any date
+    mismatch (split-only or raw-only sessions) is a contract violation: no
+    interpolation, no filling, no silent dropping of unmatched dates.
+
+    Returns the sorted aligned session dates on success.
+    """
+    split_dates = {bar.timestamp_utc.date() for bar in split_bars}
+    raw_dates = {bar.timestamp_utc.date() for bar in raw_bars}
+    if split_dates != raw_dates:
+        raise SipContractViolationError(
+            "HYP_009 split/raw session-date sets differ: "
+            f"split_only={sorted(split_dates - raw_dates)}, "
+            f"raw_only={sorted(raw_dates - split_dates)}."
+        )
+    return sorted(split_dates)
+
+
+class HYP009AlpacaClient:
+    """Client for fetching **daily** SIP bars via Alpaca under the HYP_009 contract."""
+
+    def __init__(
+        self,
         credential_provider: Optional[AlpacaCredentialProvider] = None,
-        guard: Optional[FifteenMinuteAccessGuard] = None,
+        guard: Optional[Hyp009PreNetworkGuard] = None,
+        calendar: Optional[NyseCa1Calendar] = None,
         base_url: str = "https://data.alpaca.markets",
         transport: Optional[httpx.BaseTransport] = None,
         max_pages: int = 50,
@@ -59,7 +187,8 @@ class HYP009AlpacaClient:
         retry_delay_seconds: float = 1.0,
     ) -> None:
         self._credentials_provider = credential_provider or EnvAlpacaCredentialProvider()
-        self._guard = guard or FifteenMinuteAccessGuard()
+        self._guard = guard or Hyp009PreNetworkGuard()
+        self._calendar = calendar or NyseCa1Calendar()
         self._base_url = base_url.rstrip("/")
         self._transport = transport
         self._max_pages = max_pages
@@ -88,27 +217,34 @@ class HYP009AlpacaClient:
         timeframe: str = "1Day",
         limit: int = 10000,
         asof: Optional[str] = None,
-    ) -> SipRetrievalResult:
-        """Fetch daily SIP bars with *strict* contract enforcement.
+    ) -> Hyp009RetrievalResult:
+        """Fetch daily SIP bars with strict HYP_009 contract enforcement.
+
+        Every precondition below is checked BEFORE any HTTP execution; a
+        forbidden request performs zero network calls.
         """
-        if feed != MarketDataFeed.SIP:
-            raise SipContractViolationError(
-                f"Daily SIP client requires feed='sip', got '{feed}'."
-            )
-        if adjustment != PriceAdjustment.RAW:
-            raise SipContractViolationError(
-                f"Daily SIP client requires adjustment='raw', got '{adjustment}'."
-            )
-        if timeframe != "1Day":
-            raise SipContractViolationError(
-                f"Daily SIP client requires timeframe='1Day', got '{timeframe}'."
-            )
-
-        self._guard.validate_requested_end(end_utc)
-
         sym = symbol.strip().upper()
         if not sym:
-            raise DataContractError("Symbol must be a non‑empty string.")
+            raise DataContractError("Symbol must be a non-empty string.")
+        if sym != HYP009_SYMBOL:
+            raise SipContractViolationError(
+                f"HYP_009 client requires symbol='{HYP009_SYMBOL}', got '{sym}'."
+            )
+        if feed != MarketDataFeed.SIP:
+            raise SipContractViolationError(
+                f"HYP_009 client requires feed='sip', got '{feed}'."
+            )
+        if adjustment not in HYP009_ALLOWED_ADJUSTMENTS:
+            raise SipContractViolationError(
+                f"HYP_009 client requires adjustment in "
+                f"{{'split', 'raw'}}, got '{adjustment}'."
+            )
+        if timeframe != HYP009_TIMEFRAME:
+            raise SipContractViolationError(
+                f"HYP_009 client requires timeframe='{HYP009_TIMEFRAME}', got '{timeframe}'."
+            )
+
+        start_date, end_date = self._guard.validate_window(start_utc, end_utc)
 
         start_str = start_utc.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_utc.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -119,6 +255,7 @@ class HYP009AlpacaClient:
         pages_raw_bytes: List[bytes] = []
         pages_metadata: List[SipPageMetadata] = []
         all_bars: List[DailyBar] = []
+        seen_dates: Set[date] = set()
         next_page_token: Optional[str] = None
         page_index = 0
         last_status_code = 0
@@ -171,8 +308,14 @@ class HYP009AlpacaClient:
                 raw_bars = payload.get("bars") or []
                 if isinstance(raw_bars, dict):
                     raw_bars = raw_bars.get(sym, [])
+                if not isinstance(raw_bars, list):
+                    raise SipContractViolationError(
+                        "HYP_009 response 'bars' payload must be a list (or a symbol-keyed mapping)."
+                    )
 
-                parsed_page = self._parse_daily_bars(raw_bars)
+                parsed_page = self._parse_daily_bars(
+                    raw_bars, start_date, end_date, seen_dates
+                )
                 all_bars.extend(parsed_page)
 
                 token = payload.get("next_page_token")
@@ -198,7 +341,7 @@ class HYP009AlpacaClient:
                 feed_provenance = "FEED_CONFIRMED_IN_HEADER"
                 break
 
-        return SipRetrievalResult(
+        return Hyp009RetrievalResult(
             bars=all_bars,
             pages_raw_bytes=pages_raw_bytes,
             pages_metadata=pages_metadata,
@@ -230,22 +373,80 @@ class HYP009AlpacaClient:
             except httpx.RequestError as e:
                 raise DataContractError(f"HTTP request to Alpaca failed: {e}") from e
 
-    def _parse_daily_bars(self, raw_bars: Sequence[Mapping[str, Any]]) -> List[DailyBar]:
+    def _parse_daily_bars(
+        self,
+        raw_bars: Sequence[Any],
+        window_start: date,
+        window_end: date,
+        seen_dates: Set[date],
+    ) -> List[DailyBar]:
+        """Parse and validate one response page (fail closed, no silent trimming)."""
         result: List[DailyBar] = []
         for item in raw_bars:
-            t_str = str(item["t"])
-            if t_str.endswith("Z"):
-                t_str = t_str[:-1] + "+00:00"
-            t_utc = datetime.fromisoformat(t_str).astimezone(timezone.utc)
+            if not isinstance(item, Mapping):
+                raise SipContractViolationError(
+                    "HYP_009 daily bar row must be a mapping object."
+                )
+            for key in _REQUIRED_BAR_KEYS:
+                if item.get(key) is None:
+                    raise SipContractViolationError(
+                        f"HYP_009 daily bar row has null/missing field '{key}': {item}."
+                    )
 
-            open_val = Decimal(str(item["o"]))
-            high_val = Decimal(str(item["h"]))
-            low_val = Decimal(str(item["l"]))
-            close_val = Decimal(str(item["c"]))
-            volume_val = Decimal(str(item["v"]))
+            t_raw = item["t"]
+            try:
+                t_str = str(t_raw)
+                if t_str.endswith("Z"):
+                    t_str = t_str[:-1] + "+00:00"
+                t_utc = datetime.fromisoformat(t_str).astimezone(timezone.utc)
+            except (ValueError, TypeError) as e:
+                raise SipContractViolationError(
+                    f"HYP_009 daily bar has malformed timestamp: {t_raw!r}."
+                ) from e
+            if t_utc.tzinfo is None:
+                raise SipContractViolationError(
+                    f"HYP_009 daily bar timestamp must be timezone-aware: {t_raw!r}."
+                )
+            session_date = t_utc.date()
 
-            result.append(
-                DailyBar(
+            if session_date < window_start:
+                raise SipContractViolationError(
+                    f"HYP_009 provider spill: session {session_date} precedes "
+                    f"requested start {window_start}."
+                )
+            if session_date > window_end:
+                raise SipContractViolationError(
+                    f"HYP_009 provider spill: session {session_date} exceeds "
+                    f"requested end {window_end}."
+                )
+            if session_date in seen_dates:
+                raise SipContractViolationError(
+                    f"HYP_009 duplicate session in provider response: {session_date}."
+                )
+
+            if session_date.weekday() >= 5:
+                raise SipContractViolationError(
+                    f"HYP_009 weekend row in provider response: {session_date}."
+                )
+            if self._calendar.is_holiday(session_date):
+                reason = self._calendar.get_holiday_reason(session_date)
+                raise SipContractViolationError(
+                    f"HYP_009 full-holiday row in provider response: {session_date} ({reason})."
+                )
+
+            try:
+                open_val = Decimal(str(item["o"]))
+                high_val = Decimal(str(item["h"]))
+                low_val = Decimal(str(item["l"]))
+                close_val = Decimal(str(item["c"]))
+                volume_val = Decimal(str(item["v"]))
+            except (InvalidOperation, ValueError, TypeError) as e:
+                raise SipContractViolationError(
+                    f"HYP_009 daily bar has malformed numeric values: {item}."
+                ) from e
+
+            try:
+                bar = DailyBar(
                     timestamp_utc=t_utc,
                     open=open_val,
                     high=high_val,
@@ -253,5 +454,13 @@ class HYP009AlpacaClient:
                     close=close_val,
                     volume=volume_val,
                 )
-            )
+            except (ValidationError, DomainError) as e:
+                # Normalize every model-validation failure (pydantic-wrapped or
+                # raw domain errors) into the single HYP_009 contract exception.
+                raise SipContractViolationError(
+                    f"HYP_009 daily bar failed OHLCV validation: {e}."
+                ) from e
+
+            seen_dates.add(session_date)
+            result.append(bar)
         return result
