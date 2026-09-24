@@ -42,7 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
 import httpx
 import time
@@ -76,6 +76,43 @@ HYP009_MIN_DATE: date = date(2016, 1, 1)
 HYP009_MAX_DATE: date = date(2020, 12, 31)
 
 _REQUIRED_BAR_KEYS: Tuple[str, ...] = ("t", "o", "h", "l", "c", "v")
+
+
+def inclusive_date_window_to_utc_bounds(
+    start_date: date, end_date: date
+) -> Tuple[datetime, datetime]:
+    """Convert an inclusive calendar-date window into provider timestamp bounds.
+
+    Maps the inclusive start date to UTC start-of-day (00:00:00Z) and the
+    inclusive end date to UTC end-of-day (23:59:59.999999Z), so daily bars
+    timestamped after 00:00Z for the end session (e.g. Alpaca 1Day bars near
+    04:00:00Z) remain inside the provider query. The SCIENTIFIC session-date
+    window is unchanged, and response spill validation is NOT loosened: any
+    returned session date outside [start_date, end_date] is still rejected.
+
+    This helper is a pure converter; the frozen authorized-window contract
+    (2016-01-01..2020-12-31) is still enforced by Hyp009PreNetworkGuard at
+    fetch time.
+    """
+    if start_date > end_date:
+        raise SipContractViolationError(
+            f"Inclusive date window start ({start_date}) must not exceed "
+            f"end ({end_date})."
+        )
+    start_utc = datetime(
+        start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc
+    )
+    end_utc = datetime(
+        end_date.year,
+        end_date.month,
+        end_date.day,
+        23,
+        59,
+        59,
+        999999,
+        tzinfo=timezone.utc,
+    )
+    return start_utc, end_utc
 
 
 class Hyp009PreNetworkGuard:
@@ -185,6 +222,7 @@ class HYP009AlpacaClient:
         max_pages: int = 50,
         max_retries_429: int = 3,
         retry_delay_seconds: float = 1.0,
+        http_attempt_listener: Optional[Callable[[], None]] = None,
     ) -> None:
         self._credentials_provider = credential_provider or EnvAlpacaCredentialProvider()
         self._guard = guard or Hyp009PreNetworkGuard()
@@ -194,6 +232,10 @@ class HYP009AlpacaClient:
         self._max_pages = max_pages
         self._max_retries_429 = max_retries_429
         self._retry_delay_seconds = retry_delay_seconds
+        # Auditable hook invoked once per ACTUAL provider HTTP execution
+        # (first attempts, 429 retries, and pagination pages each count).
+        # Carries no credentials and performs no logging itself.
+        self._http_attempt_listener = http_attempt_listener
 
     def _get_auth_headers(self) -> Dict[str, str]:
         creds: AlpacaCredentials = self._credentials_provider.load()
@@ -358,6 +400,8 @@ class HYP009AlpacaClient:
         retries = 0
         while True:
             try:
+                if self._http_attempt_listener is not None:
+                    self._http_attempt_listener()
                 resp = client.get(url, headers=headers, params=params, timeout=30.0)
                 if resp.status_code == 429:
                     retries += 1

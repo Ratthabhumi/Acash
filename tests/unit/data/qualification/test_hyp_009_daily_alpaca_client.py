@@ -17,7 +17,7 @@ import importlib.util
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import httpx
 import pytest
@@ -34,13 +34,17 @@ from acash.data.qualification.hyp_009_daily_client import (
     Hyp009PreNetworkGuard,
     Hyp009RetrievalResult,
     assert_split_raw_alignment,
+    inclusive_date_window_to_utc_bounds,
 )
 from acash.data.qualification.models import (
     HistoricalSipBar,
     MarketDataFeed,
     PriceAdjustment,
 )
-from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+from acash.execution.alpaca.credentials import (
+    AlpacaCredentialError,
+    EnvAlpacaCredentialProvider,
+)
 
 
 # =============================================================================
@@ -573,6 +577,229 @@ def test_guard_window_boundaries() -> None:
     assert (start, end) == (date(2016, 1, 1), date(2020, 12, 31))
     with pytest.raises(SipContractViolationError):
         guard.validate_window(_dt(2015, 12, 31), _dt(2016, 1, 4))
+
+
+# =============================================================================
+# Provider timestamp bounds (§2-3: inclusive dates -> safe UTC bounds)
+# =============================================================================
+
+
+def test_bounds_helper_maps_start_of_day() -> None:
+    start_utc, _ = inclusive_date_window_to_utc_bounds(
+        date(2016, 11, 1), date(2016, 11, 4)
+    )
+    assert start_utc == datetime(2016, 11, 1, tzinfo=timezone.utc)
+
+
+def test_bounds_helper_maps_end_of_day() -> None:
+    _, end_utc = inclusive_date_window_to_utc_bounds(
+        date(2016, 11, 1), date(2016, 11, 4)
+    )
+    assert end_utc == datetime(2016, 11, 4, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+
+def test_bounds_helper_rejects_inverted_window() -> None:
+    with pytest.raises(SipContractViolationError):
+        inclusive_date_window_to_utc_bounds(date(2016, 11, 4), date(2016, 11, 1))
+
+
+def test_nov4_late_timestamp_admitted() -> None:
+    # Auditor scenario: Alpaca 1Day bars may be timestamped after 00:00Z for
+    # the session date (e.g. 04:00:00Z). The Nov-4 bar must be admitted.
+    start_utc, end_utc = inclusive_date_window_to_utc_bounds(
+        date(2016, 11, 1), date(2016, 11, 4)
+    )
+    rows = [
+        _row(date(2016, 11, 1)),
+        _row(date(2016, 11, 2)),
+        _row(date(2016, 11, 3)),
+        {
+            "t": "2016-11-04T04:00:00Z",
+            "o": "200.0",
+            "h": "210.0",
+            "l": "190.0",
+            "c": "205.0",
+            "v": "1000000",
+        },
+    ]
+    calls: List[httpx.Request] = []
+    client = _make_client(rows, calls)
+    result = client.fetch_historical_bars(
+        symbol="SPY", start_utc=start_utc, end_utc=end_utc
+    )
+    assert len(result.bars) == 4
+    assert result.bars[3].timestamp_utc.date() == date(2016, 11, 4)
+
+
+def test_nov5_session_still_rejected() -> None:
+    # End-of-day provider bound must NOT loosen spill validation: a Nov-5
+    # session remains outside the scientific window and is rejected.
+    start_utc, end_utc = inclusive_date_window_to_utc_bounds(
+        date(2016, 11, 1), date(2016, 11, 4)
+    )
+    rows = NOV_2016_ROWS + [_row(date(2016, 11, 7))]
+    calls: List[httpx.Request] = []
+    client = _make_client(rows, calls)
+    with pytest.raises(SipContractViolationError, match="exceeds"):
+        client.fetch_historical_bars(
+            symbol="SPY", start_utc=start_utc, end_utc=end_utc
+        )
+
+
+def test_probe_session_set_exactly_nov1_to_nov4() -> None:
+    start_utc, end_utc = inclusive_date_window_to_utc_bounds(
+        date(2016, 11, 1), date(2016, 11, 4)
+    )
+    split_calls: List[httpx.Request] = []
+    raw_calls: List[httpx.Request] = []
+    split_client = _make_client(NOV_2016_ROWS, split_calls)
+    raw_client = _make_client(NOV_2016_ROWS, raw_calls)
+    split_result = split_client.fetch_historical_bars(
+        symbol="SPY",
+        start_utc=start_utc,
+        end_utc=end_utc,
+        adjustment=PriceAdjustment.SPLIT,
+    )
+    raw_result = raw_client.fetch_historical_bars(
+        symbol="SPY",
+        start_utc=start_utc,
+        end_utc=end_utc,
+        adjustment=PriceAdjustment.RAW,
+    )
+    aligned = assert_split_raw_alignment(split_result.bars, raw_result.bars)
+    assert aligned == [
+        date(2016, 11, 1),
+        date(2016, 11, 2),
+        date(2016, 11, 3),
+        date(2016, 11, 4),
+    ]
+
+
+# =============================================================================
+# Actual HTTP-attempt counting (§4)
+# =============================================================================
+
+
+def _counting_client(
+    handler: Callable[[httpx.Request], httpx.Response],
+    attempts: List[int],
+    **kwargs: Any,
+) -> HYP009AlpacaClient:
+    def counting_handler(request: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        return handler(request)
+
+    transport = httpx.MockTransport(counting_handler)
+    return HYP009AlpacaClient(
+        credential_provider=MockCredentialProvider(),
+        transport=transport,
+        **kwargs,
+    )
+
+
+def test_counter_zero_on_prenetwork_rejection() -> None:
+    attempts: List[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_payload(NOV_2016_ROWS))
+
+    client = _counting_client(handler, attempts)
+    with pytest.raises(SipContractViolationError):
+        client.fetch_historical_bars(
+            symbol="QQQ",
+            start_utc=_dt(2016, 11, 1),
+            end_utc=_dt(2016, 11, 4),
+        )
+    assert attempts == []
+
+
+def test_counter_one_on_single_page_success() -> None:
+    attempts: List[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_payload(NOV_2016_ROWS))
+
+    client = _counting_client(handler, attempts)
+    result = client.fetch_historical_bars(
+        symbol="SPY", start_utc=_dt(2016, 11, 1), end_utc=_dt(2016, 11, 4)
+    )
+    assert len(result.bars) == 4
+    assert len(attempts) == 1
+
+
+def test_counter_counts_failed_http_response() -> None:
+    for status in (401, 403, 500):
+        attempts: List[int] = []
+
+        def handler(
+            request: httpx.Request, _status: int = status
+        ) -> httpx.Response:
+            return httpx.Response(_status, json={"message": "denied"})
+
+        client = _counting_client(handler, attempts)
+        # 401 surfaces as AlpacaCredentialError (authentication failure is
+        # distinct from a data-contract violation); 403/500 surface as
+        # DataContractError. Every case must still count exactly one attempt.
+        with pytest.raises((DataContractError, AlpacaCredentialError)):
+            client.fetch_historical_bars(
+                symbol="SPY", start_utc=_dt(2016, 11, 1), end_utc=_dt(2016, 11, 4)
+            )
+        assert len(attempts) == 1, f"HTTP {status} must count exactly one attempt"
+
+
+def test_counter_two_probes_count_two() -> None:
+    attempts: List[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_payload(NOV_2016_ROWS))
+
+    client = _counting_client(handler, attempts)
+    for adjustment in (PriceAdjustment.SPLIT, PriceAdjustment.RAW):
+        client.fetch_historical_bars(
+            symbol="SPY",
+            start_utc=_dt(2016, 11, 1),
+            end_utc=_dt(2016, 11, 4),
+            adjustment=adjustment,
+        )
+    assert len(attempts) == 2
+
+
+def test_counter_counts_429_retry() -> None:
+    attempts: List[int] = []
+    state = {"calls": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return httpx.Response(429, json={"message": "rate limited"})
+        return httpx.Response(200, json=_payload(NOV_2016_ROWS))
+
+    client = _counting_client(handler, attempts, retry_delay_seconds=0.0)
+    result = client.fetch_historical_bars(
+        symbol="SPY", start_utc=_dt(2016, 11, 1), end_utc=_dt(2016, 11, 4)
+    )
+    assert len(result.bars) == 4
+    assert len(attempts) == 2
+
+
+def test_counter_counts_pagination_pages() -> None:
+    attempts: List[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "page_token" in str(request.url):
+            return httpx.Response(
+                200, json=_payload([_row(date(2016, 11, 2))])
+            )
+        page1 = _payload([_row(date(2016, 11, 1))])
+        page1["next_page_token"] = "tok-1"
+        return httpx.Response(200, json=page1)
+
+    client = _counting_client(handler, attempts)
+    result = client.fetch_historical_bars(
+        symbol="SPY", start_utc=_dt(2016, 11, 1), end_utc=_dt(2016, 11, 4)
+    )
+    assert len(result.bars) == 2
+    assert len(attempts) == 2
 
 
 def test_runner_defaults_to_no_network(monkeypatch: Any) -> None:

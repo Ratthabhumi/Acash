@@ -13,6 +13,7 @@ from acash.data.qualification.hyp_009_daily_client import (
     Hyp009PreNetworkGuard,
     Hyp009RetrievalResult,
     assert_split_raw_alignment,
+    inclusive_date_window_to_utc_bounds,
 )
 
 from acash.data.qualification.engine import HistoricalSipQualificationEngine
@@ -87,4 +88,5 @@ __all__ = [
     "serialize_manifest_to_json",
     "verify_persisted_evidence_package",
     "assert_split_raw_alignment",
+    "inclusive_date_window_to_utc_bounds",
 ]

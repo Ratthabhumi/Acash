@@ -43,7 +43,7 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import List
 
 from acash.core.domain.exceptions import DataContractError
@@ -55,6 +55,7 @@ from acash.data.qualification.hyp_009_daily_client import (
     HYP009AlpacaClient,
     Hyp009RetrievalResult,
     assert_split_raw_alignment,
+    inclusive_date_window_to_utc_bounds,
 )
 from acash.data.qualification.models import MarketDataFeed, PriceAdjustment
 from acash.execution.alpaca.credentials import (
@@ -68,6 +69,21 @@ PROBE_END_DATE: date = date(2016, 11, 4)
 EXIT_OK = 0
 EXIT_QUALIFICATION_FAIL = 1
 EXIT_BLOCKED = 2
+
+
+class HttpAttemptCounter:
+    """Counts ACTUAL provider HTTP executions (attempts, retries, pages).
+
+    Wired into the client as its http_attempt_listener, so the count reflects
+    real transport executions - including failed responses - rather than
+    successful fetch returns. Carries no credentials.
+    """
+
+    def __init__(self) -> None:
+        self.count = 0
+
+    def __call__(self) -> None:
+        self.count += 1
 
 
 def get_git_head_sha() -> str:
@@ -112,11 +128,21 @@ def expected_probe_sessions(calendar: NyseCa1Calendar) -> List[date]:
 
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
-    network_requests_issued = 0
+    http_attempts = HttpAttemptCounter()
+
+    # Provider timestamp bounds for the INCLUSIVE scientific session window.
+    # End-of-day bound keeps daily bars timestamped after 00:00Z for the end
+    # session (e.g. Alpaca 1Day bars near 04:00:00Z) inside the provider query;
+    # response spill validation still rejects any Nov-5 session.
+    provider_start_utc, provider_end_utc = inclusive_date_window_to_utc_bounds(
+        PROBE_START_DATE, PROBE_END_DATE
+    )
 
     print("================================================================================")
     print("ACASH HYP_009 R2 PROVIDER QUALIFICATION (SPY 1Day SIP, split + raw)")
-    print(f"Probe window: {PROBE_START_DATE} .. {PROBE_END_DATE} inclusive")
+    print(f"Probe sessions: {PROBE_START_DATE} .. {PROBE_END_DATE} inclusive")
+    print(f"Provider start UTC: {provider_start_utc.isoformat()}")
+    print(f"Provider end UTC:   {provider_end_utc.isoformat()}")
     print(f"Authorized window: {HYP009_MIN_DATE} .. {HYP009_MAX_DATE}")
     print(f"Network Execution Flag: {args.execute_network}")
     print(f"Git HEAD: {get_git_head_sha()}")
@@ -131,7 +157,7 @@ def main(argv: List[str] | None = None) -> int:
     # 2. Explicit live gate: default is no network.
     if not args.execute_network:
         print("VERDICT = NOT_EXECUTED_DRY_RUN_DEFAULT")
-        print(f"NETWORK_REQUESTS_ISSUED = {network_requests_issued}")
+        print(f"NETWORK_REQUESTS_ISSUED = {http_attempts.count}")
         print("Live provider qualification requires separate human authorization:")
         print("AUTHORIZE_CORE_001_HYP_009_R2_LIVE_PROVIDER_QUALIFICATION")
         return EXIT_BLOCKED
@@ -141,16 +167,16 @@ def main(argv: List[str] | None = None) -> int:
         EnvAlpacaCredentialProvider().load()
     except AlpacaCredentialError as e:
         print(f"VERDICT = BLOCKED_MISSING_CREDENTIALS ({e})")
-        print(f"NETWORK_REQUESTS_ISSUED = {network_requests_issued}")
+        print(f"NETWORK_REQUESTS_ISSUED = {http_attempts.count}")
         return EXIT_BLOCKED
 
     calendar = NyseCa1Calendar()
     expected_sessions = expected_probe_sessions(calendar)
     print(f"EXPECTED_SESSIONS = {[d.isoformat() for d in expected_sessions]}")
 
-    client = HYP009AlpacaClient()
-    start_utc = datetime(2016, 11, 1, tzinfo=timezone.utc)
-    end_utc = datetime(2016, 11, 4, tzinfo=timezone.utc)
+    client = HYP009AlpacaClient(http_attempt_listener=http_attempts)
+    start_utc = provider_start_utc
+    end_utc = provider_end_utc
 
     try:
         # Request A: adjustment = split (signal prices).
@@ -162,7 +188,6 @@ def main(argv: List[str] | None = None) -> int:
             adjustment=PriceAdjustment.SPLIT,
             timeframe="1Day",
         )
-        network_requests_issued += 1
 
         # Request B: adjustment = raw (execution/valuation).
         raw_result: Hyp009RetrievalResult = client.fetch_historical_bars(
@@ -173,7 +198,6 @@ def main(argv: List[str] | None = None) -> int:
             adjustment=PriceAdjustment.RAW,
             timeframe="1Day",
         )
-        network_requests_issued += 1
 
         split_dates = sorted({bar.timestamp_utc.date() for bar in split_result.bars})
         raw_dates = sorted({bar.timestamp_utc.date() for bar in raw_result.bars})
@@ -185,18 +209,18 @@ def main(argv: List[str] | None = None) -> int:
             print("VERDICT = FAIL_SCOPE_MISMATCH")
             print(f"SPLIT_DATES = {[d.isoformat() for d in split_dates]}")
             print(f"RAW_DATES = {[d.isoformat() for d in raw_dates]}")
-            print(f"NETWORK_REQUESTS_ISSUED = {network_requests_issued}")
+            print(f"NETWORK_REQUESTS_ISSUED = {http_attempts.count}")
             return EXIT_QUALIFICATION_FAIL
 
         # Split/raw date-set alignment (fail closed on mismatch).
         aligned = assert_split_raw_alignment(split_result.bars, raw_result.bars)
         print(f"ALIGNED_SESSIONS = {[d.isoformat() for d in aligned]}")
         print("VERDICT = PASS_PROVIDER_QUALIFICATION_PROBE")
-        print(f"NETWORK_REQUESTS_ISSUED = {network_requests_issued}")
+        print(f"NETWORK_REQUESTS_ISSUED = {http_attempts.count}")
         return EXIT_OK
     except (SipContractViolationError, DataContractError, AlpacaCredentialError) as e:
         print(f"VERDICT = FAIL_CONTRACT_VIOLATION ({e})")
-        print(f"NETWORK_REQUESTS_ISSUED = {network_requests_issued}")
+        print(f"NETWORK_REQUESTS_ISSUED = {http_attempts.count}")
         return EXIT_QUALIFICATION_FAIL
 
 
