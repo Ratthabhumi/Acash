@@ -9,7 +9,11 @@ from decimal import Decimal
 from typing import Any, Dict, List, Mapping
 
 from acash.core.serialization import CanonicalConfigSerializer
-from acash.research.hyp_009.accounting import EquityRecord, PortfolioResult
+from acash.research.hyp_009.accounting import (
+    EquityRecord,
+    PortfolioResult,
+    execution_slippage_cost,
+)
 from acash.research.hyp_009.signals import MonthSignal
 
 
@@ -81,7 +85,8 @@ def execution_ledger(result: PortfolioResult) -> Dict[str, Any]:
                 "sec31_fee": str(trade.sec31_fee),
                 "finra_taf": str(trade.finra_taf),
                 "cat_fee": str(trade.cat_fee),
-                "total_friction": str(trade.total_friction),
+                "regulatory_fees_paid": str(trade.regulatory_fees_paid),
+                "execution_slippage_cost": str(execution_slippage_cost(trade)),
                 "cash_before": str(trade.cash_before),
                 "cash_after": str(trade.cash_after),
                 "shares_before": trade.shares_before,

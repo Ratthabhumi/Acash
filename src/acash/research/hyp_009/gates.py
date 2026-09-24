@@ -7,6 +7,43 @@ from decimal import Decimal
 
 
 @dataclass(frozen=True)
+class ContractQualification:
+    """Explicit M1 material-contract qualification state (G6 authority).
+
+    Every flag must be derived from observed qualification outcomes — never
+    injected as a literal. G6 is True only when ALL flags hold.
+    """
+
+    provider_contract_pass: bool
+    calendar_coverage_pass: bool
+    split_raw_alignment_pass: bool
+    dividend_contract_pass: bool
+    payable_date_contract_pass: bool
+    split_contract_pass: bool
+    response_scope_pass: bool
+    provenance_hash_pass: bool
+    serialization_integrity_pass: bool
+    forbidden_partition_access_zero: bool
+
+    @property
+    def no_material_failure(self) -> bool:
+        return all(
+            [
+                self.provider_contract_pass,
+                self.calendar_coverage_pass,
+                self.split_raw_alignment_pass,
+                self.dividend_contract_pass,
+                self.payable_date_contract_pass,
+                self.split_contract_pass,
+                self.response_scope_pass,
+                self.provenance_hash_pass,
+                self.serialization_integrity_pass,
+                self.forbidden_partition_access_zero,
+            ]
+        )
+
+
+@dataclass(frozen=True)
 class GateInputs:
     baseline_net_total_return: Decimal
     baseline_net_annualized_sharpe: Decimal

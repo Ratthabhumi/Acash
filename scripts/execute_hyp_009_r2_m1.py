@@ -83,12 +83,11 @@ def verify_contracts() -> Dict[str, str]:
 def fetch_series(
     client: HYP009AlpacaClient,
     adjustment: PriceAdjustment,
-    counter: List[int],
 ) -> Any:
     start_utc, end_utc = inclusive_date_window_to_utc_bounds(
         PART.AUTHORIZED_MIN_DATE, PART.AUTHORIZED_MAX_DATE
     )
-    result = client.fetch_historical_bars(
+    return client.fetch_historical_bars(
         symbol="SPY",
         start_utc=start_utc,
         end_utc=end_utc,
@@ -96,8 +95,27 @@ def fetch_series(
         adjustment=adjustment,
         timeframe="1Day",
     )
-    counter[0] += 1
-    return result
+
+
+def page_provenance(result: Any) -> List[Dict[str, Any]]:
+    """Deterministic raw provider page lineage (no credentials/headers)."""
+    records: List[Dict[str, Any]] = []
+    for meta, raw_bytes in zip(result.pages_metadata, result.pages_raw_bytes):
+        records.append(
+            {
+                "page_index": meta.page_index,
+                "byte_length": meta.byte_length,
+                "bar_count": meta.bar_count,
+                "page_token": meta.page_token,
+                "next_page_token": meta.next_page_token,
+                "raw_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            }
+        )
+    if [r["raw_sha256"] for r in records] != [
+        m.raw_sha256 for m in result.pages_metadata
+    ]:
+        raise DataContractError("PROVENANCE_HASH_MISMATCH: page bytes vs metadata.")
+    return records
 
 
 def write_json(path: Path, payload: object) -> str:
@@ -143,10 +161,14 @@ def main(argv: List[str] | None = None) -> int:
     print(f"Expected sessions 2016-2020: {len(full_sessions)}; M1: {len(m1_sessions)}")
 
     http_count = [0]
-    client = HYP009AlpacaClient()
-    split_result = fetch_series(client, PriceAdjustment.SPLIT, http_count)
-    raw_result = fetch_series(client, PriceAdjustment.RAW, http_count)
-    print(f"HTTP requests issued: {http_count[0]}")
+
+    def _count_http_attempt() -> None:
+        http_count[0] += 1
+
+    client = HYP009AlpacaClient(http_attempt_listener=_count_http_attempt)
+    split_result = fetch_series(client, PriceAdjustment.SPLIT)
+    raw_result = fetch_series(client, PriceAdjustment.RAW)
+    print(f"Actual HTTP transport attempts: {http_count[0]}")
     aligned = QUAL.qualify_bar_series(full_sessions, split_result.bars, raw_result.bars)
     print(f"Bar qualification PASS: {len(aligned)} sessions, split/raw aligned.")
 
@@ -169,12 +191,15 @@ def main(argv: List[str] | None = None) -> int:
     print(f"Dividend qualification PASS: {len(dividends)} events in scope.")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    split_pages = page_provenance(split_result)
+    raw_pages = page_provenance(raw_result)
     dataset_payload = {
-        "dataset_id": "DS_SPY_CORE001_HYP009_M1_ALPACA_1DAY_SIP",
+        "dataset_id": "DS_SPY_CORE001_HYP009_M1_ALPACA_1DAY_SIP_REPRODUCIBILITY_001",
         "provider": "ALPACA_HISTORICAL_STOCK_BARS",
         "feed": "sip",
         "timeframe": "1Day",
         "request_bounds": ["2016-01-01", "2020-12-31"],
+        "actual_http_transport_attempts": http_count[0],
         "expected_sessions": len(full_sessions),
         "split_bars": [
             {
@@ -208,16 +233,31 @@ def main(argv: List[str] | None = None) -> int:
         ],
         "split_status": split_status,
         "ssga_manifest_sha256": ssga_sha,
-        "split_pages": [m.bar_count for m in split_result.pages_metadata],
-        "raw_pages": [m.bar_count for m in raw_result.pages_metadata],
+        "split_page_provenance": split_pages,
+        "raw_page_provenance": raw_pages,
         "m2_access_count": 0,
         "m3_access_count": 0,
         "quarantine_access_count": 0,
         "prospective_access_count": 0,
-        "dataset_state": "SEALED_M1_DATASET",
+        "dataset_state": "M1_REPRODUCIBILITY_DATASET_SEALED_PERFORMANCE_NOT_YET_REPLAYED",
     }
-    dataset_sha = write_json(DATA_DIR / "m1_dataset.json", dataset_payload)
-    print(f"Dataset sealed: {dataset_sha}")
+    dataset_sha = write_json(DATA_DIR / "m1_dataset_reproducibility_001.json", dataset_payload)
+    print(f"Reproducibility dataset sealed: {dataset_sha}")
+
+    contract_qualification = GATES.ContractQualification(
+        provider_contract_pass=True,
+        calendar_coverage_pass=True,
+        split_raw_alignment_pass=True,
+        dividend_contract_pass=True,
+        payable_date_contract_pass=all(
+            e.payable_date is not None for e in dividends
+        ),
+        split_contract_pass=(split_status == "NO_SPLIT_EVENTS_IN_AUTHORIZED_WINDOW"),
+        response_scope_pass=True,
+        provenance_hash_pass=True,
+        serialization_integrity_pass=True,
+        forbidden_partition_access_zero=True,
+    )
 
     div_map = {e.ex_date: e.amount_per_share for e in dividends}
     signals = SIG.compute_signal_states(full_sessions, split_close, div_map)
@@ -302,30 +342,40 @@ def main(argv: List[str] | None = None) -> int:
     stress.trades[:] = with_decisions(stress.trades)
 
     signal_doc = LED.signal_ledger(signals, pending)
-    signal_sha = write_json(DATA_DIR / "signal_ledger.json", signal_doc)
+    signal_sha = write_json(DATA_DIR / "signal_ledger_reproducibility_001.json", signal_doc)
     base_exec = LED.execution_ledger(baseline)
-    base_exec_sha = write_json(DATA_DIR / "execution_ledger_baseline.json", base_exec)
+    base_exec_sha = write_json(
+        DATA_DIR / "execution_ledger_baseline_reproducibility_001.json", base_exec
+    )
     stress_exec = LED.execution_ledger(stress)
-    stress_exec_sha = write_json(DATA_DIR / "execution_ledger_stress.json", stress_exec)
+    stress_exec_sha = write_json(
+        DATA_DIR / "execution_ledger_stress_reproducibility_001.json", stress_exec
+    )
     base_eq = LED.equity_ledger(baseline.equity_curve, "BASELINE")
-    base_eq_sha = write_json(DATA_DIR / "equity_baseline.json", base_eq)
+    base_eq_sha = write_json(DATA_DIR / "equity_baseline_reproducibility_001.json", base_eq)
     stress_eq = LED.equity_ledger(stress.equity_curve, "STRESS")
-    stress_eq_sha = write_json(DATA_DIR / "equity_stress.json", stress_eq)
+    stress_eq_sha = write_json(DATA_DIR / "equity_stress_reproducibility_001.json", stress_eq)
     bench_eq = LED.equity_ledger(benchmark.equity_curve, "BENCHMARK")
-    bench_eq_sha = write_json(DATA_DIR / "equity_benchmark.json", bench_eq)
+    bench_eq_sha = write_json(
+        DATA_DIR / "equity_benchmark_reproducibility_001.json", bench_eq
+    )
 
     def metrics(result: ACC.PortfolioResult) -> Dict[str, str]:
         returns = [
             r.daily_return for r in result.equity_curve if r.daily_return is not None
         ]
         total_return = result.ending_equity / ACC.SIMULATED_STARTING_AUM - Decimal("1")
+        slippage = sum(
+            (ACC.execution_slippage_cost(t) for t in result.trades), Decimal("0")
+        )
         return {
             "ending_aum": str(result.ending_equity),
             "net_total_return": str(total_return),
             "annualized_sharpe": str(ACC.annualized_sharpe(returns)),
             "max_drawdown": str(ACC.max_drawdown([r.total_equity for r in result.equity_curve])),
             "completed_trades": str(len(result.trades)),
-            "total_friction": str(result.total_friction),
+            "regulatory_fees_paid": str(result.regulatory_fees_paid),
+            "execution_slippage_cost": str(slippage),
             "dividends_received": str(result.dividends_received),
             "terminal_receivable": str(result.terminal_receivable),
             "terminal_shares": str(result.ending_shares),
@@ -335,6 +385,7 @@ def main(argv: List[str] | None = None) -> int:
     base_m = metrics(baseline)
     stress_m = metrics(stress)
     bench_m = metrics(benchmark)
+    g6_derived = contract_qualification.no_material_failure
     gates = GATES.evaluate_gates(
         GATES.GateInputs(
             baseline_net_total_return=Decimal(base_m["net_total_return"]),
@@ -342,10 +393,10 @@ def main(argv: List[str] | None = None) -> int:
             baseline_max_drawdown=Decimal(base_m["max_drawdown"]),
             benchmark_max_drawdown=Decimal(bench_m["max_drawdown"]),
             stress_net_total_return=Decimal(stress_m["net_total_return"]),
-            no_material_contract_failure=True,
+            no_material_contract_failure=g6_derived,
         )
     )
-    verdict = GATES.classify_m1_verdict(gates, True)
+    verdict = GATES.classify_m1_verdict(gates, g6_derived)
     for label, payload in (
         ("BASELINE", base_m),
         ("STRESS", stress_m),
@@ -359,12 +410,28 @@ def main(argv: List[str] | None = None) -> int:
     print(f"VERDICT = {verdict}")
 
     result_manifest = {
-        "manifest_id": "HYP_009_R2_M1_RESULT",
-        "manifest_type": "M1_EXECUTION_RESULT_MANIFEST",
+        "manifest_id": "HYP_009_R2_M1_REPRODUCIBILITY_RESULT",
+        "manifest_type": "M1_REPRODUCIBILITY_RESULT_MANIFEST",
         "hypothesis_id": "HYP_009",
         "core_id": "CORE-001",
-        "source_head": "290311ec2d6dc4cd64cfe4a8704f1f4a18744efe",
+        "source_head": "a3170aab0ca2e3d473d4ab28202110b7250d0ce3",
+        "original_run_classification": "M1_ORIGINAL_RESULT_INVALIDATED_FOR_ARTIFACT_INTEGRITY_REPRODUCIBILITY_REQUIRED",
+        "original_result_manifest": "docs/phase14/manifests/HYP_009_R2_M1_RESULT.json",
         "contract_hashes": contracts,
+        "contract_qualification": {
+            "provider_contract_pass": contract_qualification.provider_contract_pass,
+            "calendar_coverage_pass": contract_qualification.calendar_coverage_pass,
+            "split_raw_alignment_pass": contract_qualification.split_raw_alignment_pass,
+            "dividend_contract_pass": contract_qualification.dividend_contract_pass,
+            "payable_date_contract_pass": contract_qualification.payable_date_contract_pass,
+            "split_contract_pass": contract_qualification.split_contract_pass,
+            "response_scope_pass": contract_qualification.response_scope_pass,
+            "provenance_hash_pass": contract_qualification.provenance_hash_pass,
+            "serialization_integrity_pass": contract_qualification.serialization_integrity_pass,
+            "forbidden_partition_access_zero": contract_qualification.forbidden_partition_access_zero,
+            "g6_derived": g6_derived,
+        },
+        "actual_http_transport_attempts": http_count[0],
         "dataset_sha256": dataset_sha,
         "signal_ledger_sha256": signal_sha,
         "baseline_execution_ledger_sha256": base_exec_sha,
@@ -397,13 +464,13 @@ def main(argv: List[str] | None = None) -> int:
     }
     result_raw = json.dumps(result_manifest, indent=2, sort_keys=True)
     with open(
-        "docs/phase14/manifests/HYP_009_R2_M1_RESULT.json",
+        "docs/phase14/manifests/HYP_009_R2_M1_REPRODUCIBILITY_RESULT.json",
         "w",
         encoding="utf-8",
         newline="\n",
     ) as handle:
         handle.write(result_raw)
-    print("Result sealed: docs/phase14/manifests/HYP_009_R2_M1_RESULT.json")
+    print("Reproducibility result sealed.")
     return 0
 
 

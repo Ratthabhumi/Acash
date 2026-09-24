@@ -53,7 +53,7 @@ class TradeRecord:
     sec31_fee: Decimal
     finra_taf: Decimal
     cat_fee: Decimal
-    total_friction: Decimal
+    regulatory_fees_paid: Decimal
     cash_before: Decimal
     cash_after: Decimal
     shares_before: int
@@ -82,7 +82,7 @@ class PortfolioResult:
     ending_equity: Decimal = Decimal("0")
     ending_cash: Decimal = Decimal("0")
     ending_shares: int = 0
-    total_friction: Decimal = Decimal("0")
+    regulatory_fees_paid: Decimal = Decimal("0")
     dividends_received: Decimal = Decimal("0")
     terminal_receivable: Decimal = Decimal("0")
 
@@ -97,6 +97,22 @@ def adverse_fill(raw_open: Decimal, side: str, slippage_bps: Decimal) -> Decimal
     if side == "SELL":
         return raw_open * (Decimal("1") - factor)
     raise DataContractError(f"FILL_UNKNOWN_SIDE: {side}.")
+
+
+def execution_slippage_cost(trade: TradeRecord) -> Decimal:
+    """Deterministic adverse-slippage cost embedded in the fill price.
+
+    BUY pays (fill - raw_open) per share; SELL receives (raw_open - fill) less
+    per share. Pure reporting derivation — never alters accounting state.
+    """
+    per_share = (
+        trade.fill_price - trade.raw_open
+        if trade.side == "BUY"
+        else trade.raw_open - trade.fill_price
+    )
+    if trade.side not in ("BUY", "SELL"):
+        raise DataContractError(f"SLIPPAGE_UNKNOWN_SIDE: {trade.side}.")
+    return per_share * Decimal(trade.quantity)
 
 
 def sell_side_fees(
@@ -238,7 +254,7 @@ def run_portfolio(
                             sec31_fee=Decimal("0.00"),
                             finra_taf=Decimal("0.00"),
                             cat_fee=Decimal("0.00"),
-                            total_friction=Decimal("0.00"),
+                            regulatory_fees_paid=Decimal("0.00"),
                             cash_before=cash_before,
                             cash_after=cash,
                             shares_before=shares,
@@ -270,14 +286,14 @@ def run_portfolio(
                             sec31_fee=sec31,
                             finra_taf=taf,
                             cat_fee=cat,
-                            total_friction=friction,
+                            regulatory_fees_paid=friction,
                             cash_before=cash_before,
                             cash_after=cash,
                             shares_before=shares,
                             shares_after=0,
                         )
                     )
-                    result.total_friction += friction
+                    result.regulatory_fees_paid += friction
                     shares = 0
                 state = target
 

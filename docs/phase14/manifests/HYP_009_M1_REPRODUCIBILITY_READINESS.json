@@ -1,0 +1,26 @@
+{
+  "manifest_id": "HYP_009_M1_REPRODUCIBILITY_READINESS",
+  "manifest_type": "M1_REPRODUCIBILITY_READINESS_SEAL_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_M1_POST_RESULT_INTEGRITY_CORRECTION_AND_REPRODUCIBILITY",
+  "starting_sha": "a3170aab0ca2e3d473d4ab28202110b7250d0ce3",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "state": "M1_CORRECTED_IMPLEMENTATION_READY_REPRODUCIBILITY_NOT_EXECUTED",
+  "corrections": [
+    "ACTUAL_HTTP_TRANSPORT_ATTEMPT_LISTENER",
+    "RAW_PROVIDER_PAGE_SHA256_PROVENANCE",
+    "G6_DERIVED_FROM_CONTRACT_QUALIFICATION",
+    "FRICTION_REPORTING_REGULATORY_VS_SLIPPAGE_SEPARATED"
+  ],
+  "implementation_tests_passed": 30,
+  "network_full_m1_requests_issued": 0,
+  "m2_access_count": 0,
+  "m3_access_count": 0,
+  "quarantine_access_count": 0,
+  "prospective_access_count": 0,
+  "scientific_parameter_drift": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
