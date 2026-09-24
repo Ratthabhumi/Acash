@@ -26,14 +26,17 @@
     "spy_veu_agg_bil_authoritative_distribution_histories",
     "canonical_nyse_calendar_with_sealed_unscheduled_closure_corrections"
   ],
-  "parameter_config_json": "{\"absolute_rule\":\"RISK_ON_IFF_SPY_M12_GT_BIL_M12_ELSE_AGG\",\"absolute_tie\":\"AGG\",\"benchmark\":\"SPY_BUY_AND_HOLD\",\"calendar_authority\":\"CANONICAL_NYSE_CALENDAR_IN_REPOSITORY\",\"cash_return\":0.0,\"decision_date_rule\":\"LAST_ELIGIBLE_REGULAR_NYSE_SESSION_OF_CALENDAR_MONTH\",\"direction_states\":[\"LONG_ONLY_ALLOCATION\"],\"equality_behavior_absolute\":\"AGG\",\"equality_behavior_relative\":\"SPY\",\"execution_price_role\":\"RAW_MARKET_PRICES\",\"execution_timing\":\"NEXT_ELIGIBLE_REGULAR_SESSION_OPEN_AFTER_SIGNAL\",\"frequency\":\"MONTHLY\",\"historical_classification\":\"HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND\",\"lookback_months\":12,\"max_gross_leverage\":1.0,\"missing_data_policy\":\"FAIL_CLOSED_NO_INTERPOLATION_NO_FORWARD_FILL\",\"momentum_formula\":\"M12_ASSET_T_EQ_TR_T_DIV_TR_T-12_MINUS_1\",\"numerical_gates_authorized\":false,\"planned_trial_count_k\":1,\"pre_warmup_behavior\":\"NO_SIGNAL_FAIL_CLOSED\",\"prospective_minimum_completed_decisions\":24,\"prospective_minimum_eligible_sessions\":504,\"quarantine\":\"2026-08-15_TO_PROSPECTIVE_START_EXCLUSIVE_STRICT_ZERO_ACCESS\",\"rebalance_rule\":\"TRADE_ONLY_ON_TARGET_CHANGE\",\"recent_stress\":\"2025-01-01_TO_2026-08-14_PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE\",\"relative_rule\":\"SPY_IFF_SPY_M12_GTE_VEU_M12_ELSE_VEU\",\"research_priority\":\"CORE_FIRST\",\"selection_status\":\"SELECTED_PRE_PERFORMANCE_FROM_EXTERNAL_LITERATURE_AND_OPERATIONAL_SIMPLICITY\",\"short_state\":false,\"signal_series_role\":\"TOTAL_RETURN_OR_EQUIVALENT_CAUSALLY_RECONSTRUCTED_SERIES\",\"strategy_family\":\"ETF_NATIVE_RELATIVE_PLUS_ABSOLUTE_MOMENTUM_ASSET_ALLOCATION\",\"target_holdings\":[\"SPY\",\"VEU\",\"AGG\"],\"volatility_targeting\":false,\"warmup_completed_month_end_observations\":13,\"working_title\":\"ETF-Native Global Equity Dual Momentum Core\"}",
+  "parameter_config_json": "{\"absolute_rule\":\"RISK_ON_IFF_SPY_M12_GT_BIL_M12_ELSE_AGG\",\"absolute_tie\":\"AGG\",\"benchmark\":\"SPY_BUY_AND_HOLD\",\"calendar_authority\":\"CANONICAL_NYSE_CALENDAR_IN_REPOSITORY\",\"cash_return\":0.0,\"decision_date_rule\":\"LAST_ELIGIBLE_REGULAR_NYSE_SESSION_OF_CALENDAR_MONTH\",\"direction_states\":[\"LONG_ONLY_ALLOCATION\"],\"equality_behavior_absolute\":\"AGG\",\"equality_behavior_relative\":\"SPY\",\"execution_price_role\":\"RAW_MARKET_PRICES\",\"execution_timing\":\"NEXT_ELIGIBLE_REGULAR_SESSION_OPEN_AFTER_SIGNAL\",\"frequency\":\"MONTHLY\",\"historical_classification\":\"HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND\",\"lookback_months\":12,\"max_gross_leverage\":1.0,\"missing_data_policy\":\"FAIL_CLOSED_NO_INTERPOLATION_NO_FORWARD_FILL\",\"momentum_formula\":\"M12_ASSET_T_EQ_TR_T_DIV_TR_T-12_MINUS_1\",\"numerical_gates_authorized\":true,\"planned_trial_count_k\":1,\"pre_warmup_behavior\":\"NO_SIGNAL_FAIL_CLOSED\",\"prospective_minimum_completed_decisions\":24,\"prospective_minimum_eligible_sessions\":504,\"quarantine\":\"2026-08-15_TO_PROSPECTIVE_START_EXCLUSIVE_STRICT_ZERO_ACCESS\",\"rebalance_rule\":\"TRADE_ONLY_ON_TARGET_CHANGE\",\"recent_stress\":\"2025-01-01_TO_2026-08-14_PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE\",\"relative_rule\":\"SPY_IFF_SPY_M12_GTE_VEU_M12_ELSE_VEU\",\"research_priority\":\"CORE_FIRST\",\"selection_status\":\"SELECTED_PRE_PERFORMANCE_FROM_EXTERNAL_LITERATURE_AND_OPERATIONAL_SIMPLICITY\",\"short_state\":false,\"signal_series_role\":\"TOTAL_RETURN_OR_EQUIVALENT_CAUSALLY_RECONSTRUCTED_SERIES\",\"strategy_family\":\"ETF_NATIVE_RELATIVE_PLUS_ABSOLUTE_MOMENTUM_ASSET_ALLOCATION\",\"target_holdings\":[\"SPY\",\"VEU\",\"AGG\"],\"volatility_targeting\":false,\"warmup_completed_month_end_observations\":13,\"working_title\":\"ETF-Native Global Equity Dual Momentum Core\"}",
   "expected_direction": "LONG",
   "target_horizons": [
     21
   ],
   "primary_horizon": 21,
   "invalidation_criteria": {
-    "status": "NOT_PREREGISTERED_NO_NUMERICAL_GATES_AUTHORIZED"
+    "status": "R1_NUMERICAL_GATES_SEALED",
+    "authority": "docs/phase14/manifests/manifest_r1_HYP_010.json",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6"
   },
   "open_before_r1": [],
   "registered_at_utc": "2026-09-24T00:00:00Z",
@@ -41,5 +44,8 @@
   "inception_token_id": "AUTH_INCEPTION_HYP_010_baf1924f0934d395",
   "proposal_sha256": "baf1924f0934d39571a249e771eff6c92cfe84f7293aa06d064a4545ecd205f3",
   "preregistration_sha256": "e4d873d78131974a8f7e29c5146e526615d78257abb3f51ae338b86403fda456",
-  "r1_manifest": "docs/phase14/manifests/manifest_r1_HYP_010.json"
+  "r1_manifest": "docs/phase14/manifests/manifest_r1_HYP_010.json",
+  "r1_gate_authority": "docs/phase14/manifests/manifest_r1_HYP_010.json",
+  "r1_gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+  "r1_resolution_authority": "POST_R1_METADATA_AND_PROSPECTIVE_RECONCILIATION"
 }

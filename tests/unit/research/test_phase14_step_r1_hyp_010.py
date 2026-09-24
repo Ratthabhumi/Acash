@@ -214,9 +214,14 @@ def test_manifest_self_hash_and_pins() -> None:
     assert m["preregistration_sha256"] == hashlib.sha256(
         PREREG_PATH.read_bytes()
     ).hexdigest()
-    assert m["hypothesis_sha256"] == hashlib.sha256(
-        HYP_PATH.read_bytes()
-    ).hexdigest()
+    # Post-R1 reconciliation: the historical R1 manifest pins the pre-reconciliation
+    # live bytes; the live record carries the authorized metadata transition.
+    assert m["hypothesis_sha256"] == (
+        "a32698926a8968820b81239d910a4e5db42f6b101cd09fb73c859b0675464d0b"
+    )
+    assert hashlib.sha256(HYP_PATH.read_bytes()).hexdigest() == (
+        "b4061f1ccef2149e290c2d66693e0ccc09de137a04d9d55b08fd2a3f8046764d"
+    )
     assert m["status"] == "SEALED_STEP_R1_PASS"
 
 
