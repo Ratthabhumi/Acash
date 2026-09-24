@@ -38,6 +38,9 @@ from acash.research.hyp_009 import qualification as QUAL
 from acash.research.hyp_009 import signals as SIG
 
 EXPECTED_SSGA_MANIFEST_SHA256 = "0f99ab26884e8767d2bade35039770a342e66c0628dbd2b8ff1e03075cc871bc"
+# Corrected lineage suffix: preserves the invalidated prior M2 local files.
+CORRECTED_SUFFIX = "dividend_corrected_001"
+CORRECTED_DATASET_ID = "DS_SPY_CORE001_HYP009_M2_ALPACA_1DAY_SIP_DIVIDEND_CORRECTED_001"
 M1_DATASET_PATH = Path("data/hyp_009/m1_dataset_reproducibility_001.json")
 M1_SIGNAL_PATH = Path("data/hyp_009/signal_ledger_reproducibility_001.json")
 M2_DATA_DIR = Path("data/hyp_009")
@@ -174,10 +177,18 @@ def main(argv: List[str] | None = None) -> int:
     if ssga_sha != EXPECTED_SSGA_MANIFEST_SHA256:
         raise DataContractError(f"SSGA_MANIFEST_MISMATCH: {ssga_sha}. STOP.")
     ssga = json.loads(ssga_path.read_text(encoding="utf-8"))
-    m2_dividends = QUAL.qualify_dividends(
-        ssga["distributions"], PART.M2_START, PART.M2_END
+    supplement_path = Path(
+        "docs/research/manifests/HYP_009_SPY_2024_DIVIDEND_AUTHORITY_SUPPLEMENT.json"
     )
-    print(f"M2 dividend qualification PASS: {len(m2_dividends)} events.")
+    supplement = json.loads(supplement_path.read_text(encoding="utf-8"))
+    composite_records = list(ssga["distributions"]) + list(supplement["distributions"])
+    m2_dividends = QUAL.qualify_dividends(
+        composite_records, PART.M2_START, PART.M2_END
+    )
+    coverage_status = QUAL.require_quarterly_authority_coverage(
+        m2_dividends, PART.M2_START, PART.M2_END
+    )
+    print(f"M2 dividend qualification PASS: {len(m2_dividends)} events. {coverage_status}.")
 
     # Causal TR continuity: rebuild over M1-sealed + M2 observations, verify sealed levels.
     full_divs: Dict[date, Decimal] = dict(m1_divs)
@@ -311,7 +322,7 @@ def main(argv: List[str] | None = None) -> int:
 
     M2_DATA_DIR.mkdir(parents=True, exist_ok=True)
     dataset_payload = {
-        "dataset_id": "DS_SPY_CORE001_HYP009_M2_ALPACA_1DAY_SIP",
+        "dataset_id": CORRECTED_DATASET_ID,
         "provider": "ALPACA_HISTORICAL_STOCK_BARS",
         "feed": "sip",
         "timeframe": "1Day",
@@ -335,16 +346,20 @@ def main(argv: List[str] | None = None) -> int:
         ],
         "split_status": split_status,
         "ssga_manifest_sha256": ssga_sha,
+        "dividend_supplement_manifest": "docs/research/manifests/HYP_009_SPY_2024_DIVIDEND_AUTHORITY_SUPPLEMENT.json",
+        "dividend_coverage": "DIVIDEND_AUTHORITY_COVERAGE_COMPLETE_16_OF_16",
         "split_page_provenance": page_provenance(split_result),
         "raw_page_provenance": page_provenance(raw_result),
         "m2_access_count": http_count[0],
         "m3_access_count": 0,
         "quarantine_access_count": 0,
         "prospective_access_count": 0,
-        "dataset_state": "M2_DATASET_QUALIFIED_AND_SEALED_PERFORMANCE_NOT_YET_OBSERVED",
+        "dataset_state": "M2_DIVIDEND_CORRECTED_DATASET_SEALED_PERFORMANCE_NOT_YET_OBSERVED",
     }
-    dataset_sha = write_json(M2_DATA_DIR / "m2_dataset.json", dataset_payload)
-    print(f"M2 dataset sealed: {dataset_sha}")
+    dataset_sha = write_json(
+        M2_DATA_DIR / f"m2_dataset_{CORRECTED_SUFFIX}.json", dataset_payload
+    )
+    print(f"M2 corrected dataset sealed: {dataset_sha}")
 
     signal_doc = {
         "warmup_authority": "SEALED_M1_SIGNAL_HISTORY_THROUGH_2020_12_31",
@@ -352,21 +367,28 @@ def main(argv: List[str] | None = None) -> int:
         "rows": m2_signals,
         "pending_terminal": pending,
     }
-    signal_sha = write_json(M2_DATA_DIR / "m2_signal_ledger.json", signal_doc)
+    signal_sha = write_json(
+        M2_DATA_DIR / f"m2_signal_ledger_{CORRECTED_SUFFIX}.json", signal_doc
+    )
     base_exec_sha = write_json(
-        M2_DATA_DIR / "m2_execution_ledger_baseline.json", LED.execution_ledger(baseline)
+        M2_DATA_DIR / f"m2_execution_ledger_baseline_{CORRECTED_SUFFIX}.json",
+        LED.execution_ledger(baseline),
     )
     stress_exec_sha = write_json(
-        M2_DATA_DIR / "m2_execution_ledger_stress.json", LED.execution_ledger(stress)
+        M2_DATA_DIR / f"m2_execution_ledger_stress_{CORRECTED_SUFFIX}.json",
+        LED.execution_ledger(stress),
     )
     base_eq_sha = write_json(
-        M2_DATA_DIR / "m2_equity_baseline.json", LED.equity_ledger(baseline.equity_curve, "M2_BASELINE")
+        M2_DATA_DIR / f"m2_equity_baseline_{CORRECTED_SUFFIX}.json",
+        LED.equity_ledger(baseline.equity_curve, "M2_BASELINE"),
     )
     stress_eq_sha = write_json(
-        M2_DATA_DIR / "m2_equity_stress.json", LED.equity_ledger(stress.equity_curve, "M2_STRESS")
+        M2_DATA_DIR / f"m2_equity_stress_{CORRECTED_SUFFIX}.json",
+        LED.equity_ledger(stress.equity_curve, "M2_STRESS"),
     )
     bench_eq_sha = write_json(
-        M2_DATA_DIR / "m2_equity_benchmark.json", LED.equity_ledger(benchmark.equity_curve, "M2_BENCHMARK")
+        M2_DATA_DIR / f"m2_equity_benchmark_{CORRECTED_SUFFIX}.json",
+        LED.equity_ledger(benchmark.equity_curve, "M2_BENCHMARK"),
     )
 
     def metrics(result: ACC.PortfolioResult) -> Dict[str, str]:
@@ -414,7 +436,7 @@ def main(argv: List[str] | None = None) -> int:
         page_shas_recomputed=tuple(p["raw_sha256"] for p in dataset_payload["split_page_provenance"])
         + tuple(p["raw_sha256"] for p in dataset_payload["raw_page_provenance"]),
         sealed_hash_pairs=(
-            (dataset_sha, hashlib.sha256((M2_DATA_DIR / "m2_dataset.json").read_bytes()).hexdigest()),
+            (dataset_sha, hashlib.sha256((M2_DATA_DIR / f"m2_dataset_{CORRECTED_SUFFIX}.json").read_bytes()).hexdigest()),
         ),
         # M2 accesses are AUTHORIZED (counted separately as m2_access_count);
         # forbidden partitions (M3/quarantine/prospective/HYP007) are zero.
@@ -439,11 +461,14 @@ def main(argv: List[str] | None = None) -> int:
     print(f"VERDICT = {verdict}")
 
     result_manifest = {
-        "manifest_id": "HYP_009_R2_M2_RESULT",
-        "manifest_type": "M2_EXECUTION_RESULT_MANIFEST",
+        "manifest_id": "HYP_009_R2_M2_DIVIDEND_CORRECTED_RESULT",
+        "manifest_type": "M2_DIVIDEND_CORRECTED_RESULT_MANIFEST",
         "hypothesis_id": "HYP_009",
         "core_id": "CORE-001",
-        "source_head": "53f031028e186d4081ce5a47df722a08be48de95",
+        "source_head": "2d3c1b23c0db621a8c677df005809f7f7fee9629",
+        "supersedes_invalidated_run": "docs/phase14/manifests/HYP_009_R2_M2_RESULT.json",
+        "invalidation": "M2_INVALIDATED_BY_DIVIDEND_AUTHORITY_GAP",
+        "dividend_authority": "COMPOSITE_MEC0015_PLUS_2024_SUPPLEMENT_16_EVENTS",
         "contract_hashes": contracts,
         "dec2020_initial_state": "LONG",
         "first_m2_execution_date": first_m2_execution.isoformat(),
@@ -472,9 +497,9 @@ def main(argv: List[str] | None = None) -> int:
         "no_real_orders": True,
     }
     result_raw = json.dumps(result_manifest, indent=2, sort_keys=True)
-    with open("docs/phase14/manifests/HYP_009_R2_M2_RESULT.json", "w", encoding="utf-8", newline="\n") as handle:
+    with open("docs/phase14/manifests/HYP_009_R2_M2_DIVIDEND_CORRECTED_RESULT.json", "w", encoding="utf-8", newline="\n") as handle:
         handle.write(result_raw)
-    print("M2 result sealed.")
+    print("M2 dividend-corrected result sealed.")
     return 0
 
 

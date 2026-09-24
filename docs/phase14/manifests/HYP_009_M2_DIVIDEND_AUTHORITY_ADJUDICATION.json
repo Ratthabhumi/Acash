@@ -1,0 +1,15 @@
+{
+  "manifest_id": "HYP_009_M2_DIVIDEND_AUTHORITY_ADJUDICATION",
+  "manifest_type": "M2_DIVIDEND_AUTHORITY_ADJUDICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_M2_DIVIDEND_AUTHORITY_CORRECTION_AND_REPRODUCIBILITY",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "prior_m2_commit": "2d3c1b23c0db621a8c677df005809f7f7fee9629",
+  "prior_m2_classification": "M2_INVALIDATED_BY_DIVIDEND_AUTHORITY_GAP",
+  "scientific_terminal_verdict": "NOT_ESTABLISHED",
+  "prior_fail_verdict_authoritative": false,
+  "historical_authority_end_date": "2024-04-30",
+  "m2_partition_end": "2024-12-31",
+  "dividend_contract_pass_under_old_authority": false,
+  "g6_under_old_authority": false
+}

@@ -1,0 +1,21 @@
+{
+  "manifest_id": "HYP_009_M2_DIVIDEND_CORRECTION_READINESS",
+  "manifest_type": "M2_DIVIDEND_CORRECTION_READINESS_SEAL_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_M2_DIVIDEND_AUTHORITY_CORRECTION_AND_REPRODUCIBILITY",
+  "starting_sha": "2d3c1b23c0db621a8c677df005809f7f7fee9629",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "state": "M2_CORRECTED_DIVIDEND_AUTHORITY_READY_REPRODUCIBILITY_NOT_EXECUTED",
+  "prior_m2_classification": "M2_INVALIDATED_BY_DIVIDEND_AUTHORITY_GAP",
+  "composite_authority_events": 16,
+  "network_m2_requests_issued": 0,
+  "m2_access_count": 0,
+  "m3_access_count": 0,
+  "quarantine_access_count": 0,
+  "prospective_access_count": 0,
+  "scientific_parameter_drift": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}

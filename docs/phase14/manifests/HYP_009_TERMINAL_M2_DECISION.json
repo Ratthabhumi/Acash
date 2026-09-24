@@ -1,0 +1,20 @@
+{
+  "manifest_id": "HYP_009_TERMINAL_M2_DECISION",
+  "manifest_type": "HYPOTHESIS_TERMINAL_DECISION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_M2_DIVIDEND_AUTHORITY_CORRECTION_AND_REPRODUCIBILITY",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "hyp_009_state": "HYP_009_TERMINAL_NOT_SUPPORTED_AT_LOCKED_M2",
+  "core_001_state": "CORE-001_RESEARCH_OBJECTIVE_REMAINS_OPEN",
+  "corrected_m2_verdict": "FAIL_CORE_EDGE_NOT_SUPPORTED",
+  "corrected_m2_manifest": "docs/phase14/manifests/HYP_009_R2_M2_DIVIDEND_CORRECTED_RESULT.json",
+  "failing_gate": "G4",
+  "core_m2_mdd": "0.2557624443312489943856781208",
+  "benchmark_m2_mdd": "0.2409397072449208847315742869",
+  "m3_authorized": false,
+  "successor_hypothesis_created": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}

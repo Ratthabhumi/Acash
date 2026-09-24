@@ -75,6 +75,38 @@ def qualify_dividends(
     return sorted(events, key=lambda event: event.ex_date)
 
 
+def require_quarterly_authority_coverage(
+    events: Sequence[DividendEvent],
+    scope_start: date,
+    scope_end: date,
+) -> str:
+    """Fail closed unless every calendar quarter in scope has >= 1 ex-date.
+
+    SPY's sealed distribution history is quarterly; a scope quarter without an
+    authoritative ex-date is an authority coverage gap, NOT a zero distribution.
+    Never infer D=0 from absent authority.
+    """
+    if scope_start > scope_end:
+        raise DataContractError("DIVIDEND_SCOPE_INVERTED.")
+    covered = {(e.ex_date.year, (e.ex_date.month - 1) // 3) for e in events}
+    year, month = scope_start.year, scope_start.month
+    end_key = (scope_end.year, (scope_end.month - 1) // 3)
+    missing: List[str] = []
+    while (year, (month - 1) // 3) <= end_key:
+        quarter = (month - 1) // 3
+        if (year, quarter) not in covered:
+            missing.append(f"{year}-Q{quarter + 1}")
+        month += 3
+        if month > 12:
+            month = 1
+            year += 1
+    if missing:
+        raise DataContractError(
+            f"BLOCKED_DIVIDEND_AUTHORITY_COVERAGE_GAP: no authoritative ex-date for {missing}."
+        )
+    return "DIVIDEND_AUTHORITY_COVERAGE_COMPLETE"
+
+
 def require_no_unbound_splits(
     sessions: Sequence[date],
     split_close: Mapping[date, Decimal],

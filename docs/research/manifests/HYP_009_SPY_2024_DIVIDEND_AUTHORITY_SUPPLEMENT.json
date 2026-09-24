@@ -1,0 +1,33 @@
+{
+  "manifest_id": "HYP_009_SPY_2024_DIVIDEND_AUTHORITY_SUPPLEMENT",
+  "manifest_type": "DIVIDEND_AUTHORITY_SUPPLEMENT_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_M2_DIVIDEND_AUTHORITY_CORRECTION_AND_REPRODUCIBILITY",
+  "dividend_authority": "STATE_STREET_SPY_OFFICIAL_DISTRIBUTION_HISTORY",
+  "authority_references": [
+    "https://www.ssga.com/au/en_gb/intermediary/etfs/state-street-spdr-sp-500-etf-spy",
+    "https://www.ssga.com/us/en/individual/resources/documents/etf-dividend-distributions"
+  ],
+  "distributions": [
+    {
+      "ex_date": "2024-06-21",
+      "record_date": "2024-06-24",
+      "payable_date": "2024-08-14",
+      "cash_distribution": "1.75902",
+      "currency": "USD"
+    },
+    {
+      "ex_date": "2024-09-20",
+      "record_date": "2024-09-23",
+      "payable_date": "2024-11-14",
+      "cash_distribution": "1.74553",
+      "currency": "USD"
+    },
+    {
+      "ex_date": "2024-12-20",
+      "record_date": "2024-12-23",
+      "payable_date": "2025-02-14",
+      "cash_distribution": "1.96555",
+      "currency": "USD"
+    }
+  ]
+}
