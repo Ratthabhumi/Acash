@@ -1,0 +1,29 @@
+{
+  "manifest_id": "HYP_009_PRE_M2_ACCOUNTING_CLARIFICATION",
+  "manifest_type": "PRE_M2_ACCOUNTING_CLARIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_PRE_M2_RECONCILIATION_AND_LOCKED_M2_EXECUTION",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "m2_partition": ["2021-01-01", "2024-12-31"],
+  "m2_classification": "LOCKED_HISTORICAL_OOS_NOT_PRISTINE_RESEARCHER_BLIND",
+  "simulated_m2_starting_aum_usd": "100000.00",
+  "m1_aum_carried_into_m2": false,
+  "signal_warmup_authority": "SEALED_M1_DATASET_AND_SIGNAL_LEDGER_THROUGH_2020_12_31",
+  "dec2020_frozen_signal": {
+    "decision_date": "2020-12-31",
+    "signal_level": "2.051430715393109079173373811",
+    "sma10": "1.760537145277627779062534321",
+    "state": "LONG",
+    "transition": false
+  },
+  "m2_benchmark": {
+    "starting_aum": "100000.00",
+    "entry": "FIRST_ELIGIBLE_M2_SESSION_OPEN_WHOLE_SHARES_2BPS_ADVERSE",
+    "residual_cash_return": 0.0,
+    "rebalancing": "PROHIBITED",
+    "forced_terminal_liquidation": "PROHIBITED"
+  },
+  "m2_terminal_rule": "PENDING_NEXT_PARTITION_EXECUTION_NOT_EXECUTED_IF_2025_EXECUTION",
+  "real_capital_authority_usd": "0.00",
+  "no_real_orders": true
+}

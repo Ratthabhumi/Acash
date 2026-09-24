@@ -1,0 +1,24 @@
+{
+  "manifest_id": "HYP_009_M1_G6_EVIDENCE_RECONCILIATION",
+  "manifest_type": "M1_G6_EVIDENCE_RECONCILIATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_009_PRE_M2_RECONCILIATION_AND_LOCKED_M2_EXECUTION",
+  "hypothesis_id": "HYP_009",
+  "core_id": "CORE-001",
+  "m1_g6_evidence_reconciled": "PASS",
+  "g6_derived": true,
+  "flags_derived_from_sealed_artifacts": [
+    "provider_contract_pass",
+    "calendar_coverage_pass",
+    "split_raw_alignment_pass",
+    "dividend_contract_pass",
+    "payable_date_contract_pass",
+    "split_contract_pass",
+    "response_scope_pass",
+    "provenance_hash_pass",
+    "serialization_integrity_pass",
+    "forbidden_partition_access_zero"
+  ],
+  "m1_rerun_performed": false,
+  "m2_access_count": 0,
+  "scientific_verdict_unchanged": "M1_SUPPORTED_FOR_LOCKED_OOS_CONTINUATION"
+}
