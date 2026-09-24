@@ -1,0 +1,139 @@
+{
+  "manifest_type": "HYPOTHESIS_REGISTRATION_MANIFEST",
+  "hypothesis_id": "HYP_011",
+  "hypothesis_ordinal": 11,
+  "hypothesis_ordinal_alias": "HYP_011",
+  "core_id": "CORE-001",
+  "mechanism_id": null,
+  "candidate_ordinal_within_core": 3,
+  "canonical_title": "HYP_011 \u2014 Global 80/20 Strategic Allocation Core",
+  "hypothesis_version": "v1.0",
+  "hypothesis_sha256": "7cfc74f16ef85ac222f6605c3eae0b1cf499848bb71c797efbd7fef79a570e78",
+  "registered_at_utc": "2026-09-24T21:00:00Z",
+  "author": "external_research_authority_specification__implementation_only_encoding",
+  "target_symbol": "ACWI",
+  "target_holdings": {
+    "ACWI": 0.8,
+    "AGG": 0.2
+  },
+  "benchmark_primary": "SPY_BUY_AND_HOLD",
+  "primary_timeframe": "1Day",
+  "search_trial_count_k": 1,
+  "human_authorization": "AUTHORIZE_CORE_001_PARK_HYP_010_AND_PREREGISTER_HYP_011_R1",
+  "inception_token_id": "AUTH_INCEPTION_HYP_011_d975fd46ad1a1b2f",
+  "proposal_sha256": "d975fd46ad1a1b2ffdc1aeb51a0e88a471bc3b1509251a660d143a405ca4b83e",
+  "preregistration_sha256": "04dab8edb5b3c442094c284485eeddfc83c0b3c91e9c6db59e0f7694144fbe2e",
+  "upstream_authority_hashes": {
+    "inception_doc_sha256": "f92be501b0b3f662cd6a7d8953d2ef8a6045ef034c2f6cfda1c1985c840e54b0",
+    "inception_manifest_sha256": "5189f6dc7ad61424bf3f4f30e9fe7ce2d22303a8fe9f68c214d1c60289f37af9",
+    "semantic_conformance_record_sha256": "244c1b83ecf146f56abb743b8aeaaf86cbcf056508b1b2bb8e50f35033a651cd",
+    "semantic_conformance_manifest_sha256": "2b55400b94156a647bf7ab3e1fc80cc92ee80861d21a20f97af32864f92b9db0",
+    "hyp_011_pre_r1_proposal_record_sha256": "fa40c3f965f403e7a7be4d3044ed7560b085152a1a4714560fdf323b306cb2f8",
+    "hyp_010_park_manifest_sha256": "d997f6cad2ad9cd3ba79300fe8625f5c2feeb6d6374ac66a7bdaeb43b79d5a7d"
+  },
+  "contract_hashes": {
+    "strategy_specification_hash": "3b2159c02d4013711523538f9ea5ea8668aa0761cc05b12c2d163a9721c35c68",
+    "provider_contract_hash": "fc2f1e7525d9cb69e74ac4d1464acab4b4855ee2e0e4ed72208f2591af749edc",
+    "sample_partition_hash": "0bf1c4fe4762037f542caf7562a10ab97a0fb23d1f0fc20b967f0830762f3a13",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b"
+  },
+  "strategy_contract": {
+    "core_id": "CORE-001",
+    "hypothesis_id": "HYP_011",
+    "working_title": "Global 80/20 Strategic Allocation Core",
+    "strategy_family": "STATIC_GLOBAL_EQUITY_BOND_STRATEGIC_ASSET_ALLOCATION",
+    "target_holdings": {
+      "ACWI": 0.8,
+      "AGG": 0.2
+    },
+    "signal_present": false,
+    "lookback_present": false,
+    "rebalance_frequency": "ANNUAL",
+    "first_allocation_rule": "FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_ON_OR_AFTER_PARTITION_START",
+    "scheduled_rebalance_rule": "FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_OF_EACH_NEW_CALENDAR_YEAR",
+    "whole_share_solver": "SELLS_FIRST_THEN_BUYS_FLOOR_WITH_MIN_DEVIATION_DECREMENT_TIE_BREAK_AGG",
+    "max_gross_leverage": 1.0,
+    "volatility_targeting": false,
+    "cash_return": 0.0,
+    "candidate_ordinal_within_core": 3
+  },
+  "provider_contract": {
+    "bars_provider": "ALPACA_HISTORICAL_STOCK_BARS",
+    "bars_endpoint": "/v2/stocks/{symbol}/bars",
+    "symbols": [
+      "ACWI",
+      "AGG",
+      "SPY"
+    ],
+    "bars_timeframe": "1Day",
+    "bars_feed": "sip",
+    "signal_price_adjustment": "split",
+    "execution_price_adjustment": "raw",
+    "dividend_authorities": {
+      "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
+      "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+      "SPY": "STATE_STREET_SPDR_OFFICIAL"
+    },
+    "vendor_adjusted_close_as_authority": false,
+    "no_provider_substitution": true,
+    "no_provider_splicing": true
+  },
+  "sample_partitions": {
+    "research_start": "2016-01-01",
+    "historical_exposed_replication": {
+      "start": "2016-01-01",
+      "end": "2024-12-31",
+      "classification": "HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND"
+    },
+    "recent_stress": {
+      "start": "2025-01-01",
+      "end": "2026-08-14",
+      "classification": "PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE"
+    },
+    "quarantine": {
+      "start": "2026-08-15",
+      "end": "PROSPECTIVE_START_EXCLUSIVE",
+      "classification": "STRICT_ZERO_ACCESS_PRE_PROSPECTIVE_GAP"
+    },
+    "prospective": {
+      "rule": "FIRST_ELIGIBLE_REGULAR_SESSION_OPEN_STRICTLY_AFTER_R1_COMMIT_TIMESTAMP",
+      "state_at_r1": "LOCKED_ZERO_ACCESS",
+      "minimum_eligible_sessions": 504,
+      "minimum_annual_rebalances": 2
+    }
+  },
+  "acceptance_gates": {
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6",
+    "G1_net_total_return": "> 0",
+    "G2_net_annualized_sharpe": ">= 0.50",
+    "sharpe_convention": {
+      "periods_per_year": 252,
+      "ddof": 1,
+      "risk_free_rate": 0,
+      "zero_variance": "FAIL_CLOSED"
+    },
+    "G3_max_drawdown": "<= 0.35",
+    "G4_core_mdd_lt_benchmark_mdd": true,
+    "G5_10bps_stress_net_total_return": "> 0",
+    "G6_no_material_contract_failure": true,
+    "net_of": "BASELINE_FRICTION",
+    "no_discretionary_override": true
+  },
+  "legacy_schema_semantics": "NON_BINDING_SCHEMA_COMPATIBILITY_METADATA_ONLY",
+  "predecessors": {
+    "HYP_009": "TERMINAL_NOT_SUPPORTED_CANDIDATE_NOT_PARENT",
+    "HYP_010": "BLOCKED_NON_FALSIFIED_CANDIDATE_NOT_PARENT"
+  },
+  "status": "SEALED_STEP_R1_PASS",
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "market_data_access": "ZERO",
+  "historical_data_access": "ZERO",
+  "recent_stress_access": "ZERO",
+  "quarantine_access": "ZERO",
+  "prospective_access": "ZERO",
+  "is_paper_authorized": false,
+  "is_live_authorized": false,
+  "next_required_step": "REVIEW_CORE_001_HYP_011_R1_AND_AUTHORIZE_PROVIDER_AND_SPONSOR_QUALIFICATION",
+  "manifest_sha256": "fc81757fc333f9a62c3bf25264cf51091f4895825353313e1d8c086570b0fbab"
+}

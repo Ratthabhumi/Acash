@@ -1,0 +1,80 @@
+{
+  "manifest_id": "CORE_001_HYP_011_RESEARCH_INCEPTION",
+  "manifest_type": "CORE_RESEARCH_INCEPTION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_PARK_HYP_010_AND_PREREGISTER_HYP_011_R1",
+  "core_id": "CORE-001",
+  "hypothesis_id": "HYP_011",
+  "state": "PROPOSED_NOT_PREREGISTERED",
+  "working_title": "Global 80/20 Strategic Allocation Core",
+  "strategy_family": "STATIC_GLOBAL_EQUITY_BOND_STRATEGIC_ASSET_ALLOCATION",
+  "scientific_parent_hypothesis_id": null,
+  "mechanism_id": null,
+  "candidate_ordinal_within_core": 3,
+  "predecessors": {
+    "HYP_009": "TERMINAL_NOT_SUPPORTED_CANDIDATE_NOT_PARENT",
+    "HYP_010": "BLOCKED_NON_FALSIFIED_CANDIDATE_NOT_PARENT"
+  },
+  "target_holdings": {"ACWI": 0.8, "AGG": 0.2},
+  "signal_present": false,
+  "lookback_present": false,
+  "rebalance_frequency": "ANNUAL",
+  "first_allocation_rule": "FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_ON_OR_AFTER_PARTITION_START",
+  "scheduled_rebalance_rule": "FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_OF_EACH_NEW_CALENDAR_YEAR",
+  "max_gross_leverage": 1.0,
+  "short_state": false,
+  "volatility_targeting": false,
+  "provider_contract": {
+    "bars_provider": "ALPACA_HISTORICAL_STOCK_BARS",
+    "symbols": ["ACWI", "AGG", "SPY"],
+    "timeframe": "1Day",
+    "feed": "sip",
+    "execution_adjustment": "raw",
+    "lineage_adjustment": "split"
+  },
+  "dividend_authorities": {
+    "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
+    "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+    "SPY": "STATE_STREET_SPDR_OFFICIAL"
+  },
+  "benchmark_primary": "SPY_BUY_AND_HOLD",
+  "benchmark_secondary_informational": "ACWI_BUY_AND_HOLD",
+  "historical_partition": {
+    "start": "2016-01-01",
+    "end": "2024-12-31",
+    "classification": "HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND"
+  },
+  "recent_stress_partition": {
+    "start": "2025-01-01",
+    "end": "2026-08-14",
+    "classification": "PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE"
+  },
+  "quarantine": {
+    "start": "2026-08-15",
+    "end": "PROSPECTIVE_START_EXCLUSIVE",
+    "classification": "STRICT_ZERO_ACCESS_PRE_PROSPECTIVE_GAP"
+  },
+  "prospective": {
+    "rule": "FIRST_ELIGIBLE_REGULAR_SESSION_OPEN_STRICTLY_AFTER_R1_COMMIT_TIMESTAMP",
+    "state_at_r1": "LOCKED_ZERO_ACCESS",
+    "minimum_eligible_sessions": 504,
+    "minimum_annual_rebalances": 2
+  },
+  "acceptance_gates": {
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6",
+    "G1_net_total_return": "> 0",
+    "G2_net_annualized_sharpe": ">= 0.50",
+    "G3_max_drawdown": "<= 0.35",
+    "G4_core_mdd_lt_benchmark_mdd": true,
+    "G5_10bps_stress_net_total_return": "> 0",
+    "G6_no_material_contract_failure": true
+  },
+  "trial_count_k": 1,
+  "formal_r1_registration": false,
+  "research_re_inception_gate_invoked": false,
+  "market_data_network_requests": 0,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "next_human_action": "REVIEW_CORE_001_HYP_011_R1_AND_AUTHORIZE_PROVIDER_AND_SPONSOR_QUALIFICATION"
+}
