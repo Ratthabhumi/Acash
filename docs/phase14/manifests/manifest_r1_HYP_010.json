@@ -1,0 +1,157 @@
+{
+  "manifest_type": "HYPOTHESIS_REGISTRATION_MANIFEST",
+  "hypothesis_id": "HYP_010",
+  "hypothesis_ordinal": 10,
+  "hypothesis_ordinal_alias": "HYP_010",
+  "core_id": "CORE-001",
+  "mechanism_id": null,
+  "canonical_title": "HYP_010 \u2014 ETF-Native Global Equity Dual Momentum Core",
+  "hypothesis_version": "v1.0",
+  "hypothesis_sha256": "a32698926a8968820b81239d910a4e5db42f6b101cd09fb73c859b0675464d0b",
+  "registered_at_utc": "2026-09-24T00:00:00Z",
+  "author": "external_research_authority_specification__implementation_only_encoding",
+  "target_symbol": "SPY",
+  "target_universe": [
+    "SPY",
+    "VEU",
+    "AGG"
+  ],
+  "signal_only_assets": [
+    "BIL"
+  ],
+  "primary_timeframe": "1Day",
+  "search_trial_count_k": 1,
+  "human_authorization": "AUTHORIZE_CORE_001_HYP_010_R1_PREREGISTRATION",
+  "inception_token_id": "AUTH_INCEPTION_HYP_010_baf1924f0934d395",
+  "proposal_sha256": "baf1924f0934d39571a249e771eff6c92cfe84f7293aa06d064a4545ecd205f3",
+  "preregistration_sha256": "e4d873d78131974a8f7e29c5146e526615d78257abb3f51ae338b86403fda456",
+  "upstream_authority_hashes": {
+    "inception_doc_sha256": "47ca6f3ae46376c24fc3c40559725c8df320cd2fde9da0b1f0a56607cf1a5d0c",
+    "inception_manifest_sha256": "313e1f998bc5fd310ab8ef0a2c6745b1bc0fababe0b51e5cdffa393a7bfa3696",
+    "semantic_conformance_record_sha256": "8070b01a41cf671809edd4d546ba286fa73325f9efc995d2341a0b5d85b45b73",
+    "semantic_conformance_manifest_sha256": "31bfeed0e81c9efd7eed92392492ae413a52edb18127636b38cc1c2632a98a81",
+    "hyp_010_pre_r1_proposal_record_sha256": "f54c68b84dff27696b216a51d0034be4abf8b0803d4bf5bb506e5422c5824b65",
+    "hyp_009_terminal_decision_manifest_sha256": "d19785182ea355c578bc3c8b03fc8a7539714ee1f0c6f147469b482cafec4749"
+  },
+  "contract_hashes": {
+    "strategy_specification_hash": "63ff2373c08dde547495f96bc62564ac2851933da33ca7fb074fd5575ae984e3",
+    "provider_contract_hash": "a91ce9ec239dfc239f8e772d5ea89d4ff474507a1c51b319849dca35b313e3a9",
+    "sample_partition_hash": "a9cf14955fffcf16719f8cdd36a7bf1ab81f6ff4bdbdf1c083e13c1663c66d13",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b"
+  },
+  "strategy_contract": {
+    "core_id": "CORE-001",
+    "hypothesis_id": "HYP_010",
+    "working_title": "ETF-Native Global Equity Dual Momentum Core",
+    "strategy_family": "ETF_NATIVE_RELATIVE_PLUS_ABSOLUTE_MOMENTUM_ASSET_ALLOCATION",
+    "etf_universe": {
+      "SPY": "US_EQUITY",
+      "VEU": "NON_US_EQUITY",
+      "AGG": "DEFENSIVE",
+      "BIL": "HURDLE_SIGNAL_ONLY"
+    },
+    "target_holdings": [
+      "SPY",
+      "VEU",
+      "AGG"
+    ],
+    "frequency": "MONTHLY",
+    "decision_date_rule": "LAST_ELIGIBLE_REGULAR_NYSE_SESSION_OF_CALENDAR_MONTH",
+    "momentum_formula": "M12_ASSET_T_EQ_TR_T_DIV_TR_T-12_MINUS_1",
+    "absolute_rule": "RISK_ON_IFF_SPY_M12_GT_BIL_M12_ELSE_AGG",
+    "absolute_tie": "AGG",
+    "relative_rule": "SPY_IFF_SPY_M12_GTE_VEU_M12_ELSE_VEU",
+    "relative_tie": "SPY",
+    "lookback_months": 12,
+    "warmup_month_end_observations": 13,
+    "max_gross_leverage": 1.0,
+    "volatility_targeting": false,
+    "cash_return": 0.0,
+    "execution_timing": "NEXT_ELIGIBLE_REGULAR_SESSION_OPEN_AFTER_SIGNAL",
+    "rebalance_rule": "TRADE_ONLY_ON_TARGET_CHANGE"
+  },
+  "provider_contract": {
+    "bars_provider": "ALPACA_HISTORICAL_STOCK_BARS",
+    "bars_endpoint": "/v2/stocks/{symbol}/bars",
+    "symbols": [
+      "SPY",
+      "VEU",
+      "AGG",
+      "BIL"
+    ],
+    "bars_timeframe": "1Day",
+    "bars_feed": "sip",
+    "signal_price_adjustment": "split",
+    "execution_price_adjustment": "raw",
+    "dividend_authorities": {
+      "SPY": "STATE_STREET_SPDR_OFFICIAL",
+      "BIL": "STATE_STREET_SPDR_OFFICIAL",
+      "VEU": "VANGUARD_OFFICIAL",
+      "AGG": "BLACKROCK_ISHARES_OFFICIAL"
+    },
+    "vendor_adjusted_close_as_authority": false,
+    "no_provider_substitution": true,
+    "no_provider_splicing": true
+  },
+  "sample_partitions": {
+    "research_start": "2016-01-01",
+    "warmup": {
+      "start": "2016-01-01",
+      "end": "2017-01-31",
+      "month_ends": 13
+    },
+    "historical_exposed_replication": {
+      "start": "FIRST_EXECUTION_AFTER_JAN_2017_DECISION",
+      "end": "2024-12-31",
+      "classification": "HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND"
+    },
+    "recent_stress": {
+      "start": "2025-01-01",
+      "end": "2026-08-14",
+      "classification": "PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE"
+    },
+    "quarantine": {
+      "start": "2026-08-15",
+      "end": "PROSPECTIVE_START_EXCLUSIVE",
+      "classification": "STRICT_ZERO_ACCESS_PRE_PROSPECTIVE_GAP"
+    },
+    "prospective": {
+      "rule": "FIRST_NYSE_REGULAR_SESSION_OPEN_STRICTLY_AFTER_R1_COMMIT_TIMESTAMP",
+      "state_at_r1": "LOCKED_ZERO_ACCESS",
+      "minimum_completed_decisions": 24,
+      "minimum_eligible_sessions": 504
+    }
+  },
+  "acceptance_gates": {
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6",
+    "G1_net_total_return": "> 0",
+    "G2_net_annualized_sharpe": ">= 0.50",
+    "sharpe_convention": {
+      "periods_per_year": 252,
+      "ddof": 1,
+      "risk_free_rate": 0,
+      "zero_variance": "FAIL_CLOSED"
+    },
+    "G3_max_drawdown": "<= 0.35",
+    "G4_core_mdd_lt_benchmark_mdd": true,
+    "G5_10bps_stress_net_total_return": "> 0",
+    "G6_no_material_contract_failure": true,
+    "net_of": "BASELINE_FRICTION",
+    "no_discretionary_override": true
+  },
+  "legacy_schema_semantics": "NON_BINDING_SCHEMA_COMPATIBILITY_METADATA_ONLY",
+  "predecessor_candidate_context": "HYP_009",
+  "predecessor_relationship": "TERMINAL_PREDECESSOR_CANDIDATE_NOT_PARENT_NOT_AMENDED_NOT_RESCUED",
+  "status": "SEALED_STEP_R1_PASS",
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "market_data_access": "ZERO",
+  "historical_data_access": "ZERO",
+  "recent_stress_access": "ZERO",
+  "quarantine_access": "ZERO",
+  "prospective_access": "ZERO",
+  "is_paper_authorized": false,
+  "is_live_authorized": false,
+  "next_required_step": "REVIEW_CORE_001_HYP_010_R1_AND_AUTHORIZE_PROVIDER_DATA_QUALIFICATION",
+  "manifest_sha256": "fba365716f7494275537f6118ccaa70efc25629f1f1f47bfd1b4046ebee17ff0"
+}

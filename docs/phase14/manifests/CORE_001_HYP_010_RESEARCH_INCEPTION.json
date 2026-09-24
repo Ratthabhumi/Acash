@@ -1,0 +1,73 @@
+{
+  "manifest_id": "CORE_001_HYP_010_RESEARCH_INCEPTION",
+  "manifest_type": "CORE_RESEARCH_INCEPTION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_010_R1_PREREGISTRATION",
+  "core_id": "CORE-001",
+  "hypothesis_id": "HYP_010",
+  "state": "PROPOSED_NOT_PREREGISTERED",
+  "working_title": "ETF-Native Global Equity Dual Momentum Core",
+  "strategy_family": "ETF_NATIVE_RELATIVE_PLUS_ABSOLUTE_MOMENTUM_ASSET_ALLOCATION",
+  "scientific_parent_hypothesis_id": null,
+  "predecessor_candidate_context": "HYP_009",
+  "predecessor_relationship": "TERMINAL_PREDECESSOR_CANDIDATE_NOT_PARENT_NOT_AMENDED_NOT_RESCUED",
+  "mechanism_id": null,
+  "etf_universe": {
+    "SPY": "US_EQUITY_CANDIDATE",
+    "VEU": "NON_US_EQUITY_CANDIDATE",
+    "AGG": "DEFENSIVE_RISK_OFF_HOLDING",
+    "BIL": "TREASURY_BILL_HURDLE_SIGNAL_ONLY"
+  },
+  "target_holdings": ["SPY", "VEU", "AGG"],
+  "frequency": "MONTHLY",
+  "decision_date_rule": "LAST_ELIGIBLE_REGULAR_NYSE_SESSION_OF_CALENDAR_MONTH",
+  "execution_timing": "NEXT_ELIGIBLE_REGULAR_SESSION_OPEN_AFTER_SIGNAL",
+  "momentum_formula": "M12_ASSET_T_EQ_TR_T_DIV_TR_T-12_MINUS_1",
+  "absolute_rule": "RISK_ON_IFF_SPY_M12_GT_BIL_M12_ELSE_AGG",
+  "absolute_tie": "AGG",
+  "relative_rule": "SPY_IFF_SPY_M12_GTE_VEU_M12_ELSE_VEU",
+  "relative_tie": "SPY",
+  "warmup_month_end_observations": 13,
+  "warmup_window": ["2016-01-01", "2017-01-31"],
+  "historical_partition": {
+    "start": "FIRST_EXECUTION_AFTER_JAN_2017_DECISION",
+    "end": "2024-12-31",
+    "classification": "HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND"
+  },
+  "recent_stress_partition": {
+    "start": "2025-01-01",
+    "end": "2026-08-14",
+    "classification": "PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE"
+  },
+  "quarantine": {
+    "start": "2026-08-15",
+    "end": "PROSPECTIVE_START_EXCLUSIVE",
+    "classification": "STRICT_ZERO_ACCESS_PRE_PROSPECTIVE_GAP"
+  },
+  "prospective": {
+    "rule": "FIRST_NYSE_REGULAR_SESSION_OPEN_STRICTLY_AFTER_R1_COMMIT_TIMESTAMP",
+    "state_at_r1": "LOCKED_ZERO_ACCESS",
+    "minimum_completed_decisions": 24,
+    "minimum_eligible_sessions": 504
+  },
+  "acceptance_gates": {
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6",
+    "G1_net_total_return": "> 0",
+    "G2_net_annualized_sharpe": ">= 0.50",
+    "G3_max_drawdown": "<= 0.35",
+    "G4_core_mdd_lt_benchmark_mdd": true,
+    "G5_10bps_stress_net_total_return": "> 0",
+    "G6_no_material_contract_failure": true
+  },
+  "max_gross_leverage": 1.0,
+  "volatility_targeting": false,
+  "cash_return": 0.0,
+  "trial_count_k": 1,
+  "formal_r1_registration": false,
+  "research_re_inception_gate_invoked": false,
+  "market_data_network_requests": 0,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "next_human_action": "REVIEW_CORE_001_HYP_010_R1_AND_AUTHORIZE_PROVIDER_DATA_QUALIFICATION"
+}

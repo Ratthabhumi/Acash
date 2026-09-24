@@ -1,0 +1,29 @@
+{
+  "manifest_id": "HYP_010_PRE_R1_SEMANTIC_CONFORMANCE",
+  "manifest_type": "PRE_R1_SEMANTIC_CONFORMANCE_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_010_R1_PREREGISTRATION",
+  "hypothesis_id": "HYP_010",
+  "core_id": "CORE-001",
+  "state": "PROPOSED_NOT_PREREGISTERED",
+  "semantic_conformance_status": "PASS_WITH_NON_BINDING_LEGACY_SCHEMA_ADAPTERS",
+  "non_binding_fields": [
+    "expected_direction",
+    "target_horizons",
+    "primary_horizon"
+  ],
+  "non_binding_classification": "NON_BINDING_SCHEMA_COMPATIBILITY_METADATA_ONLY",
+  "target_horizons_stub_value": [21],
+  "primary_horizon_stub_value": 21,
+  "expected_direction_stub_value": "LONG",
+  "hypothesis_record_mutated": false,
+  "binding_strategy_authority": [
+    "docs/phase14/CORE_001_HYP_010_RESEARCH_INCEPTION.md",
+    "docs/phase14/manifests/CORE_001_HYP_010_RESEARCH_INCEPTION.json",
+    "docs/phase14/hypotheses/HYP_010.json:parameter_config_json"
+  ],
+  "fixed_holding_period": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
