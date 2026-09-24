@@ -1,0 +1,48 @@
+{
+  "manifest_id": "HYP_010_VEU_AUTHORITY_RESOLUTION",
+  "manifest_type": "VEU_SPONSOR_AUTHORITY_RESOLUTION_MANIFEST",
+  "hypothesis_id": "HYP_010",
+  "core_id": "CORE-001",
+  "starting_sha": "cd4d7b8b763147e57def53f2c8da6cc2b262181f",
+  "vanguard_ten_year_limitation_reproduced": true,
+  "ten_year_message": "Use this table to view or export up to ten years of distributions for this fund.",
+  "march_2016_source": {
+    "url": "https://www.asx.com.au/asxpdf/20160412/pdf/436gkphsb8vkch.pdf",
+    "title": "Distribution FX Rate Announcement",
+    "dated": "2016-04-12",
+    "local_evidence": "data/hyp_010/evidence/veu_asx_fx_rate_20160412.pdf",
+    "local_sha256": "4b0aa5ac3e32306dd3bfcde483436c73e22179dd0a3e157e6313df3ae1b8dbf0",
+    "amount_usd": "0.148",
+    "amount_status": "ISSUER_ORIGIN_CORROBORATED",
+    "us_share_dates": "ABSENT",
+    "context": "AUSTRALIAN_CDI_ONLY"
+  },
+  "june_2016_source": {
+    "url": "https://announcements.asx.com.au/asxpdf/20160614/pdf/437w6k5s88djln.pdf",
+    "title": "Final Distribution (VEU, VTS) 2016.06.14",
+    "dated": "2016-06-14",
+    "local_evidence": "data/hyp_010/evidence/veu_asx_final_distribution_20160614.pdf",
+    "local_sha256": "b5b6af0dfb0114117fb48036d04fc8e501efd0c77fa5e42d833c74ddb84a27c9",
+    "amount_usd": "0.53",
+    "amount_status": "ISSUER_ORIGIN_CORROBORATED",
+    "cdi_timetable": {
+      "ex_date": "2016-06-15",
+      "record_date": "2016-06-16",
+      "payment_date": "2016-07-14"
+    },
+    "us_share_dates": "ABSENT",
+    "context": "AUSTRALIAN_CDI_ONLY_US_AU_DIFFERENCES_STATED"
+  },
+  "sec_fulltext_check": "HTTP_403_NO_EVIDENCE_OBTAINED",
+  "inference_used": false,
+  "substitution_used": false,
+  "veu_verdict": "BLOCKED_VEU_DIVIDEND_AUTHORITY_NO_RECORDS",
+  "overall_r2_verdict": "R2_PROVIDER_QUALIFIED_SPONSOR_AUTHORITY_BLOCKED",
+  "full_acquisition_executed": false,
+  "momentum_computed": false,
+  "performance_computed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
