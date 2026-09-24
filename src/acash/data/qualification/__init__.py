@@ -8,6 +8,8 @@ from acash.data.qualification.client import (
     SipContractViolationError,
     SipRetrievalResult,
 )
+from acash.data.qualification.hyp_009_daily_client import HYP009AlpacaClient
+
 from acash.data.qualification.engine import HistoricalSipQualificationEngine
 from acash.data.qualification.guard import (
     FifteenMinuteAccessGuard,
@@ -47,6 +49,7 @@ __all__ = [
     "AlpacaAccessDeniedError",
     "AlpacaAuthenticationError",
     "AlpacaHistoricalSipClient",
+    "HYP009AlpacaClient",
     "AlpacaRateLimitExceededError",
     "FifteenMinuteAccessGuard",
     "HistoricalBarValidator",
