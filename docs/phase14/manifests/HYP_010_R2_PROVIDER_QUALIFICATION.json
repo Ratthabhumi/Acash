@@ -1,0 +1,50 @@
+{
+  "manifest_id": "HYP_010_R2_PROVIDER_QUALIFICATION",
+  "manifest_type": "R2_PROVIDER_QUALIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_010_R2_PROVIDER_AND_SPONSOR_AUTHORITY_QUALIFICATION",
+  "starting_sha": "2653c2564e8ab0216183d9bd5773670bddb27020",
+  "hypothesis_id": "HYP_010",
+  "core_id": "CORE-001",
+  "key_id_present": true,
+  "secret_present": true,
+  "credential_precheck": "PASS",
+  "provider": "ALPACA_HISTORICAL_STOCK_BARS",
+  "symbols": ["SPY", "VEU", "AGG", "BIL"],
+  "timeframe": "1Day",
+  "feed": "sip",
+  "probe_window": ["2017-01-03", "2017-01-06"],
+  "provider_start_utc": "2017-01-03T00:00:00+00:00",
+  "provider_end_utc": "2017-01-06T23:59:59.999999+00:00",
+  "expected_sessions": ["2017-01-03", "2017-01-04", "2017-01-05", "2017-01-06"],
+  "http_attempts": 8,
+  "results": {
+    "SPY": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"},
+    "VEU": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"},
+    "AGG": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"},
+    "BIL": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"}
+  },
+  "page_shas": {
+    "SPY": {
+      "split": ["260dd52aab32ce520a3e48b7be061fdef4049ae0710d8488cb94c858f8da3716"],
+      "raw": ["260dd52aab32ce520a3e48b7be061fdef4049ae0710d8488cb94c858f8da3716"]
+    },
+    "VEU": {
+      "split": ["f32bacf8cee0b0e9c2cefdeed89c2a532f63d7af8113811dd362290ad6c46a43"],
+      "raw": ["f32bacf8cee0b0e9c2cefdeed89c2a532f63d7af8113811dd362290ad6c46a43"]
+    },
+    "AGG": {
+      "split": ["019dfa9d874bb68ee6d3b9b660f448692914a828390775f05ca34e5f1cfb0ff9"],
+      "raw": ["019dfa9d874bb68ee6d3b9b660f448692914a828390775f05ca34e5f1cfb0ff9"]
+    },
+    "BIL": {
+      "split": ["5b6c2f83d8403f504eb5aa63f9bfd3444ea15b7bafd0e521e0040fcb11b24e36"],
+      "raw": ["e9318c36205f2e2bbc4505daeffeaca73a52900b9ece2173b9dc85d0d852e5c1"]
+    }
+  },
+  "page_note": "SPY/VEU/AGG split==raw bytes (no applicable splits); BIL split!=raw (historical split-adjustment present, R3 split contract applies).",
+  "spill_count": 0,
+  "duplicate_count": 0,
+  "classification": "PROVIDER_PROBE_PASS",
+  "local_evidence": "data/hyp_010/probe_evidence.json",
+  "local_evidence_sha256": "81fa66896ae62df3f0ce6aee4218d1cb91f1a517a4acf714addff8f4a8245737"
+}

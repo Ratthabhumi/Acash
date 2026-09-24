@@ -1,0 +1,774 @@
+{
+  "distributions": [
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-02-01",
+      "payable_date": "2016-02-09",
+      "record_date": "2016-02-03"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-03-01",
+      "payable_date": "2016-03-09",
+      "record_date": "2016-03-03"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-04-01",
+      "payable_date": "2016-04-11",
+      "record_date": "2016-04-05"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-05-02",
+      "payable_date": "2016-05-10",
+      "record_date": "2016-05-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-06-01",
+      "payable_date": "2016-06-09",
+      "record_date": "2016-06-03"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-07-01",
+      "payable_date": "2016-07-12",
+      "record_date": "2016-07-06"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-08-01",
+      "payable_date": "2016-08-09",
+      "record_date": "2016-08-03"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-09-01",
+      "payable_date": "2016-09-12",
+      "record_date": "2016-09-06"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-10-03",
+      "payable_date": "2016-10-11",
+      "record_date": "2016-10-05"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2016-11-01",
+      "payable_date": "2016-11-09",
+      "record_date": "2016-11-03"
+    },
+    {
+      "cash_distribution": "0.021036",
+      "currency": "USD",
+      "ex_date": "2016-12-01",
+      "payable_date": "2016-12-09",
+      "record_date": "2016-12-05"
+    },
+    {
+      "cash_distribution": "0.009357",
+      "currency": "USD",
+      "ex_date": "2016-12-28",
+      "payable_date": "2017-01-06",
+      "record_date": "2016-12-30"
+    },
+    {
+      "cash_distribution": "0.012558",
+      "currency": "USD",
+      "ex_date": "2017-02-01",
+      "payable_date": "2017-02-09",
+      "record_date": "2017-02-03"
+    },
+    {
+      "cash_distribution": "0.012181",
+      "currency": "USD",
+      "ex_date": "2017-03-01",
+      "payable_date": "2017-03-09",
+      "record_date": "2017-03-03"
+    },
+    {
+      "cash_distribution": "0.014439",
+      "currency": "USD",
+      "ex_date": "2017-04-03",
+      "payable_date": "2017-04-11",
+      "record_date": "2017-04-05"
+    },
+    {
+      "cash_distribution": "0.016639",
+      "currency": "USD",
+      "ex_date": "2017-05-01",
+      "payable_date": "2017-05-09",
+      "record_date": "2017-05-03"
+    },
+    {
+      "cash_distribution": "0.027035",
+      "currency": "USD",
+      "ex_date": "2017-06-01",
+      "payable_date": "2017-06-09",
+      "record_date": "2017-06-05"
+    },
+    {
+      "cash_distribution": "0.025193",
+      "currency": "USD",
+      "ex_date": "2017-07-03",
+      "payable_date": "2017-07-12",
+      "record_date": "2017-07-06"
+    },
+    {
+      "cash_distribution": "0.031680",
+      "currency": "USD",
+      "ex_date": "2017-08-01",
+      "payable_date": "2017-08-09",
+      "record_date": "2017-08-03"
+    },
+    {
+      "cash_distribution": "0.032914",
+      "currency": "USD",
+      "ex_date": "2017-09-01",
+      "payable_date": "2017-09-12",
+      "record_date": "2017-09-06"
+    },
+    {
+      "cash_distribution": "0.031762",
+      "currency": "USD",
+      "ex_date": "2017-10-02",
+      "payable_date": "2017-10-10",
+      "record_date": "2017-10-03"
+    },
+    {
+      "cash_distribution": "0.034618",
+      "currency": "USD",
+      "ex_date": "2017-11-01",
+      "payable_date": "2017-11-09",
+      "record_date": "2017-11-02"
+    },
+    {
+      "cash_distribution": "0.065511",
+      "currency": "USD",
+      "ex_date": "2017-12-01",
+      "payable_date": "2017-12-11",
+      "record_date": "2017-12-04"
+    },
+    {
+      "cash_distribution": "0.081964",
+      "currency": "USD",
+      "ex_date": "2017-12-19",
+      "payable_date": "2017-12-28",
+      "record_date": "2017-12-20"
+    },
+    {
+      "cash_distribution": "0.086157",
+      "currency": "USD",
+      "ex_date": "2018-02-01",
+      "payable_date": "2018-02-07",
+      "record_date": "2018-02-02"
+    },
+    {
+      "cash_distribution": "0.079277",
+      "currency": "USD",
+      "ex_date": "2018-03-01",
+      "payable_date": "2018-03-07",
+      "record_date": "2018-03-02"
+    },
+    {
+      "cash_distribution": "0.104953",
+      "currency": "USD",
+      "ex_date": "2018-04-02",
+      "payable_date": "2018-04-06",
+      "record_date": "2018-04-03"
+    },
+    {
+      "cash_distribution": "0.107310",
+      "currency": "USD",
+      "ex_date": "2018-05-01",
+      "payable_date": "2018-05-07",
+      "record_date": "2018-05-02"
+    },
+    {
+      "cash_distribution": "0.126376",
+      "currency": "USD",
+      "ex_date": "2018-06-01",
+      "payable_date": "2018-06-07",
+      "record_date": "2018-06-04"
+    },
+    {
+      "cash_distribution": "0.126939",
+      "currency": "USD",
+      "ex_date": "2018-07-02",
+      "payable_date": "2018-07-09",
+      "record_date": "2018-07-03"
+    },
+    {
+      "cash_distribution": "0.134931",
+      "currency": "USD",
+      "ex_date": "2018-08-01",
+      "payable_date": "2018-08-07",
+      "record_date": "2018-08-02"
+    },
+    {
+      "cash_distribution": "0.138341",
+      "currency": "USD",
+      "ex_date": "2018-09-04",
+      "payable_date": "2018-09-10",
+      "record_date": "2018-09-05"
+    },
+    {
+      "cash_distribution": "0.145853",
+      "currency": "USD",
+      "ex_date": "2018-10-01",
+      "payable_date": "2018-10-05",
+      "record_date": "2018-10-02"
+    },
+    {
+      "cash_distribution": "0.150401",
+      "currency": "USD",
+      "ex_date": "2018-11-01",
+      "payable_date": "2018-11-07",
+      "record_date": "2018-11-02"
+    },
+    {
+      "cash_distribution": "0.157184",
+      "currency": "USD",
+      "ex_date": "2018-12-03",
+      "payable_date": "2018-12-07",
+      "record_date": "2018-12-04"
+    },
+    {
+      "cash_distribution": "0.160000",
+      "currency": "USD",
+      "ex_date": "2018-12-19",
+      "payable_date": "2018-12-26",
+      "record_date": "2018-12-20"
+    },
+    {
+      "cash_distribution": "0.179207",
+      "currency": "USD",
+      "ex_date": "2019-02-01",
+      "payable_date": "2019-02-07",
+      "record_date": "2019-02-04"
+    },
+    {
+      "cash_distribution": "0.170000",
+      "currency": "USD",
+      "ex_date": "2019-03-01",
+      "payable_date": "2019-03-07",
+      "record_date": "2019-03-04"
+    },
+    {
+      "cash_distribution": "0.175557",
+      "currency": "USD",
+      "ex_date": "2019-04-01",
+      "payable_date": "2019-04-05",
+      "record_date": "2019-04-02"
+    },
+    {
+      "cash_distribution": "0.173819",
+      "currency": "USD",
+      "ex_date": "2019-05-01",
+      "payable_date": "2019-05-07",
+      "record_date": "2019-05-02"
+    },
+    {
+      "cash_distribution": "0.176150",
+      "currency": "USD",
+      "ex_date": "2019-06-03",
+      "payable_date": "2019-06-07",
+      "record_date": "2019-06-04"
+    },
+    {
+      "cash_distribution": "0.165078",
+      "currency": "USD",
+      "ex_date": "2019-07-01",
+      "payable_date": "2019-07-08",
+      "record_date": "2019-07-02"
+    },
+    {
+      "cash_distribution": "0.154507",
+      "currency": "USD",
+      "ex_date": "2019-08-01",
+      "payable_date": "2019-08-07",
+      "record_date": "2019-08-02"
+    },
+    {
+      "cash_distribution": "0.168404",
+      "currency": "USD",
+      "ex_date": "2019-09-03",
+      "payable_date": "2019-09-09",
+      "record_date": "2019-09-04"
+    },
+    {
+      "cash_distribution": "0.137026",
+      "currency": "USD",
+      "ex_date": "2019-10-01",
+      "payable_date": "2019-10-07",
+      "record_date": "2019-10-02"
+    },
+    {
+      "cash_distribution": "0.138677",
+      "currency": "USD",
+      "ex_date": "2019-11-01",
+      "payable_date": "2019-11-07",
+      "record_date": "2019-11-04"
+    },
+    {
+      "cash_distribution": "0.117204",
+      "currency": "USD",
+      "ex_date": "2019-12-02",
+      "payable_date": "2019-12-06",
+      "record_date": "2019-12-03"
+    },
+    {
+      "cash_distribution": "0.115066",
+      "currency": "USD",
+      "ex_date": "2019-12-20",
+      "payable_date": "2019-12-27",
+      "record_date": "2019-12-23"
+    },
+    {
+      "cash_distribution": "0.108323",
+      "currency": "USD",
+      "ex_date": "2020-02-03",
+      "payable_date": "2020-02-07",
+      "record_date": "2020-02-04"
+    },
+    {
+      "cash_distribution": "0.097301",
+      "currency": "USD",
+      "ex_date": "2020-03-02",
+      "payable_date": "2020-03-06",
+      "record_date": "2020-03-03"
+    },
+    {
+      "cash_distribution": "0.052270",
+      "currency": "USD",
+      "ex_date": "2020-04-01",
+      "payable_date": "2020-04-07",
+      "record_date": "2020-04-02"
+    },
+    {
+      "cash_distribution": "0.014338",
+      "currency": "USD",
+      "ex_date": "2020-05-01",
+      "payable_date": "2020-05-07",
+      "record_date": "2020-05-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-06-01",
+      "payable_date": "2020-06-05",
+      "record_date": "2020-06-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-07-01",
+      "payable_date": "2020-07-07",
+      "record_date": "2020-07-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-08-03",
+      "payable_date": "2020-08-07",
+      "record_date": "2020-08-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-09-01",
+      "payable_date": "2020-09-08",
+      "record_date": "2020-09-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-10-01",
+      "payable_date": "2020-10-07",
+      "record_date": "2020-10-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-11-02",
+      "payable_date": "2020-11-06",
+      "record_date": "2020-11-03"
+    },
+    {
+      "cash_distribution": "0.003251",
+      "currency": "USD",
+      "ex_date": "2020-12-01",
+      "payable_date": "2020-12-07",
+      "record_date": "2020-12-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2020-12-18",
+      "payable_date": "2020-12-24",
+      "record_date": "2020-12-21"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-02-01",
+      "payable_date": "2021-02-05",
+      "record_date": "2021-02-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-03-01",
+      "payable_date": "2021-03-05",
+      "record_date": "2021-03-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-04-01",
+      "payable_date": "2021-04-08",
+      "record_date": "2021-04-05"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-05-03",
+      "payable_date": "2021-05-07",
+      "record_date": "2021-05-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-06-01",
+      "payable_date": "2021-06-07",
+      "record_date": "2021-06-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-07-01",
+      "payable_date": "2021-07-08",
+      "record_date": "2021-07-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-08-02",
+      "payable_date": "2021-08-06",
+      "record_date": "2021-08-03"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-09-01",
+      "payable_date": "2021-09-08",
+      "record_date": "2021-09-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-10-01",
+      "payable_date": "2021-10-07",
+      "record_date": "2021-10-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-11-01",
+      "payable_date": "2021-11-05",
+      "record_date": "2021-11-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-12-01",
+      "payable_date": "2021-12-07",
+      "record_date": "2021-12-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2021-12-17",
+      "payable_date": "2021-12-23",
+      "record_date": "2021-12-20"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2022-02-01",
+      "payable_date": "2022-02-07",
+      "record_date": "2022-02-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2022-03-01",
+      "payable_date": "2022-03-07",
+      "record_date": "2022-03-02"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2022-04-01",
+      "payable_date": "2022-04-07",
+      "record_date": "2022-04-04"
+    },
+    {
+      "cash_distribution": "0.000000",
+      "currency": "USD",
+      "ex_date": "2022-05-02",
+      "payable_date": "2022-05-06",
+      "record_date": "2022-05-03"
+    },
+    {
+      "cash_distribution": "0.031332",
+      "currency": "USD",
+      "ex_date": "2022-06-01",
+      "payable_date": "2022-06-07",
+      "record_date": "2022-06-02"
+    },
+    {
+      "cash_distribution": "0.052865",
+      "currency": "USD",
+      "ex_date": "2022-07-01",
+      "payable_date": "2022-07-08",
+      "record_date": "2022-07-05"
+    },
+    {
+      "cash_distribution": "0.096727",
+      "currency": "USD",
+      "ex_date": "2022-08-01",
+      "payable_date": "2022-08-05",
+      "record_date": "2022-08-02"
+    },
+    {
+      "cash_distribution": "0.138459",
+      "currency": "USD",
+      "ex_date": "2022-09-01",
+      "payable_date": "2022-09-08",
+      "record_date": "2022-09-02"
+    },
+    {
+      "cash_distribution": "0.155323",
+      "currency": "USD",
+      "ex_date": "2022-10-03",
+      "payable_date": "2022-10-07",
+      "record_date": "2022-10-04"
+    },
+    {
+      "cash_distribution": "0.207511",
+      "currency": "USD",
+      "ex_date": "2022-11-01",
+      "payable_date": "2022-11-07",
+      "record_date": "2022-11-02"
+    },
+    {
+      "cash_distribution": "0.260301",
+      "currency": "USD",
+      "ex_date": "2022-12-01",
+      "payable_date": "2022-12-07",
+      "record_date": "2022-12-02"
+    },
+    {
+      "cash_distribution": "0.271268",
+      "currency": "USD",
+      "ex_date": "2022-12-19",
+      "payable_date": "2022-12-23",
+      "record_date": "2022-12-20"
+    },
+    {
+      "cash_distribution": "0.335995",
+      "currency": "USD",
+      "ex_date": "2023-02-01",
+      "payable_date": "2023-02-07",
+      "record_date": "2023-02-02"
+    },
+    {
+      "cash_distribution": "0.255284",
+      "currency": "USD",
+      "ex_date": "2023-03-01",
+      "payable_date": "2023-03-07",
+      "record_date": "2023-03-02"
+    },
+    {
+      "cash_distribution": "0.372051",
+      "currency": "USD",
+      "ex_date": "2023-04-03",
+      "payable_date": "2023-04-10",
+      "record_date": "2023-04-04"
+    },
+    {
+      "cash_distribution": "0.353155",
+      "currency": "USD",
+      "ex_date": "2023-05-01",
+      "payable_date": "2023-05-05",
+      "record_date": "2023-05-02"
+    },
+    {
+      "cash_distribution": "0.370699",
+      "currency": "USD",
+      "ex_date": "2023-06-01",
+      "payable_date": "2023-06-07",
+      "record_date": "2023-06-02"
+    },
+    {
+      "cash_distribution": "0.372798",
+      "currency": "USD",
+      "ex_date": "2023-07-03",
+      "payable_date": "2023-07-10",
+      "record_date": "2023-07-05"
+    },
+    {
+      "cash_distribution": "0.393703",
+      "currency": "USD",
+      "ex_date": "2023-08-01",
+      "payable_date": "2023-08-07",
+      "record_date": "2023-08-02"
+    },
+    {
+      "cash_distribution": "0.404697",
+      "currency": "USD",
+      "ex_date": "2023-09-01",
+      "payable_date": "2023-09-08",
+      "record_date": "2023-09-05"
+    },
+    {
+      "cash_distribution": "0.394298",
+      "currency": "USD",
+      "ex_date": "2023-10-02",
+      "payable_date": "2023-10-06",
+      "record_date": "2023-10-03"
+    },
+    {
+      "cash_distribution": "0.407686",
+      "currency": "USD",
+      "ex_date": "2023-11-01",
+      "payable_date": "2023-11-07",
+      "record_date": "2023-11-02"
+    },
+    {
+      "cash_distribution": "0.419159",
+      "currency": "USD",
+      "ex_date": "2023-12-01",
+      "payable_date": "2023-12-07",
+      "record_date": "2023-12-04"
+    },
+    {
+      "cash_distribution": "0.421350",
+      "currency": "USD",
+      "ex_date": "2023-12-18",
+      "payable_date": "2023-12-22",
+      "record_date": "2023-12-19"
+    },
+    {
+      "cash_distribution": "0.406361",
+      "currency": "USD",
+      "ex_date": "2024-02-01",
+      "payable_date": "2024-02-07",
+      "record_date": "2024-02-02"
+    },
+    {
+      "cash_distribution": "0.355122",
+      "currency": "USD",
+      "ex_date": "2024-03-01",
+      "payable_date": "2024-03-07",
+      "record_date": "2024-03-04"
+    },
+    {
+      "cash_distribution": "0.404726",
+      "currency": "USD",
+      "ex_date": "2024-04-01",
+      "payable_date": "2024-04-05",
+      "record_date": "2024-04-02"
+    },
+    {
+      "cash_distribution": "0.387540",
+      "currency": "USD",
+      "ex_date": "2024-05-01",
+      "payable_date": "2024-05-07",
+      "record_date": "2024-05-02"
+    },
+    {
+      "cash_distribution": "0.405038",
+      "currency": "USD",
+      "ex_date": "2024-06-03",
+      "payable_date": "2024-06-06",
+      "record_date": "2024-06-03"
+    },
+    {
+      "cash_distribution": "0.392200",
+      "currency": "USD",
+      "ex_date": "2024-07-01",
+      "payable_date": "2024-07-05",
+      "record_date": "2024-07-01"
+    },
+    {
+      "cash_distribution": "0.402311",
+      "currency": "USD",
+      "ex_date": "2024-08-01",
+      "payable_date": "2024-08-06",
+      "record_date": "2024-08-01"
+    },
+    {
+      "cash_distribution": "0.396088",
+      "currency": "USD",
+      "ex_date": "2024-09-03",
+      "payable_date": "2024-09-06",
+      "record_date": "2024-09-03"
+    },
+    {
+      "cash_distribution": "0.371279",
+      "currency": "USD",
+      "ex_date": "2024-10-01",
+      "payable_date": "2024-10-04",
+      "record_date": "2024-10-01"
+    },
+    {
+      "cash_distribution": "0.358528",
+      "currency": "USD",
+      "ex_date": "2024-11-01",
+      "payable_date": "2024-11-06",
+      "record_date": "2024-11-01"
+    },
+    {
+      "cash_distribution": "0.334568",
+      "currency": "USD",
+      "ex_date": "2024-12-02",
+      "payable_date": "2024-12-05",
+      "record_date": "2024-12-02"
+    },
+    {
+      "cash_distribution": "0.382797",
+      "currency": "USD",
+      "ex_date": "2024-12-19",
+      "payable_date": "2024-12-24",
+      "record_date": "2024-12-19"
+    }
+  ],
+  "manifest_id": "HYP_010_BIL_SSGA_DIVIDEND_AUTHORITY",
+  "manifest_type": "SPONSOR_DIVIDEND_AUTHORITY_MANIFEST",
+  "monthly_coverage_months": 99,
+  "official_sponsor": "STATE_STREET_SPDR_OFFICIAL",
+  "record_count": 108,
+  "required_scope": [
+    "2016-01-01",
+    "2024-12-31"
+  ],
+  "source_artifact": "SPDR ETF Historical Distributions workbook (official ssga.com)",
+  "source_file_bytes": 577715,
+  "source_file_sha256": "efae64e7144c5c641ae0b4c9bb11fc41d6affc88cf2d31c0b1ebfc8905aeee62",
+  "source_url": "https://www.ssga.com/library-content/products/fund-data/etfs/us/spdr-etf-historical-distributions.xlsx",
+  "symbol": "BIL"
+}

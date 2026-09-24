@@ -1,0 +1,51 @@
+{
+  "manifest_id": "HYP_010_R2_SPONSOR_AUTHORITY_QUALIFICATION",
+  "manifest_type": "R2_SPONSOR_AUTHORITY_QUALIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_010_R2_PROVIDER_AND_SPONSOR_AUTHORITY_QUALIFICATION",
+  "starting_sha": "2653c2564e8ab0216183d9bd5773670bddb27020",
+  "hypothesis_id": "HYP_010",
+  "core_id": "CORE-001",
+  "required_scope": ["2016-01-01", "2024-12-31"],
+  "symbols": {
+    "SPY": {
+      "sponsor": "STATE_STREET_SPDR_OFFICIAL",
+      "authority": "SEALED_MEC0015_PLUS_HYP009_2024_SUPPLEMENT",
+      "record_count": 36,
+      "payable_completeness": "COMPLETE_36_OF_36",
+      "authority_manifest": "docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json",
+      "classification": "SPY_DIVIDEND_AUTHORITY_QUALIFIED"
+    },
+    "BIL": {
+      "sponsor": "STATE_STREET_SPDR_OFFICIAL",
+      "authority": "SSGA_OFFICIAL_HISTORICAL_DISTRIBUTIONS_WORKBOOK",
+      "authority_manifest": "docs/research/manifests/HYP_010_BIL_SSGA_DIVIDEND_AUTHORITY.json",
+      "authority_manifest_sha256": "f6c5c6c83d9c43a43fc005a974b0484abe854ac027068712e37e838cc5eba7df",
+      "record_count": 108,
+      "payable_completeness": "COMPLETE_108_OF_108",
+      "affirmed_zero_months": 33,
+      "schedule": "FEB_DEC_MONTHLY_PLUS_DECEMBER_EXTRA_NO_JANUARY_DOCUMENTED",
+      "classification": "BIL_DIVIDEND_AUTHORITY_QUALIFIED"
+    },
+    "AGG": {
+      "sponsor": "BLACKROCK_ISHARES_OFFICIAL",
+      "authority": "ISHARES_OFFICIAL_PAGE_EMBEDDED_DISTRIBUTIONS_DATASET",
+      "authority_manifest": "docs/research/manifests/HYP_010_AGG_ISHARES_DIVIDEND_AUTHORITY.json",
+      "authority_manifest_sha256": "4eff3bcb11413c06f9d798ec0143076a89cdd185e8eb38e7e1b3ee31e3df749f",
+      "record_count": 108,
+      "payable_completeness": "COMPLETE_108_OF_108",
+      "schedule": "FEB_DEC_MONTHLY_PLUS_DECEMBER_EXTRA_NO_JANUARY_DOCUMENTED",
+      "classification": "AGG_DIVIDEND_AUTHORITY_QUALIFIED"
+    },
+    "VEU": {
+      "sponsor": "VANGUARD_OFFICIAL",
+      "authority": "NONE_OBTAINED",
+      "record_count": 0,
+      "coverage_evidence": "PAGE_FETCH_OK_NO_MACHINE_READABLE_DATASET_TEN_YEAR_EXPORT_LIMITATION",
+      "classification": "BLOCKED_VEU_DIVIDEND_AUTHORITY_NO_RECORDS"
+    }
+  },
+  "unofficial_sources_used": false,
+  "d_zero_inferred_anywhere": false,
+  "overall_sponsor_classification": "SPONSOR_AUTHORITY_INCOMPLETE_VEU_BLOCKED",
+  "overall_r2_classification": "R2_PROVIDER_QUALIFIED_SPONSOR_AUTHORITY_BLOCKED"
+}
