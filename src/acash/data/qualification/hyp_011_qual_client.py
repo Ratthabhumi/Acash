@@ -230,6 +230,61 @@ class HYP011AlpacaClient:
             adjustment=adjustment.value,
         )
 
+    def fetch_single_session(
+        self,
+        symbol: str,
+        session: date,
+        feed: MarketDataFeed = MarketDataFeed.SIP,
+        adjustment: PriceAdjustment = PriceAdjustment.RAW,
+        timeframe: str = "1Day",
+    ) -> Hyp011HistoricalResult:
+        """Fetch exactly one eligible trading session (prospective observations).
+
+        Bounds are the single session day (00:00:00Z..23:59:59.999999Z).
+        Activation/next-expected rules live in the runner, not here.
+        """
+        from datetime import datetime as _datetime
+
+        sym = symbol.strip().upper()
+        if sym not in HYP011_SYMBOLS:
+            raise SipContractViolationError(
+                f"HYP_011 allowlist violation: symbol '{symbol}' not in ACWI/AGG/SPY."
+            )
+        if timeframe != HYP011_TIMEFRAME:
+            raise SipContractViolationError(
+                f"HYP_011 requires timeframe='1Day', got '{timeframe}'."
+            )
+        if feed != MarketDataFeed.SIP:
+            raise SipContractViolationError(f"HYP_011 requires feed='sip', got '{feed}'.")
+        if adjustment not in HYP011_ALLOWED_ADJUSTMENTS:
+            raise SipContractViolationError(
+                f"HYP_011 requires adjustment in {{'split','raw'}}, got '{adjustment}'."
+            )
+        if not self._calendar.is_trading_session(session):
+            raise SipContractViolationError(f"HYP_011 not a trading session: {session}.")
+        start_utc = _datetime(session.year, session.month, session.day, tzinfo=timezone.utc)
+        end_utc = _datetime(
+            session.year, session.month, session.day, 23, 59, 59, 999999,
+            tzinfo=timezone.utc,
+        )
+        bars, pages_raw, pages_meta, status, _ = self._fetch_pages(
+            sym, start_utc, end_utc, feed, adjustment, timeframe,
+            max_pages=5,
+            window=(session, session),
+        )
+        if len(bars) != 1 or bars[0].timestamp_utc.date() != session:
+            raise SipContractViolationError(
+                f"HYP_011 single-session fetch must return exactly {session}."
+            )
+        return Hyp011HistoricalResult(
+            bars=bars,
+            pages_raw_bytes=pages_raw,
+            pages_metadata=pages_meta,
+            http_status_code=status,
+            symbol=sym,
+            adjustment=adjustment.value,
+        )
+
     def _fetch_pages(
         self,
         sym: str,

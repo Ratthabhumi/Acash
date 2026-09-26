@@ -32,8 +32,17 @@ class ShadowState:
     observed_sessions: List[str] = field(default_factory=list)
     completed_annual_rebalances: int = 0
 
-    def record_session(self, session: date, calendar: NyseCa1Calendar) -> None:
-        """Append exactly the next unprocessed eligible completed session."""
+    def record_session(
+        self, session: date, calendar: NyseCa1Calendar, now_utc: datetime
+    ) -> None:
+        """Append exactly the next unprocessed eligible COMPLETED session.
+
+        Completion is determined by the canonical session close_utc, never by
+        calendar date alone. now_utc is an explicit parameter (pure function).
+        """
+        if now_utc.tzinfo is None:
+            raise DataContractError("SHADOW_NOW_MUST_BE_TIMEZONE_AWARE.")
+        now = now_utc.astimezone(timezone.utc)
         iso = session.isoformat()
         if iso in self.observed_sessions:
             raise DataContractError(f"SHADOW_DUPLICATE_SESSION: {iso}.")
@@ -47,9 +56,11 @@ class ShadowState:
             raise DataContractError(f"SHADOW_RECENT_STRESS_SESSION: {iso}.")
         if QUARANTINE_START <= session < SCIENTIFIC_PROSPECTIVE_BOUNDARY:
             raise DataContractError(f"SHADOW_QUARANTINE_SESSION: {iso}.")
-        today_utc = datetime.now(timezone.utc).date()
-        if session >= today_utc:
-            raise DataContractError(f"SHADOW_FUTURE_OR_INCOMPLETE_SESSION: {iso}.")
+        close_utc = calendar.get_session(session).close_utc
+        if close_utc is None:
+            raise DataContractError(f"SHADOW_NO_CLOSE_TIME: {iso}.")
+        if now <= close_utc:
+            raise DataContractError(f"SHADOW_INCOMPLETE_SESSION: {iso}.")
         self.observed_sessions.append(iso)
 
     @property
@@ -83,22 +94,25 @@ def missed_unobserved_sessions(
 def derive_activation_session(
     calendar: NyseCa1Calendar, activation_commit_utc: datetime
 ) -> date:
-    """First canonical NYSE regular-session OPEN strictly after commit ts."""
+    """First canonical session OPEN strictly after the commit timestamp.
+
+    The commit's own calendar date is considered: a commit before today's
+    eligible open qualifies today; exactly-at-open or after-open moves on.
+    """
     if activation_commit_utc.tzinfo is None:
         raise DataContractError("SHADOW_ACTIVATION_TS_MUST_BE_TIMEZONE_AWARE.")
     commit_utc = activation_commit_utc.astimezone(timezone.utc)
     cursor = commit_utc.date()
-    for _ in range(14):
+    for _ in range(15):
+        if calendar.is_trading_session(cursor):
+            session = calendar.get_session(cursor)
+            open_utc = session.open_utc
+            if open_utc is None:
+                raise DataContractError(f"SHADOW_NO_OPEN_TIME: {cursor}.")
+            if open_utc > commit_utc:
+                return cursor
         cursor = date.fromordinal(cursor.toordinal() + 1)
-        if not calendar.is_trading_session(cursor):
-            continue
-        session = calendar.get_session(cursor)
-        open_utc = session.open_utc
-        if open_utc is None:
-            raise DataContractError(f"SHADOW_NO_OPEN_TIME: {cursor}.")
-        if open_utc > commit_utc:
-            return cursor
-    raise DataContractError("SHADOW_NO_ACTIVATION_SESSION_WITHIN_14_DAYS.")
+    raise DataContractError("SHADOW_NO_ACTIVATION_SESSION_WITHIN_15_DAYS.")
 
 
 def shadow_readiness(
