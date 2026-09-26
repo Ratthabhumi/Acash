@@ -1,0 +1,15 @@
+{
+  "manifest_id": "HYP_011_PROSPECTIVE_SHADOW_READINESS",
+  "manifest_type": "PROSPECTIVE_SHADOW_READINESS_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_PROSPECTIVE_SHADOW_ACTIVATION",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "state": "PROSPECTIVE_SHADOW_ARMED_WAITING_FOR_FIRST_COMPLETED_SESSION",
+  "corrected_r3_verdict": "HISTORICAL_REPLICATION_SUPPORTED_FOR_PROSPECTIVE_SHADOW",
+  "activation_binding": "PENDING_STAGE_B",
+  "market_data_accessed": 0,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
