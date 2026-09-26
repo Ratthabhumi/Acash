@@ -1,0 +1,158 @@
+{
+  "distributions": [
+    {
+      "cash_distribution": "0.743701",
+      "currency": "USD",
+      "ex_date": "2016-06-22",
+      "payable_date": "2016-06-28",
+      "record_date": "2016-06-24"
+    },
+    {
+      "cash_distribution": "0.553166",
+      "currency": "USD",
+      "ex_date": "2016-12-21",
+      "payable_date": "2016-12-28",
+      "record_date": "2016-12-23"
+    },
+    {
+      "cash_distribution": "0.732112",
+      "currency": "USD",
+      "ex_date": "2017-06-20",
+      "payable_date": "2017-06-26",
+      "record_date": "2017-06-22"
+    },
+    {
+      "cash_distribution": "0.669363",
+      "currency": "USD",
+      "ex_date": "2017-12-19",
+      "payable_date": "2017-12-26",
+      "record_date": "2017-12-20"
+    },
+    {
+      "cash_distribution": "0.801529",
+      "currency": "USD",
+      "ex_date": "2018-06-19",
+      "payable_date": "2018-06-25",
+      "record_date": "2018-06-20"
+    },
+    {
+      "cash_distribution": "0.598279",
+      "currency": "USD",
+      "ex_date": "2018-12-18",
+      "payable_date": "2018-12-24",
+      "record_date": "2018-12-19"
+    },
+    {
+      "cash_distribution": "0.044243",
+      "currency": "USD",
+      "ex_date": "2018-12-28",
+      "payable_date": "2019-01-04",
+      "record_date": "2018-12-31"
+    },
+    {
+      "cash_distribution": "0.906257",
+      "currency": "USD",
+      "ex_date": "2019-06-17",
+      "payable_date": "2019-06-21",
+      "record_date": "2019-06-18"
+    },
+    {
+      "cash_distribution": "0.943078",
+      "currency": "USD",
+      "ex_date": "2019-12-16",
+      "payable_date": "2019-12-20",
+      "record_date": "2019-12-17"
+    },
+    {
+      "cash_distribution": "0.614070",
+      "currency": "USD",
+      "ex_date": "2020-06-15",
+      "payable_date": "2020-06-19",
+      "record_date": "2020-06-16"
+    },
+    {
+      "cash_distribution": "0.685870",
+      "currency": "USD",
+      "ex_date": "2020-12-14",
+      "payable_date": "2020-12-18",
+      "record_date": "2020-12-15"
+    },
+    {
+      "cash_distribution": "0.724202",
+      "currency": "USD",
+      "ex_date": "2021-06-10",
+      "payable_date": "2021-06-16",
+      "record_date": "2021-06-11"
+    },
+    {
+      "cash_distribution": "1.016979",
+      "currency": "USD",
+      "ex_date": "2021-12-13",
+      "payable_date": "2021-12-17",
+      "record_date": "2021-12-14"
+    },
+    {
+      "cash_distribution": "0.071330",
+      "currency": "USD",
+      "ex_date": "2021-12-30",
+      "payable_date": "2022-01-05",
+      "record_date": "2021-12-31"
+    },
+    {
+      "cash_distribution": "0.846802",
+      "currency": "USD",
+      "ex_date": "2022-06-09",
+      "payable_date": "2022-06-15",
+      "record_date": "2022-06-10"
+    },
+    {
+      "cash_distribution": "0.676435",
+      "currency": "USD",
+      "ex_date": "2022-12-13",
+      "payable_date": "2022-12-19",
+      "record_date": "2022-12-14"
+    },
+    {
+      "cash_distribution": "0.952914",
+      "currency": "USD",
+      "ex_date": "2023-06-07",
+      "payable_date": "2023-06-13",
+      "record_date": "2023-06-08"
+    },
+    {
+      "cash_distribution": "0.962381",
+      "currency": "USD",
+      "ex_date": "2023-12-20",
+      "payable_date": "2023-12-27",
+      "record_date": "2023-12-21"
+    },
+    {
+      "cash_distribution": "0.935401",
+      "currency": "USD",
+      "ex_date": "2024-06-11",
+      "payable_date": "2024-06-17",
+      "record_date": "2024-06-11"
+    },
+    {
+      "cash_distribution": "1.066197",
+      "currency": "USD",
+      "ex_date": "2024-12-17",
+      "payable_date": "2024-12-20",
+      "record_date": "2024-12-17"
+    }
+  ],
+  "manifest_id": "HYP_011_ACWI_ISHARES_DIVIDEND_AUTHORITY",
+  "manifest_type": "SPONSOR_DIVIDEND_AUTHORITY_MANIFEST",
+  "official_sponsor": "BLACKROCK_ISHARES_OFFICIAL",
+  "record_count": 20,
+  "required_scope": [
+    "2016-01-01",
+    "2024-12-31"
+  ],
+  "schedule_note": "SEMIANNUAL_JUNE_DECEMBER_PLUS_SPECIAL_EXTRA_ACCEPTED",
+  "source_artifact": "official iShares ACWI fund page embedded distributions dataset",
+  "source_page_bytes": 1694663,
+  "source_page_sha256": "a4191f938d91db0ad99ba2e5357a82a6e30d88f437b5149f04b316842ddb3379",
+  "source_url": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+  "symbol": "ACWI"
+}

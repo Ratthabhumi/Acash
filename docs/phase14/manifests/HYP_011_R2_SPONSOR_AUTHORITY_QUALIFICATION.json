@@ -1,0 +1,41 @@
+{
+  "manifest_id": "HYP_011_R2_SPONSOR_AUTHORITY_QUALIFICATION",
+  "manifest_type": "R2_SPONSOR_AUTHORITY_QUALIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R2_PROVIDER_AND_SPONSOR_QUALIFICATION",
+  "starting_sha": "4bedcc6cbb3b6136442e9ed66ca4e5e83d563c31",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "required_scope": ["2016-01-01", "2024-12-31"],
+  "symbols": {
+    "SPY": {
+      "sponsor": "STATE_STREET_SPDR_OFFICIAL",
+      "authority": "SEALED_MEC0015_PLUS_HYP009_2024_SUPPLEMENT",
+      "record_count": 36,
+      "payable_completeness": "COMPLETE_36_OF_36",
+      "classification": "SPY_DIVIDEND_AUTHORITY_QUALIFIED"
+    },
+    "AGG": {
+      "sponsor": "BLACKROCK_ISHARES_OFFICIAL",
+      "authority": "SEALED_HYP010_AGG_MANIFEST_REUSE",
+      "authority_manifest": "docs/research/manifests/HYP_010_AGG_ISHARES_DIVIDEND_AUTHORITY.json",
+      "record_count": 108,
+      "payable_completeness": "COMPLETE_108_OF_108",
+      "classification": "AGG_DIVIDEND_AUTHORITY_QUALIFIED"
+    },
+    "ACWI": {
+      "sponsor": "BLACKROCK_ISHARES_OFFICIAL",
+      "authority": "ISHARES_OFFICIAL_PAGE_EMBEDDED_DATASET_FETCHED_THIS_SESSION",
+      "authority_manifest": "docs/research/manifests/HYP_011_ACWI_ISHARES_DIVIDEND_AUTHORITY.json",
+      "authority_manifest_sha256": "7ea38b51d01228bec292da2a2a9d7062b20bca20a8bc56b83d95c04934bc1502",
+      "record_count": 20,
+      "halves_covered": 18,
+      "payable_completeness": "COMPLETE_20_OF_20",
+      "classification": "ACWI_DIVIDEND_AUTHORITY_QUALIFIED"
+    }
+  },
+  "unofficial_sources_used": false,
+  "d_zero_inferred_anywhere": false,
+  "full_historical_split_authority_qualified": false,
+  "overall_sponsor_classification": "SPONSOR_AUTHORITY_COMPLETE",
+  "overall_r2_classification": "R2_PROVIDER_AND_SPONSOR_AUTHORITIES_QUALIFIED_HISTORICAL_BUILD_NOT_EXECUTED"
+}

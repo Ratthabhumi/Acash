@@ -22,6 +22,7 @@ SYMBOL_SPONSOR: Dict[str, str] = {
     "BIL": "STATE_STREET_SPDR_OFFICIAL",
     "VEU": "VANGUARD_OFFICIAL",
     "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+    "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
 }
 
 QUARTERLY_SYMBOLS = frozenset({"SPY", "VEU"})
@@ -30,6 +31,11 @@ QUARTERLY_SYMBOLS = frozenset({"SPY", "VEU"})
 # history (BIL 2007-2026 workbook; AGG 2003-2026 page dataset) — schedule,
 # not a scope-edge gap. A January ex-date anywhere in history contradicts it.
 FEB_DEC_NO_JANUARY_SYMBOLS = frozenset({"AGG", "BIL"})
+# ACWI official schedule: semi-annual distributions (June + December per the
+# sponsor's stated distribution frequency). Each calendar half in scope must
+# contain >= 1 ex-date; irregular/special distributions are accepted as extra
+# records, never as substitutes for a missing half.
+SEMIANNUAL_SYMBOLS = frozenset({"ACWI"})
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,19 @@ def _months_in_scope(start: date, end: date) -> List[str]:
         month += 1
         if month > 12:
             month = 1
+            year += 1
+    return periods
+
+
+def _halves_in_scope(start: date, end: date) -> List[str]:
+    periods: List[str] = []
+    year, half = start.year, (start.month - 1) // 6 + 1
+    end_key = (end.year, (end.month - 1) // 6 + 1)
+    while (year, half) <= end_key:
+        periods.append(f"{year}-H{half}")
+        half += 1
+        if half > 2:
+            half = 1
             year += 1
     return periods
 
@@ -175,6 +194,9 @@ def qualify_sponsor_authority(
     if symbol in QUARTERLY_SYMBOLS:
         expected_periods = _quarters_in_scope(REQUIRED_START, REQUIRED_END)
         covered = {f"{r.ex_date.year}-Q{(r.ex_date.month - 1) // 3 + 1}" for r in in_scope}
+    elif symbol in SEMIANNUAL_SYMBOLS:
+        expected_periods = _halves_in_scope(REQUIRED_START, REQUIRED_END)
+        covered = {f"{r.ex_date.year}-H{(r.ex_date.month - 1) // 6 + 1}" for r in in_scope}
     elif symbol in FEB_DEC_NO_JANUARY_SYMBOLS:
         expected_periods = [
             p for p in _months_in_scope(REQUIRED_START, REQUIRED_END)
