@@ -1,0 +1,23 @@
+{
+  "manifest_id": "HYP_011_R2_PROVIDER_DEFECT_ADJUDICATION",
+  "manifest_type": "R2_PROVIDER_DEFECT_ADJUDICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R2_PROVIDER_DEFECT_ADJUDICATION_AND_CLEAN_REQUALIFICATION",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "original_authorization": "AUTHORIZE_CORE_001_HYP_011_R2_PROVIDER_AND_SPONSOR_QUALIFICATION",
+  "defect": "INCLUSIVE_END_BOUND_SENT_AS_MIDNIGHT_EXCLUDED_FINAL_DAILY_BAR",
+  "first_live_result_observed": true,
+  "first_live_result_rows_per_series": 3,
+  "defect_discovered_after_live_result_observation": true,
+  "corrected_same_authorization_rerun_occurred": true,
+  "procedural_adjudication": "R2_PROVIDER_QUALIFICATION_INVALIDATED_BY_IMPLEMENTATION_DEFECT",
+  "scientific_contract_changed": false,
+  "scientific_hypothesis_falsified": false,
+  "performance_observed": false,
+  "historical_full_acquisition_executed": false,
+  "sponsor_authority_status": "PRESERVED_VALID_SUBCOMPONENT",
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}

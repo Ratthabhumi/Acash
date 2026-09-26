@@ -1,0 +1,43 @@
+{
+  "manifest_id": "HYP_011_R2_PROVIDER_REQUALIFICATION",
+  "manifest_type": "R2_PROVIDER_REQUALIFICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R2_PROVIDER_DEFECT_ADJUDICATION_AND_CLEAN_REQUALIFICATION",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "key_id_present": true,
+  "secret_present": true,
+  "provider": "ALPACA_HISTORICAL_STOCK_BARS",
+  "symbols": ["ACWI", "AGG", "SPY"],
+  "timeframe": "1Day",
+  "feed": "sip",
+  "probe_window": ["2016-01-04", "2016-01-07"],
+  "provider_start_utc": "2016-01-04T00:00:00+00:00",
+  "provider_end_utc": "2016-01-07T23:59:59.999999+00:00",
+  "expected_sessions": ["2016-01-04", "2016-01-05", "2016-01-06", "2016-01-07"],
+  "http_attempts": 6,
+  "results": {
+    "ACWI": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"},
+    "AGG": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"},
+    "SPY": {"split_rows": 4, "raw_rows": 4, "alignment": "PASS", "status": "PASS"}
+  },
+  "page_shas": {
+    "ACWI": {
+      "split": ["34efddfcd41ef5b3db29a9f40cafa30098eb0ef9cc892c807cf5482a8c21fc0b"],
+      "raw": ["34efddfcd41ef5b3db29a9f40cafa30098eb0ef9cc892c807cf5482a8c21fc0b"]
+    },
+    "AGG": {
+      "split": ["e83eebf71ce85778a24320f5ef78b21d044d8aad08df22544ba26d8330ed1bc3"],
+      "raw": ["e83eebf71ce85778a24320f5ef78b21d044d8aad08df22544ba26d8330ed1bc3"]
+    },
+    "SPY": {
+      "split": ["a9e71d366810220523500487105631499538aaf2bfcb330f0ad20404f00a5724"],
+      "raw": ["a9e71d366810220523500487105631499538aaf2bfcb330f0ad20404f00a5724"]
+    }
+  },
+  "spill_count": 0,
+  "duplicate_count": 0,
+  "new_defect_after_result": false,
+  "classification": "PROVIDER_REQUALIFICATION_PASS",
+  "local_evidence": "data/hyp_011/probe_evidence.json",
+  "local_evidence_sha256": "65a51047f59ad242739067057756f03dceb290dfe002b7e797e7ab4dddfe8298"
+}
