@@ -2,6 +2,7 @@
 
 from acash.research.hyp_011.accounting import (
     SIMULATED_STARTING_AUM,
+    corrected_path_mdd,
     run_allocation,
     run_single_asset_buy_hold,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "SIMULATED_STARTING_AUM",
     "HISTORICAL_START",
     "HISTORICAL_END",
+    "corrected_path_mdd",
     "run_allocation",
     "run_single_asset_buy_hold",
     "HYP011ContractQualificationEvidence",

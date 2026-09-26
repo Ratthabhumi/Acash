@@ -1,0 +1,130 @@
+{
+  "acwi_benchmark_equity_ledger_sha256": "22fa8f38a612e7ab8d3b2f63b6b2a2251de53dd039e03eba08d216f202879964",
+  "acwi_benchmark_metrics": {
+    "annualized_sharpe": "0.6966831110016731839996157771",
+    "completed_trades": "1",
+    "dividends_received": "26514.275307",
+    "ending_aum": "240741.694289",
+    "execution_slippage_cost": "19.991018",
+    "max_drawdown": "0.3123026836287247134564365735",
+    "net_total_return": "1.40741694289",
+    "regulatory_fees_paid": "0",
+    "starting_aum": "100000.00",
+    "terminal_cash": "26539.194289",
+    "terminal_holdings": {
+      "ACWI": "1823"
+    },
+    "terminal_receivable": "0"
+  },
+  "baseline_equity_ledger_sha256": "fa626c32773031fcc001bc61fb529cd85f5a59d082ac084f168e8dd8bd6d36fc",
+  "baseline_execution_ledger_sha256": "a5f7868bffb09587729e578b3698911fa496eed2a7e189c2bd120cd6be9f0dcc",
+  "baseline_metrics": {
+    "annualized_sharpe": "0.7082199886205631037448519049",
+    "completed_trades": "18",
+    "dividends_received": "28501.574104",
+    "ending_aum": "218852.857740",
+    "execution_slippage_cost": "28.746364",
+    "max_drawdown": "0.2706804464703170979420276404",
+    "net_total_return": "1.1885285774",
+    "regulatory_fees_paid": "0.25",
+    "starting_aum": "100000.00",
+    "terminal_cash": "4473.857740",
+    "terminal_holdings": {
+      "ACWI": "1507",
+      "AGG": "385"
+    },
+    "terminal_receivable": "0"
+  },
+  "benchmark_equity_ledger_sha256": "e9b4445732b33b4c20fac35863d7e14a6633d60a159f643634edef1744ed8849",
+  "benchmark_metrics": {
+    "annualized_sharpe": "0.8672932560936021361331579227",
+    "completed_trades": "1",
+    "dividends_received": "25641.3695622",
+    "ending_aum": "317645.2207582",
+    "execution_slippage_cost": "19.968804",
+    "max_drawdown": "0.3185096087705842203186407916",
+    "net_total_return": "2.176452207582",
+    "regulatory_fees_paid": "0",
+    "starting_aum": "100000.00",
+    "terminal_cash": "24798.5368582",
+    "terminal_holdings": {
+      "SPY": "498"
+    },
+    "terminal_receivable": "978.84390"
+  },
+  "capital_authority_usd": "0.00",
+  "contract_hashes": {
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+    "provider_contract_hash": "fc2f1e7525d9cb69e74ac4d1464acab4b4855ee2e0e4ed72208f2591af749edc",
+    "sample_partition_hash": "0bf1c4fe4762037f542caf7562a10ab97a0fb23d1f0fc20b967f0830762f3a13",
+    "strategy_specification_hash": "3b2159c02d4013711523538f9ea5ea8668aa0761cc05b12c2d163a9721c35c68"
+  },
+  "contract_qualification_derived": true,
+  "core_id": "CORE-001",
+  "dataset_sha256": "4cf20b51c2e2be2bb629ba10be7c25b34e8259bd5549575156afe433fb16c3d5",
+  "economics_unchanged": {
+    "baseline_ending_aum": true,
+    "baseline_return": true,
+    "baseline_sharpe": true,
+    "benchmark_ending_aum": true,
+    "benchmark_return": true,
+    "benchmark_sharpe": true,
+    "stress_ending_aum": true,
+    "stress_return": true,
+    "stress_sharpe": true
+  },
+  "gates": {
+    "G1": true,
+    "G2": true,
+    "G3": true,
+    "G4": true,
+    "G5": true,
+    "G6": true,
+    "conjunction": true
+  },
+  "hyp_007_empirical_read_count": 0,
+  "hypothesis_id": "HYP_011",
+  "invalidation": "HISTORICAL_RESULT_INVALIDATED_BY_IMPLEMENTATION_DEFECT",
+  "live_authorized": false,
+  "manifest_id": "HYP_011_R3_CORRECTED_REPRODUCIBILITY_RESULT",
+  "manifest_type": "CORRECTED_REPRODUCIBILITY_RESULT_MANIFEST",
+  "mdd_correction": {
+    "acwi_mdd_corrected": "0.3123026836287247134564365735",
+    "acwi_mdd_original": "0.3123026836287247134564365735",
+    "baseline_mdd_corrected": "0.2706804464703170979420276404",
+    "baseline_mdd_original": "0.2706804464703170979420276404",
+    "benchmark_mdd_corrected": "0.3185096087705842203186407916",
+    "benchmark_mdd_original": "0.3185096087705842203186407916",
+    "stress_mdd_corrected": "0.2707610914922089320548722783",
+    "stress_mdd_original": "0.2707610914922089320548722783"
+  },
+  "network_requests_issued": 0,
+  "no_real_orders": true,
+  "paper_authorized": false,
+  "prospective_access_count": 0,
+  "quarantine_access_count": 0,
+  "recent_stress_access_count": 0,
+  "signal_ledger_sha256": "43e717447d4e84352384f515089fbe7c57cc73948eaf0c6962b41aa2f107cef5",
+  "source_head": "64c927b39c6e4efcdf642facd178742e6ddf4ca1",
+  "stress_equity_ledger_sha256": "55599c68d76a3dab7e83d7edc09353e5910a934705cb9afa8607f5b4c774c048",
+  "stress_execution_ledger_sha256": "9a826891486d22079735ac9eb3022ca554b3b3d4f89ef1a927ecd70b886affa0",
+  "stress_metrics": {
+    "annualized_sharpe": "0.7072509593375763856321580724",
+    "completed_trades": "18",
+    "dividends_received": "28475.419394",
+    "ending_aum": "218619.359444",
+    "execution_slippage_cost": "143.30995",
+    "max_drawdown": "0.2707610914922089320548722783",
+    "net_total_return": "1.18619359444",
+    "regulatory_fees_paid": "0.50",
+    "starting_aum": "100000.00",
+    "terminal_cash": "4572.259444",
+    "terminal_holdings": {
+      "ACWI": "1505",
+      "AGG": "384"
+    },
+    "terminal_receivable": "0"
+  },
+  "supersedes_invalidated_run": "docs/phase14/manifests/HYP_011_R3_HISTORICAL_RESULT.json",
+  "verdict": "HISTORICAL_REPLICATION_SUPPORTED_FOR_PROSPECTIVE_SHADOW"
+}

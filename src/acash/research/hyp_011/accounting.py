@@ -44,6 +44,28 @@ class AllocationResult:
     terminal_receivable: Decimal = Decimal("0")
 
 
+def corrected_path_mdd(
+    equity_curve: Sequence[EquityRecord],
+    starting_aum: Decimal = SIMULATED_STARTING_AUM,
+) -> Decimal:
+    """Frozen MDD: curve [starting_aum, EOD_1, ..., EOD_N] cross-checked.
+
+    Independent cross-check against ledger running drawdowns; any mismatch
+    fails closed (prevents representation drift between metric and ledger).
+    """
+    if not equity_curve:
+        raise DataContractError("HYP_011_MDD_EMPTY_EQUITY_CURVE.")
+    corrected = max_drawdown(
+        [starting_aum] + [r.total_equity for r in equity_curve]
+    )
+    ledger = max(r.drawdown for r in equity_curve)
+    if corrected != ledger:
+        raise DataContractError(
+            f"HYP_011_MDD_CROSS_CHECK_MISMATCH: {corrected} != {ledger}."
+        )
+    return corrected
+
+
 def _projected_weights(
     cash: Decimal, holdings: Mapping[str, int], opens: Mapping[str, Decimal]
 ) -> Tuple[Decimal, Decimal, Decimal]:

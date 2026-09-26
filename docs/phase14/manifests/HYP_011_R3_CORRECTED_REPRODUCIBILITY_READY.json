@@ -1,0 +1,18 @@
+{
+  "manifest_id": "HYP_011_R3_CORRECTED_REPRODUCIBILITY_READY",
+  "manifest_type": "CORRECTED_REPRODUCIBILITY_READINESS_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R3_MDD_DEFECT_ADJUDICATION_AND_CORRECTED_REPRODUCIBILITY",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "state": "CORRECTED_REPRODUCIBILITY_READY_NOT_EXECUTED",
+  "dataset_sha_verified": true,
+  "dataset_sha256": "4cf20b51c2e2be2bb629ba10be7c25b34e8259bd5549575156afe433fb16c3d5",
+  "economic_contract_changed": false,
+  "metric_bug_only": true,
+  "network_requests": 0,
+  "corrected_replay_executed": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}

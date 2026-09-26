@@ -114,6 +114,12 @@ def page_provenance(result: Any) -> List[Dict[str, Any]]:
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 R3 canonical run.")
     parser.add_argument("--execute-r3", action="store_true", default=False)
+    parser.add_argument(
+        "--replay-sealed-dataset",
+        action="store_true",
+        default=False,
+        help="Replay from the sealed local dataset with zero network (corrected runs).",
+    )
     args = parser.parse_args(argv)
 
     print("=== HYP_011 R3 canonical runner ===")
@@ -141,18 +147,76 @@ def main(argv: List[str] | None = None) -> int:
     def _count() -> None:
         http_count[0] += 1
 
-    start_utc, end_utc = inclusive_date_window_to_utc_bounds(
-        PART.HISTORICAL_START, PART.HISTORICAL_END
-    )
+    from acash.data.qualification.daily_models import DailyBar as _DailyBar
+
     bars: Dict[str, Dict[str, Any]] = {}
-    for symbol in SYMBOLS:
-        for adjustment in (PriceAdjustment.SPLIT, PriceAdjustment.RAW):
-            client = HYP011AlpacaClient(http_attempt_listener=_count)
-            result = client.fetch_historical_window(
-                symbol=symbol, start_utc=start_utc, end_utc=end_utc,
-                feed=MarketDataFeed.SIP, adjustment=adjustment, timeframe="1Day",
+    replay_provenance: Dict[str, Any] = {}
+    replay_mode = bool(args.replay_sealed_dataset)
+    if replay_mode:
+        sealed_path = DATA_DIR / "historical_dataset_001.json"
+        sealed_sha = sha_file(sealed_path)
+        if sealed_sha != "4cf20b51c2e2be2bb629ba10be7c25b34e8259bd5549575156afe433fb16c3d5":
+            raise DataContractError(
+                f"REPLAY_DATASET_MISMATCH: {sealed_sha}. STOP."
             )
-            bars.setdefault(symbol, {})[adjustment.value] = result
+        sealed = json.loads(sealed_path.read_text(encoding="utf-8"))
+        if sealed.get("dataset_id") != "DS_CORE001_HYP011_ACWI_AGG_SPY_ALPACA_1DAY_SIP_2016_2024_001":
+            raise DataContractError("REPLAY_DATASET_ID_MISMATCH. STOP.")
+
+        class _ReplayBars:
+            def __init__(self, rows: List[Dict[str, Any]]) -> None:
+                from datetime import datetime, timezone as _tz
+
+                parsed = []
+                for row in rows:
+                    parsed.append(
+                        _DailyBar(
+                            timestamp_utc=datetime.fromisoformat(row["date"] + "T05:00:00+00:00"),
+                            open=Decimal(row["o"]),
+                            high=Decimal(row["h"]),
+                            low=Decimal(row["l"]),
+                            close=Decimal(row["c"]),
+                            volume=Decimal(row["v"]),
+                        )
+                    )
+                self.bars = parsed
+
+        for symbol in SYMBOLS:
+            bars[symbol] = {
+                adjustment: _ReplayBars(sealed["series"][symbol][adjustment])
+                for adjustment in ("split", "raw")
+            }
+        replay_provenance = sealed["page_provenance"]
+        print("Replay from sealed dataset: SHA verified, zero network.")
+        ssga_sha = sealed.get("ssga_manifest_sha256", "")
+
+        def _replay_events(records: List[Dict[str, Any]]) -> List[DividendEvent]:
+            out = []
+            for record in records:
+                out.append(
+                    DividendEvent(
+                        ex_date=date.fromisoformat(record["ex_date"]),
+                        payable_date=date.fromisoformat(record["payable_date"]),
+                        amount_per_share=Decimal(str(record["amount"])),
+                    )
+                )
+            return out
+
+        spy_events = _replay_events(sealed["dividends"].get("SPY", []))
+        agg_events = _replay_events(sealed["dividends"].get("AGG", []))
+        acwi_events = _replay_events(sealed["dividends"].get("ACWI", []))
+    else:
+        start_utc, end_utc = inclusive_date_window_to_utc_bounds(
+            PART.HISTORICAL_START, PART.HISTORICAL_END
+        )
+        for symbol in SYMBOLS:
+            for adjustment in (PriceAdjustment.SPLIT, PriceAdjustment.RAW):
+                client = HYP011AlpacaClient(http_attempt_listener=_count)
+                result = client.fetch_historical_window(
+                    symbol=symbol, start_utc=start_utc, end_utc=end_utc,
+                    feed=MarketDataFeed.SIP, adjustment=adjustment, timeframe="1Day",
+                )
+                bars.setdefault(symbol, {})[adjustment.value] = result
     print(f"Actual HTTP transport attempts: {http_count[0]}")
 
     # Qualification: exact calendar coverage per series + split/raw alignment.
@@ -181,10 +245,13 @@ def main(argv: List[str] | None = None) -> int:
         closes_split[symbol] = split_map
         opens_raw[symbol] = raw_map_o
         closes_raw[symbol] = raw_map_c
-        provenance[symbol] = {
-            adjustment: page_provenance(bars[symbol][adjustment])
-            for adjustment in ("split", "raw")
-        }
+        if replay_mode:
+            provenance[symbol] = replay_provenance[symbol]
+        else:
+            provenance[symbol] = {
+                adjustment: page_provenance(bars[symbol][adjustment])
+                for adjustment in ("split", "raw")
+            }
     print("Bar qualification PASS: 6/6 series exact.")
 
     # Split lineage per symbol (ratio constancy over full window).
@@ -203,55 +270,57 @@ def main(argv: List[str] | None = None) -> int:
         split_status[symbol] = "NO_SPLIT_EVENTS_IN_AUTHORIZED_WINDOW"
     print(f"Split lineage: {split_status}")
 
-    # Sponsor authorities (sealed files only, no refetch).
-    ssga_path = Path("docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json")
-    if sha_file(ssga_path) != SSGA_SHA:
-        raise DataContractError("SSGA_MANIFEST_MISMATCH. STOP.")
-    ssga = json.loads(ssga_path.read_text(encoding="utf-8"))
-    supp = json.loads(
-        Path("docs/research/manifests/HYP_009_SPY_2024_DIVIDEND_AUTHORITY_SUPPLEMENT.json").read_text(
-            encoding="utf-8"
+    # Sponsor authorities: in replay mode the sealed dataset's dividends were
+    # already loaded + verified above; otherwise derive from sealed manifests.
+    if not replay_mode:
+        ssga_path = Path("docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json")
+        if sha_file(ssga_path) != SSGA_SHA:
+            raise DataContractError("SSGA_MANIFEST_MISMATCH. STOP.")
+        ssga = json.loads(ssga_path.read_text(encoding="utf-8"))
+        supp = json.loads(
+            Path("docs/research/manifests/HYP_009_SPY_2024_DIVIDEND_AUTHORITY_SUPPLEMENT.json").read_text(
+                encoding="utf-8"
+            )
         )
-    )
-    agg_manifest = json.loads(
-        Path("docs/research/manifests/HYP_010_AGG_ISHARES_DIVIDEND_AUTHORITY.json").read_text(
-            encoding="utf-8"
+        agg_manifest = json.loads(
+            Path("docs/research/manifests/HYP_010_AGG_ISHARES_DIVIDEND_AUTHORITY.json").read_text(
+                encoding="utf-8"
+            )
         )
-    )
-    acwi_manifest = json.loads(
-        Path("docs/research/manifests/HYP_011_ACWI_ISHARES_DIVIDEND_AUTHORITY.json").read_text(
-            encoding="utf-8"
+        acwi_manifest = json.loads(
+            Path("docs/research/manifests/HYP_011_ACWI_ISHARES_DIVIDEND_AUTHORITY.json").read_text(
+                encoding="utf-8"
+            )
         )
-    )
 
-    def _events(records: List[Dict[str, Any]]) -> List[DividendEvent]:
-        out = []
-        for record in records:
-            try:
-                out.append(
-                    DividendEvent(
-                        ex_date=date.fromisoformat(record["ex_date"]),
-                        payable_date=date.fromisoformat(record["payable_date"]),
-                        amount_per_share=Decimal(str(record["cash_distribution"])),
+        def _events(records: List[Dict[str, Any]]) -> List[DividendEvent]:
+            out = []
+            for record in records:
+                try:
+                    out.append(
+                        DividendEvent(
+                            ex_date=date.fromisoformat(record["ex_date"]),
+                            payable_date=date.fromisoformat(record["payable_date"]),
+                            amount_per_share=Decimal(str(record["cash_distribution"])),
+                        )
                     )
-                )
-            except (KeyError, ValueError) as exc:
-                raise DataContractError(f"DIVIDEND_MALFORMED: {exc}.") from exc
-        return out
+                except (KeyError, ValueError) as exc:
+                    raise DataContractError(f"DIVIDEND_MALFORMED: {exc}.") from exc
+            return out
 
-    spy_events = _events([
-        {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
-        for d in ssga["distributions"] + supp["distributions"]
-        if "2016-01-01" <= d["ex_date"] <= "2024-12-31"
-    ])
-    agg_events = _events([
-        {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
-        for d in agg_manifest["distributions"]
-    ])
-    acwi_events = _events([
-        {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
-        for d in acwi_manifest["distributions"]
-    ])
+        spy_events = _events([
+            {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
+            for d in ssga["distributions"] + supp["distributions"]
+            if "2016-01-01" <= d["ex_date"] <= "2024-12-31"
+        ])
+        agg_events = _events([
+            {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
+            for d in agg_manifest["distributions"]
+        ])
+        acwi_events = _events([
+            {"ex_date": d["ex_date"], "payable_date": d["payable_date"], "cash_distribution": d["cash_distribution"]}
+            for d in acwi_manifest["distributions"]
+        ])
     for symbol, events, want in (("SPY", spy_events, 36), ("AGG", agg_events, 108), ("ACWI", acwi_events, 20)):
         if len(events) != want:
             raise DataContractError(f"DIVIDEND_COUNT_{symbol}: {len(events)} != {want}.")
@@ -278,9 +347,13 @@ def main(argv: List[str] | None = None) -> int:
         get_finra_taf_segment(rebalance_session)
     print(f"Fee authority coverage for {len(schedule)} rebalance sessions: PASS.")
 
-    # Dataset seal (bars + dividends + provenance; ledgers after execution).
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    dataset_payload = {
+    # Dataset seal (fresh acquisition only; replay reuses the sealed file).
+    if replay_mode:
+        dataset_sha = sha_file(DATA_DIR / "historical_dataset_001.json")
+        print(f"Replay dataset SHA verified: {dataset_sha}")
+    else:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        dataset_payload = {
         "dataset_id": "DS_CORE001_HYP011_ACWI_AGG_SPY_ALPACA_1DAY_SIP_2016_2024_001",
         "provider": "ALPACA_HISTORICAL_STOCK_BARS",
         "feed": "sip",
@@ -316,8 +389,9 @@ def main(argv: List[str] | None = None) -> int:
         "hyp_007_empirical_read_count": 0,
         "dataset_state": "HISTORICAL_DATASET_QUALIFIED_AND_SEALED_PERFORMANCE_NOT_YET_OBSERVED",
     }
-    dataset_sha = write_json(DATA_DIR / "historical_dataset_001.json", dataset_payload)
-    print(f"Dataset sealed: {dataset_sha}")
+    if not replay_mode:
+        dataset_sha = write_json(DATA_DIR / "historical_dataset_001.json", dataset_payload)
+        print(f"Dataset sealed: {dataset_sha}")
 
     # Execution (sealed dataset only).
     div_by_symbol = {
@@ -352,40 +426,51 @@ def main(argv: List[str] | None = None) -> int:
     )
 
     # Ledgers.
-    sig_doc = {"rebalance_schedule": [d.isoformat() for d in schedule],
-               "rebalance_count": len(schedule)}
-    sig_sha = write_json(DATA_DIR / "rebalance_schedule.json", sig_doc)
-    base_exec_sha = write_json(
-        DATA_DIR / "execution_ledger_baseline.json", _exec_ledger(baseline))
-    stress_exec_sha = write_json(
-        DATA_DIR / "execution_ledger_stress.json", _exec_ledger(stress))
-    base_eq_sha = write_json(
-        DATA_DIR / "equity_baseline.json",
-        {"path": "BASELINE", "rows": _equity_rows(baseline)},
+    # Ledgers recomputed in-memory ONLY (no duplicate files): accounting is
+    # unchanged, so every ledger SHA must equal the original sealed pins.
+    # NOTE: original pins are over indent-2 sort-keys JSON bytes (write_json),
+    # NOT canonical serialization — recompute with the identical function.
+    original = json.loads(
+        Path("docs/phase14/manifests/HYP_011_R3_HISTORICAL_RESULT.json").read_text(
+            encoding="utf-8"
+        )
     )
-    stress_eq_sha = write_json(
-        DATA_DIR / "equity_stress.json",
-        {"path": "STRESS", "rows": _equity_rows(stress)},
-    )
-    bench_eq_sha = write_json(
-        DATA_DIR / "equity_spy_benchmark.json",
-        {"path": "SPY_BENCHMARK", "rows": _equity_rows(spy_bench)},
-    )
-    acwi_eq_sha = write_json(
-        DATA_DIR / "equity_acwi_benchmark.json",
-        {"path": "ACWI_BENCHMARK", "rows": _equity_rows(acwi_bench)},
-    )
+
+    def _sealed_sha(doc: object) -> str:
+        return hashlib.sha256(
+            json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+
+    ledger_pairs = [
+        ("signal_ledger_sha256", {"rebalance_schedule": [d.isoformat() for d in schedule],
+                                  "rebalance_count": len(schedule)}),
+        ("baseline_execution_ledger_sha256", _exec_ledger(baseline)),
+        ("stress_execution_ledger_sha256", _exec_ledger(stress)),
+        ("baseline_equity_ledger_sha256", {"path": "BASELINE", "rows": _equity_rows(baseline)}),
+        ("stress_equity_ledger_sha256", {"path": "STRESS", "rows": _equity_rows(stress)}),
+        ("benchmark_equity_ledger_sha256", {"path": "SPY_BENCHMARK", "rows": _equity_rows(spy_bench)}),
+        ("acwi_benchmark_equity_ledger_sha256", {"path": "ACWI_BENCHMARK", "rows": _equity_rows(acwi_bench)}),
+    ]
+    for key, doc in ledger_pairs:
+        recomputed = _sealed_sha(doc)
+        if recomputed != original[key]:
+            raise DataContractError(
+                f"LEDGER_DRIFT_{key}: recomputed {recomputed} != sealed {original[key]}."
+            )
+    print("Ledger equality verified: all 7 recomputed SHAs match original sealed pins.")
 
     def metrics(result: ACC.AllocationResult) -> Dict[str, str]:
         returns = [r.daily_return for r in result.equity_curve if r.daily_return is not None]
         total_return = result.ending_equity / ACC.SIMULATED_STARTING_AUM - Decimal("1")
         slippage = sum((execution_slippage_cost(t) for t in result.trades), Decimal("0"))
+        # Frozen contract: MDD from [starting_aum, EOD_1, ...] with ledger cross-check.
+        corrected_mdd = ACC.corrected_path_mdd(result.equity_curve)
         return {
             "starting_aum": str(ACC.SIMULATED_STARTING_AUM),
             "ending_aum": str(result.ending_equity),
             "net_total_return": str(total_return),
             "annualized_sharpe": str(annualized_sharpe(returns)),
-            "max_drawdown": str(max_drawdown([r.total_equity for r in result.equity_curve])),
+            "max_drawdown": str(corrected_mdd),
             "completed_trades": str(len(result.trades)),
             "regulatory_fees_paid": str(result.regulatory_fees_paid),
             "execution_slippage_cost": str(slippage),
@@ -466,20 +551,43 @@ def main(argv: List[str] | None = None) -> int:
     print(f"VERDICT = {verdict}")
 
     result_manifest = {
-        "manifest_id": "HYP_011_R3_HISTORICAL_RESULT",
-        "manifest_type": "HISTORICAL_EXECUTION_RESULT_MANIFEST",
+        "manifest_id": "HYP_011_R3_CORRECTED_REPRODUCIBILITY_RESULT",
+        "manifest_type": "CORRECTED_REPRODUCIBILITY_RESULT_MANIFEST",
         "hypothesis_id": "HYP_011",
         "core_id": "CORE-001",
-        "source_head": "b2c78009dbef1bd55bb0a8d9bc89cd1d8d23a66d",
+        "source_head": "64c927b39c6e4efcdf642facd178742e6ddf4ca1",
+        "supersedes_invalidated_run": "docs/phase14/manifests/HYP_011_R3_HISTORICAL_RESULT.json",
+        "invalidation": "HISTORICAL_RESULT_INVALIDATED_BY_IMPLEMENTATION_DEFECT",
         "contract_hashes": contracts,
-        "dataset_sha256": dataset_sha,
-        "signal_ledger_sha256": sig_sha,
-        "baseline_execution_ledger_sha256": base_exec_sha,
-        "stress_execution_ledger_sha256": stress_exec_sha,
-        "baseline_equity_ledger_sha256": base_eq_sha,
-        "stress_equity_ledger_sha256": stress_eq_sha,
-        "benchmark_equity_ledger_sha256": bench_eq_sha,
-        "acwi_benchmark_equity_ledger_sha256": acwi_eq_sha,
+        "dataset_sha256": original["dataset_sha256"],
+        "signal_ledger_sha256": original["signal_ledger_sha256"],
+        "baseline_execution_ledger_sha256": original["baseline_execution_ledger_sha256"],
+        "stress_execution_ledger_sha256": original["stress_execution_ledger_sha256"],
+        "baseline_equity_ledger_sha256": original["baseline_equity_ledger_sha256"],
+        "stress_equity_ledger_sha256": original["stress_equity_ledger_sha256"],
+        "benchmark_equity_ledger_sha256": original["benchmark_equity_ledger_sha256"],
+        "acwi_benchmark_equity_ledger_sha256": original["acwi_benchmark_equity_ledger_sha256"],
+        "mdd_correction": {
+            "baseline_mdd_original": original["baseline_metrics"]["max_drawdown"],
+            "baseline_mdd_corrected": base_m["max_drawdown"],
+            "stress_mdd_original": original["stress_metrics"]["max_drawdown"],
+            "stress_mdd_corrected": stress_m["max_drawdown"],
+            "benchmark_mdd_original": original["benchmark_metrics"]["max_drawdown"],
+            "benchmark_mdd_corrected": bench_m["max_drawdown"],
+            "acwi_mdd_original": original["acwi_benchmark_metrics"]["max_drawdown"],
+            "acwi_mdd_corrected": acwi_m["max_drawdown"],
+        },
+        "economics_unchanged": {
+            "baseline_ending_aum": base_m["ending_aum"] == original["baseline_metrics"]["ending_aum"],
+            "baseline_return": base_m["net_total_return"] == original["baseline_metrics"]["net_total_return"],
+            "baseline_sharpe": base_m["annualized_sharpe"] == original["baseline_metrics"]["annualized_sharpe"],
+            "stress_ending_aum": stress_m["ending_aum"] == original["stress_metrics"]["ending_aum"],
+            "stress_return": stress_m["net_total_return"] == original["stress_metrics"]["net_total_return"],
+            "stress_sharpe": stress_m["annualized_sharpe"] == original["stress_metrics"]["annualized_sharpe"],
+            "benchmark_ending_aum": bench_m["ending_aum"] == original["benchmark_metrics"]["ending_aum"],
+            "benchmark_return": bench_m["net_total_return"] == original["benchmark_metrics"]["net_total_return"],
+            "benchmark_sharpe": bench_m["annualized_sharpe"] == original["benchmark_metrics"]["annualized_sharpe"],
+        },
         "baseline_metrics": base_m,
         "stress_metrics": stress_m,
         "benchmark_metrics": bench_m,
@@ -488,6 +596,7 @@ def main(argv: List[str] | None = None) -> int:
                   "G5": gates.g5, "G6": gates.g6, "conjunction": gates.conjunction},
         "contract_qualification_derived": g6,
         "verdict": verdict,
+        "network_requests_issued": http_count[0],
         "recent_stress_access_count": 0,
         "quarantine_access_count": 0,
         "prospective_access_count": 0,
@@ -498,10 +607,10 @@ def main(argv: List[str] | None = None) -> int:
         "no_real_orders": True,
     }
     result_raw = json.dumps(result_manifest, indent=2, sort_keys=True)
-    with open("docs/phase14/manifests/HYP_011_R3_HISTORICAL_RESULT.json",
+    with open("docs/phase14/manifests/HYP_011_R3_CORRECTED_REPRODUCIBILITY_RESULT.json",
               "w", encoding="utf-8", newline="\n") as handle:
         handle.write(result_raw)
-    print("Historical result sealed.")
+    print("Corrected reproducibility result sealed.")
     return 0
 
 

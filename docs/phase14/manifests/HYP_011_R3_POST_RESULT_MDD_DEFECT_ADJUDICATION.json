@@ -1,0 +1,28 @@
+{
+  "manifest_id": "HYP_011_R3_POST_RESULT_MDD_DEFECT_ADJUDICATION",
+  "manifest_type": "POST_RESULT_DEFECT_ADJUDICATION_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R3_MDD_DEFECT_ADJUDICATION_AND_CORRECTED_REPRODUCIBILITY",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "original_result_commit": "64c927b39c6e4efcdf642facd178742e6ddf4ca1",
+  "original_verdict": "HISTORICAL_REPLICATION_SUPPORTED_FOR_PROSPECTIVE_SHADOW",
+  "defect_discovered_after_performance_observed": true,
+  "defect": "FINAL_MDD_METRIC_RECOMPUTATION_OMITTED_FROZEN_INITIAL_100000_PEAK",
+  "affected_metrics": [
+    "BASELINE_MAX_DRAWDOWN",
+    "STRESS_MAX_DRAWDOWN",
+    "SPY_BENCHMARK_MAX_DRAWDOWN",
+    "ACWI_INFORMATIONAL_BENCHMARK_MAX_DRAWDOWN"
+  ],
+  "potentially_affected_gates": ["G3", "G4"],
+  "original_result_adjudication": "HISTORICAL_RESULT_INVALIDATED_BY_IMPLEMENTATION_DEFECT",
+  "scientific_hypothesis_falsified": false,
+  "scientific_hypothesis_supported": "NOT_ESTABLISHED_BY_INVALIDATED_RUN",
+  "dataset_invalidated": false,
+  "dataset_reacquisition_required": false,
+  "dataset_sha256": "4cf20b51c2e2be2bb629ba10be7c25b34e8259bd5549575156afe433fb16c3d5",
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
