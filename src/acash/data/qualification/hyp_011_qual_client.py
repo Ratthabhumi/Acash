@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set
+from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
 import httpx
 import time
@@ -42,12 +42,24 @@ HYP011_ALLOWED_ADJUSTMENTS: FrozenSet[PriceAdjustment] = frozenset(
 )
 HYP011_PROBE_START: date = date(2016, 1, 4)
 HYP011_PROBE_END: date = date(2016, 1, 7)
+HYP011_HISTORICAL_START: date = date(2016, 1, 1)
+HYP011_HISTORICAL_END: date = date(2024, 12, 31)
 HYP011_EXPECTED_PROBE_SESSIONS = (
     date(2016, 1, 4),
     date(2016, 1, 5),
     date(2016, 1, 6),
     date(2016, 1, 7),
 )
+
+
+@dataclass(frozen=True)
+class Hyp011HistoricalResult:
+    bars: List[DailyBar]
+    pages_raw_bytes: List[bytes]
+    pages_metadata: List[SipPageMetadata]
+    http_status_code: int
+    symbol: str
+    adjustment: str
 
 _REQUIRED_BAR_KEYS = ("t", "o", "h", "l", "c", "v")
 
@@ -151,7 +163,84 @@ class HYP011AlpacaClient:
     ) -> Hyp011RetrievalResult:
         """Fetch the exact tiny probe window; guard rejects anything else pre-network."""
         self._guard.validate_request(symbol, start_utc, end_utc, feed, adjustment, timeframe)
+        bars, pages_raw, pages_meta, status, headers = self._fetch_pages(
+            symbol.strip().upper(), start_utc, end_utc, feed, adjustment, timeframe,
+            max_pages=5,
+            window=(HYP011_PROBE_START, HYP011_PROBE_END),
+        )
+        return Hyp011RetrievalResult(
+            bars=bars,
+            pages_raw_bytes=pages_raw,
+            pages_metadata=pages_meta,
+            http_status_code=status,
+            response_headers=headers,
+            feed_requested=feed.value,
+            feed_response_provenance="alpaca-sip",
+            symbol=symbol.strip().upper(),
+            adjustment=adjustment.value,
+        )
+
+    def fetch_historical_window(
+        self,
+        symbol: str,
+        start_utc: datetime,
+        end_utc: datetime,
+        feed: MarketDataFeed = MarketDataFeed.SIP,
+        adjustment: PriceAdjustment = PriceAdjustment.RAW,
+        timeframe: str = "1Day",
+    ) -> Hyp011HistoricalResult:
+        """Fetch the full frozen historical window (fail closed outside scope)."""
         sym = symbol.strip().upper()
+        if sym not in HYP011_SYMBOLS:
+            raise SipContractViolationError(
+                f"HYP_011 allowlist violation: symbol '{symbol}' not in ACWI/AGG/SPY."
+            )
+        if timeframe != HYP011_TIMEFRAME:
+            raise SipContractViolationError(
+                f"HYP_011 requires timeframe='1Day', got '{timeframe}'."
+            )
+        if feed != MarketDataFeed.SIP:
+            raise SipContractViolationError(f"HYP_011 requires feed='sip', got '{feed}'.")
+        if adjustment not in HYP011_ALLOWED_ADJUSTMENTS:
+            raise SipContractViolationError(
+                f"HYP_011 requires adjustment in {{'split','raw'}}, got '{adjustment}'."
+            )
+        if start_utc.tzinfo is None or end_utc.tzinfo is None:
+            raise DataContractError("HYP_011 window datetimes must be timezone-aware UTC.")
+        start_date = start_utc.astimezone(timezone.utc).date()
+        end_date = end_utc.astimezone(timezone.utc).date()
+        if start_date < HYP011_HISTORICAL_START or end_date > HYP011_HISTORICAL_END:
+            raise SipContractViolationError(
+                f"HYP_011 historical window [{start_date}, {end_date}] outside "
+                f"[{HYP011_HISTORICAL_START}, {HYP011_HISTORICAL_END}]."
+            )
+        if start_date > end_date:
+            raise DataContractError("HYP_011 historical window start exceeds end.")
+        bars, pages_raw, pages_meta, status, _ = self._fetch_pages(
+            sym, start_utc, end_utc, feed, adjustment, timeframe,
+            max_pages=50,
+            window=(HYP011_HISTORICAL_START, HYP011_HISTORICAL_END),
+        )
+        return Hyp011HistoricalResult(
+            bars=bars,
+            pages_raw_bytes=pages_raw,
+            pages_metadata=pages_meta,
+            http_status_code=status,
+            symbol=sym,
+            adjustment=adjustment.value,
+        )
+
+    def _fetch_pages(
+        self,
+        sym: str,
+        start_utc: datetime,
+        end_utc: datetime,
+        feed: MarketDataFeed,
+        adjustment: PriceAdjustment,
+        timeframe: str,
+        max_pages: int,
+        window: Tuple[date, date],
+    ) -> Tuple[List[DailyBar], List[bytes], List[SipPageMetadata], int, Dict[str, str]]:
         headers = self._get_auth_headers()
         start_str = start_utc.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         end_str = end_utc.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -175,8 +264,8 @@ class HYP011AlpacaClient:
         with httpx.Client(transport=self._transport) as client:
             while True:
                 page_index += 1
-                if page_index > 5:
-                    raise DataContractError("HYP_011 tiny probe exceeded page budget.")
+                if page_index > max_pages:
+                    raise DataContractError("HYP_011 page budget exceeded.")
                 page_params = dict(params)
                 if next_page_token:
                     page_params["page_token"] = next_page_token
@@ -216,7 +305,7 @@ class HYP011AlpacaClient:
                     raw_bars = raw_bars.get(sym, [])
                 if not isinstance(raw_bars, list):
                     raise SipContractViolationError("HYP_011 'bars' payload must be a list.")
-                parsed = self._parse_bars(raw_bars)
+                parsed = self._parse_bars(raw_bars, window)
                 all_bars.extend(parsed)
                 token = payload.get("next_page_token")
                 pages_metadata.append(
@@ -233,19 +322,18 @@ class HYP011AlpacaClient:
                 if not token:
                     break
                 next_page_token = token
-        return Hyp011RetrievalResult(
-            bars=all_bars,
-            pages_raw_bytes=pages_raw_bytes,
-            pages_metadata=pages_metadata,
-            http_status_code=last_status_code,
-            response_headers=last_headers,
-            feed_requested=feed.value,
-            feed_response_provenance="alpaca-sip",
-            symbol=sym,
-            adjustment=adjustment.value,
+        return (
+            all_bars,
+            pages_raw_bytes,
+            pages_metadata,
+            last_status_code,
+            last_headers,
         )
 
-    def _parse_bars(self, raw_bars: Sequence[Any]) -> List[DailyBar]:
+    def _parse_bars(
+        self, raw_bars: Sequence[Any], window: Tuple[date, date]
+    ) -> List[DailyBar]:
+        window_start, window_end = window
         result: List[DailyBar] = []
         seen: Set[date] = set()
         for item in raw_bars:
@@ -262,9 +350,9 @@ class HYP011AlpacaClient:
             except (ValueError, TypeError) as e:
                 raise SipContractViolationError(f"HYP_011 malformed timestamp: {e}.") from e
             session_date = t_utc.date()
-            if session_date < HYP011_PROBE_START or session_date > HYP011_PROBE_END:
+            if session_date < window_start or session_date > window_end:
                 raise SipContractViolationError(
-                    f"HYP_011 provider spill: {session_date} outside probe window."
+                    f"HYP_011 provider spill: {session_date} outside [{window_start}, {window_end}]."
                 )
             if session_date in seen:
                 raise SipContractViolationError(f"HYP_011 duplicate session: {session_date}.")

@@ -80,6 +80,29 @@ def test_exact_window_and_contract_locked() -> None:
     assert calls == []
 
 
+def test_historical_window_guard() -> None:
+    from acash.data.qualification.hyp_011_qual_client import HYP011AlpacaClient as _C
+
+    calls: List[int] = []
+    client = _client(lambda r: httpx.Response(200, json={"bars": []}), calls)
+    assert isinstance(client, _C)
+    with pytest.raises(DataContractError):
+        client.fetch_historical_window(
+            symbol="ACWI",
+            start_utc=datetime(2016, 1, 4, tzinfo=timezone.utc),
+            end_utc=datetime(2025, 1, 6, tzinfo=timezone.utc),
+            feed=MarketDataFeed.SIP, adjustment=PriceAdjustment.RAW, timeframe="1Day",
+        )
+    with pytest.raises(DataContractError):
+        client.fetch_historical_window(
+            symbol="VEU",
+            start_utc=datetime(2016, 1, 4, tzinfo=timezone.utc),
+            end_utc=datetime(2016, 1, 7, tzinfo=timezone.utc),
+            feed=MarketDataFeed.SIP, adjustment=PriceAdjustment.RAW, timeframe="1Day",
+        )
+    assert calls == []
+
+
 def test_expected_sessions_and_pass_shape() -> None:
     assert list(HYP011_EXPECTED_PROBE_SESSIONS) == [
         date(2016, 1, 4), date(2016, 1, 5), date(2016, 1, 6), date(2016, 1, 7)

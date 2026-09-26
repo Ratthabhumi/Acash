@@ -1,0 +1,20 @@
+{
+  "manifest_id": "HYP_011_R3_HISTORICAL_READINESS",
+  "manifest_type": "R3_HISTORICAL_READINESS_SEAL_MANIFEST",
+  "authorization": "AUTHORIZE_CORE_001_HYP_011_R3_HISTORICAL_DATASET_BUILD_AND_SINGLE_EXECUTION",
+  "starting_sha": "b2c78009dbef1bd55bb0a8d9bc89cd1d8d23a66d",
+  "hypothesis_id": "HYP_011",
+  "core_id": "CORE-001",
+  "state": "HISTORICAL_IMPLEMENTATION_READY_DATA_NOT_ACCESSED",
+  "implementation_package": "src/acash/research/hyp_011/",
+  "implementation_tests": "tests/unit/research/test_phase14_hyp_011_r3_implementation.py",
+  "full_historical_network_requests": 0,
+  "recent_stress_access": 0,
+  "quarantine_access": 0,
+  "prospective_access": 0,
+  "scientific_parameter_drift": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "capital_authority_usd": "0.00",
+  "no_real_orders": true
+}
