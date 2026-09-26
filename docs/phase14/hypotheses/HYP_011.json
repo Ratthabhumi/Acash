@@ -25,14 +25,17 @@
     "spy_authoritative_distribution_history_STATE_STREET_SPDR_OFFICIAL",
     "canonical_nyse_calendar_with_sealed_unscheduled_closure_corrections"
   ],
-  "parameter_config_json": "{\"anti_optimization_covenant\":\"K_1_NO_POST_R1_REDESIGN\",\"benchmark_primary\":\"SPY_BUY_AND_HOLD\",\"benchmark_secondary_informational_non_binding\":\"ACWI_BUY_AND_HOLD\",\"calendar_authority\":\"CANONICAL_NYSE_CALENDAR_IN_REPOSITORY\",\"cash_return\":0.0,\"first_allocation_rule\":\"FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_ON_OR_AFTER_PARTITION_START\",\"frequency\":\"STATIC_STRATEGIC_ALLOCATION\",\"historical_classification\":\"HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND\",\"max_gross_leverage\":1.0,\"missing_data_policy\":\"FAIL_CLOSED_NO_INTERPOLATION_NO_FORWARD_FILL\",\"momentum_signal\":false,\"numerical_gates_authorized\":false,\"planned_trial_count_k\":1,\"prospective_minimum_annual_rebalances\":2,\"prospective_minimum_eligible_sessions\":504,\"quarantine\":\"2026-08-15_TO_PROSPECTIVE_START_EXCLUSIVE_STRICT_ZERO_ACCESS\",\"rebalance_frequency\":\"ANNUAL\",\"rebalance_rule\":\"FIRST_ELIGIBLE_OPEN_OF_EACH_NEW_CALENDAR_YEAR_TO_80_20_WHOLE_SHARES\",\"recent_stress\":\"2025-01-01_TO_2026-08-14_PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE\",\"research_priority\":\"CORE_FIRST\",\"selection_status\":\"SELECTED_PRE_PERFORMANCE_FROM_LITERATURE_OPERATIONAL_SIMPLICITY_AND_SOURCE_FEASIBILITY\",\"short_state\":false,\"signal_present\":false,\"strategy_family\":\"STATIC_GLOBAL_EQUITY_BOND_STRATEGIC_ASSET_ALLOCATION\",\"target_weights\":{\"ACWI\":0.8,\"AGG\":0.2},\"volatility_targeting\":false,\"working_title\":\"Global 80/20 Strategic Allocation Core\"}",
+  "parameter_config_json": "{\"anti_optimization_covenant\":\"K_1_NO_POST_R1_REDESIGN\",\"benchmark_primary\":\"SPY_BUY_AND_HOLD\",\"benchmark_secondary_informational_non_binding\":\"ACWI_BUY_AND_HOLD\",\"calendar_authority\":\"CANONICAL_NYSE_CALENDAR_IN_REPOSITORY\",\"cash_return\":0.0,\"first_allocation_rule\":\"FIRST_ELIGIBLE_CANONICAL_US_EQUITY_SESSION_OPEN_ON_OR_AFTER_PARTITION_START\",\"frequency\":\"STATIC_STRATEGIC_ALLOCATION\",\"historical_classification\":\"HISTORICAL_EXPOSED_REPLICATION_NOT_RESEARCHER_BLIND\",\"max_gross_leverage\":1.0,\"missing_data_policy\":\"FAIL_CLOSED_NO_INTERPOLATION_NO_FORWARD_FILL\",\"momentum_signal\":false,\"numerical_gates_authorized\":true,\"planned_trial_count_k\":1,\"prospective_minimum_annual_rebalances\":2,\"prospective_minimum_eligible_sessions\":504,\"quarantine\":\"2026-08-15_TO_PROSPECTIVE_START_EXCLUSIVE_STRICT_ZERO_ACCESS\",\"rebalance_frequency\":\"ANNUAL\",\"rebalance_rule\":\"FIRST_ELIGIBLE_OPEN_OF_EACH_NEW_CALENDAR_YEAR_TO_80_20_WHOLE_SHARES\",\"recent_stress\":\"2025-01-01_TO_2026-08-14_PUBLICLY_EXPOSED_RECENT_STRESS_NOT_PRISTINE_NON_DECISIVE\",\"research_priority\":\"CORE_FIRST\",\"selection_status\":\"SELECTED_PRE_PERFORMANCE_FROM_LITERATURE_OPERATIONAL_SIMPLICITY_AND_SOURCE_FEASIBILITY\",\"short_state\":false,\"signal_present\":false,\"strategy_family\":\"STATIC_GLOBAL_EQUITY_BOND_STRATEGIC_ASSET_ALLOCATION\",\"target_weights\":{\"ACWI\":0.8,\"AGG\":0.2},\"volatility_targeting\":false,\"working_title\":\"Global 80/20 Strategic Allocation Core\"}",
   "expected_direction": "LONG",
   "target_horizons": [
     21
   ],
   "primary_horizon": 21,
   "invalidation_criteria": {
-    "status": "NOT_PREREGISTERED_NO_NUMERICAL_GATES_AUTHORIZED"
+    "status": "R1_NUMERICAL_GATES_SEALED",
+    "authority": "docs/phase14/manifests/manifest_r1_HYP_011.json",
+    "gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+    "logical_conjunction": "G1 AND G2 AND G3 AND G4 AND G5 AND G6"
   },
   "open_before_r1": [],
   "registered_at_utc": "2026-09-24T21:00:00Z",
@@ -40,5 +43,8 @@
   "inception_token_id": "AUTH_INCEPTION_HYP_011_d975fd46ad1a1b2f",
   "proposal_sha256": "d975fd46ad1a1b2ffdc1aeb51a0e88a471bc3b1509251a660d143a405ca4b83e",
   "preregistration_sha256": "04dab8edb5b3c442094c284485eeddfc83c0b3c91e9c6db59e0f7694144fbe2e",
-  "r1_manifest": "docs/phase14/manifests/manifest_r1_HYP_011.json"
+  "r1_manifest": "docs/phase14/manifests/manifest_r1_HYP_011.json",
+  "r1_gate_authority": "docs/phase14/manifests/manifest_r1_HYP_011.json",
+  "r1_gate_contract_hash": "052758ae6ff6ef022b11103f1f307cdcb5afd2ef506f4babaf89ca2ed9a7ea4b",
+  "r1_resolution_authority": "POST_R1_METADATA_AND_PROSPECTIVE_RECONCILIATION"
 }
