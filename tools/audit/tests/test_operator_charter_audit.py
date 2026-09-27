@@ -133,6 +133,9 @@ class RepositoryTests(unittest.TestCase):
         return str(next(item["state"] for item in findings if item["check"] == check))
 
     def test_clean_scope_still_unknown_overall(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
+        self.commit()
         result = audit.assess(self.repo)
         self.assertEqual(self.state("COMMITTED_SCOPE"), "VERIFIED")
         self.assertEqual(self.state("WORKTREE_SCOPE"), "VERIFIED")
@@ -146,7 +149,20 @@ class RepositoryTests(unittest.TestCase):
         self.commit()
         self.assertEqual(self.state("COMMITTED_SCOPE"), "VERIFIED")
 
+    def test_all_required_additions_missing_at_base_blocked(self) -> None:
+        # Base commit without any audit additions must fail-closed
+        self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
+
+    def test_one_required_addition_missing_blocked(self) -> None:
+        # 3 out of 4 additions present => missing required addition => BLOCKED
+        for path in sorted(audit.ADDITIONS)[:-1]:
+            self.write(path, "synthetic audit-only addition\n")
+        self.commit()
+        self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
+
     def test_committed_runtime_change_blocked(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
         self.write("src/observation.py", "# unauthorized change\n")
         self.commit()
         self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
@@ -162,18 +178,30 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.state("WORKTREE_SCOPE"), "BLOCKED")
 
     def test_deleted_existing_file_blocked(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
         self.git("rm", "src/observation.py")
         self.commit()
         self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
 
     def test_renamed_existing_file_blocked(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
         self.git("mv", "src/observation.py", "src/renamed.py")
         self.commit()
         self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
 
     def test_new_workflow_blocked_even_without_runtime_change(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
         self.write(".github/workflows/audit.yml", "name: unauthorized coupling\n")
-        self.assertEqual(self.state("WORKTREE_SCOPE"), "BLOCKED")
+        self.commit()
+        self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
+
+    def test_unexpected_fifth_addition_blocked(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
+        self.write("docs/governance/EXTRA_UNAUTHORIZED.md", "unexpected fifth addition\n")
         self.commit()
         self.assertEqual(self.state("COMMITTED_SCOPE"), "BLOCKED")
 
@@ -215,6 +243,9 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.state("INDEX_VISIBILITY"), "BLOCKED")
 
     def test_caller_git_directory_cannot_redirect_audit(self) -> None:
+        for path in audit.ADDITIONS:
+            self.write(path, "synthetic audit-only addition\n")
+        self.commit()
         with patch.dict(os.environ, {"GIT_DIR": "nonexistent", "GIT_WORK_TREE": "nonexistent"}):
             self.assertEqual(self.state("COMMITTED_SCOPE"), "VERIFIED")
 

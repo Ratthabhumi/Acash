@@ -171,10 +171,13 @@ def assess(repo: Path) -> dict[str, Any]:
         changed_existing = sorted(path for path, entry in base_tree.items()
                                   if head_tree.get(path) != entry)
         extra = sorted(set(head_tree) - set(base_tree) - ADDITIONS)
-        add("COMMITTED_SCOPE", "BLOCKED" if changed_existing or extra else "VERIFIED",
+        missing_required = sorted(ADDITIONS - set(head_tree))
+        add("COMMITTED_SCOPE",
+            "BLOCKED" if changed_existing or extra or missing_required else "VERIFIED",
             "4,5,10", f"Git trees {BASE}..{head}",
             json.dumps({"changed_or_deleted_existing": changed_existing,
-                        "unexpected_additions": extra}))
+                        "unexpected_additions": extra,
+                        "missing_required_additions": missing_required}))
 
         dirty: set[str] = set()
         for args in (("--cached", "HEAD"), ("HEAD",), ()):
