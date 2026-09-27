@@ -10,6 +10,9 @@ dist-ssr/
 # Derived CORE-001 snapshot (generated, never committed)
 public/data/
 
+# Compiled fail-closed test cache (generated, never committed)
+test/.tmp-core001-failclosed/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

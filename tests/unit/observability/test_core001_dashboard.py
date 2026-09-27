@@ -202,8 +202,38 @@ def test_observability_package_has_no_write_capability() -> None:
     assert "read_text" in content
 
 
-def test_real_prospective_dir_untouched_by_tests() -> None:
-    # This suite must never create artifacts in the canonical directory.
-    if REAL_STATE_DIR.is_dir():
-        assert list((REAL_STATE_DIR / "observations").glob("*.json")) == [] if \
-            (REAL_STATE_DIR / "observations").is_dir() else True
+def test_benchmark_return_uses_starting_aum(tmp_path: Path) -> None:
+    # Frozen semantics: benchmark prev_equity starts at $100,000, so the
+    # Observation #1 sealed equity already embeds entry friction. Cumulative
+    # return must be latest/100000 - 1, NOT latest/first - 1.
+    _seal(tmp_path, date(2026, 9, 28), 1, "100100", None, spy_equity="99900.00")
+    view = dash.build_dashboard_state(tmp_path)
+    assert view["benchmark"]["return_since_entry"] == str(
+        Decimal("99900.00") / Decimal("100000") - Decimal("1")
+    )
+
+
+def test_benchmark_return_multi_observation(tmp_path: Path) -> None:
+    prev = _seal(tmp_path, date(2026, 9, 28), 1, "100100", None, spy_equity="99900.00")
+    _seal(tmp_path, date(2026, 9, 29), 2, "100200", prev, spy_equity="101000.00")
+    view = dash.build_dashboard_state(tmp_path)
+    assert view["benchmark"]["return_since_entry"] == str(
+        Decimal("101000.00") / Decimal("100000") - Decimal("1")
+    )
+    assert view["benchmark"]["return_since_entry"] != str(
+        Decimal("101000.00") / Decimal("99900.00") - Decimal("1")
+    )
+
+
+def test_real_prospective_dir_never_mutated_by_adapter() -> None:
+    # Durable past Observation #0001: the canonical directory MAY contain
+    # sealed observations. The invariant is non-mutation, never emptiness.
+    if not REAL_STATE_DIR.is_dir():
+        pytest.skip("no canonical prospective directory in this checkout")
+    before = _dir_bytes(REAL_STATE_DIR)
+    view = dash.build_dashboard_state(REAL_STATE_DIR)
+    after = _dir_bytes(REAL_STATE_DIR)
+    assert before == after
+    assert view["identity"]["hypothesis_id"] == "HYP_011"
+    assert view["governance"]["paper_authorized"] is False
+    assert view["governance"]["live_locked"] is True

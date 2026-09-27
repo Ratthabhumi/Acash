@@ -112,3 +112,32 @@ export function parseCore001Snapshot(payload: unknown, fetchedAtUtc: string): Co
 export function emptyPreS1Response(fetchedAtUtc: string): Core001ApiResponse {
   return { ok: true, data: buildEmptyPreS1State(fetchedAtUtc), error: null, fetchedAtUtc };
 }
+
+/**
+ * Fail-closed blocked state. Used ONLY when a snapshot exists (or may
+ * exist) but cannot be trusted: malformed JSON, wrong document, hypothesis
+ * mismatch, authority/capital violation, or unreadable source. NEVER used
+ * for a genuinely absent snapshot (that is EMPTY PRE-S1). Authority
+ * boundaries are preserved structurally even in the blocked state.
+ */
+export function buildBlockedState(reason: string, fetchedAtUtc: string): Core001DashboardState {
+  const base = buildEmptyPreS1State(fetchedAtUtc);
+  return {
+    ...base,
+    governance: { ...base.governance, stage: 'EVIDENCE_INVALID_OR_BLOCKED' },
+    portfolio: { ...base.portfolio, basis: 'BLOCKED_EVIDENCE_NOT_SHOWN' },
+    evidence: {
+      status: 'EVIDENCE_INVALID_OR_BLOCKED',
+      reason,
+      latest_observation_ordinal: null,
+      latest_observation_session: null,
+    },
+    incident: { category: 'UNKNOWN', basis: 'BLOCKED_EVIDENCE_UNREADABLE' },
+    dataSource: 'SNAPSHOT',
+    fetchedAtUtc,
+  };
+}
+
+export function blockedResponse(reason: string, fetchedAtUtc: string): Core001ApiResponse {
+  return { ok: false, data: buildBlockedState(reason, fetchedAtUtc), error: reason, fetchedAtUtc };
+}

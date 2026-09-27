@@ -67,6 +67,35 @@ export const Core001Page: React.FC = () => {
 
   const s = response.data;
   const chartData = toChartPoints(s);
+  const blocked = s.evidence.status === 'EVIDENCE_INVALID_OR_BLOCKED';
+
+  if (blocked) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold text-primary">ACASH CORE-001</h1>
+          <StatusBadge status="EVIDENCE_INVALID_OR_BLOCKED" size="md" />
+        </div>
+        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-md p-4 text-xs">
+          <p className="font-semibold text-rose-800 dark:text-rose-300 mb-1">Evidence unreadable — fail-closed. No state was assumed healthy.</p>
+          <p className="font-mono-code text-rose-800 dark:text-rose-300">Reason: {s.evidence.reason}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center text-xs">
+          <span className="text-secondary">Paper:</span>
+          <StatusBadge status="NOT_AUTHORIZED" />
+          <span className="text-secondary ml-2">Live:</span>
+          <StatusBadge status="LOCKED" />
+          <span className="text-secondary ml-2">Real Capital:</span>
+          <span className="font-mono-code text-primary">$0.00</span>
+          <span className="text-secondary ml-2">NO_REAL_ORDERS:</span>
+          <StatusBadge status="TRUE" />
+        </div>
+        <p className="text-[11px] text-muted font-mono-code">
+          READ-ONLY OBSERVABILITY — corruption is surfaced, never converted into a healthy-looking empty state.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">

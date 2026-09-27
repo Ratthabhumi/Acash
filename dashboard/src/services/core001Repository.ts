@@ -10,6 +10,7 @@
 
 import { Core001ApiResponse } from '../types/core001';
 import {
+  blockedResponse,
   buildEmptyPreS1State,
   parseCore001Snapshot,
 } from './core001MockData';
@@ -23,30 +24,51 @@ export interface ICore001Repository {
 }
 
 class SnapshotCore001Repository implements ICore001Repository {
+  /**
+   * Fail-closed fetch semantics:
+   * - HTTP 404 / genuinely absent snapshot -> EMPTY PRE-S1 (normal pre-Obs-#1).
+   * - Any other non-OK status, network/read error, malformed JSON, wrong
+   *   document, hypothesis/authority/capital violation -> BLOCKED.
+   * Corruption is NEVER converted into a healthy-looking empty state.
+   */
   async getState(): Promise<Core001ApiResponse> {
     const fetchedAtUtc = new Date().toISOString();
+    let resp: Response;
     try {
       const base =
         typeof window !== 'undefined' && window.location
           ? `${window.location.pathname.replace(/\/[^/]*$/, '/')}`
           : '/';
-      const resp = await fetch(`${base}${SNAPSHOT_URL}`, {
+      resp = await fetch(`${base}${SNAPSHOT_URL}`, {
         headers: { Accept: 'application/json' },
       });
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return blockedResponse(`SNAPSHOT_UNREACHABLE: ${message}`, fetchedAtUtc);
+    }
+    if (!resp.ok) {
+      if (resp.status === 404) {
+        return {
+          ok: true,
+          data: buildEmptyPreS1State(fetchedAtUtc),
+          error: null,
+          fetchedAtUtc,
+        };
       }
-      const payload: unknown = await resp.json();
+      return blockedResponse(`SNAPSHOT_HTTP_${resp.status}`, fetchedAtUtc);
+    }
+    let payload: unknown;
+    try {
+      payload = await resp.json();
+    } catch {
+      return blockedResponse('SNAPSHOT_MALFORMED_JSON', fetchedAtUtc);
+    }
+    try {
       const data = parseCore001Snapshot(payload, fetchedAtUtc);
       return { ok: true, data, error: null, fetchedAtUtc };
-    } catch {
-      // No snapshot yet (normal pre-first-observation): explicit PRE-S1.
-      return {
-        ok: true,
-        data: buildEmptyPreS1State(fetchedAtUtc),
-        error: null,
-        fetchedAtUtc,
-      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return blockedResponse(message, fetchedAtUtc);
     }
   }
 

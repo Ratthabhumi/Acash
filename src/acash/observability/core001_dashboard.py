@@ -367,9 +367,12 @@ def _benchmark_section(
 ) -> Dict[str, Any]:
     if records:
         frag = records[-1]["benchmark"]
-        first_eq = Decimal(str(records[0]["benchmark"]["equity"]))
         last_eq = Decimal(str(frag["equity"]))
-        bench_return = last_eq / first_eq - Decimal("1")
+        # Frozen semantics: benchmark starts from simulated starting AUM
+        # ($100,000 prev_equity/peak); Observation #1 daily return already
+        # includes entry friction against that base. Cumulative return must
+        # therefore use STARTING_AUM, not the first sealed equity.
+        bench_return = last_eq / STARTING_AUM - Decimal("1")
         return {
             "equity": str(frag.get("equity")),
             "shares": frag.get("shares", 0),
