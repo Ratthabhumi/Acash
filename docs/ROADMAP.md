@@ -1,5 +1,14 @@
 # ACASH — System Development Roadmap (Phases 0–16)
 
+> **CURRENT GOVERNANCE NOTE — 2026-09-27.** The historical roadmap below
+> (including the "CURRENT NORTH-STAR (2026-09-11)" heading) is preserved
+> project history, not the present state. Current CORE-001 / HYP_011
+> roadmap authority is the Staged Evidence Framework v1 section at the end
+> of this file and `docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md`.
+> Current state: **PRE-S1** · observed = 0 · Observation #0001 pending ·
+> paper unauthorized · live locked · real capital $0 · `NO_REAL_ORDERS=true` ·
+> origin/main pin `d9608c0…` until Observation #0001.
+
 **Document:** `docs/ROADMAP.md`  
 **Version:** 3.6.0  
 **Date:** 2026-09-11  
