@@ -94,9 +94,9 @@ ACASH is built as a sovereign **Modular Monolith** in Python executing locally o
 2. **Analytics & Quant Research:** `pandas`, `NumPy`, `vectorbt` (Tier-1 rapid parameter screening), and `Plotly` (interactive visualization).
 3. **Alpha Engine & Hypothesis Contract:** Strict pre-registered hypothesis contracts, econometric forward returns, and Newey-West / HAC inference.
 4. **Statistical Validation Engine:** Combinatorial Purged Cross-Validation (CPCV), Deflated Sharpe Ratio (DSR), MinTRL, Holm-Bonferroni FWER multiple testing corrections, and Probability of Backtest Overfitting (PBO).
-5. **Alpha Qualification Engine (Phase 8.5):** Canonical `AlphaQualificationDossier` and `AlphaEconomicDecomposition` DTOs certifying economic edge ($Net = Gross - Friction$) with **$0.00 capital authority**.
+5. **Alpha Qualification Engine (Phase 8.5):** Canonical `AlphaQualificationDossier` and `AlphaEconomicDecomposition` DTOs certifying economic edge ($`Net = Gross - Friction`$) with **$0.00 capital authority**.
 6. **Portfolio Engine & Tournament (Phase 8):** Native HRP and ERC optimizers evaluated strictly in zero-leakage tournaments against transparent baselines (Equal Weight, Inverse Volatility, Cash/NOWHERE).
-7. **Runtime Supervisor & Operational Scheduler (Phase 10):** Dual-clock cadence coordination ($as\_of\_utc \neq wall\_clock\_utc$) and authoritative 5-stage cycle orchestration ($\text{Data} \to \text{Census} \to \text{Tournament} \to \text{Risk} \to \text{Admission}$).
+7. **Runtime Supervisor & Operational Scheduler (Phase 10):** Dual-clock cadence coordination ($`\text{as\_of\_utc} \neq \text{wall\_clock\_utc}`$) and authoritative 5-stage cycle orchestration ($\text{Data} \to \text{Census} \to \text{Tournament} \to \text{Risk} \to \text{Admission}$).
 8. **Deterministic Risk Engine & Kill Switch (Phase 9):** Non-negotiable sovereign risk boundary (`DeterministicRiskEngine`), exact monotonic derisking (`EXACT_SCALE_DOWN`), and multi-sig `Ed25519TrustStore` quorum reset control.
 9. **Execution Engine & Broker Mapping (Phase 7):** Sovereign `ExecutionCoordinator`, vendor-agnostic broker semantic mapping (BMAP), and venue-pinned Alpaca Paper adapter.
 10. **Operational Ledger (Phase 10):** Cryptographic SHA-256 chained disk ledger (`OperationalLedger`) with full crash recovery and tamper detection.
@@ -204,30 +204,30 @@ ACASH explicitly decouples state management from decision and execution flows:
    - Deterministic 5-tuple order reconstruction (`exchange_time_utc`, `source_order_key`, `message_type_rank`, `stream_id`, `row_sub_index`).
    - Explicit `CLEAR` level semantics (distinguishing zero-volume deletions from NULL clear operations).
 6. **Phase 3C — Microstructure Feature Engine:**
-   - Derived mathematical features: Session VWAP, Volume-Weighted Dispersion ($\sigma$), Volume Profile with POC lower-price tie-breakers, Value Area 70% bounds, Footprint Analytics (Stacked Imbalances, CVD, Absorption), and Depth-Weighted Micro-Price.
-   - Dual-temporal point-in-time filtering ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$) preventing lookahead and revision leakage.
+   - Derived mathematical features: Session VWAP, Volume-Weighted Dispersion ($`\sigma`$), Volume Profile with POC lower-price tie-breakers, Value Area 70% bounds, Footprint Analytics (Stacked Imbalances, CVD, Absorption), and Depth-Weighted Micro-Price.
+   - Dual-temporal point-in-time filtering ($`T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}`$) preventing lookahead and revision leakage.
 7. **Phase 4 — Alpha Research Engine & Hypothesis Contract:**
    - Formal, pre-registered `HypothesisSpecification` with explicit falsification criteria.
-   - Discrete bar-indexed forward returns ($R(t,H) = \frac{P_{\text{close}, t+H} - P_{\text{open}, t+1}}{P_{\text{open}, t+1}}$) eliminating off-by-one ambiguities.
-   - Primary econometric inference via OLS slope $\hat{\beta}_H$ under Newey-West / HAC covariance using Bartlett kernel with verified analytical reference vector.
+   - Discrete bar-indexed forward returns ($`R(t,H) = \frac{P_{\text{close}, t+H} - P_{\text{open}, t+1}}{P_{\text{open}, t+1}}`$) eliminating off-by-one ambiguities.
+   - Primary econometric inference via OLS slope $`\hat{\beta}_H`$ under Newey-West / HAC covariance using Bartlett kernel with verified analytical reference vector.
    - Descriptive non-parametric association: Pearson IC, Spearman Rank IC (with fractional tie-handling), and Autocorrelation.
    - 3-Tier Friction Waterfall: Raw Predictive Edge $\to$ Spread + Fee Net $\to$ Fixed Slippage Proxy Economic Edge.
-   - Interval-based boundary purging across partition splits and unallocated embargo buffers ($\ge \max(H)$ bars).
+   - Interval-based boundary purging across partition splits and unallocated embargo buffers ($`\ge \max(H)`$ bars).
    - Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) locking OOS exposure (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
 8. **Phase 5 — Backtesting Substrate & Simulation Engine:**
    - Sovereign event-driven simulation substrate with simulated order lifecycle state machine (`CREATED` $\to$ `SUBMITTED` $\to$ `ACCEPTED` $\to$ `FILLED`).
-   - Canonical Data Adapter enforcing Phase 3B total ordering 5-tuple: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
-   - Decoupled double-entry shadow ledger (Balance-Sheet View vs Performance Attribution View) eliminating Realized PnL double counting ($|\text{AccountingResidual}| \le 10^{-10}$).
+   - Canonical Data Adapter enforcing Phase 3B total ordering 5-tuple: $`(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})`$.
+   - Decoupled double-entry shadow ledger (Balance-Sheet View vs Performance Attribution View) eliminating Realized PnL double counting ($`|\text{AccountingResidual}| \le 10^{-10}`$).
    - Unmocked native `NautilusTrader` execution substrate with Parquet catalog bridge and contract specification mapping.
-   - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
+   - Deterministic content-derived `BacktestManifest` identity: $`\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]`$.
    - Reality Gap Telemetry Engine implementing disjoint non-overlapping reference-price decomposition: Spread Drag, Slippage Drag, Latency Drag, Fee Drag, Maker Adverse Selection Drag, and Unmodelled Residual.
    - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
 9. **Phase 6 — Statistical Validation & Overfitting Controls:**
-   - Combinatorial Purged Cross-Validation (`cpcv.py`): Contiguous $N$-group partitioning, exhaustive $\binom{N}{k}$ combinatorial splits, strict $[t+1, t+H]$ interval purging, post-test embargo buffers, and chronological pseudo-OOS path reconstruction ($\phi = \frac{k}{N}\binom{N}{k}$).
-   - Deflated Sharpe Ratio & MinTRL (`deflated_sharpe.py`): Non-normal asymptotic inference (Bailey & López de Prado 2014) with Euler-Mascheroni constant $\gamma_E$, empirical trial variance $V$, Fisher-Pearson skewness $g_1$, and Pearson kurtosis $g_2$.
+   - Combinatorial Purged Cross-Validation (`cpcv.py`): Contiguous $N$-group partitioning, exhaustive $`\binom{N}{k}`$ combinatorial splits, strict $`[t+1, t+H]`$ interval purging, post-test embargo buffers, and chronological pseudo-OOS path reconstruction ($`\phi = \frac{k}{N}\binom{N}{k}`$).
+   - Deflated Sharpe Ratio & MinTRL (`deflated_sharpe.py`): Non-normal asymptotic inference (Bailey & López de Prado 2014) with Euler-Mascheroni constant $`\gamma_E`$, empirical trial variance $`V`$, Fisher-Pearson skewness $`g_1`$, and Pearson kurtosis $`g_2`$.
    - Multiple Testing Corrections (`multiple_testing.py`): Holm-Bonferroni (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
-   - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]$ grids, and component-wise friction stress decay monotonicity.
-   - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
+   - Probability of Backtest Overfitting & Fragility (`overfitting.py`): Mid-rank tie-breaking log-odds PBO, parameter sensitivity curvature over strict $`[0.75\theta_0, 1.0\theta_0, 1.25\theta_0]`$ grids, and component-wise friction stress decay monotonicity.
+   - Sovereign Validation Gate (`gate.py`): Invariant trial intensity coupling ($`K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}`$), strict fail-closed OOS execution, and dual cryptographic lineage digests (`evidence_digest` and `decision_digest`).
 10. **Phase 7 — Live Execution & Broker Mapping (COMPLETED — P-001 Accepted, Gate 7 PASSED):**
     - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E Execution Coordinator & Reconciliation Boundary, Operational Restriction, Real Broker Contract, and Vendor-Agnostic Broker Semantic Mapping Framework: **LOCKED**.
     - **Broker Semantic Evidence (BMAP):** E-reviewed against official broker API documentation (`BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`).
