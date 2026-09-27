@@ -2,9 +2,9 @@
   "schema_version": 1,
   "document": "ACASH_RESEARCH_INTAKE_V1_R0",
   "status": "R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION",
-  "correction_number": 1,
-  "corrects_commit": "575b7b2b7701ed550cb31f5a8d4abeb4e4db3809",
-  "content_status": "R0_CONTENT_CORRECTED_PENDING_HUMAN_AUDIT",
+  "correction_number": 2,
+  "corrects_commit": "adfdfc9a5fe42303248ff56c2ab5bd9b30eea51a",
+  "content_status": "R0_CONTENT_CORRECTED_002_PENDING_HUMAN_AUDIT",
   "base_sha": "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
   "candidate_count": 15,
   "source_note_count": 19,
@@ -25,27 +25,31 @@
   "files": [
     {
       "path": "docs/research_intake/v1/BIBLIOGRAPHY.md",
-      "sha256": "d5abec11b05d48a4ef4e93a60b17e2e7e6ad61b9a01cfec8774881f053e4aeaf"
+      "sha256": "58333b620556c283f7246e7b86319606d9d301b16182bdc9ff495da846d6d5b3"
     },
     {
       "path": "docs/research_intake/v1/DATA_AND_PROVENANCE_REQUIREMENTS.md",
-      "sha256": "48b9e380314efc9ca4c3ec4afc47c136c73bad860f61f6900104cc7931d85825"
+      "sha256": "c1d097e05086d8cb846623be28c746a85e86641e2fe72fa0343f189dc4d10af6"
     },
     {
       "path": "docs/research_intake/v1/METHODOLOGY_CONTROLS.md",
-      "sha256": "43750d0eadab721f716983856301c30fe005f736033f34b71dac88d17492b46f"
+      "sha256": "d8ab22f5bd628b146577b40929f9c7af60fd523fd257e1897ab1f8ff33fba944"
     },
     {
       "path": "docs/research_intake/v1/R0_CORRECTION_001_AUTHORITY_FIDELITY.md",
       "sha256": "225cc8d0c9a5af818f2691f97346a1d52f4ca5d74e7592b6d7f5fa523d3093d6"
     },
     {
+      "path": "docs/research_intake/v1/R0_CORRECTION_002_FINAL_FIDELITY.md",
+      "sha256": "1bc9677c63b29884456e3daed585fc111f07d16ad93a46f81db06c61e281b759"
+    },
+    {
       "path": "docs/research_intake/v1/R0_GOVERNANCE.md",
-      "sha256": "8d61a2c50e9e76ab002d14802588d9d0878c567bcee87a7dd834ba7b7c7bd0df"
+      "sha256": "9721eef278556dc9431cd2d8adc23a88b29a7380320ec8daa3c78ba73823177a"
     },
     {
       "path": "docs/research_intake/v1/README.md",
-      "sha256": "4381c139d09068ced522f4e01a7291137b6f32ba91ecfd66e2203c954ced5921"
+      "sha256": "10e2c0ce39bd3046d15e828ab3d26809f37747b12c0e994b1e2b74d5264aa103"
     },
     {
       "path": "docs/research_intake/v1/SOURCE_TO_MECHANISM_MAP.md",
@@ -53,63 +57,63 @@
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md",
-      "sha256": "1a6a4c0c7bd7cdb8111621d9a1993cf9bf67019c36a1eb53b9cc16553ceb9fb5"
+      "sha256": "fc03455ebc81d1a421c1886d08eb6c65a1219b634cc08e349e21d046305893d8"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_02_OPENING_RANGE_BREAKOUT.md",
-      "sha256": "f90526b77b221ee454305b08a4e4a1aee827372c0c1368f563b6cb9a96a3f5b5"
+      "sha256": "e763b7e502aba2c8b9b049f4bd575bdd87ffe19ccec7fb783483c3fbbb8f9b45"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_03_ORDER_FLOW_IMBALANCE.md",
-      "sha256": "c16b2a8b95d77fe215cf6e9d0f382b729cb2af6560bacaedfaf80baf9f64318e"
+      "sha256": "cbce69cabf3acada3ee858594d6061a0458cd573f6eb0ce8325f533b8a4dd0a4"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_04_ABSORPTION_IMPACT_EFFICIENCY.md",
-      "sha256": "ab99b9e1eab28303461c6dfd9f3332b7a4ee527be7d9504f91f55749263746e4"
+      "sha256": "dd83c57ec6747a9d44bae1af05333db54e755227a5aed4c808d793a95da47649"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_05_DEALER_GAMMA_GEX_REGIME.md",
-      "sha256": "28727f2648cf440a678c3f9020007dc69a620d762e3e476ef7dab1b871bd218a"
+      "sha256": "f7f31afd882ac650e870496bc9c586608e00101b1f513c011b6a9bfd51d494e8"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_06_OPTION_OPEN_INTEREST_CHANGES.md",
-      "sha256": "f7926da640feae72925467c976cb73fe364e51ee8f0a5804f6bca0a06acf2eb4"
+      "sha256": "d2d1e31424b28f8e9551b44420e9fd3dea9e5411736762fd251c0e39f8ce9f50"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_07_INTRADAY_OPTION_FLOW.md",
-      "sha256": "9ee996060bcda6cac1a0bd922a855f2be959b2f3cac5f3ce2e36b71216b53a28"
+      "sha256": "777e6af5c40d18e3d0ccaa77191f470b5856d60e978f87f165cb3fe3116f00a3"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_08_IV_EXPECTED_MOVE_REGIME.md",
-      "sha256": "823a2409d2084af0d7a9119d3251cd4709589f961110ed4802fcc47da9c96316"
+      "sha256": "328606d1b659ee4b24f024f66b6eec7aa2df5da5d305c999ac8d4092a0afb7ad"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_09_TIME_SERIES_MOMENTUM.md",
-      "sha256": "99c37d080d4e5043cb7effa335e6e26e0482183042feedcb759f39e5786d82f6"
+      "sha256": "933f9c25324c74587f2315669888bdbf24b385ea8c6792ef6cbe0afe7b681cb7"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_10_VOLUME_SPIKE_BREAKOUT.md",
-      "sha256": "13dfacab9b953cee25cca4fb115ffcf63df687b03b74a40f3cf4dd7e0c02e072"
+      "sha256": "e352b9b7b63eea129e7568ade6153983239060e71b73096dd387619a950e3258"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_11_MEAN_REVERSION_OVERREACTION.md",
-      "sha256": "5df7a7840cf25ad0b484e521bcbfafebb6a440485675637c6a7603c59f31ec87"
+      "sha256": "f0ec5e6bdae2566bb4439423fde4537b9cc33cb9507229b31f44f8a9dafc9dd3"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_12_CALENDAR_WEEKDAY_SEASONALITY.md",
-      "sha256": "98e5f9aec6c15c1901a4141aea37d6e7a57d7ae1bf33b66b4e799c5281d70c5b"
+      "sha256": "86061b34791079c389390ae93c89cd12813449b11022f055cbbc05e3e42b86ab"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_13_RELATIVE_VALUE_PAIRS.md",
-      "sha256": "48f6d582c56c9d938e7ea6fbc39c060fb725886b7a299fd40a0716b456b05b8c"
+      "sha256": "b390e9d2115d95a8cd54700ba33f8601a73ccef0665884757498659c58c1d67f"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_14_FVG_SMC.md",
-      "sha256": "e37506da7587319df82de60a593ef0c12e846c718432bb074fc86f157fe76b86"
+      "sha256": "4792b60f51a18f04ab331dd8d16ac7792729f472524c3a0675aeb7037f2480c0"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_15_EMA_CHART_CANDLESTICK_FEATURES.md",
-      "sha256": "8029bf45d9b47a77c1a535a61ef83ff102c8e223bb5629c7512e9677c4bc378b"
+      "sha256": "bcde7eebb44075f6d4c011b386deaf28c850343a151f26c6dda8f3d27927fd06"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_01_930_BREAKOUT_AND_FVG.md",

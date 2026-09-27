@@ -8,26 +8,30 @@ Before any quantitative candidate can advance from R0 intake to prospective empi
 1. **Single Source Authority**: Every ingested series must trace back to a single authoritative publisher with immutable lineage.
 2. **Point-in-Time Integrity**: Data must reflect exact information available as-of the execution decision timestamp. Zero future revision leakage (lookahead bias) is permitted.
 3. **No Unverified Data Vendor Substitution**: Free web-scraped data or broker CFD feeds cannot be substituted for authoritative exchange feeds without explicit research governance ratification.
-4. **Timestamp Precision**: Required timestamp precision: `SUBJECT_TO_MECHANISM_AND_DATA_FEASIBILITY_AUDIT`.
+4. **Timestamp Precision**: Required timestamp precision: `SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT`.
+5. **Exact Session Hours**: `EXACT_SESSION_HOURS: VERIFY_AT_FUTURE_DATA_CONTRACT_STAGE`.
+6. **Settlement Style**: `SETTLEMENT_STYLE: VERIFY_PER_INSTRUMENT_AND_SERIES`.
+7. **Rate Model**: `RATE_MODEL: NOT_YET_DETERMINED`.
+8. **Pricing Model**: `PRICING_MODEL: NOT_YET_DETERMINED`.
 
 ---
 
 ## 2. Asset-Class Specific Provenance Contracts
 
-### A. US Equities & ETFs
+### A. Equities & ETFs
 - **Instruments**: Single-stock equities and exchange-traded funds (exact universe: `NOT_YET_DETERMINED`).
-- **Authoritative Venues**: Primary listings on NASDAQ, NYSE, Cboe.
-- **Feed Semantics**: Consolidated Tape Association (CTA) / Unlisted Trading Privileges (UTP) SIP feeds, or direct proprietary feeds.
+- **Authoritative Venues**: Primary listings or direct consolidated feeds (ILLUSTRATIVE_ONLY — NOT PREREGISTERED: NASDAQ, NYSE, Cboe).
+- **Feed Semantics**: Consolidated SIP feeds or direct proprietary feeds (ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Corporate Actions**: Fully documented split and dividend adjustment history. Explicit separation between raw unadjusted execution prices and adjusted historical series for return calculations.
-- **Timestamps & Calendar**: UTC timestamps with canonical mapping to America/New_York. Handling of early closes and regulatory halts.
+- **Timestamps & Calendar**: `EXACT_SESSION_HOURS: VERIFY_AT_FUTURE_DATA_CONTRACT_STAGE`. Canonical market timezone bound by instrument at data-contract stage with `UTC_STORAGE: REQUIRED`. Handling of early closes and regulatory halts.
 
-### B. US Index Futures
+### B. Index Futures
 - **Instruments**: Index futures (exact contracts: `NOT_YET_DETERMINED`).
-- **Authoritative Venues**: CME Globex.
+- **Authoritative Venues**: Regulated futures exchanges (ILLUSTRATIVE_ONLY — NOT PREREGISTERED: CME Globex).
 - **Contract & Roll Specifications**:
   - Roll method specification: calendar volume crossover roll vs. fixed days-to-expiration roll (`NOT_YET_PREREGISTERED`).
   - Price adjustment: backwards-ratio adjusted, backwards-difference adjusted, or raw unadjusted front-month contract with explicit roll event logging.
-- **Trading Hours**: Exact exchange session and maintenance schedule must be verified against the canonical exchange calendar during the future data-contract stage.
+- **Trading Hours**: `EXACT_SESSION_HOURS: VERIFY_AT_FUTURE_DATA_CONTRACT_STAGE`. Exact exchange session and maintenance schedule must be verified against the canonical exchange calendar during the future data-contract stage.
 
 ### C. Foreign Exchange (FX)
 - **Instruments**: Currency pairs (exact pairs: `NOT_YET_DETERMINED`).
@@ -35,33 +39,39 @@ Before any quantitative candidate can advance from R0 intake to prospective empi
 - **Feed Semantics**:
   - Retail broker quote feeds represent dealer pricing, NOT a single centralized exchange.
   - Strict documentation of quote spread, dealer markup, and asymmetric slippage.
-- **Calendar & Session Semantics**: Continuous 24/5 trading. Handling of European vs. US DST misalignment.
+- **Trading Hours & Sessions**: `EXACT_SESSION_HOURS: VERIFY_AT_FUTURE_DATA_CONTRACT_STAGE`. Session definitions and liquidity shifts must be audited against canonical interbank conventions without freezing arbitrary retail clock windows. Continuous 24/5 trading semantics with handling of European vs. US DST misalignment.
 
 ### D. Listed Options
 - **Instruments**: Equity and Index Options (exact contracts: `NOT_YET_DETERMINED`).
-- **Authoritative Venues**: OPRA (Options Price Reporting Authority) consolidating US option exchanges.
+- **Authoritative Venues**: Regulated option exchanges / reporting authorities (ILLUSTRATIVE_ONLY — NOT PREREGISTERED: OPRA).
 - **Data Granularity**:
-  - End-of-Day (EOD) closing quotes vs. high-frequency tick/quote OPRA data (`NOT_YET_DETERMINED`).
+  - End-of-Day (EOD) closing quotes vs. high-frequency tick/quote option data (`NOT_YET_DETERMINED`).
   - Strike and expiration rules.
-- **Greeks & Pricing Calibration**: Specification of implied volatility solver, discount curve, dividend yield assumptions, and exercise models.
+- **Settlement Style**: `SETTLEMENT_STYLE: VERIFY_PER_INSTRUMENT_AND_SERIES` (Settlement conventions vary by product, series, and expiration; settlement style must not be universally oversimplified).
+- **Greeks & Pricing Calibration**:
+  - `PRICING_MODEL: NOT_YET_DETERMINED` (models such as Black-76, Bjerksund-Stensland, or Binomial are ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
+  - `RATE_MODEL: NOT_YET_DETERMINED` (discount curves, interest rate proxies, and dividend yield assumptions must be formally preregistered at the data-contract stage).
 
 ### E. Microstructure Order Flow & Market Depth
 - **Instruments**: Index Futures and Equities (`NOT_YET_DETERMINED`).
-- **Feed Semantics**: Top of Book (L1) vs. Market Depth (L2) vs. Order-by-order (L3) direct order-book feeds.
+- **Feed Semantics**: Top of Book (L1) vs. Market Depth (L2) vs. Order-by-order (L3) direct order-book feeds. Exact venue feed implementation: `NOT_YET_DETERMINED`.
 - **Order Flow Imbalance (OFI)**:
   - Exact algorithm for signing trades (Lee-Ready tick test vs. quote-rule matching).
   - Explicit timestamp matching: trades matched strictly against preceding quotes with documented network dissemination latency buffers.
+- **Timestamp Precision**: `TIMESTAMP_PRECISION: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT`.
 
 ### F. Option Open Interest (OI) & Gamma Exposure (GEX)
 Due to pervasive confusion in retail discourse regarding open interest and dealer positioning, any empirical research utilizing OI or GEX must strictly document the distinction between official vs estimated OI:
 
 ```
-OI_SOURCE:                  [Authoritative Clearinghouse / Vendor, e.g., CME Clearing, OCC, Cboe]
+OI_SOURCE:                  [Authoritative Clearinghouse / Vendor (ILLUSTRATIVE_ONLY: CME Clearing, OCC, Cboe)]
 OI_ASOF:                    [Exact settlement date and publication timestamp]
 OFFICIAL_OR_ESTIMATED:      [OFFICIAL_CLEARINGHOUSE / MODEL_ESTIMATED_INTRADAY]
-DEALER_SIGN_METHOD:         [Inferred net customer order flow sign / Fixed assumption]
-GREEKS_MODEL:               [Black-76 / Bjerksund-Stensland / American Binomial]
-OPTIONS_EXPIRY_SCOPE:       [Near-month / 0DTE / All active expiries]
+DEALER_SIGN_METHOD:         [Inferred net customer order flow sign / Fixed assumption — NOT_YET_PREREGISTERED]
+GREEKS_MODEL:               [PRICING_MODEL: NOT_YET_DETERMINED (ILLUSTRATIVE_ONLY: Black-76 / Bjerksund-Stensland)]
+RATE_MODEL:                 [RATE_MODEL: NOT_YET_DETERMINED]
+SETTLEMENT_STYLE:           [SETTLEMENT_STYLE: VERIFY_PER_INSTRUMENT_AND_SERIES]
+OPTIONS_EXPIRY_SCOPE:       [Near-month / 0DTE / All active expiries — NOT_YET_PREREGISTERED]
 0DTE_INCLUDED:              [TRUE / FALSE]
 ```
 

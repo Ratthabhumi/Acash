@@ -29,7 +29,7 @@ $H_1$: Prices revisit mechanically identified Fair Value Gaps with statistically
 - **Source Claim Only**: Widespread promotional claims that FVGs offer effortless daily 1:2 RR setups.
 
 ## 7. What Existing Evidence Does NOT Support
-Do not call "institutional imbalance" unless independently established. Scientific evidence does NOT support the claim that FVGs represent institutional balance sheets or guaranteed support/resistance levels.
+Do not call "institutional imbalance" unless independently established. The human-reviewed R0 corpus does not establish that FVGs represent institutional balance sheets, institutional identity, or guaranteed support/resistance.
 
 ## 8. Source Claims That Motivated This Intake
 - `SR-01`: 9:30 open breakout combined with 1-minute FVG momentum.
@@ -37,8 +37,8 @@ Do not call "institutional imbalance" unless independently established. Scientif
 ## 9. Data Requirements
 - **Instrument**: NOT_YET_DETERMINED.
 - **Frequency**: NOT_YET_DETERMINED.
-- **Data Types**: High-precision price bars and quote data.
-- **Time Zone**: America/New_York (UTC storage).
+- **Data Types**: Price observations and quote data where execution semantics require them.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

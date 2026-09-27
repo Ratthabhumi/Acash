@@ -40,7 +40,7 @@ Exact EMA 8/21, EMA 9/21/50, EMA 12, bullish engulfing, hammer, three white sold
 - **Instrument**: NOT_YET_DETERMINED.
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Deterministic OHLCV bars.
-- **Time Zone**: America/New_York (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

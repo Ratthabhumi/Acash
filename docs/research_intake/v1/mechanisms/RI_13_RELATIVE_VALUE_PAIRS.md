@@ -38,7 +38,7 @@ Correlation alone is insufficient. Literature does NOT support the claim that si
 - **Instrument**: NOT_YET_DETERMINED.
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Synchronized trade and quote timestamps for both pair legs.
-- **Time Zone**: America/New_York (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

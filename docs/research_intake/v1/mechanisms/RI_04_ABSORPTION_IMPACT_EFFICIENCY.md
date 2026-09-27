@@ -39,7 +39,7 @@ Literature does NOT support the claim that discretionary footprint delta numbers
 - **Instrument**: NOT_YET_DETERMINED (Index Futures cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Executed aggressive trade volume vs. resting limit depth changes.
-- **Time Zone**: UTC.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

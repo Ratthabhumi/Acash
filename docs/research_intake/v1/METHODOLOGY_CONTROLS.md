@@ -53,7 +53,8 @@ The term "tick" is ambiguous and mathematically dangerous across different marke
 
 ### F. Canonical Timezone & Session Authority
 Arbitrary vendor labels such as "broker time", "server time", or "local PC time" are strictly prohibited in research definitions.
-- All timestamps must be anchored to canonical market-local exchange time (e.g., US Equity / Index Futures: America/New_York) and stored in UTC.
+- All timestamps must be anchored to canonical market-local exchange time (when instrument is established) and stored in UTC.
+- Where instrument is `NOT_YET_DETERMINED`, canonical market timezone is `NOT_YET_DETERMINED_BY_INSTRUMENT` with `UTC_STORAGE: REQUIRED`.
 - Research specifications must explicitly account for:
   - Daylight Saving Time (DST) transitions (US vs. European DST shift divergence).
   - Exchange holiday schedules and scheduled early closes.

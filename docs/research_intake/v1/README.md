@@ -42,6 +42,7 @@ Translates empirical phenomena into rigorous, falsifiable market-microstructure 
 
 - [R0_GOVERNANCE.md](./R0_GOVERNANCE.md): Research intake governance charter, status declarations, and permitted lifecycle transitions.
 - [R0_CORRECTION_001_AUTHORITY_FIDELITY.md](./R0_CORRECTION_001_AUTHORITY_FIDELITY.md): Lineage correction note documenting removal of agent-invented choices.
+- [R0_CORRECTION_002_FINAL_FIDELITY.md](./R0_CORRECTION_002_FINAL_FIDELITY.md): Final authority-fidelity cleanup note documenting bibliography, data contract, and epistemic precision.
 - [METHODOLOGY_CONTROLS.md](./METHODOLOGY_CONTROLS.md): Quantitative controls, multiple-testing corrections, bar-path ambiguity rules, and friction accounting.
 - [DATA_AND_PROVENANCE_REQUIREMENTS.md](./DATA_AND_PROVENANCE_REQUIREMENTS.md): Data schema, vendor semantics, and timestamp requirements across asset classes.
 - [SOURCE_TO_MECHANISM_MAP.md](./SOURCE_TO_MECHANISM_MAP.md): Many-to-many traceability mapping linking source notes (`SR-xx`) to mechanisms (`RI-xx`).

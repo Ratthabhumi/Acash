@@ -42,7 +42,7 @@ Important: exact EMA (8/21, 9/21/50, 12) has no supplied scientific privilege. A
 - **Instrument**: NOT_YET_DETERMINED (global futures cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Continuous rolled futures prices and consolidated volumes.
-- **Time Zone**: Canonical market exchange time (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED (20 years cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Provider**: NOT_YET_DETERMINED.

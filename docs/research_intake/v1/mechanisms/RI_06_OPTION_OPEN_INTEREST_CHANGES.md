@@ -37,8 +37,8 @@ Critical distinctions: OI != directional bullish exposure. Every open contract h
 ## 9. Data Requirements
 - **Instrument**: NOT_YET_DETERMINED (Equities and Index Options cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
-- **Data Types**: Official clearinghouse open interest, closing volume, and settlement prices.
-- **Time Zone**: America/New_York (UTC storage).
+- **Data Types**: Official clearinghouse open interest, closing volume, and settlement prices where execution semantics require them.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

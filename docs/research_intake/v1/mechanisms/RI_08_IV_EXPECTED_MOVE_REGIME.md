@@ -45,7 +45,7 @@ Risk-neutral option-implied distribution != direct physical probability. Claims 
 - **Instrument**: NOT_YET_DETERMINED (VIX, SPX, SPY, QQQ cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED (1-minute IV snapshots cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Data Types**: Implied volatility measures and underlying prices.
-- **Time Zone**: America/New_York (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED (10 years cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Provider**: NOT_YET_DETERMINED (OptionMetrics cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).

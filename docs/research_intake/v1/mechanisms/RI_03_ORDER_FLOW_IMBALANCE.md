@@ -40,7 +40,7 @@ Microstructure literature does NOT support the claim that an arbitrary raw volum
 - **Instrument**: NOT_YET_DETERMINED (Index Futures or Equities cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Historical quote/L1 event data, bid size, ask size, bid price, ask price, and trade prints.
-- **Time Zone**: UTC.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED (direct exchange order-book feeds cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

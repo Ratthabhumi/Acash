@@ -38,7 +38,7 @@ Critical distinction: ORDER FLOW != OPEN INTEREST. Flow represents current aggre
 - **Instrument**: NOT_YET_DETERMINED.
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Option trade and quote prints.
-- **Time Zone**: America/New_York (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED (OPRA cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

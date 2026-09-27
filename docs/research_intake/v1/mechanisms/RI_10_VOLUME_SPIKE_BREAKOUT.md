@@ -15,7 +15,7 @@
 Unusually high normalized volume combined with price displacement/breakout may contain incremental continuation information.
 
 ## 3. Economic / Microstructure Rationale
-High volume during a price breakout reflects unusually elevated trading activity / participation sufficient to absorb resting liquidity at local extremes. When volume is abnormally elevated relative to historical baseline expectations, it reflects broader / more intense market participation rather than low-liquidity slippage.
+High observed volume indicates elevated executed trading activity. Whether that activity contains incremental predictive information is unresolved at R0. When volume is abnormally elevated relative to historical baseline expectations, it reflects broader / more intense market participation rather than low-liquidity slippage.
 
 ## 4. Null Hypothesis
 $H_0$: Conditioning price breakouts on abnormal volume spikes provides zero incremental predictive information or return persistence compared to unconditional price breakouts.
@@ -41,8 +41,8 @@ Trade volume does NOT identify participant identity (whale, institution, or reta
 ## 9. Data Requirements
 - **Instrument**: NOT_YET_DETERMINED.
 - **Frequency**: NOT_YET_DETERMINED.
-- **Data Types**: High-precision trade volume and quote prices.
-- **Time Zone**: America/New_York (UTC storage).
+- **Data Types**: Price observations and trade volume where execution semantics require them.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

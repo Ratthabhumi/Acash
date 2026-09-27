@@ -5,9 +5,11 @@
 - **Corpus Title**: ACASH Scientific Research Intake Corpus v1
 - **Lifecycle Phase**: R0 (Cataloguing, Structural Intake & Lineage Sealing)
 - **Base Authority Status**: `R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION`
-- **Current Content Status**: `R0_CONTENT_CORRECTED_PENDING_HUMAN_AUDIT`
+- **Current Content Status**: `R0_CONTENT_CORRECTED_002_PENDING_HUMAN_AUDIT`
 - **Base Commit Pin**: `d9608c0a2353bd5ed41943e5fb893ef9648089d2` (Observation #0001 homelab pin)
-- **Lineage Amendment**: Scientific acceptance of the corpus is contingent on the additive [R0_CORRECTION_001_AUTHORITY_FIDELITY.md](./R0_CORRECTION_001_AUTHORITY_FIDELITY.md) authority-fidelity amendment.
+- **Lineage Amendments**: Scientific acceptance of the corpus is contingent on the additive authority-fidelity amendments:
+  - [R0_CORRECTION_001_AUTHORITY_FIDELITY.md](./R0_CORRECTION_001_AUTHORITY_FIDELITY.md)
+  - [R0_CORRECTION_002_FINAL_FIDELITY.md](./R0_CORRECTION_002_FINAL_FIDELITY.md)
 - **Active Hypothesis Impact**: NONE. HYP_011 and CORE-001 remain completely isolated, unchanged, and frozen.
 
 ## 2. Research Shortlist & Candidate Taxonomy

@@ -15,7 +15,7 @@
 Information incorporated during the US market opening interval may contain incremental predictive information regarding later intraday returns, specifically the closing session return distribution.
 
 ## 3. Economic / Microstructure Rationale
-At the New York open (09:30 America/New_York), overnight macro news, earnings, and accumulated order imbalances are incorporated into price. Large rebalancing and liquidity discovery create structured directional flows that may exhibit persistence into subsequent trading intervals.
+At the market open (e.g. 09:30 local exchange time in US equity market examples), overnight macro news, earnings, and accumulated order imbalances are incorporated into price. Large rebalancing and liquidity discovery create structured directional flows that may exhibit persistence into subsequent trading intervals.
 
 ## 4. Null Hypothesis
 $H_0$: Information incorporated during the market opening interval contains zero incremental predictive power regarding subsequent intraday return distributions after conditioning on unconditional market return, prevailing volatility, and historical intraday seasonality.
@@ -41,8 +41,8 @@ Existing academic literature does NOT support the claim that an arbitrary retail
 ## 9. Data Requirements
 - **Instrument**: NOT_YET_DETERMINED (US Equities, ETFs, or Index Futures cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
-- **Data Types**: Executed trades, volume, and quote data.
-- **Time Zone**: America/New_York (UTC storage).
+- **Data Types**: Price observations, volume, and quotes where execution semantics require them.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED (subject to zero-outcome data feasibility audit).
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

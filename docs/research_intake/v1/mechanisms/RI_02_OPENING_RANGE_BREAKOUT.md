@@ -39,8 +39,8 @@ Literature does NOT support the claim that an invariant retail rule (e.g., 09:30
 ## 9. Data Requirements
 - **Instrument**: NOT_YET_DETERMINED (Index Futures or Currency Futures cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
-- **Data Types**: Executed trades, volume, and quote data.
-- **Time Zone**: America/New_York (UTC storage).
+- **Data Types**: Price observations, volume, and quotes where execution semantics require them.
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.

@@ -42,7 +42,7 @@ Candidate GEX must be used primarily as REGIME / CONTEXT, not "touch level -> tr
 - **Instrument**: NOT_YET_DETERMINED (SPX, SPY, NDX, QQQ cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Complete option chain: strike, expiration, bid, ask, implied volatility, open interest.
-- **Time Zone**: America/New_York (UTC storage).
+- **Canonical Market Time Zone**: NOT_YET_DETERMINED_BY_INSTRUMENT (UTC storage required).
 - **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
 - **Historical Coverage**: NOT_YET_DETERMINED.
 - **Provider**: NOT_YET_DETERMINED.
