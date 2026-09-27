@@ -638,6 +638,50 @@ The core empirical objective of ACASH is measuring:
 
 ---
 
+## ADDENDUM (2026-09-28, branch `governance/core001-staged-evidence-v1-preobs`) — CORE-001 Staged Evidence Framework v1
+
+> Historical note: the Phase 0–23 sequence above is preserved as decided
+> history. This addendum is the newer additive governance amendment for
+> CORE-001/HYP_011. The 504-session threshold keeps its role as
+> high-confidence long-horizon confirmation (S5) — it is no longer the
+> waiting room before paper may be considered (that lives at S2).
+
+```
+Historical Supported (HYP_011, corrected replay: 100000 -> 218852.857740,
+return 1.1885285774, Sharpe 0.7082199886, MDD 0.27068044647)
+        ↓
+S1: 20 actually-observed sessions — Operational Sanity → OPERATIONALLY_SANE
+        ↓
+S2: 60 actually-observed sessions total (Obs 1–60) — Short Prospective
+    Qualification. RATIFIED safety gates: MDD < 25%, cumret > -20%,
+    every daily > -10% (+ 24 conjunctive integrity gates; Sharpe/SPY/
+    positivity diagnostic only)
+        ↓
+PAPER_ELIGIBLE (eligibility only — NOT authorization)
+        ↓
+Separate Human Authorization
+        ↓
+S3: Paper Validation → CORE_001_OPERATIONALLY_VALIDATED_IN_PAPER
+        │
+        ├── CORE-002 research may proceed independently (information barrier)
+        │
+        ↓
+S4: 126 / 252-session NON-DECISIVE checkpoints
+        ↓
+S5: 504 sessions + 2 annual rebalances → LIVE_ELIGIBILITY_REVIEW
+        ↓
+Separate Human Authorization
+        ↓
+S6: Small-Capital Live Deployment (amount NOT ratified)
+```
+
+- S2 quantitative thresholds are now RATIFIED (predeclared before
+  Observation #0001; calibration used sealed historical artifacts only).
+- Current stage: PRE-S1 / awaiting Observation #0001 (observed = 0).
+- Authorities unchanged: `PAPER_AUTHORIZED=false`, `LIVE_LOCKED=true`,
+  real capital $0.00, `NO_REAL_ORDERS=true`.
+- Canonical: [`docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md`](CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md).
+
 ## License Notice
 
 **Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  

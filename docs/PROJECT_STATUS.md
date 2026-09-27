@@ -1,5 +1,36 @@
 # ACASH — Project Status & Implementation Progress
 
+> **NOTE (2026-09-28, branch `governance/core001-staged-evidence-v1-preobs`):**
+> Sections 1–5 below are the preserved 2026-09-04 snapshot (history, not
+> current state). The current snapshot is §0. Canonical staged-evidence
+> governance: `docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md`.
+
+---
+
+## 0. Current Snapshot — CORE-001 / HYP_011 PRE-S1 (2026-09-28)
+
+- Hypothesis: HYP_011 Global 80/20 (ACWI 80% / AGG 20%; SPY benchmark).
+  Historical: CORRECTED SUPPORTED (100000 → 218852.857740; return
+  1.1885285774; Sharpe 0.7082199886; MDD 0.27068044647; authority
+  `77f5610ce63015f014c5283980a01a48536f5841`).
+- Stage: **PRE-S1 / awaiting Observation #0001**. Observed = 0.
+  Rebalances = 0. Observation #0001 scheduled (session 2026-09-28;
+  homelab timer 2026-09-28 20:10 UTC = 2026-09-29 03:10 ICT) but
+  **NOT observed**.
+- 2026-09-25: `MISSED_UNOBSERVED_DUE_TO_AUTHORIZATION_LOCK` (no backfill).
+- Main pin: `d9608c0a2353bd5ed41943e5fb893ef9648089d2` (MUST NOT move
+  before Observation #0001). Runtime Python 3.14.7; timer enabled/waiting;
+  dry-run verified (`NETWORK_REQUESTS = 0`).
+- Staged Evidence Framework v1: RATIFIED (structure + S2 guardrails MDD
+  < 25% / cumret > -20% / every daily > -10%, predeclared pre-Observation).
+- Authorities: paper NOT authorized; live LOCKED; real capital $0.00;
+  `NO_REAL_ORDERS=true`.
+- Next immediate event: Observation #0001. Next governance work: post-Obs-#1
+  audit; merge decision for this branch; Observation #0002 automation. No
+  prospective results were used for any threshold.
+
+---
+
 > **Document:** `docs/PROJECT_STATUS.md`  
 > **Project Name:** ACASH (Automated Capital Allocation System)  
 > **Status:** Phases 0–12 Complete & Frozen (`1e1d154`); Phase 13 Slice 1 (Gate A Pre-Live Certification) In Progress (`2f01841`)  

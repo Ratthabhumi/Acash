@@ -26,6 +26,28 @@ $$\boxed{\mathbf{Research\ (14/8.5)} \longrightarrow \mathbf{Allocation\ (8)} \l
 
 ---
 
+## 17. CORE-001 / HYP_011 Prospective Operations (2026-09-28, PRE-S1)
+
+```powershell
+# Repo SHA / tree (main MUST stay d9608c0... until Observation #0001)
+git rev-parse HEAD; git rev-parse origin/main; git status --short --branch
+# Homelab timer + service journal + file log (operator context)
+systemctl list-timers | Select-String hyp-011
+journalctl -u hyp-011-observation --since "2026-09-28 20:00 UTC" --no-pager | tail -50
+# Prospective artifacts AFTER Observation #0001 (do NOT expect before)
+Get-ChildItem data/hyp_011/prospective/observations/ | Sort-Object Name
+# Branch / commit audit for the governance amendment
+git log --oneline --decorate -5 governance/core001-staged-evidence-v1-preobs
+git diff main...governance/core001-staged-evidence-v1-preobs --stat
+```
+
+- Do NOT manually start the observation service early (eligibility strictly
+  after 2026-09-28T20:00:00Z). No backfill (2026-09-25 stays MISSED).
+- Paper NOT AUTHORIZED; live LOCKED; `NO_REAL_ORDERS=true`. No secrets in
+  docs or commands — never print credential values.
+- Milestones: S1 = 20 observed → S2 = 60 observed (MDD < 25% /
+  cumret > -20% / every daily > -10%) → `PAPER_ELIGIBLE` (≠ authorized).
+
 ## 1.5 Current Governance & Operational State (2026-09-13)
 
 - **Gate G7 / Stage S11 (Homelab 6-Hour Operational Soak):** **CLOSED / PASS**

@@ -26,6 +26,25 @@ $$\text{DATA} \to \text{EVIDENCE} \to \text{HYPOTHESIS} \to \text{RESEARCH} \to 
 
 ---
 
+## 1.5 CORE-001 / HYP_011 — Current State (2026-09-28)
+
+- **Hypothesis:** HYP_011 Global 80/20 Strategic Allocation Core (ACWI 80% /
+  AGG 20%; SPY independent benchmark). Historical corrected replay
+  SUPPORTED (simulated $100,000 → $218,852.86; NOT real capital).
+- **Prospective:** observation starting; current stage PRE-S1, observed = 0.
+  Observation #0001 scheduled (2026-09-28 session) but NOT yet observed.
+- **Staged evidence model:** S1 (20 observed, operational sanity) → S2
+  (60 observed, ratified safety gates MDD < 25% / cumret > -20% /
+  every daily > -10%) → `PAPER_ELIGIBLE` (≠ authorization) → separate
+  human authorization → S3 paper → S4 checkpoints → S5 (504 + 2
+  rebalances) → separate human authorization → S6. Canonical:
+  [`docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md`](docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md).
+- **Paper/live distinctions:** `PAPER_ELIGIBLE` never self-converts to
+  `PAPER_AUTHORIZED`. Paper NOT AUTHORIZED; live LOCKED; real capital
+  strictly $0.00; `NO_REAL_ORDERS=true`.
+- **Maturity without prophecy:** infrastructure and historical evidence are
+  established; NOTHING here claims future profitability.
+
 ## 2. System Architecture & Decoupled Sovereign Layers
 
 ACASH is built as a sovereign **Modular Monolith** in Python executing locally on a single workstation (AIO):

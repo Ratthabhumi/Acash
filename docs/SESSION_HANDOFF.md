@@ -1,3 +1,26 @@
+# ACASH SESSION HANDOFF — §0 CURRENT (2026-09-28, CORE-001/HYP_011 PRE-S1)
+
+> Sections below §0 are preserved history (2026-09-17 era and earlier).
+> §0 is the current authoritative handoff. This branch
+> (`governance/core001-staged-evidence-v1-preobs`) holds a docs-only
+> governance amendment NOT yet merged to main.
+
+## 0. Current Handoff — PRE-S1, awaiting Observation #0001
+
+| Item | Value |
+|---|---|
+| `main` / `origin/main` pin | `d9608c0a2353bd5ed41943e5fb893ef9648089d2` — MUST NOT move before Observation #0001 unless homelab automation is deliberately re-authorized/re-pinned |
+| This branch | `governance/core001-staged-evidence-v1-preobs` (from exactly d9608c0; docs only; NOT merged) |
+| Hypothesis / stage | HYP_011 Global 80/20; PRE-S1; observed = 0; rebalances = 0 |
+| Observation #0001 | session 2026-09-28 (open 13:30 UTC execution semantics; close 20:00 UTC eligibility, strictly after). Homelab one-shot timer 2026-09-28 20:10 UTC = 2026-09-29 03:10 ICT. NOT YET OBSERVED |
+| Runtime | Python 3.14.7; frozen uv.lock; `HYP011AlpacaClient` import verified; credentials verified in systemd context; dry-run verified (`NETWORK_REQUESTS = 0`); timer enabled, active (waiting) |
+| Staged framework | v1 RATIFIED: S1 = 20 observed; S2 = 60 observed (Obs 1–60) with MDD < 25% / cumret > -20% / every daily > -10% (+ integrity gates); S3 needs separate human paper auth; S4 126/252 non-decisive; S5 504 + 2 rebalances; S6 separate human live auth. Canonical: `docs/CORE_001_STAGED_EVIDENCE_FRAMEWORK_V1.md` |
+| Authorities | `PAPER_AUTHORIZED=false`, `LIVE_LOCKED=true`, real capital $0.00, `NO_REAL_ORDERS=true` |
+| Rules | No manual execution before eligibility (strictly after 20:00 UTC 2026-09-28). No backfill (2026-09-25 stays MISSED). No automatic commit/push of prospective artifacts |
+| Post-Observation | Audit Observation #0001 conceptually (chain, provenance, CA non-required semantics, 80/20 + SPY seal); then decide merge of this branch; then Observation #0002 automation; then S1 to 20 observed |
+
+---
+
 # ACASH SESSION HANDOFF — V2 MERGED → D1-D5 RATIFIED → D4 PASS → D5 CLOSED (ACCEPTED WITH EXCEPTION)
 ## Canonical Current Session Handoff — 2026-09-17
 
