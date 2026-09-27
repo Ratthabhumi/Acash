@@ -14,14 +14,16 @@ import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
-from acash.research.hyp_009.accounting import DividendEvent
+from acash.research.hyp_011.shadow_ca import CADetermination
 from acash.research.hyp_011.shadow_ops import (
     SessionMarket,
     ShadowBenchmark,
     ShadowPortfolio,
     append_observation,
+    build_initial_state,
     process_benchmark_session,
     process_strategy_session,
+    validate_initial_state,
 )
 
 
@@ -63,9 +65,12 @@ def test_prior_close_entitlement_and_payable_ordering() -> None:
         portfolio, _market(date(2026, 9, 28)), {}, True, Decimal("2"), 1, "P"
     )
     shares = portfolio.holdings["ACWI"]
-    event = DividendEvent(
-        ex_date=date(2026, 9, 29), payable_date=date(2026, 10, 5),
-        amount_per_share=Decimal("1"),
+    event = CADetermination(
+        symbol="ACWI", session=date(2026, 9, 29), has_event=True,
+        ex_date=date(2026, 9, 29), amount_per_share=Decimal("1"),
+        payable_date=date(2026, 10, 5),
+        authority_source="BLACKROCK_ISHARES_OFFICIAL",
+        retrieved_at_utc="2026-09-29T21:00:00+00:00", source_sha256="a" * 64,
     )
     frag = process_strategy_session(
         portfolio, _market(date(2026, 9, 29)), {"ACWI": event}, False,
@@ -73,6 +78,8 @@ def test_prior_close_entitlement_and_payable_ordering() -> None:
     )
     assert frag["entitlements"] == [{
         "symbol": "ACWI", "ex_date": "2026-09-29", "amount": str(Decimal(shares)),
+        "authority_source": "BLACKROCK_ISHARES_OFFICIAL",
+        "authority_sha256": "a" * 64,
     }]
     # Receivable in equity but not yet spendable (payable Oct-05).
     assert Decimal(frag["receivable"]) == Decimal(shares)
@@ -80,9 +87,12 @@ def test_prior_close_entitlement_and_payable_ordering() -> None:
 
 def test_ex_date_activation_buy_not_entitled() -> None:
     portfolio = ShadowPortfolio()
-    event = DividendEvent(
-        ex_date=date(2026, 9, 28), payable_date=date(2026, 10, 5),
-        amount_per_share=Decimal("1"),
+    event = CADetermination(
+        symbol="ACWI", session=date(2026, 9, 28), has_event=True,
+        ex_date=date(2026, 9, 28), amount_per_share=Decimal("1"),
+        payable_date=date(2026, 10, 5),
+        authority_source="BLACKROCK_ISHARES_OFFICIAL",
+        retrieved_at_utc="2026-09-28T21:00:00+00:00", source_sha256="b" * 64,
     )
     frag = process_strategy_session(
         portfolio, _market(date(2026, 9, 28)), {"ACWI": event}, True,
@@ -179,6 +189,9 @@ def test_runner_dry_run_zero_network(capsys: Any) -> None:
     assert runner.main([]) == 0
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
+    assert "PRETEST" in out
+    assert "expected_next=2026-09-28" in out
+    assert "expected_open_utc=2026-09-28T13:30:00+00:00" in out
 
 
 def test_state_serde_round_trip() -> None:
@@ -210,14 +223,23 @@ def test_verify_chain_blocks_tamper_and_orphan() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         state_dir = Path(tmp)
-        # Empty dir verifies as fresh state.
+        # Empty dir verifies as the complete canonical initial state.
         fresh = verify_chain(state_dir)
+        validate_initial_state(fresh)
         assert fresh["observed_sessions"] == []
+        assert fresh["observed_session_count"] == 0
+        # Mutated identity field -> blocked.
+        tampered = dict(fresh)
+        tampered["starting_aum"] = "99999.99"
+        (state_dir / "state.json").write_text(json.dumps(tampered), encoding="utf-8")
+        with pytest.raises(DataContractError):
+            verify_chain(state_dir)
         # Orphan file with no state sessions -> blocked.
-        (state_dir / "observations").mkdir(parents=True)
+        (state_dir / "observations").mkdir(parents=True, exist_ok=True)
         (state_dir / "observations" / "2026-09-28.json").write_text("{}", encoding="utf-8")
         (state_dir / "state.json").write_text(
-            json.dumps({"observed_sessions": []}), encoding="utf-8"
+            json.dumps(dict(fresh, observed_sessions=["2026-09-28"])),
+            encoding="utf-8",
         )
         with pytest.raises(DataContractError):
             verify_chain(state_dir)
@@ -286,7 +308,7 @@ def _run_observation(
     argv = [
         "--execute-network",
         "--authorization",
-        f"AUTH_OBS_{ordinal:04d}",
+        f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}",
         "--ordinal",
         str(ordinal),
     ]
@@ -322,6 +344,11 @@ def test_mocked_observation_0001_end_to_end(tmp_path: Path) -> None:
         (tmp_path / "observations" / "2026-09-28.json").read_text(encoding="utf-8")
     )
     assert obs["previous_observation_sha256"] is None
+    # Session one makes no existence claim: explicit non-required status.
+    for symbol in ("ACWI", "AGG", "SPY"):
+        assert obs["corporate_actions"][symbol] == {
+            "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
+        }
     assert state["last_observation_sha256"] == hashlib.sha256(
         (tmp_path / "observations" / "2026-09-28.json").read_bytes()
     ).hexdigest()
@@ -335,9 +362,17 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     ) == 0
     state1 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     cash1 = state1["strategy"]["cash"]
-    # Second session: needs CA determinations file (has prior holdings now).
+    # Second session: needs canonical CA determinations (has prior holdings now).
+    sponsors = {"ACWI": "BLACKROCK_ISHARES_OFFICIAL", "AGG": "BLACKROCK_ISHARES_OFFICIAL", "SPY": "STATE_STREET_SPDR_OFFICIAL"}
     ca_doc = {
-        symbol: {"session": "2026-09-29", "has_event": False}
+        symbol: {
+            "symbol": symbol,
+            "session": "2026-09-29",
+            "has_event": False,
+            "authority_source": sponsors[symbol],
+            "retrieved_at_utc": "2026-09-29T21:00:00+00:00",
+            "source_sha256": "c" * 64,
+        }
         for symbol in ("ACWI", "AGG", "SPY")
     }
     ca_path = tmp_path / "ca_2026-09-29.json"
@@ -360,3 +395,92 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     assert state2["last_observation_sha256"] == hashlib.sha256(
         (tmp_path / "observations" / "2026-09-29.json").read_bytes()
     ).hexdigest()
+
+
+def _ca_doc(
+    symbol: str, session: str, sponsor: str, has_event: bool = False,
+) -> Dict[str, Any]:
+    return {
+        "symbol": symbol,
+        "session": session,
+        "has_event": has_event,
+        "authority_source": sponsor,
+        "retrieved_at_utc": f"{session}T21:00:00+00:00",
+        "source_sha256": "d" * 64,
+    }
+
+
+def test_ca_from_dict_round_trip_no_event() -> None:
+    from acash.research.hyp_011.shadow_ca import CADetermination
+
+    now = datetime(2026, 9, 29, 21, 30, 0, tzinfo=timezone.utc)
+    det = CADetermination.from_dict(
+        _ca_doc("ACWI", "2026-09-29", "BLACKROCK_ISHARES_OFFICIAL"),
+        "ACWI", date(2026, 9, 29), now,
+    )
+    assert det.has_event is False
+    assert det.source_sha256 == "d" * 64
+
+
+def test_ca_from_dict_event_requires_canonical_amount() -> None:
+    from acash.research.hyp_011.shadow_ca import CADetermination
+
+    now = datetime(2026, 9, 29, 21, 30, 0, tzinfo=timezone.utc)
+    base = _ca_doc("AGG", "2026-09-29", "BLACKROCK_ISHARES_OFFICIAL", True)
+    base.update({
+        "ex_date": "2026-09-29",
+        "amount_per_share": "0.5",
+        "payable_date": "2026-10-05",
+    })
+    det = CADetermination.from_dict(base, "AGG", date(2026, 9, 29), now)
+    assert det.amount_per_share == Decimal("0.5")
+    # Legacy "amount" key alone is NOT accepted.
+    legacy = dict(base)
+    del legacy["amount_per_share"]
+    legacy["amount"] = "0.5"
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(legacy, "AGG", date(2026, 9, 29), now)
+
+
+def test_ca_from_dict_rejects_spoof_and_future() -> None:
+    from acash.research.hyp_011.shadow_ca import CADetermination
+
+    now = datetime(2026, 9, 29, 21, 30, 0, tzinfo=timezone.utc)
+    good = _ca_doc("SPY", "2026-09-29", "STATE_STREET_SPDR_OFFICIAL")
+    # Wrong sponsor for symbol.
+    bad = dict(good, authority_source="BLACKROCK_ISHARES_OFFICIAL")
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(bad, "SPY", date(2026, 9, 29), now)
+    # Wrong session.
+    bad = dict(good, session="2026-09-30")
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(bad, "SPY", date(2026, 9, 29), now)
+    # Malformed SHA.
+    bad = dict(good, source_sha256="xyz")
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(bad, "SPY", date(2026, 9, 29), now)
+    # Retrieval timestamp in the future relative to processing.
+    bad = dict(good, retrieved_at_utc="2026-09-29T22:00:00+00:00")
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(bad, "SPY", date(2026, 9, 29), now)
+    # Naive timestamp.
+    bad = dict(good, retrieved_at_utc="2026-09-29T21:00:00")
+    with pytest.raises(DataContractError):
+        CADetermination.from_dict(bad, "SPY", date(2026, 9, 29), now)
+
+
+def test_initial_state_rejects_nonpristine() -> None:
+    state = build_initial_state()
+    bad = dict(state, observed_session_count=1)
+    with pytest.raises(DataContractError):
+        validate_initial_state(bad)
+    bad = dict(state, hypothesis_id="HYP_009")
+    with pytest.raises(DataContractError):
+        validate_initial_state(bad)
+    tampered = dict(state["strategy"], cash="99999.99")
+    bad = dict(state, strategy=tampered)
+    with pytest.raises(DataContractError):
+        validate_initial_state(bad)
+    bad = dict(state, locks=dict(state["locks"], no_real_orders=False))
+    with pytest.raises(DataContractError):
+        validate_initial_state(bad)

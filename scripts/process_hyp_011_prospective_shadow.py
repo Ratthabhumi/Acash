@@ -26,9 +26,9 @@ from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
     EnvAlpacaCredentialProvider,
 )
-from acash.research.hyp_009.accounting import DividendEvent
+from acash.research.hyp_011.shadow_ca import CADetermination
 from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
-from acash.research.hyp_011.shadow import ShadowState
+from acash.research.hyp_011.shadow import EXPECTED_SESSION_OPEN_US, ShadowState
 from acash.research.hyp_011.shadow_ops import (
     SessionMarket,
     ShadowBenchmark,
@@ -113,6 +113,22 @@ def main(
 
     print("=== HYP_011 PROSPECTIVE SHADOW (single atomic session) ===")
     if not args.execute_network:
+        # PRETEST: full local contract validation, zero network.
+        print("PRETEST-DRY-RUN: zero network. Validating local contracts.")
+        pretest_state_dir = _state_dir if _state_dir is not None else STATE_DIR
+        pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
+        pretest_verified = verify_chain(pretest_state_dir)
+        pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
+        pretest_target = _expected_next(pretest_observed, NyseCa1Calendar())
+        pretest_open = datetime.combine(
+            pretest_target, EXPECTED_SESSION_OPEN_US, tzinfo=timezone.utc
+        )
+        print(
+            f"PRETEST: expected_next={pretest_target.isoformat()} "
+            f"expected_open_utc={pretest_open.isoformat()}"
+        )
+        if pretest_now.astimezone(timezone.utc) < pretest_open:
+            print("PRETEST: trigger not yet reached; no action possible.")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
 
@@ -123,12 +139,20 @@ def main(
     verified = verify_chain(state_dir)
     observed: List[str] = list(verified.get("observed_sessions", []))
     expected_ordinal = len(observed) + 1
+    expected_authorization = (
+        f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{expected_ordinal:04d}"
+    )
     if not args.authorization:
         raise DataContractError("SHADOW_AUTHORIZATION_REQUIRED.")
     if args.ordinal != expected_ordinal:
         raise DataContractError(
             f"SHADOW_AUTHORIZATION_ORDINAL_MISMATCH: got {args.ordinal}, "
             f"expected {expected_ordinal}."
+        )
+    if args.authorization != expected_authorization:
+        raise DataContractError(
+            f"SHADOW_AUTHORIZATION_STRING_MISMATCH: got {args.authorization}, "
+            f"expected {expected_authorization}."
         )
     print(f"Authorization {args.authorization} ordinal {args.ordinal}: ACCEPTED.")
 
@@ -220,9 +244,11 @@ def main(
             symbol, market_closes, market_split_closes, prior_closes,
         )
 
-    # Corporate-action determinations (session 1 needs none: no prior holdings).
+    # Corporate-action determinations via the canonical CADetermination parser.
+    # Session one: no prior holdings, so no entitlement is possible; record the
+    # explicit status WITHOUT claiming whether a distribution exists.
     ca_section: Dict[str, Any] = {}
-    dividends: Dict[str, DividendEvent] = {}
+    dividends: Dict[str, CADetermination] = {}
     if observed:
         if not args.ca_determinations:
             raise DataContractError(
@@ -230,22 +256,19 @@ def main(
             )
         ca_doc = json.loads(Path(args.ca_determinations).read_text(encoding="utf-8"))
         for symbol in SYMBOLS:
-            det = ca_doc.get(symbol)
-            if not det or det.get("session") != target.isoformat():
+            raw = ca_doc.get(symbol)
+            if not isinstance(raw, dict):
                 raise DataContractError(f"SHADOW_CA_MISSING_{symbol}.")
-            if det.get("has_event"):
-                for field in ("ex_date", "amount", "payable_date", "authority_source"):
-                    if not det.get(field):
-                        raise DataContractError(f"SHADOW_CA_INCOMPLETE_{symbol}.")
-                dividends[symbol] = DividendEvent(
-                    ex_date=date.fromisoformat(det["ex_date"]),
-                    payable_date=date.fromisoformat(det["payable_date"]),
-                    amount_per_share=Decimal(str(det["amount"])),
-                )
-            ca_section[symbol] = {"has_event": det["has_event"]}
+            determination = CADetermination.from_dict(
+                raw, symbol, target, now_utc
+            )
+            dividends[symbol] = determination
+            ca_section[symbol] = determination.to_dict()
     else:
         for symbol in SYMBOLS:
-            ca_section[symbol] = {"has_event": False, "reason": "NO_PRIOR_HOLDINGS_SESSION_ONE"}
+            ca_section[symbol] = {
+                "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
+            }
     print("Corporate-action qualification: PASS.")
 
     # Restore economic state (fresh on session one).

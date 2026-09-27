@@ -7,10 +7,11 @@ mere absence of a parsed row. Live sponsor calls need a future authorization.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from acash.core.domain.exceptions import DataContractError
 
@@ -54,6 +55,60 @@ class CADetermination:
             "retrieved_at_utc": self.retrieved_at_utc,
             "source_sha256": self.source_sha256,
         }
+
+    @classmethod
+    def from_dict(
+        cls, doc: Mapping[str, Any], symbol: str, session: date,
+        processing_utc: datetime,
+    ) -> "CADetermination":
+        """Parse + fully validate one canonical CA determination (runner path)."""
+        if not isinstance(doc, Mapping):
+            raise DataContractError("CA_DETERMINATION_NOT_A_MAPPING.")
+        if doc.get("symbol") != symbol:
+            raise DataContractError(f"CA_SYMBOL_MISMATCH: {doc.get('symbol')} != {symbol}.")
+        if doc.get("session") != session.isoformat():
+            raise DataContractError(f"CA_SESSION_MISMATCH for {symbol}.")
+        expected_sponsor = SPONSOR_BY_SYMBOL.get(symbol)
+        if not expected_sponsor or doc.get("authority_source") != expected_sponsor:
+            raise DataContractError(f"CA_SPONSOR_MISMATCH for {symbol}.")
+        try:
+            retrieved = datetime.fromisoformat(str(doc.get("retrieved_at_utc")))
+        except (ValueError, TypeError) as exc:
+            raise DataContractError(f"CA_RETRIEVED_AT_MALFORMED for {symbol}.") from exc
+        if retrieved.tzinfo is None:
+            raise DataContractError(f"CA_RETRIEVED_AT_NAIVE for {symbol}.")
+        if processing_utc.tzinfo is None:
+            raise DataContractError("CA_PROCESSING_TS_MUST_BE_TIMEZONE_AWARE.")
+        if retrieved.astimezone(timezone.utc) > processing_utc.astimezone(timezone.utc):
+            raise DataContractError(f"CA_FUTURE_RETRIEVAL for {symbol}.")
+        sha = str(doc.get("source_sha256") or "")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", sha):
+            raise DataContractError(f"CA_SOURCE_SHA_INVALID for {symbol}.")
+        has_event = doc.get("has_event")
+        if not isinstance(has_event, bool):
+            raise DataContractError(f"CA_HAS_EVENT_NOT_BOOL for {symbol}.")
+        if not has_event:
+            return cls(
+                symbol=symbol, session=session, has_event=False,
+                authority_source=str(doc.get("authority_source")),
+                retrieved_at_utc=retrieved.isoformat(), source_sha256=sha.lower(),
+            )
+        try:
+            ex_date = date.fromisoformat(str(doc["ex_date"]))
+            amount = Decimal(str(doc["amount_per_share"]))
+            payable = date.fromisoformat(str(doc["payable_date"]))
+        except (KeyError, ValueError, TypeError, ArithmeticError) as exc:
+            raise DataContractError(f"CA_EVENT_INCOMPLETE for {symbol}: {exc}.") from exc
+        if amount <= Decimal("0"):
+            raise DataContractError(f"CA_EVENT_NONPOSITIVE_AMOUNT for {symbol}.")
+        record = doc.get("record_date")
+        return cls(
+            symbol=symbol, session=session, has_event=True, ex_date=ex_date,
+            amount_per_share=amount, payable_date=payable,
+            record_date=date.fromisoformat(str(record)) if record else None,
+            authority_source=str(doc.get("authority_source")),
+            retrieved_at_utc=retrieved.isoformat(), source_sha256=sha.lower(),
+        )
 
 
 class SponsorAuthorityAdapter:

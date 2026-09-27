@@ -8,7 +8,7 @@ operational activation, exclusive) are never backfilled and never counted.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Dict, List
 
@@ -21,6 +21,12 @@ RECENT_STRESS_END: date = date(2026, 8, 14)
 QUARANTINE_START: date = date(2026, 8, 15)
 PROSPECTIVE_MIN_SESSIONS: int = 504
 PROSPECTIVE_MIN_REBALANCES: int = 2
+STATE_SCHEMA_VERSION: int = 1
+STATE_HYPOTHESIS_ID: str = "HYP_011"
+STATE_ACTIVATION_SESSION: date = date(2026, 9, 28)
+# NYSE regular-session open in UTC (EDT in September): the earliest instant at
+# which a target session's observation trigger may be considered.
+EXPECTED_SESSION_OPEN_US: time = time(13, 30)
 SHADOW_STARTING_AUM: Decimal = Decimal("100000.00")
 
 
