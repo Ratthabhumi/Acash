@@ -1,0 +1,103 @@
+{
+  "document": "CORE_001_DASHBOARD_SNAPSHOT_V1",
+  "generated_at_utc": "2026-09-27T10:57:01.628763+00:00",
+  "network_requests_issued": 0,
+  "read_only_derivation": true,
+  "source_state_dir": "C:\\Users\\MewMew\\AppData\\Local\\Temp\\tmp6u9zbsnz",
+  "view": {
+    "benchmark": {
+      "equity": "100050.00",
+      "return_since_entry": "0",
+      "shares": 190,
+      "status": "SEALED"
+    },
+    "equity_series": [
+      {
+        "benchmark_equity": "100050.00",
+        "ordinal": 1,
+        "session": "2026-09-28",
+        "strategy_drawdown": "0.0",
+        "strategy_equity": "100000.00"
+      }
+    ],
+    "evidence": {
+      "corporate_action_status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS",
+      "latest_artifact_sha256": "11ec76352c02338315b4cb7aef26eebcf991a353126c8a4b06153d3d47a3268c",
+      "latest_observation_ordinal": 1,
+      "latest_observation_session": "2026-09-28",
+      "observation_count": 1,
+      "previous_artifact_sha256": null,
+      "provider_attempts": 6,
+      "reason": "LATEST_SEALED_OBSERVATION",
+      "state_chain_health": "READY",
+      "status": "NON_DECISIVE_PROSPECTIVE_SHADOW_MONITORING"
+    },
+    "governance": {
+      "live_authorized": false,
+      "live_locked": true,
+      "no_real_orders": true,
+      "paper_authorized": false,
+      "paper_eligible": false,
+      "paper_eligible_basis": "NO_QUALIFICATION_EVIDENCE_IN_V1",
+      "real_capital_authority_usd": "0.00",
+      "stage": "S1_OPERATIONAL_SANITY_IN_PROGRESS"
+    },
+    "identity": {
+      "core_id": "CORE-001",
+      "hypothesis_id": "HYP_011",
+      "strategy_name": "Global 80/20 Strategic Allocation Core"
+    },
+    "incident": {
+      "basis": "NO_INCIDENCE_EVIDENCE",
+      "category": "NONE"
+    },
+    "performance": {
+      "annualized_sharpe": null,
+      "annualized_volatility": null,
+      "cumulative_return": "0",
+      "current_drawdown": "0.0",
+      "latest_daily_return": "0.0",
+      "max_drawdown": "0",
+      "status": "DIAGNOSTIC_ONLY_UNTIL_OBSERVATION_60"
+    },
+    "portfolio": {
+      "basis": "LATEST_SEALED_OBSERVATION",
+      "cash": "500.00",
+      "holdings": {
+        "ACWI": 800,
+        "AGG": 180
+      },
+      "market_value": "99500.00",
+      "receivable": "0",
+      "total_equity": "100000.00"
+    },
+    "progress": {
+      "completed_annual_rebalances": 0,
+      "long_horizon_required": 504,
+      "observed_sessions": 1,
+      "required_annual_rebalances": 2,
+      "s1_required": 20,
+      "s2_required": 60,
+      "s4_checkpoints": [
+        126,
+        252
+      ]
+    },
+    "runtime": {
+      "note": "Dashboard v1 performs no remote access.",
+      "runtime_status": "UNAVAILABLE_FROM_DASHBOARD",
+      "service_status": "UNAVAILABLE_FROM_DASHBOARD",
+      "timer_status": "UNAVAILABLE_FROM_DASHBOARD"
+    },
+    "s2": {
+      "cumulative_return_floor": "-0.20",
+      "current_cumulative_return": "0",
+      "current_mdd": "0",
+      "daily_return_floor": "-0.10",
+      "evaluation_state": "INSUFFICIENT_OBSERVATIONS",
+      "mdd_limit": "0.25",
+      "note": "Diagnostic only until Observation 60.",
+      "worst_daily_return": "0.0"
+    }
+  }
+}

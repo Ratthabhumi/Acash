@@ -7,6 +7,9 @@ node_modules/
 dist/
 dist-ssr/
 
+# Derived CORE-001 snapshot (generated, never committed)
+public/data/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

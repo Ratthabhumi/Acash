@@ -1,17 +1,18 @@
 import React from 'react';
-import { 
-  BarChart3, 
-  ArrowLeftRight, 
-  GitBranch, 
-  ShieldCheck, 
-  Database, 
-  Lock, 
+import {
+  BarChart3,
+  ArrowLeftRight,
+  GitBranch,
+  ShieldCheck,
+  Database,
+  Lock,
   Layers,
   X,
-  Swords
+  Swords,
+  Telescope
 } from 'lucide-react';
 
-export type DashboardTab = 'overview' | 'trades' | 'evidence' | 'validation' | 'shadow';
+export type DashboardTab = 'overview' | 'trades' | 'evidence' | 'validation' | 'shadow' | 'core001';
 
 interface SidebarProps {
   currentTab: DashboardTab;
@@ -63,6 +64,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Swords,
       badge: 'SIMULATED',
       description: 'Shadow alpha tournament — read-only',
+    },
+    {
+      id: 'core001' as DashboardTab,
+      label: 'CORE-001 HYP_011',
+      icon: Telescope,
+      badge: 'PRE-S1',
+      description: 'Global 80/20 prospective shadow — read-only',
     },
   ];
 
