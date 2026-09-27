@@ -1,10 +1,10 @@
 # ACASH GitHub Protection & Repository Ruleset Design
 
-**Document:** `docs/governance/preobs_audit_20260928/GITHUB_PROTECTION_DESIGN.md`  
-**Evaluation Scope:** Pre-Observation Governance Audit & Post-Observation Hardening Plan  
-**Target Repository:** `Ratthabhumi/Acash`  
-**Current Main SHA Pin:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2`  
-**Audit Date:** 2026-09-28  
+**Document:** `docs/governance/preobs_audit_20260928/GITHUB_PROTECTION_DESIGN.md`
+**Evaluation Scope:** Pre-Observation Governance Audit & Post-Observation Hardening Plan
+**Target Repository:** `Ratthabhumi/Acash`
+**Current Main SHA Pin:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2`
+**Audit Date:** 2026-09-28
 **Governance Authority:** `docs/governance/OPERATOR_DECISION_CHARTER_V1.md` (e787cda) — Principles 5, 8, 10
 
 ---

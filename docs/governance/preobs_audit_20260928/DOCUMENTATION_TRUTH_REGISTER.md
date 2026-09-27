@@ -1,9 +1,9 @@
 # ACASH Documentation Truth Register (Stale State & Authority Census)
 
-**Document:** `docs/governance/preobs_audit_20260928/DOCUMENTATION_TRUTH_REGISTER.md`  
-**Audit Scope:** Repository-wide Canonical Documentation & Authority Lineage  
-**Canonical Main SHA Pin:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2`  
-**Audit Date:** 2026-09-28  
+**Document:** `docs/governance/preobs_audit_20260928/DOCUMENTATION_TRUTH_REGISTER.md`
+**Audit Scope:** Repository-wide Canonical Documentation & Authority Lineage
+**Canonical Main SHA Pin:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2`
+**Audit Date:** 2026-09-28
 **Governance Authority:** `docs/governance/OPERATOR_DECISION_CHARTER_V1.md` (e787cda) — Principles 1, 4, 11
 
 ---
