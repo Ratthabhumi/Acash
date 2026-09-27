@@ -1,9 +1,10 @@
-"""HYP_011 prospective shadow single-session runner.
+"""HYP_011 prospective shadow single-session runner (atomic observation).
 
 Default DRY-RUN (zero network). Live observation requires --execute-network
-under an explicit human authorization AND processes exactly the unique next
-expected session (activation session if none observed, else the first session
-after the last processed one). One session per invocation. No catch-up ranges.
+plus an explicit --authorization identifier whose --ordinal equals
+state.observed_session_count + 1. Exactly one expected session per invocation:
+no ranges, no catch-up, no backfill. Accounting/benchmark/chain commit happens
+only after all price + corporate-action qualification passes.
 """
 
 from __future__ import annotations
@@ -11,11 +12,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import sys
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
@@ -25,12 +26,9 @@ from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
     EnvAlpacaCredentialProvider,
 )
-from acash.research.hyp_011.shadow import (
-    SCIENTIFIC_PROSPECTIVE_BOUNDARY,
-    ShadowState,
-    derive_activation_session,
-    missed_unobserved_sessions,
-)
+from acash.research.hyp_009.accounting import DividendEvent
+from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
+from acash.research.hyp_011.shadow import ShadowState
 from acash.research.hyp_011.shadow_ops import (
     SessionMarket,
     ShadowBenchmark,
@@ -38,6 +36,7 @@ from acash.research.hyp_011.shadow_ops import (
     append_observation,
     process_benchmark_session,
     process_strategy_session,
+    verify_chain,
 )
 
 SYMBOLS = ("ACWI", "AGG", "SPY")
@@ -48,33 +47,44 @@ EXIT_OK = 0
 EXIT_BLOCKED = 2
 
 
-def _load_state() -> Dict[str, Any]:
-    path = STATE_DIR / "state.json"
-    if not path.exists():
-        return {
-            "activation_session": ACTIVATION_SESSION.isoformat(),
-            "observed_sessions": [],
-            "completed_annual_rebalances": 0,
-            "last_observation_sha256": None,
-            "portfolio": None,
-            "benchmark": None,
-        }
-    return json.loads(path.read_text(encoding="utf-8"))
+def _check_split_continuity(
+    symbol: str,
+    market_closes: Dict[str, Decimal],
+    market_split_closes: Dict[str, Decimal],
+    prior_closes: Dict[str, Any],
+) -> str:
+    """Fail closed on an implied split without bound official authority.
+
+    Compares today's raw/split close ratio against the prior observed
+    session's ratio from persistent state. Session one has no history:
+    recorded explicitly, never inferred.
+    """
+    if not prior_closes:
+        return "NO_PRIOR_HISTORY_SINGLE_SESSION"
+    prior = prior_closes.get(symbol)
+    if not prior:
+        raise DataContractError(f"SHADOW_SPLIT_BASELINE_CORRUPT: {symbol}.")
+    prior_raw = Decimal(str(prior["raw"]))
+    prior_split = Decimal(str(prior["split"]))
+    if prior_raw <= Decimal("0") or prior_split <= Decimal("0"):
+        raise DataContractError(f"SHADOW_SPLIT_BASELINE_CORRUPT: {symbol}.")
+    if market_split_closes[symbol] <= Decimal("0"):
+        raise DataContractError(f"SHADOW_SPLIT_NONPOSITIVE: {symbol}.")
+    prior_ratio = prior_raw / prior_split
+    today_ratio = market_closes[symbol] / market_split_closes[symbol]
+    tolerance = abs(prior_ratio) * Decimal("0.000001")
+    if abs(today_ratio - prior_ratio) > tolerance:
+        raise DataContractError(
+            f"BLOCK_PROSPECTIVE_SPLIT_EVENT_CONTRACT: {symbol} ratio "
+            f"{prior_ratio} -> {today_ratio} without bound authority."
+        )
+    return "NO_NEW_SPLIT_EVENT_OBSERVED"
 
 
-def _save_state(doc: Dict[str, Any]) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / "state.json"
-    raw = json.dumps(doc, indent=2, sort_keys=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(raw)
-
-
-def _expected_next(state: Dict[str, Any], calendar: NyseCa1Calendar) -> date:
-    observed = state.get("observed_sessions", [])
-    if not observed:
+def _expected_next(state_sessions: List[str], calendar: NyseCa1Calendar) -> date:
+    if not state_sessions:
         return ACTIVATION_SESSION
-    last = date.fromisoformat(observed[-1])
+    last = date.fromisoformat(state_sessions[-1])
     cursor = date.fromordinal(last.toordinal() + 1)
     for _ in range(14):
         if calendar.is_trading_session(cursor):
@@ -83,9 +93,17 @@ def _expected_next(state: Dict[str, Any], calendar: NyseCa1Calendar) -> date:
     raise DataContractError("SHADOW_NO_NEXT_SESSION_WITHIN_14_DAYS.")
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(
+    argv: List[str] | None = None,
+    _now_utc: datetime | None = None,
+    _state_dir: Path | None = None,
+    _client: Any | None = None,
+) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 prospective shadow runner.")
     parser.add_argument("--execute-network", action="store_true", default=False)
+    parser.add_argument("--authorization", default="")
+    parser.add_argument("--ordinal", type=int, default=0)
+    parser.add_argument("--ca-determinations", default="")
     args = parser.parse_args(argv)
 
     attempts = [0]
@@ -93,10 +111,27 @@ def main(argv: List[str] | None = None) -> int:
     def _count() -> None:
         attempts[0] += 1
 
-    print("=== HYP_011 PROSPECTIVE SHADOW (single session) ===")
+    print("=== HYP_011 PROSPECTIVE SHADOW (single atomic session) ===")
     if not args.execute_network:
-        print("DRY-RUN: no network. Use --execute-network.")
+        print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
+
+    state_dir = _state_dir if _state_dir is not None else STATE_DIR
+    now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
+
+    # Pre-network local validation: chain integrity first.
+    verified = verify_chain(state_dir)
+    observed: List[str] = list(verified.get("observed_sessions", []))
+    expected_ordinal = len(observed) + 1
+    if not args.authorization:
+        raise DataContractError("SHADOW_AUTHORIZATION_REQUIRED.")
+    if args.ordinal != expected_ordinal:
+        raise DataContractError(
+            f"SHADOW_AUTHORIZATION_ORDINAL_MISMATCH: got {args.ordinal}, "
+            f"expected {expected_ordinal}."
+        )
+    print(f"Authorization {args.authorization} ordinal {args.ordinal}: ACCEPTED.")
+
     try:
         EnvAlpacaCredentialProvider().load()
     except AlpacaCredentialError as exc:
@@ -104,36 +139,24 @@ def main(argv: List[str] | None = None) -> int:
         return EXIT_BLOCKED
 
     calendar = NyseCa1Calendar()
-    state = _load_state()
-    if state.get("activation_session") != ACTIVATION_SESSION.isoformat():
-        raise DataContractError("SHADOW_ACTIVATION_MISMATCH.")
-    target = _expected_next(state, calendar)
+    target = _expected_next(observed, calendar)
     print(f"Expected next session: {target.isoformat()}")
 
-    # Idempotence: already processed -> no action, zero network.
-    obs_path = STATE_DIR / "observations" / f"{target.isoformat()}.json"
+    obs_path = state_dir / "observations" / f"{target.isoformat()}.json"
     if obs_path.exists():
         print("ALREADY_PROCESSED_NO_ACTION")
         print("NETWORK_REQUESTS_ISSUED = 0")
         return EXIT_OK
 
-    # Completion + backfill guards BEFORE any network call.
+    # Full guard validation pre-network (duplicate/order/early/stress/
+    # quarantine/completion via close_utc).
     guard_state = ShadowState(activation_session=ACTIVATION_SESSION)
-    guard_state.observed_sessions = list(state.get("observed_sessions", []))
+    guard_state.observed_sessions = list(observed)
     if target < ACTIVATION_SESSION:
         raise DataContractError(f"SHADOW_BACKFILL_FORBIDDEN: {target}.")
-    close_utc = calendar.get_session(target).close_utc
-    if close_utc is None:
-        raise DataContractError(f"SHADOW_NO_CLOSE_TIME: {target}.")
-    now_utc = datetime.now(timezone.utc)
-    if now_utc <= close_utc:
-        print(f"SESSION_NOT_YET_COMPLETE: {target} (close {close_utc.isoformat()}).")
-        print("NETWORK_REQUESTS_ISSUED = 0")
-        return EXIT_OK
-    # Full guard validation (duplicate/order/early/stress/quarantine/completion).
     guard_state.record_session(target, calendar, now_utc)
 
-    client = HYP011AlpacaClient(http_attempt_listener=_count)
+    client = _client if _client is not None else HYP011AlpacaClient(http_attempt_listener=_count)
     fetched: Dict[str, Dict[str, Any]] = {}
     for symbol in SYMBOLS:
         fetched[symbol] = {}
@@ -148,8 +171,165 @@ def main(argv: List[str] | None = None) -> int:
                 "raw_bytes": result.pages_raw_bytes,
             }
     print(f"NETWORK_REQUESTS_ISSUED = {attempts[0]}")
-    print("Single-session fetch complete; accounting/benchmark/chain-write")
-    print("completes only under a dedicated observation authorization. STOP.")
+
+    # Six-series input qualification.
+    market_opens: Dict[str, Decimal] = {}
+    market_closes: Dict[str, Decimal] = {}
+    provider_section: Dict[str, Any] = {"http_attempts": attempts[0], "series": {}}
+    for symbol in SYMBOLS:
+        split_bar = fetched[symbol]["split"]["bar"]
+        raw_bar = fetched[symbol]["raw"]["bar"]
+        if split_bar.timestamp_utc.date() != target or raw_bar.timestamp_utc.date() != target:
+            raise DataContractError(f"SHADOW_SERIES_DATE_MISMATCH: {symbol}.")
+        market_opens[symbol] = raw_bar.open
+        market_closes[symbol] = raw_bar.close
+        provider_section["series"][symbol] = {}
+        for adjustment in ("split", "raw"):
+            entry = fetched[symbol][adjustment]
+            provider_section["series"][symbol][adjustment] = {
+                "bar": {
+                    "t": entry["bar"].timestamp_utc.isoformat(),
+                    "o": str(entry["bar"].open), "h": str(entry["bar"].high),
+                    "l": str(entry["bar"].low), "c": str(entry["bar"].close),
+                    "v": str(entry["bar"].volume),
+                },
+                "pages": [
+                    {"page_index": m.page_index, "byte_length": m.byte_length,
+                     "bar_count": m.bar_count,
+                     "raw_sha256": hashlib.sha256(b).hexdigest()}
+                    for m, b in zip(entry["pages"], entry["raw_bytes"])
+                ],
+            }
+
+    # Split lineage: ratio continuity vs prior observed closes from state.
+    split_section: Dict[str, Any] = {}
+    market_split_closes: Dict[str, Decimal] = {
+        symbol: fetched[symbol]["split"]["bar"].close for symbol in SYMBOLS
+    }
+    prior_closes: Dict[str, Any] = {}
+    if observed:
+        stored_raw = verified.get("last_closes_raw", {})
+        stored_split = verified.get("last_closes_split", {})
+        for symbol in SYMBOLS:
+            if symbol in stored_raw and symbol in stored_split:
+                prior_closes[symbol] = {
+                    "raw": stored_raw[symbol], "split": stored_split[symbol]
+                }
+    for symbol in SYMBOLS:
+        split_section[symbol] = _check_split_continuity(
+            symbol, market_closes, market_split_closes, prior_closes,
+        )
+
+    # Corporate-action determinations (session 1 needs none: no prior holdings).
+    ca_section: Dict[str, Any] = {}
+    dividends: Dict[str, DividendEvent] = {}
+    if observed:
+        if not args.ca_determinations:
+            raise DataContractError(
+                "SHADOW_CA_DETERMINATIONS_REQUIRED_BEYOND_SESSION_ONE."
+            )
+        ca_doc = json.loads(Path(args.ca_determinations).read_text(encoding="utf-8"))
+        for symbol in SYMBOLS:
+            det = ca_doc.get(symbol)
+            if not det or det.get("session") != target.isoformat():
+                raise DataContractError(f"SHADOW_CA_MISSING_{symbol}.")
+            if det.get("has_event"):
+                for field in ("ex_date", "amount", "payable_date", "authority_source"):
+                    if not det.get(field):
+                        raise DataContractError(f"SHADOW_CA_INCOMPLETE_{symbol}.")
+                dividends[symbol] = DividendEvent(
+                    ex_date=date.fromisoformat(det["ex_date"]),
+                    payable_date=date.fromisoformat(det["payable_date"]),
+                    amount_per_share=Decimal(str(det["amount"])),
+                )
+            ca_section[symbol] = {"has_event": det["has_event"]}
+    else:
+        for symbol in SYMBOLS:
+            ca_section[symbol] = {"has_event": False, "reason": "NO_PRIOR_HOLDINGS_SESSION_ONE"}
+    print("Corporate-action qualification: PASS.")
+
+    # Restore economic state (fresh on session one).
+    if observed:
+        portfolio = ShadowPortfolio.from_dict(verified["strategy"])
+        benchmark = ShadowBenchmark.from_dict(verified["benchmark"])
+        completed_rebalances = int(verified.get("completed_annual_rebalances", 0))
+        previous_sha = verified.get("last_observation_sha256")
+    else:
+        portfolio = ShadowPortfolio()
+        benchmark = ShadowBenchmark()
+        completed_rebalances = 0
+        previous_sha = None
+
+    # Transaction type.
+    if not observed:
+        transaction_type = "INITIAL_ALLOCATION"
+        is_rebalance = True
+    elif target.year not in {date.fromisoformat(s).year for s in observed}:
+        transaction_type = "SCHEDULED_ANNUAL_REBALANCE"
+        is_rebalance = True
+    else:
+        transaction_type = "HOLD"
+        is_rebalance = False
+
+    market = SessionMarket(session=target, opens_raw=market_opens, closes_raw=market_closes)
+    pre_strategy = portfolio.to_dict()
+    pre_benchmark = benchmark.to_dict()
+    strategy_frag = process_strategy_session(
+        portfolio, market, dividends, is_rebalance,
+        BASELINE_SLIPPAGE_BPS, 1, "SHADOW_BASELINE",
+    )
+    bench_div = dividends.get("SPY")
+    bench_frag = process_benchmark_session(
+        benchmark, target, market_opens["SPY"], market_closes["SPY"],
+        bench_div, BASELINE_SLIPPAGE_BPS,
+    )
+
+    observation: Dict[str, Any] = {
+        "schema_version": 1,
+        "hypothesis_id": "HYP_011",
+        "session": target.isoformat(),
+        "processed_at_utc": now_utc.isoformat(),
+        "authority": {
+            "activation_binding": "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json",
+            "authorization": args.authorization,
+            "ordinal": args.ordinal,
+        },
+        "provider": provider_section,
+        "corporate_actions": ca_section,
+        "split_qualification": split_section,
+        "transaction_type": transaction_type,
+        "pre_state": {
+            "strategy": pre_strategy,
+            "benchmark": pre_benchmark,
+        },
+        "strategy": strategy_frag,
+        "benchmark": bench_frag,
+        "metrics_non_decisive": {
+            "strategy_equity": strategy_frag["equity"],
+            "strategy_daily_return": strategy_frag["daily_return"],
+            "strategy_drawdown": strategy_frag["drawdown"],
+            "benchmark_equity": bench_frag["equity"],
+            "observed_session_ordinal": len(observed) + 1,
+        },
+        "scientific_status": "NON_DECISIVE_PROSPECTIVE_SHADOW_MONITORING",
+        "paper": False,
+        "live": False,
+        "capital": "0.00",
+        "no_real_orders": True,
+    }
+    digest = append_observation(
+        state_dir, target, observation, previous_sha,
+        portfolio=portfolio, benchmark=benchmark,
+        completed_annual_rebalances=(
+            completed_rebalances + (1 if transaction_type == "SCHEDULED_ANNUAL_REBALANCE" else 0)
+        ),
+        extra_state={
+            "last_closes_raw": {s: str(market_closes[s]) for s in SYMBOLS},
+            "last_closes_split": {s: str(market_split_closes[s]) for s in SYMBOLS},
+        },
+    )
+    print(f"Observation sealed: {digest}")
+    print("STATE: observation committed; no further sessions in this invocation.")
     return EXIT_OK
 
 
