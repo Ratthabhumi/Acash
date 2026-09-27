@@ -40,9 +40,10 @@ Translates empirical phenomena into rigorous, falsifiable market-microstructure 
 
 ## Directory Manifest & Navigation
 
-- [R0_GOVERNANCE.md](file:///docs/research_intake/v1/R0_GOVERNANCE.md): Research intake governance charter, status declarations, and permitted lifecycle transitions.
-- [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md): Quantitative controls, multiple-testing corrections, bar-path ambiguity rules, and friction accounting.
-- [DATA_AND_PROVENANCE_REQUIREMENTS.md](file:///docs/research_intake/v1/DATA_AND_PROVENANCE_REQUIREMENTS.md): Data schema, vendor semantics, and timestamp requirements across asset classes.
-- [SOURCE_TO_MECHANISM_MAP.md](file:///docs/research_intake/v1/SOURCE_TO_MECHANISM_MAP.md): Many-to-many traceability mapping linking source notes (`SR-xx`) to mechanisms (`RI-xx`).
-- [BIBLIOGRAPHY.md](file:///docs/research_intake/v1/BIBLIOGRAPHY.md): Curated academic and industry literature references supporting the intake mechanisms.
-- [RESEARCH_INTAKE_V1_MANIFEST.json](file:///docs/research_intake/v1/RESEARCH_INTAKE_V1_MANIFEST.json): Cryptographic SHA-256 seal of all documents in this intake release.
+- [R0_GOVERNANCE.md](./R0_GOVERNANCE.md): Research intake governance charter, status declarations, and permitted lifecycle transitions.
+- [R0_CORRECTION_001_AUTHORITY_FIDELITY.md](./R0_CORRECTION_001_AUTHORITY_FIDELITY.md): Lineage correction note documenting removal of agent-invented choices.
+- [METHODOLOGY_CONTROLS.md](./METHODOLOGY_CONTROLS.md): Quantitative controls, multiple-testing corrections, bar-path ambiguity rules, and friction accounting.
+- [DATA_AND_PROVENANCE_REQUIREMENTS.md](./DATA_AND_PROVENANCE_REQUIREMENTS.md): Data schema, vendor semantics, and timestamp requirements across asset classes.
+- [SOURCE_TO_MECHANISM_MAP.md](./SOURCE_TO_MECHANISM_MAP.md): Many-to-many traceability mapping linking source notes (`SR-xx`) to mechanisms (`RI-xx`).
+- [BIBLIOGRAPHY.md](./BIBLIOGRAPHY.md): Curated academic and industry literature references supporting the intake mechanisms.
+- [RESEARCH_INTAKE_V1_MANIFEST.json](./RESEARCH_INTAKE_V1_MANIFEST.json): Cryptographic SHA-256 seal of all documents in this intake release.

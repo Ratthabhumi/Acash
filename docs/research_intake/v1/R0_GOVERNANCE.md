@@ -4,8 +4,10 @@
 
 - **Corpus Title**: ACASH Scientific Research Intake Corpus v1
 - **Lifecycle Phase**: R0 (Cataloguing, Structural Intake & Lineage Sealing)
-- **Governance Status**: `R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION`
+- **Base Authority Status**: `R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION`
+- **Current Content Status**: `R0_CONTENT_CORRECTED_PENDING_HUMAN_AUDIT`
 - **Base Commit Pin**: `d9608c0a2353bd5ed41943e5fb893ef9648089d2` (Observation #0001 homelab pin)
+- **Lineage Amendment**: Scientific acceptance of the corpus is contingent on the additive [R0_CORRECTION_001_AUTHORITY_FIDELITY.md](./R0_CORRECTION_001_AUTHORITY_FIDELITY.md) authority-fidelity amendment.
 - **Active Hypothesis Impact**: NONE. HYP_011 and CORE-001 remain completely isolated, unchanged, and frozen.
 
 ## 2. Research Shortlist & Candidate Taxonomy
@@ -13,15 +15,15 @@
 The human research authority has reviewed 15 intake mechanisms (`RI-01` through `RI-15`) and approved a preliminary research shortlist for future exploratory prioritization:
 
 ### Approved Exploratory Shortlist:
-1. **Shortlist A — Opening-State Information**: [RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md](file:///docs/research_intake/v1/mechanisms/RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md)
-2. **Shortlist B — Order Flow Imbalance & Absorption**: [RI_03_ORDER_FLOW_IMBALANCE.md](file:///docs/research_intake/v1/mechanisms/RI_03_ORDER_FLOW_IMBALANCE.md) and [RI_04_ABSORPTION_IMPACT_EFFICIENCY.md](file:///docs/research_intake/v1/mechanisms/RI_04_ABSORPTION_IMPACT_EFFICIENCY.md)
-3. **Shortlist C — Option Positioning & Gamma Regime**: [RI_05_DEALER_GAMMA_GEX_REGIME.md](file:///docs/research_intake/v1/mechanisms/RI_05_DEALER_GAMMA_GEX_REGIME.md), [RI_06_OPTION_OPEN_INTEREST_CHANGES.md](file:///docs/research_intake/v1/mechanisms/RI_06_OPTION_OPEN_INTEREST_CHANGES.md), and [RI_08_IV_EXPECTED_MOVE_REGIME.md](file:///docs/research_intake/v1/mechanisms/RI_08_IV_EXPECTED_MOVE_REGIME.md)
+1. **Shortlist A — Opening-State Information**: [RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md](./mechanisms/RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md)
+2. **Shortlist B — Order Flow Imbalance & Absorption**: [RI_03_ORDER_FLOW_IMBALANCE.md](./mechanisms/RI_03_ORDER_FLOW_IMBALANCE.md) and [RI_04_ABSORPTION_IMPACT_EFFICIENCY.md](./mechanisms/RI_04_ABSORPTION_IMPACT_EFFICIENCY.md)
+3. **Shortlist C — Option Positioning & Gamma Regime**: [RI_05_DEALER_GAMMA_GEX_REGIME.md](./mechanisms/RI_05_DEALER_GAMMA_GEX_REGIME.md), [RI_06_OPTION_OPEN_INTEREST_CHANGES.md](./mechanisms/RI_06_OPTION_OPEN_INTEREST_CHANGES.md), and [RI_08_IV_EXPECTED_MOVE_REGIME.md](./mechanisms/RI_08_IV_EXPECTED_MOVE_REGIME.md)
 
 ### Non-Shortlisted / Restricted Categories:
-- **Baseline / Controls**: [RI_09_TIME_SERIES_MOMENTUM.md](file:///docs/research_intake/v1/mechanisms/RI_09_TIME_SERIES_MOMENTUM.md) (`DO_NOT_RECYCLE` into CORE-002 due to high contamination with HYP_009/HYP_010).
-- **Negative Control Candidates**: [RI_14_FVG_SMC.md](file:///docs/research_intake/v1/mechanisms/RI_14_FVG_SMC.md) (placebo comparator for geometric price patterns).
-- **Feature Only**: [RI_15_EMA_CHART_CANDLESTICK_FEATURES.md](file:///docs/research_intake/v1/mechanisms/RI_15_EMA_CHART_CANDLESTICK_FEATURES.md) (not authorized as a standalone thesis).
-- **Advanced Sleeve / On Hold**: [RI_02](file:///docs/research_intake/v1/mechanisms/RI_02_OPENING_RANGE_BREAKOUT.md), [RI_07](file:///docs/research_intake/v1/mechanisms/RI_07_INTRADAY_OPTION_FLOW.md), [RI_10](file:///docs/research_intake/v1/mechanisms/RI_10_VOLUME_SPIKE_BREAKOUT.md), [RI_11](file:///docs/research_intake/v1/mechanisms/RI_11_MEAN_REVERSION_OVERREACTION.md), [RI_12](file:///docs/research_intake/v1/mechanisms/RI_12_CALENDAR_WEEKDAY_SEASONALITY.md), [RI_13](file:///docs/research_intake/v1/mechanisms/RI_13_RELATIVE_VALUE_PAIRS.md).
+- **Baseline / Controls**: [RI_09_TIME_SERIES_MOMENTUM.md](./mechanisms/RI_09_TIME_SERIES_MOMENTUM.md) (`DO_NOT_RECYCLE` into CORE-002 due to high contamination with HYP_009/HYP_010).
+- **Negative Control Candidates**: [RI_14_FVG_SMC.md](./mechanisms/RI_14_FVG_SMC.md) (placebo comparator for geometric price patterns).
+- **Feature Only**: [RI_15_EMA_CHART_CANDLESTICK_FEATURES.md](./mechanisms/RI_15_EMA_CHART_CANDLESTICK_FEATURES.md) (not authorized as a standalone thesis).
+- **Advanced Sleeve / On Hold**: [RI_02](./mechanisms/RI_02_OPENING_RANGE_BREAKOUT.md), [RI_07](./mechanisms/RI_07_INTRADAY_OPTION_FLOW.md), [RI_10](./mechanisms/RI_10_VOLUME_SPIKE_BREAKOUT.md), [RI_11](./mechanisms/RI_11_MEAN_REVERSION_OVERREACTION.md), [RI_12](./mechanisms/RI_12_CALENDAR_WEEKDAY_SEASONALITY.md), [RI_13](./mechanisms/RI_13_RELATIVE_VALUE_PAIRS.md).
 
 ## 3. Strict Boundary Prohibitions (Fail-Closed Contract)
 
@@ -43,7 +45,7 @@ The only permitted future technical step for candidates in Shortlists A, B, and 
 A zero-outcome audit is strictly limited to data engineering contracts:
 - **Permitted**:
   - Inspecting vendor data dictionaries, API schemas, and historical availability.
-  - Verifying timestamp granularity (nanosecond, microsecond, millisecond) and quote/trade semantics.
+  - Verifying timestamp granularity and quote/trade semantics.
   - Assessing cost, licensing, entitlement constraints, and survivorship/restatement policies.
   - Evaluating delivery mechanisms (flat files, S3, WebSocket, FIX).
 - **Strictly Prohibited**:

@@ -12,7 +12,7 @@
 - NO_REAL_ORDERS: true
 
 ## 2. Research-Grade Mechanism
-Aggregate option dealer gamma exposure (GEX) influences underlying market volatility: positive net dealer gamma encourages volatility-dampening mean reversion, while negative net dealer gamma induces volatility-amplifying momentum.
+Dealer hedging under negative gamma may amplify price movements, while positive gamma may damp them.
 
 ## 3. Economic / Microstructure Rationale
 Option market makers delta-hedge their option inventory. In a positive gamma regime, dealers buy underlying assets as prices fall and sell as prices rise, creating a stabilizing feedback loop. In a negative gamma regime, dealers sell as prices fall and buy as prices rise, amplifying directional price displacement.
@@ -21,37 +21,41 @@ Option market makers delta-hedge their option inventory. In a positive gamma reg
 $H_0$: Aggregate estimated dealer gamma exposure has zero conditional relationship with realized underlying volatility or price continuation/reversal dynamics.
 
 ## 5. Alternative Hypothesis
-$H_1$: Underlying index volatility is significantly lower during positive GEX regimes than negative GEX regimes, and intraday mean reversion is significantly stronger when aggregate net dealer gamma is positive.
+$H_1$: Underlying volatility is significantly lower during positive GEX regimes than negative GEX regimes, and intraday mean reversion is significantly stronger when aggregate net dealer gamma is positive.
 
 ## 6. What Existing Evidence Actually Supports
-- **Peer-Reviewed / Established**: Extensive literature on option market maker hedging channels and volatility feedback (e.g., S&P 500 index option market-maker hedging dynamics).
-- **Preprint / Preliminary**: Research on 0DTE (zero days to expiration) options and their intraday hedging impact.
+- **Peer-Reviewed / Established**: Literature on option market maker hedging channels and volatility feedback at the broad mechanism level.
+- **Preprint / Preliminary**: Research on 0DTE options and their intraday hedging impact.
 - **Source Claim Only**: Retail claims that GEX levels act as guaranteed support/resistance pivots or that touching a GEX level guarantees a tradeable bounce.
 
 ## 7. What Existing Evidence Does NOT Support
-Literature does NOT support the claim that public Open Interest directly reveals exact dealer inventory sign. Retail "GEX charts" are model-dependent estimates, not direct observations of bank balance sheets.
+Literature does NOT support the claim that public Open Interest directly reveals exact dealer inventory sign. Retail GEX map != observed dealer inventory. Conceptual GEX is calculated as:
+$$\text{GEX} \approx \text{OI} \times \text{option gamma} \times \text{multiplier} \times \text{inferred position sign}$$
+Candidate GEX must be used primarily as REGIME / CONTEXT, not "touch level -> trade".
 
 ## 8. Source Claims That Motivated This Intake
 - `SR-06`: Ninja GEX A+ checklist, positive gamma stabilization, negative gamma amplified movement.
-- `SR-17`: MTraders OI/IV intraday zones, option dealer delta-hedging claims.
+- `SR-17`: MTraders OI/IV intraday zones, option dealer delta-neutral hedging claims.
 - `SR-18`: Derivatives pricing and risk-neutral calibration discussions.
 
 ## 9. Data Requirements
-- **Instrument**: S&P 500 Index Options (SPX, SPY) and Nasdaq Options (NDX, QQQ).
-- **Frequency**: End-of-day open interest and intraday quote/trade prints.
+- **Instrument**: NOT_YET_DETERMINED (SPX, SPY, NDX, QQQ cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
+- **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Complete option chain: strike, expiration, bid, ask, implied volatility, open interest.
-- **Time Zone**: America/New_York (UTC).
-- **Vendor / Feed Semantics**: OPRA / Cboe official archives.
-- **Historical Coverage**: Minimum 5 years (covering pre- and post-0DTE regimes).
-- **Authority Requirements**: Cboe DataShop or authoritative clearinghouse archives.
+- **Time Zone**: America/New_York (UTC storage).
+- **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
+- **Historical Coverage**: NOT_YET_DETERMINED.
+- **Provider**: NOT_YET_DETERMINED.
+- **Timestamp Precision**: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT.
+- **Authority Requirements**: Authoritative exchange or clearinghouse archives.
 
 ## 10. Data Provenance Contract Required Before Empirical Work
 Mandatory specification of the 7-point GEX provenance contract:
-- `OI_SOURCE`: Authoritative clearinghouse / Cboe.
+- `OI_SOURCE`: Authoritative clearinghouse / vendor.
 - `OI_ASOF`: Exact publication timestamp.
 - `OFFICIAL_OR_ESTIMATED`: Distinction between official clearinghouse OI and intraday estimated positioning.
-- `DEALER_SIGN_METHOD`: Explicitly stated assumption for customer vs. dealer sign.
-- `GREEKS_MODEL`: Specified volatility and pricing engine.
+- `DEALER_SIGN_METHOD`: Inferred net customer order flow sign / method.
+- `GREEKS_MODEL`: Greeks calculation model.
 - `OPTIONS_EXPIRY_SCOPE`: Near-month vs. full surface vs. 0DTE.
 - `0DTE_INCLUDED`: Boolean flag.
 

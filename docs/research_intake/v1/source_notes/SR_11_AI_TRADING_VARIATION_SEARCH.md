@@ -24,5 +24,5 @@ THIS FILE PRESERVES CLAIMS; IT DOES NOT ENDORSE THEM.
 
 ## 3. Mapping to ACASH Research Architecture
 - **Mapped Research Mechanisms**:
-  - Directly maps to [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md) (Multiple Testing, K Expansion, and Metric Evaluation standards: profit factor is not supreme).
+  - Directly maps to [METHODOLOGY_CONTROLS.md](../METHODOLOGY_CONTROLS.md) (Multiple Testing, K Expansion, and Metric Evaluation standards: profit factor is not supreme).
 - **Trial Status**: Preserved as a critique benchmark for automated strategy mining.

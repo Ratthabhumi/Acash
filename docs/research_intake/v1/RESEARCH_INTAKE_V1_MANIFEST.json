@@ -2,6 +2,9 @@
   "schema_version": 1,
   "document": "ACASH_RESEARCH_INTAKE_V1_R0",
   "status": "R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION",
+  "correction_number": 1,
+  "corrects_commit": "575b7b2b7701ed550cb31f5a8d4abeb4e4db3809",
+  "content_status": "R0_CONTENT_CORRECTED_PENDING_HUMAN_AUDIT",
   "base_sha": "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
   "candidate_count": 15,
   "source_note_count": 19,
@@ -22,23 +25,27 @@
   "files": [
     {
       "path": "docs/research_intake/v1/BIBLIOGRAPHY.md",
-      "sha256": "a2ab0823841b706c954eb04ec553409cce5ad05501dae919381ab658e4f10257"
+      "sha256": "d5abec11b05d48a4ef4e93a60b17e2e7e6ad61b9a01cfec8774881f053e4aeaf"
     },
     {
       "path": "docs/research_intake/v1/DATA_AND_PROVENANCE_REQUIREMENTS.md",
-      "sha256": "b2ed7caa9f0b8b2012680a47599f3dc327f87bc4bed8b7a019e7d6160fc5ba04"
+      "sha256": "48b9e380314efc9ca4c3ec4afc47c136c73bad860f61f6900104cc7931d85825"
     },
     {
       "path": "docs/research_intake/v1/METHODOLOGY_CONTROLS.md",
-      "sha256": "32edd6eb0d3f4d5e47a2105afaeddb013694dde38c1b2daec321d8d12b1e9ee3"
+      "sha256": "43750d0eadab721f716983856301c30fe005f736033f34b71dac88d17492b46f"
+    },
+    {
+      "path": "docs/research_intake/v1/R0_CORRECTION_001_AUTHORITY_FIDELITY.md",
+      "sha256": "225cc8d0c9a5af818f2691f97346a1d52f4ca5d74e7592b6d7f5fa523d3093d6"
     },
     {
       "path": "docs/research_intake/v1/R0_GOVERNANCE.md",
-      "sha256": "a4b46ec7369ed1a8a9d730e9108b002e753644b3fa2e1cc3fd8fb6ba2fcbccd6"
+      "sha256": "8d61a2c50e9e76ab002d14802588d9d0878c567bcee87a7dd834ba7b7c7bd0df"
     },
     {
       "path": "docs/research_intake/v1/README.md",
-      "sha256": "2f818388ce4fc140a432d926c5308326dfc6d96c9297ed1eedfb7576748ae239"
+      "sha256": "4381c139d09068ced522f4e01a7291137b6f32ba91ecfd66e2203c954ced5921"
     },
     {
       "path": "docs/research_intake/v1/SOURCE_TO_MECHANISM_MAP.md",
@@ -46,63 +53,63 @@
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md",
-      "sha256": "98a5687211dab20ad428cc03c9039924e58ea1bfdaddf632dc0fdb65fc1d4f32"
+      "sha256": "1a6a4c0c7bd7cdb8111621d9a1993cf9bf67019c36a1eb53b9cc16553ceb9fb5"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_02_OPENING_RANGE_BREAKOUT.md",
-      "sha256": "46a6c033997bdaac1e77c57d840bb2437a9f519eb9f2c92bcc7a07ef0b801708"
+      "sha256": "f90526b77b221ee454305b08a4e4a1aee827372c0c1368f563b6cb9a96a3f5b5"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_03_ORDER_FLOW_IMBALANCE.md",
-      "sha256": "3beeb4e7cca20491ac284dac82ebfbbe17c25b37770e0408ab0640338976bc62"
+      "sha256": "c16b2a8b95d77fe215cf6e9d0f382b729cb2af6560bacaedfaf80baf9f64318e"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_04_ABSORPTION_IMPACT_EFFICIENCY.md",
-      "sha256": "5074f29f59b6b2e0b557706808323e60746c53c26718b352122ff9ec5581ea42"
+      "sha256": "ab99b9e1eab28303461c6dfd9f3332b7a4ee527be7d9504f91f55749263746e4"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_05_DEALER_GAMMA_GEX_REGIME.md",
-      "sha256": "029e155634d8714461a020e6047d2809ff8d2fe2b2f98ec41fd955c0565bffeb"
+      "sha256": "28727f2648cf440a678c3f9020007dc69a620d762e3e476ef7dab1b871bd218a"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_06_OPTION_OPEN_INTEREST_CHANGES.md",
-      "sha256": "ba5ca91630c349635f86ab2a5330215570822cbae90b4993eacf7954be479abd"
+      "sha256": "f7926da640feae72925467c976cb73fe364e51ee8f0a5804f6bca0a06acf2eb4"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_07_INTRADAY_OPTION_FLOW.md",
-      "sha256": "3eb286781755b68283894081bb5ff05c2c8ce305032cda55cf86ca1f90ab0799"
+      "sha256": "9ee996060bcda6cac1a0bd922a855f2be959b2f3cac5f3ce2e36b71216b53a28"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_08_IV_EXPECTED_MOVE_REGIME.md",
-      "sha256": "f67320fa6969ea6d3fa6ea24975d652ae5ac5793a408a85cbe11e8a57cf8b207"
+      "sha256": "823a2409d2084af0d7a9119d3251cd4709589f961110ed4802fcc47da9c96316"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_09_TIME_SERIES_MOMENTUM.md",
-      "sha256": "e0c0900344ace40b205a3edea292bfbdfeca6b75d05a5740a36473eb0c3601cd"
+      "sha256": "99c37d080d4e5043cb7effa335e6e26e0482183042feedcb759f39e5786d82f6"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_10_VOLUME_SPIKE_BREAKOUT.md",
-      "sha256": "de4fb845d2aee7cf9cecb433dd626b0956dad4048d6106304dad892f859c1270"
+      "sha256": "13dfacab9b953cee25cca4fb115ffcf63df687b03b74a40f3cf4dd7e0c02e072"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_11_MEAN_REVERSION_OVERREACTION.md",
-      "sha256": "f0ad82f7bdd2eabcaba2cac207dd3158881aa24394a16820dfcb248ea85d024a"
+      "sha256": "5df7a7840cf25ad0b484e521bcbfafebb6a440485675637c6a7603c59f31ec87"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_12_CALENDAR_WEEKDAY_SEASONALITY.md",
-      "sha256": "264705880929eacf7b769c1c2532892aea5071848979628356f3111da287028d"
+      "sha256": "98e5f9aec6c15c1901a4141aea37d6e7a57d7ae1bf33b66b4e799c5281d70c5b"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_13_RELATIVE_VALUE_PAIRS.md",
-      "sha256": "8b6dba3311d07293b5c95e3d6ea2307911ada01552f331bc8b2000090d957d7e"
+      "sha256": "48f6d582c56c9d938e7ea6fbc39c060fb725886b7a299fd40a0716b456b05b8c"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_14_FVG_SMC.md",
-      "sha256": "567b3cd4c6860c96d82d4c46319a6db814daa78bf0683e428ad6c68f667f50fb"
+      "sha256": "e37506da7587319df82de60a593ef0c12e846c718432bb074fc86f157fe76b86"
     },
     {
       "path": "docs/research_intake/v1/mechanisms/RI_15_EMA_CHART_CANDLESTICK_FEATURES.md",
-      "sha256": "bb8fffefcedecb3697a540af96b6bad8e8faba8f28e481c4c1fced6bd7e61b6c"
+      "sha256": "8029bf45d9b47a77c1a535a61ef83ff102c8e223bb5629c7512e9677c4bc378b"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_01_930_BREAKOUT_AND_FVG.md",
@@ -122,7 +129,7 @@
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_05_NVDA_COST_SANITY_EXAMPLE.md",
-      "sha256": "6a2609c951f1aeb3a47ebbf18e0db877df481748cc78c4c64593acac106dfb8b"
+      "sha256": "32b560b08af41d3cf7d4e222436bb1b365172ae9b264efc640d4808f5c607bf6"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_06_NINJA_GEX_A_PLUS_CHECKLIST.md",
@@ -134,7 +141,7 @@
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_08_NASDAQ_DAILY_LONG_BIAS.md",
-      "sha256": "d65b042a40df66f03e46f50beaae4a4a08ab5b6b8fdc03951e12d3ef6e215a48"
+      "sha256": "681ee2e7ffa07431c47cbaba02e6c19783fc9e53f9557cb4df29f1bd99424704"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_09_DOW_TURNAROUND_TUESDAY.md",
@@ -146,7 +153,7 @@
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_11_AI_TRADING_VARIATION_SEARCH.md",
-      "sha256": "1c3414e16d33d40817315e173436e106b9dfbba301d8b2ccd8d3ab20fff3b661"
+      "sha256": "c6251ce743ab08fb7531835f847ab36425069a34ac6454ccfe6e40aead69c0f5"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_12_VOLUME_SPIKE_BREAKOUT.md",
@@ -162,11 +169,11 @@
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_15_BACKTESTING_PRINCIPLES.md",
-      "sha256": "7a53680dfe2b8b23e2bdce697c29533b91fc6212147ca9540ed64cd0b8bbe158"
+      "sha256": "cd1a2235ad87cfe922172fdaf3206f8d0c0f7cfe7217dcd13ebd4bc590935b50"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_16_PROBABILITY_LLN_CASINO.md",
-      "sha256": "a07d3856bc622e02d900264683aea24a8dae9304e6c46b348ec7fbe99c80da0a"
+      "sha256": "17e1f9a35d893a49e558711a2ecc2993badcf4805dbc7101615b86711e097669"
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_17_MTRADERS_OI_IV_INTRADAY.md",
@@ -178,7 +185,7 @@
     },
     {
       "path": "docs/research_intake/v1/source_notes/SR_19_AI_PROP_RANDOM_CONTROL_FINDINGS.md",
-      "sha256": "08c5b2e74bfab83950e42578361d3c3820c582a5eec09c274c95928d4853f73d"
+      "sha256": "9563543a47c7ae831d47fd2eedfe7114b51e389d5a5c14755c72ada8e553b6ae"
     }
   ]
 }

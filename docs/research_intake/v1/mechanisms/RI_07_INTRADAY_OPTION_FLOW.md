@@ -12,43 +12,45 @@
 - NO_REAL_ORDERS: true
 
 ## 2. Research-Grade Mechanism
-Signed intraday aggressive option transaction volume (order flow imbalance in options) contains timely informed-flow information that leads price formation in the underlying security.
+Signed option order imbalance may contain informed-flow information beyond end-of-day open interest.
 
 ## 3. Economic / Microstructure Rationale
-Informed market participants with short-lived private information often trade in the option market to obtain leverage or conceal intent. Market makers who fill these orders must immediately hedge in the underlying market, creating mechanical price pressure.
+Informed market participants with short-lived private information may trade in the option market to obtain leverage. Market makers filling these orders may hedge in the underlying market, creating mechanical price transmission.
 
 ## 4. Null Hypothesis
-$H_0$: Intraday signed option volume provides zero incremental forecast power for underlying asset price movements beyond underlying equity order flow.
+$H_0$: Intraday signed option order imbalance provides zero incremental forecast power for underlying asset price movements beyond underlying order flow.
 
 ## 5. Alternative Hypothesis
-$H_1$: Aggressive call volume buying relative to put volume buying significantly predicts short-horizon underlying price drift over horizons from 5 minutes to end-of-day.
+$H_1$: Aggressive option volume imbalance significantly predicts short-horizon underlying price drift.
 
 ## 6. What Existing Evidence Actually Supports
-- **Peer-Reviewed / Established**: Academic literature on informed option trading and lead-lag dynamics between option order flow and underlying stocks.
-- **Preprint / Preliminary**: 2026 preprints analyzing high-frequency OPRA trade imbalances and underlying price impact.
-- **Source Claim Only**: Claims by retail services that scanning for "unusual option sweeps" produces instant high-probability directional edges.
+- **Peer-Reviewed / Established**: Literature on informed option trading and lead-lag dynamics between option order flow and underlying stocks.
+- **Preprint / Preliminary**: 2026 preprints analyzing intraday option order imbalance and underlying price impact.
+- **Source Claim Only**: Claims that scanning for "unusual option sweeps" produces instant high-probability directional edges.
 
 ## 7. What Existing Evidence Does NOT Support
-Literature does NOT support the claim that every large option trade represents directional "smart money". A large fraction of option block volume consists of delta-neutral hedging, volatility trading, or synthetic financing.
+Critical distinction: ORDER FLOW != OPEN INTEREST. Flow represents current aggressive trading activity; OI represents outstanding aggregate inventory. Order flow does not automatically equal directional conviction, as large blocks often represent delta-neutral hedging.
 
 ## 8. Source Claims That Motivated This Intake
 - `SR-17`: MTraders intraday option flow and market-maker reaction narratives.
 
 ## 9. Data Requirements
-- **Instrument**: Complete OPRA option feeds for US Equities and Index Options.
-- **Frequency**: Tick-level trade and quote events.
-- **Data Types**: Microsecond timestamps, strike, expiration, premium, trade size, NBBO quotes.
-- **Time Zone**: America/New_York (UTC).
-- **Vendor / Feed Semantics**: Direct OPRA feed.
-- **Historical Coverage**: Minimum 2 years.
-- **Authority Requirements**: Full OPRA consolidated tape data.
+- **Instrument**: NOT_YET_DETERMINED.
+- **Frequency**: NOT_YET_DETERMINED.
+- **Data Types**: Option trade and quote prints.
+- **Time Zone**: America/New_York (UTC storage).
+- **Vendor / Feed Semantics**: NOT_YET_DETERMINED (OPRA cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
+- **Historical Coverage**: NOT_YET_DETERMINED.
+- **Provider**: NOT_YET_DETERMINED.
+- **Timestamp Precision**: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT.
+- **Authority Requirements**: Authoritative consolidated option tape.
 
 ## 10. Data Provenance Contract Required Before Empirical Work
-Trade-to-quote matching algorithms (e.g., Lee-Ready applied to option quotes) must be formally validated and locked.
+Trade-to-quote matching algorithms must be formally validated and locked before empirical evaluation.
 
 ## 11. Execution / Friction Requirements
 - Executable underlying transaction costs and market impact.
-- OPRA data infrastructure costs (massive data volume constraint).
+- Option data infrastructure bandwidth and storage costs.
 
 ## 12. Confounders
 - Complex multi-leg spread trades misclassified as outright directional sweeps.
@@ -63,22 +65,22 @@ Trade-to-quote matching algorithms (e.g., Lee-Ready applied to option quotes) mu
 - **Rationale**: Completely unresearched within ACASH historical archives.
 
 ## 15. Falsification Concept
-Falsified if out-of-sample forward underlying returns conditional on signed option flow fail to exceed underlying bid/ask spread costs.
+Falsified if out-of-sample forward underlying returns conditional on signed option flow fail to exceed underlying transaction costs.
 
 ## 16. Parameters
 PARAMETERS_NOT_PREREGISTERED.
 No trade size filters, premium thresholds, or expiration filters are authorized at R0.
 
 ## 17. Metrics
-Information Coefficient (IC), cumulative trading PnL net of spread, Sharpe Ratio.
+Information Coefficient (IC), cumulative return net of spread, Sharpe Ratio.
 NO_SINGLE_METRIC_IS_DECISIVE.
 
 ## 18. Candidate Classification
 Research watchlist.
 
 ## 19. Open Questions
-- What is the computational and data storage cost of storing and processing tick-level OPRA data?
-- Does option flow offer information beyond what is already visible in cash market order flow?
+- What is the data burden and computational overhead of reconstructing signed option flow?
+- Does option flow offer incremental information beyond what is already visible in cash market order flow?
 
 ## 20. Next Permitted Action
 remain on hold.

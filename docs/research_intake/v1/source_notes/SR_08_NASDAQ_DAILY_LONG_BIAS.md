@@ -25,5 +25,5 @@ THIS FILE PRESERVES CLAIMS; IT DOES NOT ENDORSE THEM.
 ## 3. Mapping to ACASH Research Architecture
 - **Mapped Research Mechanisms**:
   - `RI-09`: Time-Series Momentum / Trend (as a BASELINE_CONTROL).
-  - Maps to [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md) (Beta / Baseline Drift standard).
+  - Maps to [METHODOLOGY_CONTROLS.md](../METHODOLOGY_CONTROLS.md) (Beta / Baseline Drift standard).
 - **Trial Status**: Preserved strictly as an equity drift baseline comparator.

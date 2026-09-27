@@ -31,7 +31,7 @@ THIS FILE PRESERVES CLAIMS; IT DOES NOT ENDORSE THEM.
 
 ## 3. Mapping to ACASH Research Architecture
 - **Mapped Research Mechanisms**:
-  - Directly maps to [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md) (Random / Negative Controls standard, random control, human discretion, fixed stop, time exit).
+  - Directly maps to [METHODOLOGY_CONTROLS.md](../METHODOLOGY_CONTROLS.md) (Random / Negative Controls standard, random control, human discretion, fixed stop, time exit).
   - `RI-01`: Opening-State / Intraday Momentum.
   - `RI-10`: Volume-Spike Breakout.
 - **Trial Status**: Preserved as an empirical case study in multi-testing hazards.

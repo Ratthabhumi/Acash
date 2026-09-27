@@ -25,9 +25,9 @@ THIS FILE PRESERVES CLAIMS; IT DOES NOT ENDORSE THEM.
 - **Comprehensive Cost Additions**: In addition to spread, commission, slippage, and swap, complete friction accounting requires: market impact, short borrow fees (borrow), exchange clearing fees, SEC/FINRA regulatory fees, financing costs, and futures contract roll drag.
 - **The 100 Trades Fallacy: 100 trades is not proof**: The claim that "100 trades proves a strategy" is `INCORRECT_AS_STATED`. 100 trades is not proof; 100 trades is an arbitrary milestone. Statistical validity depends on variance, skewness, kurtosis, autocorrelation, regime diversity, and total trials K (multiple testing).
 - **Perturbation Limits**: $\pm 20\%$ parameter stability is a useful diagnostic check, but does NOT mathematically prove the absence of data snooping.
-- **Bar-Path Fail-Closed Contract**: Intrabar bar-path ambiguity must be resolved with strict fail-closed assumptions (worst-case fill path) if high-resolution tick data is unavailable.
+- **Bar-Path Fail-Closed Contract**: Intrabar bar-path ambiguity must be resolved with strict fail-closed assumptions if high-resolution tick data is unavailable.
 
 ## 3. Mapping to ACASH Research Architecture
 - **Mapped Research Mechanisms**:
-  - Directly maps to [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md) (spread, commission, slippage, swap, market impact, multiple testing, K, hard OOS, prospective, bar-path ambiguity, negative control, 100 trades is not proof, profit factor is not supreme).
+  - Directly maps to [METHODOLOGY_CONTROLS.md](../METHODOLOGY_CONTROLS.md) (spread, commission, slippage, swap, market impact, multiple testing, K, hard OOS, prospective, bar-path ambiguity, negative control, 100 trades is not proof, profit factor is not supreme).
 - **Trial Status**: Preserved as a foundational methodology reference.

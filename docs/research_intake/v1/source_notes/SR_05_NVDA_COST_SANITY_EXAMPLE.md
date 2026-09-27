@@ -28,5 +28,5 @@ THIS FILE PRESERVES CLAIMS; IT DOES NOT ENDORSE THEM.
 
 ## 3. Mapping to ACASH Research Architecture
 - **Mapped Research Mechanisms**:
-  - Directly maps to [METHODOLOGY_CONTROLS.md](file:///docs/research_intake/v1/METHODOLOGY_CONTROLS.md) (Complete Cost Accounting standard).
+  - Directly maps to [METHODOLOGY_CONTROLS.md](../METHODOLOGY_CONTROLS.md) (Complete Cost Accounting standard).
 - **Trial Status**: Preserved as a methodology sanity benchmark.

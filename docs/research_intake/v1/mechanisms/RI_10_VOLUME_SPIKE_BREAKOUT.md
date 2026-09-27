@@ -12,10 +12,10 @@
 - NO_REAL_ORDERS: true
 
 ## 2. Research-Grade Mechanism
-Abnormally high normalized transaction volume accompanying a price displacement or breakout beyond recent local extrema may signal genuine institutional participation, increasing the probability of short-horizon trend continuation.
+Unusually high normalized volume combined with price displacement/breakout may contain incremental continuation information.
 
 ## 3. Economic / Microstructure Rationale
-High volume during a price breakout reflects aggressive order flow sufficient to absorb resting liquidity at local extremes. When volume is abnormally elevated relative to historical time-of-day expectations, it indicates coordinated market participation rather than low-liquidity slippage.
+High volume during a price breakout reflects unusually elevated trading activity / participation sufficient to absorb resting liquidity at local extremes. When volume is abnormally elevated relative to historical baseline expectations, it reflects broader / more intense market participation rather than low-liquidity slippage.
 
 ## 4. Null Hypothesis
 $H_0$: Conditioning price breakouts on abnormal volume spikes provides zero incremental predictive information or return persistence compared to unconditional price breakouts.
@@ -24,41 +24,45 @@ $H_0$: Conditioning price breakouts on abnormal volume spikes provides zero incr
 $H_1$: Breakouts accompanied by statistically significant normalized volume spikes exhibit higher continuation rates and lower false-breakout frequency than breakouts occurring on average or below-average volume.
 
 ## 6. What Existing Evidence Actually Supports
-- **Peer-Reviewed / Established**: Literature on volume-return interactions (e.g., Blume, Easley, O'Hara on volume and price discovery; Lee and Swaminathan on volume and momentum).
+- **Peer-Reviewed / Established**: Volume/flow information has a scientific basis in market microstructure literature.
 - **Preprint / Preliminary**: Empirical evaluations of abnormal volume filters on breakout strategies in futures.
-- **Source Claim Only**: Specific social-media recipes claiming optimal parameters such as $	ext{vol\_mult} = 2.5$, $	ext{vol\_n} = 50$, $k = 10$, ATR 14, 50% retracement limit entries, and skipping Wednesdays and Fridays.
+- **Source Claim Only**: Specific social-media recipes claiming optimal parameters such as vol_mult = 2.5, vol_n = 50, k = 10, ATR14, 50% retracement limit entries, and skipping Wednesdays and Fridays.
 
 ## 7. What Existing Evidence Does NOT Support
-Literature does NOT support the claim that an arbitrarily complex set of heuristic filters ($	ext{vol\_mult}=2.5$, 12:00–16:00 ET window, skipping Wed/Fri) represents a stationary law of market behavior. Such hyper-specific parameter sets are classic artifacts of historical overfitting.
+The exact social-media recipe is NOT authority. The following belong only to `SR-12`:
+vol_mult = 2.5, vol_n = 50, k = 10, long+short, 50% retracement limit, cancel after 10 bars, ATR14, 1 ATR stop, 1 ATR target, 12:00–16:00 ET, 15:59 flat, max 2/day, exclude Wed/Fri.
+Trade volume does NOT identify participant identity (whale, institution, or retail).
 
 ## 8. Source Claims That Motivated This Intake
 - `SR-06`: Ninja GEX checklist emphasizing volume 1.5x–3x average to validate breakouts.
-- `SR-12`: Volume spike breakout strategy recipe ($	ext{vol\_mult}=2.5$, $	ext{vol\_n}=50$, $k=10$, 50% retracement limit, ATR14 stop/target, 12:00–16:00 ET, skip Wed/Fri).
+- `SR-12`: Volume spike breakout strategy recipe (vol_mult = 2.5, vol_n = 50, k = 10, 50% retracement limit, ATR14 stop/target, 12:00–16:00 ET, skip Wed/Fri).
 - `SR-19`: Discussion of volume spike systems exhibiting low win rates (7–14%) but high payoffs.
 
 ## 9. Data Requirements
-- **Instrument**: CME Index Futures (NQ, ES) and US Equities.
-- **Frequency**: 1-minute and 5-minute bars.
-- **Data Types**: High-precision trade volume and NBBO prices.
-- **Time Zone**: America/New_York (UTC).
-- **Vendor / Feed Semantics**: CME MDP 3.0 / Consolidated Tape SIP.
-- **Historical Coverage**: Minimum 10 years.
+- **Instrument**: NOT_YET_DETERMINED.
+- **Frequency**: NOT_YET_DETERMINED.
+- **Data Types**: High-precision trade volume and quote prices.
+- **Time Zone**: America/New_York (UTC storage).
+- **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
+- **Historical Coverage**: NOT_YET_DETERMINED.
+- **Provider**: NOT_YET_DETERMINED.
+- **Timestamp Precision**: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT.
 - **Authority Requirements**: Authoritative exchange trade volume archives.
 
 ## 10. Data Provenance Contract Required Before Empirical Work
-Strict verification of volume semantics: CFD tick volume is explicitly banned; consolidated exchange volume is required.
+Data semantic warning: CFD tick volume != CME futures volume != SIP equity volume. Volume semantics must be strictly verified.
 
 ## 11. Execution / Friction Requirements
 - Stop-limit order execution modeling.
-- Limit order fill probability on 50% retracement pullback rules.
+- Limit order fill probability on retracement pullback rules.
 - Intrabar bar-path ambiguity resolution.
 
 ## 12. Confounders
-- Time-of-day U-shaped volume curve (a raw 2.5x volume at 13:00 is very different from 2.5x at 09:30).
+- Time-of-day U-shaped volume curve.
 - Scheduled news releases creating non-tradeable flash spikes.
 
 ## 13. Required Negative / Placebo Controls
-- Volume-independent breakout control: Identical price breakout without the volume spike condition.
+- Required control: matched price move without abnormal volume.
 - Shuffled volume control: Randomly assigning volume values across bars.
 
 ## 14. Contamination / Prior-Exposure Risk
@@ -73,7 +77,7 @@ PARAMETERS_NOT_PREREGISTERED.
 No volume multipliers (e.g. 2.5), lookbacks (e.g. 50), or session filters are authorized at R0.
 
 ## 17. Metrics
-Post-breakout drift $t$-statistic, Deflated Sharpe Ratio, limit order execution rate.
+Post-breakout drift t-statistic, Deflated Sharpe Ratio, limit order execution rate.
 NO_SINGLE_METRIC_IS_DECISIVE.
 
 ## 18. Candidate Classification
@@ -81,7 +85,7 @@ Satellite later.
 
 ## 19. Open Questions
 - How should volume be normalized: relative to rolling window, time-of-day expectation, or volatility state?
-- Do retracement limit entries introduce severe survivorship bias by omitting the strongest runaway trends?
+- Do retracement limit entries introduce severe survivorship bias by omitting runaway trends?
 
 ## 20. Next Permitted Action
 remain on hold.

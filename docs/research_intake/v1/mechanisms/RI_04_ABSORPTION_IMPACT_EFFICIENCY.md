@@ -12,40 +12,42 @@
 - NO_REAL_ORDERS: true
 
 ## 2. Research-Grade Mechanism
-Under extreme aggressive order flow, an unusually low price displacement reflects passive limit order absorption (liquidity replenishment), distinguishing an absorption state from a price displacement / continuation state.
+For extreme aggressive flow, low price response may represent a different liquidity state than high price response.
 
 ## 3. Economic / Microstructure Rationale
-When large aggressive market orders are executed without producing proportional price displacement, large passive market participants are absorbing the flow at resting limit levels. Conversely, large price moves on low volume indicate thin liquidity.
+When large aggressive market orders are executed without producing proportional price displacement, passive market participants are absorbing the flow at resting limit levels (absorption/liquidity-state candidate). Conversely, large flow with strong price response represents a continuation-type state candidate.
 
 ## 4. Null Hypothesis
-$H_0$: The ratio of price displacement to order flow volume (impact efficiency) contains zero predictive information regarding subsequent price continuation or mean reversion.
+$H_0$: The ratio of price displacement to order flow volume contains zero predictive information regarding subsequent price continuation or mean reversion beyond unconditional controls.
 
 ## 5. Alternative Hypothesis
-$H_1$: Abnormally low impact efficiency during high aggressive flow predicts subsequent price stall or reversal, whereas abnormally high impact efficiency predicts directional continuation.
+$H_1$: Abnormally low price response during large aggressive flow predicts subsequent price stall or reversal, whereas abnormally high price response predicts directional continuation.
 
 ## 6. What Existing Evidence Actually Supports
-- **Peer-Reviewed / Established**: Kyle's lambda (price impact of order flow) and literature on state-dependent market liquidity and limit order replenishment.
+- **Peer-Reviewed / Established**: Literature on price impact of order flow and state-dependent market liquidity.
 - **Preprint / Preliminary**: Microstructure studies examining liquidity absorption near support/resistance levels.
 - **Source Claim Only**: Footprint claims that "absorption at footprint pivots guarantees a reversal".
 
 ## 7. What Existing Evidence Does NOT Support
-Literature does NOT support the claim that discretionary footprint delta numbers alone guarantee profitable trading signals without conditioning on depth and volatility regimes.
+Literature does NOT support the claim that discretionary footprint delta numbers alone guarantee profitable trading signals without conditioning on depth and volatility regimes. Exact profitable signal is UNVERIFIED.
 
 ## 8. Source Claims That Motivated This Intake
-- `SR-02`: Footprint delta flip, large volume with no follow-through interpreted as institutional absorption.
+- `SR-02`: Footprint delta flip, large volume with no follow-through interpreted as absorption.
 - `SR-06`: High-volume stall near resistance levels.
 
 ## 9. Data Requirements
-- **Instrument**: CME Index Futures (ES, NQ).
-- **Frequency**: Sub-second / tick event bars.
+- **Instrument**: NOT_YET_DETERMINED (Index Futures cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
+- **Frequency**: NOT_YET_DETERMINED.
 - **Data Types**: Executed aggressive trade volume vs. resting limit depth changes.
 - **Time Zone**: UTC.
-- **Vendor / Feed Semantics**: CME MDP 3.0 order book depth.
-- **Historical Coverage**: Minimum 3 years.
+- **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
+- **Historical Coverage**: NOT_YET_DETERMINED.
+- **Provider**: NOT_YET_DETERMINED.
+- **Timestamp Precision**: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT.
 - **Authority Requirements**: Authoritative tick data with depth snapshots.
 
 ## 10. Data Provenance Contract Required Before Empirical Work
-Explicit verification of trade aggressor classification (Lee-Ready algorithm vs. exchange trade flags).
+Explicit verification of trade aggressor classification methods.
 
 ## 11. Execution / Friction Requirements
 - Passive execution queue modeling.
@@ -69,7 +71,7 @@ Falsified if the conditional distribution of post-absorption returns is symmetri
 
 ## 16. Parameters
 PARAMETERS_NOT_PREREGISTERED.
-The conceptual diagnostic $	ext{impact\_efficiency} pprox |\Delta P| / |	ext{OFI}|$ is a theoretical construct; no numerical thresholds are frozen.
+The conceptual diagnostic $\text{impact\_efficiency} \approx |\Delta P| / |\text{OFI}|$ is a theoretical construct; no window or numerical threshold is frozen.
 
 ## 17. Metrics
 Conditional return asymmetry, probability of stall, execution survival rate.
@@ -79,7 +81,7 @@ NO_SINGLE_METRIC_IS_DECISIVE.
 microstructure satellite.
 
 ## 19. Open Questions
-- Can absorption be measured reliably on aggregated 1-minute bars or is sub-second depth mandatory?
+- Can absorption be measured reliably on aggregated bars or is sub-second depth mandatory?
 - How frequently does passive absorption turn into aggressive breakthrough?
 
 ## 20. Next Permitted Action

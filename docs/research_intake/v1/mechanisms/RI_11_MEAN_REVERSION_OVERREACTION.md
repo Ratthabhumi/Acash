@@ -12,51 +12,53 @@
 - NO_REAL_ORDERS: true
 
 ## 2. Research-Grade Mechanism
-Extreme short-horizon price displacements driven by temporary liquidity shortages, order execution imbalances, or investor overreaction contain a transitory component that subsequently mean-reverts toward equilibrium.
+Some extreme short-horizon price displacement may contain a temporary component that subsequently reverses.
 
 ## 3. Economic / Microstructure Rationale
-Large institutional block trades or liquidity sweeps can temporarily push market prices beyond fundamental values, consuming all available resting depth. As liquidity providers replenish the book and aggressive pressure dissipates, prices tend to snap back toward the pre-displacement level.
+Large orders or temporary liquidity imbalances can push market prices temporarily away from short-term equilibrium. As passive liquidity providers replenish the book and aggressive pressure subsides, prices may exhibit mean-reverting tendencies.
 
 ## 4. Null Hypothesis
-$H_0$: Extreme short-horizon price deviations from rolling moving averages or equilibrium bands exhibit zero tendency toward mean reversion beyond what is expected from a geometric random walk.
+$H_0$: Extreme short-horizon price deviations exhibit zero tendency toward mean reversion beyond what is expected from unconditional price drift.
 
 ## 5. Alternative Hypothesis
 $H_1$: Normalized price excursions beyond extreme statistical thresholds exhibit negative autocorrelation and positive expected return in the counter-displacement direction, net of execution frictions.
 
 ## 6. What Existing Evidence Actually Supports
-- **Peer-Reviewed / Established**: Literature on short-term return reversals and bid-ask bounce (Jegadeesh 1990; Lehmann 1990).
-- **Preprint / Preliminary**: High-frequency mean reversion conditioned on order book replenishment.
-- **Source Claim Only**: Claims that "prices always return to the mean" or that specific indicator thresholds (e.g., RSI < 30 or Bollinger 2 SD) guarantee high-probability rebounds.
+- **Peer-Reviewed / Established**: Empirical literature on short-term return reversals and bid-ask bounce; evidence is regime- and horizon-dependent.
+- **Preprint / Preliminary**: Studies on intraday mean reversion conditioned on order book replenishment.
+- **Source Claim Only**: Claims that "prices always return to the mean" or that specific indicator thresholds guarantee high-probability rebounds.
 
 ## 7. What Existing Evidence Does NOT Support
-Theory and empirical evidence do NOT support the claim that prices "always" return to the mean. Extreme price displacement can reflect genuine permanent information; counter-trend trading without strict risk controls risks severe tail losses during structural regime shifts.
+Do NOT state: "prices always return to the mean". Mean reversion and momentum can coexist at different horizons. Extreme price displacement can reflect genuine permanent information; counter-trend trading without strict risk controls risks severe tail losses during structural regime shifts.
 
 ## 8. Source Claims That Motivated This Intake
 - `SR-14`: Broad macro strategy families (mean reversion).
 - `SR-17`: MTraders zone mean-reversion narratives and 1 SD abnormal price bounce claims.
 
 ## 9. Data Requirements
-- **Instrument**: US Equities (S&P 500 constituents) and Index Futures.
-- **Frequency**: 1-minute to daily bars.
-- **Data Types**: High-precision trade and quote data.
-- **Time Zone**: America/New_York (UTC).
-- **Vendor / Feed Semantics**: Consolidated Tape SIP / CME direct.
-- **Historical Coverage**: Minimum 10 years.
+- **Instrument**: NOT_YET_DETERMINED.
+- **Frequency**: NOT_YET_DETERMINED.
+- **Data Types**: Executed trades, quotes, and order book data.
+- **Time Zone**: America/New_York (UTC storage).
+- **Vendor / Feed Semantics**: NOT_YET_DETERMINED.
+- **Historical Coverage**: NOT_YET_DETERMINED.
+- **Provider**: NOT_YET_DETERMINED.
+- **Timestamp Precision**: SUBJECT_TO_ZERO_OUTCOME_DATA_FEASIBILITY_AUDIT.
 - **Authority Requirements**: Authoritative exchange data.
 
 ## 10. Data Provenance Contract Required Before Empirical Work
-Corporate action adjustments (splits, cash dividends) must be verified to prevent artificial price gap signals.
+Corporate action adjustments must be verified to prevent artificial price gap signals.
 
 ## 11. Execution / Friction Requirements
-- Asymmetric slippage: buying into falling knives often incurs severe negative execution slippage.
+- Asymmetric slippage: buying into falling momentum often incurs severe execution drag.
 - Short borrow availability and borrow fees for overbought short candidates.
 
 ## 12. Confounders
-- Structural momentum regimes where mean-reversion strategies suffer catastrophic drawdowns.
-- Market-wide factor shocks (macro beta shocks).
+- Structural momentum regimes where mean-reversion strategies suffer severe drawdowns.
+- Market-wide factor shocks.
 
 ## 13. Required Negative / Placebo Controls
-- Matched price displacement control: Comparing extreme moves with and without liquidity replenishment.
+- Required controls: matched extreme moves, volatility, market beta, time-of-day, regime.
 - Shuffled sequence control.
 
 ## 14. Contamination / Prior-Exposure Risk
@@ -71,14 +73,14 @@ PARAMETERS_NOT_PREREGISTERED.
 No RSI parameters, Bollinger Band widths, or lookback windows are authorized at R0.
 
 ## 17. Metrics
-Gain-to-Pain ratio, Tail Risk (Expected Shortfall), Maximum Adverse Excursion (MAE).
+Gain-to-Pain ratio, Tail Risk, Maximum Adverse Excursion (MAE).
 NO_SINGLE_METRIC_IS_DECISIVE.
 
 ## 18. Candidate Classification
 Potential family.
 
 ## 19. Open Questions
-- What conditioning variable (e.g., volume exhaustion, OFI flip) best separates transitory noise from permanent fundamental re-pricing?
+- What conditioning variable best separates transitory noise from permanent fundamental re-pricing?
 - How does mean reversion decay across different intraday time windows?
 
 ## 20. Next Permitted Action

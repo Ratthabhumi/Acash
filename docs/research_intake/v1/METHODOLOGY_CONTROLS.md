@@ -25,27 +25,28 @@ Gross backtest returns are mathematically meaningless. Every future empirical ca
 - **commission**: Explicit per-share, per-contract, or broker commissions and turnover fees.
 - **slippage**: Empirical function of order size relative to available depth.
 - **swap**: Financing and overnight swap fees, margin interest, or CFD financing.
-- **market impact**: Dynamic market impact (e.g., Almgren-Chriss or square-root law).
+- **market impact**: Dynamic market impact models (e.g., Almgren-Chriss or square-root law, cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 - **borrow**: Hard-to-borrow fees, borrow recall risk, and locate fees.
 - **exchange fees**: Regulatory and exchange transaction/clearing fees (SEC/FINRA fees).
 - **futures roll**: Calendar spread transaction costs, roll timing yield drag, and tick-size frictions.
 - **option spread**: Wide strike-dependent spreads, contract assignment/exercise fees, pin risk, and margin maintenance.
 - *Rule*: While not all friction types apply to every instrument, omitting an applicable friction constitutes an immediate failure of the research contract.
 
-### D. Bar-Path Ambiguity & Strict Fail-Closed Rule
+### D. Bar-Path Ambiguity & Frictional Sequence Boundaries
 Standard OHLC (Open, High, Low, Close) price bars discard intrabar sequence information.
 - If a strategy establishes an entry, stop-loss (SL), and take-profit (TP) where both SL and TP lie within the high-low range of a single bar, the exact outcome sequence is mathematically indeterminate from OHLC data alone.
 - **bar-path ambiguity**: Never assume a favorable fill sequence (e.g., assuming TP was hit before SL).
-- **Mandatory Policy**:
-  1. Implement a strict **fail-closed convention**: evaluate the worst-case intrabar path (assume SL is triggered first), OR
-  2. Require high-resolution tick-level or sub-minute data with verified microsecond sequencing to adjudicate fills deterministically.
+- **Resolution Contract**: Same-bar ambiguity must NOT be resolved optimistically. Resolution method must be separately preregistered and may use:
+  1. Authoritative finer-resolution evidence, or
+  2. A separately preregistered conservative / fail-closed convention (e.g., evaluating worst-case path or excluding unresolved observations).
+  *Exact convention*: `NOT_YET_PREREGISTERED`.
 
 ### E. Data Feed Semantics & Quote Dissemination
 The term "tick" is ambiguous and mathematically dangerous across different market venues:
-- **Direct Exchange Feeds (ITCH/OUCH, CME MDP 3.0)**: Order-by-order, deterministic queue state.
+- **Direct Exchange Feeds**: Order-by-order, deterministic queue state from direct exchange market data feeds.
 - **Consolidated Tape (SIP / NBBO)**: Dissemination latency creates localized crossed or stale quotes relative to exchange direct feeds.
 - **Broker Tick Feeds**: Often filtered, subsampled, or synthetic mid-prices.
-- **CFD Tick Volume**: Represents dealer platform update frequency, NOT market transaction volume or aggregate traded contracts.
+- **CFD Tick Volume**: Represents dealer platform update frequency; CFD volume semantics differ materially from centralized exchange volume.
 - **Equity Consolidated Volume vs. Futures Volume**: Distinct settlement and reporting rules.
 - **Option OPRA Feeds**: High-bandwidth, message-suppressed consolidated option quotes.
 - *Rule*: Research models must specify exact feed semantics. CFD tick volume cannot be substituted for CME futures volume.
@@ -55,10 +56,10 @@ Arbitrary vendor labels such as "broker time", "server time", or "local PC time"
 - All timestamps must be anchored to canonical market-local exchange time (e.g., US Equity / Index Futures: America/New_York) and stored in UTC.
 - Research specifications must explicitly account for:
   - Daylight Saving Time (DST) transitions (US vs. European DST shift divergence).
-  - Exchange holiday schedules and scheduled early closes (e.g., 13:00 ET bond/equity closes).
-  - Trading halt handling (LULD halts, CME circuit breakers).
+  - Exchange holiday schedules and scheduled early closes.
+  - Trading halt handling.
 
-### G. Multiple Testing & Rigorous Trial Ledger (K)
+### G. Multiple Testing & Rigorous Trial Accounting (K)
 Every empirical test, indicator variation, parameter adjustment, filter addition, or exploratory scan increments the total trial count $K$.
 - **multiple testing**: This includes:
   - Human-driven interactive parameter scans.
@@ -67,7 +68,10 @@ Every empirical test, indicator variation, parameter adjustment, filter addition
   - Variations in lookback windows, stop distances, target multiples, session filters, or asset lists.
 - **Example of $K$ Expansion**: Testing 3 opening windows $\times$ 3 stop-loss distances $\times$ 3 take-profit targets $\times$ 3 volume multipliers yields:
   $$3 \times 3 \times 3 \times 3 = 81 \text{ empirical trials}$$
-- Every trial must be logged in a sealed cryptographic ledger. Significance thresholds must be adjusted using family-wise error rate (FWER) controls or False Discovery Rate (FDR) adjustments, including the Deflated Sharpe Ratio (DSR) and White's Reality Check.
+- **Trial Lineage**: Every trial must be logged in an auditable and immutable lineage once sealed. Implementation: `NOT_YET_DETERMINED`.
+- **Multiple-Testing Correction Method**:
+  $$\text{MULTIPLE\_TESTING\_CORRECTION\_METHOD} = \text{NOT\_YET\_PREREGISTERED}$$
+  Potential methods to be considered under separate methodological authority may include the Deflated Sharpe Ratio (DSR), White's Reality Check, family-wise error rate (FWER) controls, False Discovery Rate (FDR) procedures, or other appropriate methods. No specific correction method is frozen by R0.
 
 ### H. Mandatory Negative & Placebo Controls
 A proposed candidate strategy cannot be evaluated in isolation. Every empirical evaluation must incorporate matched baseline, negative control, and random control designs:
@@ -90,20 +94,21 @@ The heuristic that "100 trades proves a strategy" is `INCORRECT_AS_STATED`.
   - Effect size (mean excess return over benchmark).
   - Variance, skewness, and kurtosis of return distribution.
   - Serial dependence and autocorrelation.
-  - Number of independent market regimes traversed (e.g., high vs. low vol, bull vs. bear).
+  - Number of independent market regimes traversed.
   - Trial count $K$ accumulated during research.
 
 ### K. Multi-Dimensional Performance Evaluation: Profit Factor Is Not Supreme
 **profit factor is not supreme**: Profit Factor (PF) is an incomplete, fragile ratio that ignores drawdowns, tail risk, and autocorrelation.
 - **Mandatory Policy**: `NO_SINGLE_METRIC_IS_DECISIVE`.
-- Evaluation must report a balanced multi-dimensional diagnostic matrix:
+- Evaluation must report a balanced multi-dimensional diagnostic matrix.
+- Potential illustrative diagnostics (ILLUSTRATIVE_ONLY — NOT PREREGISTERED) include:
   - Net return and expectancy per dollar risked.
   - Annualized Sharpe Ratio and Sortino Ratio.
   - Deflated Sharpe Ratio (DSR) and Probabilistic Sharpe Ratio (PSR).
   - Maximum Drawdown (MDD), duration of drawdown, and Calmar Ratio.
-  - Tail risk measures: Expected Shortfall (CVaR at 95% and 99%), Value at Risk (VaR).
+  - Tail risk measures: Expected Shortfall (CVaR), Value at Risk (VaR).
   - Turnover, holding period distribution, and capacity estimation.
-  - Regime conditional performance (bull, bear, sideways, high-vol, low-vol).
+  - Regime conditional performance.
 
 ### L. Beta Drift & Unconditional Equity Drift Controls
 Long-only equity or index strategies often confuse broad macroeconomic drift with alpha.
@@ -111,7 +116,7 @@ Long-only equity or index strategies often confuse broad macroeconomic drift wit
 - All candidate strategies must be benchmarked against:
   - Buy-and-hold underlying asset return over the identical period.
   - Time-matched exposure controls (e.g., random entry with identical holding duration).
-  - Factor-adjusted alphas (Fama-French 5-factor or Q-factor model).
+  - Factor-adjusted benchmarks (e.g., Fama-French or other factor models, cited as ILLUSTRATIVE_ONLY — NOT PREREGISTERED).
 
 ### M. Elimination of Subjective Terminology
 Discretionary trading terminology such as "clean level", "obvious breakout", "respecting the moving average", "strong momentum", or "whale activity" cannot be scientifically evaluated.
@@ -119,9 +124,9 @@ Discretionary trading terminology such as "clean level", "obvious breakout", "re
 - Any subjective interpretation that cannot be reduced to deterministic code remains catalogued as an unsupported discretionary heuristic.
 
 ### N. Parameter Robustness & Perturbation Boundaries
-Testing parameter perturbations ($\pm 10\%$, $\pm 20\%$) around an optimal point provides diagnostic evidence of surface stability, but:
+Testing parameter perturbations (e.g., approximately $\pm 20\%$, as discussed in source literature) around an optimal point provides diagnostic evidence of surface stability, but:
 - Stability under perturbation is a necessary condition, NOT a sufficient condition for predictive validity.
-- Smooth parameter response surfaces can still be overfitted to sample-wide structural regimes.
+- Local sensitivity checks do not prove the absence of data snooping or overfitting.
 
 ### O. Human Discretion Requires Formal A/B Validation
 Claims that "human discretion adds value" or that "discretionary intervention improves prop passing rates" have no baseline standing.

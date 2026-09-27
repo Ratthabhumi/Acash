@@ -5,49 +5,49 @@
 Before any quantitative candidate can advance from R0 intake to prospective empirical analysis, an authoritative data provenance contract must be established. No empirical data may be queried or ingested without satisfying the standards set forth in this document.
 
 ### General Data Invariants:
-1. **Single Source Authority**: Every ingested series must trace back to a single authoritative publisher with immutable SHA-256 lineage.
+1. **Single Source Authority**: Every ingested series must trace back to a single authoritative publisher with immutable lineage.
 2. **Point-in-Time Integrity**: Data must reflect exact information available as-of the execution decision timestamp. Zero future revision leakage (lookahead bias) is permitted.
 3. **No Unverified Data Vendor Substitution**: Free web-scraped data or broker CFD feeds cannot be substituted for authoritative exchange feeds without explicit research governance ratification.
+4. **Timestamp Precision**: Required timestamp precision: `SUBJECT_TO_MECHANISM_AND_DATA_FEASIBILITY_AUDIT`.
 
 ---
 
 ## 2. Asset-Class Specific Provenance Contracts
 
 ### A. US Equities & ETFs
-- **Instruments**: Single-stock equities (e.g., NVDA, AAPL) and exchange-traded funds (e.g., SPY, QQQ).
+- **Instruments**: Single-stock equities and exchange-traded funds (exact universe: `NOT_YET_DETERMINED`).
 - **Authoritative Venues**: Primary listings on NASDAQ, NYSE, Cboe.
-- **Feed Semantics**: Consolidated Tape Association (CTA) / Unlisted Trading Privileges (UTP) SIP feeds, or direct proprietary feeds (NASDAQ TotalView, NYSE Integrated).
+- **Feed Semantics**: Consolidated Tape Association (CTA) / Unlisted Trading Privileges (UTP) SIP feeds, or direct proprietary feeds.
 - **Corporate Actions**: Fully documented split and dividend adjustment history. Explicit separation between raw unadjusted execution prices and adjusted historical series for return calculations.
-- **Timestamps & Calendar**: Microsecond-resolution UTC timestamps with canonical mapping to America/New_York. Handling of early closes (13:00 ET) and regulatory halts (LULD).
+- **Timestamps & Calendar**: UTC timestamps with canonical mapping to America/New_York. Handling of early closes and regulatory halts.
 
 ### B. US Index Futures
-- **Instruments**: E-mini and Micro E-mini index futures (CME: ES, MES; CME: NQ, MNQ).
-- **Authoritative Venues**: Chicago Mercantile Exchange (CME Globex).
+- **Instruments**: Index futures (exact contracts: `NOT_YET_DETERMINED`).
+- **Authoritative Venues**: CME Globex.
 - **Contract & Roll Specifications**:
-  - Explicit contract month symbols (e.g., ESH26, NQM26).
-  - Roll method specification: calendar volume crossover roll vs. fixed days-to-expiration roll.
+  - Roll method specification: calendar volume crossover roll vs. fixed days-to-expiration roll (`NOT_YET_PREREGISTERED`).
   - Price adjustment: backwards-ratio adjusted, backwards-difference adjusted, or raw unadjusted front-month contract with explicit roll event logging.
-- **Trading Hours**: CME Globex 23-hour trading cycle (18:00 ET to 17:00 ET next day with 15-minute maintenance halt).
+- **Trading Hours**: Exact exchange session and maintenance schedule must be verified against the canonical exchange calendar during the future data-contract stage.
 
 ### C. Foreign Exchange (FX)
-- **Instruments**: G10 currency pairs (e.g., USD/JPY, EUR/USD).
-- **Authoritative Venues**: Over-The-Counter (OTC) interbank market (e.g., EBS, Currenex, Refinitiv Matching).
+- **Instruments**: Currency pairs (exact pairs: `NOT_YET_DETERMINED`).
+- **Authoritative Venues**: Over-The-Counter (OTC) interbank market.
 - **Feed Semantics**:
   - Retail broker quote feeds represent dealer pricing, NOT a single centralized exchange.
   - Strict documentation of quote spread, dealer markup, and asymmetric slippage.
-- **Calendar & Session Semantics**: Continuous 24/5 trading. Explicit definition of session boundaries (e.g., London 08:00–16:30 GMT, New York 08:00–17:00 ET, Tokyo 09:00–17:00 JST). Strict handling of European vs. US DST misalignment.
+- **Calendar & Session Semantics**: Continuous 24/5 trading. Handling of European vs. US DST misalignment.
 
 ### D. Listed Options
-- **Instruments**: US Equity and Index Options (e.g., SPX, SPY, QQQ, NVDA options).
-- **Authoritative Venues**: OPRA (Options Price Reporting Authority) consolidating 16 US option exchanges.
+- **Instruments**: Equity and Index Options (exact contracts: `NOT_YET_DETERMINED`).
+- **Authoritative Venues**: OPRA (Options Price Reporting Authority) consolidating US option exchanges.
 - **Data Granularity**:
-  - End-of-Day (EOD) closing quotes vs. high-frequency tick/quote OPRA data.
-  - Exact strike, expiration date, settlement style (AM cash-settled for SPX vs. PM physical-settled for SPY).
-- **Greeks & Pricing Calibration**: Exact specification of implied volatility solver, risk-free discount curve (SOFR/Treasury), dividend yield assumptions, and early exercise models (American vs. European).
+  - End-of-Day (EOD) closing quotes vs. high-frequency tick/quote OPRA data (`NOT_YET_DETERMINED`).
+  - Strike and expiration rules.
+- **Greeks & Pricing Calibration**: Specification of implied volatility solver, discount curve, dividend yield assumptions, and exercise models.
 
 ### E. Microstructure Order Flow & Market Depth
-- **Instruments**: CME Index Futures and US Equities.
-- **Feed Semantics**: Level 1 (Top of Book / NBBO) vs. Level 2 (Market Depth / Aggregate Price Levels) vs. Level 3 (Order-by-order, e.g., CME ITCH).
+- **Instruments**: Index Futures and Equities (`NOT_YET_DETERMINED`).
+- **Feed Semantics**: Top of Book (L1) vs. Market Depth (L2) vs. Order-by-order (L3) direct order-book feeds.
 - **Order Flow Imbalance (OFI)**:
   - Exact algorithm for signing trades (Lee-Ready tick test vs. quote-rule matching).
   - Explicit timestamp matching: trades matched strictly against preceding quotes with documented network dissemination latency buffers.
@@ -57,7 +57,7 @@ Due to pervasive confusion in retail discourse regarding open interest and deale
 
 ```
 OI_SOURCE:                  [Authoritative Clearinghouse / Vendor, e.g., CME Clearing, OCC, Cboe]
-OI_ASOF:                    [Exact settlement date and publication timestamp, e.g., 07:00 ET next day]
+OI_ASOF:                    [Exact settlement date and publication timestamp]
 OFFICIAL_OR_ESTIMATED:      [OFFICIAL_CLEARINGHOUSE / MODEL_ESTIMATED_INTRADAY]
 DEALER_SIGN_METHOD:         [Inferred net customer order flow sign / Fixed assumption]
 GREEKS_MODEL:               [Black-76 / Bjerksund-Stensland / American Binomial]
@@ -70,5 +70,5 @@ OPTIONS_EXPIRY_SCOPE:       [Near-month / 0DTE / All active expiries]
 
 ### G. CFD Feeds & Retail Platforms
 - **Feed Nature**: Contract for Difference (CFD) broker feeds reflect localized broker liquidity pools and internal pricing engines.
-- **Volume Semantics**: CFD "tick volume" measures broker quote updates, NOT actual exchange turnover or financial volume.
-- **Policy**: CFD feeds are prohibited as primary empirical research sources for CME index futures or US equities.
+- **Volume Semantics**: CFD volume semantics differ materially from centralized exchange volume. CFD tick volume measures broker quote updates, NOT actual exchange turnover or financial volume.
+- **Policy**: CFD feeds are NOT authorized as primary empirical research sources for CME index futures or US equities at R0.
