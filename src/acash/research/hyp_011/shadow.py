@@ -8,7 +8,7 @@ operational activation, exclusive) are never backfilled and never counted.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Dict, List
 
@@ -24,9 +24,27 @@ PROSPECTIVE_MIN_REBALANCES: int = 2
 STATE_SCHEMA_VERSION: int = 1
 STATE_HYPOTHESIS_ID: str = "HYP_011"
 STATE_ACTIVATION_SESSION: date = date(2026, 9, 28)
-# NYSE regular-session open in UTC (EDT in September): the earliest instant at
-# which a target session's observation trigger may be considered.
-EXPECTED_SESSION_OPEN_US: time = time(13, 30)
+# Timing semantics (never hard-code UTC market times: DST changes the offset).
+# session.open_utc  = portfolio execution timestamp semantics (calendar-derived).
+# session.close_utc = observation availability / processing eligibility
+#                     (calendar-derived). The two must never be conflated:
+# no observation trigger may be defined relative to the open.
+
+
+def observation_eligible_after(
+    session_date: date, calendar: NyseCa1Calendar
+) -> datetime:
+    """Canonical eligibility instant: the session's calendar-derived close_utc.
+
+    Production eligibility is STRICT: now_utc > close_utc. At exactly
+    close_utc the session is NOT YET PROCESSABLE.
+    """
+    close_utc = calendar.get_session(session_date).close_utc
+    if close_utc is None:
+        raise DataContractError(
+            f"SHADOW_NO_CLOSE_TIME: {session_date.isoformat()}."
+        )
+    return close_utc
 SHADOW_STARTING_AUM: Decimal = Decimal("100000.00")
 
 

@@ -190,8 +190,10 @@ def test_runner_dry_run_zero_network(capsys: Any) -> None:
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PRETEST" in out
-    assert "expected_next=2026-09-28" in out
-    assert "expected_open_utc=2026-09-28T13:30:00+00:00" in out
+    assert "EXPECTED_SESSION = 2026-09-28" in out
+    assert "SESSION_OPEN_UTC = 2026-09-28T13:30:00+00:00" in out
+    assert "SESSION_CLOSE_UTC = 2026-09-28T20:00:00+00:00" in out
+    assert "NETWORK_REQUESTS = 0" in out
 
 
 def test_state_serde_round_trip() -> None:

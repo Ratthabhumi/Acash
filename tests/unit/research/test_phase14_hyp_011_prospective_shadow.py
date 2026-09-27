@@ -8,6 +8,7 @@ derivation + zero counting, activation from real commit timestamps, guards
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import List
 
 import pytest
@@ -159,3 +160,79 @@ def test_minimums_conjunctive() -> None:
     assert state.minimums_satisfied() is False
     state.completed_annual_rebalances = 2
     assert state.minimums_satisfied() is True
+
+
+def test_hardcoded_open_trigger_removed() -> None:
+    # No UTC market time may be hard-coded: DST changes the offset.
+    assert not hasattr(SH, "EXPECTED_SESSION_OPEN_US")
+
+
+def test_bound_activation_session_canonical_open_and_close() -> None:
+    cal = NyseCa1Calendar()
+    session = cal.get_session(date(2026, 9, 28))
+    # Open = execution timestamp semantics; close = observation eligibility.
+    assert session.open_utc == datetime(2026, 9, 28, 13, 30, 0, tzinfo=timezone.utc)
+    assert session.close_utc == datetime(2026, 9, 28, 20, 0, 0, tzinfo=timezone.utc)
+    assert SH.observation_eligible_after(date(2026, 9, 28), cal) == session.close_utc
+
+
+def test_winter_session_does_not_assume_1330_open() -> None:
+    cal = NyseCa1Calendar()
+    session = cal.get_session(date(2026, 1, 5))
+    # EST (UTC-5): 09:30 open = 14:30Z, 16:00 close = 21:00Z.
+    assert session.open_utc == datetime(2026, 1, 5, 14, 30, 0, tzinfo=timezone.utc)
+    assert session.close_utc == datetime(2026, 1, 5, 21, 0, 0, tzinfo=timezone.utc)
+
+
+def test_eligibility_strictly_after_close() -> None:
+    cal = NyseCa1Calendar()
+    close_utc = cal.get_session(date(2026, 9, 28)).close_utc
+    assert close_utc is not None
+    state = SH.ShadowState(activation_session=date(2026, 9, 28))
+    # One second before close: rejected.
+    with pytest.raises(DataContractError):
+        state.record_session(
+            date(2026, 9, 28), cal, close_utc - timedelta(seconds=1)
+        )
+    # Exactly at close: NOT YET PROCESSABLE.
+    with pytest.raises(DataContractError):
+        state.record_session(date(2026, 9, 28), cal, close_utc)
+    # One microsecond after close: eligible.
+    state.record_session(
+        date(2026, 9, 28), cal, close_utc + timedelta(microseconds=1)
+    )
+    assert state.observed_count == 1
+
+
+def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
+    import sys
+
+    sys.path.insert(0, "scripts")
+    import process_hyp_011_prospective_shadow as runner  # type: ignore[import-not-found]
+
+    state_dir = tmp_path
+
+    def _dry_run(now_utc: datetime) -> str:
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = runner.main([], _now_utc=now_utc, _state_dir=state_dir)
+        assert rc == 0
+        return buf.getvalue()
+
+    # Before close: not eligible, zero network, activation unchanged, count 0.
+    before = _dry_run(datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc))
+    assert "EXPECTED_SESSION = 2026-09-28" in before
+    assert "SESSION_OPEN_UTC = 2026-09-28T13:30:00+00:00" in before
+    assert "SESSION_CLOSE_UTC = 2026-09-28T20:00:00+00:00" in before
+    assert "OBSERVATION_ELIGIBLE = false" in before
+    assert "NETWORK_REQUESTS = 0" in before
+    # After close: eligible flag flips, but dry-run STILL issues zero network
+    # and writes nothing.
+    after = _dry_run(datetime(2026, 9, 28, 20, 0, 1, tzinfo=timezone.utc))
+    assert "OBSERVATION_ELIGIBLE = true" in after
+    assert "NETWORK_REQUESTS = 0" in after
+    assert not (state_dir / "state.json").exists()
+    assert SH.STATE_ACTIVATION_SESSION == date(2026, 9, 28)

@@ -28,7 +28,7 @@ from acash.execution.alpaca.credentials import (
 )
 from acash.research.hyp_011.shadow_ca import CADetermination
 from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
-from acash.research.hyp_011.shadow import EXPECTED_SESSION_OPEN_US, ShadowState
+from acash.research.hyp_011.shadow import ShadowState, observation_eligible_after
 from acash.research.hyp_011.shadow_ops import (
     SessionMarket,
     ShadowBenchmark,
@@ -119,16 +119,20 @@ def main(
         pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
         pretest_verified = verify_chain(pretest_state_dir)
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
-        pretest_target = _expected_next(pretest_observed, NyseCa1Calendar())
-        pretest_open = datetime.combine(
-            pretest_target, EXPECTED_SESSION_OPEN_US, tzinfo=timezone.utc
+        pretest_calendar = NyseCa1Calendar()
+        pretest_target = _expected_next(pretest_observed, pretest_calendar)
+        pretest_session = pretest_calendar.get_session(pretest_target)
+        pretest_eligible_after = observation_eligible_after(
+            pretest_target, pretest_calendar
         )
-        print(
-            f"PRETEST: expected_next={pretest_target.isoformat()} "
-            f"expected_open_utc={pretest_open.isoformat()}"
+        pretest_eligible = (
+            pretest_now.astimezone(timezone.utc) > pretest_eligible_after
         )
-        if pretest_now.astimezone(timezone.utc) < pretest_open:
-            print("PRETEST: trigger not yet reached; no action possible.")
+        print(f"EXPECTED_SESSION = {pretest_target.isoformat()}")
+        print(f"SESSION_OPEN_UTC = {pretest_session.open_utc.isoformat()}")
+        print(f"SESSION_CLOSE_UTC = {pretest_session.close_utc.isoformat()}")
+        print(f"OBSERVATION_ELIGIBLE = {str(pretest_eligible).lower()}")
+        print("NETWORK_REQUESTS = 0")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
 
