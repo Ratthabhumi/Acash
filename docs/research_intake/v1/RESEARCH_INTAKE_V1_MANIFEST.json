@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "document": "ACASH_RESEARCH_INTAKE_V1_R0",
+  "status": "R0_INTAKE_SEALED_NO_EMPIRICAL_AUTHORIZATION",
+  "base_sha": "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
+  "candidate_count": 15,
+  "source_note_count": 19,
+  "empirical_testing_authorized": false,
+  "market_data_access_authorized": false,
+  "parameter_sweep_authorized": false,
+  "paper_authorized": false,
+  "live_authorized": false,
+  "real_capital_authority_usd": "0.00",
+  "no_real_orders": true,
+  "core_001_modified": false,
+  "core_002_promoted": false,
+  "shortlist": [
+    "RI-01_OPENING_STATE",
+    "RI-03_ORDER_FLOW_IMBALANCE",
+    "RI-05_OPTION_GAMMA_REGIME"
+  ],
+  "files": [
+    {
+      "path": "docs/research_intake/v1/BIBLIOGRAPHY.md",
+      "sha256": "a2ab0823841b706c954eb04ec553409cce5ad05501dae919381ab658e4f10257"
+    },
+    {
+      "path": "docs/research_intake/v1/DATA_AND_PROVENANCE_REQUIREMENTS.md",
+      "sha256": "b2ed7caa9f0b8b2012680a47599f3dc327f87bc4bed8b7a019e7d6160fc5ba04"
+    },
+    {
+      "path": "docs/research_intake/v1/METHODOLOGY_CONTROLS.md",
+      "sha256": "32edd6eb0d3f4d5e47a2105afaeddb013694dde38c1b2daec321d8d12b1e9ee3"
+    },
+    {
+      "path": "docs/research_intake/v1/R0_GOVERNANCE.md",
+      "sha256": "a4b46ec7369ed1a8a9d730e9108b002e753644b3fa2e1cc3fd8fb6ba2fcbccd6"
+    },
+    {
+      "path": "docs/research_intake/v1/README.md",
+      "sha256": "2f818388ce4fc140a432d926c5308326dfc6d96c9297ed1eedfb7576748ae239"
+    },
+    {
+      "path": "docs/research_intake/v1/SOURCE_TO_MECHANISM_MAP.md",
+      "sha256": "b3a17e691502b6ed910f589e60268ab1a6d6eb6fd36bad7928e3d47627751de6"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_01_OPENING_STATE_INTRADAY_MOMENTUM.md",
+      "sha256": "98a5687211dab20ad428cc03c9039924e58ea1bfdaddf632dc0fdb65fc1d4f32"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_02_OPENING_RANGE_BREAKOUT.md",
+      "sha256": "46a6c033997bdaac1e77c57d840bb2437a9f519eb9f2c92bcc7a07ef0b801708"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_03_ORDER_FLOW_IMBALANCE.md",
+      "sha256": "3beeb4e7cca20491ac284dac82ebfbbe17c25b37770e0408ab0640338976bc62"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_04_ABSORPTION_IMPACT_EFFICIENCY.md",
+      "sha256": "5074f29f59b6b2e0b557706808323e60746c53c26718b352122ff9ec5581ea42"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_05_DEALER_GAMMA_GEX_REGIME.md",
+      "sha256": "029e155634d8714461a020e6047d2809ff8d2fe2b2f98ec41fd955c0565bffeb"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_06_OPTION_OPEN_INTEREST_CHANGES.md",
+      "sha256": "ba5ca91630c349635f86ab2a5330215570822cbae90b4993eacf7954be479abd"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_07_INTRADAY_OPTION_FLOW.md",
+      "sha256": "3eb286781755b68283894081bb5ff05c2c8ce305032cda55cf86ca1f90ab0799"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_08_IV_EXPECTED_MOVE_REGIME.md",
+      "sha256": "f67320fa6969ea6d3fa6ea24975d652ae5ac5793a408a85cbe11e8a57cf8b207"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_09_TIME_SERIES_MOMENTUM.md",
+      "sha256": "e0c0900344ace40b205a3edea292bfbdfeca6b75d05a5740a36473eb0c3601cd"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_10_VOLUME_SPIKE_BREAKOUT.md",
+      "sha256": "de4fb845d2aee7cf9cecb433dd626b0956dad4048d6106304dad892f859c1270"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_11_MEAN_REVERSION_OVERREACTION.md",
+      "sha256": "f0ad82f7bdd2eabcaba2cac207dd3158881aa24394a16820dfcb248ea85d024a"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_12_CALENDAR_WEEKDAY_SEASONALITY.md",
+      "sha256": "264705880929eacf7b769c1c2532892aea5071848979628356f3111da287028d"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_13_RELATIVE_VALUE_PAIRS.md",
+      "sha256": "8b6dba3311d07293b5c95e3d6ea2307911ada01552f331bc8b2000090d957d7e"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_14_FVG_SMC.md",
+      "sha256": "567b3cd4c6860c96d82d4c46319a6db814daa78bf0683e428ad6c68f667f50fb"
+    },
+    {
+      "path": "docs/research_intake/v1/mechanisms/RI_15_EMA_CHART_CANDLESTICK_FEATURES.md",
+      "sha256": "bb8fffefcedecb3697a540af96b6bad8e8faba8f28e481c4c1fced6bd7e61b6c"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_01_930_BREAKOUT_AND_FVG.md",
+      "sha256": "a58bb43f771d52b69c7dc3239b741f196c2fcc74b7912715ccd1b412a9308ac9"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_02_WHALE_PIVOT_FOOTPRINT.md",
+      "sha256": "a4b91f6f4072d7188db6a732fbec86cd9e8c1d7a25c6ee385554a7e53aea056d"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_03_TRADEFATHER_DISCRETIONARY_TOOLKIT.md",
+      "sha256": "745a558ef21787a3b3335045412959c74bb639601ee48d63a01aff7b0844eb40"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_04_OPEN_5M_EMA12_MOMENTUM.md",
+      "sha256": "bc50b958d8dbff9c1aeb52b1563c0f8c812bd03ca1bb0184b61a5ebefd44b252"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_05_NVDA_COST_SANITY_EXAMPLE.md",
+      "sha256": "6a2609c951f1aeb3a47ebbf18e0db877df481748cc78c4c64593acac106dfb8b"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_06_NINJA_GEX_A_PLUS_CHECKLIST.md",
+      "sha256": "3bab198462e43f01756cb124ca15318bf84e3a2bf0530b7e58c69c9cfdb9d663"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_07_NASDAQ_OPENING_RANGE_BREAKOUT.md",
+      "sha256": "ee90acfa75ba455699093484b73d66ee0dd926810ba0078628b37f3352cb27a0"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_08_NASDAQ_DAILY_LONG_BIAS.md",
+      "sha256": "d65b042a40df66f03e46f50beaae4a4a08ab5b6b8fdc03951e12d3ef6e215a48"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_09_DOW_TURNAROUND_TUESDAY.md",
+      "sha256": "eaba706e743921fde7211c9603b143d36b806ea9b860bb9b3af22e5e9316597b"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_10_USDJPY_MORNING_RANGE_BREAKOUT.md",
+      "sha256": "ced2e376c877c9a8fc5ee07e0e2bf8f65664324f32fe69a3e41580d1d7ad957c"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_11_AI_TRADING_VARIATION_SEARCH.md",
+      "sha256": "1c3414e16d33d40817315e173436e106b9dfbba301d8b2ccd8d3ab20fff3b661"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_12_VOLUME_SPIKE_BREAKOUT.md",
+      "sha256": "0c26958d40dd6a609b5040a8e6e5a177baf390ad414510a9dae96efe287e50c7"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_13_121_NEW_YORK_WINDOW_SWEEP.md",
+      "sha256": "4ea0409d85ec6bdfc948c3cd67fe99ba1cef8aa5428bc74a60506890b52bdf6a"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_14_MACRO_AND_STRATEGY_FAMILIES.md",
+      "sha256": "7b8d3242ce5122ee77ae6aed066e687fc206ee3a33a8c9be4aa6f0b1e86499de"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_15_BACKTESTING_PRINCIPLES.md",
+      "sha256": "7a53680dfe2b8b23e2bdce697c29533b91fc6212147ca9540ed64cd0b8bbe158"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_16_PROBABILITY_LLN_CASINO.md",
+      "sha256": "a07d3856bc622e02d900264683aea24a8dae9304e6c46b348ec7fbe99c80da0a"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_17_MTRADERS_OI_IV_INTRADAY.md",
+      "sha256": "622d48e6025660a024225bcbd281f024fa27a4552500d97b81329d1f759b463e"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_18_DERIVATIVES_PRICING_CALIBRATION.md",
+      "sha256": "2473eab57794e32aaad00f754c0714839c28101c013ed2bad13bc07073a527e2"
+    },
+    {
+      "path": "docs/research_intake/v1/source_notes/SR_19_AI_PROP_RANDOM_CONTROL_FINDINGS.md",
+      "sha256": "08c5b2e74bfab83950e42578361d3c3820c582a5eec09c274c95928d4853f73d"
+    }
+  ]
+}
