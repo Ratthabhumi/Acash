@@ -39,8 +39,14 @@ Based on primary guidance from the Thai Revenue Department (including Department
 
 ### 2.3 Double Taxation Agreements (DTA) & Foreign Tax Credits (FTC)
 - Under the **US–Thailand Double Taxation Agreement (DTA)**:
-  - US dividends paid to a Thai resident with a valid W-8BEN are subject to a maximum US withholding tax of **15.0%** at source.
+  - Form W-8BEN is statutory documentation executed by a foreign individual to establish non-US status and, where eligible, claim applicable bilateral treaty benefits. Form W-8BEN is not itself a tax levy.
+  - Under Article 10 (Dividends) of the US–Thailand DTA, the tax imposed by the US on gross dividends paid to an eligible Thai resident beneficial owner is capped at:
+    - **10%** in the qualifying corporate-control case specified by the treaty.
+    - **15%** of gross dividends in all other ordinary beneficial-owner cases.
+    - Per Article 10 Paragraph 3, dividends paid by a US Regulated Investment Company (RIC / ETF) are governed by the 15% rule rather than the corporate-control rule.
+    - Therefore, for an ordinary Thai individual beneficial owner of US equities and ETFs, 15% represents the statutory treaty withholding ceiling, subject to treaty eligibility, beneficial-owner verification, proper documentation, and applicable exceptions.
   - Taxes legitimately paid to the US Internal Revenue Service (IRS) may generally be claimed as a Foreign Tax Credit (FTC) against Thai personal income tax on the same income, up to the amount of Thai tax attributable to that foreign income.
+  - All classifications remain subject to mandatory professional review (`TAX_INTERPRETATION_REQUIRES_HUMAN/PROFESSIONAL_REVIEW = true`).
 
 ### 2.4 Broker-Neutral Tax Truth
 - Broker choice (e.g. Dime! vs. Webull vs. Interactive Brokers) does **not** alter Thai statutory tax liability.
@@ -96,7 +102,7 @@ class TaxEvidenceRecord:
     # Dividend & Withholding Taxes
     foreign_withholding_tax_usd: Decimal
     foreign_withholding_tax_thb: Decimal
-    jurisdiction_withholding: str      # e.g. "US" (W-8BEN 15%)
+    jurisdiction_withholding: str      # e.g. "US" (US-Thailand DTA Art. 10 15% via Form W-8BEN)
 
     # Statutory Document Provenance
     source_document_name: str          # e.g. "Dime_Statement_202609.pdf"

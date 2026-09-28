@@ -24,12 +24,30 @@ This document establishes the empirical fee structure, promotional calendar cons
 | **Standard Broker Commission** | **0.15%** of gross trade value | BUY and SELL | No minimum commission per ticket (min USD 0.00). |
 | **Monthly Free Trade** | **1 Free Trade per calendar month** | BUY or SELL | First trade executed in each calendar month is exempt from the 0.15% commission. |
 | **VAT on Commission** | **7.0%** of broker commission | All commission-bearing trades | Applies only to the broker commission portion, not to gross principal. |
-| **SEC Section 31 Fee** | Currently ~**0.00278%** ($0.0000278) | **SELL orders only** | Pass-through US regulatory fee. Subject to periodic US SEC updates. |
-| **FINRA TAF Fee** | **$0.000166 per share** (Max $8.30/trade) | **SELL orders only** | Trading Activity Fee; rounded up to the nearest cent. |
-| **CAT Regulatory Fee** | Variable / Inconsistent across pages | Per-transaction / per-share | **SOURCE CONFLICT (See § 3.2)**. Parameterized in friction model. |
-| **W-8BEN Withholding Tax** | **15.0%** on gross US dividends | US Cash Distributions | Reduced rate under the US–Thailand Double Taxation Agreement (DTA). |
+| **SEC Section 31 Fee** | **0.00206%** ($20.60 per $1M covered sales) | **SELL orders only** | Pass-through US regulatory fee. Statutory rate effective 2026-04-04 (SEC Fee Rate Advisory FY2026). Confirmed on Dime official schedule. |
+| **FINRA TAF Fee** | **Date-Effective Schedule** (See § 2.1) | **SELL orders only** | **2026-01-01 .. 2026-09-30:** $0.000195/share (max $9.79/trade).<br>**2026-10-01 .. 2026-12-31:** **$0.00** (Temporary pause under SR-FINRA-2026-021). |
+| **CAT Regulatory Fee** | Variable / Inconsistent across pages | Per-transaction / per-share | **SOURCE CONFLICT (See § 3.2)**: Observed $0.000046/share vs $0.000003/share. Configurable parameter. |
+| **W-8BEN Treaty Benefit** | **15.0%** dividend withholding ceiling | US Cash Distributions | Form W-8BEN establishes foreign beneficial-owner status to claim treaty benefit under US–Thailand DTA Art. 10 (subject to eligibility). |
 | **Account Maintenance Fee** | **$0.00** / Free | Account custody | No monthly or annual account holding fee. |
 | **Inbound THB Deposit** | **Free** (PromptPay / Bank Transfer) | Cash funding | Instant deposit via KKP Mobile / Thai QR. |
+
+
+### 2.1 Regulatory Fee Lineage & Date-Effective Schedules (SEC, FINRA TAF)
+
+Regulatory fees on covered US equity sell orders are dynamic statutory pass-throughs and must not be modeled as timeless constants:
+
+1. **SEC Section 31 Fee:**
+   - **Authority:** SEC Fee Rate Advisory for Fiscal Year 2026 (Order 2026-2).
+   - **Statutory Rate:** **USD 20.60 per USD 1,000,000** of covered sales (**0.00206%** or $0.0000206 per dollar of gross sales proceeds), effective **2026-04-04**.
+   - **Broker Schedule:** Dime!'s current official US stock fee schedule confirms pass-through SEC Fee = 0.00206% of sell value. Stale FY2025 rates (~0.00278%) are superseded.
+
+2. **FINRA Trading Activity Fee (TAF):**
+   - **Date-Effective Policy Model:**
+     - **2026-01-01 through 2026-09-30:** Standard 2026 equity TAF rate of **$0.000195 per share** sold, with a maximum cap of **$9.79 per trade** (rounded up to the nearest cent). Confirmed on Dime! official rate disclosures.
+     - **2026-10-01 through 2026-12-31:** **$0.00 / share (Rate = 0)**.
+       - *Regulatory Authority:* SEC Release No. 34-106409; File No. SR-FINRA-2026-021 (filed 2026-09-15, published 2026-09-18, designated immediately effective).
+       - *Policy Scope:* FINRA temporarily paused the assessment of TAF on covered equity transactions from 2026-10-01 through 2026-12-31 inclusive.
+     - **Post-2026-12-31:** Requires new regulatory determination. Do not extrapolate beyond 2026-12-31 without a ratified SRO/SEC filing. Classified as `VOLATILE`.
 
 ---
 
@@ -54,8 +72,10 @@ This document establishes the empirical fee structure, promotional calendar cons
 - **Reconciliation Status:** `NEEDS_PRIMARY_SOURCE_RECONCILIATION`. The system preserves both wallet designations without assuming equivalence.
 
 #### B. `DIME_CAT_FEE` Conflict:
-- Published official help documentation reflects conflicting CAT fee rates across versions (some showing $0.0000X/share, others omitting it or incorporating it into pass-through regulatory fees).
-- **Reconciliation Status:** `SOURCE_CONFLICT`. Handled dynamically via configurable parameters in the execution cost model.
+- Published official Dime! documentation reflects irreconcilable CAT fee rates across active pages retrieved 2026-09-28:
+  - Official Page Rendering 1: **$0.000046 per share**.
+  - Official Page Rendering 2: **$0.000003 per share**.
+- **Reconciliation Status:** `SOURCE_CONFLICT`. Handled dynamically via an effective-dated, configurable parameter in the execution cost model rather than silently selecting an arbitrary value.
 
 ---
 
@@ -101,6 +121,8 @@ The PPDS allocator strictly separates:
 ## 6. Verification Ledger
 
 - Custodian Profile: DIME! (KKP) COMPLETE
+- SEC Section 31 Rate: 0.00206% (USD 20.60 per $1M sales, statutory effective 2026-04-04)
+- FINRA TAF Rate: DATE-EFFECTIVE ($0.000195/share max $9.79 through 2026-09-30; $0.00 through 2026-12-31 per SR-FINRA-2026-021)
 - Promotional Calendar: BOUNDED TO 2026-09-30 (Dynamic)
-- Source Conflicts Recorded: 2 (`DIME_FCD_VS_DIME_USD`, `DIME_CAT_FEE`)
+- Source Conflicts Recorded: 2 (`DIME_FCD_VS_DIME_USD`, `DIME_CAT_FEE`: $0.000046 vs $0.000003)
 - Friction Model: COMPREHENSIVE (9-component waterfall)

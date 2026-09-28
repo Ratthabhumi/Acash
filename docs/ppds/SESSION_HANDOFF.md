@@ -81,6 +81,12 @@ PERSONAL CAPITAL
 ## 6. Dime! (KKP) Research & Execution Model
 
 - **Standard Fees:** 0.15% commission (no minimum fee per trade) + 7% VAT on commission; first trade of each calendar month is commission-free.
+- **SEC Section 31 Fee:** 0.00206% ($20.60 per $1M covered sales) effective 2026-04-04 (SEC Fee Rate Advisory FY2026). Stale FY2025 rates (~0.00278%) superseded.
+- **FINRA TAF Fee (Date-Effective Schedule):**
+  - 2026-01-01 through 2026-09-30: $0.000195 per share sold (max $9.79 per trade).
+  - 2026-10-01 through 2026-12-31: **$0.00** (statutory pause under SEC Release No. 34-106409 / SR-FINRA-2026-021).
+  - Post-2026-12-31: Volatile, requires new regulatory filing.
+- **CAT Fee:** Source conflict preserved ($0.000046 vs $0.000003 per share on official Dime pages). Configurable model parameter.
 - **Dime Club Level 1 Free Trade Day:**
   - Published schedule verified **through 30 September 2026** (dynamic promotional calendar, not guaranteed indefinitely).
   - US window: strictly **22:00 – 23:50 ICT**.
@@ -109,18 +115,20 @@ PERSONAL CAPITAL
 - **`MCL` (Micro WTI Crude):** 100 bbl, tick $0.01 ($1.00/tick), cash-settled.
 - **`M6E` (Micro EUR/USD):** 12,500 EUR, tick 0.0001 ($1.25/tick), physically deliverable (mandatory roll before expiration).
 
-### Broker Ranking for Future Implementation:
-1. **Interactive Brokers (IBKR) — Ranked #1:** Thailand confirmed on official country directory; micro commission $0.25/contract; free robust API; established Wise/wire rails. Conservative intraday margins.
-2. **NinjaTrader / Tradovate — Ranked #2 (On Hold):** Purpose-built futures scalper with ~$50 day margins and $0.39 micro commission, but **Thai resident onboarding is NOT confirmed by primary source**.
-3. **AMP Futures — Ranked #3:** Dedicated discount FCM, but restricts custom client-side daily loss limits.
-4. **Ironbeam — Ranked #4 (Disqualified):** Prohibitive $249/mo developer API fee on inactive accounts.
+### Broker Candidate Classifications:
+1. **Interactive Brokers (IBKR):** `LEADING_CANDIDATE` — Thailand confirmed on official country directory; micro commission $0.25/contract; no separate API fee for supported accounts, but subject to auth, account, market-data, and pacing limits (Web API historical 10 req/s or 50 req/min; TWS Lines/2 pacing). Retail Web API uses Client Portal Gateway; OAuth 2.0 applies to licensed orgs/FAs; TWS API uses TWS/IB Gateway. Conservative intraday margins. Zero capital authorized.
+2. **NinjaTrader / Tradovate:** `CANDIDATE_ON_HOLD` — Purpose-built futures scalper with ~$50 day margins and $0.39 micro commission, but **Thai resident onboarding is NOT confirmed by primary source** and retail REST API requires a funded LIVE account (> $1,000 equity) + API Access subscription (`TRADOVATE_RETAIL_API_ACCESS = FUNDED_LIVE_ACCOUNT_REQUIRED`).
+3. **AMP Futures:** `REDUCED_FIT_CANDIDATE` — Dedicated discount FCM, but restricts custom client-side daily loss limits.
+4. **Ironbeam:** `REDUCED_FIT_CANDIDATE` — Prohibitive $249/mo developer API fee on low-volume accounts (unattractive for shadow/read-only research; not a terminal governance disqualification).
+
+> **GOVERNANCE INVARIANT:** `FUTURES_BROKER = CANDIDATE_IDENTIFIED`. No broker is authorized or funded for capital deployment.
 
 ---
 
 ## 9. Thai Tax Evidence Ledger (2026 Guidelines)
 
 - **Statutory Foundation:** Thai Revenue Code Section 41 Paragraph 3 (180-day residency test) + Departmental Orders Paw 161/2566 & Paw 162/2566.
-- **Tax Liability Principle:** Foreign assessable income (realized capital gains, dividends) remitted into Thailand by a Thai tax resident is subject to Personal Income Tax (PIT), with Foreign Tax Credits (FTC) applicable for US withholding taxes (W-8BEN 15%) under the US–Thai DTA.
+- **Tax Liability Principle:** Foreign assessable income (realized capital gains, dividends) remitted into Thailand by a Thai tax resident is subject to Personal Income Tax (PIT). Form W-8BEN establishes foreign status to claim treaty benefit under US–Thailand DTA Article 10, which generally caps US gross dividend withholding at 15% for qualifying individual beneficial owners (and RIC distributions per para 3). W-8BEN is documentation, not a tax levy itself. Foreign Tax Credits (FTC) may be claimed subject to statutory limits.
 - **Broker Neutrality:** Broker choice does not determine tax status; assessable income realization and remittance determine liability.
 - **Status:** `TAX_INTERPRETATION_REQUIRES_HUMAN/PROFESSIONAL_REVIEW = true`. Ledger provides double-entry evidence exports for human and CPA review.
 
@@ -129,9 +137,10 @@ PERSONAL CAPITAL
 ## 10. Formally Preserved Source Conflicts
 
 1. **`DIME_FCD_VS_DIME_USD`:** Promotional fine print in Payday campaigns excludes "Dime! USD", while the Club terms allow "Dime! FCD". Preserved without forced reconciliation.
-2. **`DIME_CAT_FEE`:** Conflicting CAT regulatory fee entries across published Dime pages. Parameterized dynamically.
+2. **`DIME_CAT_FEE`:** Conflicting CAT regulatory fee entries across published official Dime pages ($0.000046 vs $0.000003 per share, retrieved 2026-09-28). Parameterized dynamically.
 3. **`THAI_RESIDENT_NINJATRADER`:** Foreign clients accepted generally, but Thailand-specific KYC whitelist remains unverified.
-4. **`S2_GOVERNANCE_SEMANTICS`:** Stage S2 60 observed vs 60 contiguous calendar sessions remains on formal **HOLD**.
+4. **`TRADOVATE_RETAIL_API_ACCESS`:** Official Tradovate API docs require a funded LIVE account (> $1,000 equity) + API Access subscription. Free retail developer/simulation API access does not exist for un-funded retail accounts.
+5. **`S2_GOVERNANCE_SEMANTICS`:** Stage S2 60 observed vs 60 contiguous calendar sessions remains on formal **HOLD**.
 
 ---
 
@@ -181,3 +190,48 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 3. Review the 14 parameter inputs in `docs/ppds/PERSONAL_CAPITAL_GOVERNANCE_V1_DRAFT.md` to establish the personal capital ceiling and risk boundaries.
 4. Adjudicate Stage S2 semantics (60 observed vs 60 contiguous calendar sessions).
 5. Post-Observation: authorize merge of `docs/readme-math-render-fix-preobs-20260928` and evaluate Phase A repository ruleset activation.
+
+---
+
+## 15. R0 Corrective Audit — 2026-09-28
+
+- **Starting Branch HEAD:** `5f99dedca90ef0b8f815402364e763507c3dfefd`
+- **Corrective Commit SHA:** *(Recorded upon final commit)*
+- **Exact Corrected Claims & Sourced Revisions:**
+  1. **SEC Section 31 Fee:** Updated to statutory rate of **0.00206%** (USD 20.60 per USD 1,000,000 covered sales) effective 2026-04-04 per SEC Fee Rate Advisory FY2026 (Order 2026-2) and verified on Dime! official rate disclosures. Removed stale FY2025 rate (~0.00278%).
+  2. **FINRA TAF Fee (Date-Effective Policy Model):** Codified as a date-effective schedule rather than a static constant:
+     - 2026-01-01 through 2026-09-30: $0.000195 per share sold (max $9.79 per trade).
+     - 2026-10-01 through 2026-12-31: **$0.00** (statutory temporary pause under SEC Release No. 34-106409 / SR-FINRA-2026-021, immediately effective).
+     - Post-2026-12-31: Marked volatile, requiring new regulatory authority.
+  3. **Dime CAT Fee:** Formalized as `SOURCE_CONFLICT` between active official Dime! page disclosures showing $0.000046/share vs $0.000003/share (retrieved 2026-09-28). Maintained as a configurable cost-model parameter without forced reconciliation.
+  4. **Tradovate / NinjaTrader API Economics:** Removed claims of free retail developer/simulation API access. Official Tradovate API documentation explicitly requires a funded LIVE account (> USD 1,000 equity), active API Access subscription, and API key (`TRADOVATE_RETAIL_API_ACCESS = FUNDED_LIVE_ACCOUNT_REQUIRED`; `SHADOW_FIRST_API_ECONOMICS = REDUCED_FIT`). Thai onboarding remains `NOT_CONFIRMED`.
+  5. **IBKR API Pacing & Gateway Distinctions:** Removed "unthrottled" / "unlimited" claims. Documented strict pacing limits (Web API historical market data `/iserver/marketdata/history` capped at 10 req/s or 50 req/min; TWS message pacing tied to Market Data Lines). Distinguished authentication architectures: Client Portal Gateway (local proxy for retail Web API) vs OAuth 2.0 direct API (licensed orgs/FAs) vs TWS/IB Gateway (socket API).
+  6. **Tax Terminology (W-8BEN & US–Thailand Treaty):** Corrected terminology: Form W-8BEN is statutory documentation to establish foreign status and claim treaty benefits, not a tax levy itself. Under US–Thailand DTA Article 10, US dividend withholding is capped at 15% for qualifying individual beneficial owners (and RIC distributions per para 3). Retains `TAX_INTERPRETATION_REQUIRES_HUMAN/PROFESSIONAL_REVIEW = true`.
+  7. **Broker Candidate Statuses:** Replaced rigid rankings with objective candidate classifications:
+     - IBKR = `LEADING_CANDIDATE` (subject to account/auth/pacing constraints; no capital authorized).
+     - NinjaTrader / Tradovate = `CANDIDATE_ON_HOLD` (pending primary-source Thai KYC and live-account API cost trade-off).
+     - AMP Futures = `REDUCED_FIT_CANDIDATE` (restricted client-side risk boundaries).
+     - Ironbeam = `REDUCED_FIT_CANDIDATE` (prohibitive recurring developer API fee for low-volume/shadow phases; not terminal disqualification).
+     - Overall: `FUTURES_BROKER = CANDIDATE_IDENTIFIED`. Zero capital authorized.
+- **Remaining Unresolved Claims:**
+  - `DIME_FCD_VS_DIME_USD`: Needs primary source reconciliation.
+  - `DIME_CAT_FEE`: Source conflict ($0.000046 vs $0.000003).
+  - `THAI_RESIDENT_NINJATRADER`: Not confirmed by primary source.
+  - `WEBULL_READ_ONLY_INTEGRATION`: Blocked pending credential security architecture.
+  - `PERSONAL_CAPITAL_ALLOCATION_POLICY`: Unresolved pending operator inputs.
+- **Final Governance & State Summary:**
+```text
+PPDS_R0_RESEARCH                  = CORRECTED_PENDING_INDEPENDENT_AUDIT
+IBKR                              = LEADING_CANDIDATE
+FUTURES_BROKER                    = CANDIDATE_IDENTIFIED
+THAI_RESIDENT_NINJATRADER         = NOT_CONFIRMED
+DIME_CAT_FEE                      = SOURCE_CONFLICT
+WEBULL_READ_ONLY_INTEGRATION      = BLOCKED_PENDING_SECURITY_DESIGN
+REAL_ORDER_AUTHORITY              = NONE
+PAPER_TRADING_AUTHORITY           = NONE
+LIVE_TRADING_AUTHORITY            = NONE
+CAPITAL_AUTHORITY                 = $0.00
+MAIN_MODIFIED                     = false
+HYP011_EXECUTION_PATH_MODIFIED    = false
+MERGE_STATUS                      = HOLD
+```
