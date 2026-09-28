@@ -9,14 +9,14 @@
 
 ---
 
-## 1. Executive Summary & Selection Philosophy
+## 1. Executive Summary & Selection Methodology
 
-The **Futures / Macro Trading Book** requires access to regulated, centralized exchange-traded derivatives on the Chicago Mercantile Exchange (CME Group).
+The **Futures / Macro Trading Book** evaluates broker candidates providing access to centrally cleared exchange-traded derivatives on the Chicago Mercantile Exchange (CME Group).
 
-### Core Selection Axioms
-1. **Low Margin $\neq$ Low Economic Risk:** Sizing positions based on broker intraday margin (e.g. $50 day margin on MNQ) is financial recklessness. Sizing is governed strictly by dollar loss at stop-loss invalidation.
-2. **Thai Resident Eligibility is a Hard Prerequisite:** A broker offering the lowest commission or best API is completely disqualified if onboarding of Thai residents cannot be verified by primary-source compliance evidence.
-3. **Shadow-First Economics:** ACASH develops in simulation/shadow mode prior to capital commitment. Broker pricing models that impose recurring monthly API access penalties on inactive or read-only accounts violate ACASH development economics.
+### Core Selection Axioms:
+1. **Intraday Margin $\neq$ Economic Risk:** Position sizing must never be governed by broker intraday margin requirements (e.g. $50 or $100 retail day margin). Risk sizing is governed strictly by dollar loss at stop-loss invalidation. Margins are volatile external parameters determined by broker risk desks and exchange clearing houses.
+2. **Thai Resident Eligibility is a Hard Prerequisite:** A broker offering low commissions or flexible APIs is unusable if onboarding of Thai residents cannot be verified by primary-source compliance documentation.
+3. **Shadow-First Economics:** ACASH operates in simulation and shadow telemetry modes prior to live capital allocation. Pricing models that require recurring monthly fees or mandatory live-funded minimums for API telemetry require explicit cost budgeting.
 
 ---
 
@@ -24,92 +24,102 @@ The **Futures / Macro Trading Book** requires access to regulated, centralized e
 
 | Due-Diligence Dimension | NinjaTrader / Tradovate | Interactive Brokers (IBKR) | Ironbeam | AMP Futures |
 | :--- | :--- | :--- | :--- | :--- |
-| **Thai Resident Eligibility** | **UNVERIFIED / NOT CONFIRMED** (Discloses foreign clients generally; no primary whitelist for Thailand). | **CONFIRMED** (Thailand explicitly listed in official supported country directory). | **PARTIAL** (Accepts select foreign nationals; individual Thai KYC case-by-case). | **CONFIRMED** (Broad international individual onboarding supported). |
-| **Regulatory Standing** | CFTC registered FCM; NFA ID `0309379`. High custody security. | CFTC / SEC / FINRA / Global multi-jurisdiction giant. | CFTC registered FCM; NFA ID `0265382`. Long-standing US clearing broker. | CFTC registered FCM; NFA ID `0412490`. Dedicated retail futures broker. |
-| **Micro Commission (Base)** | **$0.39 / side** (Free Plan) or $0.09 (Lifetime License) + fees. | **$0.25 / contract** (Tiered $\le 1,000$ contracts) + fees. | **$0.49 / side** (Standard) or tiered volume rates. | **$0.30 - $0.40 / side** depending on clearing route. |
-| **All-In Micro Round-Turn** | ~$1.20 – $1.40 / contract (includes CME clearing & NFA). | ~$1.00 – $1.20 / contract (all-in pass-through). | ~$1.30 – $1.50 / contract. | ~$1.20 – $1.40 / contract. |
-| **Intraday Margin (Micros)**| **~$50 / contract** (Aggressive retail day margin). | **Standard Exchange Margins** (or moderate intraday discount ~50% of initial). | **~$50 - $100 / contract** (Retail day margin). | **~$50 / contract** (Competitive day margin). |
-| **API & Telemetry Quality** | Tradovate REST / WebSocket API + NinjaTrader SDK. Excellent. | IBKR Web API (Client Portal Gateway) / TWS API / IB Gateway. Subject to documented pacing. | Dedicated Ironbeam API. | Third-party routing APIs (CQG, Rithmic). |
-| **API Commercial Cost** | **FUNDED ACCOUNT REQUIRED:** Official Tradovate API docs require LIVE account (> $1,000 equity), API Access subscription, and API key. No free retail dev API. | No separate API usage fee for supported accounts, but subject to auth, account, market-data entitlement, session, and pacing limits. | **PROHIBITIVE:** ~$249/mo developer API fee unless minimum trade quota met; $99 sim fee. Unattractive for shadow-first phase. | Varies by routing bridge (CQG/Rithmic data add-ons). |
-| **Customer Risk Controls** | Robust broker-side trailing drawdown and daily loss lockouts. | Native portfolio margin, liquidation triggers, order presets. | Standard FCM risk liquidation engine. | **RESTRICTIVE:** Customers *cannot* set custom daily loss limits; fixed broker defaults apply. |
-| **TradingView Support** | Native integration via Tradovate credential. | Native integration via IBKR broker login. | Supported through third-party bridges. | Native integration via CQG routing. |
-| **Funding from Thailand** | International Bank Wire (USD). | International Wire, Local Thai Bank via partner rails, Wise integration. | International Bank Wire (USD). | International Bank Wire (USD). |
+| **Thai Resident Eligibility** | **NOT_CONFIRMED** (Accepts select foreign clients; Thailand is not documented on an explicit public whitelist). | **CONFIRMED** (Thailand explicitly listed in official supported country directory). | **PARTIAL** (Accepts select foreign nationals; Thai individual KYC evaluated case-by-case). | **ELIGIBLE_TO_APPLY_SUBJECT_TO_COMPLIANCE** (Thailand not on published restricted list; subject to KYC approval). |
+| **Regulatory Registration** | CFTC registered FCM; NFA ID `0309379`. | CFTC registered FCM, SEC registered BD; NFA ID `0001925`. | CFTC registered FCM; NFA ID `0265382`. | CFTC registered FCM; NFA ID `0412490`. |
+| **Micro Commission (Base)** | $0.39 / side (Standard Plan) or $0.09 (Lifetime License) + exchange/NFA fees. | $0.25 / contract (Tiered $\le 1,000$ contracts) + exchange/regulatory/clearing fees. | $0.49 / side (Standard Plan) or tiered volume rates. | $0.30 - $0.40 / side depending on selected clearing route. |
+| **All-In Micro Round-Turn** | `ALL_IN_COST = NOT_NORMALIZED` (Dependent on contract, data tier, routing, and membership). | `ALL_IN_COST = NOT_NORMALIZED` (Dependent on contract, tiered volume, and exchange pass-through). | `ALL_IN_COST = NOT_NORMALIZED` (Varies with volume and data feed). | `ALL_IN_COST = NOT_NORMALIZED` (Varies by clearing route: CQG, Rithmic, TT). |
+| **Intraday Margin Status** | `VOLATILE_EXTERNAL_PARAMETER` (Retail day margins subject to unannounced revision). | `VOLATILE_EXTERNAL_PARAMETER` (Standard exchange margins or broker intraday maintenance policy). | `VOLATILE_EXTERNAL_PARAMETER` (Subject to FCM intraday risk policy). | `VOLATILE_EXTERNAL_PARAMETER` (Subject to FCM intraday risk policy). |
+| **API & Telemetry Architecture** | Tradovate REST / WebSocket API + NinjaTrader SDK. | IBKR Client Portal Web API / TWS Socket API. Documented request pacing. | Dedicated Ironbeam API. | Third-party routing bridges (CQG Web API, Rithmic R|API+). |
+| **API Commercial Cost** | **FUNDED ACCOUNT REQUIRED:** Requires live funded account (> $1,000 equity), API Access add-on, and API key. | No direct API access subscription fee for standard accounts; subject to pacing, auth, and market data costs. | Developer API fee (~$249/mo unless volume quota reached); simulation fee (~$99/mo). | Varies by routing bridge (data and platform add-on fees). |
+| **Customer Risk Controls** | Trailing drawdown and daily loss lockouts configurable in platform. | Native portfolio margin, account-level liquidation triggers, order presets. | FCM-level risk liquidation engine. | **RESTRICTIVE:** Individual accounts cannot configure custom daily loss limits in portal; fixed defaults apply. |
+| **TradingView Support** | Supported via Tradovate broker integration. | Supported via IBKR broker integration. | Supported via third-party bridges. | Supported via CQG routing bridge. |
+| **Funding Rails (Thailand)** | International Bank Wire (USD). | International Bank Wire (USD), Wise integration. `IBKR_LOCAL_THAI_BANK_RAIL = NOT_CONFIRMED`. | International Bank Wire (USD). | International Bank Wire (USD). |
 
 ---
 
-## 3. Deep-Dive Broker Candidate Evaluations
+## 3. Futures Cost & Margin Normalization Standards
 
-### 3.1 Candidate Alpha: Interactive Brokers (IBKR)
-- **Strengths:**
-  - Absolute certainty on Thai resident eligibility (Thailand on official primary country list).
-  - Unmatched global financial strength and segregated customer asset protection.
-  - Micro commission of **USD 0.25/contract** is the lowest base commission in the group.
-  - No separate API access fee for ordinary supported account access (subject to account, market-data, and pacing constraints).
-  - Established funding infrastructure from Thailand (direct Wise integration and swift wire routes).
-- **API Architecture & Pacing Limits:**
-  - **Pacing / Rate Limits:** Web API historical market data (`/iserver/marketdata/history`) is throttled to a maximum of 10 requests per second OR 50 requests per minute. TWS API has separate message pacing semantics based on account-provisioned Market Data Lines (including dynamic Lines / 2 models). Not unthrottled.
-  - **Authentication Modes Must Be Distinguished:**
-    - *Retail Web API:* Requires local execution of Client Portal Gateway (browser-based authentication, daily session reauthentication; does not support fully headless background login).
-    - *OAuth 2.0 Direct API:* Allows direct calls to `api.ibkr.com` without Client Portal Gateway, but official documentation restricts OAuth 2.0 to licensed Organizations, Financial Advisors, and IBrokers (not generally provisioned for individual retail accounts).
-    - *TWS API:* Socket API connecting via Trader Workstation (TWS) or IB Gateway (a lightweight daemon distinct from Client Portal Gateway).
-- **Weaknesses:**
-  - Intraday margin requirements are conservative (typically 50% of overnight initial margin, e.g. ~$1,000–$1,500 on equity micros vs $50 at specialty futures brokers).
-  - Retail Web API requires the Client Portal Gateway process running locally with interactive browser authentication.
-- **Verdict:** **LEADING_CANDIDATE** for institutional robustness, verified Thai residency, and API telemetry (pending human operator authorization; no capital authorized).
+### 3.1 All-In Transaction Cost Normalization Standard
+Because published marketing figures aggregate dissimilar fee schedules across varying plans, `ALL_IN_COST = NOT_NORMALIZED`. A future rigorous comparison requires evaluating identical standardized trades under contemporaneous schedules:
 
-### 3.2 Candidate Beta: NinjaTrader / Tradovate
-- **Strengths:**
-  - Purpose-built for futures scalping and active intraday trading.
-  - Ultralow day margins (~$50 on MNQ/MES).
-  - Modern Tradovate REST/WebSocket API natively integrated with TradingView.
-- **API Economics & Onboarding Friction:**
-  - **Retail API Access Requirements:** Official Tradovate API documentation explicitly specifies that retail REST API access requires:
-    1. A LIVE account (not demo-only).
-    2. Minimum account equity greater than USD 1,000.
-    3. Active subscription to API Access.
-    4. Generation of an API Key.
-    - ACASH cannot assume a free, un-funded developer or simulation API environment (`TRADOVATE_RETAIL_API_ACCESS = FUNDED_LIVE_ACCOUNT_REQUIRED`; `SHADOW_FIRST_API_ECONOMICS = REDUCED_FIT`).
-  - **Thai Resident KYC is NOT confirmed by primary source:** Discloses international client support in general terms, but Thailand does not appear on an official public whitelist.
-- **Verdict:** **CANDIDATE_ON_HOLD** pending primary-source Thai onboarding confirmation and live-account API cost trade-off evaluation.
+```text
+Standardized 1-Round-Trip Comparison Template (Single Contract):
+- Instrument: [1 MES | 1 MNQ | 1 MGC | 1 MCL | 1 M6E]
+- Components:
+  + Broker Commission (Buy + Sell)
+  + CME Exchange Fee (Buy + Sell)
+  + CME Clearing Fee (Buy + Sell)
+  + NFA Regulatory Fee ($0.02 / contract side => $0.04 round trip)
+  + Order Routing / Platform Transaction Fee
+  + Contemporaneous Monthly Fixed Costs (Market Data, API access amortized over N trades)
+- Effective Date Context & Plan Tier
+```
 
-### 3.3 Candidate Gamma: Ironbeam
-- **Strengths:** High-speed direct exchange connectivity, registered FCM with clearing sovereignty.
-- **Weaknesses:** Imposes a ~$249/month developer API fee on accounts failing to meet heavy trading volume quotas. Unattractive for ACASH's shadow-first, low-turnover research model.
-- **Verdict:** **REDUCED_FIT_CANDIDATE** due to anti-developer API economics for low-turnover/shadow phases. Not permanently disqualified by immutable charter rule, but economically unattractive for R0.
-
-### 3.4 Candidate Delta: AMP Futures
-- **Strengths:** Established discount futures broker, accepts international clients, competitive day margins.
-- **Weaknesses:** Official risk policy explicitly restricts account holders from setting customized daily loss or maximum contract limits in the portal (enforces rigid FCM defaults).
-- **Verdict:** **REDUCED_FIT_CANDIDATE** due to lack of customizable programmatic client-side risk boundaries.
+### 3.2 Margin Normalization Standard
+Broker intraday margins are volatile operational parameters set at broker discretion and do not represent exchange legal minimums:
+- **Exchange Maintenance Margin:** Established by CME Clearing (SPAN / CME CORE margin models) based on market volatility.
+- **Broker Day Trading Margin:** Promotional or risk-desk intraday leverage parameter that can be modified or revoked during volatility events without prior notice.
+- **Rule:** `VOLATILE_EXTERNAL_PARAMETER`. ACASH never sizes positions or computes capital adequacy using broker intraday margins.
 
 ---
 
-## 4. Working Candidate Classifications for Future Implementation
+## 4. Deep-Dive Candidate Evaluations
 
-Based on multi-factor evaluation (Eligibility Certainty > API Economics > Risk Controls > Margins):
+### 4.1 Candidate Alpha: Interactive Brokers (IBKR)
+- **Documented Properties:**
+  - Thai resident eligibility confirmed via official country directory.
+  - Base micro commission published at USD 0.25/contract (Tiered schedule) + exchange/clearing pass-through.
+  - Multi-currency accounts with international bank wire and official Wise integration. Local Thai commercial bank direct partner rails are `NOT_CONFIRMED` by primary source.
+  - API connectivity provided via Client Portal Web API (local gateway daemon required, interactive browser login) and TWS Socket API.
+- **API Architecture & Constraints:**
+  - Web API historical market data throttled to 10 req/s or 50 req/min. TWS API subject to pacing lines.
+  - OAuth 2.0 direct API documented primarily for institutional/advisory entities, not standard retail accounts.
+- **Classification:** `LEADING_CANDIDATE` (Subject to operator review; zero capital authorized).
 
-1. **Interactive Brokers (IBKR):** `LEADING_CANDIDATE` (Meets regulatory, Thai eligibility, funding, and cost requirements; subject to auth/pacing constraints).
-2. **NinjaTrader / Tradovate:** `CANDIDATE_ON_HOLD` (Re-evaluate if primary-source evidence proves seamless Thai individual KYC and retail API economics align).
-3. **AMP Futures:** `REDUCED_FIT_CANDIDATE` (Restricted client-side loss limit controls).
-4. **Ironbeam:** `REDUCED_FIT_CANDIDATE` (Prohibitive monthly developer API fee for low-volume/shadow phase).
+### 4.2 Candidate Beta: NinjaTrader / Tradovate
+- **Documented Properties:**
+  - Modern REST/WebSocket telemetry natively integrated with TradingView.
+  - Official retail API documentation requires a live funded account (> USD 1,000 equity) and active API Access subscription.
+  - Primary-source whitelist confirmation for Thai resident onboarding remains unverified (`THAI_RESIDENT_NINJATRADER = NOT_CONFIRMED`).
+- **Classification:** `CANDIDATE_ON_HOLD` pending primary-source Thai KYC verification and live-account API cost trade-off evaluation.
 
-> **GOVERNANCE INVARIANT:**
-> `FUTURES_BROKER = CANDIDATE_IDENTIFIED`
-> No broker is authorized, selected, or funded for capital deployment. Capital authority remains `$0.00`.
+### 4.3 Candidate Gamma: Ironbeam
+- **Documented Properties:** Registered FCM with proprietary API; developer API model imposes ~$249/mo fee for accounts not meeting high monthly volume thresholds.
+- **Classification:** `REDUCED_FIT_CANDIDATE` due to commercial developer API friction during low-turnover research phases.
+
+### 4.4 Candidate Delta: AMP Futures
+- **Documented Properties:**
+  - Thailand is not listed on AMP's published restricted countries list (`THAI_RESIDENT_AMP = ELIGIBLE_TO_APPLY_SUBJECT_TO_COMPLIANCE`).
+  - Risk management policy strictly limits user-configurable account loss controls in portal.
+- **Classification:** `REDUCED_FIT_CANDIDATE` due to restricted programmatic risk boundaries.
 
 ---
 
-## 5. Verification Ledger
+## 5. Candidate Status & Governance Boundaries
 
-- Evaluation Status: COMPLETE (4 Major FCMs Analyzed)
-- Candidate Classification:
-  - IBKR: `LEADING_CANDIDATE`
-  - NinjaTrader / Tradovate: `CANDIDATE_ON_HOLD`
-  - AMP Futures: `REDUCED_FIT_CANDIDATE`
-  - Ironbeam: `REDUCED_FIT_CANDIDATE`
-- Overall Broker Status: `FUTURES_BROKER = CANDIDATE_IDENTIFIED`
-- Thai Onboarding Proof: IBKR (`CONFIRMED`) | NinjaTrader (`NOT_CONFIRMED`)
-- Tradovate Retail API: `FUNDED_LIVE_ACCOUNT_REQUIRED` (> $1,000 equity + subscription)
-- IBKR Pacing Limits: DOCUMENTED (Web API 10 req/s or 50 req/min; TWS lines/2 pacing)
-- Sizing Policy: Risk-at-invalidation strictly decoupled from broker day margin
-- Capital Authority: `$0.00` / NO REAL ORDERS
+```text
+GOVERNANCE INVARIANT:
+FUTURES_BROKER = CANDIDATE_IDENTIFIED
+IBKR = LEADING_CANDIDATE
+THAI_RESIDENT_NINJATRADER = NOT_CONFIRMED
+THAI_RESIDENT_AMP = ELIGIBLE_TO_APPLY_SUBJECT_TO_COMPLIANCE
+IBKR_LOCAL_THAI_BANK_RAIL = NOT_CONFIRMED
+ALL_IN_COST = NOT_NORMALIZED
+MARGIN_STATUS = VOLATILE_EXTERNAL_PARAMETER
+CAPITAL_AUTHORITY = $0.00
+NO_REAL_ORDERS = true
+```
+
+No broker contract is executed, no account is opened, and no credentials exist.
+
+---
+
+## 6. Verification Ledger
+
+- Candidate Matrix Completed: 4 US FCMs audited (IBKR, Tradovate, Ironbeam, AMP)
+- Thai Residency Audit: IBKR (`CONFIRMED`) | NinjaTrader (`NOT_CONFIRMED`) | AMP (`ELIGIBLE_TO_APPLY_SUBJECT_TO_COMPLIANCE`)
+- Tradovate Retail API: Live funded account (> $1,000 equity) + paid subscription required
+- IBKR Pacing & Auth: Web API gateway pacing verified; local Thai bank rail unconfirmed
+- Cost Normalization: `ALL_IN_COST = NOT_NORMALIZED` (Template established)
+- Margin Discipline: Sizing strictly decoupled from volatile broker day margin
+- Final Candidate Status: `FUTURES_BROKER = CANDIDATE_IDENTIFIED`

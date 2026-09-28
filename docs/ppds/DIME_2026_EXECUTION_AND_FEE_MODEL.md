@@ -49,6 +49,26 @@ Regulatory fees on covered US equity sell orders are dynamic statutory pass-thro
        - *Policy Scope:* FINRA temporarily paused the assessment of TAF on covered equity transactions from 2026-10-01 through 2026-12-31 inclusive.
      - **Post-2026-12-31:** Requires new regulatory determination. Do not extrapolate beyond 2026-12-31 without a ratified SRO/SEC filing. Classified as `VOLATILE`.
 
+### 2.2 Dime Club 2026 Dynamic Sliding Commission Model
+
+Broker commission is **account-specific, dynamic, promotion-aware, and effective-dated** (`ACCOUNT_SPECIFIC + EFFECTIVE_DATED + PROMOTION_AWARE`), not a static 0.15% constant:
+
+- **Authority:** Dime! Official Campaign Terms ("Sliding Commission / Dime Club", published 2026).
+- **Mechanics:** For Dime Club members, cumulative monthly trading value in month $T$ determines the US stock **BUY commission** applied in month $T+1$:
+  - **Tier 1 ($\le$ THB 5,000,000):** BUY Commission = **0.15%**
+  - **Tier 2 (THB 5,000,001 – 20,000,000):** BUY Commission = **0.10%**
+  - **Tier 3 (> THB 20,000,000):** BUY Commission = **0.05%**
+- **Sell Orders:** US stock SELL commission remains statutory **0.15%** across all volume tiers.
+- **Validity Horizon:** The current campaign schedule covers qualification periods through November 2026 and fee benefit execution through **December 2026**.
+- **Portfolio Context:** For the operator's current observed portfolio scale (~THB 100k), the baseline tier (0.15%) applies unless verified account records prove higher cumulative volume. The cost engine must enforce:
+  ```text
+  DIME_EFFECTIVE_COMMISSION_RATE = ACCOUNT_STATE_REQUIRED
+  ```
+- **Distinct Execution Mechanisms Preserved:**
+  1. *Monthly Free Trade:* First trade of each calendar month is commission-free (0.00%).
+  2. *Dime Club Level 1 Free Trade Day:* Pre-scheduled promotional BUY windows (0.00% commission).
+  3. *Sliding Commission:* Volume-tiered baseline BUY commission (0.05% – 0.15%).
+
 ---
 
 ## 3. Dime Club Level 1 Free Trade Day (2026 Promotion Audit)
@@ -64,14 +84,20 @@ Regulatory fees on covered US equity sell orders are dynamic statutory pass-thro
   - Funded in **THB amount** (instant FX conversion at broker rate).
   - Funded in **USD amount from Dime! FCD**.
 
-### 3.2 Source Conflicts Preserved
+### 3.2 Account Architecture & Sourced Disclosures
 
-#### A. `DIME_FCD_VS_DIME_USD` Conflict:
-- The Dime Club Level 1 terms explicitly allow USD funding via "Dime! FCD".
-- Conversely, promotional fine print in campaign materials (e.g. Payday September 2026) states: *"Transactions funded via Dime! USD are excluded from campaign benefits."*
-- **Reconciliation Status:** `NEEDS_PRIMARY_SOURCE_RECONCILIATION`. The system preserves both wallet designations without assuming equivalence.
+#### A. `DIME_FCD_VS_DIME_USD` (Resolved Distinct Products):
+- **Primary Source:** Dime! Official Product Portal (`https://dime.co.th/save/dime-fcd`, retrieved 2026-09-28).
+- **Product Distinction:**
+  - **Dime! FCD - USD:** A Foreign Currency Deposit (FCD) bank account with Kiatnakin Phatra Bank (KKP) that can accrue deposit interest and holds USD cash usable across US stocks, US options, and gold investments.
+  - **Dime! USD:** An investment trading cash wallet designated specifically for US stock and options transactions.
+- **Resolution:** Because these are distinct legal and operational account products, the observation that one campaign (e.g. Free Trade Day) permits Dime! FCD while another campaign (e.g. Payday) excludes Dime! USD is **not a source conflict**. Each campaign establishes its own explicit product eligibility.
+- **Status:**
+  ```text
+  DIME_FCD_VS_DIME_USD = RESOLVED_DISTINCT_PRODUCTS
+  ```
 
-#### B. `DIME_CAT_FEE` Conflict:
+#### B. `DIME_CAT_FEE` (Source Conflict Preserved):
 - Published official Dime! documentation reflects irreconcilable CAT fee rates across active pages retrieved 2026-09-28:
   - Official Page Rendering 1: **$0.000046 per share**.
   - Official Page Rendering 2: **$0.000003 per share**.
@@ -85,10 +111,14 @@ In ACASH, **commission-free does not mean friction-free**. The total expected fr
 
 $$\Phi_{\text{total}} = \text{Commission} + \text{VAT} + \text{SEC} + \text{TAF} + \text{CAT} + \text{Spread Drag} + \text{Slippage Drag} + \text{FX Drag} + \text{Timing Cost}$$
 
-### Friction Component Breakdown:
-1. **Spread & Market Impact Drag:** Market orders executed during the 22:00–23:50 ICT window incur bid-ask spread crossing. For liquid ETFs (`VOO`, `QQQM`), spread drag is minimal (~1–2 bps); for smaller-cap thematic holdings (`SATL`, `SIDU`), spread drag can exceed 50–100 bps.
-2. **FX Conversion Drag:** Funding trades via THB incurs an embedded currency conversion spread (typically 10–25 bps from interbank mid-rate). Using pre-funded Dime! FCD balances eliminates recurring FX drag on individual trades.
-3. **Opportunity & Timing Cost:** Delaying an accumulation purchase by 10 to 14 days solely to wait for a Free Trade Day exposes capital to market drift $\Delta P$. If expected upward trend or volatility drag exceeds the 0.15% commission savings ($1.50 on a $1,000 order), waiting is economically irrational.
+### Friction Component Breakdown & Modeling Status:
+1. **Commission & Regulatory Fees (Calibrated):** Contractually determined by account tier, monthly free-trade status, promotional window, SEC Section 31 rate (0.00206%), date-effective TAF schedule, and configurable CAT fee.
+2. **Spread & Market Impact Drag (`MODEL_ASSUMPTION_NOT_CALIBRATED`):** Bid-ask spread and market impact vary by security liquidity, market session, order size, and contemporaneous quote depth. Quantitative estimates (e.g. 1–2 bps on index ETFs, 50–100 bps on small-cap thematic equities) are working design hypotheses and must not be treated as calibrated broker-contract invariants without empirical quote-book logging.
+3. **FX Conversion Drag (`MODEL_ASSUMPTION_NOT_CALIBRATED`):** THB-to-USD conversion spreads depend on time-of-day bank counter spreads and broker FX markup. Maintaining pre-funded FCD balances mitigates recurring per-trade conversion spread.
+4. **Opportunity & Timing Cost (`MODEL_ASSUMPTION_NOT_CALIBRATED`):** Delaying accumulation purchases solely to capture promotional commission savings exposes capital to market drift $\Delta P$. ACASH does not accelerate or delay trade recommendations based on uncalibrated heuristic trend forecasts.
+
+> **OPTIMIZER DESIGN PRINCIPLE:**
+> Expected execution friction requires: observed contemporaneous bid/ask, order size, prevailing liquidity, verified commission tier, statutory regulatory fees, actual quoted FX, execution delay horizon, and an empirically validated timing-cost model. No execution recommendation is authorized.
 
 ---
 
@@ -110,10 +140,9 @@ The PPDS allocator strictly separates:
         ┌─────────────────────┴─────────────────────┐
         ▼                                           ▼
 [ Small Ticket (< $500) ]                 [ Large Ticket (> $2,000) ]
-- 0.15% commission = $0.75                - 0.15% commission = $3.00+
-- Free Trade Day value: HIGH              - Timing drift risk > commission
-- Recommendation: Utilize monthly         - Recommendation: Execute on
-  free trade or Free Trade Day              favorable liquidity without delay
+- Commission savings meaningful            - Timing drift risk > commission
+- Consider monthly free trade             - Prioritize contemporaneous
+  or verified promotional window            liquidity and minimal slippage
 ```
 
 ---
@@ -121,8 +150,9 @@ The PPDS allocator strictly separates:
 ## 6. Verification Ledger
 
 - Custodian Profile: DIME! (KKP) COMPLETE
-- SEC Section 31 Rate: 0.00206% (USD 20.60 per $1M sales, statutory effective 2026-04-04)
+- SEC Section 31 Rate: 0.00206% (statutory effective 2026-04-04)
 - FINRA TAF Rate: DATE-EFFECTIVE ($0.000195/share max $9.79 through 2026-09-30; $0.00 through 2026-12-31 per SR-FINRA-2026-021)
-- Promotional Calendar: BOUNDED TO 2026-09-30 (Dynamic)
-- Source Conflicts Recorded: 2 (`DIME_FCD_VS_DIME_USD`, `DIME_CAT_FEE`: $0.000046 vs $0.000003)
-- Friction Model: COMPREHENSIVE (9-component waterfall)
+- Commission Architecture: `ACCOUNT_SPECIFIC + EFFECTIVE_DATED + PROMOTION_AWARE` (Sliding Commission verified through Dec 2026)
+- Product Distinction: `DIME_FCD_VS_DIME_USD = RESOLVED_DISTINCT_PRODUCTS`
+- Source Conflicts Recorded: 1 (`DIME_CAT_FEE`: $0.000046 vs $0.000003)
+- Friction Model: COMPREHENSIVE (Demoted uncalibrated spread/FX precision to `MODEL_ASSUMPTION_NOT_CALIBRATED`)

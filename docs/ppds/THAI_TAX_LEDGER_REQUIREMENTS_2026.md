@@ -48,9 +48,16 @@ Based on primary guidance from the Thai Revenue Department (including Department
   - Taxes legitimately paid to the US Internal Revenue Service (IRS) may generally be claimed as a Foreign Tax Credit (FTC) against Thai personal income tax on the same income, up to the amount of Thai tax attributable to that foreign income.
   - All classifications remain subject to mandatory professional review (`TAX_INTERPRETATION_REQUIRES_HUMAN/PROFESSIONAL_REVIEW = true`).
 
-### 2.4 Broker-Neutral Tax Truth
-- Broker choice (e.g. Dime! vs. Webull vs. Interactive Brokers) does **not** alter Thai statutory tax liability.
-- Thai tax liability is determined by residency, income realization, and remittance into Thailand, not by the broker's marketing label. Claims that any specific broker "avoids tax" are legally spurious.
+### 2.5 Foreign Exchange Valuation Rule (Section 9 Revenue Code)
+- Under Section 9 of the Thai Revenue Code and the Ministry of Finance / Revenue Department Notification on Exchange Rates:
+  - Conversion of foreign currency into Thai Baht for assessable income computation may utilize, subject to the applicable statutory context:
+    1. The daily exchange rate announced by a commercial bank established under Thai banking law; OR
+    2. The daily reference exchange rate announced by the Bank of Thailand (BOT).
+  - Under the statutory announcement, once a taxpayer selects an authorized exchange rate computation method, consistency must be maintained across tax years unless formal approval for method change is obtained.
+  - Hardcoding BOT reference rates as the sole canonical tax truth is legally ungrounded. The ledger must preserve the chosen method, exchange rate provider, rate type (e.g. buying telegraphic transfer vs reference rate), and effective date:
+    ```text
+    TAX_FX_METHOD = HUMAN_PROFESSIONAL_POLICY_REQUIRED
+    ```
 
 ---
 
@@ -89,12 +96,20 @@ class TaxEvidenceRecord:
     executed_price_usd: Decimal
     gross_amount_usd: Decimal
 
-    # Currency & BOT Exchange Rate Lineage
-    bot_reference_fx_rate: Decimal     # Bank of Thailand official daily counter rate
-    gross_amount_thb: Decimal          # gross_amount_usd * bot_reference_fx_rate
+    # Currency & Tax FX Lineage (Section 9 Revenue Code)
+    # TAX_FX_METHOD = HUMAN_PROFESSIONAL_POLICY_REQUIRED
+    tax_fx_method: str                 # BOT_REFERENCE or COMMERCIAL_BANK_DAILY
+    tax_fx_source: str                 # e.g. "BOT", "SCB", "KBANK", "BBL"
+    tax_fx_rate: Decimal               # Converted rate
+    tax_fx_rate_type: str              # REFERENCE, BUYING_TT, MID_RATE
+    tax_fx_effective_date: date
+    tax_fx_source_reference: str       # Link or publication identifier
+    gross_amount_thb: Decimal          # gross_amount_usd * tax_fx_rate
 
     # Realized Capital Gains (SELL events)
-    cost_basis_method: str             # FIFO / AVERAGE_COST
+    # TAX_COST_BASIS_METHOD = HUMAN_PROFESSIONAL_DETERMINATION_REQUIRED
+    # All underlying lot lineage preserved; method is an external accounting parameter
+    cost_basis_method: str             # e.g. "FIFO", "SPECIFIC_LOT", "AVERAGE"
     cost_basis_usd: Decimal
     realized_gain_loss_usd: Decimal
     realized_gain_loss_thb: Decimal
@@ -111,20 +126,38 @@ class TaxEvidenceRecord:
 
 ---
 
-## 4. Remittance Tracking & Matching Engine
+## 4. Remittance Evidence & Tracing Architecture
 
-The critical accounting challenge under Thai tax law is tracing whether remitted funds constitute:
-1. **Original Principal (Capital):** Repatriation of after-tax savings previously remitted abroad (non-taxable return of capital).
-2. **Realized Capital Gains / Offshore Profits:** Assessable income subject to Thai PIT.
+The statutory challenge under Thai tax guidelines is distinguishing between:
+1. **Original Principal (Capital):** Repatriation of after-tax personal savings previously remitted abroad (non-taxable return of capital).
+2. **Realized Foreign Income:** Offshore gains, dividends, or interest remitted to Thailand by a tax resident.
 
-The ACASH Tax Engine maintains an unbroken cash ledger separating **Deposited Principal** from **Realized Profit**:
-- When funds are remitted to Thailand, the engine supports both **Specific Identification** and **Pro-Rata Gain/Capital Matching**, allowing the operator and accountant to review the exact tax lot breakdown.
+### Legal Boundary Notice:
+The Thai Revenue Department has not published a binding, universal statutory formula mandating either "FIFO lot-matching" or "pro-rata gain-capital apportionment" for individual offshore equities. Encoding either method as legal ground truth violates ACASH research standards:
+```text
+TAX_COST_BASIS_METHOD            = HUMAN_PROFESSIONAL_DETERMINATION_REQUIRED
+TAX_REMITTANCE_CHARACTERIZATION  = HUMAN_PROFESSIONAL_REVIEW_REQUIRED
+```
+
+### `RemittanceEvidenceLink` Data Contract:
+Instead of making unilateral legal determinations, PPDS records an unbroken evidentiary link preserving:
+- Source brokerage and bank accounts.
+- Source cash deposit history (inbound principal).
+- Realized gains, losses, and cash dividend receipts.
+- Inter-broker and multi-currency transfers.
+- Actual quoted conversion rates and bank FX counter slips.
+- Repatriation timestamp, remittance destination, and receiving Thai bank statement hashes.
+
+This structured evidence enables certified public accountants and tax counsel to compute and justify alternative allocation views (e.g. principal-first, pro-rata, or specific identification) during tax filing preparation without destroying underlying lot lineage.
 
 ---
 
 ## 5. Verification Ledger
 
-- Requirements Scope: COMPLETE (2026 Thai RD Guidelines Ingested)
+- Requirements Scope: COMPLETE (Thai Revenue Code § 9 & § 41, Paw 161/2566, Paw 162/2566)
 - Legal Boundaries: NON-ADVISORY / EVIDENCE LEDGER ONLY
-- Statutory Basis: Section 41, Paw 161/2566, Paw 162/2566, US-Thai DTA
-- Status: `TAX_INTERPRETATION_REQUIRES_HUMAN/PROFESSIONAL_REVIEW = true`
+- Foreign Exchange Valuation: `TAX_FX_METHOD = HUMAN_PROFESSIONAL_POLICY_REQUIRED` (Commercial Bank vs BOT)
+- Cost Basis Status: `TAX_COST_BASIS_METHOD = HUMAN_PROFESSIONAL_DETERMINATION_REQUIRED` (Lot lineage preserved)
+- Remittance Tracing: `TAX_REMITTANCE_CHARACTERIZATION = HUMAN_PROFESSIONAL_REVIEW_REQUIRED`
+- Statutory Lineage: Section 41, Section 9, US-Thai DTA Article 10
+- Execution Status: STRICTLY $0.00 / NO REAL ORDERS

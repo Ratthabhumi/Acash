@@ -15,7 +15,7 @@ The **PPDS Data Contract** defines the canonical data transfer objects (DTOs) an
 ### Core Data Integrity Invariants:
 1. **Preserve Broker-Native Identifiers:** Never discard or overwrite custodian order IDs, execution IDs, or transaction numbers. Every domain record must retain a direct pointer to its raw broker source payload.
 2. **Double-Entry Financial Discipline:** Every cash movement, trade execution, dividend payment, and fee deduction must balance across asset and cash accounts.
-3. **Multi-Currency Purity:** Balances and transactions are stored in their native currency (`USD`, `THB`, `EUR`) alongside an authoritative reference exchange rate from the Bank of Thailand (BOT). Never store single un-attributed converted values.
+3. **Multi-Currency Purity:** Balances and transactions are stored in their native currency (`USD`, `THB`, `EUR`) alongside an authoritative exchange rate lineage (e.g. Bank of Thailand or Commercial Bank Daily Rate under Section 9 of the Thai Revenue Code). Never store single un-attributed converted values.
 
 ---
 
@@ -72,7 +72,9 @@ class PositionLot:
     quantity: Decimal
     cost_basis_per_unit_native: Decimal
     cost_basis_native_currency: str
-    fx_rate_to_thb_at_acquisition: Decimal
+    tax_fx_method: str                 # BOT_REFERENCE or COMMERCIAL_BANK_DAILY
+    tax_fx_rate: Decimal
+    tax_fx_source: str                 # e.g. "BOT", "SCB"
     source_fill_id: str
 
 @dataclass(frozen=True)
@@ -153,8 +155,10 @@ class Dividend:
     gross_amount_usd: Decimal
     withholding_tax_usd: Decimal
     net_amount_usd: Decimal
-    withholding_tax_rate: Decimal      # e.g. 0.1500 (15%)
-    bot_fx_rate_at_payment: Decimal
+    withholding_tax_rate: Decimal      # e.g. 0.1500 (15% per DTA Art. 10 via W-8BEN)
+    tax_fx_method: str                 # BOT_REFERENCE or COMMERCIAL_BANK_DAILY
+    tax_fx_rate: Decimal
+    tax_fx_source: str                 # e.g. "BOT", "SCB"
     net_amount_thb: Decimal
     official_sponsor_source: str       # BLACKROCK_ISHARES_OFFICIAL, etc.
 
@@ -192,7 +196,7 @@ class CapitalTransfer:
     transfer_rationale: str
 
 # ==============================================================================
-# 6. Decision Support Output
+# 6. Decision Support Output (Decoupled Investment vs Trading)
 # ==============================================================================
 
 class RecommendationState(Enum):
@@ -203,15 +207,40 @@ class RecommendationState(Enum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 @dataclass(frozen=True)
-class RecommendationSnapshot:
+class InvestmentRecommendationDTO:
+    """
+    Long-term investment recommendation envelope.
+    Does NOT use short-term price stops. Governed by fundamental review and thesis criteria.
+    """
     recommendation_id: str
     book_id: str
     symbol: str
     state: RecommendationState
     evaluation_timestamp_utc: datetime
-    target_entry_price: Optional[Decimal]
-    structural_invalidation_stop: Optional[Decimal]
-    recommended_dollar_risk: Optional[Decimal]
+    thesis_statement: str
+    thesis_review_conditions: List[str]
+    target_allocation_envelope_pct: Decimal
+    valuation_evidence_digest: str
+    portfolio_concentration_impact: Decimal
+    target_custodian: str
+    is_reviewed_by_human: bool = False
+
+@dataclass(frozen=True)
+class TradingRecommendationDTO:
+    """
+    Tactical trading recommendation envelope.
+    Governed by explicit structural price invalidation and dollar risk limits.
+    """
+    recommendation_id: str
+    book_id: str
+    symbol: str
+    state: RecommendationState
+    evaluation_timestamp_utc: datetime
+    entry_level: Decimal
+    price_invalidation_stop: Decimal
+    stop_distance: Decimal
+    recommended_dollar_risk: Decimal
+    target_time_horizon: str
     target_broker_code: str
     evidence_reference_digest: str
     is_reviewed_by_human: bool = False
@@ -219,17 +248,24 @@ class RecommendationSnapshot:
 
 ---
 
-## 3. Storage & Cryptographic Lineage
+## 3. Storage & Cryptographic Lineage (Target Design Invariants)
 
-In alignment with existing ACASH runtime standards:
-- All domain DTOs serialize deterministically via byte-exact JSON schema.
-- Data records in production are indexed by their SHA-256 state hashes, ensuring that any external modification or statement tampering breaks the lineage chain.
+> **STATUS NOTICE:**
+> ```text
+> PPDS_RUNTIME_IMPLEMENTATION = NOT_AUTHORIZED / NOT_IMPLEMENTED
+> ```
+> All data contracts in this document represent **DRAFT ARCHITECTURAL SPECIFICATIONS** and target invariants. No runtime database, serialization engine, or active background process is currently authorized or implemented.
+
+- **Target Invariant:** All domain DTOs will serialize deterministically via byte-exact JSON schemas.
+- **Target Invariant:** In production implementation, records will be indexed by their SHA-256 state hashes, ensuring that external modifications break cryptographic lineage.
+- **Target Invariant:** Execution capabilities remain strictly fail-closed at the interface layer.
 
 ---
 
 ## 4. Verification Ledger
 
-- Domain Model Scope: COMPLETE (20 Canonical Entities Defined)
-- Multi-Currency Support: PRESERVED
-- Broker Lineage: UNBROKEN
-- Execution Gating: INHERENTLY FAIL-CLOSED
+- Domain Model Scope: DRAFT SPECIFICATION (21 Canonical Entities Defined)
+- Multi-Currency Support: PRESERVED (Section 9 Flexible Tax FX Schema)
+- Recommendation Schemas: DECOUPLED (Investment Thesis vs Trading Invalidation)
+- Runtime Implementation Status: `NOT_AUTHORIZED / NOT_IMPLEMENTED`
+- Execution Gating: STRICT FAIL-CLOSED DESIGN ($0.00 / NO REAL ORDERS)

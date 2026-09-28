@@ -49,20 +49,24 @@ PPDS **IS**:
 PPDS enforces a strict architectural and accounting firewall between **Investment** and **Trading**:
 
 ### 2.1 The Investment Book
-- **Objective:** Generational wealth creation, broad risk-premia harvesting, and long-horizon compounding with minimal portfolio turnover.
-- **Horizon:** 3 to 10+ years.
-- **Benchmark:** Broad market index (e.g. MSCI ACWI, S&P 500, or a blended 80/20 equity/bond benchmark).
-- **Sub-Books:**
-  1. **Core / DCA:** Market-cap and factor index ETFs (e.g. `VOO`, `QQQM`). Low turnover, scheduled accumulation, automated cash allocation rules.
-  2. **Satellite / Conviction:** High-quality individual businesses with durable competitive advantages (e.g. `TSM`, `PLTR`, `NOW`). Each holding requires an explicit, auditable investment thesis.
-  3. **Speculative / Thematic:** High-uncertainty, convex emerging themes (e.g. Space tech: `RKLB`, `RDW`, `SATL`). Governed by a strict aggregate capital ceiling to prevent speculative drift.
+- **Objective (`CANDIDATE_POLICY_UNRATIFIED`):** Generational wealth creation, broad risk-premia harvesting, and long-horizon compounding with minimal portfolio turnover.
+- **Horizon (`CANDIDATE_POLICY_UNRATIFIED`):** 3 to 10+ years (subject to operator ratification).
+- **Benchmark (`CANDIDATE_POLICY_UNRATIFIED`):** Broad market index (e.g. MSCI ACWI, S&P 500, or a blended 80/20 equity/bond benchmark).
+- **Sub-Books & Illustrative Existing Holdings (`BOOK_ASSIGNMENT_UNRATIFIED`):**
+  1. **Core / DCA:** Market-cap and factor index ETFs. Illustrative observed holdings: `VOO`, `QQQM` (`ILLUSTRATIVE_EXISTING_HOLDING`). Low turnover, scheduled accumulation, automated cash allocation rules.
+  2. **Satellite / Conviction:** Focused corporate equity positions. Illustrative observed holdings: `TSM`, `PLTR`, `NOW` (`ILLUSTRATIVE_EXISTING_HOLDING`). Every allocation requires an explicit, audited investment thesis prior to formal book ratification.
+  3. **Speculative / Thematic:** High-uncertainty emerging themes. Illustrative observed holdings: `RKLB`, `RDW`, `SATL` (`ILLUSTRATIVE_EXISTING_HOLDING`). Governed by a strict aggregate capital ceiling to prevent speculative drift.
 
 ### 2.2 The Trading Book
-- **Objective:** Exploitation of short-to-medium horizon market microstructure inefficiencies, momentum, volatility dislocations, and macro trends.
-- **Horizon:** Intraday to several weeks.
-- **Benchmark:** Cash hurdle rate (SOFR / Risk-Free Yield) or zero benchmark (absolute return).
+- **Objective & Strategy Authority:** The Trading Book may host only separately researched, validated, and formally authorized strategies. The system does not assume innate market edge. Current state:
+  ```text
+  NO_AUTHORIZED_TRADING_STRATEGY
+  NO_TRADE
+  ```
+- **Horizon (`CANDIDATE_POLICY_UNRATIFIED`):** Intraday to several weeks.
+- **Benchmark (`CANDIDATE_POLICY_UNRATIFIED`):** Cash hurdle rate (SOFR / Risk-Free Yield) or zero benchmark (absolute return).
 - **Sub-Books:**
-  1. **Equity Tactical / Sniper:** Event-driven equity catalysts, earnings reactions, breakout setups. Executed via API-enabled equity accounts (Webull Thailand candidate).
+  1. **Equity Tactical / Sniper:** Event-driven equity catalysts and breakout setups. Candidate execution venue: Webull Thailand (API integration gated).
   2. **Futures / Macro:** Direct macro exposure hedging and directional trades utilizing regulated CME Micro contracts (`MNQ`, `MES`, `MGC`, `MCL`, `M6E`).
 
 ### 2.3 The Non-Negotiable Book Firewall
@@ -134,14 +138,17 @@ The PPDS Risk Engine maintains real-time consolidated oversight across all custo
 
 PPDS decouples portfolio decision logic from custodian execution APIs:
 1. **Dime! Adapter:** Custodian for existing US long-term equities and FCD cash. Operates initially via statement ingestion and manual reconciliation.
-2. **Webull Thailand Adapter:** Target candidate for Equity Tactical / Sniper book. Utilizes the official Webull Open API for real-time portfolio telemetry, positions, and fills (read-only in R0).
+2. **Webull Thailand Adapter:** Target candidate for Equity Tactical / Sniper book. Utilizes official HTTPS REST queries, gRPC trade event streaming, and WebSocket market data (read-only in R0; credential integration gated).
 3. **Futures FCM Adapter:** Future interface to regulated CME clearing broker (IBKR / NinjaTrader candidate).
 
 ---
 
 ## 6. Verification Ledger
 
-- Architecture Status: DRAFTED (V1 Complete)
-- Governance Separation: STRICT FIREWALL DEFINED
+- Architecture Status: DRAFT SPECIFICATION (V1 Complete)
+- Governance Separation: STRICT FIREWALL CODIFIED
 - Decision Model: EVIDENCE-FIRST / HUMAN-IN-THE-LOOP
+- Holdings Classification: `ILLUSTRATIVE_EXISTING_HOLDING` / `BOOK_ASSIGNMENT_UNRATIFIED`
+- Trading Strategy Authority: `NO_AUTHORIZED_TRADING_STRATEGY` (NO_TRADE)
+- Runtime Implementation Status: `NOT_AUTHORIZED / NOT_IMPLEMENTED`
 - Execution Authority: STRICTLY $0.00 / NO REAL ORDERS

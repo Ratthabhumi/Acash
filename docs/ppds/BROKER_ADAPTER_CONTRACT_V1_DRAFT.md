@@ -2,9 +2,14 @@
 
 **Document:** `docs/ppds/BROKER_ADAPTER_CONTRACT_V1_DRAFT.md`
 **System Module:** Broker Abstraction & Execution Gateway
-**Stage:** R0 Software Contract Draft
+**Stage:** R0 Architectural Contract Specification (Draft)
+**Runtime Implementation Status:** `PPDS_RUNTIME_IMPLEMENTATION = NOT_AUTHORIZED / NOT_IMPLEMENTED`
 **Date Context:** 2026-09-28
 **Governance Authority:** `docs/governance/OPERATOR_DECISION_CHARTER_V1.md` (e787cda) — Principles 3, 4, 11
+
+> [!IMPORTANT]
+> **ARCHITECTURAL DRAFT ONLY:**
+> This document specifies target interface signatures and design invariants. No concrete broker adapter or execution code is implemented or authorized. Zero broker credentials exist or are tested in this task.
 
 ---
 
@@ -12,9 +17,9 @@
 
 To prevent architectural lock-in to any single custodian or execution venue, PPDS decouples all portfolio analytics, risk calculations, and tax ledger records from broker-native API idiosyncrasies.
 
-The **`BrokerAdapter`** interface establishes a standardized protocol for telemetry ingestion and reconciliation across disparate brokers (e.g. Dime! KKP, Webull Thailand, Interactive Brokers, CME FCMs).
+The candidate **`BrokerAdapter`** interface establishes a standardized protocol for telemetry ingestion and reconciliation across disparate brokers (e.g. Dime! KKP, Webull Securities Thailand, Interactive Brokers, CME FCMs).
 
-### Critical Safety Invariant
+### Critical Safety Invariant (Target Design):
 All execution-related capability flags (`CAN_SUBMIT_ORDER`, `CAN_REPLACE_ORDER`, `CAN_CANCEL_ORDER`) **default strictly to `false`** across all adapters in PPDS R0. The software interface enforces an immutable read-only firewall at the software layer.
 
 ---
@@ -50,7 +55,7 @@ class AdapterCapabilityManifest:
     adapter_name: str
     broker_code: str
     capabilities: frozenset[BrokerCapability]
-    is_read_only: bool = True  # Strict invariant for PPDS R0
+    is_read_only: bool = True  # Strict target invariant for PPDS R0
 ```
 
 ---
@@ -65,7 +70,7 @@ from decimal import Decimal
 
 class BrokerAdapter(ABC):
     """
-    Standardized sovereign broker adapter contract.
+    Standardized sovereign broker adapter contract (Target Architecture).
     Decouples custodian communication from ACASH portfolio logic.
     """
 
@@ -142,7 +147,7 @@ class BrokerAdapter(ABC):
         """Retrieve active real-time and delayed market data subscriptions."""
         pass
 
-    # Execution Boundary (Fail-Closed Default in R0)
+    # Execution Boundary (Fail-Closed Default in R0 Target Architecture)
     def submit_order(self, order_intent: "OrderIntentDTO") -> "OrderResultDTO":
         raise PermissionError("ORDER_WRITING_DISABLED: PPDS R0 is strictly read-only.")
 
@@ -152,39 +157,47 @@ class BrokerAdapter(ABC):
 
 ---
 
-## 4. Planned Concrete Adapters
+## 4. Planned Candidate Adapters
 
 ### 4.1 `DimeAdapter` (File / Statement Ingestion)
 - **Primary Transport:** Secure local parser ingesting official PDF statements, CSV trade confirmations, and exported ledger tables.
 - **Capabilities:**
   - `CAN_READ_ACCOUNT`, `CAN_READ_POSITIONS`, `CAN_READ_TRANSACTIONS`, `CAN_READ_DIVIDENDS`, `CAN_READ_FX`.
   - Execution capabilities: `NONE` (Zero API order entry).
-- **Function:** Reconciles long-term US stock holdings (`QQQM`, `VOO`, `PLTR`, `TSM`) and Dime! FCD balances.
+- **Function:** Reconciles US equity holdings and cash/FCD deposit accounts.
 
-### 4.2 `WebullAdapter` (Open API)
-- **Primary Transport:** HTTPS REST + WebSocket connection to Webull Securities (Thailand) Open API.
-- **Capabilities (Targeted for R1):**
-  - `CAN_READ_ACCOUNT`, `CAN_READ_POSITIONS`, `CAN_READ_ORDERS`, `CAN_READ_FILLS`, `CAN_READ_MARKET_DATA`.
-  - Execution capabilities: Strictly gated to `false` until security review confirms read-only credential isolation.
-- **Function:** Real-time telemetry for the Equity Tactical / Sniper Trading Book.
+### 4.2 `WebullAdapter` (Open API Telemetry)
+- **Primary Transport:**
+  - REST HTTPS: Account inquiry, order inquiry, historical executions.
+  - Server-streaming gRPC: Real-time trade event streaming (`TradeEvent` notifications).
+  - WebSocket: Market data streaming (independent entitlement required).
+- **Security & Authorization Status:**
+  - `WEBULL_BROKER_SIDE_READ_ONLY_KEY = NOT_PRIMARY_SOURCE_CONFIRMED`.
+  - `WEBULL_READ_ONLY_INTEGRATION = BLOCKED_PENDING_SECURITY_DESIGN`.
+  - `WEBULL_UAT = DOCUMENTED_NOT_AUTHORIZED_FOR_USE`.
+- **Capabilities (Proposed Target):**
+  - Read telemetry only (`CAN_READ_ACCOUNT`, `CAN_READ_POSITIONS`, `CAN_READ_ORDERS`, `CAN_READ_FILLS`).
+  - Order writing strictly disabled.
 
 ### 4.3 `FuturesBrokerAdapter` (FCM Integration)
-- **Primary Transport:** FIX / Web API to regulated CME clearing broker (IBKR / NinjaTrader candidate).
-- **Capabilities:**
+- **Primary Transport:** FIX / Web API / Gateway socket to regulated CME clearing broker (IBKR candidate).
+- **Capabilities (Proposed Target):**
   - `CAN_READ_POSITIONS`, `CAN_READ_FILLS`, `CAN_READ_CASH`, `CAN_READ_FEES`.
 - **Function:** Micro futures position tracking, mark-to-market reconciliation, and margin utilization telemetry.
 
 ---
 
-## 5. Security & Fail-Closed Invariants
+## 5. Security & Fail-Closed Invariants (Target Architecture)
 
 1. **Zero Hardcoded Credentials:** Adapters must ingest credentials via OS-level secure credential stores (e.g. Windows DPAPI, system environment variables), never from source files or git history.
-2. **Read-Only Verification Handshake:** Prior to initializing an API adapter, a self-test handshake must verify that the provided credential lacks order-placement permissions. If order submission is technically permitted by the API key, the adapter raises `SecurityContractError` and halts.
+2. **Read-Only Verification Handshake:** Prior to initializing an API adapter, a self-test handshake must verify that the provided credential lacks order-placement permissions. If order submission is technically permitted by the API key and no broker-side constraint exists, the adapter raises `SecurityContractError` and halts.
 
 ---
 
 ## 6. Verification Ledger
 
-- Contract Specification: COMPLETE
+- Contract Specification: COMPLETE (Draft Signatures)
+- Implementation Truth: `PPDS_RUNTIME_IMPLEMENTATION = NOT_AUTHORIZED / NOT_IMPLEMENTED`
 - Adapter Decoupling: BROKER-NEUTRAL
-- Execution Gating: STRICT FAIL-CLOSED (Order placement hard-disabled)
+- Execution Gating: STRICT FAIL-CLOSED (Order placement hard-disabled in design)
+- Security Boundary: Integration blocked pending broker-side read-only key confirmation

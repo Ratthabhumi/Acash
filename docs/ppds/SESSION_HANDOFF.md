@@ -164,12 +164,13 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 3. `docs/ppds/PPDS_ARCHITECTURE_V1_DRAFT.md` (System architecture, multi-book model, state machine)
 4. `docs/ppds/PERSONAL_CAPITAL_GOVERNANCE_V1_DRAFT.md` (Capital governance, human input ledger)
 5. `docs/ppds/BROKER_ADAPTER_CONTRACT_V1_DRAFT.md` (Broker-neutral software interface, read-only gating)
-6. `docs/ppds/DIME_2026_EXECUTION_AND_FEE_MODEL.md` (Dime fee schedule, Club Level 1, friction waterfall)
+6. `docs/ppds/DIME_2026_EXECUTION_AND_FEE_MODEL.md` (Dime fee schedule, Club Level 1, sliding commission, friction waterfall)
 7. `docs/ppds/WEBULL_OPEN_API_FEASIBILITY_R0.md` (Webull Thailand Open API study, credential security)
 8. `docs/ppds/FUTURES_BROKER_DUE_DILIGENCE_R0.md` (4-broker due diligence matrix, IBKR vs NinjaTrader)
 9. `docs/ppds/FUTURES_INSTRUMENT_UNIVERSE_R0.md` (CME Micro specs, roll calendar, delivery prevention)
-10. `docs/ppds/THAI_TAX_LEDGER_REQUIREMENTS_2026.md` (Thai RD 2026 guidelines, remittance engine)
+10. `docs/ppds/THAI_TAX_LEDGER_REQUIREMENTS_2026.md` (Thai RD 2026 guidelines, remittance engine, FX options)
 11. `docs/ppds/PPDS_DATA_CONTRACT_V1_DRAFT.md` (Canonical domain entities, DTOs, double-entry schemas)
+12. `docs/ppds/PPDS_R0_INDEPENDENT_EVIDENCE_AUDIT_20260928.md` (Independent evidence & semantic boundary audit)
 
 ---
 
@@ -177,7 +178,9 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 
 - **Branch Name:** `research/ppds-r0-capital-broker-architecture-20260928`
 - **Initial Handoff Commit SHA:** `f59b0d4578eafc69a52309c3de952c0e74fd95c4`
-- **Final R0 Research Commit SHA:** *(Recorded upon final commit)*
+- **Initial R0 Research Commit SHA:** `5f99dedca90ef0b8f815402364e763507c3dfefd`
+- **Corrective Commit Pass #1 SHA:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
+- **Hardening Pass #2 Parent/Start HEAD:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
 - **Base Tree:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2` (`origin/main`)
 - **Merge Status:** **HOLD** (Zero PRs, zero merges into `main`).
 
@@ -193,10 +196,10 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 
 ---
 
-## 15. R0 Corrective Audit — 2026-09-28
+## 15. R0 Corrective Audit Pass #1 — 2026-09-28
 
 - **Starting Branch HEAD:** `5f99dedca90ef0b8f815402364e763507c3dfefd`
-- **Corrective Commit SHA:** *(Recorded upon final commit)*
+- **Corrective Commit SHA:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
 - **Exact Corrected Claims & Sourced Revisions:**
   1. **SEC Section 31 Fee:** Updated to statutory rate of **0.00206%** (USD 20.60 per USD 1,000,000 covered sales) effective 2026-04-04 per SEC Fee Rate Advisory FY2026 (Order 2026-2) and verified on Dime! official rate disclosures. Removed stale FY2025 rate (~0.00278%).
   2. **FINRA TAF Fee (Date-Effective Policy Model):** Codified as a date-effective schedule rather than a static constant:
@@ -213,25 +216,59 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
      - AMP Futures = `REDUCED_FIT_CANDIDATE` (restricted client-side risk boundaries).
      - Ironbeam = `REDUCED_FIT_CANDIDATE` (prohibitive recurring developer API fee for low-volume/shadow phases; not terminal disqualification).
      - Overall: `FUTURES_BROKER = CANDIDATE_IDENTIFIED`. Zero capital authorized.
-- **Remaining Unresolved Claims:**
-  - `DIME_FCD_VS_DIME_USD`: Needs primary source reconciliation.
-  - `DIME_CAT_FEE`: Source conflict ($0.000046 vs $0.000003).
-  - `THAI_RESIDENT_NINJATRADER`: Not confirmed by primary source.
-  - `WEBULL_READ_ONLY_INTEGRATION`: Blocked pending credential security architecture.
-  - `PERSONAL_CAPITAL_ALLOCATION_POLICY`: Unresolved pending operator inputs.
-- **Final Governance & State Summary:**
+
+---
+
+## 16. Independent Evidence Hardening Pass #2 — 2026-09-28
+
+- **Starting Branch HEAD:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
+- **Parent Commit:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
+- **Audit Reference:** `docs/ppds/PPDS_R0_INDEPENDENT_EVIDENCE_AUDIT_20260928.md`
+- **Exact Hardened Boundaries & Sourced Revisions:**
+  1. **Dime FCD vs Dime USD Reconciled:** Replaced `SOURCE_CONFLICT` with `RESOLVED_DISTINCT_PRODUCTS`. Verified from official Dime documentation that Dime! FCD - USD is a bank foreign currency deposit account (KKP Bank, deposit interest, gold/US assets), whereas Dime! USD is a securities trading cash balance. Promotional eligibility variations across campaigns reflect distinct products, not a factual conflict.
+  2. **Dime Sliding Commission 2026:** Modeled dynamic account-aware fee schedule per official Dime Club 2026 terms. US stock buy commissions are determined by prior-month cumulative trading value:
+     - $\le$ THB 5,000,000: 0.15%
+     - THB 5,000,001 – 20,000,000: 0.10%
+     - > THB 20,000,000: 0.05%
+     - US stock sell commission remains 0.15%; campaign benefits effective through December 2026.
+     - Classified as `DIME_COMMISSION_MODEL = EFFECTIVE_DATED_ACCOUNT_SPECIFIC` and `DIME_EFFECTIVE_COMMISSION_RATE = ACCOUNT_STATE_REQUIRED`.
+  3. **Dime Execution Assumptions Demoted:** Removed false precision from execution friction estimates (VOO 1-2 bps, small thematic 50-100 bps, FX drag 10-25 bps). Reclassified as `MODEL_ASSUMPTION_NOT_CALIBRATED`. Parameterized execution model without uncensored trend forecasts.
+  4. **Webull Thailand Authentication & Transport:** Corrected authentication terminology to official App Key/App Secret, signed requests (version/endpoint dependent), access tokens (not JWT), and initial production 2FA. Corrected transport architecture: REST endpoints (`/trading/accounts/list`, `/trading/orders/...`), server-streaming **gRPC** for trade event updates, and WebSocket for market data. Codified separate market-data entitlement requirements.
+  5. **Webull Read-Only Key & UAT:** Confirmed `WEBULL_BROKER_SIDE_READ_ONLY_KEY = NOT_PRIMARY_SOURCE_CONFIRMED`; retained `WEBULL_READ_ONLY_INTEGRATION = BLOCKED_PENDING_SECURITY_DESIGN`. Documented Webull Thailand UAT environment but classified `WEBULL_UAT = DOCUMENTED_NOT_AUTHORIZED_FOR_USE`.
+  6. **Thai Tax Valuation Options:** Removed BOT-only hardcoding. Codified statutory options under Thai Revenue Code Section 9 and MOF notification: commercial bank daily rate OR Bank of Thailand daily reference rate, subject to consistency. Classified `TAX_FX_METHOD = HUMAN_PROFESSIONAL_POLICY_REQUIRED`.
+  7. **Tax Cost Basis & Remittance Matching:** Decoupled FIFO / average cost assertions from statutory foreign equity tax law (`TAX_COST_BASIS_METHOD = HUMAN_PROFESSIONAL_DETERMINATION_REQUIRED`; full lot lineage preserved). Replaced legal remittance claims with `RemittanceEvidenceLink` preserving empirical cash/lot events without asserting binding legal truth (`TAX_REMITTANCE_CHARACTERIZATION = HUMAN_PROFESSIONAL_REVIEW_REQUIRED`).
+  8. **Data Contract Design Intent vs Runtime Truth:** Clarified that serialization, hash chains, and fail-closed runtime behaviors are design invariants, not implemented code (`PPDS_RUNTIME_IMPLEMENTATION = NOT_AUTHORIZED / NOT_IMPLEMENTED`). Split `RecommendationSnapshot` into `InvestmentRecommendationDTO` (thesis & fundamental reviews, no price stops) and `TradingRecommendationDTO` (entry, price stops, dollar risk).
+  9. **Portfolio Classification Neutrality:** Reclassified existing portfolio holdings (VOO, QQQM, TSM, PLTR, NOW, RKLB, RDW, SATL) as `ILLUSTRATIVE_EXISTING_HOLDING` / `BOOK_ASSIGNMENT_UNRATIFIED`. Labeled multi-year horizons and benchmarks as `CANDIDATE_POLICY_UNRATIFIED`. Enforced baseline `NO_AUTHORIZED_TRADING_STRATEGY` / `NO_TRADE` for the Trading Book.
+  10. **Futures Market Structure & Settlement:** Rewrote CFD comparison to objective market-structure differences (clearing house vs bilateral OTC; broker credit/custody risk acknowledged). Reverified CME micro contract specifications: `MNQ`, `MES`, and `MCL` are **Financial (Cash)** settled; `MGC` is Physical Delivery (COMEX); `M6E` is Deliverable Currency (CME FX).
+  11. **Futures Delivery Buffer & Roll Conventions:** Separated CME exchange notice/delivery rules from proposed ACASH safety buffers (`DELIVERY_RISK_BUFFER_POLICY = UNRATIFIED`). Decoupled "second Thursday" volume convention from continuous roll policy (`FUTURES_CONTINUOUS_ROLL_POLICY = UNRESOLVED`).
+  12. **Futures Broker Costs & Margins:** Replaced cross-broker all-in costs with `ALL_IN_COST = NOT_NORMALIZED` and established standardized round-trip comparison template. Classified broker day margins as `MARGIN_STATUS = VOLATILE_EXTERNAL_PARAMETER` (sizing strictly decoupled from day-margin). Classified `IBKR_LOCAL_THAI_BANK_RAIL = NOT_CONFIRMED`. Clarified `THAI_RESIDENT_AMP = ELIGIBLE_TO_APPLY_SUBJECT_TO_COMPLIANCE`. Removed marketing adjectives.
+- **Final Classification State:**
 ```text
-PPDS_R0_RESEARCH                  = CORRECTED_PENDING_INDEPENDENT_AUDIT
-IBKR                              = LEADING_CANDIDATE
-FUTURES_BROKER                    = CANDIDATE_IDENTIFIED
-THAI_RESIDENT_NINJATRADER         = NOT_CONFIRMED
-DIME_CAT_FEE                      = SOURCE_CONFLICT
-WEBULL_READ_ONLY_INTEGRATION      = BLOCKED_PENDING_SECURITY_DESIGN
-REAL_ORDER_AUTHORITY              = NONE
-PAPER_TRADING_AUTHORITY           = NONE
-LIVE_TRADING_AUTHORITY            = NONE
-CAPITAL_AUTHORITY                 = $0.00
-MAIN_MODIFIED                     = false
-HYP011_EXECUTION_PATH_MODIFIED    = false
-MERGE_STATUS                      = HOLD
+PPDS_R0_EVIDENCE_AUDIT             = PASS_WITH_UNRESOLVED_GATES
+PPDS_RUNTIME_IMPLEMENTATION        = NOT_AUTHORIZED
+PERSONAL_CAPITAL_ALLOCATION_POLICY = UNRESOLVED
+CURRENT_HOLDINGS_BOOK_ASSIGNMENT   = UNRATIFIED
+DIME_FCD_VS_DIME_USD               = RESOLVED_DISTINCT_PRODUCTS
+DIME_CAT_FEE                       = SOURCE_CONFLICT
+DIME_COMMISSION_MODEL              = EFFECTIVE_DATED_ACCOUNT_SPECIFIC
+DIME_EXECUTION_SPREAD_MODEL        = NOT_CALIBRATED
+WEBULL_BROKER_SIDE_READ_ONLY_KEY   = NOT_PRIMARY_SOURCE_CONFIRMED
+WEBULL_READ_ONLY_INTEGRATION       = BLOCKED_PENDING_SECURITY_DESIGN
+WEBULL_UAT                         = DOCUMENTED_NOT_AUTHORIZED_FOR_USE
+TAX_FX_METHOD                      = HUMAN_PROFESSIONAL_POLICY_REQUIRED
+TAX_COST_BASIS_METHOD              = HUMAN_PROFESSIONAL_DETERMINATION_REQUIRED
+TAX_REMITTANCE_CHARACTERIZATION    = HUMAN_PROFESSIONAL_REVIEW_REQUIRED
+FUTURES_CONTINUOUS_ROLL_POLICY     = UNRESOLVED
+DELIVERY_RISK_BUFFER_POLICY        = UNRATIFIED
+FUTURES_BROKER                     = CANDIDATE_IDENTIFIED
+IBKR                               = LEADING_CANDIDATE
+THAI_RESIDENT_NINJATRADER          = NOT_CONFIRMED
+REAL_ORDER_AUTHORITY               = NONE
+PAPER_TRADING_AUTHORITY            = NONE
+LIVE_TRADING_AUTHORITY             = NONE
+CAPITAL_AUTHORITY                  = $0.00
+MAIN_MODIFIED                      = false
+HYP011_EXECUTION_PATH_MODIFIED     = false
+HOMELAB_TOUCHED                    = false
+MERGE_STATUS                       = HOLD
 ```
