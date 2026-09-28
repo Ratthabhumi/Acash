@@ -181,6 +181,7 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 - **Initial R0 Research Commit SHA:** `5f99dedca90ef0b8f815402364e763507c3dfefd`
 - **Corrective Commit Pass #1 SHA:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
 - **Hardening Pass #2 Parent/Start HEAD:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
+- **Hardening Pass #2 Commit SHA:** `cd45b6afe8450b485bd6615eca597e2b0514ca55`
 - **Base Tree:** `d9608c0a2353bd5ed41943e5fb893ef9648089d2` (`origin/main`)
 - **Merge Status:** **HOLD** (Zero PRs, zero merges into `main`).
 
@@ -223,6 +224,7 @@ All files authored under `docs/ppds/` on isolated branch `research/ppds-r0-capit
 
 - **Starting Branch HEAD:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
 - **Parent Commit:** `59a8fb2c3b8e672f3bd036674cfb53a731fd2ff7`
+- **Hardening Commit SHA:** `cd45b6afe8450b485bd6615eca597e2b0514ca55`
 - **Audit Reference:** `docs/ppds/PPDS_R0_INDEPENDENT_EVIDENCE_AUDIT_20260928.md`
 - **Exact Hardened Boundaries & Sourced Revisions:**
   1. **Dime FCD vs Dime USD Reconciled:** Replaced `SOURCE_CONFLICT` with `RESOLVED_DISTINCT_PRODUCTS`. Verified from official Dime documentation that Dime! FCD - USD is a bank foreign currency deposit account (KKP Bank, deposit interest, gold/US assets), whereas Dime! USD is a securities trading cash balance. Promotional eligibility variations across campaigns reflect distinct products, not a factual conflict.
