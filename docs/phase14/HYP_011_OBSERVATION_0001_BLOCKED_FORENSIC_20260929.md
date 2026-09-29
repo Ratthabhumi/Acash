@@ -147,22 +147,68 @@ RECOVERY_POLICY = HUMAN_ADJUDICATION_REQUIRED
 
 ---
 
-## 6. Observation Ordinal Semantics
+## 6. Observation Ordinal Semantics & Human Adjudication
 
-A governance ambiguity exists regarding ordinal numbering:
-1. **Interpretation A (Attempt Ordinal):** Ordinal 1 was dispatched and consumed by the failed attempt; the next dispatch requires ordinal 2 (`AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0002`).
-2. **Interpretation B (Committed Observation Ordinal):** Ordinal corresponds to `len(observed_sessions) + 1`; since 0 observations were committed, the first successful observation remains ordinal 1.
-
+Human governance adjudication for recovery ratified:
 ```text
-OBSERVATION_ORDINAL_RECOVERY = HUMAN_ADJUDICATION_REQUIRED
+RECOVERY_POLICY = OPTION_B_ADDITIVE_OPERATIONAL_REACTIVATION
+OBSERVATION_ORDINAL_SEMANTICS = COMMITTED_OBSERVATION_ORDINAL
 ```
+
+Therefore:
+- `OBSERVATION_ORDINAL = 1` (reflects committed count of 0 observations + 1; `S1_PROGRESS = 0/20`).
+- Operational attempt history is tracked separately:
+  - `FAILED_DISPATCH_ATTEMPT = 1` (Session 2026-09-28)
+  - `NEXT_DISPATCH_ATTEMPT = 2`
+- Post-recovery authorization tokens explicitly bind both dimensions:
+  `AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001_ATTEMPT_0002`
+- Classification:
+  `FAILED_DISPATCH_2026_09_28 = BLOCKED_PROVIDER_ACCESS_BEFORE_OBSERVATION_COMMIT`
+  `OBSERVATION_COMMIT_COUNT = 0`
 
 ---
 
-## 7. Candidate Operational Schedule (Document Only)
+## 7. Candidate Operational Schedule & Derivation
 
-No changes have been or will be made to systemd on the execution host as part of this branch. For future human planning:
-- Regular session close: `20:00:00 UTC` (`03:00:00 ICT`).
-- Provider eligibility boundary (15-min delay): `20:15:00 UTC` (`03:15:00 ICT`).
-- Recommended safe dispatch schedule (`CANDIDATE_OPERATIONAL_SCHEDULE`):
-  `20:20:00 UTC` (`03:20:00 ICT`), providing a 5-minute operational safety buffer beyond provider availability.
+No changes have been or will be made to systemd on the execution host as part of this branch.
+Operational scheduling must **never** be treated as a universal fixed UTC timer (such as `20:20:00 UTC`), because US Daylight Saving Time changes the NYSE UTC close time (20:00 UTC under DST vs 21:00 UTC under standard time) and early close sessions conclude earlier.
+
+Canonical schedule derivation formula:
+```text
+CANDIDATE_SCHEDULE_DERIVATION = CALENDAR_CLOSE_PLUS_PROVIDER_DELAY_PLUS_MARGIN
+schedule_utc = calendar.get_session(session).close_utc + provider_delay + operational_margin
+```
+
+Where:
+- `provider_delay`: 15 minutes (`ALPACA_SIP_DELAY`).
+- `operational_margin`: 5 minutes recommended buffer.
+- `20:20:00 UTC`: Illustrative instance only for regular September 2026 DST sessions (close 20:00 UTC + 15m delay + 5m buffer).
+
+---
+
+## 8. Historical Timing Authority Supersession
+
+Existing historical governance and manifest documents state that observation eligibility begins strictly after market close. Those historical records remain immutable evidentiary artifacts.
+This recovery pass formally records an additive supersession:
+- **Historical Timing Rule:** `MARKET_CLOSE_ONLY`
+- **Superseded Operational Rule:** `MARKET_CLOSE + PROVIDER_ACCESS_DELAY + FAIL_CLOSED_BOUNDARY`
+
+Runtime execution uses the superseded rule strictly via Stage C recovery binding.
+
+---
+
+## 9. Forensic Audit Correction: No-Backfill Proof at Commit c6f65cf
+
+The initial verification test `test_5_no_retry_backfill_of_missed_prospective_session()` at commit `c6f65cfd` proved only that an attempt to record `2026-09-25` (a date prior to original activation `2026-09-28`) was rejected. It did **not** prove that the failed activation session `2026-09-28` could not be retried, because `_expected_next()` still fell back to hard-coded `ACTIVATION_SESSION = date(2026, 9, 28)` when `observed_sessions` was empty.
+
+Classification:
+```text
+NO_BACKFILL_TEST_AT_c6f65cf = INSUFFICIENT_FOR_FAILED_ACTIVATION_SESSION
+```
+
+**Corrective Hardening (Stage C-A):**
+1. The hardcoded fallback in the runner was eliminated.
+2. Operational activation is now strictly resolved via `resolve_operational_activation()`.
+3. In the post-failure operational state (`now_utc >= 2026-09-28 close_utc` and 0 committed observations), the runner strictly requires a ratified Stage C-B recovery binding (`STAGE_C_RECOVERY_BINDING_PATH`).
+4. If no Stage C-B binding exists, the runner fails closed immediately with `SHADOW_RECOVERY_BINDING_REQUIRED` with **zero network calls**, deterministically preventing retry of `2026-09-28`.
+5. Once a Stage C-B binding is ratified, the new operational activation date is derived from the canonical main commit timestamp, and all prior sessions in `[2026-09-25, new_activation)` (including `2026-09-28`) are permanently unobserved (`MISSED_UNOBSERVED_DUE_TO_PROVIDER_ACCESS_BLOCK`).
