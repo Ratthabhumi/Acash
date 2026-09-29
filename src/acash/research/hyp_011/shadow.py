@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
@@ -23,7 +24,21 @@ PROSPECTIVE_MIN_SESSIONS: int = 504
 PROSPECTIVE_MIN_REBALANCES: int = 2
 STATE_SCHEMA_VERSION: int = 1
 STATE_HYPOTHESIS_ID: str = "HYP_011"
-STATE_ACTIVATION_SESSION: date = date(2026, 9, 28)
+STAGE_B_ACTIVATION_SESSION: date = date(2026, 9, 28)
+STATE_ACTIVATION_SESSION: date = STAGE_B_ACTIVATION_SESSION
+
+# Stage-C Recovery Governance constants
+FAILED_ACTIVATION_SESSION: date = date(2026, 9, 28)
+FAILED_DISPATCH_ATTEMPT: int = 1
+NEXT_DISPATCH_ATTEMPT: int = 2
+STAGE_C_RECOVERY_BINDING_ID: str = "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C"
+STAGE_C_RECOVERY_BINDING_PATH: Path = Path(
+    "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json"
+)
+STAGE_C_A_SPEC_PATH: Path = Path(
+    "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_A.json"
+)
+
 # Timing semantics (never hard-code UTC market times: DST changes the offset).
 # session.open_utc  = portfolio execution timestamp semantics (calendar-derived).
 # session.close_utc = market session completion instant (calendar-derived).
@@ -32,6 +47,102 @@ STATE_ACTIVATION_SESSION: date = date(2026, 9, 28)
 # real-time SIP subscription. Querying earlier or querying into the future returns HTTP 403.
 ALPACA_SIP_DELAY: timedelta = timedelta(minutes=15)
 DEFAULT_PROVIDER_SAFETY_MARGIN: timedelta = timedelta(minutes=0)
+
+
+def resolve_operational_activation(
+    calendar: NyseCa1Calendar,
+    now_utc: datetime,
+    stage_c_binding_path: Optional[Path] = None,
+    explicit_activation: Optional[date] = None,
+) -> date:
+    """Resolve authoritative operational activation session.
+
+    If explicit_activation is supplied (e.g. in unit tests), returns it.
+    If a ratified Stage C-B recovery binding exists, validates and returns
+    the bound operational activation session.
+    If no Stage C-B binding exists:
+    - If now_utc is strictly before FAILED_ACTIVATION_SESSION close_utc,
+      the session is in the pre-failure Stage-B state.
+    - If now_utc is at or after FAILED_ACTIVATION_SESSION close_utc,
+      dispatch attempt 1 on 2026-09-28 has already occurred and failed/blocked.
+      Any further operational execution strictly requires the ratified Stage C-B binding.
+      Fails closed with SHADOW_RECOVERY_BINDING_REQUIRED.
+    """
+    if explicit_activation is not None:
+        return explicit_activation
+
+    if now_utc.tzinfo is None:
+        raise DataContractError("SHADOW_NOW_MUST_BE_TIMEZONE_AWARE.")
+    now = now_utc.astimezone(timezone.utc)
+
+    if stage_c_binding_path is not None and not stage_c_binding_path.is_file():
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_NOT_FOUND: {stage_c_binding_path}."
+        )
+
+    binding_file = stage_c_binding_path or STAGE_C_RECOVERY_BINDING_PATH
+    if binding_file.is_file():
+        try:
+            import json
+
+            data = json.loads(binding_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise DataContractError(f"SHADOW_RECOVERY_BINDING_CORRUPT: {exc}.") from exc
+
+        if data.get("binding_id") != STAGE_C_RECOVERY_BINDING_ID:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_ID_MISMATCH: expected {STAGE_C_RECOVERY_BINDING_ID}, "
+                f"got {data.get('binding_id')}."
+            )
+
+        commit_ts_raw = data.get("binding_commit_utc") or data.get("activation_commit_utc")
+        derived_act: Optional[date] = None
+        if commit_ts_raw:
+            commit_ts = datetime.fromisoformat(str(commit_ts_raw))
+            derived_act = derive_activation_session(calendar, commit_ts)
+
+        raw_act = data.get("activation_session")
+        if not raw_act and derived_act is None:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_MISSING_ACTIVATION.")
+
+        bound_act = date.fromisoformat(str(raw_act)) if raw_act else derived_act
+        assert bound_act is not None
+        if derived_act is not None and raw_act and bound_act != derived_act:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH: declared {bound_act} "
+                f"!= derived {derived_act} from commit {commit_ts_raw}."
+            )
+
+        if bound_act <= FAILED_ACTIVATION_SESSION:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_ACTIVATION_NOT_ADVANCED: bound {bound_act} <= "
+                f"failed {FAILED_ACTIVATION_SESSION}."
+            )
+        if not calendar.is_trading_session(bound_act):
+            raise DataContractError(f"SHADOW_RECOVERY_NON_TRADING_SESSION: {bound_act}.")
+        return bound_act
+
+    # No Stage C-B binding exists.
+    if now.date() > FAILED_ACTIVATION_SESSION:
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_REQUIRED: Attempt 1 on 2026-09-28 failed/blocked. "
+            "Operational re-activation strictly requires a ratified Stage C-B binding."
+        )
+
+    return STAGE_B_ACTIVATION_SESSION
+
+
+def candidate_schedule_time(
+    session_date: date,
+    calendar: NyseCa1Calendar,
+    provider_delay: timedelta = ALPACA_SIP_DELAY,
+    operational_margin: timedelta = DEFAULT_PROVIDER_SAFETY_MARGIN,
+) -> datetime:
+    """Derive candidate operational dispatch timestamp: session.close_utc + provider_delay + margin."""
+    session = calendar.get_session(session_date)
+    if session.close_utc is None:
+        raise DataContractError(f"SHADOW_NO_CLOSE_TIME: {session_date.isoformat()}.")
+    return session.close_utc + provider_delay + operational_margin
 
 
 def market_session_completed_after(

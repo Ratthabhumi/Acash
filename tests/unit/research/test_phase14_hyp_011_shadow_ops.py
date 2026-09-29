@@ -186,7 +186,7 @@ def test_runner_dry_run_zero_network(capsys: Any) -> None:
     sys.path.insert(0, "scripts")
     import process_hyp_011_prospective_shadow as runner  # type: ignore[import-not-found]
 
-    assert runner.main([]) == 0
+    assert runner.main([], _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc)) == 0
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PRETEST" in out

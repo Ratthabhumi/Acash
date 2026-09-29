@@ -312,6 +312,7 @@ def append_observation(
     benchmark: Optional[ShadowBenchmark] = None,
     completed_annual_rebalances: int = 0,
     extra_state: Optional[Dict[str, Any]] = None,
+    activation_session: Optional[date] = None,
 ) -> str:
     """Write an immutable observation artifact; persist full state; return SHA.
 
@@ -336,11 +337,16 @@ def append_observation(
     if state_path.exists():
         state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     else:
-        state_doc = build_initial_state()
+        state_doc = build_initial_state(activation_session)
     # Re-stamp fixed identity fields (never inferred from a partial doc).
+    act = activation_session or (
+        date.fromisoformat(state_doc["activation_session"])
+        if "activation_session" in state_doc
+        else STATE_ACTIVATION_SESSION
+    )
     state_doc["schema_version"] = STATE_SCHEMA_VERSION
     state_doc["hypothesis_id"] = STATE_HYPOTHESIS_ID
-    state_doc["activation_session"] = STATE_ACTIVATION_SESSION.isoformat()
+    state_doc["activation_session"] = act.isoformat()
     state_doc["starting_aum"] = str(SIMULATED_STARTING_AUM)
     state_doc["locks"] = {
         "paper_authorized": False,
@@ -371,12 +377,13 @@ def append_observation(
     return digest
 
 
-def build_initial_state() -> Dict[str, Any]:
+def build_initial_state(activation_session: Optional[date] = None) -> Dict[str, Any]:
     """Complete canonical initial state document (never a bare {})."""
+    act = activation_session or STATE_ACTIVATION_SESSION
     return {
         "schema_version": STATE_SCHEMA_VERSION,
         "hypothesis_id": STATE_HYPOTHESIS_ID,
-        "activation_session": STATE_ACTIVATION_SESSION.isoformat(),
+        "activation_session": act.isoformat(),
         "starting_aum": str(SIMULATED_STARTING_AUM),
         "observed_sessions": [],
         "observed_session_count": 0,
@@ -445,7 +452,10 @@ def validate_initial_state(doc: Mapping[str, Any]) -> None:
         raise DataContractError("SHADOW_INITIAL_LOCKS.")
 
 
-def verify_chain(state_dir: Path) -> Dict[str, Any]:
+def verify_chain(
+    state_dir: Path,
+    expected_activation: Optional[date] = None,
+) -> Dict[str, Any]:
     """Recompute the full observation chain BEFORE any network execution.
 
     Returns the verified state document. Any mismatch raises
@@ -453,14 +463,15 @@ def verify_chain(state_dir: Path) -> Dict[str, Any]:
     """
     state_path = state_dir / "state.json"
     if not state_path.exists():
-        return build_initial_state()
+        return build_initial_state(expected_activation)
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     # Fixed identity fields (every state, empty or not).
     if state_doc.get("schema_version") != STATE_SCHEMA_VERSION:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: schema_version.")
     if state_doc.get("hypothesis_id") != STATE_HYPOTHESIS_ID:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: hypothesis_id.")
-    if state_doc.get("activation_session") != STATE_ACTIVATION_SESSION.isoformat():
+    exp_act = (expected_activation or STATE_ACTIVATION_SESSION).isoformat()
+    if state_doc.get("activation_session") != exp_act:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: activation_session.")
     if str(state_doc.get("starting_aum")) != str(SIMULATED_STARTING_AUM):
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: starting_aum.")
