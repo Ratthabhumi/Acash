@@ -7,6 +7,9 @@ operational activation, exclusive) are never backfilled and never counted.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -52,28 +55,143 @@ DEFAULT_PROVIDER_SAFETY_MARGIN: timedelta = PROVIDER_SAFETY_MARGIN
 CANDIDATE_OPERATIONAL_MARGIN: timedelta = timedelta(minutes=5)
 
 
+@dataclass(frozen=True)
+class StageCRecoveryAuthority:
+    """Authoritative Stage C-B recovery binding metadata loaded from disk."""
+
+    binding_id: str
+    binding_commit_sha: str
+    binding_commit_utc: str
+    activation_session: date
+    manifest_sha256: str
+    manifest_path: str
+
+
+def load_stage_c_recovery_authority(
+    calendar: NyseCa1Calendar,
+    stage_c_binding_path: Optional[Path] = None,
+) -> StageCRecoveryAuthority:
+    """Validate Stage C-B recovery binding manifest and return authoritative metadata.
+
+    Computes deterministic SHA-256 digest over the raw canonical file bytes on disk.
+    Enforces all 11 required fields, valid 40-character hex commit SHA,
+    timezone-aware commit timestamp, matching NYSE-derived activation session,
+    failed session invariants, and advance beyond 2026-09-28.
+    """
+    path = stage_c_binding_path or STAGE_C_RECOVERY_BINDING_PATH
+    if not path.is_file():
+        raise DataContractError(f"SHADOW_RECOVERY_BINDING_NOT_FOUND: {path}.")
+
+    raw_bytes = path.read_bytes()
+    manifest_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+
+    try:
+        data = json.loads(raw_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise DataContractError(f"SHADOW_RECOVERY_BINDING_CORRUPT: {exc}.") from exc
+
+    required_fields = (
+        "binding_id",
+        "binding_commit_sha",
+        "binding_commit_utc",
+        "activation_session",
+        "scientific_prospective_boundary",
+        "failed_dispatch_session",
+        "failed_dispatch_attempt",
+        "next_observation_ordinal",
+        "next_dispatch_attempt",
+        "backfill_allowed",
+        "retry_failed_session_allowed",
+    )
+    for req_field in required_fields:
+        if req_field not in data:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_MISSING_FIELD: {req_field}."
+            )
+
+    if data["binding_id"] != STAGE_C_RECOVERY_BINDING_ID:
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_ID_MISMATCH: expected {STAGE_C_RECOVERY_BINDING_ID}, "
+            f"got {data['binding_id']}."
+        )
+
+    commit_sha = str(data["binding_commit_sha"])
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", commit_sha):
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_INVALID_SHA: {commit_sha}."
+        )
+
+    commit_ts_raw = data["binding_commit_utc"]
+    try:
+        commit_ts = datetime.fromisoformat(str(commit_ts_raw))
+    except Exception as exc:
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_INVALID_TIMESTAMP: {exc}."
+        ) from exc
+
+    if commit_ts.tzinfo is None:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_TIMESTAMP_NAIVE.")
+    commit_utc = commit_ts.astimezone(timezone.utc)
+
+    derived_act = derive_activation_session(calendar, commit_utc)
+
+    try:
+        declared_act = date.fromisoformat(str(data["activation_session"]))
+    except Exception as exc:
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_INVALID_ACTIVATION: {exc}."
+        ) from exc
+
+    if declared_act != derived_act:
+        raise DataContractError(
+            f"SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH: declared {declared_act} "
+            f"!= derived {derived_act} from commit {commit_ts_raw}."
+        )
+
+    if data["scientific_prospective_boundary"] != SCIENTIFIC_PROSPECTIVE_BOUNDARY.isoformat():
+        raise DataContractError("SHADOW_RECOVERY_BINDING_BOUNDARY_MISMATCH.")
+    if data["failed_dispatch_session"] != FAILED_ACTIVATION_SESSION.isoformat():
+        raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_SESSION_MISMATCH.")
+    if data["failed_dispatch_attempt"] != FAILED_DISPATCH_ATTEMPT:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_ATTEMPT_MISMATCH.")
+    if data["next_observation_ordinal"] != 1:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_ORDINAL_MISMATCH.")
+    if data["next_dispatch_attempt"] != NEXT_DISPATCH_ATTEMPT:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_NEXT_ATTEMPT_MISMATCH.")
+    if data["backfill_allowed"] is not False:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_BACKFILL_NOT_FORBIDDEN.")
+    if data["retry_failed_session_allowed"] is not False:
+        raise DataContractError("SHADOW_RECOVERY_BINDING_RETRY_NOT_FORBIDDEN.")
+
+    if derived_act <= FAILED_ACTIVATION_SESSION:
+        raise DataContractError(
+            f"SHADOW_RECOVERY_ACTIVATION_NOT_ADVANCED: bound {derived_act} <= "
+            f"failed {FAILED_ACTIVATION_SESSION}."
+        )
+    if not calendar.is_trading_session(derived_act):
+        raise DataContractError(f"SHADOW_RECOVERY_NON_TRADING_SESSION: {derived_act}.")
+
+    return StageCRecoveryAuthority(
+        binding_id=str(data["binding_id"]),
+        binding_commit_sha=commit_sha,
+        binding_commit_utc=commit_utc.isoformat(),
+        activation_session=derived_act,
+        manifest_sha256=manifest_sha256,
+        manifest_path=str(path),
+    )
+
+
 def resolve_operational_activation(
     calendar: NyseCa1Calendar,
     now_utc: datetime,
     stage_c_binding_path: Optional[Path] = None,
-    explicit_activation: Optional[date] = None,
     committed_observations: int = 0,
 ) -> date:
     """Resolve authoritative operational activation session.
 
-    If explicit_activation is supplied (e.g. from verified persistent state), returns it.
-    If a ratified Stage C-B recovery binding exists, validates and returns
-    the bound operational activation session.
-    If no Stage C-B binding exists:
-    - If committed_observations == 0 and now_utc >= FAILED_DISPATCH_AT_UTC,
-      dispatch attempt 1 on 2026-09-28 has already occurred and failed/blocked.
-      Any further operational execution strictly requires the ratified Stage C-B binding.
-      Fails closed with SHADOW_RECOVERY_BINDING_REQUIRED.
-    - Otherwise returns STAGE_B_ACTIVATION_SESSION.
+    Activation authority strictly originates from canonical Stage C-B binding
+    or historical Stage-B boundary, never from mutable runtime state.
     """
-    if explicit_activation is not None:
-        return explicit_activation
-
     if now_utc.tzinfo is None:
         raise DataContractError("SHADOW_NOW_MUST_BE_TIMEZONE_AWARE.")
     now = now_utc.astimezone(timezone.utc)
@@ -85,96 +203,8 @@ def resolve_operational_activation(
 
     binding_file = stage_c_binding_path or STAGE_C_RECOVERY_BINDING_PATH
     if binding_file.is_file():
-        try:
-            import json
-            import re
-
-            data = json.loads(binding_file.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise DataContractError(f"SHADOW_RECOVERY_BINDING_CORRUPT: {exc}.") from exc
-
-        # All 11 authoritative fields required without inference.
-        required_fields = (
-            "binding_id",
-            "binding_commit_sha",
-            "binding_commit_utc",
-            "activation_session",
-            "scientific_prospective_boundary",
-            "failed_dispatch_session",
-            "failed_dispatch_attempt",
-            "next_observation_ordinal",
-            "next_dispatch_attempt",
-            "backfill_allowed",
-            "retry_failed_session_allowed",
-        )
-        for req_field in required_fields:
-            if req_field not in data:
-                raise DataContractError(
-                    f"SHADOW_RECOVERY_BINDING_MISSING_FIELD: {req_field}."
-                )
-
-        if data["binding_id"] != STAGE_C_RECOVERY_BINDING_ID:
-            raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_ID_MISMATCH: expected {STAGE_C_RECOVERY_BINDING_ID}, "
-                f"got {data['binding_id']}."
-            )
-
-        commit_sha = str(data["binding_commit_sha"])
-        if not re.fullmatch(r"[0-9a-fA-F]{40}", commit_sha):
-            raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_INVALID_SHA: {commit_sha}."
-            )
-
-        commit_ts_raw = data["binding_commit_utc"]
-        try:
-            commit_ts = datetime.fromisoformat(str(commit_ts_raw))
-        except Exception as exc:
-            raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_INVALID_TIMESTAMP: {exc}."
-            ) from exc
-
-        if commit_ts.tzinfo is None:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_TIMESTAMP_NAIVE.")
-        commit_utc = commit_ts.astimezone(timezone.utc)
-
-        derived_act = derive_activation_session(calendar, commit_utc)
-
-        try:
-            declared_act = date.fromisoformat(str(data["activation_session"]))
-        except Exception as exc:
-            raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_INVALID_ACTIVATION: {exc}."
-            ) from exc
-
-        if declared_act != derived_act:
-            raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH: declared {declared_act} "
-                f"!= derived {derived_act} from commit {commit_ts_raw}."
-            )
-
-        if data["scientific_prospective_boundary"] != SCIENTIFIC_PROSPECTIVE_BOUNDARY.isoformat():
-            raise DataContractError("SHADOW_RECOVERY_BINDING_BOUNDARY_MISMATCH.")
-        if data["failed_dispatch_session"] != FAILED_ACTIVATION_SESSION.isoformat():
-            raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_SESSION_MISMATCH.")
-        if data["failed_dispatch_attempt"] != FAILED_DISPATCH_ATTEMPT:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_ATTEMPT_MISMATCH.")
-        if data["next_observation_ordinal"] != 1:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_ORDINAL_MISMATCH.")
-        if data["next_dispatch_attempt"] != NEXT_DISPATCH_ATTEMPT:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_NEXT_ATTEMPT_MISMATCH.")
-        if data["backfill_allowed"] is not False:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_BACKFILL_NOT_FORBIDDEN.")
-        if data["retry_failed_session_allowed"] is not False:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_RETRY_NOT_FORBIDDEN.")
-
-        if derived_act <= FAILED_ACTIVATION_SESSION:
-            raise DataContractError(
-                f"SHADOW_RECOVERY_ACTIVATION_NOT_ADVANCED: bound {derived_act} <= "
-                f"failed {FAILED_ACTIVATION_SESSION}."
-            )
-        if not calendar.is_trading_session(derived_act):
-            raise DataContractError(f"SHADOW_RECOVERY_NON_TRADING_SESSION: {derived_act}.")
-        return derived_act
+        auth = load_stage_c_recovery_authority(calendar, binding_file)
+        return auth.activation_session
 
     # No Stage C-B binding exists.
     if committed_observations == 0 and now >= FAILED_DISPATCH_AT_UTC:

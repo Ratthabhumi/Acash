@@ -36,7 +36,9 @@ from acash.research.hyp_011.shadow import (
     STAGE_C_RECOVERY_BINDING_ID,
     STAGE_C_RECOVERY_BINDING_PATH,
     ShadowState,
+    StageCRecoveryAuthority,
     candidate_schedule_time,
+    load_stage_c_recovery_authority,
     observation_eligible_after,
     resolve_operational_activation,
 )
@@ -138,25 +140,33 @@ def main(
         pretest_state_dir = _state_dir if _state_dir is not None else STATE_DIR
         pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
         pretest_state_file = pretest_state_dir / "state.json"
-        pretest_existing_act: Optional[date] = None
         pretest_committed_count: int = 0
         if pretest_state_file.is_file():
             try:
                 st = json.loads(pretest_state_file.read_text(encoding="utf-8"))
                 pretest_committed_count = len(st.get("observed_sessions", []))
-                if st.get("observed_sessions"):
-                    pretest_existing_act = date.fromisoformat(st["activation_session"])
             except Exception:
                 pass
 
+        pretest_binding_file = binding_path or (
+            STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+        )
+        pretest_recovery_auth = (
+            load_stage_c_recovery_authority(calendar, pretest_binding_file)
+            if (pretest_binding_file and pretest_binding_file.is_file())
+            else None
+        )
         pretest_activation = resolve_operational_activation(
             calendar=calendar,
             now_utc=pretest_now,
             stage_c_binding_path=binding_path,
-            explicit_activation=pretest_existing_act,
             committed_observations=pretest_committed_count,
         )
-        pretest_verified = verify_chain(pretest_state_dir, expected_activation=pretest_activation)
+        pretest_verified = verify_chain(
+            pretest_state_dir,
+            expected_activation=pretest_activation,
+            expected_recovery_authority=pretest_recovery_auth,
+        )
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
         pretest_target = _expected_next(pretest_observed, calendar, pretest_activation)
         pretest_session = calendar.get_session(pretest_target)
@@ -178,16 +188,22 @@ def main(
     state_dir = _state_dir if _state_dir is not None else STATE_DIR
     now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
     state_file = state_dir / "state.json"
-    existing_act: Optional[date] = None
     committed_count: int = 0
     if state_file.is_file():
         try:
             st = json.loads(state_file.read_text(encoding="utf-8"))
             committed_count = len(st.get("observed_sessions", []))
-            if st.get("observed_sessions"):
-                existing_act = date.fromisoformat(st["activation_session"])
         except Exception:
             pass
+
+    actual_binding_file = binding_path or (
+        STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+    )
+    recovery_auth = (
+        load_stage_c_recovery_authority(calendar, actual_binding_file)
+        if (actual_binding_file and actual_binding_file.is_file())
+        else None
+    )
 
     # Pre-network local validation: resolve operational activation.
     # Fails closed (e.g. SHADOW_RECOVERY_BINDING_REQUIRED) before any network call.
@@ -195,11 +211,14 @@ def main(
         calendar=calendar,
         now_utc=now_utc,
         stage_c_binding_path=binding_path,
-        explicit_activation=existing_act,
         committed_observations=committed_count,
     )
 
-    verified = verify_chain(state_dir, expected_activation=activation_session)
+    verified = verify_chain(
+        state_dir,
+        expected_activation=activation_session,
+        expected_recovery_authority=recovery_auth,
+    )
     observed: List[str] = list(verified.get("observed_sessions", []))
     expected_ordinal = len(observed) + 1
 
@@ -405,25 +424,36 @@ def main(
         bench_div, BASELINE_SLIPPAGE_BPS,
     )
 
+    if recovery_auth is not None:
+        authority_section: Dict[str, Any] = {
+            "activation_binding": recovery_auth.manifest_path,
+            "activation_binding_id": recovery_auth.binding_id,
+            "activation_binding_sha256": recovery_auth.manifest_sha256,
+            "activation_binding_commit_sha": recovery_auth.binding_commit_sha,
+            "activation_binding_commit_utc": recovery_auth.binding_commit_utc,
+            "operational_activation_session": recovery_auth.activation_session.isoformat(),
+            "authorization": args.authorization,
+            "ordinal": args.ordinal,
+            "dispatch_attempt": expected_dispatch_attempt,
+        }
+    else:
+        authority_section = {
+            "activation_binding": (
+                str(binding_path)
+                if binding_path is not None
+                else "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json"
+            ),
+            "authorization": args.authorization,
+            "ordinal": args.ordinal,
+            "dispatch_attempt": expected_dispatch_attempt,
+        }
+
     observation: Dict[str, Any] = {
         "schema_version": 1,
         "hypothesis_id": "HYP_011",
         "session": target.isoformat(),
         "processed_at_utc": now_utc.isoformat(),
-        "authority": {
-            "activation_binding": (
-                str(binding_path)
-                if binding_path is not None
-                else (
-                    str(STAGE_C_RECOVERY_BINDING_PATH)
-                    if is_recovery
-                    else "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json"
-                )
-            ),
-            "authorization": args.authorization,
-            "ordinal": args.ordinal,
-            "dispatch_attempt": expected_dispatch_attempt,
-        },
+        "authority": authority_section,
         "provider": provider_section,
         "corporate_actions": ca_section,
         "split_qualification": split_section,
@@ -463,6 +493,7 @@ def main(
             "last_closes_split": {s: str(market_split_closes[s]) for s in SYMBOLS},
         },
         activation_session=activation_session,
+        recovery_authority=recovery_auth,
     )
     print(f"Observation sealed: {digest}")
     print("STATE: observation committed; no further sessions in this invocation.")

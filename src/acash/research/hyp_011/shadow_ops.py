@@ -26,6 +26,7 @@ from acash.research.hyp_011.shadow import (
     STATE_HYPOTHESIS_ID,
     STATE_SCHEMA_VERSION,
     ShadowState,
+    StageCRecoveryAuthority,
 )
 from acash.research.hyp_011.shadow_ca import CADetermination
 from acash.research.hyp_011.accounting import (
@@ -313,6 +314,7 @@ def append_observation(
     completed_annual_rebalances: int = 0,
     extra_state: Optional[Dict[str, Any]] = None,
     activation_session: Optional[date] = None,
+    recovery_authority: Optional[StageCRecoveryAuthority] = None,
 ) -> str:
     """Write an immutable observation artifact; persist full state; return SHA.
 
@@ -347,6 +349,22 @@ def append_observation(
     state_doc["schema_version"] = STATE_SCHEMA_VERSION
     state_doc["hypothesis_id"] = STATE_HYPOTHESIS_ID
     state_doc["activation_session"] = act.isoformat()
+    if recovery_authority is not None:
+        if (
+            state_doc.get("activation_authority_sha256") is not None
+            and state_doc.get("activation_authority_sha256") != recovery_authority.manifest_sha256
+        ):
+            raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: recovery authority changed.")
+        state_doc["activation_authority_id"] = recovery_authority.binding_id
+        state_doc["activation_authority_sha256"] = recovery_authority.manifest_sha256
+        state_doc["activation_commit_sha"] = recovery_authority.binding_commit_sha
+    else:
+        if "activation_authority_id" not in state_doc:
+            state_doc["activation_authority_id"] = None
+        if "activation_authority_sha256" not in state_doc:
+            state_doc["activation_authority_sha256"] = None
+        if "activation_commit_sha" not in state_doc:
+            state_doc["activation_commit_sha"] = None
     state_doc["starting_aum"] = str(SIMULATED_STARTING_AUM)
     state_doc["locks"] = {
         "paper_authorized": False,
@@ -384,6 +402,9 @@ def build_initial_state(activation_session: Optional[date] = None) -> Dict[str, 
         "schema_version": STATE_SCHEMA_VERSION,
         "hypothesis_id": STATE_HYPOTHESIS_ID,
         "activation_session": act.isoformat(),
+        "activation_authority_id": None,
+        "activation_authority_sha256": None,
+        "activation_commit_sha": None,
         "starting_aum": str(SIMULATED_STARTING_AUM),
         "observed_sessions": [],
         "observed_session_count": 0,
@@ -414,6 +435,12 @@ def validate_initial_state(
         raise DataContractError("SHADOW_INITIAL_HYPOTHESIS_ID.")
     if doc.get("activation_session") != expected_activation.isoformat():
         raise DataContractError("SHADOW_INITIAL_ACTIVATION.")
+    if doc.get("activation_authority_id") is not None:
+        raise DataContractError("SHADOW_INITIAL_AUTHORITY_ID.")
+    if doc.get("activation_authority_sha256") is not None:
+        raise DataContractError("SHADOW_INITIAL_AUTHORITY_SHA.")
+    if doc.get("activation_commit_sha") is not None:
+        raise DataContractError("SHADOW_INITIAL_COMMIT_SHA.")
     if str(doc.get("starting_aum")) != "100000.00":
         raise DataContractError("SHADOW_INITIAL_AUM.")
     if list(doc.get("observed_sessions", [None])) != []:
@@ -458,6 +485,7 @@ def validate_initial_state(
 def verify_chain(
     state_dir: Path,
     expected_activation: Optional[date] = None,
+    expected_recovery_authority: Optional[StageCRecoveryAuthority] = None,
 ) -> Dict[str, Any]:
     """Recompute the full observation chain BEFORE any network execution.
 
@@ -489,6 +517,18 @@ def verify_chain(
     observed = list(state_doc.get("observed_sessions", []))
     if not observed:
         validate_initial_state(state_doc, expected_activation or STATE_ACTIVATION_SESSION)
+    else:
+        # Check recovery authority binding invariants when observations exist
+        if expected_recovery_authority is not None:
+            if state_doc.get("activation_authority_id") != expected_recovery_authority.binding_id:
+                raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: authority ID mismatch.")
+            if state_doc.get("activation_authority_sha256") != expected_recovery_authority.manifest_sha256:
+                raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: authority SHA mismatch.")
+            if state_doc.get("activation_commit_sha") != expected_recovery_authority.binding_commit_sha:
+                raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: commit SHA mismatch.")
+        elif state_doc.get("activation_authority_sha256") is not None:
+            raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: missing expected recovery authority.")
+
     if observed != sorted(observed):
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: sessions unordered.")
     previous: Optional[str] = None
@@ -506,6 +546,17 @@ def verify_chain(
                 f"BLOCK_SHADOW_STATE_INTEGRITY: broken link at {iso}."
             )
         previous = digest
+        if expected_recovery_authority is not None:
+            auth_doc = doc.get("authority", {})
+            if "activation_binding_sha256" in auth_doc:
+                if auth_doc["activation_binding_sha256"] != expected_recovery_authority.manifest_sha256:
+                    raise DataContractError(
+                        f"BLOCK_SHADOW_STATE_INTEGRITY: observation binding SHA mismatch at {iso}."
+                    )
+                if auth_doc.get("activation_binding_commit_sha") != expected_recovery_authority.binding_commit_sha:
+                    raise DataContractError(
+                        f"BLOCK_SHADOW_STATE_INTEGRITY: observation commit SHA mismatch at {iso}."
+                    )
     if state_doc.get("last_observation_sha256") != previous:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: last SHA mismatch.")
     if state_doc.get("last_processed_session") != (observed[-1] if observed else None):
