@@ -30,6 +30,7 @@ STATE_ACTIVATION_SESSION: date = STAGE_B_ACTIVATION_SESSION
 # Stage-C Recovery Governance constants
 FAILED_ACTIVATION_SESSION: date = date(2026, 9, 28)
 FAILED_DISPATCH_ATTEMPT: int = 1
+FAILED_DISPATCH_AT_UTC: datetime = datetime(2026, 9, 28, 20, 10, 0, tzinfo=timezone.utc)
 NEXT_DISPATCH_ATTEMPT: int = 2
 STAGE_C_RECOVERY_BINDING_ID: str = "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C"
 STAGE_C_RECOVERY_BINDING_PATH: Path = Path(
@@ -46,7 +47,9 @@ STAGE_C_A_SPEC_PATH: Path = Path(
 # Alpaca historical SIP requires at least 15-minute delay for accounts without
 # real-time SIP subscription. Querying earlier or querying into the future returns HTTP 403.
 ALPACA_SIP_DELAY: timedelta = timedelta(minutes=15)
-DEFAULT_PROVIDER_SAFETY_MARGIN: timedelta = timedelta(minutes=0)
+PROVIDER_SAFETY_MARGIN: timedelta = timedelta(minutes=0)
+DEFAULT_PROVIDER_SAFETY_MARGIN: timedelta = PROVIDER_SAFETY_MARGIN
+CANDIDATE_OPERATIONAL_MARGIN: timedelta = timedelta(minutes=5)
 
 
 def resolve_operational_activation(
@@ -54,19 +57,19 @@ def resolve_operational_activation(
     now_utc: datetime,
     stage_c_binding_path: Optional[Path] = None,
     explicit_activation: Optional[date] = None,
+    committed_observations: int = 0,
 ) -> date:
     """Resolve authoritative operational activation session.
 
-    If explicit_activation is supplied (e.g. in unit tests), returns it.
+    If explicit_activation is supplied (e.g. from verified persistent state), returns it.
     If a ratified Stage C-B recovery binding exists, validates and returns
     the bound operational activation session.
     If no Stage C-B binding exists:
-    - If now_utc is strictly before FAILED_ACTIVATION_SESSION close_utc,
-      the session is in the pre-failure Stage-B state.
-    - If now_utc is at or after FAILED_ACTIVATION_SESSION close_utc,
+    - If committed_observations == 0 and now_utc >= FAILED_DISPATCH_AT_UTC,
       dispatch attempt 1 on 2026-09-28 has already occurred and failed/blocked.
       Any further operational execution strictly requires the ratified Stage C-B binding.
       Fails closed with SHADOW_RECOVERY_BINDING_REQUIRED.
+    - Otherwise returns STAGE_B_ACTIVATION_SESSION.
     """
     if explicit_activation is not None:
         return explicit_activation
@@ -84,46 +87,97 @@ def resolve_operational_activation(
     if binding_file.is_file():
         try:
             import json
+            import re
 
             data = json.loads(binding_file.read_text(encoding="utf-8"))
         except Exception as exc:
             raise DataContractError(f"SHADOW_RECOVERY_BINDING_CORRUPT: {exc}.") from exc
 
-        if data.get("binding_id") != STAGE_C_RECOVERY_BINDING_ID:
+        # All 11 authoritative fields required without inference.
+        required_fields = (
+            "binding_id",
+            "binding_commit_sha",
+            "binding_commit_utc",
+            "activation_session",
+            "scientific_prospective_boundary",
+            "failed_dispatch_session",
+            "failed_dispatch_attempt",
+            "next_observation_ordinal",
+            "next_dispatch_attempt",
+            "backfill_allowed",
+            "retry_failed_session_allowed",
+        )
+        for req_field in required_fields:
+            if req_field not in data:
+                raise DataContractError(
+                    f"SHADOW_RECOVERY_BINDING_MISSING_FIELD: {req_field}."
+                )
+
+        if data["binding_id"] != STAGE_C_RECOVERY_BINDING_ID:
             raise DataContractError(
                 f"SHADOW_RECOVERY_BINDING_ID_MISMATCH: expected {STAGE_C_RECOVERY_BINDING_ID}, "
-                f"got {data.get('binding_id')}."
+                f"got {data['binding_id']}."
             )
 
-        commit_ts_raw = data.get("binding_commit_utc") or data.get("activation_commit_utc")
-        derived_act: Optional[date] = None
-        if commit_ts_raw:
-            commit_ts = datetime.fromisoformat(str(commit_ts_raw))
-            derived_act = derive_activation_session(calendar, commit_ts)
-
-        raw_act = data.get("activation_session")
-        if not raw_act and derived_act is None:
-            raise DataContractError("SHADOW_RECOVERY_BINDING_MISSING_ACTIVATION.")
-
-        bound_act = date.fromisoformat(str(raw_act)) if raw_act else derived_act
-        assert bound_act is not None
-        if derived_act is not None and raw_act and bound_act != derived_act:
+        commit_sha = str(data["binding_commit_sha"])
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", commit_sha):
             raise DataContractError(
-                f"SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH: declared {bound_act} "
+                f"SHADOW_RECOVERY_BINDING_INVALID_SHA: {commit_sha}."
+            )
+
+        commit_ts_raw = data["binding_commit_utc"]
+        try:
+            commit_ts = datetime.fromisoformat(str(commit_ts_raw))
+        except Exception as exc:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_INVALID_TIMESTAMP: {exc}."
+            ) from exc
+
+        if commit_ts.tzinfo is None:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_TIMESTAMP_NAIVE.")
+        commit_utc = commit_ts.astimezone(timezone.utc)
+
+        derived_act = derive_activation_session(calendar, commit_utc)
+
+        try:
+            declared_act = date.fromisoformat(str(data["activation_session"]))
+        except Exception as exc:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_INVALID_ACTIVATION: {exc}."
+            ) from exc
+
+        if declared_act != derived_act:
+            raise DataContractError(
+                f"SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH: declared {declared_act} "
                 f"!= derived {derived_act} from commit {commit_ts_raw}."
             )
 
-        if bound_act <= FAILED_ACTIVATION_SESSION:
+        if data["scientific_prospective_boundary"] != SCIENTIFIC_PROSPECTIVE_BOUNDARY.isoformat():
+            raise DataContractError("SHADOW_RECOVERY_BINDING_BOUNDARY_MISMATCH.")
+        if data["failed_dispatch_session"] != FAILED_ACTIVATION_SESSION.isoformat():
+            raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_SESSION_MISMATCH.")
+        if data["failed_dispatch_attempt"] != FAILED_DISPATCH_ATTEMPT:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_FAILED_ATTEMPT_MISMATCH.")
+        if data["next_observation_ordinal"] != 1:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_ORDINAL_MISMATCH.")
+        if data["next_dispatch_attempt"] != NEXT_DISPATCH_ATTEMPT:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_NEXT_ATTEMPT_MISMATCH.")
+        if data["backfill_allowed"] is not False:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_BACKFILL_NOT_FORBIDDEN.")
+        if data["retry_failed_session_allowed"] is not False:
+            raise DataContractError("SHADOW_RECOVERY_BINDING_RETRY_NOT_FORBIDDEN.")
+
+        if derived_act <= FAILED_ACTIVATION_SESSION:
             raise DataContractError(
-                f"SHADOW_RECOVERY_ACTIVATION_NOT_ADVANCED: bound {bound_act} <= "
+                f"SHADOW_RECOVERY_ACTIVATION_NOT_ADVANCED: bound {derived_act} <= "
                 f"failed {FAILED_ACTIVATION_SESSION}."
             )
-        if not calendar.is_trading_session(bound_act):
-            raise DataContractError(f"SHADOW_RECOVERY_NON_TRADING_SESSION: {bound_act}.")
-        return bound_act
+        if not calendar.is_trading_session(derived_act):
+            raise DataContractError(f"SHADOW_RECOVERY_NON_TRADING_SESSION: {derived_act}.")
+        return derived_act
 
     # No Stage C-B binding exists.
-    if now.date() > FAILED_ACTIVATION_SESSION:
+    if committed_observations == 0 and now >= FAILED_DISPATCH_AT_UTC:
         raise DataContractError(
             "SHADOW_RECOVERY_BINDING_REQUIRED: Attempt 1 on 2026-09-28 failed/blocked. "
             "Operational re-activation strictly requires a ratified Stage C-B binding."
@@ -136,7 +190,7 @@ def candidate_schedule_time(
     session_date: date,
     calendar: NyseCa1Calendar,
     provider_delay: timedelta = ALPACA_SIP_DELAY,
-    operational_margin: timedelta = DEFAULT_PROVIDER_SAFETY_MARGIN,
+    operational_margin: timedelta = CANDIDATE_OPERATIONAL_MARGIN,
 ) -> datetime:
     """Derive candidate operational dispatch timestamp: session.close_utc + provider_delay + margin."""
     session = calendar.get_session(session_date)
@@ -164,7 +218,7 @@ def provider_observation_eligible_after(
     session_date: date,
     calendar: NyseCa1Calendar,
     provider_delay: timedelta = ALPACA_SIP_DELAY,
-    safety_margin: timedelta = DEFAULT_PROVIDER_SAFETY_MARGIN,
+    safety_margin: timedelta = PROVIDER_SAFETY_MARGIN,
 ) -> datetime:
     """Canonical instant after which delayed SIP historical data is accessible.
 

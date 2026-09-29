@@ -6,6 +6,9 @@ derivation + zero counting, activation from real commit timestamps, guards
 80/20 strategy constants, 504+2 minimums, and locks. Calendar only.
 """
 
+import io
+import json
+from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -214,7 +217,7 @@ def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
     import sys
 
     sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner  # type: ignore[import-not-found]
+    import process_hyp_011_prospective_shadow as runner
 
     state_dir = tmp_path
 
@@ -237,15 +240,52 @@ def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
     assert "OBSERVATION_ELIGIBLE = false" in before
     assert "NETWORK_REQUESTS = 0" in before
 
-    # 10 minutes post close (attempt #0001 dispatch time): market complete but provider not eligible!
-    attempt_time = _dry_run(datetime(2026, 9, 28, 20, 10, 0, tzinfo=timezone.utc))
-    assert "OBSERVATION_ELIGIBLE = false" in attempt_time
-    assert "NETWORK_REQUESTS = 0" in attempt_time
+    # Post close but strictly before 20:10:00Z failed dispatch instant:
+    # market complete but provider not yet eligible.
+    pre_failure = _dry_run(datetime(2026, 9, 28, 20, 9, 59, tzinfo=timezone.utc))
+    assert "OBSERVATION_ELIGIBLE = false" in pre_failure
+    assert "NETWORK_REQUESTS = 0" in pre_failure
 
-    # After provider eligibility (e.g. 20:15:01): eligible flag flips, but dry-run STILL issues zero network
-    # and writes nothing.
-    after = _dry_run(datetime(2026, 9, 28, 20, 15, 1, tzinfo=timezone.utc))
+    # At or after 20:10:00Z failure instant without Stage C-B binding:
+    # strictly fails closed with SHADOW_RECOVERY_BINDING_REQUIRED.
+    with pytest.raises(DataContractError) as exc_info:
+        _dry_run(datetime(2026, 9, 28, 20, 10, 0, tzinfo=timezone.utc))
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+    with pytest.raises(DataContractError) as exc_info:
+        _dry_run(datetime(2026, 9, 28, 20, 20, 0, tzinfo=timezone.utc))
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+    # Under valid Stage C-B binding: eligible flag flips when provider eligible, zero network in dry-run
+    binding_file = tmp_path / "stage_c_dry.json"
+    binding_file.write_text(
+        json.dumps({
+            "binding_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+            "binding_commit_sha": "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
+            "binding_commit_utc": "2026-09-29T12:00:00Z",
+            "activation_session": "2026-09-29",
+            "scientific_prospective_boundary": "2026-09-25",
+            "failed_dispatch_session": "2026-09-28",
+            "failed_dispatch_attempt": 1,
+            "next_observation_ordinal": 1,
+            "next_dispatch_attempt": 2,
+            "backfill_allowed": False,
+            "retry_failed_session_allowed": False,
+        }),
+        encoding="utf-8",
+    )
+    buf2 = io.StringIO()
+    with redirect_stdout(buf2):
+        rc2 = runner.main(
+            [],
+            _now_utc=datetime(2026, 9, 29, 20, 20, 0, tzinfo=timezone.utc),
+            _state_dir=state_dir,
+            _stage_c_binding_path=binding_file,
+        )
+    assert rc2 == 0
+    after = buf2.getvalue()
+    assert "EXPECTED_SESSION = 2026-09-29" in after
     assert "OBSERVATION_ELIGIBLE = true" in after
     assert "NETWORK_REQUESTS = 0" in after
-    assert not (state_dir / "state.json").exists()
+    assert not (state_dir / "observations").exists()
     assert SH.STATE_ACTIVATION_SESSION == date(2026, 9, 28)

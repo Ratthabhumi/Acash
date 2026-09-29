@@ -403,13 +403,16 @@ def build_initial_state(activation_session: Optional[date] = None) -> Dict[str, 
     }
 
 
-def validate_initial_state(doc: Mapping[str, Any]) -> None:
+def validate_initial_state(
+    doc: Mapping[str, Any],
+    expected_activation: date = STATE_ACTIVATION_SESSION,
+) -> None:
     """Enforce §4 initial-state invariants before observation #1 network."""
     if doc.get("schema_version") != 1:
         raise DataContractError("SHADOW_INITIAL_SCHEMA_VERSION.")
     if doc.get("hypothesis_id") != "HYP_011":
         raise DataContractError("SHADOW_INITIAL_HYPOTHESIS_ID.")
-    if doc.get("activation_session") != "2026-09-28":
+    if doc.get("activation_session") != expected_activation.isoformat():
         raise DataContractError("SHADOW_INITIAL_ACTIVATION.")
     if str(doc.get("starting_aum")) != "100000.00":
         raise DataContractError("SHADOW_INITIAL_AUM.")
@@ -484,6 +487,8 @@ def verify_chain(
     ):
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: locks.")
     observed = list(state_doc.get("observed_sessions", []))
+    if not observed:
+        validate_initial_state(state_doc, expected_activation or STATE_ACTIVATION_SESSION)
     if observed != sorted(observed):
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: sessions unordered.")
     previous: Optional[str] = None

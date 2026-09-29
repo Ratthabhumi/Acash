@@ -16,7 +16,7 @@ import sys
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
@@ -113,14 +113,13 @@ def main(
     _state_dir: Path | None = None,
     _client: Any | None = None,
     _credential_provider: Any | None = None,
+    _stage_c_binding_path: Path | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 prospective shadow runner.")
     parser.add_argument("--execute-network", action="store_true", default=False)
     parser.add_argument("--authorization", default="")
     parser.add_argument("--ordinal", type=int, default=0)
     parser.add_argument("--dispatch-attempt", type=int, default=0)
-    parser.add_argument("--recovery-binding", default="")
-    parser.add_argument("--recovery-binding-id", default="")
     parser.add_argument("--ca-determinations", default="")
     args = parser.parse_args(argv)
 
@@ -131,13 +130,7 @@ def main(
 
     print("=== HYP_011 PROSPECTIVE SHADOW (single atomic session) ===")
     calendar = NyseCa1Calendar()
-    binding_path = Path(args.recovery_binding) if args.recovery_binding else None
-
-    if args.recovery_binding_id and args.recovery_binding_id != STAGE_C_RECOVERY_BINDING_ID:
-        raise DataContractError(
-            f"SHADOW_RECOVERY_BINDING_ID_MISMATCH: got {args.recovery_binding_id}, "
-            f"expected {STAGE_C_RECOVERY_BINDING_ID}."
-        )
+    binding_path = _stage_c_binding_path
 
     if not args.execute_network:
         # PRETEST: full local contract validation, zero network.
@@ -146,9 +139,11 @@ def main(
         pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
         pretest_state_file = pretest_state_dir / "state.json"
         pretest_existing_act: Optional[date] = None
+        pretest_committed_count: int = 0
         if pretest_state_file.is_file():
             try:
                 st = json.loads(pretest_state_file.read_text(encoding="utf-8"))
+                pretest_committed_count = len(st.get("observed_sessions", []))
                 if st.get("observed_sessions"):
                     pretest_existing_act = date.fromisoformat(st["activation_session"])
             except Exception:
@@ -159,6 +154,7 @@ def main(
             now_utc=pretest_now,
             stage_c_binding_path=binding_path,
             explicit_activation=pretest_existing_act,
+            committed_observations=pretest_committed_count,
         )
         pretest_verified = verify_chain(pretest_state_dir, expected_activation=pretest_activation)
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
@@ -183,9 +179,11 @@ def main(
     now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
     state_file = state_dir / "state.json"
     existing_act: Optional[date] = None
+    committed_count: int = 0
     if state_file.is_file():
         try:
             st = json.loads(state_file.read_text(encoding="utf-8"))
+            committed_count = len(st.get("observed_sessions", []))
             if st.get("observed_sessions"):
                 existing_act = date.fromisoformat(st["activation_session"])
         except Exception:
@@ -198,6 +196,7 @@ def main(
         now_utc=now_utc,
         stage_c_binding_path=binding_path,
         explicit_activation=existing_act,
+        committed_observations=committed_count,
     )
 
     verified = verify_chain(state_dir, expected_activation=activation_session)
@@ -206,7 +205,7 @@ def main(
 
     is_recovery = (
         len(observed) == 0
-        and (binding_path is not None or now_utc.date() > FAILED_ACTIVATION_SESSION)
+        and activation_session > FAILED_ACTIVATION_SESSION
     )
     if is_recovery:
         expected_dispatch_attempt = NEXT_DISPATCH_ATTEMPT
@@ -414,8 +413,12 @@ def main(
         "authority": {
             "activation_binding": (
                 str(binding_path)
-                if binding_path
-                else "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json"
+                if binding_path is not None
+                else (
+                    str(STAGE_C_RECOVERY_BINDING_PATH)
+                    if is_recovery
+                    else "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json"
+                )
             ),
             "authorization": args.authorization,
             "ordinal": args.ordinal,

@@ -1,26 +1,28 @@
 """Deterministic tests for HYP_011 prospective SIP window correction and recovery.
 
-Validates the 20 non-negotiable requirements of the recovery contract:
-A. 2026-09-28 failed session cannot be selected again.
-B. No Stage-C-B binding -> zero network.
-C. A future synthetic Stage-C binding derives next session exclusively from calendar + binding timestamp.
-D. Sessions before new activation are missed/unobserved and count 0.
-E. Observation ordinal remains 1 when committed count is 0.
-F. Dispatch attempt is 2 after failed attempt 1.
-G. Wrong observation ordinal fails pre-network.
-H. Wrong dispatch attempt fails pre-network.
-I. Wrong recovery-binding identity fails pre-network.
-J. At close: provider inaccessible.
-K. At close + 10m: inaccessible under 15m rule.
-L. At exact +15m: fail closed.
-M. After +15m: provider-eligible.
-N. Query end exactly canonical close.
-O. Early-close session derives correct close.
-P. Winter session derives correct UTC close.
-Q. No IEX fallback.
-R. Provider 403 creates zero disk mutation.
-S. All six series required before append.
-T. No real/paper/live authority changes.
+Validates the complete set of authority and invariant hardening requirements:
+A. canonical Stage C-B manifest absent -> SHADOW_RECOVERY_BINDING_REQUIRED -> zero network
+B. arbitrary CLI recovery-binding path is impossible / rejected
+C. binding with activation_session but no binding_commit_utc -> rejected
+D. binding with timestamp but no binding_commit_sha -> rejected
+E. invalid SHA -> rejected
+F. naive binding timestamp -> rejected
+G. declared activation != calendar-derived activation -> rejected
+H. valid timestamp + SHA + matching activation -> accepted locally
+I. same-day 20:10Z failure boundary blocks retry (20:09:59Z, 20:10:00Z, 20:10:01Z, 20:20:00Z)
+J. 20:20Z on failed date still cannot select 2026-09-28
+K. Stage-C activation selected only from valid binding
+L. validate_initial_state accepts new Stage-C activation when explicitly expected
+M. validate_initial_state rejects mismatched activation
+N. first committed observation remains ordinal 1
+O. Observation 1 recovery dispatch attempt = 2
+P. no IEX fallback
+Q. provider eligibility remains strict close+15m
+R. candidate schedule defaults to close+20m
+S. winter and early-close schedules calendar-derived
+T. provider 403 produces zero state/observation files
+U. all six series required before append
+V. paper/live false, capital zero, NO_REAL_ORDERS true
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -48,7 +50,7 @@ from acash.research.hyp_011.shadow_ops import (
 )
 import sys
 sys.path.insert(0, "scripts")
-import process_hyp_011_prospective_shadow as runner  # type: ignore[import-not-found]
+import process_hyp_011_prospective_shadow as runner
 
 
 def _make_client(
@@ -64,19 +66,38 @@ def _make_client(
     )
 
 
-def test_a_failed_session_2026_09_28_cannot_be_selected_again(tmp_path: Path) -> None:
-    """A. 2026-09-28 failed session cannot be selected again."""
+def make_valid_stage_c_binding_doc(
+    commit_utc: str = "2026-09-29T12:00:00Z",
+    activation_session: str = "2026-09-29",
+    commit_sha: str = "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
+) -> Dict[str, Any]:
+    return {
+        "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
+        "binding_commit_sha": commit_sha,
+        "binding_commit_utc": commit_utc,
+        "activation_session": activation_session,
+        "scientific_prospective_boundary": "2026-09-25",
+        "failed_dispatch_session": "2026-09-28",
+        "failed_dispatch_attempt": 1,
+        "next_observation_ordinal": 1,
+        "next_dispatch_attempt": 2,
+        "backfill_allowed": False,
+        "retry_failed_session_allowed": False,
+    }
+
+
+def test_a_canonical_stage_c_b_manifest_absent_fails_closed_zero_network(tmp_path: Path) -> None:
+    """A. canonical Stage C-B manifest absent -> SHADOW_RECOVERY_BINDING_REQUIRED -> zero network."""
     cal = NyseCa1Calendar()
-    # Reproduce failure state: no state.json, no observations, current time after 2026-09-28 close
     now_post_failure = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
     state_dir = tmp_path / "prospective"
 
-    # 1. Without Stage-C binding: fails closed with SHADOW_RECOVERY_BINDING_REQUIRED
+    # 1. Direct function call fails closed
     with pytest.raises(DataContractError) as exc_info:
         SH.resolve_operational_activation(cal, now_post_failure)
     assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
 
-    # 2. In DRY RUN without binding: raises SHADOW_RECOVERY_BINDING_REQUIRED (never selects 2026-09-28)
+    # 2. Dry run runner execution fails closed with zero network
     with pytest.raises(DataContractError) as exc_info:
         runner.main(
             [],
@@ -85,51 +106,15 @@ def test_a_failed_session_2026_09_28_cannot_be_selected_again(tmp_path: Path) ->
         )
     assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
 
-    # 3. With a Stage C binding to 2026-09-29 or later: _expected_next returns the new activation, NOT 2026-09-28
-    synthetic_binding = tmp_path / "stage_c.json"
-    synthetic_binding.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "activation_session": "2026-09-29",
-        }),
-        encoding="utf-8",
-    )
-    resolved = SH.resolve_operational_activation(
-        cal, now_post_failure, stage_c_binding_path=synthetic_binding
-    )
-    assert resolved == date(2026, 9, 29)
-    next_session = runner._expected_next([], cal, activation_session=resolved)
-    assert next_session == date(2026, 9, 29)
-    assert next_session != date(2026, 9, 28)
-
-    # 4. Any direct attempt to record 2026-09-28 under the new activation is rejected as backfill
-    state = SH.ShadowState(activation_session=resolved)
-    with pytest.raises(DataContractError) as exc_info:
-        state.record_session(
-            date(2026, 9, 28),
-            cal,
-            datetime(2026, 9, 29, 21, 0, 0, tzinfo=timezone.utc),
-        )
-    assert "SHADOW_EARLIER_THAN_ACTIVATION" in str(exc_info.value)
-
-
-def test_b_no_stage_c_b_binding_zero_network(tmp_path: Path) -> None:
-    """B. No Stage-C-B binding -> zero network requests issued."""
+    # 3. Network runner execution fails closed with zero network
     network_attempts = [0]
-
-    def _listener() -> None:
-        network_attempts[0] += 1
-
-    def _should_not_reach(r: httpx.Request) -> httpx.Response:
-        raise AssertionError("Network must not be reached without Stage-C binding")
-
-    client = _make_client(_should_not_reach, listener=_listener)
-    state_dir = tmp_path / "prospective"
+    client = _make_client(
+        lambda r: pytest.fail("Network must not be reached"),
+        listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1),
+    )
     dummy_prov = EnvAlpacaCredentialProvider(
         environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
     )
-    now_post_failure = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
-
     argv = [
         "--execute-network",
         "--authorization",
@@ -151,62 +136,203 @@ def test_b_no_stage_c_b_binding_zero_network(tmp_path: Path) -> None:
     assert network_attempts[0] == 0
 
 
-def test_c_synthetic_stage_c_binding_derives_next_session_from_calendar_and_commit(tmp_path: Path) -> None:
-    """C. A future synthetic Stage-C binding derives next session exclusively from calendar + commit timestamp."""
+def test_b_arbitrary_cli_recovery_binding_path_is_rejected() -> None:
+    """B. Arbitrary CLI recovery-binding path is impossible / rejected by CLI."""
+    argv = ["--recovery-binding", "arbitrary/path/manifest.json"]
+    with pytest.raises(SystemExit):
+        runner.main(argv)
+
+    argv2 = ["--recovery-binding-id", SH.STAGE_C_RECOVERY_BINDING_ID]
+    with pytest.raises(SystemExit):
+        runner.main(argv2)
+
+
+def test_c_binding_with_activation_session_but_no_commit_utc_rejected(tmp_path: Path) -> None:
+    """C. Binding with activation_session but no binding_commit_utc -> rejected."""
     cal = NyseCa1Calendar()
-    # Case 1: Commit at 14:00 UTC on 2026-09-29 is AFTER NYSE open (13:30 UTC).
-    # The first NYSE open strictly after this timestamp is 2026-09-30 (13:30 UTC).
-    binding_file = tmp_path / "binding_after_open.json"
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+    doc = make_valid_stage_c_binding_doc()
+    del doc["binding_commit_utc"]
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_MISSING_FIELD: binding_commit_utc" in str(exc_info.value)
+
+
+def test_d_binding_with_timestamp_but_no_commit_sha_rejected(tmp_path: Path) -> None:
+    """D. Binding with timestamp but no binding_commit_sha -> rejected."""
+    cal = NyseCa1Calendar()
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+    doc = make_valid_stage_c_binding_doc()
+    del doc["binding_commit_sha"]
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_MISSING_FIELD: binding_commit_sha" in str(exc_info.value)
+
+
+def test_e_invalid_commit_sha_rejected(tmp_path: Path) -> None:
+    """E. Invalid SHA -> rejected."""
+    cal = NyseCa1Calendar()
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    # 1. Truncated SHA (< 40 characters)
+    doc = make_valid_stage_c_binding_doc(commit_sha="d9608c0a")
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_INVALID_SHA" in str(exc_info.value)
+
+    # 2. 40 characters but non-hex
+    doc["binding_commit_sha"] = "z" * 40
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_INVALID_SHA" in str(exc_info.value)
+
+
+def test_f_naive_binding_timestamp_rejected(tmp_path: Path) -> None:
+    """F. Naive binding timestamp -> rejected."""
+    cal = NyseCa1Calendar()
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+    doc = make_valid_stage_c_binding_doc(commit_utc="2026-09-29T12:00:00")  # missing Z / tz
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_TIMESTAMP_NAIVE" in str(exc_info.value)
+
+
+def test_g_declared_activation_mismatch_rejected(tmp_path: Path) -> None:
+    """G. Declared activation != calendar-derived activation -> rejected."""
+    cal = NyseCa1Calendar()
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+    # Commit at 12:00 UTC on 9/29 derives 2026-09-29, but declared is forged as 2026-09-30
+    doc = make_valid_stage_c_binding_doc(
+        commit_utc="2026-09-29T12:00:00Z",
+        activation_session="2026-09-30",
+    )
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, now, stage_c_binding_path=binding_path)
+    assert "SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH" in str(exc_info.value)
+
+
+def test_h_valid_timestamp_and_sha_and_matching_activation_accepted(tmp_path: Path) -> None:
+    """H. Valid timestamp + SHA + matching activation -> accepted locally."""
+    cal = NyseCa1Calendar()
+    now = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Pre-open commit qualifies today
+    doc1 = make_valid_stage_c_binding_doc(
+        commit_utc="2026-09-29T12:00:00Z",
+        activation_session="2026-09-29",
+    )
+    p1 = tmp_path / "b1.json"
+    p1.write_text(json.dumps(doc1), encoding="utf-8")
+    assert SH.resolve_operational_activation(cal, now, stage_c_binding_path=p1) == date(2026, 9, 29)
+
+    # Post-open commit qualifies next trading session (2026-09-30)
+    doc2 = make_valid_stage_c_binding_doc(
+        commit_utc="2026-09-29T14:00:00Z",
+        activation_session="2026-09-30",
+    )
+    p2 = tmp_path / "b2.json"
+    p2.write_text(json.dumps(doc2), encoding="utf-8")
+    assert SH.resolve_operational_activation(cal, now, stage_c_binding_path=p2) == date(2026, 9, 30)
+
+
+def test_i_same_day_failure_boundary_blocks_retry() -> None:
+    """I. Same-day 20:10Z failure boundary blocks retry at 20:09:59Z, 20:10:00Z, 20:10:01Z, 20:20:00Z."""
+    cal = NyseCa1Calendar()
+
+    # 1. 20:09:59Z: strictly before failed dispatch, Stage-B initial activation returned
+    t_before = datetime(2026, 9, 28, 20, 9, 59, tzinfo=timezone.utc)
+    assert SH.resolve_operational_activation(cal, t_before) == date(2026, 9, 28)
+
+    # 2. 20:10:00Z: exact historical failure instant, strictly blocked
+    t_boundary = datetime(2026, 9, 28, 20, 10, 0, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, t_boundary)
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+    # 3. 20:10:01Z: strictly after historical failure instant, strictly blocked
+    t_after_1s = datetime(2026, 9, 28, 20, 10, 1, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, t_after_1s)
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+    # 4. 20:20:00Z: same-day operational schedule time, strictly blocked
+    t_after_10m = datetime(2026, 9, 28, 20, 20, 0, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError) as exc_info:
+        SH.resolve_operational_activation(cal, t_after_10m)
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+
+def test_j_2020z_on_failed_date_still_cannot_select_2026_09_28(tmp_path: Path) -> None:
+    """J. 20:20Z on failed date still cannot select 2026-09-28."""
+    state_dir = tmp_path / "prospective"
+    t_2020 = datetime(2026, 9, 28, 20, 20, 0, tzinfo=timezone.utc)
+
+    # Runner execution fails closed without selecting 2026-09-28
+    with pytest.raises(DataContractError) as exc_info:
+        runner.main([], _now_utc=t_2020, _state_dir=state_dir)
+    assert "SHADOW_RECOVERY_BINDING_REQUIRED" in str(exc_info.value)
+
+
+def test_k_stage_c_activation_selected_only_from_valid_binding(tmp_path: Path) -> None:
+    """K. Stage-C activation selected only from valid binding."""
+    cal = NyseCa1Calendar()
+    now_post_failure = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Without binding: fails closed
+    with pytest.raises(DataContractError):
+        SH.resolve_operational_activation(cal, now_post_failure)
+
+    # With valid binding injected internally: selects Stage-C activation
+    binding_file = tmp_path / "valid_stage_c.json"
     binding_file.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "binding_commit_utc": "2026-09-29T14:00:00Z",
-        }),
+        json.dumps(make_valid_stage_c_binding_doc(
+            commit_utc="2026-09-29T12:00:00Z",
+            activation_session="2026-09-29",
+        )),
         encoding="utf-8",
     )
-    act1 = SH.resolve_operational_activation(
-        cal, datetime(2026, 9, 29, 15, 0, 0, tzinfo=timezone.utc), stage_c_binding_path=binding_file
+    resolved = SH.resolve_operational_activation(
+        cal, now_post_failure, stage_c_binding_path=binding_file
     )
-    assert act1 == date(2026, 9, 30)
-
-    # Case 2: Commit at 12:00 UTC on 2026-09-29 is BEFORE NYSE open (13:30 UTC).
-    # The first NYSE open strictly after this timestamp is 2026-09-29 (13:30 UTC).
-    binding_file2 = tmp_path / "binding_before_open.json"
-    binding_file2.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "binding_commit_utc": "2026-09-29T12:00:00Z",
-        }),
-        encoding="utf-8",
-    )
-    act2 = SH.resolve_operational_activation(
-        cal, datetime(2026, 9, 29, 12, 30, 0, tzinfo=timezone.utc), stage_c_binding_path=binding_file2
-    )
-    assert act2 == date(2026, 9, 29)
+    assert resolved == date(2026, 9, 29)
+    next_session = runner._expected_next([], cal, activation_session=resolved)
+    assert next_session == date(2026, 9, 29)
+    assert next_session != date(2026, 9, 28)
 
 
-def test_d_sessions_before_new_activation_are_missed_unobserved_and_count_zero() -> None:
-    """D. Sessions before new activation are missed/unobserved and count 0."""
-    cal = NyseCa1Calendar()
-    # For new activation 2026-09-29: missed interval [2026-09-25, 2026-09-29) contains 9/25 and 9/28
-    missed_29 = SH.missed_unobserved_sessions(cal, date(2026, 9, 29))
-    assert missed_29 == [date(2026, 9, 25), date(2026, 9, 28)]
-
-    # For new activation 2026-09-30: missed interval [2026-09-25, 2026-09-30) contains 9/25, 9/28, 9/29
-    missed_30 = SH.missed_unobserved_sessions(cal, date(2026, 9, 30))
-    assert missed_30 == [date(2026, 9, 25), date(2026, 9, 28), date(2026, 9, 29)]
-
-    # State rejects any attempt to record sessions in the missed interval
-    state = SH.ShadowState(activation_session=date(2026, 9, 30))
-    for s in missed_30:
-        with pytest.raises(DataContractError) as exc_info:
-            state.record_session(s, cal, datetime(2026, 9, 30, 21, 0, 0, tzinfo=timezone.utc))
-        assert "SHADOW_EARLIER_THAN_ACTIVATION" in str(exc_info.value)
-    assert len(state.observed_sessions) == 0
+def test_l_validate_initial_state_accepts_new_stage_c_activation() -> None:
+    """L. validate_initial_state accepts new Stage-C activation when explicitly expected."""
+    doc = build_initial_state(activation_session=date(2026, 9, 29))
+    assert doc["activation_session"] == "2026-09-29"
+    # Must pass without error when expected activation matches
+    validate_initial_state(doc, expected_activation=date(2026, 9, 29))
 
 
-def test_e_observation_ordinal_remains_1_when_committed_count_is_0(tmp_path: Path) -> None:
-    """E. Observation ordinal remains 1 when committed count is 0."""
+def test_m_validate_initial_state_rejects_mismatched_activation() -> None:
+    """M. validate_initial_state rejects mismatched activation."""
+    doc = build_initial_state(activation_session=date(2026, 9, 29))
+    with pytest.raises(DataContractError) as exc_info:
+        validate_initial_state(doc, expected_activation=date(2026, 9, 30))
+    assert "SHADOW_INITIAL_ACTIVATION" in str(exc_info.value)
+
+
+def test_n_first_committed_observation_remains_ordinal_1(tmp_path: Path) -> None:
+    """N. First committed observation remains ordinal 1."""
     state_dir = tmp_path / "prospective"
     verified = verify_chain(state_dir)
     assert len(verified.get("observed_sessions", [])) == 0
@@ -214,25 +340,16 @@ def test_e_observation_ordinal_remains_1_when_committed_count_is_0(tmp_path: Pat
     expected_ordinal = len(verified.get("observed_sessions", [])) + 1
     assert expected_ordinal == 1
 
-
-def test_f_dispatch_attempt_is_2_after_failed_attempt_1() -> None:
-    """F. Dispatch attempt is 2 after failed attempt 1."""
-    assert SH.FAILED_DISPATCH_ATTEMPT == 1
-    assert SH.NEXT_DISPATCH_ATTEMPT == 2
-    assert SH.FAILED_ACTIVATION_SESSION == date(2026, 9, 28)
-
-
-def test_g_wrong_observation_ordinal_fails_prenetwork(tmp_path: Path) -> None:
-    """G. Wrong observation ordinal fails pre-network."""
-    network_attempts = [0]
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}), listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1))
+    # Pass wrong ordinal to runner -> fails pre-network
     binding_file = tmp_path / "stage_c.json"
     binding_file.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "activation_session": "2026-09-29",
-        }),
+        json.dumps(make_valid_stage_c_binding_doc()),
         encoding="utf-8",
+    )
+    network_attempts = [0]
+    client = _make_client(
+        lambda r: pytest.fail("Network must not be reached"),
+        listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1),
     )
     dummy_prov = EnvAlpacaCredentialProvider(
         environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
@@ -245,32 +362,34 @@ def test_g_wrong_observation_ordinal_fails_prenetwork(tmp_path: Path) -> None:
         "2",  # WRONG: expected 1
         "--dispatch-attempt",
         "2",
-        "--recovery-binding",
-        str(binding_file),
     ]
     with pytest.raises(DataContractError) as exc_info:
         runner.main(
             argv,
             _now_utc=datetime(2026, 9, 29, 20, 20, 0, tzinfo=timezone.utc),
-            _state_dir=tmp_path / "prospective",
+            _state_dir=state_dir,
             _client=client,
             _credential_provider=dummy_prov,
+            _stage_c_binding_path=binding_file,
         )
     assert "SHADOW_AUTHORIZATION_ORDINAL_MISMATCH" in str(exc_info.value)
     assert network_attempts[0] == 0
 
 
-def test_h_wrong_dispatch_attempt_fails_prenetwork(tmp_path: Path) -> None:
-    """H. Wrong dispatch attempt fails pre-network."""
-    network_attempts = [0]
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}), listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1))
+def test_o_observation_1_recovery_dispatch_attempt_is_2(tmp_path: Path) -> None:
+    """O. Observation 1 recovery dispatch attempt = 2."""
+    assert SH.FAILED_DISPATCH_ATTEMPT == 1
+    assert SH.NEXT_DISPATCH_ATTEMPT == 2
+
     binding_file = tmp_path / "stage_c.json"
     binding_file.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "activation_session": "2026-09-29",
-        }),
+        json.dumps(make_valid_stage_c_binding_doc()),
         encoding="utf-8",
+    )
+    network_attempts = [0]
+    client = _make_client(
+        lambda r: pytest.fail("Network must not be reached"),
+        listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1),
     )
     dummy_prov = EnvAlpacaCredentialProvider(
         environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
@@ -283,8 +402,6 @@ def test_h_wrong_dispatch_attempt_fails_prenetwork(tmp_path: Path) -> None:
         "1",
         "--dispatch-attempt",
         "1",  # WRONG: expected 2 under recovery
-        "--recovery-binding",
-        str(binding_file),
     ]
     with pytest.raises(DataContractError) as exc_info:
         runner.main(
@@ -293,198 +410,14 @@ def test_h_wrong_dispatch_attempt_fails_prenetwork(tmp_path: Path) -> None:
             _state_dir=tmp_path / "prospective",
             _client=client,
             _credential_provider=dummy_prov,
+            _stage_c_binding_path=binding_file,
         )
     assert "SHADOW_AUTHORIZATION_ATTEMPT_MISMATCH" in str(exc_info.value)
     assert network_attempts[0] == 0
 
 
-def test_i_wrong_recovery_binding_identity_fails_prenetwork(tmp_path: Path) -> None:
-    """I. Wrong recovery-binding identity fails pre-network."""
-    network_attempts = [0]
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}), listener=lambda: network_attempts.__setitem__(0, network_attempts[0] + 1))
-    binding_file = tmp_path / "corrupt_binding.json"
-    binding_file.write_text(
-        json.dumps({
-            "binding_id": "WRONG_BINDING_IDENTIFIER",
-            "activation_session": "2026-09-29",
-        }),
-        encoding="utf-8",
-    )
-    dummy_prov = EnvAlpacaCredentialProvider(
-        environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
-    )
-    argv = [
-        "--execute-network",
-        "--authorization",
-        "AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001_ATTEMPT_0002",
-        "--ordinal",
-        "1",
-        "--dispatch-attempt",
-        "2",
-        "--recovery-binding",
-        str(binding_file),
-    ]
-    with pytest.raises(DataContractError) as exc_info:
-        runner.main(
-            argv,
-            _now_utc=datetime(2026, 9, 29, 20, 20, 0, tzinfo=timezone.utc),
-            _state_dir=tmp_path / "prospective",
-            _client=client,
-            _credential_provider=dummy_prov,
-        )
-    assert "SHADOW_RECOVERY_BINDING_ID_MISMATCH" in str(exc_info.value)
-    assert network_attempts[0] == 0
-
-
-def test_j_at_close_provider_inaccessible() -> None:
-    """J. At close: provider inaccessible."""
-    cal = NyseCa1Calendar()
-    session = date(2026, 9, 28)
-    close_utc = cal.get_session(session).close_utc
-    assert close_utc is not None
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}))
-
-    with pytest.raises(DataContractError) as exc_info:
-        client.fetch_single_session("SPY", session, now_utc=close_utc)
-    assert "market session incomplete" in str(exc_info.value)
-
-
-def test_k_at_close_plus_10m_inaccessible_under_15m_rule() -> None:
-    """K. At close + 10m: inaccessible under 15m rule."""
-    cal = NyseCa1Calendar()
-    session = date(2026, 9, 28)
-    close_utc = cal.get_session(session).close_utc
-    assert close_utc is not None
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}))
-
-    with pytest.raises(DataContractError) as exc_info:
-        client.fetch_single_session(
-            "SPY", session, now_utc=close_utc + timedelta(minutes=10)
-        )
-    assert "provider SIP data not yet accessible" in str(exc_info.value)
-
-
-def test_l_at_exact_close_plus_15m_fails_closed() -> None:
-    """L. At exact +15m: fail closed (strict > inequality)."""
-    cal = NyseCa1Calendar()
-    session = date(2026, 9, 28)
-    eligible_after = SH.provider_observation_eligible_after(session, cal)
-    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}))
-
-    with pytest.raises(DataContractError) as exc_info:
-        client.fetch_single_session("SPY", session, now_utc=eligible_after)
-    assert "provider SIP data not yet accessible" in str(exc_info.value)
-
-
-def test_m_after_close_plus_15m_provider_eligible() -> None:
-    """M. After +15m: provider-eligible."""
-    cal = NyseCa1Calendar()
-    session = date(2026, 9, 28)
-    eligible_after = SH.provider_observation_eligible_after(session, cal)
-    network_called = [False]
-
-    def _handler(r: httpx.Request) -> httpx.Response:
-        network_called[0] = True
-        return httpx.Response(
-            200,
-            json={
-                "bars": [
-                    {
-                        "t": "2026-09-28T05:00:00Z",
-                        "o": 100.0,
-                        "h": 101.0,
-                        "l": 99.0,
-                        "c": 100.5,
-                        "v": 1000,
-                    }
-                ]
-            },
-        )
-
-    client = _make_client(_handler)
-    res = client.fetch_single_session(
-        "SPY", session, now_utc=eligible_after + timedelta(microseconds=1)
-    )
-    assert network_called[0] is True
-    assert len(res.bars) == 1
-
-
-def test_n_query_end_exactly_canonical_close() -> None:
-    """N. Query end exactly canonical close."""
-    captured_requests: List[httpx.Request] = []
-
-    def _handler(request: httpx.Request) -> httpx.Response:
-        captured_requests.append(request)
-        return httpx.Response(
-            200,
-            json={
-                "bars": [
-                    {
-                        "t": "2026-09-28T05:00:00Z",
-                        "o": 100.0,
-                        "h": 101.0,
-                        "l": 99.0,
-                        "c": 100.5,
-                        "v": 1000,
-                    }
-                ]
-            },
-        )
-
-    client = _make_client(_handler)
-    cal = NyseCa1Calendar()
-    session = date(2026, 9, 28)
-    now_utc = datetime(2026, 9, 28, 20, 20, 0, tzinfo=timezone.utc)
-    client.fetch_single_session(
-        symbol="SPY",
-        session=session,
-        feed=MarketDataFeed.SIP,
-        adjustment=PriceAdjustment.RAW,
-        timeframe="1Day",
-        now_utc=now_utc,
-    )
-    assert len(captured_requests) == 1
-    req = captured_requests[0]
-    query_params = dict(req.url.params)
-    assert query_params["start"] == "2026-09-28T00:00:00Z"
-    assert query_params["end"] == "2026-09-28T20:00:00Z"
-    assert "23:59:59" not in query_params["end"]
-
-
-def test_o_early_close_session_derives_correct_close() -> None:
-    """O. Early-close session derives correct close."""
-    cal = NyseCa1Calendar()
-    # 2026-11-27 is Day after Thanksgiving (early close 13:00 EST -> 18:00 UTC)
-    early_session = date(2026, 11, 27)
-    session_details = cal.get_session(early_session)
-    assert session_details.close_utc == datetime(2026, 11, 27, 18, 0, 0, tzinfo=timezone.utc)
-
-    # Candidate schedule derives 18:00 UTC + 15m delay + 5m margin = 18:20 UTC
-    sched = SH.candidate_schedule_time(
-        early_session, cal, operational_margin=timedelta(minutes=5)
-    )
-    assert sched == datetime(2026, 11, 27, 18, 20, 0, tzinfo=timezone.utc)
-    assert sched != datetime(2026, 11, 27, 20, 20, 0, tzinfo=timezone.utc)
-
-
-def test_p_winter_session_derives_correct_utc_close() -> None:
-    """P. Winter session derives correct UTC close (proving 20:20 UTC is not universal)."""
-    cal = NyseCa1Calendar()
-    # 2026-12-15 is regular session during Standard Time (EST = UTC-5: close 16:00 EST -> 21:00 UTC)
-    winter_session = date(2026, 12, 15)
-    session_details = cal.get_session(winter_session)
-    assert session_details.close_utc == datetime(2026, 12, 15, 21, 0, 0, tzinfo=timezone.utc)
-
-    # Candidate schedule derives 21:00 UTC + 15m delay + 5m margin = 21:20 UTC
-    sched = SH.candidate_schedule_time(
-        winter_session, cal, operational_margin=timedelta(minutes=5)
-    )
-    assert sched == datetime(2026, 12, 15, 21, 20, 0, tzinfo=timezone.utc)
-    assert sched != datetime(2026, 12, 15, 20, 20, 0, tzinfo=timezone.utc)
-
-
-def test_q_no_iex_fallback() -> None:
-    """Q. No IEX fallback."""
+def test_p_no_iex_fallback() -> None:
+    """P. No IEX fallback."""
     client = _make_client(lambda r: httpx.Response(200, json={"bars": []}))
     session = date(2026, 9, 28)
     now_utc = datetime(2026, 9, 28, 20, 20, 0, tzinfo=timezone.utc)
@@ -499,8 +432,103 @@ def test_q_no_iex_fallback() -> None:
     assert "feed='sip'" in str(exc_info.value)
 
 
-def test_r_provider_403_creates_zero_disk_mutation(tmp_path: Path) -> None:
-    """R. Provider 403 creates zero disk mutation."""
+def test_q_provider_eligibility_remains_strict_close_plus_15m() -> None:
+    """Q. Provider eligibility remains strict close+15m."""
+    cal = NyseCa1Calendar()
+    session = date(2026, 9, 28)
+    close_utc = cal.get_session(session).close_utc
+    assert close_utc is not None
+    client = _make_client(lambda r: httpx.Response(200, json={"bars": []}))
+
+    # 1. At exact close: incomplete
+    with pytest.raises(DataContractError) as exc_info:
+        client.fetch_single_session("SPY", session, now_utc=close_utc)
+    assert "market session incomplete" in str(exc_info.value)
+
+    # 2. At close + 10m: inaccessible under 15m rule
+    with pytest.raises(DataContractError) as exc_info:
+        client.fetch_single_session("SPY", session, now_utc=close_utc + timedelta(minutes=10))
+    assert "provider SIP data not yet accessible" in str(exc_info.value)
+
+    # 3. At exact close + 15m: fails closed (strict > inequality)
+    eligible_after = SH.provider_observation_eligible_after(session, cal)
+    assert eligible_after == close_utc + timedelta(minutes=15)
+    with pytest.raises(DataContractError) as exc_info:
+        client.fetch_single_session("SPY", session, now_utc=eligible_after)
+    assert "provider SIP data not yet accessible" in str(exc_info.value)
+
+    # 4. Strictly after close + 15m: query executes and query end is exactly canonical close
+    captured_requests: List[httpx.Request] = []
+
+    def _handler(req: httpx.Request) -> httpx.Response:
+        captured_requests.append(req)
+        return httpx.Response(
+            200,
+            json={
+                "bars": [
+                    {
+                        "t": "2026-09-28T05:00:00Z",
+                        "o": 100.0,
+                        "h": 101.0,
+                        "l": 99.0,
+                        "c": 100.5,
+                        "v": 1000,
+                    }
+                ]
+            },
+        )
+
+    client_valid = _make_client(_handler)
+    res = client_valid.fetch_single_session(
+        "SPY", session, now_utc=eligible_after + timedelta(microseconds=1)
+    )
+    assert len(res.bars) == 1
+    assert len(captured_requests) == 1
+    query_params = dict(captured_requests[0].url.params)
+    assert query_params["start"] == "2026-09-28T00:00:00Z"
+    assert query_params["end"] == "2026-09-28T20:00:00Z"
+    assert "23:59:59" not in query_params["end"]
+
+
+def test_r_candidate_schedule_defaults_to_close_plus_20m() -> None:
+    """R. Candidate schedule defaults to close+20m."""
+    cal = NyseCa1Calendar()
+    session = date(2026, 9, 29)
+    close_utc = cal.get_session(session).close_utc
+    assert close_utc == datetime(2026, 9, 29, 20, 0, 0, tzinfo=timezone.utc)
+
+    # Provider eligibility: close + 15m + 0m = 20:15 UTC
+    elig = SH.provider_observation_eligible_after(session, cal)
+    assert elig == datetime(2026, 9, 29, 20, 15, 0, tzinfo=timezone.utc)
+
+    # Candidate operational schedule: close + 15m + 5m = 20:20 UTC
+    sched = SH.candidate_schedule_time(session, cal)
+    assert sched == datetime(2026, 9, 29, 20, 20, 0, tzinfo=timezone.utc)
+
+
+def test_s_winter_and_early_close_schedules_calendar_derived() -> None:
+    """S. Winter and early-close schedules calendar-derived."""
+    cal = NyseCa1Calendar()
+
+    # 1. Early-close session: 2026-11-27 (close 13:00 EST -> 18:00 UTC)
+    early_session = date(2026, 11, 27)
+    early_close = cal.get_session(early_session).close_utc
+    assert early_close == datetime(2026, 11, 27, 18, 0, 0, tzinfo=timezone.utc)
+    early_sched = SH.candidate_schedule_time(early_session, cal)
+    assert early_sched == datetime(2026, 11, 27, 18, 20, 0, tzinfo=timezone.utc)
+    assert early_sched != datetime(2026, 11, 27, 20, 20, 0, tzinfo=timezone.utc)
+
+    # 2. Winter session: 2026-12-15 (close 16:00 EST -> 21:00 UTC)
+    winter_session = date(2026, 12, 15)
+    winter_close = cal.get_session(winter_session).close_utc
+    assert winter_close == datetime(2026, 12, 15, 21, 0, 0, tzinfo=timezone.utc)
+    winter_sched = SH.candidate_schedule_time(winter_session, cal)
+    assert winter_sched == datetime(2026, 12, 15, 21, 20, 0, tzinfo=timezone.utc)
+    assert winter_sched != datetime(2026, 12, 15, 20, 20, 0, tzinfo=timezone.utc)
+
+
+def test_t_provider_403_produces_zero_state_or_observation_files(tmp_path: Path) -> None:
+    """T. Provider 403 produces zero state/observation files."""
     def _forbidden_handler(r: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"code": 40010001, "message": "SIP denied"})
 
@@ -511,10 +539,7 @@ def test_r_provider_403_creates_zero_disk_mutation(tmp_path: Path) -> None:
     )
     binding_file = tmp_path / "stage_c.json"
     binding_file.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "activation_session": "2026-09-29",
-        }),
+        json.dumps(make_valid_stage_c_binding_doc()),
         encoding="utf-8",
     )
 
@@ -526,8 +551,6 @@ def test_r_provider_403_creates_zero_disk_mutation(tmp_path: Path) -> None:
         "1",
         "--dispatch-attempt",
         "2",
-        "--recovery-binding",
-        str(binding_file),
     ]
     with pytest.raises(DataContractError) as exc_info:
         runner.main(
@@ -536,19 +559,19 @@ def test_r_provider_403_creates_zero_disk_mutation(tmp_path: Path) -> None:
             _state_dir=state_dir,
             _client=client,
             _credential_provider=dummy_prov,
+            _stage_c_binding_path=binding_file,
         )
     assert "Alpaca access forbidden (HTTP 403)" in str(exc_info.value)
     assert not (state_dir / "observations" / "2026-09-29.json").exists()
     assert not (state_dir / "state.json").exists()
 
 
-def test_s_all_six_series_required_before_append(tmp_path: Path) -> None:
-    """S. All six series required before append."""
+def test_u_all_six_series_required_before_append(tmp_path: Path) -> None:
+    """U. All six series required before append."""
     attempt_count = [0]
 
     def _flaky_handler(r: httpx.Request) -> httpx.Response:
         attempt_count[0] += 1
-        # Fail on the 4th series
         if attempt_count[0] == 4:
             return httpx.Response(403, json={"code": 40010001, "message": "SIP denied"})
         return httpx.Response(
@@ -574,10 +597,7 @@ def test_s_all_six_series_required_before_append(tmp_path: Path) -> None:
     )
     binding_file = tmp_path / "stage_c.json"
     binding_file.write_text(
-        json.dumps({
-            "binding_id": SH.STAGE_C_RECOVERY_BINDING_ID,
-            "activation_session": "2026-09-29",
-        }),
+        json.dumps(make_valid_stage_c_binding_doc()),
         encoding="utf-8",
     )
     argv = [
@@ -588,8 +608,6 @@ def test_s_all_six_series_required_before_append(tmp_path: Path) -> None:
         "1",
         "--dispatch-attempt",
         "2",
-        "--recovery-binding",
-        str(binding_file),
     ]
     with pytest.raises(DataContractError):
         runner.main(
@@ -598,13 +616,14 @@ def test_s_all_six_series_required_before_append(tmp_path: Path) -> None:
             _state_dir=state_dir,
             _client=client,
             _credential_provider=dummy_prov,
+            _stage_c_binding_path=binding_file,
         )
     assert not (state_dir / "observations" / "2026-09-29.json").exists()
     assert not (state_dir / "state.json").exists()
 
 
-def test_t_no_real_paper_live_authority_changes() -> None:
-    """T. No real/paper/live authority changes."""
+def test_v_paper_live_false_capital_zero_no_real_orders() -> None:
+    """V. Paper/live false, capital zero, NO_REAL_ORDERS true."""
     state = build_initial_state()
     assert state["starting_aum"] == "100000.00"
     assert Decimal(state["starting_aum"]) == Decimal("100000.00")

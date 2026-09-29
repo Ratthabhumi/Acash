@@ -41,8 +41,10 @@ To ensure that operational activation is bound exclusively to canonical `main` h
 ### Stage C-B: Canonical Main Activation Binding (POST-MERGE ONLY)
 - To be created **strictly after** human authorization and merge of the recovery branch into canonical `main`.
 - Binds the canonical `main` merge commit SHA and commit timestamp in UTC.
-- Canonical operational activation session will be derived dynamically via `NyseCa1Calendar.derive_activation_session(calendar, merge_commit_utc)` (the first NYSE session open strictly after the canonical commit timestamp).
+- Canonical operational activation session will be derived dynamically via `acash.research.hyp_011.shadow.derive_activation_session(calendar, merge_commit_utc)` (the first NYSE session open strictly after the canonical commit timestamp).
 - Manifest: `docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json`.
+- **Authority Binding Requirement:** The Stage C-B production manifest strictly requires both canonical `main` commit SHA (`binding_commit_sha`, 40 hex characters) and timezone-aware UTC commit timestamp (`binding_commit_utc`). It cannot authorize an `activation_session` by itself; runtime independently derives the expected activation session from the calendar and commit timestamp and fails closed on any mismatch (`SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH`).
+- **Canonical Path Requirement:** Production recovery authority must come exclusively from `docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json` relative to the canonical repository checkout. Arbitrary CLI filesystem paths (`--recovery-binding`) are forbidden and rejected.
 
 ---
 
@@ -56,9 +58,13 @@ To prevent ambiguity between scientific sample count and operational attempt his
   $$\text{OBSERVATION\_ORDINAL} = 1$$
   $$\text{S1\_PROGRESS} = 0/20$$
 
-- **Dispatch Attempt Lineage:**
+- **Dispatch Attempt Lineage & Scoping:**
   $$\text{FAILED\_DISPATCH\_ATTEMPT} = 1 \quad (\text{Session 2026-09-28})$$
-  $$\text{NEXT\_DISPATCH\_ATTEMPT} = 2$$
+  $$\text{NEXT\_DISPATCH\_ATTEMPT} = 2 \quad (\text{Recovery Dispatch for Observation \#0001})$$
+  *Scoping Rule:* `dispatch_attempt` is strictly scoped to the current observation ordinal.
+  - Observation ordinal 1: attempt 1 = failed (blocked provider access); attempt 2 = next recovery dispatch.
+  - After Observation 1 successfully commits, Observation 2 begins with its own attempt ordinal (attempt 1) under the standard prospective operational contract.
+  - `NEXT_DISPATCH_ATTEMPT = 2` applies exclusively to Observation #0001 recovery and is NOT a forever-global monotonic counter.
 
 - **Authorization Token Specification:**
   For post-recovery dispatches ($\text{dispatch\_attempt} \ge 2$), authorization tokens must make both the observation ordinal and dispatch attempt explicit:
@@ -80,15 +86,21 @@ To prevent ambiguity between scientific sample count and operational attempt his
 - **Superseded operational rule:** `MARKET_CLOSE + PROVIDER_ACCESS_DELAY + FAIL_CLOSED_BOUNDARY`.
 - Historical manifests remain immutable evidence. Future runtime execution uses the superseded rule.
 
-### Candidate Schedule Derivation Formula
-Operational scheduling must **never** hard-code fixed UTC timers (such as 20:20 UTC). Because US Daylight Saving Time changes the UTC close of the NYSE (20:00 UTC in summer/fall DST vs 21:00 UTC in winter standard time) and early close sessions conclude at 13:00 local time (17:00 or 18:00 UTC), dispatch timing must be derived per session from the calendar:
+### Provider Eligibility vs Candidate Operational Schedule
+Operational timing strictly distinguishes between **provider data eligibility** (when delayed historical SIP bars become queryable without HTTP 403) and **candidate operational schedule** (when the automation runner should be scheduled):
 
-$$\text{schedule\_utc} = \text{calendar.get\_session}(\text{session}).\text{close\_utc} + \text{provider\_delay} + \text{operational\_margin}$$
+1. **Provider Data Eligibility Boundary (Strict Condition):**
+   $$\text{provider\_eligible\_after\_utc} = \text{calendar.get\_session}(\text{session}).\text{close\_utc} + \text{ALPACA\_SIP\_DELAY} + \text{PROVIDER\_SAFETY\_MARGIN}$$
+   - `ALPACA_SIP_DELAY = 15 minutes` (Alpaca delayed SIP requirement)
+   - `PROVIDER_SAFETY_MARGIN = 0 minutes`
+   - Execution rule: queries are permitted strictly when $\text{now\_utc} > \text{provider\_eligible\_after\_utc}$. At exactly the boundary or earlier, requests fail closed immediately.
 
-Where:
-- $\text{provider\_delay} = 15\text{ minutes}$ (`ALPACA_SIP_DELAY`)
-- $\text{operational\_margin} = 5\text{ minutes}$ (recommended operator buffer)
-- For regular September 2026 sessions (DST): $20:00\text{ UTC} + 15\text{m} + 5\text{m} = 20:20\text{ UTC}$ (illustrative instance only).
+2. **Candidate Operational Schedule (Automation Buffer):**
+   $$\text{candidate\_schedule\_time} = \text{session}.\text{close\_utc} + \text{ALPACA\_SIP\_DELAY} + \text{CANDIDATE\_OPERATIONAL\_MARGIN}$$
+   - `CANDIDATE_OPERATIONAL_MARGIN = 5 minutes` (operational margin for dispatch scheduling)
+   - Summer/Fall regular session (DST, close 20:00 UTC): $20:00\text{ UTC} + 15\text{m} + 5\text{m} = 20:20\text{ UTC}$.
+   - Winter standard time session (EST, close 21:00 UTC): $21:00\text{ UTC} + 15\text{m} + 5\text{m} = 21:20\text{ UTC}$.
+   - Early close session (close 18:00 UTC): $18:00\text{ UTC} + 15\text{m} + 5\text{m} = 18:20\text{ UTC}$.
 
 ---
 
