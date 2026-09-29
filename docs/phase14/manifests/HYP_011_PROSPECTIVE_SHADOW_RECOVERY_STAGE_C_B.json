@@ -1,0 +1,28 @@
+{
+  "activation_session": "2026-09-30",
+  "backfill_allowed": false,
+  "binding_commit_sha": "08530b1ab4ec64788d0eadfaf821aa01e07d0a5f",
+  "binding_commit_utc": "2026-09-29T17:12:46+00:00",
+  "binding_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+  "description": "Post-merge Stage C-B operational re-activation binding for HYP_011 prospective shadow.",
+  "failed_dispatch_at_utc": "2026-09-28T20:10:00+00:00",
+  "failed_dispatch_attempt": 1,
+  "failed_dispatch_session": "2026-09-28",
+  "failed_session_classification": "MISSED_UNOBSERVED_DUE_TO_PROVIDER_ACCESS_BLOCK",
+  "locks": {
+    "live_trading": false,
+    "no_real_orders": true,
+    "paper_trading": false,
+    "real_capital_authority_usd": "0.00"
+  },
+  "manifest_version": 1,
+  "missed_unobserved_sessions": [
+    "2026-09-25",
+    "2026-09-28",
+    "2026-09-29"
+  ],
+  "next_dispatch_attempt": 2,
+  "next_observation_ordinal": 1,
+  "retry_failed_session_allowed": false,
+  "scientific_prospective_boundary": "2026-09-25"
+}
