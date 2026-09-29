@@ -501,7 +501,10 @@ def verify_chain(
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: schema_version.")
     if state_doc.get("hypothesis_id") != STATE_HYPOTHESIS_ID:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: hypothesis_id.")
-    exp_act = (expected_activation or STATE_ACTIVATION_SESSION).isoformat()
+    exp_act = (
+        expected_activation
+        or (expected_recovery_authority.activation_session if expected_recovery_authority is not None else STATE_ACTIVATION_SESSION)
+    ).isoformat()
     if state_doc.get("activation_session") != exp_act:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: activation_session.")
     if str(state_doc.get("starting_aum")) != str(SIMULATED_STARTING_AUM):
@@ -548,15 +551,39 @@ def verify_chain(
         previous = digest
         if expected_recovery_authority is not None:
             auth_doc = doc.get("authority", {})
-            if "activation_binding_sha256" in auth_doc:
-                if auth_doc["activation_binding_sha256"] != expected_recovery_authority.manifest_sha256:
+            required_authority_fields = (
+                "activation_binding",
+                "activation_binding_id",
+                "activation_binding_sha256",
+                "activation_binding_commit_sha",
+                "activation_binding_commit_utc",
+                "operational_activation_session",
+            )
+            for req_field in required_authority_fields:
+                if req_field not in auth_doc or auth_doc[req_field] is None:
                     raise DataContractError(
-                        f"BLOCK_SHADOW_STATE_INTEGRITY: observation binding SHA mismatch at {iso}."
+                        f"BLOCK_SHADOW_STATE_INTEGRITY: missing recovery authority field {req_field} at {iso}."
                     )
-                if auth_doc.get("activation_binding_commit_sha") != expected_recovery_authority.binding_commit_sha:
-                    raise DataContractError(
-                        f"BLOCK_SHADOW_STATE_INTEGRITY: observation commit SHA mismatch at {iso}."
-                    )
+            if auth_doc["activation_binding_id"] != expected_recovery_authority.binding_id:
+                raise DataContractError(
+                    f"BLOCK_SHADOW_STATE_INTEGRITY: observation authority ID mismatch at {iso}."
+                )
+            if auth_doc["activation_binding_sha256"] != expected_recovery_authority.manifest_sha256:
+                raise DataContractError(
+                    f"BLOCK_SHADOW_STATE_INTEGRITY: observation binding SHA mismatch at {iso}."
+                )
+            if auth_doc["activation_binding_commit_sha"] != expected_recovery_authority.binding_commit_sha:
+                raise DataContractError(
+                    f"BLOCK_SHADOW_STATE_INTEGRITY: observation commit SHA mismatch at {iso}."
+                )
+            if auth_doc["activation_binding_commit_utc"] != expected_recovery_authority.binding_commit_utc:
+                raise DataContractError(
+                    f"BLOCK_SHADOW_STATE_INTEGRITY: observation commit UTC mismatch at {iso}."
+                )
+            if auth_doc["operational_activation_session"] != expected_recovery_authority.activation_session.isoformat():
+                raise DataContractError(
+                    f"BLOCK_SHADOW_STATE_INTEGRITY: observation activation session mismatch at {iso}."
+                )
     if state_doc.get("last_observation_sha256") != previous:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: last SHA mismatch.")
     if state_doc.get("last_processed_session") != (observed[-1] if observed else None):

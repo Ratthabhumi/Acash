@@ -46,6 +46,28 @@ To ensure that operational activation is bound exclusively to canonical `main` h
 - **Authority Binding Requirement:** The Stage C-B production manifest strictly requires both canonical `main` commit SHA (`binding_commit_sha`, 40 hex characters) and timezone-aware UTC commit timestamp (`binding_commit_utc`). It cannot authorize an `activation_session` by itself; runtime independently derives the expected activation session from the calendar and commit timestamp and fails closed on any mismatch (`SHADOW_RECOVERY_BINDING_ACTIVATION_MISMATCH`).
 - **Canonical Path Requirement:** Production recovery authority must come exclusively from `docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json` relative to the canonical repository checkout. Arbitrary CLI filesystem paths (`--recovery-binding`) are forbidden and rejected.
 
+### 2.3 Future Canonical Integration & Merge Procedure (Strict Invariant)
+
+**THE FUTURE CANONICAL INTEGRATION MUST NOT USE FAST-FORWARD AS THE ACTIVATION TIME AUTHORITY.**
+
+**Rationale (Why Fast-Forward is Forbidden):**
+$$\text{feature\_commit\_timestamp} \ne \text{time\_feature\_became\_canonical\_main}$$
+Commits on a feature branch (such as `fix/hyp011-prospective-sip-window-recovery-20260929`) carry timestamps from when they were authored during development. If canonical `main` were fast-forwarded (`git merge --ff-only`), the HEAD of `main` would inherit a development commit timestamp that substantially predates the actual moment of human merge authorization and canonical main integration. Deriving operational activation from a pre-merge feature commit timestamp could cause the activation session calculation to select an earlier or already-completed calendar session rather than the prospective session following canonical integration.
+
+**Required Future Merge Procedure:**
+1. Canonical integration MUST create a dedicated non-fast-forward merge commit:
+   ```bash
+   git checkout main
+   git merge --no-ff origin/fix/hyp011-prospective-sip-window-recovery-20260929 \
+     -m "Merge branch 'fix/hyp011-prospective-sip-window-recovery-20260929' into main"
+   git push origin main
+   ```
+2. The resulting dedicated merge commit provides the authoritative:
+   - `CANONICAL_INTEGRATION_SHA = git rev-parse origin/main`
+   - `CANONICAL_INTEGRATION_TIMESTAMP = git show -s --format=%cI origin/main`
+3. Stage C-B creation binds this exact merge commit SHA and timestamp to derive the authoritative `activation_session`.
+4. *Do NOT execute this merge now.* Merge authorization and execution remain a distinct, subsequent step.
+
 ---
 
 ## 3. Observation Ordinal vs Dispatch Attempt Semantics

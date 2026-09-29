@@ -966,7 +966,247 @@ def test_v_paper_live_false_capital_zero_no_real_orders() -> None:
 
 
 # -----------------------------------------------------------------------------
-# Builder tests
+# W. Stage C observation missing authority field fails closed (tamper test)
+# -----------------------------------------------------------------------------
+def test_w_stage_c_observation_missing_any_authority_field_fails_closed(tmp_path: Path) -> None:
+    """W. Tamper test: removing ANY Stage C authority field fails closed even if hash chain is reconstructed."""
+    cal = NyseCa1Calendar()
+    state_dir = tmp_path / "prospective"
+    binding_file = tmp_path / "stage_c.json"
+    doc = make_valid_stage_c_binding_doc()
+    auth = _write_binding(binding_file, doc)
+
+    # Valid observation 1
+    obs1: Dict[str, Any] = {
+        "schema_version": 1,
+        "hypothesis_id": "HYP_011",
+        "session": "2026-09-29",
+        "authority": {
+            "activation_binding": str(binding_file),
+            "activation_binding_id": auth.binding_id,
+            "activation_binding_sha256": auth.manifest_sha256,
+            "activation_binding_commit_sha": auth.binding_commit_sha,
+            "activation_binding_commit_utc": auth.binding_commit_utc,
+            "operational_activation_session": "2026-09-29",
+            "authorization": "AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001_ATTEMPT_0002",
+            "ordinal": 1,
+            "dispatch_attempt": 2,
+        },
+    }
+    append_observation(
+        state_dir=state_dir,
+        session=date(2026, 9, 29),
+        observation=obs1,
+        previous_sha=None,
+        activation_session=date(2026, 9, 29),
+        recovery_authority=auth,
+        extra_state={"last_closes_raw": {}, "last_closes_split": {}},
+    )
+
+    # Verify clean state passes
+    assert verify_chain(state_dir, expected_recovery_authority=auth)
+
+    # Tamper: remove ONLY activation_binding_sha256 from observation artifact
+    obs_path = state_dir / "observations" / "2026-09-29.json"
+    obs_data = json.loads(obs_path.read_text(encoding="utf-8"))
+    del obs_data["authority"]["activation_binding_sha256"]
+
+    # Recompute observation hash and update state.json so normal chain is internally consistent
+    recomputed_raw = json.dumps(obs_data, indent=2, sort_keys=True)
+    obs_path.write_bytes(recomputed_raw.encode("utf-8"))
+    new_digest = hashlib.sha256(recomputed_raw.encode("utf-8")).hexdigest()
+
+    state_path = state_dir / "state.json"
+    state_data = json.loads(state_path.read_text(encoding="utf-8"))
+    state_data["last_observation_sha256"] = new_digest
+    state_path.write_bytes(json.dumps(state_data, indent=2).encode("utf-8"))
+
+    # verify_chain with expected recovery authority must fail closed on missing field
+    with pytest.raises(DataContractError) as exc_info:
+        verify_chain(state_dir, expected_recovery_authority=auth)
+    assert "BLOCK_SHADOW_STATE_INTEGRITY: missing recovery authority field activation_binding_sha256" in str(exc_info.value)
+
+
+# -----------------------------------------------------------------------------
+# X. Stage C observation other authority field tamper fails closed
+# -----------------------------------------------------------------------------
+def test_x_stage_c_observation_other_authority_field_tamper_fails_closed(tmp_path: Path) -> None:
+    """X. Tamper tests for all other Stage C authority fields: missing or mismatched values fail closed."""
+    cal = NyseCa1Calendar()
+    binding_file = tmp_path / "stage_c.json"
+    doc = make_valid_stage_c_binding_doc()
+    auth = _write_binding(binding_file, doc)
+
+    fields_to_test = [
+        ("activation_binding_id", "WRONG_ID", "ID mismatch"),
+        ("activation_binding_commit_utc", "2026-09-29T00:00:00+00:00", "UTC mismatch"),
+        ("operational_activation_session", "2026-09-30", "session mismatch"),
+        ("activation_binding_commit_sha", "f" * 40, "commit SHA mismatch"),
+    ]
+
+    for field_name, wrong_val, expected_err_sub in fields_to_test:
+        sub_dir = tmp_path / f"test_{field_name}"
+        obs1: Dict[str, Any] = {
+            "schema_version": 1,
+            "hypothesis_id": "HYP_011",
+            "session": "2026-09-29",
+            "authority": {
+                "activation_binding": str(binding_file),
+                "activation_binding_id": auth.binding_id,
+                "activation_binding_sha256": auth.manifest_sha256,
+                "activation_binding_commit_sha": auth.binding_commit_sha,
+                "activation_binding_commit_utc": auth.binding_commit_utc,
+                "operational_activation_session": "2026-09-29",
+                "authorization": "AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001_ATTEMPT_0002",
+                "ordinal": 1,
+                "dispatch_attempt": 2,
+            },
+        }
+        append_observation(
+            state_dir=sub_dir,
+            session=date(2026, 9, 29),
+            observation=obs1,
+            previous_sha=None,
+            activation_session=date(2026, 9, 29),
+            recovery_authority=auth,
+            extra_state={"last_closes_raw": {}, "last_closes_split": {}},
+        )
+
+        obs_path = sub_dir / "observations" / "2026-09-29.json"
+        state_path = sub_dir / "state.json"
+
+        # 1. Missing field test
+        obs_data = json.loads(obs_path.read_text(encoding="utf-8"))
+        del obs_data["authority"][field_name]
+        raw_recomputed = json.dumps(obs_data, indent=2, sort_keys=True)
+        obs_path.write_bytes(raw_recomputed.encode("utf-8"))
+        st = json.loads(state_path.read_text(encoding="utf-8"))
+        st["last_observation_sha256"] = hashlib.sha256(raw_recomputed.encode("utf-8")).hexdigest()
+        state_path.write_bytes(json.dumps(st, indent=2).encode("utf-8"))
+
+        with pytest.raises(DataContractError) as exc_info:
+            verify_chain(sub_dir, expected_recovery_authority=auth)
+        assert f"missing recovery authority field {field_name}" in str(exc_info.value)
+
+        # 2. Wrong value test
+        obs_data["authority"][field_name] = wrong_val
+        raw_recomputed2 = json.dumps(obs_data, indent=2, sort_keys=True)
+        obs_path.write_bytes(raw_recomputed2.encode("utf-8"))
+        st["last_observation_sha256"] = hashlib.sha256(raw_recomputed2.encode("utf-8")).hexdigest()
+        state_path.write_bytes(json.dumps(st, indent=2).encode("utf-8"))
+
+        with pytest.raises(DataContractError) as exc_info:
+            verify_chain(sub_dir, expected_recovery_authority=auth)
+        assert expected_err_sub in str(exc_info.value)
+
+
+# -----------------------------------------------------------------------------
+# Y. Builder CLI rejects bypass options
+# -----------------------------------------------------------------------------
+def test_y_builder_cli_rejects_bypass_options() -> None:
+    """Y. Production builder CLI rejects bypass options (--skip-ancestor-check, --canonical-ref, --output-path)."""
+    # 1. Reject --skip-ancestor-check
+    with pytest.raises(SystemExit):
+        builder.main(["--commit-sha", "0" * 40, "--skip-ancestor-check"])
+
+    # 2. Reject --canonical-ref
+    with pytest.raises(SystemExit):
+        builder.main(["--commit-sha", "0" * 40, "--canonical-ref", "arbitrary_branch"])
+
+    # 3. Reject --output-path
+    with pytest.raises(SystemExit):
+        builder.main(["--commit-sha", "0" * 40, "--output-path", "arbitrary/path.json"])
+
+
+# -----------------------------------------------------------------------------
+# Z. Builder write-mode gates and immutable create-once semantics
+# -----------------------------------------------------------------------------
+def test_z_builder_write_mode_gates(tmp_path: Path) -> None:
+    """Z. Builder write-mode gates: commit mismatch, branch mismatch, dirty tree, immutable create-once."""
+    import os
+    import subprocess
+    tmp_repo = tmp_path / "repo"
+    tmp_repo.mkdir()
+
+    # Initialize a temporary git repository
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@acash.local"], cwd=tmp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "ACASH Test"], cwd=tmp_repo, check=True, capture_output=True)
+
+    # Initial commit (commit at 12:00 UTC on 2026-09-29 -> activation 2026-09-29)
+    (tmp_repo / "README.md").write_text("ACASH test repo", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_repo, check=True, capture_output=True)
+    env = dict(
+        GIT_COMMITTER_DATE="2026-09-29T12:00:00Z",
+        GIT_AUTHOR_DATE="2026-09-29T12:00:00Z",
+    )
+    merged_env = {**os.environ, **env}
+    subprocess.run(
+        ["git", "commit", "-m", "canonical main integration", "--date", "2026-09-29T12:00:00Z"],
+        cwd=tmp_repo,
+        check=True,
+        capture_output=True,
+        env=merged_env,
+    )
+
+    # Set up refs/remotes/origin/main pointing to HEAD
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=tmp_repo, check=True, capture_output=True)
+
+    head_sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=tmp_repo).stdout.strip().lower()
+    target_manifest = tmp_repo / "target_manifest.json"
+
+    # D. Write with commit != origin/main fails
+    with pytest.raises(DataContractError) as exc_info:
+        builder.main(
+            ["--commit-sha", "a" * 40, "--write"],
+            _output_path=target_manifest,
+            _repo_root=tmp_repo,
+        )
+    assert "WRITE_MODE_COMMIT_NOT_ORIGIN_MAIN" in str(exc_info.value)
+
+    # E. Write outside main branch fails
+    subprocess.run(["git", "checkout", "-b", "feature/other"], cwd=tmp_repo, check=True, capture_output=True)
+    with pytest.raises(DataContractError) as exc_info:
+        builder.main(
+            ["--commit-sha", head_sha, "--write"],
+            _output_path=target_manifest,
+            _repo_root=tmp_repo,
+        )
+    assert "WRITE_MODE_NOT_ON_MAIN_BRANCH" in str(exc_info.value)
+    subprocess.run(["git", "checkout", "main"], cwd=tmp_repo, check=True, capture_output=True)
+
+    # F. Dirty tracked working tree fails
+    (tmp_repo / "README.md").write_text("dirty tracked content", encoding="utf-8")
+    with pytest.raises(DataContractError) as exc_info:
+        builder.main(
+            ["--commit-sha", head_sha, "--write"],
+            _output_path=target_manifest,
+            _repo_root=tmp_repo,
+        )
+    assert "WRITE_MODE_DIRTY_WORKING_TREE" in str(exc_info.value)
+    subprocess.run(["git", "checkout", "--", "README.md"], cwd=tmp_repo, check=True, capture_output=True)
+
+    # H. Valid canonical-main write creates exactly one canonical manifest
+    code = builder.main(
+        ["--commit-sha", head_sha, "--write"],
+        _output_path=target_manifest,
+        _repo_root=tmp_repo,
+    )
+    assert code == 0
+    assert target_manifest.exists()
+
+    # G. Existing Stage C-B file cannot be overwritten (immutable create-once)
+    with pytest.raises(DataContractError) as exc_info:
+        builder.main(
+            ["--commit-sha", head_sha, "--write"],
+            _output_path=target_manifest,
+            _repo_root=tmp_repo,
+        )
+    assert "STAGE_C_B_ALREADY_EXISTS_IMMUTABLE" in str(exc_info.value)
+
+
+# -----------------------------------------------------------------------------
+# Builder dry-run and invariants tests
 # -----------------------------------------------------------------------------
 def test_builder_dry_run_and_invariants(tmp_path: Path) -> None:
     """Test build_stage_c_b_recovery_manifest dry-run and git validation."""
@@ -974,36 +1214,28 @@ def test_builder_dry_run_and_invariants(tmp_path: Path) -> None:
     target_out = tmp_path / "test_stage_c_b.json"
 
     # 1. Dry-run on valid post-failure commit: does NOT write to disk
-    code = builder.main([
-        "--commit-sha", post_failure_sha,
-        "--canonical-ref", "HEAD",
-        "--output-path", str(target_out),
-    ])
+    code = builder.main(
+        ["--commit-sha", post_failure_sha],
+        _output_path=target_out,
+    )
     assert code == 0
     assert not target_out.exists()
 
     # 2. Pre-failure commit (e.g. initial main) rejected because activation <= 2026-09-28
     pre_failure_sha = "d9608c0a2353bd5ed41943e5fb893ef9648089d2"
     with pytest.raises(DataContractError) as exc_info:
-        builder.main([
-            "--commit-sha", pre_failure_sha,
-            "--canonical-ref", "origin/main",
-            "--output-path", str(target_out),
-        ])
+        builder.main(
+            ["--commit-sha", pre_failure_sha],
+            _output_path=target_out,
+        )
     assert "ACTIVATION_NOT_ADVANCED" in str(exc_info.value)
 
     # 3. Invalid SHA format fails
     with pytest.raises(DataContractError) as exc_info:
-        builder.main([
-            "--commit-sha", "not_a_sha",
-            "--output-path", str(target_out),
-        ])
+        builder.main(["--commit-sha", "not_a_sha"], _output_path=target_out)
     assert "INVALID_COMMIT_SHA_FORMAT" in str(exc_info.value)
 
     # 4. Non-existent SHA fails
     with pytest.raises(DataContractError) as exc_info:
-        builder.main([
-            "--commit-sha", "0" * 40,
-            "--output-path", str(target_out),
-        ])
+        builder.main(["--commit-sha", "0" * 40], _output_path=target_out)
     assert "GIT_COMMIT_NOT_FOUND" in str(exc_info.value)
