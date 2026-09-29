@@ -170,10 +170,16 @@ def test_hardcoded_open_trigger_removed() -> None:
 def test_bound_activation_session_canonical_open_and_close() -> None:
     cal = NyseCa1Calendar()
     session = cal.get_session(date(2026, 9, 28))
-    # Open = execution timestamp semantics; close = observation eligibility.
+    # Open = execution timestamp semantics; close = market session completion.
     assert session.open_utc == datetime(2026, 9, 28, 13, 30, 0, tzinfo=timezone.utc)
     assert session.close_utc == datetime(2026, 9, 28, 20, 0, 0, tzinfo=timezone.utc)
-    assert SH.observation_eligible_after(date(2026, 9, 28), cal) == session.close_utc
+    assert SH.market_session_completed_after(date(2026, 9, 28), cal) == session.close_utc
+    assert SH.provider_observation_eligible_after(date(2026, 9, 28), cal) == datetime(
+        2026, 9, 28, 20, 15, 0, tzinfo=timezone.utc
+    )
+    assert SH.observation_eligible_after(date(2026, 9, 28), cal) == datetime(
+        2026, 9, 28, 20, 15, 0, tzinfo=timezone.utc
+    )
 
 
 def test_winter_session_does_not_assume_1330_open() -> None:
@@ -227,11 +233,18 @@ def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
     assert "EXPECTED_SESSION = 2026-09-28" in before
     assert "SESSION_OPEN_UTC = 2026-09-28T13:30:00+00:00" in before
     assert "SESSION_CLOSE_UTC = 2026-09-28T20:00:00+00:00" in before
+    assert "PROVIDER_ELIGIBLE_AFTER_UTC = 2026-09-28T20:15:00+00:00" in before
     assert "OBSERVATION_ELIGIBLE = false" in before
     assert "NETWORK_REQUESTS = 0" in before
-    # After close: eligible flag flips, but dry-run STILL issues zero network
+
+    # 10 minutes post close (attempt #0001 dispatch time): market complete but provider not eligible!
+    attempt_time = _dry_run(datetime(2026, 9, 28, 20, 10, 0, tzinfo=timezone.utc))
+    assert "OBSERVATION_ELIGIBLE = false" in attempt_time
+    assert "NETWORK_REQUESTS = 0" in attempt_time
+
+    # After provider eligibility (e.g. 20:15:01): eligible flag flips, but dry-run STILL issues zero network
     # and writes nothing.
-    after = _dry_run(datetime(2026, 9, 28, 20, 0, 1, tzinfo=timezone.utc))
+    after = _dry_run(datetime(2026, 9, 28, 20, 15, 1, tzinfo=timezone.utc))
     assert "OBSERVATION_ELIGIBLE = true" in after
     assert "NETWORK_REQUESTS = 0" in after
     assert not (state_dir / "state.json").exists()

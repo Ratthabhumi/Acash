@@ -316,12 +316,18 @@ def _run_observation(
     ]
     if ca_file:
         argv += ["--ca-determinations", ca_file]
+    from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+
+    dummy_prov = EnvAlpacaCredentialProvider(
+        environ={"ACASH_ALPACA_API_KEY_ID": "mock_id", "ACASH_ALPACA_API_SECRET": "mock_secret"}
+    )
     return int(
         runner.main(
             argv,
             _now_utc=now_utc,
             _state_dir=tmp_path,
             _client=_MockClient(calls, level),
+            _credential_provider=dummy_prov,
         )
     )
 

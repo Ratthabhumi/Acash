@@ -98,6 +98,7 @@ def main(
     _now_utc: datetime | None = None,
     _state_dir: Path | None = None,
     _client: Any | None = None,
+    _credential_provider: Any | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 prospective shadow runner.")
     parser.add_argument("--execute-network", action="store_true", default=False)
@@ -131,6 +132,7 @@ def main(
         print(f"EXPECTED_SESSION = {pretest_target.isoformat()}")
         print(f"SESSION_OPEN_UTC = {pretest_session.open_utc.isoformat()}")
         print(f"SESSION_CLOSE_UTC = {pretest_session.close_utc.isoformat()}")
+        print(f"PROVIDER_ELIGIBLE_AFTER_UTC = {pretest_eligible_after.isoformat()}")
         print(f"OBSERVATION_ELIGIBLE = {str(pretest_eligible).lower()}")
         print("NETWORK_REQUESTS = 0")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
@@ -160,8 +162,9 @@ def main(
         )
     print(f"Authorization {args.authorization} ordinal {args.ordinal}: ACCEPTED.")
 
+    cred_prov = _credential_provider or EnvAlpacaCredentialProvider()
     try:
-        EnvAlpacaCredentialProvider().load()
+        cred_prov.load()
     except AlpacaCredentialError as exc:
         print(f"BLOCKED_MISSING_CREDENTIALS: {exc}")
         return EXIT_BLOCKED
@@ -184,6 +187,15 @@ def main(
         raise DataContractError(f"SHADOW_BACKFILL_FORBIDDEN: {target}.")
     guard_state.record_session(target, calendar, now_utc)
 
+    # Provider accessibility check pre-network (delayed SIP 15-min boundary)
+    provider_eligible_after_utc = observation_eligible_after(target, calendar)
+    if now_utc <= provider_eligible_after_utc:
+        raise DataContractError(
+            f"SHADOW_PROVIDER_DATA_NOT_YET_ACCESSIBLE: session {target.isoformat()} "
+            f"eligible strictly after {provider_eligible_after_utc.isoformat()}, "
+            f"now is {now_utc.isoformat()}."
+        )
+
     client = _client if _client is not None else HYP011AlpacaClient(http_attempt_listener=_count)
     fetched: Dict[str, Dict[str, Any]] = {}
     for symbol in SYMBOLS:
@@ -191,7 +203,7 @@ def main(
         for adjustment in (PriceAdjustment.SPLIT, PriceAdjustment.RAW):
             result = client.fetch_single_session(
                 symbol=symbol, session=target, feed=MarketDataFeed.SIP,
-                adjustment=adjustment, timeframe="1Day",
+                adjustment=adjustment, timeframe="1Day", now_utc=now_utc,
             )
             fetched[symbol][adjustment.value] = {
                 "bar": result.bars[0],
@@ -212,9 +224,9 @@ def main(
         market_opens[symbol] = raw_bar.open
         market_closes[symbol] = raw_bar.close
         provider_section["series"][symbol] = {}
-        for adjustment in ("split", "raw"):
-            entry = fetched[symbol][adjustment]
-            provider_section["series"][symbol][adjustment] = {
+        for adj_name in ("split", "raw"):
+            entry = fetched[symbol][adj_name]
+            provider_section["series"][symbol][adj_name] = {
                 "bar": {
                     "t": entry["bar"].timestamp_utc.isoformat(),
                     "o": str(entry["bar"].open), "h": str(entry["bar"].high),

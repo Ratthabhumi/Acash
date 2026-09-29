@@ -8,7 +8,7 @@ operational activation, exclusive) are never backfilled and never counted.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List
 
@@ -26,18 +26,20 @@ STATE_HYPOTHESIS_ID: str = "HYP_011"
 STATE_ACTIVATION_SESSION: date = date(2026, 9, 28)
 # Timing semantics (never hard-code UTC market times: DST changes the offset).
 # session.open_utc  = portfolio execution timestamp semantics (calendar-derived).
-# session.close_utc = observation availability / processing eligibility
-#                     (calendar-derived). The two must never be conflated:
-# no observation trigger may be defined relative to the open.
+# session.close_utc = market session completion instant (calendar-derived).
+# Provider data accessibility boundary:
+# Alpaca historical SIP requires at least 15-minute delay for accounts without
+# real-time SIP subscription. Querying earlier or querying into the future returns HTTP 403.
+ALPACA_SIP_DELAY: timedelta = timedelta(minutes=15)
+DEFAULT_PROVIDER_SAFETY_MARGIN: timedelta = timedelta(minutes=0)
 
 
-def observation_eligible_after(
+def market_session_completed_after(
     session_date: date, calendar: NyseCa1Calendar
 ) -> datetime:
-    """Canonical eligibility instant: the session's calendar-derived close_utc.
+    """Canonical completion instant: the session's calendar-derived close_utc.
 
-    Production eligibility is STRICT: now_utc > close_utc. At exactly
-    close_utc the session is NOT YET PROCESSABLE.
+    Strict: session is completed strictly when now_utc > close_utc.
     """
     close_utc = calendar.get_session(session_date).close_utc
     if close_utc is None:
@@ -45,6 +47,34 @@ def observation_eligible_after(
             f"SHADOW_NO_CLOSE_TIME: {session_date.isoformat()}."
         )
     return close_utc
+
+
+def provider_observation_eligible_after(
+    session_date: date,
+    calendar: NyseCa1Calendar,
+    provider_delay: timedelta = ALPACA_SIP_DELAY,
+    safety_margin: timedelta = DEFAULT_PROVIDER_SAFETY_MARGIN,
+) -> datetime:
+    """Canonical instant after which delayed SIP historical data is accessible.
+
+    Separates MARKET SESSION COMPLETE from PROVIDER DATA ACCESSIBLE.
+    Under Alpaca delayed historical SIP rules, queries must not include data
+    fresher than 15 minutes.
+    Strict fail-closed: request is only eligible when now_utc > provider_eligible_after_utc.
+    """
+    return market_session_completed_after(session_date, calendar) + provider_delay + safety_margin
+
+
+def observation_eligible_after(
+    session_date: date, calendar: NyseCa1Calendar
+) -> datetime:
+    """Canonical overall observation eligibility instant.
+
+    Observation requires BOTH market session completion and delayed SIP provider
+    data accessibility. Production eligibility is STRICT: now_utc > eligible_after.
+    At exactly eligible_after the session is NOT YET PROCESSABLE.
+    """
+    return provider_observation_eligible_after(session_date, calendar)
 SHADOW_STARTING_AUM: Decimal = Decimal("100000.00")
 
 
