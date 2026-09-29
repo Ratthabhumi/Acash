@@ -8,7 +8,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -184,9 +184,9 @@ def test_runner_dry_run_zero_network(capsys: Any) -> None:
     import sys
 
     sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner  # type: ignore[import-not-found]
+    import process_hyp_011_prospective_shadow as runner
 
-    assert runner.main([]) == 0
+    assert runner.main([], _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc)) == 0
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PRETEST" in out
@@ -293,6 +293,25 @@ class _MockClient:
         return _MockBars(session, self._level)
 
 
+def _make_test_stage_c_binding(tmp_path: Path) -> Path:
+    binding_path = tmp_path / "stage_c_test_binding.json"
+    doc = {
+        "binding_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+        "binding_commit_sha": "d9608c0a2353bd5ed41943e5fb893ef9648089d2",
+        "binding_commit_utc": "2026-09-29T12:00:00Z",
+        "activation_session": "2026-09-29",
+        "scientific_prospective_boundary": "2026-09-25",
+        "failed_dispatch_session": "2026-09-28",
+        "failed_dispatch_attempt": 1,
+        "next_observation_ordinal": 1,
+        "next_dispatch_attempt": 2,
+        "backfill_allowed": False,
+        "retry_failed_session_allowed": False,
+    }
+    binding_path.write_text(json.dumps(doc), encoding="utf-8")
+    return binding_path
+
+
 def _run_observation(
     tmp_path: Path,
     session: str,
@@ -301,49 +320,68 @@ def _run_observation(
     calls: List[Any],
     level: str = "100",
     ca_file: str = "",
+    stage_c_binding: Optional[Path] = None,
+    dispatch_attempt: int = 1,
 ) -> int:
     import sys
 
     sys.path.insert(0, "scripts")
     import process_hyp_011_prospective_shadow as runner
 
+    if dispatch_attempt > 1:
+        auth = f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}_ATTEMPT_{dispatch_attempt:04d}"
+    else:
+        auth = f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}"
+
     argv = [
         "--execute-network",
         "--authorization",
-        f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}",
+        auth,
         "--ordinal",
         str(ordinal),
+        "--dispatch-attempt",
+        str(dispatch_attempt),
     ]
     if ca_file:
         argv += ["--ca-determinations", ca_file]
+    from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+
+    dummy_prov = EnvAlpacaCredentialProvider(
+        environ={"ACASH_ALPACA_API_KEY_ID": "mock_id", "ACASH_ALPACA_API_SECRET": "mock_secret"}
+    )
     return int(
         runner.main(
             argv,
             _now_utc=now_utc,
             _state_dir=tmp_path,
             _client=_MockClient(calls, level),
+            _credential_provider=dummy_prov,
+            _stage_c_binding_path=stage_c_binding,
         )
     )
 
 
 def test_mocked_observation_0001_end_to_end(tmp_path: Path) -> None:
+    binding = _make_test_stage_c_binding(tmp_path)
     calls: List[Any] = []
     rc = _run_observation(
-        tmp_path, "2026-09-28", 1,
-        datetime(2026, 9, 28, 21, 0, 0, tzinfo=timezone.utc), calls,
+        tmp_path, "2026-09-29", 1,
+        datetime(2026, 9, 29, 21, 0, 0, tzinfo=timezone.utc), calls,
+        stage_c_binding=binding, dispatch_attempt=2,
     )
     assert rc == 0
     assert len(calls) == 6  # 3 symbols x 2 adjustments, no retry
     state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state["observed_sessions"] == ["2026-09-28"]
+    assert state["activation_session"] == "2026-09-29"
+    assert state["observed_sessions"] == ["2026-09-29"]
     assert state["observed_session_count"] == 1
-    assert state["last_processed_session"] == "2026-09-28"
+    assert state["last_processed_session"] == "2026-09-29"
     assert state["completed_annual_rebalances"] == 0
     assert state["strategy"]["holdings"]["ACWI"] > 0
     assert state["strategy"]["holdings"]["AGG"] > 0
     assert state["benchmark"]["SPY_shares"] > 0
     obs = json.loads(
-        (tmp_path / "observations" / "2026-09-28.json").read_text(encoding="utf-8")
+        (tmp_path / "observations" / "2026-09-29.json").read_text(encoding="utf-8")
     )
     assert obs["previous_observation_sha256"] is None
     # Session one makes no existence claim: explicit non-required status.
@@ -352,15 +390,17 @@ def test_mocked_observation_0001_end_to_end(tmp_path: Path) -> None:
             "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
         }
     assert state["last_observation_sha256"] == hashlib.sha256(
-        (tmp_path / "observations" / "2026-09-28.json").read_bytes()
+        (tmp_path / "observations" / "2026-09-29.json").read_bytes()
     ).hexdigest()
 
 
 def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
+    binding = _make_test_stage_c_binding(tmp_path)
     calls: List[Any] = []
     assert _run_observation(
-        tmp_path, "2026-09-28", 1,
-        datetime(2026, 9, 28, 21, 0, 0, tzinfo=timezone.utc), calls,
+        tmp_path, "2026-09-29", 1,
+        datetime(2026, 9, 29, 21, 0, 0, tzinfo=timezone.utc), calls,
+        stage_c_binding=binding, dispatch_attempt=2,
     ) == 0
     state1 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     cash1 = state1["strategy"]["cash"]
@@ -369,33 +409,34 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     ca_doc = {
         symbol: {
             "symbol": symbol,
-            "session": "2026-09-29",
+            "session": "2026-09-30",
             "has_event": False,
             "authority_source": sponsors[symbol],
-            "retrieved_at_utc": "2026-09-29T21:00:00+00:00",
+            "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
             "source_sha256": "c" * 64,
         }
         for symbol in ("ACWI", "AGG", "SPY")
     }
-    ca_path = tmp_path / "ca_2026-09-29.json"
+    ca_path = tmp_path / "ca_2026-09-30.json"
     ca_path.write_text(json.dumps(ca_doc), encoding="utf-8")
     assert _run_observation(
-        tmp_path, "2026-09-29", 2,
-        datetime(2026, 9, 29, 21, 0, 0, tzinfo=timezone.utc), calls,
+        tmp_path, "2026-09-30", 2,
+        datetime(2026, 9, 30, 21, 0, 0, tzinfo=timezone.utc), calls,
         level="101", ca_file=str(ca_path),
+        stage_c_binding=binding, dispatch_attempt=1,
     ) == 0
     state2 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
-    assert state2["observed_sessions"] == ["2026-09-28", "2026-09-29"]
+    assert state2["observed_sessions"] == ["2026-09-29", "2026-09-30"]
     assert state2["observed_session_count"] == 2
     # No fresh reset: holdings/cash continue, benchmark does not re-enter.
     assert state2["strategy"]["holdings"] == state1["strategy"]["holdings"]
     assert state2["benchmark"]["SPY_shares"] == state1["benchmark"]["SPY_shares"]
     obs2 = json.loads(
-        (tmp_path / "observations" / "2026-09-29.json").read_text(encoding="utf-8")
+        (tmp_path / "observations" / "2026-09-30.json").read_text(encoding="utf-8")
     )
     assert obs2["previous_observation_sha256"] == state1["last_observation_sha256"]
     assert state2["last_observation_sha256"] == hashlib.sha256(
-        (tmp_path / "observations" / "2026-09-29.json").read_bytes()
+        (tmp_path / "observations" / "2026-09-30.json").read_bytes()
     ).hexdigest()
 
 

@@ -16,7 +16,7 @@ import sys
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
@@ -28,7 +28,20 @@ from acash.execution.alpaca.credentials import (
 )
 from acash.research.hyp_011.shadow_ca import CADetermination
 from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
-from acash.research.hyp_011.shadow import ShadowState, observation_eligible_after
+from acash.research.hyp_011.shadow import (
+    FAILED_ACTIVATION_SESSION,
+    FAILED_DISPATCH_ATTEMPT,
+    NEXT_DISPATCH_ATTEMPT,
+    STAGE_B_ACTIVATION_SESSION,
+    STAGE_C_RECOVERY_BINDING_ID,
+    STAGE_C_RECOVERY_BINDING_PATH,
+    ShadowState,
+    StageCRecoveryAuthority,
+    candidate_schedule_time,
+    load_stage_c_recovery_authority,
+    observation_eligible_after,
+    resolve_operational_activation,
+)
 from acash.research.hyp_011.shadow_ops import (
     SessionMarket,
     ShadowBenchmark,
@@ -40,7 +53,6 @@ from acash.research.hyp_011.shadow_ops import (
 )
 
 SYMBOLS = ("ACWI", "AGG", "SPY")
-ACTIVATION_SESSION = date(2026, 9, 28)
 STATE_DIR = Path("data/hyp_011/prospective")
 
 EXIT_OK = 0
@@ -81,9 +93,13 @@ def _check_split_continuity(
     return "NO_NEW_SPLIT_EVENT_OBSERVED"
 
 
-def _expected_next(state_sessions: List[str], calendar: NyseCa1Calendar) -> date:
+def _expected_next(
+    state_sessions: List[str],
+    calendar: NyseCa1Calendar,
+    activation_session: date,
+) -> date:
     if not state_sessions:
-        return ACTIVATION_SESSION
+        return activation_session
     last = date.fromisoformat(state_sessions[-1])
     cursor = date.fromordinal(last.toordinal() + 1)
     for _ in range(14):
@@ -98,11 +114,14 @@ def main(
     _now_utc: datetime | None = None,
     _state_dir: Path | None = None,
     _client: Any | None = None,
+    _credential_provider: Any | None = None,
+    _stage_c_binding_path: Path | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 prospective shadow runner.")
     parser.add_argument("--execute-network", action="store_true", default=False)
     parser.add_argument("--authorization", default="")
     parser.add_argument("--ordinal", type=int, default=0)
+    parser.add_argument("--dispatch-attempt", type=int, default=0)
     parser.add_argument("--ca-determinations", default="")
     args = parser.parse_args(argv)
 
@@ -112,18 +131,47 @@ def main(
         attempts[0] += 1
 
     print("=== HYP_011 PROSPECTIVE SHADOW (single atomic session) ===")
+    calendar = NyseCa1Calendar()
+    binding_path = _stage_c_binding_path
+
     if not args.execute_network:
         # PRETEST: full local contract validation, zero network.
         print("PRETEST-DRY-RUN: zero network. Validating local contracts.")
         pretest_state_dir = _state_dir if _state_dir is not None else STATE_DIR
         pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
-        pretest_verified = verify_chain(pretest_state_dir)
+        pretest_state_file = pretest_state_dir / "state.json"
+        pretest_committed_count: int = 0
+        if pretest_state_file.is_file():
+            try:
+                st = json.loads(pretest_state_file.read_text(encoding="utf-8"))
+                pretest_committed_count = len(st.get("observed_sessions", []))
+            except Exception:
+                pass
+
+        pretest_binding_file = binding_path or (
+            STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+        )
+        pretest_recovery_auth = (
+            load_stage_c_recovery_authority(calendar, pretest_binding_file)
+            if (pretest_binding_file and pretest_binding_file.is_file())
+            else None
+        )
+        pretest_activation = resolve_operational_activation(
+            calendar=calendar,
+            now_utc=pretest_now,
+            stage_c_binding_path=binding_path,
+            committed_observations=pretest_committed_count,
+        )
+        pretest_verified = verify_chain(
+            pretest_state_dir,
+            expected_activation=pretest_activation,
+            expected_recovery_authority=pretest_recovery_auth,
+        )
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
-        pretest_calendar = NyseCa1Calendar()
-        pretest_target = _expected_next(pretest_observed, pretest_calendar)
-        pretest_session = pretest_calendar.get_session(pretest_target)
+        pretest_target = _expected_next(pretest_observed, calendar, pretest_activation)
+        pretest_session = calendar.get_session(pretest_target)
         pretest_eligible_after = observation_eligible_after(
-            pretest_target, pretest_calendar
+            pretest_target, calendar
         )
         pretest_eligible = (
             pretest_now.astimezone(timezone.utc) > pretest_eligible_after
@@ -131,6 +179,7 @@ def main(
         print(f"EXPECTED_SESSION = {pretest_target.isoformat()}")
         print(f"SESSION_OPEN_UTC = {pretest_session.open_utc.isoformat()}")
         print(f"SESSION_CLOSE_UTC = {pretest_session.close_utc.isoformat()}")
+        print(f"PROVIDER_ELIGIBLE_AFTER_UTC = {pretest_eligible_after.isoformat()}")
         print(f"OBSERVATION_ELIGIBLE = {str(pretest_eligible).lower()}")
         print("NETWORK_REQUESTS = 0")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
@@ -138,14 +187,56 @@ def main(
 
     state_dir = _state_dir if _state_dir is not None else STATE_DIR
     now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
+    state_file = state_dir / "state.json"
+    committed_count: int = 0
+    if state_file.is_file():
+        try:
+            st = json.loads(state_file.read_text(encoding="utf-8"))
+            committed_count = len(st.get("observed_sessions", []))
+        except Exception:
+            pass
 
-    # Pre-network local validation: chain integrity first.
-    verified = verify_chain(state_dir)
+    actual_binding_file = binding_path or (
+        STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+    )
+    recovery_auth = (
+        load_stage_c_recovery_authority(calendar, actual_binding_file)
+        if (actual_binding_file and actual_binding_file.is_file())
+        else None
+    )
+
+    # Pre-network local validation: resolve operational activation.
+    # Fails closed (e.g. SHADOW_RECOVERY_BINDING_REQUIRED) before any network call.
+    activation_session = resolve_operational_activation(
+        calendar=calendar,
+        now_utc=now_utc,
+        stage_c_binding_path=binding_path,
+        committed_observations=committed_count,
+    )
+
+    verified = verify_chain(
+        state_dir,
+        expected_activation=activation_session,
+        expected_recovery_authority=recovery_auth,
+    )
     observed: List[str] = list(verified.get("observed_sessions", []))
     expected_ordinal = len(observed) + 1
-    expected_authorization = (
-        f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{expected_ordinal:04d}"
+
+    is_recovery = (
+        len(observed) == 0
+        and activation_session > FAILED_ACTIVATION_SESSION
     )
+    if is_recovery:
+        expected_dispatch_attempt = NEXT_DISPATCH_ATTEMPT
+        expected_authorization = (
+            f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{expected_ordinal:04d}_ATTEMPT_{expected_dispatch_attempt:04d}"
+        )
+    else:
+        expected_dispatch_attempt = 1
+        expected_authorization = (
+            f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{expected_ordinal:04d}"
+        )
+
     if not args.authorization:
         raise DataContractError("SHADOW_AUTHORIZATION_REQUIRED.")
     if args.ordinal != expected_ordinal:
@@ -153,21 +244,34 @@ def main(
             f"SHADOW_AUTHORIZATION_ORDINAL_MISMATCH: got {args.ordinal}, "
             f"expected {expected_ordinal}."
         )
+    if is_recovery and args.dispatch_attempt != expected_dispatch_attempt:
+        raise DataContractError(
+            f"SHADOW_AUTHORIZATION_ATTEMPT_MISMATCH: got {args.dispatch_attempt}, "
+            f"expected {expected_dispatch_attempt}."
+        )
+    elif not is_recovery and args.dispatch_attempt not in (0, 1):
+        raise DataContractError(
+            f"SHADOW_AUTHORIZATION_ATTEMPT_MISMATCH: got {args.dispatch_attempt}, "
+            f"expected 1."
+        )
     if args.authorization != expected_authorization:
         raise DataContractError(
             f"SHADOW_AUTHORIZATION_STRING_MISMATCH: got {args.authorization}, "
             f"expected {expected_authorization}."
         )
-    print(f"Authorization {args.authorization} ordinal {args.ordinal}: ACCEPTED.")
+    print(
+        f"Authorization {args.authorization} ordinal {args.ordinal} "
+        f"attempt {expected_dispatch_attempt}: ACCEPTED."
+    )
 
+    cred_prov = _credential_provider or EnvAlpacaCredentialProvider()
     try:
-        EnvAlpacaCredentialProvider().load()
+        cred_prov.load()
     except AlpacaCredentialError as exc:
         print(f"BLOCKED_MISSING_CREDENTIALS: {exc}")
         return EXIT_BLOCKED
 
-    calendar = NyseCa1Calendar()
-    target = _expected_next(observed, calendar)
+    target = _expected_next(observed, calendar, activation_session)
     print(f"Expected next session: {target.isoformat()}")
 
     obs_path = state_dir / "observations" / f"{target.isoformat()}.json"
@@ -178,11 +282,20 @@ def main(
 
     # Full guard validation pre-network (duplicate/order/early/stress/
     # quarantine/completion via close_utc).
-    guard_state = ShadowState(activation_session=ACTIVATION_SESSION)
+    guard_state = ShadowState(activation_session=activation_session)
     guard_state.observed_sessions = list(observed)
-    if target < ACTIVATION_SESSION:
+    if target < activation_session:
         raise DataContractError(f"SHADOW_BACKFILL_FORBIDDEN: {target}.")
     guard_state.record_session(target, calendar, now_utc)
+
+    # Provider accessibility check pre-network (delayed SIP 15-min boundary)
+    provider_eligible_after_utc = observation_eligible_after(target, calendar)
+    if now_utc <= provider_eligible_after_utc:
+        raise DataContractError(
+            f"SHADOW_PROVIDER_DATA_NOT_YET_ACCESSIBLE: session {target.isoformat()} "
+            f"eligible strictly after {provider_eligible_after_utc.isoformat()}, "
+            f"now is {now_utc.isoformat()}."
+        )
 
     client = _client if _client is not None else HYP011AlpacaClient(http_attempt_listener=_count)
     fetched: Dict[str, Dict[str, Any]] = {}
@@ -191,7 +304,7 @@ def main(
         for adjustment in (PriceAdjustment.SPLIT, PriceAdjustment.RAW):
             result = client.fetch_single_session(
                 symbol=symbol, session=target, feed=MarketDataFeed.SIP,
-                adjustment=adjustment, timeframe="1Day",
+                adjustment=adjustment, timeframe="1Day", now_utc=now_utc,
             )
             fetched[symbol][adjustment.value] = {
                 "bar": result.bars[0],
@@ -212,9 +325,9 @@ def main(
         market_opens[symbol] = raw_bar.open
         market_closes[symbol] = raw_bar.close
         provider_section["series"][symbol] = {}
-        for adjustment in ("split", "raw"):
-            entry = fetched[symbol][adjustment]
-            provider_section["series"][symbol][adjustment] = {
+        for adj_name in ("split", "raw"):
+            entry = fetched[symbol][adj_name]
+            provider_section["series"][symbol][adj_name] = {
                 "bar": {
                     "t": entry["bar"].timestamp_utc.isoformat(),
                     "o": str(entry["bar"].open), "h": str(entry["bar"].high),
@@ -311,16 +424,36 @@ def main(
         bench_div, BASELINE_SLIPPAGE_BPS,
     )
 
+    if recovery_auth is not None:
+        authority_section: Dict[str, Any] = {
+            "activation_binding": recovery_auth.manifest_path,
+            "activation_binding_id": recovery_auth.binding_id,
+            "activation_binding_sha256": recovery_auth.manifest_sha256,
+            "activation_binding_commit_sha": recovery_auth.binding_commit_sha,
+            "activation_binding_commit_utc": recovery_auth.binding_commit_utc,
+            "operational_activation_session": recovery_auth.activation_session.isoformat(),
+            "authorization": args.authorization,
+            "ordinal": args.ordinal,
+            "dispatch_attempt": expected_dispatch_attempt,
+        }
+    else:
+        authority_section = {
+            "activation_binding": (
+                str(binding_path)
+                if binding_path is not None
+                else "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json"
+            ),
+            "authorization": args.authorization,
+            "ordinal": args.ordinal,
+            "dispatch_attempt": expected_dispatch_attempt,
+        }
+
     observation: Dict[str, Any] = {
         "schema_version": 1,
         "hypothesis_id": "HYP_011",
         "session": target.isoformat(),
         "processed_at_utc": now_utc.isoformat(),
-        "authority": {
-            "activation_binding": "docs/phase14/manifests/HYP_011_PROSPECTIVE_SHADOW_ACTIVATION_BINDING.json",
-            "authorization": args.authorization,
-            "ordinal": args.ordinal,
-        },
+        "authority": authority_section,
         "provider": provider_section,
         "corporate_actions": ca_section,
         "split_qualification": split_section,
@@ -345,15 +478,22 @@ def main(
         "no_real_orders": True,
     }
     digest = append_observation(
-        state_dir, target, observation, previous_sha,
-        portfolio=portfolio, benchmark=benchmark,
+        state_dir,
+        target,
+        observation,
+        previous_sha,
+        portfolio=portfolio,
+        benchmark=benchmark,
         completed_annual_rebalances=(
-            completed_rebalances + (1 if transaction_type == "SCHEDULED_ANNUAL_REBALANCE" else 0)
+            completed_rebalances
+            + (1 if transaction_type == "SCHEDULED_ANNUAL_REBALANCE" else 0)
         ),
         extra_state={
             "last_closes_raw": {s: str(market_closes[s]) for s in SYMBOLS},
             "last_closes_split": {s: str(market_split_closes[s]) for s in SYMBOLS},
         },
+        activation_session=activation_session,
+        recovery_authority=recovery_auth,
     )
     print(f"Observation sealed: {digest}")
     print("STATE: observation committed; no further sessions in this invocation.")

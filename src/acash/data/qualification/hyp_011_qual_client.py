@@ -237,10 +237,13 @@ class HYP011AlpacaClient:
         feed: MarketDataFeed = MarketDataFeed.SIP,
         adjustment: PriceAdjustment = PriceAdjustment.RAW,
         timeframe: str = "1Day",
+        now_utc: Optional[datetime] = None,
     ) -> Hyp011HistoricalResult:
         """Fetch exactly one eligible trading session (prospective observations).
 
-        Bounds are the single session day (00:00:00Z..23:59:59.999999Z).
+        Query range is strictly bound to the completed canonical NYSE market session
+        (00:00:00Z..session_close_utc), never requesting beyond session completion.
+        Enforces delayed SIP provider accessibility boundary before issuing network.
         Activation/next-expected rules live in the runner, not here.
         """
         from datetime import datetime as _datetime
@@ -262,11 +265,35 @@ class HYP011AlpacaClient:
             )
         if not self._calendar.is_trading_session(session):
             raise SipContractViolationError(f"HYP_011 not a trading session: {session}.")
+
+        session_details = self._calendar.get_session(session)
+        if session_details.close_utc is None:
+            raise DataContractError(f"HYP_011 session has no close_utc: {session}.")
+
+        from acash.research.hyp_011.shadow import provider_observation_eligible_after
+        provider_eligible_after_utc = provider_observation_eligible_after(session, self._calendar)
+
+        effective_now = now_utc if now_utc is not None else datetime.now(timezone.utc)
+        if effective_now.tzinfo is None:
+            raise DataContractError("HYP_011 now_utc must be timezone-aware UTC.")
+        effective_now = effective_now.astimezone(timezone.utc)
+
+        # Market session complete check
+        if effective_now <= session_details.close_utc:
+            raise DataContractError(
+                f"HYP_011 market session incomplete: {session} closes at "
+                f"{session_details.close_utc.isoformat()}, now is {effective_now.isoformat()}."
+            )
+
+        # Provider data accessible check (15-min delay rule)
+        if effective_now <= provider_eligible_after_utc:
+            raise DataContractError(
+                f"HYP_011 provider SIP data not yet accessible: {session} eligible strictly after "
+                f"{provider_eligible_after_utc.isoformat()}, now is {effective_now.isoformat()}."
+            )
+
         start_utc = _datetime(session.year, session.month, session.day, tzinfo=timezone.utc)
-        end_utc = _datetime(
-            session.year, session.month, session.day, 23, 59, 59, 999999,
-            tzinfo=timezone.utc,
-        )
+        end_utc = session_details.close_utc
         bars, pages_raw, pages_meta, status, _ = self._fetch_pages(
             sym, start_utc, end_utc, feed, adjustment, timeframe,
             max_pages=5,
