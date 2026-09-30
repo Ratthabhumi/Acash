@@ -35,11 +35,15 @@
 
 ---
 
-## 2. Local Audit Branch
+## 2. Audit Branch Status & Post-Push Inventory
+
+### Pre-Push vs Post-Push Inventory Accounting
+- **Pre-Push Remote Inventory Cutoff (`2026-09-30T07:00:00Z`)**: Exactly 21 remote branches on GitHub (surveyed above).
+- **Post-Push Remote Inventory (`2026-09-30T07:03:37Z`)**: 22 remote branches on GitHub, reflecting the authorized publication of the isolated audit branch.
 
 | Branch Name | Local Tip SHA | Remote Tracking | Divergence vs `main` | Status | Purpose |
 | :--- | :--- | :--- | :---: | :--- | :--- |
-| **`audit/repo-closure-20260930`** | `becec27f...` (base) | Pending push to `origin` | 0 / 0 (at inception) | **ACTIVE** | Isolated audit documentation (`docs/audit/`), hermetic test isolation, and defect reproduction pack. |
+| **`audit/repo-closure-20260930`** | `04907ac5...` (initial audit push) | `origin/audit/repo-closure-20260930` (`04907ac5...`) | Ahead 1 / Behind 0 | **AUDIT BRANCH PUBLISHED** | Isolated audit documentation (`docs/audit/`), hermetic test isolation, and defect reproduction pack pushed for independent review. |
 
 ---
 

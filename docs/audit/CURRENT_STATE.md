@@ -58,11 +58,17 @@ NO_REAL_ORDERS = true
 
 ---
 
-## 4. Current Worktree Isolation
+## 4. Current Worktree Isolation & Remote State
 
 - **Branch**: `audit/repo-closure-20260930`
 - **Scope**: Repository audit documentation (`docs/audit/`), hermetic test isolation (`tests/`), and acceptance reproduction tests for audited defects F01/F02/F09.
-- **Forbidden Actions**: No runtime code modification (`src/**`), no dependency edits (`pyproject.toml`, `uv.lock`), no remote pushes, no homelab mutation.
+- **Remote Push Lineage**: The initial closure construction prohibited all remote mutations. A subsequent, explicitly authorized finalization step pushed exclusively `audit/repo-closure-20260930` to `origin` (tip commit `04907ac5...`) for independent audit review.
+- **Strict Invariants Preserved**:
+  - `origin/main` remains strictly untouched at `becec27f5eacf283dcb191cf72d0858682d8e055`.
+  - Zero pull requests created or merged.
+  - Zero runtime code modification (`src/**`).
+  - Zero dependency edits (`pyproject.toml`, `uv.lock`).
+  - Zero homelab or operational execution interference.
 
 ---
 

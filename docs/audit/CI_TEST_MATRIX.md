@@ -2,7 +2,7 @@
 
 **Date Context**: 2026-09-30  
 **Scope**: Repository-Wide Test Organization & CI Tier Decoupling  
-**Audited Finding Reference**: F08 (Monolithic Test Suite Lacks Tier Partitioning)
+**Audited Finding References**: F06 (Missing CI Assurance) & F08 (Non-Hermetic Test & Reproducibility Dependencies)
 
 ---
 

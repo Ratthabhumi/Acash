@@ -1,8 +1,9 @@
 # ACASH Line Ending & Cryptographic Hash Convention Register
 
-**Date Context**: 2026-09-30  
-**Scope**: HYP_006, HYP_007, HYP_009, HYP_011 Sealed Manifests & Reproducibility  
-**Authority**: Cryptographic Lineage & Canonical Git Tree Standard
+**Date Context**: 2026-09-30<br>
+**Scope**: HYP_006, HYP_007, HYP_009, HYP_011 Sealed Manifests & Reproducibility<br>
+**Authority**: Cryptographic Lineage & Canonical Git Tree Standard<br>
+**Audited Finding Reference**: F03 (CRLF/LF Historical Seal/Hash Mismatch)
 
 ---
 
