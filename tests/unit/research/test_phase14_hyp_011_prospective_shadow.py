@@ -12,7 +12,7 @@ from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import List
+from typing import Any, List
 
 import pytest
 
@@ -213,12 +213,21 @@ def test_eligibility_strictly_after_close() -> None:
     assert state.observed_count == 1
 
 
-def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
-    import sys
+def _load_runner_module() -> Any:
+    import importlib.util
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "process_hyp_011_prospective_shadow.py"
+    spec = importlib.util.spec_from_file_location("process_hyp_011_prospective_shadow", script_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
 
+def test_dry_run_eligibility_messaging_zero_network(
+    tmp_path: Path, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _load_runner_module()
+    monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
     state_dir = tmp_path
 
     def _dry_run(now_utc: datetime) -> str:

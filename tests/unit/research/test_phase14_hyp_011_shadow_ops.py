@@ -27,6 +27,17 @@ from acash.research.hyp_011.shadow_ops import (
 )
 
 
+def _load_runner_module() -> Any:
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "process_hyp_011_prospective_shadow.py"
+    spec = importlib.util.spec_from_file_location("process_hyp_011_prospective_shadow", script_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _market(session: date, level: str = "100") -> SessionMarket:
     px = Decimal(level)
     return SessionMarket(
@@ -180,13 +191,19 @@ def test_benchmark_independent_and_first_day_anchor() -> None:
     assert Decimal(frag2["daily_return"]) == Decimal(frag2["equity"]) / first_equity - Decimal("1")
 
 
-def test_runner_dry_run_zero_network(capsys: Any) -> None:
-    import sys
+def test_runner_dry_run_zero_network(
+    capsys: Any, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _load_runner_module()
+    monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
 
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
-
-    assert runner.main([], _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc)) == 0
+    assert (
+        runner.main(
+            [],
+            _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc),
+        )
+        == 0
+    )
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PRETEST" in out
@@ -248,10 +265,7 @@ def test_verify_chain_blocks_tamper_and_orphan() -> None:
 
 
 def test_runner_ordinal_and_chain_guards() -> None:
-    import sys
-
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
+    runner = _load_runner_module()
 
     # Wrong ordinal rejected pre-network (no --execute-network needed for arg parse,
     # but ordinal check happens after chain verify which needs no network).
@@ -323,10 +337,7 @@ def _run_observation(
     stage_c_binding: Optional[Path] = None,
     dispatch_attempt: int = 1,
 ) -> int:
-    import sys
-
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
+    runner = _load_runner_module()
 
     if dispatch_attempt > 1:
         auth = f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}_ATTEMPT_{dispatch_attempt:04d}"

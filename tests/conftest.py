@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 import pytest
 
 from acash.core.domain.enums import AssetClass, BarTimeframe, OrderSide, OrderStatus, OrderType
@@ -11,6 +12,22 @@ from acash.core.domain.market_data import Bar, MarketDataSnapshot
 from acash.core.domain.portfolio import AccountState, PortfolioState
 from acash.core.domain.position import Position
 from acash.core.domain.signal import RiskAssessment, Signal, TargetAllocation
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "non_hermetic: Non-hermetic test requiring live repository or external environment state",
+    )
+
+
+@pytest.fixture
+def stage_c_b_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Fixture ensuring Stage C-B recovery manifest is treated as absent for testing pre-recovery boundaries."""
+    absent_path = tmp_path / "absent_stage_c_b.json"
+    import acash.research.hyp_011.shadow as shadow_mod
+    monkeypatch.setattr(shadow_mod, "STAGE_C_RECOVERY_BINDING_PATH", absent_path)
+    return absent_path
 
 
 @pytest.fixture

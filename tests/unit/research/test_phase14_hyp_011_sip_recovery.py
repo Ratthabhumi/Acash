@@ -50,10 +50,20 @@ from acash.research.hyp_011.shadow_ops import (
     validate_initial_state,
     verify_chain,
 )
-import sys
-sys.path.insert(0, "scripts")
-import process_hyp_011_prospective_shadow as runner
-import build_stage_c_b_recovery_manifest as builder
+import importlib.util
+
+
+def _load_script_module(name: str) -> Any:
+    script_file = Path(__file__).resolve().parents[3] / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, script_file)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+runner = _load_script_module("process_hyp_011_prospective_shadow")
+builder = _load_script_module("build_stage_c_b_recovery_manifest")
 
 
 def _make_client(
@@ -110,11 +120,14 @@ def _write_binding(path: Path, doc: Dict[str, Any]) -> SH.StageCRecoveryAuthorit
 # -----------------------------------------------------------------------------
 # A. no Stage C-B -> zero network
 # -----------------------------------------------------------------------------
-def test_a_canonical_stage_c_b_manifest_absent_fails_closed_zero_network(tmp_path: Path) -> None:
+def test_a_canonical_stage_c_b_manifest_absent_fails_closed_zero_network(
+    tmp_path: Path, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A. Canonical Stage C-B manifest absent -> SHADOW_RECOVERY_BINDING_REQUIRED -> zero network."""
     cal = NyseCa1Calendar()
     now_post_failure = datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc)
     state_dir = tmp_path / "prospective"
+    monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
 
     # 1. Direct function call fails closed
     with pytest.raises(DataContractError) as exc_info:
@@ -159,7 +172,7 @@ def test_a_canonical_stage_c_b_manifest_absent_fails_closed_zero_network(tmp_pat
 # -----------------------------------------------------------------------------
 # B. same-day failed-session retry blocked
 # -----------------------------------------------------------------------------
-def test_b_same_day_failure_boundary_blocks_retry() -> None:
+def test_b_same_day_failure_boundary_blocks_retry(stage_c_b_absent: Path) -> None:
     """B. Same-day 20:10Z failure boundary blocks retry at 20:09:59Z, 20:10:00Z, 20:10:01Z, 20:20:00Z."""
     cal = NyseCa1Calendar()
 
@@ -1209,33 +1222,73 @@ def test_z_builder_write_mode_gates(tmp_path: Path) -> None:
 # Builder dry-run and invariants tests
 # -----------------------------------------------------------------------------
 def test_builder_dry_run_and_invariants(tmp_path: Path) -> None:
-    """Test build_stage_c_b_recovery_manifest dry-run and git validation."""
-    post_failure_sha = "0949bbbaf08f8bb3604a642bddf1641ba7b00eda"
+    """Test build_stage_c_b_recovery_manifest dry-run and git validation using hermetic synthetic git fixture."""
+    import os
+    import subprocess
+    tmp_repo = tmp_path / "hermetic_repo"
+    tmp_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@acash.local"], cwd=tmp_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "ACASH Test"], cwd=tmp_repo, check=True, capture_output=True)
+
+    # 1. Commit 1: pre-failure commit (2026-09-28T12:00:00Z -> activation 2026-09-28)
+    (tmp_repo / "README.md").write_text("commit 1", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_repo, check=True, capture_output=True)
+    env1 = {**os.environ, "GIT_COMMITTER_DATE": "2026-09-28T12:00:00Z", "GIT_AUTHOR_DATE": "2026-09-28T12:00:00Z"}
+    subprocess.run(["git", "commit", "-m", "pre-failure commit", "--date", "2026-09-28T12:00:00Z"], cwd=tmp_repo, check=True, capture_output=True, env=env1)
+    pre_failure_sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=tmp_repo).stdout.strip().lower()
+
+    # 2. Commit 2: post-failure commit (2026-09-29T12:00:00Z -> activation 2026-09-29)
+    (tmp_repo / "README.md").write_text("commit 2", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_repo, check=True, capture_output=True)
+    env2 = {**os.environ, "GIT_COMMITTER_DATE": "2026-09-29T12:00:00Z", "GIT_AUTHOR_DATE": "2026-09-29T12:00:00Z"}
+    subprocess.run(["git", "commit", "-m", "post-failure commit", "--date", "2026-09-29T12:00:00Z"], cwd=tmp_repo, check=True, capture_output=True, env=env2)
+    post_failure_sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=tmp_repo).stdout.strip().lower()
+
     target_out = tmp_path / "test_stage_c_b.json"
 
     # 1. Dry-run on valid post-failure commit: does NOT write to disk
     code = builder.main(
         ["--commit-sha", post_failure_sha],
         _output_path=target_out,
+        _repo_root=tmp_repo,
     )
     assert code == 0
     assert not target_out.exists()
 
-    # 2. Pre-failure commit (e.g. initial main) rejected because activation <= 2026-09-28
-    pre_failure_sha = "d9608c0a2353bd5ed41943e5fb893ef9648089d2"
+    # 2. Pre-failure commit rejected because activation <= 2026-09-28
     with pytest.raises(DataContractError) as exc_info:
         builder.main(
             ["--commit-sha", pre_failure_sha],
             _output_path=target_out,
+            _repo_root=tmp_repo,
         )
     assert "ACTIVATION_NOT_ADVANCED" in str(exc_info.value)
 
     # 3. Invalid SHA format fails
     with pytest.raises(DataContractError) as exc_info:
-        builder.main(["--commit-sha", "not_a_sha"], _output_path=target_out)
+        builder.main(["--commit-sha", "not_a_sha"], _output_path=target_out, _repo_root=tmp_repo)
     assert "INVALID_COMMIT_SHA_FORMAT" in str(exc_info.value)
 
     # 4. Non-existent SHA fails
     with pytest.raises(DataContractError) as exc_info:
-        builder.main(["--commit-sha", "0" * 40], _output_path=target_out)
+        builder.main(["--commit-sha", "0" * 40], _output_path=target_out, _repo_root=tmp_repo)
     assert "GIT_COMMIT_NOT_FOUND" in str(exc_info.value)
+
+
+@pytest.mark.non_hermetic
+def test_builder_historical_git_audit(tmp_path: Path) -> None:
+    """Non-hermetic historical audit validating active Git repository commit timestamps and boundaries."""
+    target_out = tmp_path / "audit_stage_c_b.json"
+
+    # Authoritative canonical integration merge commit
+    merge_sha = "08530b1ab4ec64788d0eadfaf821aa01e07d0a5f"
+    code = builder.main(["--commit-sha", merge_sha], _output_path=target_out)
+    assert code == 0
+    assert not target_out.exists()
+
+    # Prior canonical main must fail activation advancement
+    prior_main_sha = "d9608c0a2353bd5ed41943e5fb893ef9648089d2"
+    with pytest.raises(DataContractError) as exc_info:
+        builder.main(["--commit-sha", prior_main_sha], _output_path=target_out)
+    assert "ACTIVATION_NOT_ADVANCED" in str(exc_info.value)
