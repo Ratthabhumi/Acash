@@ -243,3 +243,57 @@ def intake_doc_to_determination(
     if not isinstance(doc, Mapping):
         raise DataContractError("CA_DETERMINATION_NOT_A_MAPPING.")
     return CADetermination.from_dict(doc, symbol, session, processing_utc)
+
+
+def validate_scope_mapping(
+    raw: Any, symbol: str, session: date, processing_utc: datetime
+) -> ScopeEvidence:
+    """Validate operator-supplied scope evidence from a loaded intake document."""
+    if not isinstance(raw, Mapping):
+        raise DataContractError(
+            f"CA_NO_EVENT_SCOPE_REQUIRED: {symbol} {session.isoformat()} "
+            f"no-event lacks validated scope_evidence."
+        )
+    try:
+        scope = ScopeEvidence(
+            schedule_id=str(raw.get("schedule_id") or ""),
+            schedule_sha256=str(raw.get("schedule_sha256") or ""),
+            scope_note=str(raw.get("scope_note") or ""),
+            retrieved_at_utc=str(raw.get("retrieved_at_utc") or ""),
+        )
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise DataContractError(
+            f"CA_NO_EVENT_SCOPE_REQUIRED: {symbol} {session.isoformat()} "
+            f"scope_evidence malformed: {exc}."
+        ) from exc
+    return scope.validated(processing_utc)
+
+
+def validate_intake_document(
+    doc: Mapping[str, Any], symbol: str, session: date, processing_utc: datetime
+) -> CADetermination:
+    """Runner trust-boundary gate for one symbol's intake document (F16-A).
+
+    Enforces the FULL offline intake contract — not just the core
+    CADetermination fields: evidence_ref and source_sha256 must be present
+    and well-formed, and no-event determinations must carry validated
+    scope_evidence. Must run BEFORE any market-data network call.
+    """
+    if not isinstance(doc, Mapping):
+        raise DataContractError("CA_DETERMINATION_NOT_A_MAPPING.")
+    evidence_ref = doc.get("evidence_ref")
+    if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+        raise DataContractError(
+            f"CA_EVIDENCE_REF_REQUIRED: {symbol} {session.isoformat()}."
+        )
+    sha = doc.get("source_sha256")
+    if not isinstance(sha, str) or not _SHA64.fullmatch(sha):
+        raise DataContractError(
+            f"CA_SOURCE_SHA_INVALID: {symbol} {session.isoformat()}."
+        )
+    determination = CADetermination.from_dict(doc, symbol, session, processing_utc)
+    if not determination.has_event:
+        validate_scope_mapping(
+            doc.get("scope_evidence"), symbol, session, processing_utc
+        )
+    return determination

@@ -499,8 +499,18 @@ def test_f14_no_historical_backfill() -> None:
 
 
 def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None:
-    """Script live path with a stale target fails BEFORE any network side effect."""
+    """Script live path with a stale target fails BEFORE any network side effect.
+
+    Supplies a fully valid DispatchAuthority + CA package so the F14
+    freshness gate itself (not an earlier gate) is proven to block.
+    """
+    import hashlib as _hashlib
+
     from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+    from acash.research.hyp_011.shadow_authority import (
+        ObservationIntent,
+        validate_observation_intent,
+    )
 
     runner = _load_runner_module()
     binding = _f14_binding(tmp_path)
@@ -513,6 +523,71 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
     dummy_prov = EnvAlpacaCredentialProvider(
         environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
     )
+    # Valid CA package (bytes-bound by the authority below).
+    sponsors = {
+        "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
+        "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+        "SPY": "STATE_STREET_SPDR_OFFICIAL",
+    }
+    ca_doc = {
+        symbol: {
+            "symbol": symbol,
+            "session": "2026-10-01",
+            "has_event": False,
+            "authority_source": sponsors[symbol],
+            "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "source_sha256": "ab" * 32,
+            "evidence_ref": f"evidence/{symbol.lower()}-scope-fixture.pdf",
+            "scope_evidence": {
+                "schedule_id": "FIXTURE_SCOPE",
+                "schedule_sha256": "ab" * 32,
+                "scope_note": "Fixture scope.",
+                "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            },
+        }
+        for symbol in sponsors
+    }
+    ca_path = tmp_path / "ca_2026-10-01.json"
+    ca_bytes = (json.dumps(ca_doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    ca_path.write_bytes(ca_bytes)
+    # Valid authority (window covers the stale now; F14 must still block).
+    fixture_runtime = "f" * 40
+    intent = ObservationIntent(
+        hypothesis_id="HYP_011",
+        target_session=date(2026, 10, 1),
+        observation_ordinal=2,
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        previous_observation_sha256=json.loads(
+            (state_dir / "state.json").read_text(encoding="utf-8")
+        )["last_observation_sha256"],
+        backfill_allowed=False,
+        automatic_skip_allowed=False,
+        created_at_utc=datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc),
+        authority_identity="TEST_FIXTURE",
+    )
+    cal = NyseCa1Calendar()
+    validated_intent = validate_observation_intent(
+        intent.canonical_doc(), cal, datetime(2026, 10, 1, 0, 0, 0, tzinfo=timezone.utc)
+    )
+    authority_doc = {
+        "schema_version": 1,
+        "intent_sha256": validated_intent.intent_sha256(),
+        "intent": intent.canonical_doc(),
+        "runtime_commit_sha": fixture_runtime,
+        "target_session": "2026-10-01",
+        "observation_ordinal": 2,
+        "dispatch_attempt": 1,
+        "valid_after_utc": "2026-10-01T00:00:00+00:00",
+        "expires_at_utc": "2026-10-06T00:00:00+00:00",
+        "ca_manifest_sha256": _hashlib.sha256(ca_bytes).hexdigest(),
+        "paper_trading": False,
+        "live_trading": False,
+        "real_capital_authority_usd": "0.00",
+        "no_real_orders": True,
+        "authority_identity": "TEST_FIXTURE",
+    }
+    authority_path = tmp_path / "dispatch_authority_stale.json"
+    authority_path.write_text(json.dumps(authority_doc, indent=2), encoding="utf-8")
     argv = [
         "--execute-network",
         "--authorization",
@@ -521,6 +596,10 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
         "2",
         "--dispatch-attempt",
         "1",
+        "--dispatch-authority",
+        str(authority_path),
+        "--ca-determinations",
+        str(ca_path),
     ]
     with pytest.raises(DataContractError, match="MISSED_REACTIVATION_REQUIRED"):
         runner.main(
@@ -530,6 +609,7 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
             _client=_NoNetworkClient(),
             _credential_provider=dummy_prov,
             _stage_c_binding_path=binding["path"],
+            _runtime_sha=fixture_runtime,
         )
 
 

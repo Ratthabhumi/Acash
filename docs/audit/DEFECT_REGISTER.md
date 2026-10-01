@@ -2,14 +2,14 @@
 
 **Date Context**: 2026-09-30<br>
 **Baseline Anchor**: Canonical `origin/main` at `becec27f5eacf283dcb191cf72d0858682d8e055`<br>
-**Classification Authority**: Canonical Audit Register (F01 – F14)<br>
+**Classification Authority**: Canonical Audit Register (F01 – F16)<br>
 **Contract Enforcement Classification**: `CONTRACT_ENFORCEMENT = FAIL_CLOSED_WITH_REPAIRED_F01_F02_F09_ON_REPAIR_BRANCH`<br>
 **Runtime Repair Status**: `RUNTIME_REPAIR_STATUS = IMPLEMENTED_ON_REPAIR_BRANCH_PENDING_HUMAN_REVIEW`<br>
 **Offline Reproductions Invariant**: `PASSING_REPRODUCTION_TEST != DEFECT_REPAIRED`
 
 ---
 
-## 1. Canonical Audit Summary Table (F01 – F14)
+## 1. Canonical Audit Summary Table (F01 – F16)
 
 | ID | Finding Title / Description | Component / Location | Operational Risk for Attempt #2 | Required Timing | Status |
 | :---: | :--- | :--- | :--- | :--- | :--- |
@@ -32,6 +32,8 @@
 | **F12** | API / network exposure assumptions require deployment isolation | Homelab Network Architecture & Broker API | LOW (homelab is local, orders locked) | Ongoing Operational Invariant | REGISTERED |
 | **F13** | Public repository vs confidential / proprietary wording inconsistency | Repository Metadata & Documentation Tone | NONE (governance alignment) | Post-Attempt #2 Documentation Pass | REGISTERED |
 | **F14** | Post-observation missed-session / silent-backfill continuation gap | `src/acash/research/hyp_011/shadow.py` (`assert_target_session_fresh`) + `scripts/process_hyp_011_prospective_shadow.py` (`_expected_next` call site) | CRITICAL (stale target would silently backfill) | Before Obs #2 Authorization | FORMALLY_REGISTERED; CONTRACT_IMPLEMENTED_AS_PROPOSED_PENDING_HUMAN_RATIFICATION |
+| **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `scripts/process_hyp_011_prospective_shadow.py` (authorization gate) | HIGH (same token re-runnable after pre-commit failure) | Before Obs #2 Authorization | NEW_REGISTERED |
+| **F16** | CA intake enforcement + provenance gap (runner bypasses intake; provenance stripped; CA validated post-fetch) | `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py` | HIGH (unscoped no-event accepted; evidence dropped; network before CA fail) | Before Obs #2 Authorization | NEW_REGISTERED |
 
 ---
 
@@ -158,3 +160,44 @@
   A target may only be processed if (1) it is exactly the next session allowed by persisted/recovery authority, (2) `now` is strictly after provider observation eligibility, and (3) `now` is still strictly before the next NYSE session open. Once the next session opens, an unobserved target is `MISSED_UNOBSERVED` and raises `SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`. No auto-advance, no observed_sessions rewrite, no auto-created recovery authority. Retry authority is unchanged: a failed dispatch gains nothing from target freshness alone.
 - **Operational Impact**: CRITICAL HARD BLOCK FOR OBSERVATION #2 until ratified. Session 2026-10-01 eligibility must additionally be adjudicated under this contract.
 - **Acceptance Tests**: `test_f14_*` in `tests/unit/research/test_phase14_hyp_011_prospective_shadow.py` (fresh allowed / pre-eligibility blocked / exact-open blocked / post-open blocked / activation pinned / no skip / no backfill / stale live-path zero-network / pretest freshness report).
+
+---
+
+### F15: Dispatch Authority Replay Gap (No Single-Use Attempt Ledger)
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` (live-path authorization gate)
+- **Mechanism**:
+  For non-recovery observations the runner accepts a bare
+  `AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal}` token with
+  `dispatch_attempt` 0 or 1. If execution fails before observation commit,
+  the same authorization can be replayed in a later process invocation
+  because no durable attempt-consumption ledger exists. Policy text forbidding
+  retry is not runtime enforcement.
+- **Remediation Direction**: two-stage authority — `ObservationIntent`
+  (ratified before target session opens) + `DispatchAuthority` (bound to
+  intent, runtime SHA, CA evidence SHA, expiry, trading locks) + append-only
+  atomic single-use `DispatchAttemptLedger` consumed before any market-data
+  network call. Implemented in `src/acash/research/hyp_011/shadow_authority.py`;
+  `DispatchAuthority` manifest required on the live path for ordinal >= 2.
+- **Acceptance Tests**: `test_f15_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (replay BLOCK / crash-reuse BLOCK / expiry BLOCK / runtime-SHA mismatch BLOCK / CA-SHA mismatch BLOCK / missing authority BLOCK).
+
+---
+
+### F16: CA Intake Enforcement and Provenance Gap
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py`
+- **Mechanism (three sub-findings)**:
+  - **F16-A**: `shadow_ca_intake.py` validates scope evidence, but the
+    production runner calls `CADetermination.from_dict()` directly, so an
+    operator-crafted no-event document without `ScopeEvidence` passes whenever
+    the base fields are complete.
+  - **F16-B**: the runner converts determinations back through
+    `CADetermination.to_dict()`, dropping `evidence_ref` and `scope_evidence`
+    from the sealed observation artifact.
+  - **F16-C**: CA determinations are validated only AFTER the six Alpaca
+    series requests, so malformed/missing CA evidence does not fail before
+    network.
+- **Remediation Direction**: runner-side intake gate (`validate_intake_document`)
+  enforced pre-network for every symbol; enriched `corporate_actions` section
+  retaining `authority_source`, `retrieved_at_utc`, `source_sha256`,
+  `evidence_ref`, and `scope_evidence` (no-event) / event fields; CA block
+  moved before market-data fetch so a bad package proves zero network calls.
+- **Acceptance Tests**: `test_f16_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (no-scope BLOCK zero-network / bad-SHA BLOCK zero-network / authority-CA-SHA mismatch BLOCK zero-network / provenance survival).
