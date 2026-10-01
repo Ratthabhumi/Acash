@@ -20,18 +20,18 @@
 ## 2. Mandatory Pre-Conditions for Observation #2
 
 ### Gate 1: Observation #1 Independent Ratification
-- [ ] Observation #1 classified as `COMMITTED_AND_RECONCILED` per `docs/audit/OBSERVATION_0001_POST_RUN_CHECKLIST.md`.
-- [ ] $S_1$ progress officially recorded at $1/20$.
-- [ ] Zero manual backfills or retries invoked.
+- [x] Observation #1 classified as `COMMITTED_AND_RECONCILED` per `docs/audit/OBSERVATION_0001_POST_RUN_CHECKLIST.md` (record: `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`).
+- [x] $S_1$ progress officially recorded at $1/20$.
+- [x] Zero manual backfills or retries invoked.
 
 ---
 
 ### Gate 2: Implementation & Verification of Runtime Repairs (F01, F02, F09)
 Apply and verify the patches documented in `docs/audit/F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md`:
-- [ ] **F01**: `verify_chain()` cross-reconciles state portfolio cash/equity/holdings with terminal observation artifact.
-- [ ] **F02**: `verify_chain()` orphan detection moved prior to state file existence check.
-- [ ] **F09**: `load_stage_c_recovery_authority()` strictly enforces `locks` dictionary.
-- [ ] `tests/unit/research/test_hyp011_audit_reproductions.py` updated to verify strict fail-closed enforcement (all 3 passing under repaired contracts).
+- [x] **F01**: `verify_chain()` cross-reconciles state portfolio cash/equity/holdings with terminal observation artifact (implemented on repair branch; Obs #1 backward-compatible).
+- [x] **F02**: `verify_chain()` orphan detection moved prior to state file existence check (implemented; pristine-empty still valid).
+- [x] **F09**: `load_stage_c_recovery_authority()` strictly enforces `locks` dictionary (implemented; 12 fields; production manifest loads, bytes preserved).
+- [x] `tests/unit/research/test_hyp011_audit_reproductions.py` updated to verify strict fail-closed enforcement (all acceptance tests passing under repaired contracts).
 - [ ] Full HYP_011 unit suite passes cleanly.
 - [ ] Runtime repair PR merged to canonical `main`.
 

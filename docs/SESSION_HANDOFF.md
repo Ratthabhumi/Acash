@@ -1,7 +1,7 @@
-# ACASH SESSION HANDOFF — HYP_011 PROSPECTIVE SHADOW / ATTEMPT #2 FROZEN
+# ACASH SESSION HANDOFF — HYP_011 OBS #1 COMMITTED / POST-OBS REPAIR BRANCH
 
 **Document Authority**: `docs/SESSION_HANDOFF.md`<br>
-**Date Context**: 2026-09-30<br>
+**Date Context**: 2026-10-01<br>
 **Classification**: Single Canonical ACASH Session Handoff (Current Working Checkpoint)<br>
 **Parent Canonical Main**: `becec27f5eacf283dcb191cf72d0858682d8e055`
 
@@ -50,7 +50,7 @@
 - **`GOVERNANCE BOUNDARY — SCIENTIFIC ACCEPTANCE THRESHOLDS`**:
   - Full scientific evaluation requires: $\ge 504$ committed daily observations **AND** $\ge 2$ completed annual rebalances.
   - Intermediate staging checkpoint ($S_1$): $20$ committed observations.
-  - **Current Status**: `S1_PROGRESS = 0/20`. Do not confuse $S_1$ progress with final strategy qualification or trading admission.
+  - **Current Status**: `S1_PROGRESS = 1/20` (Observation #1 COMMITTED_AND_RECONCILED 2026-09-30; see `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`). Do not confuse $S_1$ progress with final strategy qualification or trading admission.
 
 ---
 
@@ -112,10 +112,11 @@ PRE_ATTEMPT_0002_STATE             = READY_AND_FROZEN
 CANONICAL_MAIN                     = becec27f5eacf283dcb191cf72d0858682d8e055
 AUDIT_BRANCH                       = audit/repo-closure-20260930
 
-OBSERVATION_0001                   = PENDING_ATTEMPT_0002
+OBSERVATION_0001                   = COMMITTED_AND_RECONCILED (2026-09-30; record:
+                                     docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md)
 OBSERVATION_0002                   = NOT_AUTHORIZED (Timer must NOT be set)
 
-S1_PROGRESS                        = 0/20
+S1_PROGRESS                        = 1/20
 
 MERGE_STATUS                       = STRICT_HOLD
 RUNTIME_CHANGE                     = FORBIDDEN_PRE_RUN
@@ -134,16 +135,17 @@ NO_REAL_ORDERS                     = true
 ## 7. Audit & Repository Closure Pack Status
 
 - **`REPOSITORY-VERIFIED — AUDIT BRANCH`**: `audit/repo-closure-20260930` published on GitHub.
-- **`REPOSITORY-VERIFIED — AUDIT PACK ARTIFACTS`** (in [`docs/audit/`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/)):
-  1. [`CURRENT_STATE.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/CURRENT_STATE.md): Formal integration and boundary snapshot.
-  2. [`AUTHORITY_MAP.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/AUTHORITY_MAP.md): Single canonical points of authority mapping.
-  3. [`BRANCH_INTEGRATION_MATRIX.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/BRANCH_INTEGRATION_MATRIX.md): Survey of all 21 pre-push and 22 post-push remote branches.
-  4. [`DEFECT_REGISTER.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/DEFECT_REGISTER.md): Complete F01–F13 canonical audit register with sub-findings.
-  5. [`LINE_ENDING_HASH_CONVENTION_REGISTER.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/LINE_ENDING_HASH_CONVENTION_REGISTER.md): Two-Era hash and newline standards.
-  6. [`CI_TEST_MATRIX.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/CI_TEST_MATRIX.md): 5-tier test architecture.
-  7. [`F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md): Surgical repair proposal (unimplemented).
-  8. [`OBSERVATION_0001_POST_RUN_CHECKLIST.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/OBSERVATION_0001_POST_RUN_CHECKLIST.md): 4-state post-run forensic classification procedure.
-  9. [`OBSERVATION_0002_READINESS_CHECKLIST.md`](file:///c:/Users/MewMew/Desktop/Co-op/Acash/docs/audit/OBSERVATION_0002_READINESS_CHECKLIST.md): Hard stop gate before Observation #2.
+- **`REPOSITORY-VERIFIED — AUDIT PACK ARTIFACTS`** (in [`docs/audit/`](docs/audit/)):
+  1. [`CURRENT_STATE.md`](docs/audit/CURRENT_STATE.md): Formal integration and boundary snapshot.
+  2. [`AUTHORITY_MAP.md`](docs/audit/AUTHORITY_MAP.md): Single canonical points of authority mapping.
+  3. [`BRANCH_INTEGRATION_MATRIX.md`](docs/audit/BRANCH_INTEGRATION_MATRIX.md): Survey of all 21 pre-push and 22 post-push remote branches.
+  4. [`DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md): Complete F01–F14 canonical audit register with sub-findings.
+  5. [`LINE_ENDING_HASH_CONVENTION_REGISTER.md`](docs/audit/LINE_ENDING_HASH_CONVENTION_REGISTER.md): Two-Era hash and newline standards.
+  6. [`CI_TEST_MATRIX.md`](docs/audit/CI_TEST_MATRIX.md): 5-tier test architecture.
+  7. [`F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md`](docs/audit/F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md): Surgical repair proposal (superseded by implementation on the repair branch).
+  8. [`OBSERVATION_0001_POST_RUN_CHECKLIST.md`](docs/audit/OBSERVATION_0001_POST_RUN_CHECKLIST.md): 4-state post-run forensic classification procedure.
+  9. [`OBSERVATION_0002_READINESS_CHECKLIST.md`](docs/audit/OBSERVATION_0002_READINESS_CHECKLIST.md): Hard stop gate before Observation #2.
+  10. [`OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`](docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md): Immutable Obs #1 result/adjudication record.
 - **`REPOSITORY-VERIFIED — LOCAL VERIFICATION EVIDENCE`**:
   - Full Test Suite: `3268 passed, 1 skipped, 0 failed` (3,269 collected).
   - Scoped MyPy: `Success: no issues found in 5 source files`.
@@ -158,17 +160,17 @@ The canonical finding identities established during repository audit remain stab
 
 | ID | Title / Mechanism | Status | Operational Impact |
 | :---: | :--- | :--- | :--- |
-| **F01** | Economic-state reconciliation gap (`verify_chain` deserializes state but does not reconcile balances against terminal observation) | `OPEN / REPRODUCED / UNPATCHED` | Non-blocking for Obs #1 (starting AUM $100k); **BLOCKING for Obs #2** |
-| **F02** | Orphan observation bypass when `state.json` absent (`build_initial_state` returned before orphan check) | `OPEN / REPRODUCED / UNPATCHED` | Mitigated by homelab wrapper preflight check; **BLOCKING for Obs #2** |
-| **F09** | Stage C-B loader does not validate `locks` subdocument | `OPEN / REPRODUCED / UNPATCHED` | Low for Obs #1 (production manifest locks valid); **BLOCKING for Obs #2** |
-| **F10** | Corporate Actions (CA) operational determination intake pipeline absent for Session $\ge 2$ | `OPEN / BLOCKING` | **CRITICAL HARD BLOCK FOR OBSERVATION #2** |
-| **F14** | Post-observation missed-session / continuation semantics gap | `OPEN / RECORDED_IN_UNMERGED_AUDIT_HANDOFF` | **CRITICAL HARD BLOCK FOR OBSERVATION #2** |
+| **F01** | Economic-state reconciliation gap (`verify_chain` deserializes state but does not reconcile balances against terminal observation) | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; backward-compatible with Obs #1) | Repaired; Obs #2 gate satisfied on this axis |
+| **F02** | Orphan observation bypass when `state.json` absent (`build_initial_state` returned before orphan check) | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; pristine-empty still valid) | Repaired; Obs #2 gate satisfied on this axis |
+| **F09** | Stage C-B loader does not validate `locks` subdocument | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; production manifest loads, bytes preserved) | Repaired; Obs #2 gate satisfied on this axis |
+| **F10** | Corporate Actions (CA) operational determination intake pipeline absent for Session $\ge 2$ | `TOOLING_IMPLEMENTED / OBS2 STILL BLOCKED` (offline intake + tests; AGG 2026-10-01 amount still required from official declaration) | **CRITICAL HARD BLOCK FOR OBSERVATION #2 until exact official AGG amount is bound** |
+| **F14** | Post-observation missed-session / continuation semantics gap | `PROPOSED_PENDING_HUMAN_RATIFICATION` (implemented on repair branch; `SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`) | **CRITICAL HARD BLOCK FOR OBSERVATION #2 until ratified** |
 
 ### Mechanism of Finding F14 (Continuation / Silent Backfill Gap)
-- **Defect Discovery**: In `src/acash/research/hyp_011/shadow_ops.py`, `_expected_next()` selects the next trading day strictly after `state_sessions[-1]`. The runner verifies that the session has closed (`now_utc > close_utc + 15m`), but contains **no upper-bound freshness rule** preventing an older unobserved session from being processed days later.
+- **Defect Discovery**: In `scripts/process_hyp_011_prospective_shadow.py`, `_expected_next()` selects the next trading day strictly after `state_sessions[-1]`. The runner verifies that the session has closed (`now_utc > close_utc + 15m`), but contains **no upper-bound freshness rule** preventing an older unobserved session from being processed days later.
 - **Operational Risk**: If Observation #1 completes on 2026-09-30, but Observation #2 cannot run on 2026-10-01 (e.g. pending F01/F02/F09/F10/F14 resolution), a delayed invocation on October 2 or October 5 would attempt to process October 1 retroactively. This would constitute an unauthorized **Silent Backfill**, violating `backfill_allowed = false`.
 - **Zero-Commit Failure Risk**: Conversely, if Observation #1 Attempt #2 produces zero commit, `_expected_next()` continues targeting `2026-09-30` indefinitely; it does not automatically advance to a subsequent session without formal recovery governance.
-- **Governance Status**: `F14_REPOSITORY_STATUS = RECORDED_IN_UNMERGED_AUDIT_HANDOFF`. Formal addition to `DEFECT_REGISTER.md` is deferred post-Attempt #2.
+- **Governance Status**: `F14_REPOSITORY_STATUS = FORMALLY_REGISTERED_IN_DEFECT_REGISTER`. Contract implemented on the repair branch as `PROPOSED_PENDING_HUMAN_RATIFICATION` (`SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`).
 
 ---
 

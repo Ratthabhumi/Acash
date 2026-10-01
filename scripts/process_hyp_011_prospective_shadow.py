@@ -37,6 +37,7 @@ from acash.research.hyp_011.shadow import (
     STAGE_C_RECOVERY_BINDING_PATH,
     ShadowState,
     StageCRecoveryAuthority,
+    assert_target_session_fresh,
     candidate_schedule_time,
     load_stage_c_recovery_authority,
     observation_eligible_after,
@@ -181,6 +182,15 @@ def main(
         print(f"SESSION_CLOSE_UTC = {pretest_session.close_utc.isoformat()}")
         print(f"PROVIDER_ELIGIBLE_AFTER_UTC = {pretest_eligible_after.isoformat()}")
         print(f"OBSERVATION_ELIGIBLE = {str(pretest_eligible).lower()}")
+        try:
+            pretest_next = assert_target_session_fresh(
+                pretest_target, calendar, pretest_now
+            )
+            print(f"TARGET_FRESH = true")
+            print(f"NEXT_SESSION_NOT_YET_OPEN = {pretest_next.isoformat()}")
+        except DataContractError as exc:
+            print(f"TARGET_FRESH = false")
+            print(f"TARGET_STALE_REASON = {exc}")
         print("NETWORK_REQUESTS = 0")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
@@ -279,6 +289,12 @@ def main(
         print("ALREADY_PROCESSED_NO_ACTION")
         print("NETWORK_REQUESTS_ISSUED = 0")
         return EXIT_OK
+
+    # F14 continuation/freshness gate (PROPOSED_PENDING_HUMAN_RATIFICATION):
+    # the target may only be processed while the next NYSE session has not
+    # opened. A stale target fails here before any network side effect.
+    fresh_next = assert_target_session_fresh(target, calendar, now_utc)
+    print(f"NEXT_SESSION_NOT_YET_OPEN = {fresh_next.isoformat()}")
 
     # Full guard validation pre-network (duplicate/order/early/stress/
     # quarantine/completion via close_utc).

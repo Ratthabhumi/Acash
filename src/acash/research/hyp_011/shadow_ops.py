@@ -11,7 +11,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
@@ -482,6 +482,147 @@ def validate_initial_state(
         raise DataContractError("SHADOW_INITIAL_LOCKS.")
 
 
+def _require_finite_decimal(raw: Any, context: str) -> Decimal:
+    """Parse an exact Decimal, rejecting malformed or non-finite values fail-closed."""
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, ValueError, TypeError, ArithmeticError) as exc:
+        raise DataContractError(
+            f"BLOCK_SHADOW_STATE_INTEGRITY: malformed decimal {context}."
+        ) from exc
+    if not value.is_finite():
+        raise DataContractError(
+            f"BLOCK_SHADOW_STATE_INTEGRITY: non-finite decimal {context}."
+        )
+    return value
+
+
+def _require_holdings_mapping(raw: Any, context: str) -> Dict[str, int]:
+    """Validate a holdings mapping ({symbol: int shares}) fail-closed."""
+    if not isinstance(raw, dict):
+        raise DataContractError(
+            f"BLOCK_SHADOW_STATE_INTEGRITY: malformed holdings {context}."
+        )
+    for key, val in raw.items():
+        if not isinstance(key, str) or not isinstance(val, int) or isinstance(val, bool):
+            raise DataContractError(
+                f"BLOCK_SHADOW_STATE_INTEGRITY: malformed holdings {context}."
+            )
+    return dict(raw)
+
+
+def _receivables_total(receivables: List[Receivable], context: str) -> Decimal:
+    """Sum outstanding receivable amounts, rejecting non-finite entries fail-closed."""
+    total = Decimal("0")
+    for _, _, _, amount, _, _ in receivables:
+        if not amount.is_finite():
+            raise DataContractError(
+                f"BLOCK_SHADOW_STATE_INTEGRITY: non-finite receivable {context}."
+            )
+        total += amount
+    return total
+
+
+def _reconcile_terminal_economics(
+    state_dir: Path,
+    terminal_iso: str,
+    portfolio_state: ShadowPortfolio,
+    benchmark_state: ShadowBenchmark,
+) -> None:
+    """F01: cross-reconcile persisted terminal economics with the terminal observation.
+
+    The terminal observation file was already hash/link-verified by the
+    chain walk. Any divergence between persisted state economics and the
+    terminal observation fragment fails closed. Never mutates artifacts.
+    """
+    obs_path = state_dir / "observations" / f"{terminal_iso}.json"
+    terminal_doc = json.loads(obs_path.read_text(encoding="utf-8"))
+    if not isinstance(terminal_doc, dict):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: terminal observation malformed."
+        )
+    last_strat = terminal_doc.get("strategy")
+    last_bench = terminal_doc.get("benchmark")
+    if not isinstance(last_strat, dict) or not isinstance(last_bench, dict):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: terminal observation legs malformed."
+        )
+    # Strategy leg.
+    if (
+        _require_finite_decimal(last_strat.get("cash"), "terminal strategy cash")
+        != portfolio_state.cash
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: state cash diverges from terminal observation."
+        )
+    if (
+        _require_holdings_mapping(last_strat.get("holdings"), "terminal strategy holdings")
+        != dict(portfolio_state.holdings)
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: state holdings diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_strat.get("equity"), "terminal strategy equity")
+        != portfolio_state.prev_equity
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: state equity diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_strat.get("running_peak"), "terminal strategy peak")
+        != portfolio_state.peak
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: state peak diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_strat.get("receivable"), "terminal strategy receivable")
+        != _receivables_total(portfolio_state.receivables, "strategy")
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: state receivable diverges from terminal observation."
+        )
+    # Benchmark leg.
+    if (
+        _require_finite_decimal(last_bench.get("cash"), "terminal benchmark cash")
+        != benchmark_state.cash
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: benchmark cash diverges from terminal observation."
+        )
+    obs_shares = last_bench.get("shares")
+    if not isinstance(obs_shares, int) or isinstance(obs_shares, bool):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: terminal benchmark shares malformed."
+        )
+    if benchmark_state.shares != obs_shares:
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: benchmark shares diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_bench.get("equity"), "terminal benchmark equity")
+        != benchmark_state.prev_equity
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: benchmark equity diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_bench.get("running_peak"), "terminal benchmark peak")
+        != benchmark_state.peak
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: benchmark peak diverges from terminal observation."
+        )
+    if (
+        _require_finite_decimal(last_bench.get("receivable"), "terminal benchmark receivable")
+        != _receivables_total(benchmark_state.receivables, "benchmark")
+    ):
+        raise DataContractError(
+            "BLOCK_SHADOW_STATE_INTEGRITY: benchmark receivable diverges from terminal observation."
+        )
+
+
 def verify_chain(
     state_dir: Path,
     expected_activation: Optional[date] = None,
@@ -493,7 +634,19 @@ def verify_chain(
     BLOCK_SHADOW_STATE_INTEGRITY with zero network side effects.
     """
     state_path = state_dir / "state.json"
+    obs_dir = state_dir / "observations"
+    # F02: orphan check on disk precedes any initial-state generation. An
+    # observation file without state.json is a crash/interruption remnant and
+    # must BLOCK rather than silently restart from pristine initial state.
+    on_disk_all = sorted(
+        p.stem for p in obs_dir.glob("*.json") if p.is_file()
+    ) if obs_dir.exists() else []
     if not state_path.exists():
+        if on_disk_all:
+            raise DataContractError(
+                f"BLOCK_SHADOW_STATE_INTEGRITY: orphan observation files "
+                f"{on_disk_all} exist without state.json."
+            )
         return build_initial_state(expected_activation)
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     # Fixed identity fields (every state, empty or not).
@@ -598,8 +751,14 @@ def verify_chain(
             if field not in state_doc:
                 raise DataContractError(f"BLOCK_SHADOW_STATE_INTEGRITY: missing {field}.")
         # Economic state must deserialize (proves persistence completeness).
-        ShadowPortfolio.from_dict(state_doc["strategy"])
-        ShadowBenchmark.from_dict(state_doc["benchmark"])
+        portfolio_state = ShadowPortfolio.from_dict(state_doc["strategy"])
+        benchmark_state = ShadowBenchmark.from_dict(state_doc["benchmark"])
+        # F01: cross-document economic reconciliation with the terminal
+        # observation. Tampered or divergent balances fail closed here even
+        # when every subdocument deserializes cleanly.
+        _reconcile_terminal_economics(
+            state_dir, observed[-1], portfolio_state, benchmark_state
+        )
     # Orphan detection: no extra observation files beyond the chain.
     on_disk = sorted(
         p.stem for p in (state_dir / "observations").glob("*.json") if p.is_file()

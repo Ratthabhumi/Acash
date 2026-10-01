@@ -321,6 +321,12 @@ def _make_test_stage_c_binding(tmp_path: Path) -> Path:
         "next_dispatch_attempt": 2,
         "backfill_allowed": False,
         "retry_failed_session_allowed": False,
+        "locks": {
+            "paper_trading": False,
+            "live_trading": False,
+            "real_capital_authority_usd": "0.00",
+            "no_real_orders": True,
+        },
     }
     binding_path.write_text(json.dumps(doc), encoding="utf-8")
     return binding_path

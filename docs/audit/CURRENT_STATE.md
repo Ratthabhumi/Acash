@@ -78,3 +78,23 @@ NO_REAL_ORDERS = true
 - **Runtime Repair Status**: `PROPOSED_NOT_IMPLEMENTED`
 - **Offline Reproductions**: `REPRODUCED_UNPATCHED` (`PASSING_REPRODUCTION_TEST != DEFECT_REPAIRED`)
 
+---
+
+## 6. Post-Observation #1 Repair Branch Addendum (2026-10-01)
+
+Historical §§1–5 above remain an immutable snapshot of the audit branch at
+`d9019fc`. This section records the repair branch only:
+
+- **Repair Branch**: `fix/hyp011-post-obs1-integrity-continuation-20261001`
+  (branched from exact `d9019fc`; `origin/main` untouched).
+- **Observation #1**: `COMMITTED_AND_RECONCILED`, S1=1/20 (record:
+  `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`).
+- **F01/F02/F09**: `REPAIRED_IMPLEMENTED` with fail-closed acceptance tests;
+  Obs #1 backward compatibility proven with reconciled-pair fixtures.
+- **F14**: formally registered in `DEFECT_REGISTER.md`; bounded
+  no-backfill contract implemented as `PROPOSED_PENDING_HUMAN_RATIFICATION`.
+- **F10**: offline operator intake pipeline + tests implemented; AGG
+  2026-10-01 exact official amount still required before Obs #2.
+- **Obs #2**: `NOT_AUTHORIZED`. No merge, no deploy, no timer, no backfill,
+  no production artifact mutation.
+

@@ -117,6 +117,42 @@ def _write_binding(path: Path, doc: Dict[str, Any]) -> SH.StageCRecoveryAuthorit
     return SH.load_stage_c_recovery_authority(cal, path)
 
 
+def _pristine_economics_fragments() -> Dict[str, Any]:
+    """Economically consistent zero-activity fragments for synthetic fixtures.
+
+    Matches the pristine default state written by append_observation when no
+    portfolio/benchmark is supplied (starting AUM $100k, no holdings, no
+    receivables). Fixtures testing non-economic behaviors (authority,
+    activation) must carry these so repaired F01 reconciliation passes.
+    """
+    return {
+        "strategy": {
+            "holdings": {"ACWI": 0, "AGG": 0},
+            "cash": "100000.00",
+            "market_value": "0",
+            "receivable": "0",
+            "equity": "100000.00",
+            "daily_return": "0.00000000",
+            "running_peak": "100000.00",
+            "drawdown": "0.00000000",
+            "entitlements": [],
+            "trades": [],
+        },
+        "benchmark": {
+            "entry": {},
+            "entitlements": [],
+            "shares": 0,
+            "cash": "100000.00",
+            "market_value": "0",
+            "receivable": "0",
+            "equity": "100000.00",
+            "daily_return": "0.00000000",
+            "running_peak": "100000.00",
+            "drawdown": "0.00000000",
+        },
+    }
+
+
 # -----------------------------------------------------------------------------
 # A. no Stage C-B -> zero network
 # -----------------------------------------------------------------------------
@@ -375,6 +411,7 @@ def test_h_tampered_state_activation_blocks_pre_network(tmp_path: Path) -> None:
             "dispatch_attempt": 2,
         },
     }
+    obs1.update(_pristine_economics_fragments())
     append_observation(
         state_dir=state_dir,
         session=date(2026, 9, 29),
@@ -608,6 +645,7 @@ def test_l_same_authority_accepted_on_next_invocation(tmp_path: Path) -> None:
             "dispatch_attempt": 2,
         },
     }
+    obs1.update(_pristine_economics_fragments())
     append_observation(
         state_dir=state_dir,
         session=date(2026, 9, 29),
@@ -1006,6 +1044,7 @@ def test_w_stage_c_observation_missing_any_authority_field_fails_closed(tmp_path
             "dispatch_attempt": 2,
         },
     }
+    obs1.update(_pristine_economics_fragments())
     append_observation(
         state_dir=state_dir,
         session=date(2026, 9, 29),
