@@ -344,6 +344,7 @@ def _run_observation(
     dispatch_attempt: int = 1,
     authority_path: str = "",
     runtime_sha: Optional[str] = None,
+    bundle_path: str = "",
 ) -> int:
     runner = _load_runner_module()
 
@@ -365,6 +366,8 @@ def _run_observation(
         argv += ["--ca-determinations", ca_file]
     if authority_path:
         argv += ["--dispatch-authority", authority_path]
+    if bundle_path:
+        argv += ["--ca-evidence-bundle", bundle_path]
     from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
 
     dummy_prov = EnvAlpacaCredentialProvider(
@@ -428,7 +431,47 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     cash1 = state1["strategy"]["cash"]
     # Second session: needs canonical CA determinations (has prior holdings now).
     # F16 intake contract: no-event docs carry scope evidence + evidence refs.
+    # F19: digests are recomputed bundle-evidence digests over fixture bytes.
     sponsors = {"ACWI": "BLACKROCK_ISHARES_OFFICIAL", "AGG": "BLACKROCK_ISHARES_OFFICIAL", "SPY": "STATE_STREET_SPDR_OFFICIAL"}
+    urls = {
+        "ACWI": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+        "AGG": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+        "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
+    }
+    identities = {
+        "ACWI": {"product_id": "239600", "ticker": "ACWI",
+                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "AGG": {"product_id": "239458", "ticker": "AGG",
+                "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
+                "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    bundle_root = tmp_path / "ca_bundle_2026-09-30"
+    bundle_digests = {}
+    for symbol in ("ACWI", "AGG", "SPY"):
+        sdir = bundle_root / symbol
+        edir = sdir / "evidence"
+        edir.mkdir(parents=True)
+        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-09-30\n".encode()
+        sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-09-30\n".encode()
+        ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+        sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
+        (edir / ev_name).write_bytes(ev_bytes)
+        (edir / sched_name).write_bytes(sched_bytes)
+        ev_sha = hashlib.sha256(ev_bytes).hexdigest()
+        sched_sha = hashlib.sha256(sched_bytes).hexdigest()
+        manifest = {
+            "schema_version": 1, "symbol": symbol, "target_session": "2026-09-30",
+            "authority_source": sponsors[symbol], "official_url": urls[symbol],
+            "product_identity": identities[symbol], "evidence_file": ev_name,
+            "evidence_sha256": ev_sha,
+            "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
+            "scope_type": "NO_EVENT_SCOPE",
+            "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
+            "note": "Fixture bundle.",
+        }
+        (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        bundle_digests[symbol] = {"sha": ev_sha, "ref": ev_name, "sched_sha": sched_sha}
     ca_doc = {
         symbol: {
             "symbol": symbol,
@@ -436,11 +479,11 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
             "has_event": False,
             "authority_source": sponsors[symbol],
             "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
-            "source_sha256": "c" * 64,
-            "evidence_ref": f"evidence/{symbol.lower()}-scope-fixture.pdf",
+            "source_sha256": bundle_digests[symbol]["sha"],
+            "evidence_ref": bundle_digests[symbol]["ref"],
             "scope_evidence": {
                 "schedule_id": "FIXTURE_OFFICIAL_SCOPE_2026_09_30",
-                "schedule_sha256": "c" * 64,
+                "schedule_sha256": bundle_digests[symbol]["sched_sha"],
                 "scope_note": "Fixture official-scope coverage for 2026-09-30.",
                 "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
             },
@@ -450,12 +493,25 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     ca_path = tmp_path / "ca_2026-09-30.json"
     ca_path.write_text(json.dumps(ca_doc), encoding="utf-8")
     # F15 ceremony: mint a DispatchAuthority bound to intent + runtime + CA bytes.
+    # F17: the authority binds the PHYSICALLY preregistered intent digest.
     from acash.research.hyp_011.shadow_authority import (
         ObservationIntent,
+        register_observation_intent,
         validate_observation_intent,
     )
 
     fixture_runtime_sha = "e" * 40
+    reg_path = register_observation_intent(
+        registry_dir=tmp_path / "intent_registry",
+        calendar=NyseCa1Calendar(),
+        target_session=date(2026, 9, 30),
+        observation_ordinal=2,
+        previous_observation_sha256=state1["last_observation_sha256"],
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        authority_identity="TEST_FIXTURE",
+        now_utc=datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    registered_sha = str(json.loads(reg_path.read_text(encoding="utf-8"))["intent_sha256"])
     intent = ObservationIntent(
         hypothesis_id="HYP_011",
         target_session=date(2026, 9, 30),
@@ -474,7 +530,7 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     ca_bytes = ca_path.read_bytes()
     authority_doc = {
         "schema_version": 1,
-        "intent_sha256": validated_intent.intent_sha256(),
+        "intent_sha256": registered_sha,
         "intent": intent.canonical_doc(),
         "runtime_commit_sha": fixture_runtime_sha,
         "target_session": "2026-09-30",
@@ -497,6 +553,7 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
         level="101", ca_file=str(ca_path),
         stage_c_binding=binding, dispatch_attempt=1,
         authority_path=str(authority_path), runtime_sha=fixture_runtime_sha,
+        bundle_path=str(bundle_root),
     ) == 0
     state2 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert state2["observed_sessions"] == ["2026-09-29", "2026-09-30"]
@@ -512,6 +569,7 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
         (tmp_path / "observations" / "2026-09-30.json").read_bytes()
     ).hexdigest()
     # F16-B: intake provenance survives into the sealed observation.
+    # F19: sealed digests are recomputed bundle-evidence digests.
     for symbol, sponsor in (
         ("ACWI", "BLACKROCK_ISHARES_OFFICIAL"),
         ("AGG", "BLACKROCK_ISHARES_OFFICIAL"),
@@ -519,9 +577,9 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     ):
         section = obs2["corporate_actions"][symbol]
         assert section["authority_source"] == sponsor
-        assert section["source_sha256"] == "c" * 64
-        assert section["evidence_ref"] == f"evidence/{symbol.lower()}-scope-fixture.pdf"
-        assert section["scope_evidence"]["schedule_id"] == "FIXTURE_OFFICIAL_SCOPE_2026_09_30"
+        assert section["source_sha256"] == bundle_digests[symbol]["sha"]
+        assert section["evidence_ref"] == bundle_digests[symbol]["ref"]
+        assert section["scope_evidence"]["schedule_sha256"] == bundle_digests[symbol]["sched_sha"]
         assert section["has_event"] is False
     # F15: each live dispatch consumed exactly one ledger entry (bare ordinal-1
     # attempt + authority-bound ordinal-2 attempt).

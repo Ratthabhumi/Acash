@@ -2,7 +2,7 @@
 
 **Date Context**: 2026-09-30<br>
 **Baseline Anchor**: Canonical `origin/main` at `becec27f5eacf283dcb191cf72d0858682d8e055`<br>
-**Classification Authority**: Canonical Audit Register (F01 – F16)<br>
+**Classification Authority**: Canonical Audit Register (F01 – F19)<br>
 **Contract Enforcement Classification**: `CONTRACT_ENFORCEMENT = FAIL_CLOSED_WITH_REPAIRED_F01_F02_F09_ON_REPAIR_BRANCH`<br>
 **Runtime Repair Status**: `RUNTIME_REPAIR_STATUS = IMPLEMENTED_ON_REPAIR_BRANCH_PENDING_HUMAN_REVIEW`<br>
 **Offline Reproductions Invariant**: `PASSING_REPRODUCTION_TEST != DEFECT_REPAIRED`
@@ -34,6 +34,9 @@
 | **F14** | Post-observation missed-session / silent-backfill continuation gap | `src/acash/research/hyp_011/shadow.py` (`assert_target_session_fresh`) + `scripts/process_hyp_011_prospective_shadow.py` (`_expected_next` call site) | CRITICAL (stale target would silently backfill) | Before Obs #2 Authorization | FORMALLY_REGISTERED; CONTRACT_IMPLEMENTED_AS_PROPOSED_PENDING_HUMAN_RATIFICATION |
 | **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `scripts/process_hyp_011_prospective_shadow.py` (authorization gate) | HIGH (same token re-runnable after pre-commit failure) | Before Obs #2 Authorization | NEW_REGISTERED |
 | **F16** | CA intake enforcement + provenance gap (runner bypasses intake; provenance stripped; CA validated post-fetch) | `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py` | HIGH (unscoped no-event accepted; evidence dropped; network before CA fail) | Before Obs #2 Authorization | NEW_REGISTERED |
+| **F17** | ObservationIntent preregistration attestation gap (self-declared timestamp; backdatable) | `src/acash/research/hyp_011/shadow_authority.py` (intent registry) | HIGH (post-hoc session selection not disproven) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
+| **F18** | Premature dispatch-attempt consumption ordering (ledger burned before local preflight) | `scripts/process_hyp_011_prospective_shadow.py` (live path) | MEDIUM (invalid inputs burn single-use attempts) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
+| **F19** | CA raw-evidence byte verification + source-identity gap (syntax-only SHA; 239707 mislabeled as ACWI) | `src/acash/research/hyp_011/shadow_ca_bundle.py` + `docs/audit/CA_2026_10_01_OFFICIAL_SCOPE_NOTE.md` §§5–6 | HIGH (invented digests pass; wrong-product evidence usable) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
 
 ---
 
@@ -201,3 +204,71 @@
   `evidence_ref`, and `scope_evidence` (no-event) / event fields; CA block
   moved before market-data fetch so a bad package proves zero network calls.
 - **Acceptance Tests**: `test_f16_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (no-scope BLOCK zero-network / bad-SHA BLOCK zero-network / authority-CA-SHA mismatch BLOCK zero-network / provenance survival).
+
+---
+
+### F17: ObservationIntent Preregistration Attestation Gap
+- **Location**: `src/acash/research/hyp_011/shadow_authority.py` (intent registry: `register_observation_intent`, `load_registered_intent`, `verify_registered_intent_binding`)
+- **Mechanism**:
+  `ObservationIntent.created_at_utc` is supplied inside the JSON itself.
+  Validation proved only that the DECLARED timestamp precedes market open —
+  not that the artifact actually existed before open. A post-session actor
+  could fabricate a backdated intent document.
+- **Remediation (this pack)**: create-once `register_observation_intent()`
+  captures `now_utc` itself (production callers supply no timestamp),
+  refuses registration unless strictly before target `open_utc`, persists
+  via O_EXCL (`intent_registry/<session>_ordNNNN.json`) carrying
+  `registered_at_utc` + sealed `intent_sha256`. `DispatchAuthority`
+  `intent_sha256` now names the REGISTERED digest; dispatch proves
+  existence + byte-integrity + SHA match + chain-head match.
+  Honest boundary: privileged-host clock/operator fabrication while the
+  market is still closed remains a governance-trust boundary, documented in
+  the module docstring.
+- **Acceptance Tests**: `test_f17_*` in `tests/unit/research/test_phase14_hyp_011_evidence_kernel_hardening.py` (pre-open PASS / at-open + post-open BLOCK / unregistered backdate BLOCK / tamper BLOCK / duplicate BLOCK / wrong chain head BLOCK / ordinal-1 chain-start rule / runner dispatch-without-registry BLOCK with ledger unchanged).
+
+---
+
+### F18: Premature Dispatch-Attempt Consumption Ordering
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` (live path)
+- **Mechanism**:
+  The runner consumed the single-use attempt ledger BEFORE full
+  DispatchAuthority validation, CA intake, freshness, provider eligibility,
+  and credential readiness — so malformed local inputs burned attempts
+  before the network boundary.
+- **Remediation (this pack)**: live path reordered to state/chain →
+  target → registered-intent + authority → CA bundle + intake →
+  credentials → F14 freshness → guards → provider eligibility →
+  `LOCAL_PREFLIGHT = PASS` → atomically consume → transport. New
+  `--local-preflight` mode proves the full path green with
+  `ATTEMPT_CONSUMED = false, NETWORK_REQUESTS = 0`. Invariant:
+  local failure ⇒ ledger unchanged + zero network; post-consume
+  crash/error ⇒ attempt burned, replay blocked.
+- **Acceptance Tests**: `test_f18_*` (bad authority/CA/bundle/credentials/
+  stale/too-early ⇒ ledger empty + zero network; transport crash ⇒
+  consumed + replay BLOCK; full success seals; preflight mode clean).
+
+---
+
+### F19: CA Raw-Evidence Byte Verification and Source-Identity Gap
+- **Location**: `src/acash/research/hyp_011/shadow_ca_bundle.py` (new) + runner `--ca-evidence-bundle` gate
+- **Mechanism (two sub-findings)**:
+  - **F19-A**: `validate_intake_document` regex-checked `source_sha256`
+    syntax but never recomputed the digest from official source bytes —
+    an invented 64-hex digest passed.
+  - **F19-B**: no sponsor/product-identity check existed: the 2026-10-01
+    research note labeled iShares product **239707 (IWB)** as ACWI
+    evidence. Corrected: 239600 = ACWI; 239458 = AGG; SPY = SSGA schedule.
+    Raw bytes for the prior note's rows 1–5 were never preserved in-repo.
+- **Remediation (this pack)**: per-symbol `ca_bundle/<SYM>/manifest.json` +
+  `evidence/` raw files; dispatch recomputes SHA-256 over actual bytes,
+  enforces frozen `PRODUCT_IDENTITY_BY_SYMBOL`, recomputes no-event
+  schedule digests, and binds each sealed determination
+  (`source_sha256` + `evidence_ref`) to its verified bundle. Runner
+  requires `--ca-evidence-bundle` beyond session one. Corrected raw
+  evidence preserved under `docs/audit/ca_evidence_2026_10_01/` with
+  recomputed SHAs; scope note §§5–6 invalidate the row-2 attribution and
+  record the fix.
+- **Acceptance Tests**: `test_f19_*` (invented digest / modified byte /
+  missing evidence / wrong file / 239707-as-ACWI identity / schedule
+  digest mismatch BLOCK; valid bundle + binding PASS; runner bad-bundle
+  ⇒ ledger unchanged).

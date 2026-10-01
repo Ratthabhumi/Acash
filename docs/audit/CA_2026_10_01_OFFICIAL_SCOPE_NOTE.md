@@ -90,3 +90,72 @@ basis for the 2026-10-01 → 2026-10-02 transition.
   human ratification, exact-amount intake binding by the operator at
   dispatch time, and an explicit Obs #2 dispatch authorization. No timer
   has been set by this task.
+
+---
+
+## 5. CORRECTION — ACWI Product-Identity Invalidation (2026-10-01, F19)
+
+**Row 2 of §1 is INVALID as ACWI authority and MUST NOT be used.**
+
+The URL `https://www.ishares.com/us/products/239707/ishares-msci-acwi-etf`
+identifies iShares product **239707 = IWB (iShares Russell 1000 ETF)**,
+not ACWI. Any digest or claim derived from row 2 (`a49a3a59…`) is
+disqualified as ACWI evidence. This incident is recorded as the motivating
+case for F19 source-identity verification (digests alone cannot detect a
+wrong-product page).
+
+Official identity (verified 2026-10-01 from the live official page below):
+**239600 = ACWI / iShares MSCI ACWI ETF** (ticker ACWI, Semi-Annual
+distribution frequency). The prior §2 claim of 2026 ex-dates
+"Mar 17, Jun 15, Sep 15" is WITHDRAWN as unattributed (it cannot be traced
+to the correct 239600 record).
+
+## 6. Corrected Evidence (raw bytes preserved in-repo, F19-grade)
+
+Retrieval method (2026-10-01, read-only): unauthenticated official-page
+retrieval; exact received bytes preserved under
+`docs/audit/ca_evidence_2026_10_01/`; SHA-256 recomputed over those bytes.
+No Alpaca, no broker, no credentials. No production determination or Obs #2
+authority is created by this correction.
+
+| # | Symbol / Scope | Official URL | Preserved file | Bytes | SHA-256 |
+|---|---|---|---|---|---|
+| 6 | ACWI product + embedded distribution history | `https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf` | `acwi_239600_product_page.html` | 1,693,738 | `1369c71a839491fea0916f0c6ce2ce3a2697d13022093793a88f67a2c4ff1b56` |
+| 7 | AGG product + distributions table | `https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf` | `agg_239458_product_page.md` | 65,362 | `67de92612aa60bf08b9df2cc6f00cb99074835c84e286d951f5bf17524d9eacb` |
+| 8 | SPY product page (identity + frequency) | `https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy` | `spy_ssga_product_page.txt` | 98,089 | `2d981beb17945b304b7f9ee188c151eeec43e009d33eef92ea6095474069ba05` |
+
+### ACWI — corrected scope (from row 6 bytes)
+
+- Page identity: `portfolioId 239600`, ticker `acwi`, canonical URL
+  `.../products/239600/ishares-msci-acwi-etf`, `Distribution Frequency:
+  Semi-Annual`. Zero mentions of product 239707 anywhere in the bytes.
+- Embedded official ex-date history (latest-first): `20260615, 20251216,
+  20250616, …` — i.e. latest ex-date **2026-06-15** (Jun/Dec semi-annual
+  pattern). **No 2026-10-01 ex-date exists** in the official record.
+- Supports a scope-evidenced ACWI no-event determination for 2026-10-01
+  once bound through the F19 bundle path with these exact bytes.
+
+### AGG — event reconfirmed (from row 7 bytes)
+
+- Latest-first table row: Record `Oct 01, 2026` / Ex `Oct 01, 2026` /
+  Payable `Oct 06, 2026` / Total `$0.334142` / Income `$0.334142`
+  ($0 gains/ROC), vs prior `Sep 01, 2026 / $0.337062` (not reused).
+- `has_event = true`, `ex_date = 2026-10-01`, `payable_date = 2026-10-06`,
+  `amount_per_share = 0.334142`. Product 239458 confirmed by URL.
+
+### SPY — identity confirmed, schedule still partial (from row 8 bytes)
+
+- Page identity: ticker SPY, CUSIP `78462F103`,
+  `Distribution Frequency: Quarterly`, sponsor State Street.
+- Static bytes carry no distribution rows (JS-rendered table, same boundary
+  as before). The Sep-18/Dec-18 2026 schedule remains operator research,
+  NOT bytes-verified here; a scope-evidenced SPY no-event intake must cite
+  the State Street schedule source directly at preparation time.
+
+### Revised F10 posture
+
+- AGG = OFFICIAL EVENT ESTABLISHED (row 7 bytes).
+- ACWI = CORRECTED SCOPE EVIDENCE AVAILABLE (row 6 bytes; row 2 void).
+- SPY = OFFICIAL SCHEDULE/IDENTITY AVAILABLE, rows still partial.
+- **F10 = NOT YET CLOSED END-TO-END** (pending F17/F18/F19 tooling +
+  operator dispatch-time binding + explicit Obs #2 authorization).

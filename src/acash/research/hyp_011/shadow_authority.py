@@ -14,6 +14,13 @@ A crash or failure never permits reuse of the same authority: a new attempt,
 if governance ever allows one, requires a NEW explicit DispatchAuthority with
 a NEW attempt number. Retries are never auto-authorized.
 
+F17 preregistration attestation boundary (honest statement): the registry
+proves the intent artifact PHYSICALLY EXISTED before session open
+(O_EXCL create-once + server-side timestamp). It does NOT defend against a
+privileged host clocks/operator fabricating registration while the market
+is still closed, nor against host-time manipulation. Those remain
+governance/operator-trust boundaries, not file-level proofs.
+
 No network in this module. No broker access. No capital authority.
 """
 
@@ -36,6 +43,8 @@ from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 INTENT_SCHEMA_VERSION: int = 1
 AUTHORITY_SCHEMA_VERSION: int = 1
 LEDGER_DIRNAME: str = "dispatch_ledger"
+INTENT_REGISTRY_DIRNAME: str = "intent_registry"
+REGISTERED_INTENT_SCHEMA_VERSION: int = 1
 _SHA40 = re.compile(r"[0-9a-fA-F]{40}")
 _SHA64 = re.compile(r"[0-9a-fA-F]{64}")
 
@@ -156,7 +165,11 @@ def validate_observation_intent(
 
 @dataclass(frozen=True)
 class DispatchAuthority:
-    """Single-use dispatch binding for one (ordinal, attempt, target) triple."""
+    """Single-use dispatch binding for one (ordinal, attempt, target) triple.
+
+    ``intent_sha256`` is the digest of the PHYSICALLY preregistered intent
+    artifact (F17), NOT a hash of the embedded operator claim.
+    """
 
     intent_sha256: str
     intent: ObservationIntent
@@ -239,6 +252,11 @@ def validate_dispatch_authority(
 
     Every binding is checked BEFORE any market-data network call. Any mismatch
     fails closed; malformed authorities never reach the attempt ledger.
+
+    F17 binding note: ``intent_sha256`` names the PHYSICALLY preregistered
+    intent artifact (see verify_registered_intent_binding, enforced at
+    dispatch). Here it is format-checked; equality with the registry-sealed
+    digest is proven at dispatch time, never from the embedded claim alone.
     """
     if not isinstance(doc, Mapping):
         raise DataContractError("SHADOW_AUTHORITY_NOT_A_MAPPING.")
@@ -251,10 +269,10 @@ def validate_dispatch_authority(
         raise DataContractError("SHADOW_AUTHORITY_INTENT_MISSING.")
     intent = validate_observation_intent(intent_doc, calendar, now)
     declared_intent_sha = doc.get("intent_sha256")
-    if not isinstance(declared_intent_sha, str) or (
-        declared_intent_sha.lower() != intent.intent_sha256()
+    if not isinstance(declared_intent_sha, str) or not _SHA64.fullmatch(
+        declared_intent_sha
     ):
-        raise DataContractError("SHADOW_AUTHORITY_INTENT_SHA_MISMATCH.")
+        raise DataContractError("SHADOW_AUTHORITY_INTENT_SHA_MALFORMED.")
 
     bound_runtime = doc.get("runtime_commit_sha")
     if not isinstance(bound_runtime, str) or bound_runtime.lower() != runtime_sha.lower():
@@ -312,7 +330,7 @@ def validate_dispatch_authority(
     if not isinstance(identity, str) or not identity.strip():
         raise DataContractError("SHADOW_AUTHORITY_BAD_IDENTITY.")
     return DispatchAuthority(
-        intent_sha256=intent.intent_sha256(),
+        intent_sha256=declared_intent_sha.lower(),
         intent=intent,
         runtime_commit_sha=runtime_sha.lower(),
         target_session=target_session,
@@ -381,3 +399,221 @@ def consume_dispatch_attempt(
             f"BLOCK_DISPATCH_ATTEMPT_LEDGER_WRITE: {exc}."
         ) from exc
     return entry_path
+
+
+# =============================================================================
+# F17: create-once preregistered ObservationIntent (true pre-session lock)
+# =============================================================================
+#
+# A caller-supplied created_at_utc proves only what the JSON DECLARES. True
+# preregistration requires the intent artifact to PHYSICALLY EXIST before
+# the target session opens. register_observation_intent() captures now_utc
+# itself, refuses registration at/after open, and persists via O_EXCL
+# create-once semantics. Dispatch binds the REGISTERED intent SHA.
+
+
+@dataclass(frozen=True)
+class RegisteredIntent:
+    """Physically preregistered inclusion decision (server-side timestamp)."""
+
+    hypothesis_id: str
+    target_session: date
+    observation_ordinal: int
+    previous_observation_sha256: Optional[str]
+    scientific_inclusion_intent: str
+    backfill_allowed: bool
+    automatic_skip_allowed: bool
+    registered_at_utc: datetime
+    authority_identity: str
+
+    def canonical_doc(self) -> Dict[str, Any]:
+        return {
+            "schema_version": REGISTERED_INTENT_SCHEMA_VERSION,
+            "hypothesis_id": self.hypothesis_id,
+            "target_session": self.target_session.isoformat(),
+            "observation_ordinal": self.observation_ordinal,
+            "previous_observation_sha256": self.previous_observation_sha256,
+            "scientific_inclusion_intent": self.scientific_inclusion_intent,
+            "backfill_allowed": self.backfill_allowed,
+            "automatic_skip_allowed": self.automatic_skip_allowed,
+            "registered_at_utc": self.registered_at_utc.isoformat(),
+            "authority_identity": self.authority_identity,
+        }
+
+    def registered_sha256(self) -> str:
+        return _canonical_sha256(self.canonical_doc())
+
+
+def _intent_registry_filename(target_session: date, observation_ordinal: int) -> str:
+    return f"{target_session.isoformat()}_ord{observation_ordinal:04d}.json"
+
+
+def register_observation_intent(
+    registry_dir: Path,
+    calendar: NyseCa1Calendar,
+    target_session: date,
+    observation_ordinal: int,
+    previous_observation_sha256: Optional[str],
+    scientific_inclusion_intent: str,
+    authority_identity: str,
+    hypothesis_id: str = "HYP_011",
+    now_utc: Optional[datetime] = None,
+) -> Path:
+    """Create-once preregistration of an observation inclusion decision.
+
+    The registration instant is captured HERE (or injected explicitly for
+    tests); production callers MUST NOT supply a timestamp. Registration is
+    refused unless strictly before the target session open. The artifact is
+    written with O_EXCL: duplicates fail closed.
+    """
+    if hypothesis_id != "HYP_011":
+        raise DataContractError("SHADOW_INTENT_REG_HYPOTHESIS_ID.")
+    if not isinstance(observation_ordinal, int) or isinstance(
+        observation_ordinal, bool
+    ) or observation_ordinal < 1:
+        raise DataContractError("SHADOW_INTENT_REG_BAD_ORDINAL.")
+    if (
+        not isinstance(scientific_inclusion_intent, str)
+        or not scientific_inclusion_intent.strip()
+    ):
+        raise DataContractError("SHADOW_INTENT_REG_BAD_INCLUSION_INTENT.")
+    if previous_observation_sha256 is not None and (
+        not isinstance(previous_observation_sha256, str)
+        or not _SHA64.fullmatch(previous_observation_sha256)
+    ):
+        raise DataContractError("SHADOW_INTENT_REG_BAD_PREVIOUS_SHA.")
+    if observation_ordinal == 1 and previous_observation_sha256 is not None:
+        raise DataContractError("SHADOW_INTENT_REG_ORDINAL1_MUST_START_CHAIN.")
+    if not isinstance(authority_identity, str) or not authority_identity.strip():
+        raise DataContractError("SHADOW_INTENT_REG_BAD_IDENTITY.")
+    registered_at = (
+        _require_tz_aware(now_utc, "intent registration now_utc")
+        if now_utc is not None
+        else datetime.now(timezone.utc)
+    )
+    target_open = calendar.get_session(target_session).open_utc
+    if target_open is None:
+        raise DataContractError(
+            f"SHADOW_NO_OPEN_TIME: {target_session.isoformat()}."
+        )
+    if not registered_at < target_open:
+        raise DataContractError(
+            "SHADOW_INTENT_REGISTRATION_CLOSED: registration at "
+            f"{registered_at.isoformat()} is not strictly before target open "
+            f"{target_open.isoformat()}."
+        )
+    intent = RegisteredIntent(
+        hypothesis_id="HYP_011",
+        target_session=target_session,
+        observation_ordinal=observation_ordinal,
+        previous_observation_sha256=previous_observation_sha256,
+        scientific_inclusion_intent=scientific_inclusion_intent.strip(),
+        backfill_allowed=False,
+        automatic_skip_allowed=False,
+        registered_at_utc=registered_at,
+        authority_identity=authority_identity.strip(),
+    )
+    registry_dir.mkdir(parents=True, exist_ok=True)
+    entry_path = registry_dir / _intent_registry_filename(
+        target_session, observation_ordinal
+    )
+    stored = dict(intent.canonical_doc())
+    stored["intent_sha256"] = intent.registered_sha256()
+    payload = json.dumps(stored, indent=2, sort_keys=True)
+    try:
+        fd = os.open(str(entry_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as exc:
+        raise DataContractError(
+            "SHADOW_INTENT_ALREADY_REGISTERED: duplicate registration for "
+            f"{target_session.isoformat()} ordinal {observation_ordinal}."
+        ) from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(payload)
+    except OSError as exc:
+        raise DataContractError(f"SHADOW_INTENT_REGISTRY_WRITE: {exc}.") from exc
+    return entry_path
+
+
+def load_registered_intent(
+    registry_dir: Path,
+    target_session: date,
+    observation_ordinal: int,
+) -> RegisteredIntent:
+    """Load + byte-validate a preregistered intent (tamper-evident)."""
+    entry_path = registry_dir / _intent_registry_filename(
+        target_session, observation_ordinal
+    )
+    if not entry_path.is_file():
+        raise DataContractError(
+            "SHADOW_REGISTERED_INTENT_MISSING: no preregistered intent for "
+            f"{target_session.isoformat()} ordinal {observation_ordinal}; "
+            "backdated unregistered intent documents are rejected."
+        )
+    try:
+        stored = json.loads(entry_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise DataContractError(
+            f"SHADOW_REGISTERED_INTENT_CORRUPT: {exc}."
+        ) from exc
+    if not isinstance(stored, dict):
+        raise DataContractError("SHADOW_REGISTERED_INTENT_MALFORMED.")
+    declared_sha = stored.get("intent_sha256")
+    doc = {k: v for k, v in stored.items() if k != "intent_sha256"}
+    if doc.get("schema_version") != REGISTERED_INTENT_SCHEMA_VERSION:
+        raise DataContractError("SHADOW_REGISTERED_INTENT_SCHEMA_VERSION.")
+    if (
+        not isinstance(declared_sha, str)
+        or declared_sha.lower() != _canonical_sha256(doc)
+    ):
+        raise DataContractError(
+            "SHADOW_REGISTERED_INTENT_TAMPERED: stored bytes do not match "
+            "the sealed intent digest."
+        )
+    try:
+        intent = RegisteredIntent(
+            hypothesis_id=str(doc["hypothesis_id"]),
+            target_session=date.fromisoformat(str(doc["target_session"])),
+            observation_ordinal=int(doc["observation_ordinal"]),
+            previous_observation_sha256=doc.get("previous_observation_sha256"),
+            scientific_inclusion_intent=str(doc["scientific_inclusion_intent"]),
+            backfill_allowed=bool(doc["backfill_allowed"]),
+            automatic_skip_allowed=bool(doc["automatic_skip_allowed"]),
+            registered_at_utc=_parse_utc(doc["registered_at_utc"], "registered_at_utc"),
+            authority_identity=str(doc["authority_identity"]),
+        )
+    except (ValueError, TypeError, KeyError) as exc:
+        raise DataContractError(
+            f"SHADOW_REGISTERED_INTENT_MALFORMED: {exc}."
+        ) from exc
+    if intent.target_session != target_session:
+        raise DataContractError("SHADOW_REGISTERED_INTENT_TARGET_MISMATCH.")
+    if intent.observation_ordinal != observation_ordinal:
+        raise DataContractError("SHADOW_REGISTERED_INTENT_ORDINAL_MISMATCH.")
+    return intent
+
+
+def verify_registered_intent_binding(
+    registry_dir: Path,
+    bound_intent_sha256: str,
+    target_session: date,
+    observation_ordinal: int,
+    state_prev_sha256: Optional[str],
+) -> RegisteredIntent:
+    """Prove a DispatchAuthority binds a physically preregistered intent."""
+    registered = load_registered_intent(
+        registry_dir, target_session, observation_ordinal
+    )
+    if (
+        not isinstance(bound_intent_sha256, str)
+        or bound_intent_sha256.lower() != registered.registered_sha256()
+    ):
+        raise DataContractError(
+            "SHADOW_AUTHORITY_REGISTERED_INTENT_MISMATCH: authority does not "
+            "bind the preregistered intent artifact."
+        )
+    if registered.previous_observation_sha256 != state_prev_sha256:
+        raise DataContractError(
+            "SHADOW_REGISTERED_INTENT_CHAIN_HEAD_MISMATCH."
+        )
+    return registered

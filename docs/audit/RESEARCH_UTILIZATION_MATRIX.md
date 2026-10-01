@@ -61,7 +61,6 @@ authorization required). No mechanism has empirical use.
 | Personal capital governance draft | `BLOCKED` | Unresolved policy; no allocation authority |
 
 ## 4. Governance & Platform
-
 | Asset | Location | Status | Note |
 |---|---|---|---|
 | Operator decision charter v1 | `origin/governance/operator-decision-charter-v1` | `USED_IN_GOVERNANCE` | Active principles reference |
@@ -82,3 +81,17 @@ authorization required). No mechanism has empirical use.
 New empirical use of any `READY_FOR_DATA_FEASIBILITY` asset requires a
 separate explicit human authorization scoped to zero-outcome feasibility
 only. Matrix status changes only via committed evidence, never by assertion.
+
+---
+
+## 6. Addendum 2026-10-01 — Evidence-Kernel Hardening Pack (repair branch)
+
+| Asset | Status | Note |
+|---|---|---|
+| F17 registered-intent tooling | `USED_IN_RUNTIME` (tooling) | Create-once registry + dispatch binding; honest privileged-host boundary documented |
+| F18 attempt-boundary reorder + `--local-preflight` | `USED_IN_RUNTIME` (tooling) | Local failure burns nothing; post-consume crash burns; preflight proves green with zero network |
+| F19 evidence-bundle tooling | `USED_IN_RUNTIME` (tooling) | Raw-byte digests + frozen product identity (239600=ACWI); row-2 239707 attribution void |
+| ACWI/AGG/SPY corrected raw evidence | `USED_IN_GOVERNANCE` (scope) | `docs/audit/ca_evidence_2026_10_01/` + corrected scope note §§5–6; no Obs #2 determination created |
+| Evidence Kernel extraction plan | `RESEARCH_ONLY` | `docs/audit/EVIDENCE_KERNEL_EXTRACTION_PLAN.md`; design only, no package move |
+| RI-01 Zero-Outcome Data Feasibility Pack | `READY_FOR_DATA_FEASIBILITY` | Questions pack prepared; execution needs separate authorization |
+| PPDS Read-Only Runtime Skeleton Pack | `READY_FOR_DATA_FEASIBILITY` | Synthetic-fixture skeleton prepared; no credentials/statements/orders |

@@ -98,3 +98,20 @@ Historical §§1–5 above remain an immutable snapshot of the audit branch at
 - **Obs #2**: `NOT_AUTHORIZED`. No merge, no deploy, no timer, no backfill,
   no production artifact mutation.
 
+## 7. Evidence-Kernel Hardening Pack Addendum (2026-10-01, this pack)
+
+- **F01/F02/F09**: `REPAIRED_ON_BRANCH` (unchanged).
+- **F14**: `IMPLEMENTED_PROPOSAL_PENDING_RATIFICATION` (unchanged).
+- **F15**: `IMPLEMENTED_PENDING_JOINT_F14_F15_RATIFICATION` (F18 reorder
+  + F17 registry binding proven by adversarial tests; joint ratification
+  still required).
+- **F16**: `IMPLEMENTED` (F19 raw-byte + source-identity bundle tests prove
+  closure of the syntax-only/identity gaps).
+- **F17/F18/F19**: `REPAIRED_ON_BRANCH` (this pack).
+- **F10**: `PARTIALLY_OPERATIONALIZED` — AGG event ESTABLISHED (row-7
+  bytes), ACWI scope CORRECTED (row-6 bytes; row-2 239707 attribution
+  VOID), SPY identity available / rows partial. NOT closed end-to-end.
+- **OBSERVATION_0002**: `NOT_AUTHORIZED` (2026-10-01 classified as
+  missed/unobserved due to governed continuation hardening; no S1 counter
+  reset — gap recorded separately for later staging adjudication).
+

@@ -26,6 +26,7 @@ from acash.research.hyp_011.shadow_authority import (
     ObservationIntent,
     attempt_ledger_key,
     consume_dispatch_attempt,
+    register_observation_intent,
     validate_dispatch_authority,
     validate_observation_intent,
 )
@@ -239,18 +240,75 @@ def _no_event_intake(symbol: str, sponsor: str, session_iso: str = "2026-10-01")
     }
 
 
-def _write_ca_file(tmp_path: Path, name: str = "ca_2026-10-01.json") -> Path:
+def _write_ca_file(tmp_path: Path, name: str = "ca_2026-10-01.json",
+                   digests: Dict[str, Dict[str, str]] | None = None) -> Path:
     sponsors = {
         "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
         "AGG": "BLACKROCK_ISHARES_OFFICIAL",
         "SPY": "STATE_STREET_SPDR_OFFICIAL",
     }
-    doc = {
-        symbol: _no_event_intake(symbol, sponsors[symbol]) for symbol in sponsors
-    }
+    doc = {}
+    for symbol in sponsors:
+        if digests is not None:
+            sha = digests[symbol]["sha"]
+            ref = digests[symbol]["ref"]
+            sched = digests[symbol]["sched_sha"]
+        else:
+            sha, ref, sched = FAKE_SHA, f"evidence/{symbol.lower()}-scope-fixture.pdf", FAKE_SHA
+        doc[symbol] = _no_event_intake(symbol, sponsors[symbol])
+        doc[symbol]["source_sha256"] = sha
+        doc[symbol]["evidence_ref"] = ref
+        doc[symbol]["scope_evidence"] = dict(_scope_doc(), schedule_sha256=sched)
     path = tmp_path / name
     path.write_bytes((json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8"))
     return path
+
+
+def _write_ca_bundle(tmp_path: Path, name: str = "ca_bundle_2026-10-01") -> Dict[str, Any]:
+    """Per-symbol evidence bundles with REAL digests over fixture bytes."""
+    urls = {
+        "ACWI": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+        "AGG": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+        "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
+    }
+    identities = {
+        "ACWI": {"product_id": "239600", "ticker": "ACWI",
+                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "AGG": {"product_id": "239458", "ticker": "AGG",
+                "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
+                "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    sponsors = {"ACWI": "BLACKROCK_ISHARES_OFFICIAL",
+                "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+                "SPY": "STATE_STREET_SPDR_OFFICIAL"}
+    root = tmp_path / name
+    digests: Dict[str, Dict[str, str]] = {}
+    for symbol in sponsors:
+        sdir = root / symbol
+        edir = sdir / "evidence"
+        edir.mkdir(parents=True)
+        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-10-01\n".encode()
+        sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-10-01\n".encode()
+        ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+        sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
+        (edir / ev_name).write_bytes(ev_bytes)
+        (edir / sched_name).write_bytes(sched_bytes)
+        ev_sha = hashlib.sha256(ev_bytes).hexdigest()
+        sched_sha = hashlib.sha256(sched_bytes).hexdigest()
+        manifest = {
+            "schema_version": 1, "symbol": symbol, "target_session": "2026-10-01",
+            "authority_source": sponsors[symbol], "official_url": urls[symbol],
+            "product_identity": identities[symbol], "evidence_file": ev_name,
+            "evidence_sha256": ev_sha,
+            "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "scope_type": "NO_EVENT_SCOPE",
+            "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
+            "note": "Fixture bundle.",
+        }
+        (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        digests[symbol] = {"sha": ev_sha, "ref": ev_name, "sched_sha": sched_sha}
+    return {"root": root, "digests": digests}
 
 
 def _mint_intent(
@@ -283,16 +341,29 @@ def _mint_authority(
     valid_after: str = "2026-10-01T00:00:00+00:00",
     expires_at: str = "2026-10-02T00:00:00+00:00",
     runtime_sha: str = RUNTIME_SHA,
+    registry_dir: Path | None = None,
 ) -> Path:
+    # F17: preregister the intent first; the authority binds the REGISTERED
+    # digest (server-side timestamp), never a self-declared one.
+    registry = registry_dir or (tmp_path / "intent_registry")
+    reg_path = register_observation_intent(
+        registry_dir=registry, calendar=NyseCa1Calendar(),
+        target_session=date.fromisoformat(target), observation_ordinal=ordinal,
+        previous_observation_sha256=prev_sha,
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        authority_identity="OPERATOR_FIXTURE",
+        now_utc=datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    registered_sha = str(json.loads(reg_path.read_text(encoding="utf-8"))["intent_sha256"])
     intent_doc = _mint_intent(target=target, ordinal=ordinal, prev_sha=prev_sha)
     cal = NyseCa1Calendar()
-    validated_intent = validate_observation_intent(
+    validate_observation_intent(
         intent_doc, cal, datetime.fromisoformat(valid_after)
     )
     ca_bytes = ca_path.read_bytes()
     doc = {
         "schema_version": 1,
-        "intent_sha256": validated_intent.intent_sha256(),
+        "intent_sha256": registered_sha,
         "intent": intent_doc,
         "runtime_commit_sha": runtime_sha,
         "target_session": target,
@@ -320,7 +391,8 @@ def _read_json_dict(path: Path) -> Dict[str, Any]:
 
 
 def _live_argv(
-    authority_path: Path | None, ordinal: int = 2, attempt: int = 1
+    authority_path: Path | None, ordinal: int = 2, attempt: int = 1,
+    bundle_root: Path | None = None,
 ) -> List[str]:
     auth_token = (
         f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}"
@@ -338,6 +410,8 @@ def _live_argv(
     ]
     if authority_path is not None:
         argv += ["--dispatch-authority", str(authority_path)]
+    if bundle_root is not None:
+        argv += ["--ca-evidence-bundle", str(bundle_root)]
     return argv
 
 
@@ -482,9 +556,12 @@ def _run_ordinal2_success(tmp_path: Path) -> Path:
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
-    ca_path = _write_ca_file(tmp_path)
-    auth_path = _mint_authority(tmp_path, ca_path, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(ca_path)]
+    bundle = _write_ca_bundle(tmp_path)
+    ca_path = _write_ca_file(tmp_path, digests=bundle["digests"])
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     calls: List[Any] = []
     rc = runner.main(
         argv,
@@ -512,22 +589,24 @@ def test_f15_valid_authority_dispatch_succeeds_and_consumes(tmp_path: Path) -> N
     assert obs2["session"] == "2026-10-01"
 
 
-def test_f15_replay_consumed_authority_blocked_zero_network(tmp_path: Path) -> None:
-    """Replaying a consumed authority blocks on the ledger (pre-commit crash shape).
+def test_f18_local_failure_consumes_nothing_zero_network(tmp_path: Path) -> None:
+    """F18: a first invocation failing local preflight (bad CA) burns nothing.
 
-    First invocation consumes the attempt then crashes pre-network on a bad CA
-    package (zero network, zero commit); the identical replay must hit the
-    ledger — not merely re-fail validation.
+    The identical replay must re-raise the SAME validation error — not a
+    ledger replay block — proving the attempt was never consumed.
     """
     runner = _load_runner_module()
     binding = _fixture_binding(tmp_path)
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
+    bundle = _write_ca_bundle(tmp_path)
     bad_ca = tmp_path / "ca_bad.json"
     bad_ca.write_bytes(b'{"ACWI": {"has_event": "maybe"}}')
-    auth_path = _mint_authority(tmp_path, bad_ca, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(bad_ca)]
+    auth_path = _mint_authority(
+        tmp_path, bad_ca, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(bad_ca)]
     now = datetime(2026, 10, 1, 21, 0, 0, tzinfo=timezone.utc)
     common = dict(
         _now_utc=now,
@@ -540,9 +619,12 @@ def test_f15_replay_consumed_authority_blocked_zero_network(tmp_path: Path) -> N
     with pytest.raises(DataContractError):
         runner.main(argv, **common)
     assert not (state_dir / "observations" / "2026-10-01.json").exists()
-    # Identical replay: ledger blocks before any network or state mutation.
-    with pytest.raises(DataContractError, match="BLOCK_DISPATCH_AUTHORITY_REPLAY"):
+    ledger = state_dir / "dispatch_ledger"
+    assert len(list(ledger.glob("*.json"))) == 0 if ledger.is_dir() else True
+    # Identical replay: same local failure, still nothing consumed.
+    with pytest.raises(DataContractError):
         runner.main(argv, **common)
+    assert len(list(ledger.glob("*.json"))) == 0 if ledger.is_dir() else True
 
 
 def test_f15_post_success_replay_blocked_zero_network(tmp_path: Path) -> None:
@@ -552,9 +634,12 @@ def test_f15_post_success_replay_blocked_zero_network(tmp_path: Path) -> None:
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
-    ca_path = _write_ca_file(tmp_path)
-    auth_path = _mint_authority(tmp_path, ca_path, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(ca_path)]
+    bundle = _write_ca_bundle(tmp_path)
+    ca_path = _write_ca_file(tmp_path, digests=bundle["digests"])
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     now = datetime(2026, 10, 1, 21, 0, 0, tzinfo=timezone.utc)
     calls: List[Any] = []
     assert (
@@ -584,39 +669,45 @@ def test_f15_post_success_replay_blocked_zero_network(tmp_path: Path) -> None:
     assert len(calls) == 6
 
 
-def test_f15_crash_reuse_blocked_zero_network(tmp_path: Path) -> None:
-    """An attempt that crashed pre-network (bad CA) cannot be reused."""
+def test_f18_transport_crash_consumes_and_blocks_replay(tmp_path: Path) -> None:
+    """F18: only a post-consume transport crash burns the attempt.
+
+    A fully valid ceremony with a transport that explodes at fetch consumes
+    exactly one ledger entry; the identical replay then hits the ledger.
+    """
+    import httpx as _httpx
+
+    from acash.data.qualification.hyp_011_qual_client import HYP011AlpacaClient
+
     runner = _load_runner_module()
     binding = _fixture_binding(tmp_path)
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
-    bad_ca = tmp_path / "ca_bad.json"
-    bad_ca.write_bytes(b'{"ACWI": {"has_event": "maybe"}}')
-    auth_path = _mint_authority(tmp_path, bad_ca, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(bad_ca)]
+    bundle = _write_ca_bundle(tmp_path)
+    ca_path = _write_ca_file(tmp_path, digests=bundle["digests"])
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     now = datetime(2026, 10, 1, 21, 0, 0, tzinfo=timezone.utc)
-    with pytest.raises(DataContractError):
-        runner.main(
-            argv,
-            _now_utc=now,
-            _state_dir=state_dir,
-            _client=_failing_client(),
-            _credential_provider=_mock_creds(),
-            _stage_c_binding_path=binding["path"],
-            _runtime_sha=RUNTIME_SHA,
-        )
-    # The crashed attempt is consumed: identical reuse blocks on the ledger.
+
+    def _boom(request: _httpx.Request) -> _httpx.Response:
+        raise _httpx.ConnectError("simulated post-consume transport failure")
+
+    boom_client = HYP011AlpacaClient(
+        transport=_httpx.MockTransport(_boom), credential_provider=_mock_creds())
+    common = dict(
+        _now_utc=now, _state_dir=state_dir,
+        _credential_provider=_mock_creds(),
+        _stage_c_binding_path=binding["path"], _runtime_sha=RUNTIME_SHA)
+    with pytest.raises(Exception):
+        runner.main(argv, _client=boom_client, **common)
+    assert len(list((state_dir / "dispatch_ledger").glob("*.json"))) == 1
+    assert not (state_dir / "observations" / "2026-10-01.json").exists()
+    # Identical reuse: ledger blocks before network/state effects.
     with pytest.raises(DataContractError, match="BLOCK_DISPATCH_AUTHORITY_REPLAY"):
-        runner.main(
-            argv,
-            _now_utc=now,
-            _state_dir=state_dir,
-            _client=_failing_client(),
-            _credential_provider=_mock_creds(),
-            _stage_c_binding_path=binding["path"],
-            _runtime_sha=RUNTIME_SHA,
-        )
+        runner.main(argv, _client=_failing_client(), **common)
 
 
 def test_f15_bare_token_replay_blocked(tmp_path: Path) -> None:
@@ -693,8 +784,11 @@ def test_f16_no_scope_intake_blocked_zero_network(tmp_path: Path) -> None:
     }
     ca_path = tmp_path / "ca_bare.json"
     ca_path.write_bytes((json.dumps(bare_doc, indent=2, sort_keys=True) + "\n").encode("utf-8"))
-    auth_path = _mint_authority(tmp_path, ca_path, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(ca_path)]
+    bundle = _write_ca_bundle(tmp_path)
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     with pytest.raises(DataContractError, match="CA_NO_EVENT_SCOPE_REQUIRED"):
         runner.main(
             argv,
@@ -714,12 +808,15 @@ def test_f16_bad_source_sha_blocked_zero_network(tmp_path: Path) -> None:
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
-    ca_path = _write_ca_file(tmp_path)
+    bundle = _write_ca_bundle(tmp_path)
+    ca_path = _write_ca_file(tmp_path, digests=bundle["digests"])
     doc = json.loads(ca_path.read_text(encoding="utf-8"))
     doc["ACWI"]["source_sha256"] = "not-a-sha"
     ca_path.write_bytes((json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8"))
-    auth_path = _mint_authority(tmp_path, ca_path, prev_sha)
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(ca_path)]
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     with pytest.raises(DataContractError, match="CA_SOURCE_SHA_INVALID"):
         runner.main(
             argv,
@@ -739,13 +836,16 @@ def test_f16_authority_ca_sha_mismatch_blocked_zero_network(tmp_path: Path) -> N
     state_dir = _reconciled_obs1_state(tmp_path / "s", binding)
     state_doc = json.loads((state_dir / "state.json").read_text(encoding="utf-8"))
     prev_sha = state_doc["last_observation_sha256"]
-    ca_path = _write_ca_file(tmp_path)
-    auth_path = _mint_authority(tmp_path, ca_path, prev_sha)
+    bundle = _write_ca_bundle(tmp_path)
+    ca_path = _write_ca_file(tmp_path, digests=bundle["digests"])
+    auth_path = _mint_authority(
+        tmp_path, ca_path, prev_sha, registry_dir=state_dir / "intent_registry")
     # Mutate the CA file AFTER the authority bound its bytes.
     doc = json.loads(ca_path.read_text(encoding="utf-8"))
     doc["ACWI"]["evidence_ref"] = "evidence/mutated.pdf"
     ca_path.write_bytes((json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8"))
-    argv = _live_argv(auth_path) + ["--ca-determinations", str(ca_path)]
+    argv = _live_argv(auth_path, bundle_root=bundle["root"]) + [
+        "--ca-determinations", str(ca_path)]
     with pytest.raises(DataContractError, match="SHADOW_AUTHORITY_CA_SHA_MISMATCH"):
         runner.main(
             argv,
@@ -769,9 +869,14 @@ def test_f16_provenance_survives_into_observation(tmp_path: Path) -> None:
         ("AGG", "BLACKROCK_ISHARES_OFFICIAL"),
         ("SPY", "STATE_STREET_SPDR_OFFICIAL"),
     ):
+        manifest = json.loads(
+            (tmp_path / "ca_bundle_2026-10-01" / symbol / "manifest.json")
+            .read_text(encoding="utf-8"))
         section = obs2["corporate_actions"][symbol]
         assert section["authority_source"] == sponsor
-        assert section["source_sha256"] == FAKE_SHA
-        assert section["evidence_ref"] == f"evidence/{symbol.lower()}-scope-fixture.pdf"
-        assert section["scope_evidence"]["schedule_sha256"] == FAKE_SHA
+        # F19: sealed digest is the recomputed bundle-evidence digest.
+        assert section["source_sha256"] == manifest["evidence_sha256"]
+        assert section["evidence_ref"] == manifest["evidence_file"]
+        assert section["scope_evidence"]["schedule_sha256"] == manifest[
+            "schedule_evidence"]["sha256"]
         assert section["has_event"] is False

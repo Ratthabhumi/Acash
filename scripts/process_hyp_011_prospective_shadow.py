@@ -34,12 +34,18 @@ from acash.execution.alpaca.credentials import (
     EnvAlpacaCredentialProvider,
 )
 from acash.research.hyp_011.shadow_ca import CADetermination
+from acash.research.hyp_011.shadow_ca_bundle import (
+    verify_determination_evidence_binding,
+    verify_evidence_bundle,
+)
 from acash.research.hyp_011.shadow_ca_intake import validate_intake_document
 from acash.research.hyp_011.shadow_authority import (
+    INTENT_REGISTRY_DIRNAME,
     attempt_ledger_key,
     consume_dispatch_attempt,
     resolve_runtime_sha,
     validate_dispatch_authority,
+    verify_registered_intent_binding,
 )
 from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
 from acash.research.hyp_011.shadow import (
@@ -143,6 +149,23 @@ def main(
         "--dispatch-authority",
         default="",
         help="Explicit DispatchAuthority manifest (required on live path for ordinal >= 2).",
+    )
+    parser.add_argument(
+        "--ca-evidence-bundle",
+        default="",
+        help="Per-symbol CA evidence bundle root (required on live path beyond session one).",
+    )
+    parser.add_argument(
+        "--intent-registry",
+        default="",
+        help="Preregistered-intent registry dir (defaults to <state_dir>/intent_registry).",
+    )
+    parser.add_argument(
+        "--local-preflight",
+        action="store_true",
+        default=False,
+        help="Validate the complete zero-network preflight without consuming "
+        "the dispatch attempt and without network.",
     )
     parser.add_argument(
         "--runtime-sha",
@@ -349,19 +372,9 @@ def main(
         print("NETWORK_REQUESTS_ISSUED = 0")
         return EXIT_OK
 
-    # F15: consume the attempt atomically (one-shot). Any crash or failure
-    # after this point burns the attempt; reuse fails closed above.
-    consume_dispatch_attempt(
-        state_dir,
-        ledger_key,
-        {
-            "authorization": args.authorization,
-            "authority_sha256": authority_file_sha,
-            "observation_ordinal": expected_ordinal,
-            "dispatch_attempt": args.dispatch_attempt,
-            "target_session": target.isoformat(),
-        },
-    )
+    # F18: the attempt ledger is consumed ONLY after every local preflight
+    # passes (see below). The read-only replay pre-check above stays early;
+    # the destructive consume moved to immediately before network transport.
 
     # F16: load CA evidence bytes once (prior observations imply CA required).
     ca_file_bytes = b""
@@ -397,35 +410,25 @@ def main(
             ca_file_sha256=hashlib.sha256(ca_file_bytes).hexdigest(),
         )
         print(f"DispatchAuthority ACCEPTED: {validated_authority.authority_sha256()[:16]}...")
-
-    cred_prov = _credential_provider or EnvAlpacaCredentialProvider()
-    try:
-        cred_prov.load()
-    except AlpacaCredentialError as exc:
-        print(f"BLOCKED_MISSING_CREDENTIALS: {exc}")
-        return EXIT_BLOCKED
-
-    # F14 continuation/freshness gate (PROPOSED_PENDING_HUMAN_RATIFICATION):
-    # the target may only be processed while the next NYSE session has not
-    # opened. A stale target fails here before any network side effect.
-    fresh_next = assert_target_session_fresh(target, calendar, now_utc)
-    print(f"NEXT_SESSION_NOT_YET_OPEN = {fresh_next.isoformat()}")
-
-    # Full guard validation pre-network (duplicate/order/early/stress/
-    # quarantine/completion via close_utc).
-    guard_state = ShadowState(activation_session=activation_session)
-    guard_state.observed_sessions = list(observed)
-    if target < activation_session:
-        raise DataContractError(f"SHADOW_BACKFILL_FORBIDDEN: {target}.")
-    guard_state.record_session(target, calendar, now_utc)
-
-    # Provider accessibility check pre-network (delayed SIP 15-min boundary)
-    provider_eligible_after_utc = observation_eligible_after(target, calendar)
-    if now_utc <= provider_eligible_after_utc:
-        raise DataContractError(
-            f"SHADOW_PROVIDER_DATA_NOT_YET_ACCESSIBLE: session {target.isoformat()} "
-            f"eligible strictly after {provider_eligible_after_utc.isoformat()}, "
-            f"now is {now_utc.isoformat()}."
+        # F17: the authority must bind a PHYSICALLY preregistered intent
+        # (server-side registry timestamp, O_EXCL create-once). A backdated
+        # unregistered JSON can never satisfy this check.
+        registry_dir = (
+            Path(args.intent_registry)
+            if args.intent_registry
+            else (state_dir / INTENT_REGISTRY_DIRNAME)
+        )
+        registered_intent = verify_registered_intent_binding(
+            registry_dir=registry_dir,
+            bound_intent_sha256=str(authority_doc.get("intent_sha256") or ""),
+            target_session=target,
+            observation_ordinal=expected_ordinal,
+            state_prev_sha256=verified.get("last_observation_sha256"),
+        )
+        print(
+            "RegisteredIntent BOUND: "
+            f"{registered_intent.registered_sha256()[:16]}... "
+            f"registered_at={registered_intent.registered_at_utc.isoformat()}"
         )
 
     # F16: corporate-action intake gate BEFORE any market-data network call.
@@ -463,6 +466,83 @@ def main(
                 "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
             }
     print("Corporate-action qualification: PASS.")
+
+    # F19: raw-byte evidence bundle verification per symbol (before any
+    # network). Recomputes digests from preserved official bytes, validates
+    # sponsor/product identity (239707 is IWB, never ACWI), and binds each
+    # sealed determination to its verified bundle digest. Invented digests,
+    # missing bytes, and wrong identities fail here with zero requests.
+    if observed:
+        if not args.ca_evidence_bundle:
+            raise DataContractError(
+                "SHADOW_CA_BUNDLE_REQUIRED_BEYOND_SESSION_ONE."
+            )
+        bundle_root = Path(args.ca_evidence_bundle)
+        for symbol in SYMBOLS:
+            verified_manifest = verify_evidence_bundle(
+                bundle_root / symbol, symbol, target, now_utc
+            )
+            verify_determination_evidence_binding(
+                ca_section[symbol], verified_manifest, symbol
+            )
+        print("Corporate-action evidence bundles: VERIFIED.")
+
+    # Credential presence check (F18 order: after CA/evidence preflight,
+    # still before attempt consumption and network).
+    cred_prov = _credential_provider or EnvAlpacaCredentialProvider()
+    try:
+        cred_prov.load()
+    except AlpacaCredentialError as exc:
+        print(f"BLOCKED_MISSING_CREDENTIALS: {exc}")
+        return EXIT_BLOCKED
+
+    # F14 continuation/freshness gate (PROPOSED_PENDING_HUMAN_RATIFICATION):
+    # the target may only be processed while the next NYSE session has not
+    # opened. A stale target fails here before any network side effect.
+    fresh_next = assert_target_session_fresh(target, calendar, now_utc)
+    print(f"NEXT_SESSION_NOT_YET_OPEN = {fresh_next.isoformat()}")
+
+    # Full guard validation pre-network (duplicate/order/early/stress/
+    # quarantine/completion via close_utc).
+    guard_state = ShadowState(activation_session=activation_session)
+    guard_state.observed_sessions = list(observed)
+    if target < activation_session:
+        raise DataContractError(f"SHADOW_BACKFILL_FORBIDDEN: {target}.")
+    guard_state.record_session(target, calendar, now_utc)
+
+    # Provider accessibility check pre-network (delayed SIP 15-min boundary)
+    provider_eligible_after_utc = observation_eligible_after(target, calendar)
+    if now_utc <= provider_eligible_after_utc:
+        raise DataContractError(
+            f"SHADOW_PROVIDER_DATA_NOT_YET_ACCESSIBLE: session {target.isoformat()} "
+            f"eligible strictly after {provider_eligible_after_utc.isoformat()}, "
+            f"now is {now_utc.isoformat()}."
+        )
+
+    # Complete zero-network local dispatch preflight (H): every local check
+    # above passed and NOTHING has been consumed or fetched. This mode proves
+    # the full live path is green without touching the attempt ledger.
+    if args.local_preflight:
+        print("LOCAL_PREFLIGHT = PASS")
+        print("ATTEMPT_CONSUMED = false")
+        print("NETWORK_REQUESTS = 0")
+        return EXIT_OK
+
+    # F18: consume the attempt atomically (one-shot) ONLY after ALL local
+    # preflight passed, immediately before market-data transport. Any crash
+    # or failure after this point burns the attempt; reuse fails closed.
+    # Local preflight failures above leave the ledger UNCHANGED.
+    consume_dispatch_attempt(
+        state_dir,
+        ledger_key,
+        {
+            "authorization": args.authorization,
+            "authority_sha256": authority_file_sha,
+            "observation_ordinal": expected_ordinal,
+            "dispatch_attempt": args.dispatch_attempt,
+            "target_session": target.isoformat(),
+        },
+    )
 
     client = _client if _client is not None else HYP011AlpacaClient(http_attempt_listener=_count)
     fetched: Dict[str, Dict[str, Any]] = {}

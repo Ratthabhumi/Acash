@@ -524,11 +524,51 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
         environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
     )
     # Valid CA package (bytes-bound by the authority below).
+    # F19: digests are recomputed bundle-evidence digests over fixture bytes.
     sponsors = {
         "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
         "AGG": "BLACKROCK_ISHARES_OFFICIAL",
         "SPY": "STATE_STREET_SPDR_OFFICIAL",
     }
+    urls = {
+        "ACWI": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+        "AGG": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+        "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
+    }
+    identities = {
+        "ACWI": {"product_id": "239600", "ticker": "ACWI",
+                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "AGG": {"product_id": "239458", "ticker": "AGG",
+                "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
+                "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    bundle_root = tmp_path / "ca_bundle_2026-10-01"
+    bundle_digests = {}
+    for symbol in sponsors:
+        sdir = bundle_root / symbol
+        edir = sdir / "evidence"
+        edir.mkdir(parents=True)
+        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-10-01\n".encode()
+        sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-10-01\n".encode()
+        ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+        sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
+        (edir / ev_name).write_bytes(ev_bytes)
+        (edir / sched_name).write_bytes(sched_bytes)
+        ev_sha = _hashlib.sha256(ev_bytes).hexdigest()
+        sched_sha = _hashlib.sha256(sched_bytes).hexdigest()
+        manifest = {
+            "schema_version": 1, "symbol": symbol, "target_session": "2026-10-01",
+            "authority_source": sponsors[symbol], "official_url": urls[symbol],
+            "product_identity": identities[symbol], "evidence_file": ev_name,
+            "evidence_sha256": ev_sha,
+            "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "scope_type": "NO_EVENT_SCOPE",
+            "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
+            "note": "Fixture bundle.",
+        }
+        (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        bundle_digests[symbol] = {"sha": ev_sha, "ref": ev_name, "sched_sha": sched_sha}
     ca_doc = {
         symbol: {
             "symbol": symbol,
@@ -536,11 +576,11 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
             "has_event": False,
             "authority_source": sponsors[symbol],
             "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
-            "source_sha256": "ab" * 32,
-            "evidence_ref": f"evidence/{symbol.lower()}-scope-fixture.pdf",
+            "source_sha256": bundle_digests[symbol]["sha"],
+            "evidence_ref": bundle_digests[symbol]["ref"],
             "scope_evidence": {
                 "schedule_id": "FIXTURE_SCOPE",
-                "schedule_sha256": "ab" * 32,
+                "schedule_sha256": bundle_digests[symbol]["sched_sha"],
                 "scope_note": "Fixture scope.",
                 "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
             },
@@ -551,7 +591,23 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
     ca_bytes = (json.dumps(ca_doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
     ca_path.write_bytes(ca_bytes)
     # Valid authority (window covers the stale now; F14 must still block).
+    # F17: binds the physically preregistered intent digest.
+    from acash.research.hyp_011.shadow_authority import register_observation_intent
+
     fixture_runtime = "f" * 40
+    reg_path = register_observation_intent(
+        registry_dir=state_dir / "intent_registry",
+        calendar=NyseCa1Calendar(),
+        target_session=date(2026, 10, 1),
+        observation_ordinal=2,
+        previous_observation_sha256=json.loads(
+            (state_dir / "state.json").read_text(encoding="utf-8")
+        )["last_observation_sha256"],
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        authority_identity="TEST_FIXTURE",
+        now_utc=datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    registered_sha = str(json.loads(reg_path.read_text(encoding="utf-8"))["intent_sha256"])
     intent = ObservationIntent(
         hypothesis_id="HYP_011",
         target_session=date(2026, 10, 1),
@@ -571,7 +627,7 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
     )
     authority_doc = {
         "schema_version": 1,
-        "intent_sha256": validated_intent.intent_sha256(),
+        "intent_sha256": registered_sha,
         "intent": intent.canonical_doc(),
         "runtime_commit_sha": fixture_runtime,
         "target_session": "2026-10-01",
@@ -600,6 +656,8 @@ def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None
         str(authority_path),
         "--ca-determinations",
         str(ca_path),
+        "--ca-evidence-bundle",
+        str(bundle_root),
     ]
     with pytest.raises(DataContractError, match="MISSED_REACTIVATION_REQUIRED"):
         runner.main(
