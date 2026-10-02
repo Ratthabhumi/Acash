@@ -54,7 +54,8 @@ authorization required). No mechanism has empirical use.
 
 | Asset | Status | Note |
 |---|---|---|
-| PPDS architecture/data-contract drafts | `RESEARCH_ONLY` | Runtime 0%; read-only decision-support direction proposed in VNext doc |
+| PPDS architecture/data-contract drafts | `RESEARCH_ONLY` | Read-only decision-support direction proposed in VNext doc |
+| PPDS synthetic read-only runtime (`src/acash/ppds/`, 12 tests) | `USED_IN_RUNTIME` (tooling, repair branch) | Statement ingestion, Position/Cash lots, hash-chained ledger, exact reconciliation, exposure/overlap/FX, read-only surface; synthetic fixtures only |
 | Broker adapter contract draft | `RESEARCH_ONLY` | No endpoint wired |
 | Dime/Webull/IBKR/futures due diligence | `RESEARCH_ONLY` | Feeds VNext read-only ingestion proposal |
 | Thai tax ledger requirements | `USED_IN_GOVERNANCE` | Compliance boundary reference |
@@ -82,6 +83,11 @@ New empirical use of any `READY_FOR_DATA_FEASIBILITY` asset requires a
 separate explicit human authorization scoped to zero-outcome feasibility
 only. Matrix status changes only via committed evidence, never by assertion.
 
+**Capability scope**: `CANONICAL_MAIN_CAPABILITY` (merged to `origin/main`
+at `becec27`) vs `REPAIR_BRANCH_CAPABILITY` (exists only on
+`fix/hyp011-post-obs1-integrity-continuation-20261001` until merged).
+Nothing on the repair branch becomes canonical merely by existing.
+
 ---
 
 ## 6. Addendum 2026-10-01 — Evidence-Kernel Hardening Pack (repair branch)
@@ -94,4 +100,4 @@ only. Matrix status changes only via committed evidence, never by assertion.
 | ACWI/AGG/SPY corrected raw evidence | `USED_IN_GOVERNANCE` (scope) | `docs/audit/ca_evidence_2026_10_01/` + corrected scope note §§5–6; no Obs #2 determination created |
 | Evidence Kernel extraction plan | `RESEARCH_ONLY` | `docs/audit/EVIDENCE_KERNEL_EXTRACTION_PLAN.md`; design only, no package move |
 | RI-01 Zero-Outcome Data Feasibility Pack | `READY_FOR_DATA_FEASIBILITY` | Questions pack prepared; execution needs separate authorization |
-| PPDS Read-Only Runtime Skeleton Pack | `READY_FOR_DATA_FEASIBILITY` | Synthetic-fixture skeleton prepared; no credentials/statements/orders |
+| PPDS Read-Only Runtime Skeleton Pack | `USED_IN_RUNTIME` (tooling, repair branch) | Implemented synthetic runtime (see §3); real statements/broker/credentials/orders still forbidden |

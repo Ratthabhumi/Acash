@@ -1,0 +1,59 @@
+# ACASH CI — hermetic tier + static typing (no secrets, no network tests).
+#
+# T1-HERMETIC must pass from a fresh clone with no hidden local files:
+# it excludes non_hermetic (live repo/env), native_mt5 (optional native
+# package), sealed_data (untracked sealed datasets), and dashboard
+# (node-side contracts run in their own toolchain).
+#
+# NOTE on tests/unit/execution/mt5: those modules hard-import the optional
+# MetaTrader5 native package, so collection itself fails without it. The
+# `-m "not native_mt5"` filter alone cannot prevent the import; the explicit
+# --ignore below is therefore required in lockfile-faithful environments
+# (the mark documents intent; the ignore enforces collectability).
+#
+# Action pins are full immutable commit SHAs verified against the official
+# repositories at workflow creation (2026-10-02):
+# - actions/checkout v7.0.1 = 3d3c42e5aac5ba805825da76410c181273ba90b1
+# - astral-sh/setup-uv v10.2.0 = c18668ad3cf93ea998bef934396af7bb5c839dc7
+
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  t1-hermetic:
+    name: T1 hermetic pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Sync locked dependencies
+        run: uv sync --locked
+      - name: Hermetic test tier
+        run: >-
+          uv run pytest -q --tb=line
+          -m "not non_hermetic and not native_mt5 and not sealed_data and not dashboard"
+          --ignore=tests/unit/execution/mt5
+
+  mypy:
+    name: MyPy strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Sync locked dependencies
+        run: uv sync --locked
+      - name: Static typing
+        run: uv run mypy src/ tests/

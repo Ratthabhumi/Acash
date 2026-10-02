@@ -1,4 +1,21 @@
-# PPDS Read-Only Runtime Skeleton Pack (PREPARED — NOT EXECUTED)
+# PPDS Read-Only Runtime Skeleton Pack — IMPLEMENTED_ON_REPAIR_BRANCH
+
+**Status update 2026-10-02**: no longer PREPARED/NOT EXECUTED. Implemented:
+
+- statement ingestion (`src/acash/ppds/statement_ingest.py`)
+- PositionLot/CashLot (`src/acash/ppds/lots.py`)
+- hash-chained NormalizedPortfolioLedger (`src/acash/ppds/ledger.py`)
+- exact reconciliation (`src/acash/ppds/reconcile.py`)
+- exposure / ETF overlap / FX exposure (`src/acash/ppds/exposure.py`)
+- read-only surface (`src/acash/ppds/surface.py`)
+- 12 tests (`tests/unit/ppds/test_ppds_readonly_ledger.py`)
+
+**Authorization boundary** (unchanged): synthetic fixtures only. No broker
+credentials, no real statements, no order endpoint, no capital movement.
+Read-only decision-support direction.
+
+**Still forbidden**: real statements, broker API, credentials, order
+endpoint, capital movement.
 
 **Authorization boundary**: synthetic fixtures only. No broker credentials,
 no real statements, no order endpoint, no capital movement. Read-only

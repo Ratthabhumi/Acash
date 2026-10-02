@@ -50,7 +50,11 @@
 - **`GOVERNANCE BOUNDARY — SCIENTIFIC ACCEPTANCE THRESHOLDS`**:
   - Full scientific evaluation requires: $\ge 504$ committed daily observations **AND** $\ge 2$ completed annual rebalances.
   - Intermediate staging checkpoint ($S_1$): $20$ committed observations.
-  - **Current Status**: `S1_PROGRESS = 1/20` (Observation #1 COMMITTED_AND_RECONCILED 2026-09-30; see `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`). Do not confuse $S_1$ progress with final strategy qualification or trading admission.
+  - **Current Status**: `V1_PLATFORM_VALIDATION_OBSERVATIONS = 1`
+    (Observation #1 COMMITTED_AND_RECONCILED 2026-09-30; see `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`);
+    `V1_CLOSURE = PROPOSED_FOR_RATIFICATION`; `V2_S1_PROGRESS = 0/20`
+    (V2 proposed, NOT activated). Do not use an ambiguous global `S1 = 1/20`.
+    Do not confuse $S_1$ progress with final strategy qualification or trading admission.
 
 ---
 
@@ -105,28 +109,39 @@
 
 ```text
 ================================================================================
-ACASH PRE-ATTEMPT #2 FROZEN OPERATIONAL REGISTER
+ACASH PRE-ATTEMPT #2 FROZEN OPERATIONAL REGISTER — SUPERSEDED 2026-10-02
 ================================================================================
-PRE_ATTEMPT_0002_STATE             = READY_AND_FROZEN
+PRE_ATTEMPT_0002_STATE           = SUPERSEDED (Attempt #2 is historical
+                                   completed evidence; do NOT reuse this
+                                   register for new dispatches)
 
-CANONICAL_MAIN                     = becec27f5eacf283dcb191cf72d0858682d8e055
-AUDIT_BRANCH                       = audit/repo-closure-20260930
+CANONICAL_MAIN                   = becec27f5eacf283dcb191cf72d0858682d8e055
+AUDIT_BRANCH                     = audit/repo-closure-20260930
 
-OBSERVATION_0001                   = COMMITTED_AND_RECONCILED (2026-09-30; record:
-                                     docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md)
-OBSERVATION_0002                   = NOT_AUTHORIZED (Timer must NOT be set)
+OBSERVATION_0001                 = COMMITTED_AND_RECONCILED (2026-09-30; record:
+                                    docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md)
+OBSERVATION_0002                 = NOT_AUTHORIZED (Timer must NOT be set)
 
-S1_PROGRESS                        = 1/20
+HYP_011_PROSPECTIVE_V1           = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING
+V1_COMMITTED_OBSERVATIONS        = 1 (2026-09-30; preserved platform-validation
+                                    evidence, never mixed into V2)
+V1_PLATFORM_VALIDATION_OBSERVATIONS = 1
+V1_CLOSURE                       = PROPOSED_FOR_RATIFICATION (agent-written
+                                    segment policy only; no explicit human
+                                    ratification record exists — do NOT treat
+                                    as ratified)
+HYP_011_V2                       = PROPOSED_PENDING_HUMAN_RATIFICATION
+V2_S1_PROGRESS                   = 0/20 (no ambiguous global S1 counter)
 
-MERGE_STATUS                       = STRICT_HOLD
-RUNTIME_CHANGE                     = FORBIDDEN_PRE_RUN
-BACKFILL                           = FORBIDDEN
-RETRY                              = FORBIDDEN
+MERGE_STATUS                     = STRICT_HOLD
+RUNTIME_CHANGE                   = FORBIDDEN_PRE_RUN
+BACKFILL                         = FORBIDDEN
+RETRY                            = FORBIDDEN
 
-REAL_CAPITAL_AUTHORITY             = $0.00
-PAPER_TRADING_AUTHORITY            = false
-LIVE_TRADING_AUTHORITY             = false
-NO_REAL_ORDERS                     = true
+REAL_CAPITAL_AUTHORITY           = $0.00
+PAPER_TRADING_AUTHORITY          = false
+LIVE_TRADING_AUTHORITY           = false
+NO_REAL_ORDERS                   = true
 ================================================================================
 ```
 

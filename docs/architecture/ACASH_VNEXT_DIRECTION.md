@@ -35,7 +35,8 @@ ACASH
 │   └── read-only: statement ingestion → normalized ledger → cash/position
 │       reconciliation → exposure/overlap → decision support.
 │       No order endpoint. No allocation authority.
-│   Status: DOCS ONLY (0% runtime)
+│   Status: SYNTHETIC_READONLY_RUNTIME_IMPLEMENTED_ON_REPAIR_BRANCH
+│       (12 tests; real statements/broker/credentials/orders still forbidden)
 │
 ├── Observation / Market Data Platform
 │   ├── point-in-time data (SIP daily + intraday qualification paths)
