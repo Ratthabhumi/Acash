@@ -92,3 +92,33 @@ CI, they become a standalone defect, not a tiering exercise.
 
 - Fresh-clone T1 after this pack: 0 failed expected (verified in Phase 4).
 - Deselected: pre-existing 4 + 52 sealed_data = 56.
+
+## Addendum 2026-10-02 — platform-hermeticity repairs (CI ubuntu/Python 3.12)
+
+Remote CI (run 37018838519) exposed two further genuine hermeticity gaps,
+both repaired on the branch (no tiering — real defects):
+
+1. **94 collection errors, `NameError: RestrictionAdmissionGate`**:
+   `src/acash/execution/operational_restriction.py` used an unquoted
+   forward reference (`-> RestrictionAdmissionGate`, class defined later)
+   without `from __future__ import annotations`. Python 3.14 defers
+   annotation evaluation (PEP 649) so local runs passed; CI's Python 3.12
+   evaluates eagerly at def time. Root cause proven by version switch;
+   fix proven by 94→0 collection errors on 3.12. (Repo convention is
+   future-annotations, e.g. `gate_b/storage.py`.)
+2. **12 mypy errors (Win32-only ctypes APIs)** in `gate_b/manifest.py`,
+   `gate_b/storage.py`, `test_gate_b_governance_repair.py`: `os.name`
+   guards satisfy runtime but not static typing on Linux. Repaired with
+   `sys.platform == "win32"` narrowing (runtime-identical) + runtime
+   skips for Windows-only NTFS/Authenticode tests. Verified
+   `mypy src/ tests/` clean on Windows host AND `--platform linux`.
+3. **`test_no_forbidden_access_mocks` UnboundLocalError on ≤3.13**: nested
+   `def _boom(request: httpx.Request)` preceded a function-local
+   `import httpx`, making the annotation's name local-but-unbound at def
+   time (lazy on 3.14 only). Repaired by dropping the redundant local
+   import (module already imports httpx).
+
+Remote-CI verification matrix (fresh worktree at final commit):
+- T1 on CPython 3.14.3: 3089 passed / 0 failed / 56 deselected.
+- T1 on CPython 3.12.13: 3089 passed / 0 failed / 56 deselected.
+- `mypy src/ tests/`: clean (564 files), host + `--platform linux`.
