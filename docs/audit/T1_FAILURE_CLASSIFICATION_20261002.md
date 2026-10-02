@@ -141,3 +141,7 @@ Remote-CI verification matrix (fresh worktree at final commit):
 - T1 on CPython 3.14.3: 3089 passed / 0 failed / 56 deselected.
 - T1 on CPython 3.12.13: 3089 passed / 0 failed / 56 deselected.
 - `mypy src/ tests/`: clean (564 files), host + `--platform linux`.
+
+## Addendum 2026-10-02 — remote-CI round 4 (final byte-audit sweep)
+
+The round-3 corpus scan covered tests+manifests only and missed pins living in src/. A full-corpus scan (all tracked text) found 4 more CRLF-pinned paths (manifest_r1_HYP_007.json — the round-3 R1-manifest raw-SHA failure — plus search_trial_ledger_HYP_003.json, manifest-EURUSD_H4_2021_2024_canonical.json, MEC-0014-transaction-contract-manifest.json) plus 4 dual-pinned layer_b_evidence_*.json files (both forms referenced somewhere; left entirely untouched — no T1 test asserts either form against disk bytes). Appended to .gitattributes (82 entries total). No seal/test/pin edited.

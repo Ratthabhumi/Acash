@@ -83,3 +83,7 @@ docs/research/manifests/MEC-0015-bar-provider-contract-manifest.json text eol=cr
 docs/research/manifests/MEC-0015-dividend-provider-contract-manifest.json text eol=crlf
 docs/research/manifests/MEC-0015-quote-provider-contract-manifest.json text eol=crlf
 docs/research/manifests/MEC-0016-alpaca-early-quote-contract-manifest.json text eol=crlf
+docs/phase14/ledgers/search_trial_ledger_HYP_003.json text eol=crlf
+docs/phase14/manifests/manifest_r1_HYP_007.json text eol=crlf
+docs/phase8.5/manifests/manifest-EURUSD_H4_2021_2024_canonical.json text eol=crlf
+docs/research/manifests/MEC-0014-transaction-contract-manifest.json text eol=crlf
