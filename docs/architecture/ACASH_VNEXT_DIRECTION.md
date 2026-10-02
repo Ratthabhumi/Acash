@@ -90,7 +90,9 @@ Evidence Kernel.
 
 - No backtests (none run, none implied).
 - No Paper/Live/broker wiring.
-- No PPDS runtime implementation (read-only direction only).
+- No real-statement ingestion, broker connectivity, or execution authority
+  (synthetic PPDS read-only runtime now implemented on the repair branch;
+  the old "No PPDS runtime implementation" line described the pre-code state).
 - No HYP_011 acceleration, no observation-count gaming, no selection
   discretion over sessions (F14 intent-lock discipline applies platform-wide).
 - NoCI/branch-protection changes (recorded as still missing).

@@ -68,7 +68,7 @@ authorization required). No mechanism has empirical use.
 | Operator charter audit | `origin/governance/operator-charter-audit-v1-20260928` | `USED_IN_GOVERNANCE` | Audit lineage |
 | CORE-001 observability dashboard | `origin/feature/core001-observability-dashboard-v1` | `RESEARCH_ONLY` | Branch-only; not canonical |
 | Research-foundation review | `origin/review/research-foundation-pre-empirical` | `USED_IN_GOVERNANCE` | Pre-empirical gate record |
-| CI / branch protection | repo settings | `BLOCKED` | Zero runs; human review only |
+| CI / branch protection | repo settings + `.github/workflows/ci.yml` (repair branch) | `USED_IN_RUNTIME` (CI green: runs 37029140943 + 37029592071) / `BLOCKED` (branch protection ruleset not yet configured) |
 | Broker/API transport research | PPDS docs | `RESEARCH_ONLY` | Not connected to any runtime |
 | Corporate-action sponsor research | this pack §E + F10 tooling | `USED_IN_RUNTIME` (tooling) / `USED_IN_GOVERNANCE` (scope) | AGG amount established; intake enforced end-to-end on repair branch |
 | F11 Docker provenance | finding register | `BLOCKED` | Unresolved |

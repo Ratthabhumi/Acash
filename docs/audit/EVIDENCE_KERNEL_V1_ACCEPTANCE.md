@@ -1,11 +1,17 @@
 # Evidence Kernel V1 — Platform Acceptance Checklist (Frozen)
 
 **Date Context**: 2026-10-01
-**Status**: `LOCALLY_ACCEPTED_PENDING_GREEN_REMOTE_CI` (corrected
-2026-10-02: `MERGE_READY` was premature — no remote CI exists and the
-reported T1 had 71 failures). `MERGE_READY` returns only when fresh-clone
-T1 = 0 failed AND GitHub Actions T1 + MyPy both succeed. This checklist
-freezes what "Evidence Kernel V1" means for canonical-merge readiness. Broader package extraction is
+**Status**:
+
+```text
+EVIDENCE_KERNEL_V1 = REMOTE_CI_VERIFIED_MERGE_READY
+CANONICAL_MERGE = NOT_YET_AUTHORIZED
+```
+
+(Remote CI runs 37029140943 + 37029592071 green; the interim
+`LOCALLY_ACCEPTED_PENDING_GREEN_REMOTE_CI` header is superseded by this
+record.) This checklist freezes what "Evidence Kernel V1" means for
+canonical-merge readiness. Broader package extraction is
 explicitly deferred: `EXTRACTION_PLAN = READY_AFTER_CANONICAL_MERGE`
 (see `docs/audit/EVIDENCE_KERNEL_EXTRACTION_PLAN.md` for the deferred plan —
 no extraction is performed by this checklist).

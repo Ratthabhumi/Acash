@@ -19,7 +19,9 @@ endpoint, capital movement.
 
 **Authorization boundary**: synthetic fixtures only. No broker credentials,
 no real statements, no order endpoint, no capital movement. Read-only
-decision-support direction; runtime 0% until separately authorized.
+decision-support direction; real-statement runtime 0% until separately
+authorized (the synthetic runtime below is implemented, not authorized
+for real data).
 
 ## Pipeline (synthetic fixtures only)
 
@@ -33,7 +35,7 @@ CSV / synthetic statement
   -> read-only decision surface
 ```
 
-## Skeleton components (to be built post-authorization)
+## Skeleton components (IMPLEMENTED on repair branch — was "to be built")
 
 1. `statement_ingest.py` — parse synthetic CSV into `AccountSnapshot`
    (holdings, cash balances, as-of timestamp). Reject malformed rows

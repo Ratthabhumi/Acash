@@ -161,11 +161,14 @@ NO_REAL_ORDERS                   = true
   8. [`OBSERVATION_0001_POST_RUN_CHECKLIST.md`](docs/audit/OBSERVATION_0001_POST_RUN_CHECKLIST.md): 4-state post-run forensic classification procedure.
   9. [`OBSERVATION_0002_READINESS_CHECKLIST.md`](docs/audit/OBSERVATION_0002_READINESS_CHECKLIST.md): Hard stop gate before Observation #2.
   10. [`OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`](docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md): Immutable Obs #1 result/adjudication record.
-- **`REPOSITORY-VERIFIED — LOCAL VERIFICATION EVIDENCE`**:
+- **`REPOSITORY-VERIFIED — LOCAL VERIFICATION EVIDENCE`** (HISTORICAL SNAPSHOT
+  at handoff preparation; current evidence is remote CI — see §15):
   - Full Test Suite: `3268 passed, 1 skipped, 0 failed` (3,269 collected).
   - Scoped MyPy: `Success: no issues found in 5 source files`.
   - **Caveat**: Same-environment pre-change regression delta against pristine `becec27` was **NOT** established.
-  - Remote CI Status: **NOT AVAILABLE** (GitHub Actions runs = 0, commit statuses = 0).
+  - Remote CI Status at that time: **NOT AVAILABLE** (GitHub Actions runs = 0, commit statuses = 0).
+    SUPERSEDED 2026-10-02: remote CI runs 37029140943 + 37029592071 both
+    SUCCESS (T1 hermetic + MyPy strict) — see §15.
 
 ---
 
@@ -212,7 +215,11 @@ The canonical finding identities established during repository audit remain stab
 - **`FACT — PPDS BRANCH`**: `research/ppds-r0-capital-broker-architecture-20260928` (tip `1b5aed1bafe70ecd41ec57a6da0b8af92be65801`).
 - **`GOVERNANCE BOUNDARY — PPDS LIMITS`**:
   - `PPDS_R0_RESEARCH_CHURN = STOP`
-  - `PPDS_RUNTIME_IMPLEMENTATION = NOT_AUTHORIZED / NOT_IMPLEMENTED`
+  - `PPDS_SYNTHETIC_READONLY_RUNTIME = IMPLEMENTED_ON_REPAIR_BRANCH`
+    (statement ingestion → lots → hash-chained ledger → reconciliation →
+    exposure/overlap/FX → read-only surface; 12 tests; synthetic fixtures
+    only — supersedes the old `PPDS_RUNTIME_IMPLEMENTATION =
+    NOT_IMPLEMENTED` line, which described the pre-implementation state)
   - `MERGE_STATUS = HOLD`
   - `PERSONAL_CAPITAL_ALLOCATION_POLICY = UNRESOLVED`
   - `CURRENT_HOLDINGS_BOOK_ASSIGNMENT = UNRATIFIED`
@@ -220,7 +227,13 @@ The canonical finding identities established during repository audit remain stab
 
 ---
 
-## 11. NEXT HARD GATE — Observation #1 Post-Run Forensic
+## 11. NEXT HARD GATE — Observation #1 Post-Run Forensic (HISTORICAL — COMPLETED)
+
+> SUPERSEDED 2026-10-02: Obs #1 forensic is DONE
+> (`OBSERVATION_0001 = COMMITTED_AND_RECONCILED`; record cited in §6).
+> The procedure below is preserved as the historical protocol, NOT a
+> current operational instruction. Current checkpoint: §6 register
+> (V1 closure proposed, V2 proposed, Obs #2 NOT authorized).
 
 - **`NEXT HARD GATE`**: `OBSERVATION_0001_POST_RUN_FORENSIC`
 - **Inspection Window**: After approximately **2026-10-01 03:25–03:30 ICT** (post-execution of the 03:20 ICT timer).
@@ -292,3 +305,9 @@ At handoff preparation, live GitHub API inspection confirmed:
 - Repository Rulesets: `[]` (empty)
 - Pull Requests: `[]` (empty)
 - *Invariant*: Zero commit statuses does **NOT** constitute CI assurance. All assurance currently derives from local verified test execution.
+
+**UPDATE 2026-10-02 (current)**: remote CI now EXISTS and is GREEN on the
+repair branch — runs 37029140943 + 37029592071 both SUCCESS (T1 hermetic
+pytest + MyPy strict). The `0 runs` lines above are a HISTORICAL SNAPSHOT
+of the pre-CI state. Rulesets still `[]`; PRs still `[]`; `origin/main`
+still `becec27f5eacf283dcb191cf72d0858682d8e055`.
