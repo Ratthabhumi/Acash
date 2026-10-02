@@ -58,6 +58,7 @@ from acash.research.step_r4_hyp_007_governance import (
 )
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_007/m1_bars_qualified.parquet, absent from fresh clones
 def test_r4_preconditions_stage_a_verified() -> None:
     repo_root = Path(__file__).resolve().parents[3]
     preconditions = validate_r4_preconditions(repo_root)

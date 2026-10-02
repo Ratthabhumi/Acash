@@ -1,8 +1,11 @@
 # Evidence Kernel V1 — Platform Acceptance Checklist (Frozen)
 
 **Date Context**: 2026-10-01
-**Status**: `FROZEN_FOR_MERGE_REVIEW`. This checklist freezes what "Evidence
-Kernel V1" means for canonical-merge readiness. Broader package extraction is
+**Status**: `LOCALLY_ACCEPTED_PENDING_GREEN_REMOTE_CI` (corrected
+2026-10-02: `MERGE_READY` was premature — no remote CI exists and the
+reported T1 had 71 failures). `MERGE_READY` returns only when fresh-clone
+T1 = 0 failed AND GitHub Actions T1 + MyPy both succeed. This checklist
+freezes what "Evidence Kernel V1" means for canonical-merge readiness. Broader package extraction is
 explicitly deferred: `EXTRACTION_PLAN = READY_AFTER_CANONICAL_MERGE`
 (see `docs/audit/EVIDENCE_KERNEL_EXTRACTION_PLAN.md` for the deferred plan —
 no extraction is performed by this checklist).
@@ -36,17 +39,17 @@ no extraction is performed by this checklist).
 ## 3. Merge-Readiness Verdict (To Be Filled by Validation)
 
 ```text
-EVIDENCE_KERNEL_V1 = MERGE_READY
+EVIDENCE_KERNEL_V1 = LOCALLY_ACCEPTED_PENDING_GREEN_REMOTE_CI
 ```
 
 Validation record (repair branch, commits through `cc57c36`):
 - HYP_011 family + PPDS in a FRESH worktree (`uv sync --locked`, no hidden
   files): **153 passed**.
 - NON_MT5_DIAGNOSTIC_SUITE in the fresh worktree: 71 failed / 3070 passed /
-  18 skipped / 4 deselected — every failure in a pre-existing pinned-hash /
-  sealed-data family with zero failures in any touched file; the 4
-  deselected prove marker partitioning works (3 `sealed_data` + 1
-  `non_hermetic`).
+  18 skipped / 4 deselected — SUPERSEDED by
+  `docs/audit/T1_FAILURE_CLASSIFICATION_20261002.md` (per-test census:
+  52 sealed-data, 12 repaired via `.gitattributes`, remainder analyzed;
+  "pre-existing" is a regression-comparison note, never a green gate).
 - `mypy src/ tests/`: **Success, 564 files** (including the MetaTrader5
   optional-dep override fix that un-breaks fresh-checkout typing).
 - `git diff --check`: clean.

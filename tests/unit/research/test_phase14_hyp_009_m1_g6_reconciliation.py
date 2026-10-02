@@ -11,6 +11,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, cast
 
+import pytest
+
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.research.hyp_009 import gates as GATES
@@ -125,6 +127,7 @@ def build_m1_reconciliation_evidence() -> GATES.ContractQualificationEvidence:
     )
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m1_dataset_reproducibility_001.json, absent from fresh clones
 def test_m1_g6_evidence_reconciled_pass() -> None:
     evidence = build_m1_reconciliation_evidence()
     assert evidence.dividend_validated_count == 20

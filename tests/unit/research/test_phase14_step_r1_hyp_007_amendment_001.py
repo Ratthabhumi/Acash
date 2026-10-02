@@ -34,6 +34,7 @@ def test_1_original_hyp_007_r1_artifacts_immutability() -> None:
     assert "round nearest cent" in cfg["friction_model"]["finra_taf"]
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/HYP_007_R1_FRICTION_CORRECTION_AMENDMENT_001.json, absent from fresh clones
 def test_2_amendment_document_and_manifest_integrity() -> None:
     """Invariant 2: Additive Amendment 001 document and manifest are formed, sealed, and mirror-identical."""
     doc_path = Path("docs/phase14/HYP_007_R1_FRICTION_CORRECTION_AMENDMENT_001.md")

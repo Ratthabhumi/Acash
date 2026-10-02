@@ -79,6 +79,7 @@ def _create_synthetic_390_bars(
 
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_003_SPY_1Min_IS_canonical.parquet, absent from fresh clones
 def test_gate1_r2_dataset_hash_verification() -> None:
     """Gate 1: Preconditions verify R2 dataset and lineage hashes."""
     preconditions = validate_r3_preconditions()

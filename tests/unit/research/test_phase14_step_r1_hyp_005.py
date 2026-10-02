@@ -101,6 +101,7 @@ def test_3_k_equals_1_grid_cardinality() -> None:
     assert cfg["primary_specification"] == "MEC_0015_NOISE_AREA_INTRADAY_MOMENTUM_BASELINE"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/hypotheses/HYP_005.json, absent from fresh clones
 def test_4_sealed_mirrors_byte_identical() -> None:
     """Invariant 4: Canonical Git-tracked hypothesis mirrors and local runtime mirror are byte-identical."""
     p85 = Path("docs/phase8.5/hypotheses/HYP_005.json").read_bytes()
@@ -115,6 +116,7 @@ def test_4_sealed_mirrors_byte_identical() -> None:
     assert manifest["hypothesis_sha256"] == calculated_spec_sha
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/manifest_r1_HYP_005.json, absent from fresh clones
 def test_5_manifest_mirrors_byte_identical_and_valid() -> None:
     """Invariant 5: Canonical Git-tracked manifest and local runtime manifest mirror are byte-identical."""
     m14 = Path("docs/phase14/manifests/manifest_r1_HYP_005.json").read_bytes()

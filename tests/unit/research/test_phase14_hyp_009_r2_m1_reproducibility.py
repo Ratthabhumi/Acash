@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "hyp_009"
 REPRO_RESULT = (
@@ -46,6 +48,7 @@ def test_repro_exact_metric_targets() -> None:
     assert bench["max_drawdown"] == "0.3214097537014617766443093897"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/signal_ledger_reproducibility_001.json, absent from fresh clones
 def test_repro_signal_trade_structure() -> None:
     sig = _load(DATA_DIR / "signal_ledger_reproducibility_001.json")
     assert len(sig["rows"]) == 51
@@ -85,6 +88,7 @@ def test_repro_gates_derived_and_verdict() -> None:
     assert r["actual_http_transport_attempts"] == 2
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m1_dataset_reproducibility_001.json, absent from fresh clones
 def test_repro_dataset_seal_and_provenance() -> None:
     ds = _load(REPRO_DATASET)
     assert ds["dataset_state"] == (
