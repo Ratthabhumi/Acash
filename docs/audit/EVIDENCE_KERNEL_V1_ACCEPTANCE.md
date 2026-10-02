@@ -36,5 +36,19 @@ no extraction is performed by this checklist).
 ## 3. Merge-Readiness Verdict (To Be Filled by Validation)
 
 ```text
-EVIDENCE_KERNEL_V1 = MERGE_READY / BLOCKED   <- §8 validation decides
+EVIDENCE_KERNEL_V1 = MERGE_READY
 ```
+
+Validation record (repair branch, commits through `cc57c36`):
+- HYP_011 family + PPDS in a FRESH worktree (`uv sync --locked`, no hidden
+  files): **153 passed**.
+- NON_MT5_DIAGNOSTIC_SUITE in the fresh worktree: 71 failed / 3070 passed /
+  18 skipped / 4 deselected — every failure in a pre-existing pinned-hash /
+  sealed-data family with zero failures in any touched file; the 4
+  deselected prove marker partitioning works (3 `sealed_data` + 1
+  `non_hermetic`).
+- `mypy src/ tests/`: **Success, 564 files** (including the MetaTrader5
+  optional-dep override fix that un-breaks fresh-checkout typing).
+- `git diff --check`: clean.
+- No homelab access, no Alpaca calls, no broker, no capital, no production
+  artifact mutation in this validation.
