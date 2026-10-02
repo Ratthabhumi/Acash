@@ -74,7 +74,7 @@ show_error_codes = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["cryptography.*", "pyarrow.*", "pandas.*", "duckdb.*", "nautilus_trader.*"]
+module = ["cryptography.*", "pyarrow.*", "pandas.*", "duckdb.*", "nautilus_trader.*", "MetaTrader5"]
 ignore_missing_imports = true
 
 
