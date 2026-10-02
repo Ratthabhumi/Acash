@@ -53,6 +53,10 @@ pythonpath = ["src"]
 addopts = "-v --strict-markers"
 markers = [
     "nautilus: Real unmocked NautilusTrader execution and integration tests",
+    "non_hermetic: Non-hermetic test requiring live repository or external environment state",
+    "native_mt5: Native MetaTrader5 test requiring the optional MetaTrader5 package",
+    "sealed_data: Test requiring external sealed datasets absent from fresh clones",
+    "dashboard: Dashboard contract tests",
 ]
 
 [tool.mypy]

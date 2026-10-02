@@ -139,7 +139,7 @@ NO_REAL_ORDERS                     = true
   1. [`CURRENT_STATE.md`](docs/audit/CURRENT_STATE.md): Formal integration and boundary snapshot.
   2. [`AUTHORITY_MAP.md`](docs/audit/AUTHORITY_MAP.md): Single canonical points of authority mapping.
   3. [`BRANCH_INTEGRATION_MATRIX.md`](docs/audit/BRANCH_INTEGRATION_MATRIX.md): Survey of all 21 pre-push and 22 post-push remote branches.
-  4. [`DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md): Complete F01–F14 canonical audit register with sub-findings.
+  4. [`DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md): Complete F01–F19 canonical audit register with sub-findings.
   5. [`LINE_ENDING_HASH_CONVENTION_REGISTER.md`](docs/audit/LINE_ENDING_HASH_CONVENTION_REGISTER.md): Two-Era hash and newline standards.
   6. [`CI_TEST_MATRIX.md`](docs/audit/CI_TEST_MATRIX.md): 5-tier test architecture.
   7. [`F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md`](docs/audit/F01_F02_F09_RUNTIME_REPAIR_PROPOSAL.md): Surgical repair proposal (superseded by implementation on the repair branch).
@@ -163,8 +163,14 @@ The canonical finding identities established during repository audit remain stab
 | **F01** | Economic-state reconciliation gap (`verify_chain` deserializes state but does not reconcile balances against terminal observation) | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; backward-compatible with Obs #1) | Repaired; Obs #2 gate satisfied on this axis |
 | **F02** | Orphan observation bypass when `state.json` absent (`build_initial_state` returned before orphan check) | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; pristine-empty still valid) | Repaired; Obs #2 gate satisfied on this axis |
 | **F09** | Stage C-B loader does not validate `locks` subdocument | `REPAIRED_IMPLEMENTED / ACCEPTANCE-PROVEN` (repair branch; production manifest loads, bytes preserved) | Repaired; Obs #2 gate satisfied on this axis |
-| **F10** | Corporate Actions (CA) operational determination intake pipeline absent for Session $\ge 2$ | `TOOLING_IMPLEMENTED / OBS2 STILL BLOCKED` (offline intake + tests; AGG 2026-10-01 amount still required from official declaration) | **CRITICAL HARD BLOCK FOR OBSERVATION #2 until exact official AGG amount is bound** |
-| **F14** | Post-observation missed-session / continuation semantics gap | `PROPOSED_PENDING_HUMAN_RATIFICATION` (implemented on repair branch; `SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`) | **CRITICAL HARD BLOCK FOR OBSERVATION #2 until ratified** |
+| **F10** | Corporate Actions (CA) operational determination intake pipeline absent for Session $\ge 2$ | `TOOLING_IMPLEMENTED / RUNNER_ENFORCED` (offline intake + pre-network gate + provenance; AGG 2026-10-01 exact official amount $0.334142 now established — see `docs/audit/CA_2026_10_01_OFFICIAL_SCOPE_NOTE.md`) | F10 axis factually closable; Obs #2 still gated on F14/F15 ratification + dispatch authorization |
+| **F14** | Post-observation missed-session / continuation semantics gap | `PROPOSED_PENDING_HUMAN_RATIFICATION` (implemented on repair branch; `SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`; to be ratified jointly with F15 two-stage authority) | **CRITICAL HARD BLOCK FOR OBSERVATION #2 until ratified** |
+| **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `REPAIRED_IMPLEMENTED` (two-stage ObservationIntent + DispatchAuthority + O_EXCL ledger; bare tokens ordinal-1 only) | Repaired; ratify jointly with F14 |
+| **F16** | CA intake enforcement + provenance gap | `REPAIRED_IMPLEMENTED` (pre-network intake gate; enriched provenance; CA-before-fetch) | Repaired; Obs #2 gate satisfied on this axis |
+| **F17** | Intent preregistration attestation gap | `REPAIRED_ON_BRANCH` (O_EXCL intent registry; backdated/unregistered intents blocked) | Repaired on branch |
+| **F18** | Premature attempt-consumption ordering | `REPAIRED_ON_BRANCH` (consume after all local validation; `--local-preflight` burns nothing) | Repaired on branch |
+| **F19** | CA raw-evidence byte verification + source-identity gap | `REPAIRED_ON_BRANCH` (semantic identity derived from evidence bytes; IWB-behind-ACWI blocked; retrieval representation labeled) | Repaired on branch |
+| **V1/V2** | Prospective segment policy (missed session terminates segment) | `V1 = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING` (amendment recorded); `V2 = PROPOSED_PENDING_HUMAN_RATIFICATION` (fresh activation, intent-first, no carry-over) | See `docs/phase14/HYP_011_PROSPECTIVE_SEGMENT_POLICY_V1_V2.md`; V2 NOT activated |
 
 ### Mechanism of Finding F14 (Continuation / Silent Backfill Gap)
 - **Defect Discovery**: In `scripts/process_hyp_011_prospective_shadow.py`, `_expected_next()` selects the next trading day strictly after `state_sessions[-1]`. The runner verifies that the session has closed (`now_utc > close_utc + 15m`), but contains **no upper-bound freshness rule** preventing an older unobserved session from being processed days later.

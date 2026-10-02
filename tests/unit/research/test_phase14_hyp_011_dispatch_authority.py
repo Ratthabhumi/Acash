@@ -272,23 +272,29 @@ def _write_ca_bundle(tmp_path: Path, name: str = "ca_bundle_2026-10-01") -> Dict
         "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
     }
     identities = {
-        "ACWI": {"product_id": "239600", "ticker": "ACWI",
+        "ACWI": {"product_id": "239600", "ticker": "ACWI", "cusip": "464288257",
                  "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
         "AGG": {"product_id": "239458", "ticker": "AGG",
                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
         "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
-                "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+                "cusip": "78462F103", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
     }
     sponsors = {"ACWI": "BLACKROCK_ISHARES_OFFICIAL",
                 "AGG": "BLACKROCK_ISHARES_OFFICIAL",
                 "SPY": "STATE_STREET_SPDR_OFFICIAL"}
+    # F19: fixture evidence bytes carry the semantic identity markers.
+    marker_bytes = {
+        "ACWI": b"OFFICIAL-FIXTURE-EVIDENCE::ACWI::239600::464288257::2026-10-01\n",
+        "AGG": b"OFFICIAL-FIXTURE-EVIDENCE::AGG::239458::2026-10-01\n",
+        "SPY": b"OFFICIAL-FIXTURE-EVIDENCE::SPY::78462F103::State Street::2026-10-01\n",
+    }
     root = tmp_path / name
     digests: Dict[str, Dict[str, str]] = {}
     for symbol in sponsors:
         sdir = root / symbol
         edir = sdir / "evidence"
         edir.mkdir(parents=True)
-        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-10-01\n".encode()
+        ev_bytes = marker_bytes[symbol]
         sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-10-01\n".encode()
         ev_name = f"{symbol.lower()}-scope-fixture.pdf"
         sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
@@ -302,6 +308,7 @@ def _write_ca_bundle(tmp_path: Path, name: str = "ca_bundle_2026-10-01") -> Dict
             "product_identity": identities[symbol], "evidence_file": ev_name,
             "evidence_sha256": ev_sha,
             "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "retrieval_representation": "NORMALIZED_RETRIEVAL_REPRESENTATION",
             "scope_type": "NO_EVENT_SCOPE",
             "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
             "note": "Fixture bundle.",

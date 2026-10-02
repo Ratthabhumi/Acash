@@ -32,8 +32,8 @@
 | **F12** | API / network exposure assumptions require deployment isolation | Homelab Network Architecture & Broker API | LOW (homelab is local, orders locked) | Ongoing Operational Invariant | REGISTERED |
 | **F13** | Public repository vs confidential / proprietary wording inconsistency | Repository Metadata & Documentation Tone | NONE (governance alignment) | Post-Attempt #2 Documentation Pass | REGISTERED |
 | **F14** | Post-observation missed-session / silent-backfill continuation gap | `src/acash/research/hyp_011/shadow.py` (`assert_target_session_fresh`) + `scripts/process_hyp_011_prospective_shadow.py` (`_expected_next` call site) | CRITICAL (stale target would silently backfill) | Before Obs #2 Authorization | FORMALLY_REGISTERED; CONTRACT_IMPLEMENTED_AS_PROPOSED_PENDING_HUMAN_RATIFICATION |
-| **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `scripts/process_hyp_011_prospective_shadow.py` (authorization gate) | HIGH (same token re-runnable after pre-commit failure) | Before Obs #2 Authorization | NEW_REGISTERED |
-| **F16** | CA intake enforcement + provenance gap (runner bypasses intake; provenance stripped; CA validated post-fetch) | `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py` | HIGH (unscoped no-event accepted; evidence dropped; network before CA fail) | Before Obs #2 Authorization | NEW_REGISTERED |
+| **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `scripts/process_hyp_011_prospective_shadow.py` (authorization gate) | HIGH (same token re-runnable after pre-commit failure) | Before Obs #2 Authorization | REPAIRED_IMPLEMENTED (this pack: intent + authority + O_EXCL ledger; bare tokens ordinal-1 only) |
+| **F16** | CA intake enforcement + provenance gap (runner bypasses intake; provenance stripped; CA validated post-fetch) | `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py` | HIGH (unscoped no-event accepted; evidence dropped; network before CA fail) | Before Obs #2 Authorization | REPAIRED_IMPLEMENTED (this pack: pre-network intake gate + enriched provenance + CA-before-fetch) |
 | **F17** | ObservationIntent preregistration attestation gap (self-declared timestamp; backdatable) | `src/acash/research/hyp_011/shadow_authority.py` (intent registry) | HIGH (post-hoc session selection not disproven) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
 | **F18** | Premature dispatch-attempt consumption ordering (ledger burned before local preflight) | `scripts/process_hyp_011_prospective_shadow.py` (live path) | MEDIUM (invalid inputs burn single-use attempts) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
 | **F19** | CA raw-evidence byte verification + source-identity gap (syntax-only SHA; 239707 mislabeled as ACWI) | `src/acash/research/hyp_011/shadow_ca_bundle.py` + `docs/audit/CA_2026_10_01_OFFICIAL_SCOPE_NOTE.md` §§5–6 | HIGH (invented digests pass; wrong-product evidence usable) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
@@ -182,6 +182,7 @@
   network call. Implemented in `src/acash/research/hyp_011/shadow_authority.py`;
   `DispatchAuthority` manifest required on the live path for ordinal >= 2.
 - **Acceptance Tests**: `test_f15_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (replay BLOCK / crash-reuse BLOCK / expiry BLOCK / runtime-SHA mismatch BLOCK / CA-SHA mismatch BLOCK / missing authority BLOCK).
+- **Implementation (this pack)**: `src/acash/research/hyp_011/shadow_authority.py` (`ObservationIntent`, `validate_observation_intent`, `DispatchAuthority`, `validate_dispatch_authority`, `attempt_ledger_key`, `consume_dispatch_attempt` O_EXCL); runner live path requires `--dispatch-authority` for ordinal >= 2, checks the ledger read-only gate early, consumes atomically, and validates the full binding pre-network.
 
 ---
 
@@ -204,6 +205,7 @@
   `evidence_ref`, and `scope_evidence` (no-event) / event fields; CA block
   moved before market-data fetch so a bad package proves zero network calls.
 - **Acceptance Tests**: `test_f16_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (no-scope BLOCK zero-network / bad-SHA BLOCK zero-network / authority-CA-SHA mismatch BLOCK zero-network / provenance survival).
+- **Implementation (this pack)**: `validate_intake_document()` / `validate_scope_mapping()` in `shadow_ca_intake.py`; runner CA block moved before market-data fetch with single-source CA bytes; `corporate_actions` sections enriched with `evidence_ref` + `scope_evidence`.
 
 ---
 
@@ -272,3 +274,12 @@
   missing evidence / wrong file / 239707-as-ACWI identity / schedule
   digest mismatch BLOCK; valid bundle + binding PASS; runner bad-bundle
   ⇒ ledger unchanged).
+- **Semantic-identity hardening (this pack)**: `derive_evidence_identity_markers()`
+  parses the preserved evidence body itself (ACWI: ticker + 239600 + CUSIP
+  464288257; AGG: ticker + 239458; SPY: ticker + CUSIP 78462F103 + State
+  Street) — IWB/239707 bytes behind an ACWI/239600 manifest now BLOCK with
+  `EVIDENCE_IDENTITY_UNPROVEN` even when all digests match. Manifests must
+  declare `retrieval_representation` (`NORMALIZED_RETRIEVAL_REPRESENTATION`
+  vs `RAW_HTTP_BODY`); the current AGG .md / SPY .txt / ACWI .html evidence
+  is honestly labeled NORMALIZED, never falsely described as byte-identical
+  HTTP bodies. Proven against the real preserved files in-repo.

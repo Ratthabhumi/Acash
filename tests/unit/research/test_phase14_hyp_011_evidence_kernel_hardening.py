@@ -55,9 +55,16 @@ OFFICIAL_URLS = {
     "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
 }
 PRODUCT_IDENTITY = {
-    "ACWI": {"product_id": "239600", "ticker": "ACWI", "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+    "ACWI": {"product_id": "239600", "ticker": "ACWI", "cusip": "464288257", "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
     "AGG": {"product_id": "239458", "ticker": "AGG", "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
-    "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY", "cusip": "78462F103", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+}
+# Fixture evidence bytes MUST carry the semantic identity markers the F19
+# gate derives (ticker/product/CUSIP/sponsor); marker-less bytes fail closed.
+EVIDENCE_MARKER_BYTES = {
+    "ACWI": b"OFFICIAL-FIXTURE-EVIDENCE::ACWI::239600::464288257::2026-10-01\n",
+    "AGG": b"OFFICIAL-FIXTURE-EVIDENCE::AGG::239458::2026-10-01\n",
+    "SPY": b"OFFICIAL-FIXTURE-EVIDENCE::SPY::78462F103::State Street::2026-10-01\n",
 }
 
 
@@ -215,7 +222,10 @@ def _write_bundle(tmp_path: Path, name: str = "ca_bundle_2026-10-01") -> Dict[st
         sdir = root / symbol
         edir = sdir / "evidence"
         edir.mkdir(parents=True)
-        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-10-01\n".encode()
+        ev_bytes = (
+            EVIDENCE_MARKER_BYTES[symbol]
+            + f"::SCOPE::{symbol}::2026-10-01\n".encode()
+        )
         sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-10-01\n".encode()
         ev_name = f"{symbol.lower()}-scope-fixture.pdf"
         sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
@@ -228,6 +238,7 @@ def _write_bundle(tmp_path: Path, name: str = "ca_bundle_2026-10-01") -> Dict[st
             "authority_source": SPONSORS[symbol], "official_url": OFFICIAL_URLS[symbol],
             "product_identity": PRODUCT_IDENTITY[symbol], "evidence_file": ev_name,
             "evidence_sha256": ev_sha, "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "retrieval_representation": "NORMALIZED_RETRIEVAL_REPRESENTATION",
             "scope_type": "NO_EVENT_SCOPE",
             "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
             "note": "Fixture bundle for hardening tests.",
@@ -456,6 +467,108 @@ def test_f19_wrong_product_identity_blocked(tmp_path: Path) -> None:
     manifest_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
     with pytest.raises(DataContractError, match="PRODUCT_IDENTITY_MISMATCH"):
         verify_evidence_bundle(bundle["root"] / "ACWI", "ACWI", TARGET, LIVE_NOW)
+
+
+def _rewrite_bundle_evidence(bundle_root: Path, symbol: str, raw: bytes) -> None:
+    """Replace bundle evidence bytes + reseal the manifest digest (keeps claims)."""
+    from acash.research.hyp_011 import shadow_ca_bundle as BUNDLE
+
+    ev_dir = bundle_root / symbol / "evidence"
+    manifest_path = bundle_root / symbol / "manifest.json"
+    ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+    (ev_dir / ev_name).write_bytes(raw)
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    doc["evidence_sha256"] = hashlib.sha256(raw).hexdigest()
+    manifest_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    assert BUNDLE.PRODUCT_IDENTITY_BY_SYMBOL  # module import sanity
+
+
+def test_f19_iwb_bytes_behind_acwi_manifest_blocked(tmp_path: Path) -> None:
+    """Valid IWB/239707 page bytes + correct ACWI/239600 manifest claim => BLOCK.
+
+    Digests match and the manifest claim matches frozen identity, yet the
+    preserved BYTES prove a different product. Semantic derivation from the
+    evidence body itself is what catches this.
+    """
+    bundle = _write_bundle(tmp_path)
+    iwb_page = (
+        b"<html><head><title>iShares Russell 1000 ETF | IWB</title></head>"
+        b"<body><h1>IWB</h1><p>Product 239707. CUSIP 4642875N6.</p></body></html>\n"
+    )
+    assert b"ACWI" not in iwb_page and b"239600" not in iwb_page
+    _rewrite_bundle_evidence(bundle["root"], "ACWI", iwb_page)
+    with pytest.raises(
+        DataContractError, match="EVIDENCE_IDENTITY_UNPROVEN"
+    ):
+        verify_evidence_bundle(bundle["root"] / "ACWI", "ACWI", TARGET, LIVE_NOW)
+
+
+def test_f19_missing_representation_blocked(tmp_path: Path) -> None:
+    """A manifest without retrieval_representation fails closed."""
+    bundle = _write_bundle(tmp_path)
+    manifest_path = bundle["root"] / "AGG" / "manifest.json"
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del doc["retrieval_representation"]
+    manifest_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    with pytest.raises(DataContractError, match="REPRESENTATION_UNKNOWN"):
+        verify_evidence_bundle(bundle["root"] / "AGG", "AGG", TARGET, LIVE_NOW)
+
+
+def test_f19_unknown_representation_blocked(tmp_path: Path) -> None:
+    """An unrecognized representation label fails closed (no silent tier)."""
+    bundle = _write_bundle(tmp_path)
+    manifest_path = bundle["root"] / "SPY" / "manifest.json"
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    doc["retrieval_representation"] = "TRUST_ME_RAW"
+    manifest_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    with pytest.raises(DataContractError, match="REPRESENTATION_UNKNOWN"):
+        verify_evidence_bundle(bundle["root"] / "SPY", "SPY", TARGET, LIVE_NOW)
+
+
+def test_f19_genuine_markers_derive_and_pass() -> None:
+    """Marker-bearing evidence derives canonical identity per symbol."""
+    from acash.research.hyp_011.shadow_ca_bundle import (
+        PRODUCT_IDENTITY_BY_SYMBOL,
+        derive_evidence_identity_markers,
+    )
+
+    cases = {
+        "ACWI": (b"ACWI product 239600 CUSIP 464288257 BlackRock iShares\n",
+                 {"ticker": "ACWI", "product_id": "239600", "cusip": "464288257"}),
+        "AGG": (b"AGG product 239458 iShares monthly distributions\n",
+                {"ticker": "AGG", "product_id": "239458"}),
+        "SPY": (b"SPY CUSIP 78462F103 State Street SPDR distributions\n",
+                {"ticker": "SPY", "cusip": "78462F103",
+                 "sponsor": "STATE_STREET_SPDR_OFFICIAL"}),
+    }
+    for symbol, (raw, expected_fields) in cases.items():
+        derived = derive_evidence_identity_markers(raw, symbol)
+        frozen = PRODUCT_IDENTITY_BY_SYMBOL[symbol]
+        for field, value in expected_fields.items():
+            assert derived[field] == value
+            assert frozen[field] == value
+
+
+def test_f19_real_preserved_evidence_passes_identity_gate() -> None:
+    """The actual preserved 2026-10-01 evidence files prove their identities."""
+    from acash.research.hyp_011.shadow_ca_bundle import derive_evidence_identity_markers
+
+    repo_root = Path(__file__).resolve().parents[3]
+    evidence_dir = repo_root / "docs" / "audit" / "ca_evidence_2026_10_01"
+    real_files = {
+        "ACWI": "acwi_239600_product_page.html",
+        "AGG": "agg_239458_product_page.md",
+        "SPY": "spy_ssga_product_page.txt",
+    }
+    for symbol, filename in real_files.items():
+        raw = (evidence_dir / filename).read_bytes()
+        assert len(raw) > 0
+        derived = derive_evidence_identity_markers(raw, symbol)
+        assert derived["ticker"] == symbol
+    # Cross-check: ACWI bytes must NOT prove AGG/SPY identity and vice versa.
+    acwi_raw = (evidence_dir / real_files["ACWI"]).read_bytes()
+    with pytest.raises(DataContractError, match="EVIDENCE_IDENTITY_UNPROVEN"):
+        derive_evidence_identity_markers(acwi_raw, "AGG")
 
 
 def test_f19_schedule_digest_mismatch_blocked(tmp_path: Path) -> None:

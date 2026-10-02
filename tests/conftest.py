@@ -14,11 +14,9 @@ from acash.core.domain.position import Position
 from acash.core.domain.signal import RiskAssessment, Signal, TargetAllocation
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line(
-        "markers",
-        "non_hermetic: Non-hermetic test requiring live repository or external environment state",
-    )
+# NOTE: pytest markers (non_hermetic, native_mt5, sealed_data, dashboard)
+# are registered EXACTLY ONCE in pyproject.toml [tool.pytest.ini_options].
+# Do not re-register markers here; pyproject is the single authority.
 
 
 @pytest.fixture

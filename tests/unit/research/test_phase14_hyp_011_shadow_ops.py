@@ -439,12 +439,19 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
         "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
     }
     identities = {
-        "ACWI": {"product_id": "239600", "ticker": "ACWI",
+        "ACWI": {"product_id": "239600", "ticker": "ACWI", "cusip": "464288257",
                  "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
         "AGG": {"product_id": "239458", "ticker": "AGG",
                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
         "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
-                "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+                "cusip": "78462F103", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    # F19: fixture evidence bytes MUST carry the semantic identity markers
+    # the bundle gate derives (ticker/product/CUSIP/sponsor).
+    marker_bytes = {
+        "ACWI": b"OFFICIAL-FIXTURE-EVIDENCE::ACWI::239600::464288257::2026-09-30\n",
+        "AGG": b"OFFICIAL-FIXTURE-EVIDENCE::AGG::239458::2026-09-30\n",
+        "SPY": b"OFFICIAL-FIXTURE-EVIDENCE::SPY::78462F103::State Street::2026-09-30\n",
     }
     bundle_root = tmp_path / "ca_bundle_2026-09-30"
     bundle_digests = {}
@@ -452,7 +459,7 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
         sdir = bundle_root / symbol
         edir = sdir / "evidence"
         edir.mkdir(parents=True)
-        ev_bytes = f"OFFICIAL-FIXTURE-EVIDENCE::{symbol}::2026-09-30\n".encode()
+        ev_bytes = marker_bytes[symbol]
         sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-09-30\n".encode()
         ev_name = f"{symbol.lower()}-scope-fixture.pdf"
         sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
@@ -466,6 +473,7 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
             "product_identity": identities[symbol], "evidence_file": ev_name,
             "evidence_sha256": ev_sha,
             "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
+            "retrieval_representation": "NORMALIZED_RETRIEVAL_REPRESENTATION",
             "scope_type": "NO_EVENT_SCOPE",
             "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
             "note": "Fixture bundle.",

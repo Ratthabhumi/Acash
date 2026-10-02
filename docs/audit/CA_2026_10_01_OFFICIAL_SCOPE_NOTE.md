@@ -12,13 +12,38 @@ Third-party dividend calendars were NOT used as authority.
 
 ## 1. Retrieved Official Sources (Preserved Evidence References)
 
-| # | Symbol / Scope | Official URL | Retrieved (UTC) | Raw bytes | Raw SHA-256 |
-|---|---|---|---|---|---|
-| 1 | AGG product + distributions table | `https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf` | 2026-10-01T08:02:53Z | 1,902,351 | `3b54109fa410becf0417291e58d44ef6e4910a5a6f0049176313aa1a0bf2da5c` |
-| 2 | ACWI product + distributions table | `https://www.ishares.com/us/products/239707/ishares-msci-acwi-etf` | 2026-10-01T08:02:53Z | 1,728,971 | `a49a3a593960f2ab8217e30347268acc76ee7ffb70b18515f0bac64ad0e83039` |
-| 3 | SPY product page (frequency only) | `https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy` | 2026-10-01T08:02:53Z | 235,867 | `19bdb2d1b23d76a555e1bb80627014892d6a3abde374f534596d0ed79152c7b3` |
-| 4 | SSGA historical-distributions library (JS index, no static rows) | `https://www.ssga.com/us/en/institutional/resources/documents/etf-dividend-distributions` | 2026-10-01T08:04:59Z | 79,998 | `89cdb28f0fe2ac6748ecc3448883c55f4d7af9bedd8e018925ead4da3ffd3b19` |
-| 5 | iShares/BlackRock ETF distribution schedule (PDF) | `https://www.ishares.com/us/literature/shareholder-letters/isharesandblackrocketfsdistributionschedule.pdf` | 2026-10-01T08:06:21Z | 219,995 | `3aae43b85793cbf68e3d9c16a3106a647b62f24222d62ba13a7f05acdba55834` |
+| # | Symbol / Scope | Official URL | Retrieved (UTC) | Raw bytes | Raw SHA-256 | Retrieval representation |
+|---|---|---|---|---|---|---|
+| 1 | AGG product + distributions table | `https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf` | 2026-10-01T08:02:53Z | 1,902,351 | `3b54109fa410becf0417291e58d44ef6e4910a5a6f0049176313aa1a0bf2da5c` | NORMALIZED (rendered Markdown) |
+| 2 | ACWI product + distributions table | `https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf` | 2026-10-01T08:02:53Z | 1,728,971 | `a49a3a593960f2ab8217e30347268acc76ee7ffb70b18515f0bac64ad0e83039` | NORMALIZED (page HTML as preserved) |
+| 3 | SPY product page (frequency only) | `https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy` | 2026-10-01T08:02:53Z | 235,867 | `19bdb2d1b23d76a555e1bb80627014892d6a3abde374f534596d0ed79152c7b3` | NORMALIZED (normalized text extract) |
+| 4 | SSGA historical-distributions library (JS index, no static rows) | `https://www.ssga.com/us/en/institutional/resources/documents/etf-dividend-distributions` | 2026-10-01T08:04:59Z | 79,998 | `89cdb28f0fe2ac6748ecc3448883c55f4d7af9bedd8e018925ead4da3ffd3b19` | NORMALIZED (page HTML as preserved) |
+| 5 | iShares/BlackRock ETF distribution schedule (PDF) | `https://www.ishares.com/us/literature/shareholder-letters/isharesandblackrocketfsdistributionschedule.pdf` | 2026-10-01T08:06:21Z | 219,995 | `3aae43b85793cbf68e3d9c16a3106a647b62f24222d62ba13a7f05acdba55834` | RAW_HTTP_BODY (verbatim PDF bytes) |
+
+> **Correction (F19-B)**: row 2's URL was previously recorded with product
+> `239707` (IWB) — that was a documentation error. The preserved bytes are
+> genuinely ACWI (`ACWI`×111, `239600`×64, `464288257`×25, zero IWB markers;
+> proven by `test_f19_real_preserved_evidence_passes_identity_gate`). The
+> correct official ACWI product URL uses `239600` as recorded above.
+>
+> **Representation honesty**: rows 1–4 are `NORMALIZED_RETRIEVAL_REPRESENTATION`
+> — digests cover the preserved bytes, which are NOT claimed to be
+> byte-identical HTTP response bodies. Only row 5 (verbatim PDF bytes) is
+> labeled `RAW_HTTP_BODY`.
+>
+> **Bytes-vs-file distinction**: the byte counts/SHAs in the table above
+> record each retrieval event itself. The preserved files under
+> `docs/audit/ca_evidence_2026_10_01/` are normalized representations with
+> their own digests:
+> `acwi_239600_product_page.html` =
+> `b28ef636b346ca95b058dc00aae07ccc8f1e4d8f4bd371277bf159d40d45c9aa`,
+> `agg_239458_product_page.md` =
+> `a6b9c315f159fb6d994ba20dc8288fc89021a7ed4020e53ff4bcafd0240d512e`,
+> `spy_ssga_product_page.txt` =
+> `55e3de878c2075730a3da15bc81a6926fa84e4edb912a3cca23ee85782bac1c1`
+> (recompute with `sha256sum` to verify). Any future bundle manifest MUST
+> bind the preserved-file digest, never this table's retrieval-event
+> digest — conflating the two is exactly the F19 failure mode.
 
 Source identities: rows 1–2, 5 = `BLACKROCK_ISHARES_OFFICIAL`; rows 3–4 =
 `STATE_STREET_SPDR_OFFICIAL`.

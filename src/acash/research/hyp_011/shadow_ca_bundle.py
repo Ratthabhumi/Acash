@@ -21,7 +21,7 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping
 from urllib.parse import urlparse
 
 from acash.core.domain.exceptions import DataContractError
@@ -37,6 +37,7 @@ PRODUCT_IDENTITY_BY_SYMBOL: Dict[str, Dict[str, str]] = {
     "ACWI": {
         "product_id": "239600",
         "ticker": "ACWI",
+        "cusip": "464288257",
         "sponsor": "BLACKROCK_ISHARES_OFFICIAL",
     },
     "AGG": {
@@ -47,7 +48,43 @@ PRODUCT_IDENTITY_BY_SYMBOL: Dict[str, Dict[str, str]] = {
     "SPY": {
         "schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS",
         "ticker": "SPY",
+        "cusip": "78462F103",
         "sponsor": "STATE_STREET_SPDR_OFFICIAL",
+    },
+}
+
+# Retrieval representation types (descriptive honesty, not a security tier).
+# NORMALIZED_RETRIEVAL_REPRESENTATION: converted/normalized content (rendered
+# Markdown, normalized text, re-serialized HTML) whose digest covers the
+# PRESERVED bytes but which must NOT be described as byte-identical HTTP
+# response bodies. RAW_HTTP_BODY: verbatim HTTP response bytes captured with
+# response metadata. Both are digest-verified; the label prevents false
+# byte-identity claims.
+RETRIEVAL_REPRESENTATION_NORMALIZED: str = "NORMALIZED_RETRIEVAL_REPRESENTATION"
+RETRIEVAL_REPRESENTATION_RAW_HTTP: str = "RAW_HTTP_BODY"
+KNOWN_RETRIEVAL_REPRESENTATIONS = frozenset(
+    {RETRIEVAL_REPRESENTATION_NORMALIZED, RETRIEVAL_REPRESENTATION_RAW_HTTP}
+)
+
+# Semantic identity markers that MUST be derivable from genuine preserved
+# evidence bytes per symbol (F19). Ticker/product/CUSIP match case-sensitively
+# (they are proper identifiers); sponsor display names match case-insensitively.
+# Marker presence is necessary but not sufficient for full semantic parsing —
+# see derive_evidence_identity_markers.
+EVIDENCE_IDENTITY_MARKERS: Dict[str, Dict[str, List[str]]] = {
+    "ACWI": {
+        "ticker": ["ACWI"],
+        "product_id": ["239600"],
+        "cusip": ["464288257"],
+    },
+    "AGG": {
+        "ticker": ["AGG"],
+        "product_id": ["239458"],
+    },
+    "SPY": {
+        "ticker": ["SPY"],
+        "cusip": ["78462F103"],
+        "sponsor": ["state street"],
     },
 }
 
@@ -84,6 +121,52 @@ def _read_evidence_bytes(bundle_symbol_dir: Path, evidence_file: str) -> bytes:
     if not raw:
         raise DataContractError("CA_BUNDLE_EVIDENCE_EMPTY.")
     return raw
+
+
+def derive_evidence_identity_markers(raw: bytes, symbol: str) -> Dict[str, str]:
+    """Derive semantic identity markers from preserved evidence bytes (F19).
+
+    Parses the evidence representation itself for ticker / product / CUSIP /
+    sponsor markers instead of trusting manifest claims. Every required marker
+    for the symbol must be present or verification fails closed. Returns the
+    canonical proven values on success.
+
+    Boundary honesty: marker presence proves the bytes discuss the claimed
+    product; it is not a full semantic parse of arbitrary page structures.
+    """
+    rules = EVIDENCE_IDENTITY_MARKERS.get(symbol)
+    if not rules:
+        raise DataContractError(f"CA_BUNDLE_UNKNOWN_SYMBOL: {symbol}.")
+    if not raw:
+        raise DataContractError(
+            f"CA_BUNDLE_EVIDENCE_IDENTITY_UNPROVEN: {symbol} empty bytes."
+        )
+    try:
+        text = raw.decode("utf-8", errors="strict")
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise DataContractError(
+            f"CA_BUNDLE_EVIDENCE_IDENTITY_UNPROVEN: {symbol} non-UTF-8 bytes."
+        ) from exc
+    lowered = text.lower()
+    proven: Dict[str, str] = {}
+    frozen = PRODUCT_IDENTITY_BY_SYMBOL.get(symbol, {})
+    for field, markers in rules.items():
+        hit = False
+        for marker in markers:
+            if field == "sponsor":
+                if marker.lower() in lowered:
+                    hit = True
+                    break
+            elif marker in text:
+                hit = True
+                break
+        if not hit:
+            raise DataContractError(
+                f"CA_BUNDLE_EVIDENCE_IDENTITY_UNPROVEN: {symbol} {field} "
+                f"marker absent from preserved evidence bytes."
+            )
+        proven[field] = str(frozen.get(field, markers[0]))
+    return proven
 
 
 def verify_evidence_bundle(
@@ -136,6 +219,13 @@ def verify_evidence_bundle(
     scope_type = manifest.get("scope_type")
     if scope_type not in ("EVENT_EVIDENCE", "NO_EVENT_SCOPE"):
         raise DataContractError(f"CA_BUNDLE_SCOPE_TYPE_INVALID: {symbol}.")
+    representation = manifest.get("retrieval_representation")
+    if representation not in KNOWN_RETRIEVAL_REPRESENTATIONS:
+        raise DataContractError(
+            f"CA_BUNDLE_REPRESENTATION_UNKNOWN: {symbol} retrieval "
+            f"representation must be one of "
+            f"{sorted(KNOWN_RETRIEVAL_REPRESENTATIONS)}."
+        )
     raw = _read_evidence_bytes(bundle_symbol_dir, manifest.get("evidence_file", ""))
     recomputed = hashlib.sha256(raw).hexdigest()
     declared_sha = manifest.get("evidence_sha256")
@@ -147,6 +237,12 @@ def verify_evidence_bundle(
             f"CA_BUNDLE_DIGEST_MISMATCH: {symbol} preserved bytes do not match "
             "the manifest digest (invented digests rejected)."
         )
+    # F19: semantic identity MUST be derived from the preserved bytes, never
+    # trusted from manifest claims alone. IWB/239707 bytes behind an
+    # ACWI/239600 manifest fail here even when every digest matches, because
+    # the ACWI markers are absent from IWB content. The manifest claim itself
+    # is separately pinned to the frozen identity above.
+    derived_identity = derive_evidence_identity_markers(raw, symbol)
     schedule = manifest.get("schedule_evidence")
     if scope_type == "NO_EVENT_SCOPE":
         if not isinstance(schedule, dict):
@@ -168,6 +264,7 @@ def verify_evidence_bundle(
     _check_causality(str(manifest.get("retrieved_at_utc") or ""), processing_utc)
     verified = dict(manifest)
     verified["evidence_sha256"] = recomputed
+    verified["derived_evidence_identity"] = derived_identity
     return verified
 
 
