@@ -22,6 +22,7 @@ import hashlib
 import os
 from pathlib import Path
 import shutil
+import sys
 from typing import Generator, Tuple
 from uuid import UUID, uuid4
 
@@ -198,6 +199,8 @@ def test_e2e_cannot_transition_production_gate_b_state() -> None:
 
 def test_e2e_storage_root_is_proven_physical_ntfs(e2e_isolated_env: E2EIsolatedContext) -> None:
     """Asserts that E2E isolated test root is hosted on physical NTFS volume via runtime Win32 inspection."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: physical NTFS volume provenance")
     root = e2e_isolated_env.root
     vol_info = StoragePlatformUtils.get_volume_info(root)
     assert vol_info["file_system_name"] == "NTFS", (
@@ -213,6 +216,8 @@ def test_e2e_storage_root_is_proven_physical_ntfs(e2e_isolated_env: E2EIsolatedC
 
 def test_e2e_full_lifecycle_and_zero_ram_restart(e2e_isolated_env: E2EIsolatedContext) -> None:
     """Executes the full dual-layer authorization and readiness lifecycle across all stages."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: lifecycle asserts physical NTFS provenance throughout")
     root = e2e_isolated_env.root
     trust_store = e2e_isolated_env.trust_store
     eng_signer = e2e_isolated_env.eng_signer

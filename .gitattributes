@@ -64,3 +64,22 @@ docs/research/manifests/MEC-0015-sec31-fee-schedule.json text eol=lf
 docs/research/manifests/MEC-0016-alpaca-quote-conditions-tape-b.json text eol=lf
 docs/research/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json text eol=lf
 docs/research/manifests/MEC-0017-alpaca-direct-sip-transition-manifest.json text eol=lf
+
+# CRLF-pinned artifacts: pins match CRLF worktree bytes (Windows-checkout seals).
+# Forced CRLF on every platform so byte audits are hermetic; LF-form digests
+# of these files appear nowhere tracked (verified 2026-10-02).
+docs/phase14/HYP_007_R3_IMPLEMENTATION_CORRECTION_001.md text eol=crlf
+docs/phase14/hypotheses/HYP_006.json text eol=crlf
+docs/phase14/hypotheses/HYP_007.json text eol=crlf
+docs/phase14/hypotheses/HYP_009.json text eol=crlf
+docs/phase14/manifests/manifest_r2_HYP_003.json text eol=crlf
+docs/phase14/manifests/manifest_r3_HYP_003.json text eol=crlf
+docs/phase14/manifests/manifest_r3_HYP_007_CORRECTED_001.json text eol=crlf
+docs/phase14/manifests/terminal_decision_HYP_007_CORRECTED_001.json text eol=crlf
+docs/phase8.5/hypotheses/HYP_006.json text eol=crlf
+docs/phase8.5/hypotheses/HYP_007.json text eol=crlf
+docs/research/manifests/MEC-0015-SPY-dividend-authority-manifest.json text eol=crlf
+docs/research/manifests/MEC-0015-bar-provider-contract-manifest.json text eol=crlf
+docs/research/manifests/MEC-0015-dividend-provider-contract-manifest.json text eol=crlf
+docs/research/manifests/MEC-0015-quote-provider-contract-manifest.json text eol=crlf
+docs/research/manifests/MEC-0016-alpaca-early-quote-contract-manifest.json text eol=crlf

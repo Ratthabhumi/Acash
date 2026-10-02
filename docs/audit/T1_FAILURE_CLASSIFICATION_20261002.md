@@ -118,6 +118,25 @@ both repaired on the branch (no tiering — real defects):
    time (lazy on 3.14 only). Repaired by dropping the redundant local
    import (module already imports httpx).
 
+## Addendum 2026-10-02 — remote-CI round 2 (run 37026947850)
+
+MyPy strict went SUCCESS. T1 failed with 12, all analyzed:
+
+1. **3 gate_b NTFS-semantics tests** (`e2e_storage_root_is_proven_physical_ntfs`,
+   `e2e_full_lifecycle_and_zero_ram_restart`,
+   `directory_flush_on_read_only_directory_fails_closed`): assert physical
+   NTFS behavior (volume provenance, win_error=5 on read-only flush)
+   impossible on posix. Runtime `pytest.skip` on non-Windows added
+   (Windows behavior unchanged); no static or logic change.
+2. **9 byte-audit tests pinning CRLF worktree bytes** (HYP_009 record
+   `fb85…`, SSGA manifest `0f99…`, HYP_006/007 `30d6…`/`912a…`,
+   bar-provider `4b2c…`, R2-HYP-007 raw-SHA `c77b…`, etc.): committed blobs
+   are LF-only (verified from the git object store); these pins match
+   Windows-autocrlf checkout bytes only and can never pass on LF
+   checkouts. Repaired by targeted `.gitattributes` `text eol=crlf` on
+   exactly the 15 CRLF-pinned paths (LF-form digests of those files appear
+   nowhere tracked — verified blast-free). No seal, test, or pin edited.
+
 Remote-CI verification matrix (fresh worktree at final commit):
 - T1 on CPython 3.14.3: 3089 passed / 0 failed / 56 deselected.
 - T1 on CPython 3.12.13: 3089 passed / 0 failed / 56 deselected.
