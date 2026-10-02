@@ -281,12 +281,16 @@ def test_b1_runner_direct_ast_ban() -> None:
 # =============================================================================
 def test_b2_runner_trust_store_overwrite(governance_env: Dict[str, Any]) -> None:
     """Runner attempts to overwrite trust_store.json; must fail closed."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: NTFS read-only attributes via Win32 API")
     ts_path = governance_env["ts_path"]
-    
-    # Set read-only attribute
+
+    # Set read-only attribute (Win32-only API; non-Windows skips above,
+    # and the platform guard below keeps static typing clean on all hosts).
     import ctypes
     FILE_ATTRIBUTE_READONLY = 0x01
-    ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), FILE_ATTRIBUTE_READONLY)
+    if sys.platform == "win32":
+        ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), FILE_ATTRIBUTE_READONLY)
 
     try:
         with pytest.raises((PermissionError, OSError, StorageDurabilityError)):
@@ -294,7 +298,8 @@ def test_b2_runner_trust_store_overwrite(governance_env: Dict[str, Any]) -> None
                 f.write(b"{\"tampered\": true}")
     finally:
         # Reset attribute
-        ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), 0x80)  # FILE_ATTRIBUTE_NORMAL
+        if sys.platform == "win32":
+            ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), 0x80)  # FILE_ATTRIBUTE_NORMAL
 
 
 # =============================================================================
@@ -302,6 +307,8 @@ def test_b2_runner_trust_store_overwrite(governance_env: Dict[str, Any]) -> None
 # =============================================================================
 def test_b3_trust_store_dacl_modification(governance_env: Dict[str, Any]) -> None:
     """Attempting unauthorized DACL modification must fail closed."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: NTFS DACL via icacls")
     ts_path = governance_env["ts_path"]
     # Attempt to use icacls or SetFileSecurityW without required permissions
     res = subprocess.run(
@@ -325,19 +332,23 @@ def test_b3_trust_store_dacl_modification(governance_env: Dict[str, Any]) -> Non
 # =============================================================================
 def test_b4_trust_store_replacement_attack(governance_env: Dict[str, Any]) -> None:
     """Runner creates temp.json and attempts os.replace on protected trust store."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: NTFS read-only attributes via Win32 API")
     ts_path = governance_env["ts_path"]
     temp_file = governance_env["storage_root"] / "temp_trust_store.json"
     temp_file.write_text("{\"forged\": true}", encoding="utf-8")
 
     import ctypes
     FILE_ATTRIBUTE_READONLY = 0x01
-    ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), FILE_ATTRIBUTE_READONLY)
+    if sys.platform == "win32":
+        ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), FILE_ATTRIBUTE_READONLY)
 
     try:
         with pytest.raises(PermissionError):
             os.replace(temp_file, ts_path)
     finally:
-        ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), 0x80)
+        if sys.platform == "win32":
+            ctypes.windll.kernel32.SetFileAttributesW(str(ts_path), 0x80)
         if temp_file.exists():
             temp_file.unlink()
 
@@ -915,10 +926,13 @@ def test_b23_1_native_bootstrapper_authenticode_trust_verification(governance_en
     tampered_exe.write_bytes(bytes(raw_bytes))
 
     # Invoke WinVerifyTrust via ctypes to test object/PE trust verification
+    # (platform guard keeps static typing clean on all hosts; runtime skips
+    # non-Windows above).
     import ctypes
     from ctypes import wintypes
 
-    wintrust = ctypes.windll.wintrust
+    wintrust = ctypes.windll.wintrust if sys.platform == "win32" else None
+    assert wintrust is not None
 
     class WINTRUST_FILE_INFO(ctypes.Structure):
         _fields_ = [

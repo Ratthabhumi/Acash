@@ -20,6 +20,7 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 import threading
 from typing import Any, Dict, Generator, Optional, Protocol, Tuple
 from uuid import UUID, uuid4
@@ -128,7 +129,9 @@ class StoragePlatformUtils:
     @classmethod
     def _ensure_win32_initialized(cls) -> None:
         """Initialize 64-bit Win32 C runtime and kernel32 function signatures."""
-        if cls._win32_initialized or os.name != "nt":
+        # sys.platform (not os.name) so static typing narrows the Win32-only
+        # ctypes APIs on every host; runtime semantics unchanged.
+        if cls._win32_initialized or sys.platform != "win32":
             return
 
         try:
@@ -180,7 +183,7 @@ class StoragePlatformUtils:
     @classmethod
     def flush_file(cls, fd: int) -> None:
         """Call FlushFileBuffers on Windows or fsync on Linux with strict error propagation."""
-        if os.name == "nt":
+        if sys.platform == "win32":
             try:
                 os.fstat(fd)
             except OSError as exc:
@@ -210,7 +213,7 @@ class StoragePlatformUtils:
         if not directory.exists():
             return
 
-        if os.name == "nt":
+        if sys.platform == "win32":
             cls._ensure_win32_initialized()
             handle = cls._CreateFileW(
                 str(directory),
@@ -341,9 +344,9 @@ class StoragePlatformUtils:
             pass
 
     @classmethod
-    def get_volume_info(cls, path: Path) -> Dict[str, Any]:
+    def get_volume_info(cls, path: Path    ) -> Dict[str, Any]:
         """Query authoritative Win32 volume information (filesystem name, serial, flags)."""
-        if os.name == "nt":
+        if sys.platform == "win32":
             cls._ensure_win32_initialized()
             resolved = path.resolve()
             drive = os.path.splitdrive(str(resolved))[0]
