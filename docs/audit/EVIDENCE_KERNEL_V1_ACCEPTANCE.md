@@ -39,8 +39,17 @@ no extraction is performed by this checklist).
 ## 3. Merge-Readiness Verdict (To Be Filled by Validation)
 
 ```text
-EVIDENCE_KERNEL_V1 = LOCALLY_ACCEPTED_PENDING_GREEN_REMOTE_CI
+EVIDENCE_KERNEL_V1 = REMOTE_CI_VERIFIED_MERGE_READY
+CANONICAL_MERGE = NOT_YET_AUTHORIZED
 ```
+
+Remote CI proof (repair branch, commit `8dd710e`):
+- GitHub Actions run **37029140943**: T1 hermetic pytest SUCCESS
+  (3079 passed, 28 skipped, 56 deselected, 0 failed) + MyPy strict
+  SUCCESS (564 files clean).
+- Canonical `origin/main` remains
+  `becec27f5eacf283dcb191cf72d0858682d8e055`. No merge performed here;
+  merge requires a separate explicit human authorization.
 
 Validation record (repair branch, commits through `cc57c36`):
 - HYP_011 family + PPDS in a FRESH worktree (`uv sync --locked`, no hidden
