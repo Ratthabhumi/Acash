@@ -38,6 +38,11 @@ from acash.research.hyp_011.shadow_ca_bundle import (
     verify_determination_evidence_binding,
     verify_evidence_bundle,
 )
+from acash.research.hyp_011.shadow_v2_activation import (
+    load_segment_activation_authority,
+    resolve_v2_activation_session,
+    session_one_ca_binding_sha256,
+)
 from acash.research.hyp_011.shadow_ca_intake import validate_intake_document
 from acash.research.hyp_011.shadow_authority import (
     INTENT_REGISTRY_DIRNAME,
@@ -186,6 +191,12 @@ def main(
         default="",
         help="Prospective segment identifier (V2 requires HYP_011_PROSPECTIVE_V2).",
     )
+    parser.add_argument(
+        "--segment-activation-authority",
+        default="",
+        help="V2 SegmentActivationAuthority manifest (REQUIRED on the V2 path; "
+        "the V2 first target is never derived from V1 Stage-B/Stage-C machinery).",
+    )
     args = parser.parse_args(argv)
 
     # State directory resolution with V2 contract enforcement
@@ -222,6 +233,35 @@ def main(
                 "SHADOW_V2_REQUIRES_STATE_DIR: --state-dir is required when --segment-id is set."
             )
 
+    is_v2 = bool(args.segment_id)
+
+    calendar = NyseCa1Calendar()
+
+    # V2 activation authority: the V2 first target comes SOLELY from the
+    # human-authorized SegmentActivationAuthority. V1 Stage-B/Stage-C
+    # machinery is never consulted on the V2 path (not even when a Stage-C
+    # manifest file exists in the checkout).
+    segment_activation_sha256: Optional[str] = None
+    v2_activation_session: Optional[date] = None
+    if is_v2:
+        if not args.segment_activation_authority:
+            raise DataContractError(
+                "SHADOW_V2_ACTIVATION_AUTHORITY_REQUIRED: "
+                "--segment-activation-authority is required on the V2 path."
+            )
+        v2_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
+        v2_runtime_sha = resolve_runtime_sha(
+            _runtime_sha if _runtime_sha is not None else (args.runtime_sha or None)
+        )
+        v2_authority, segment_activation_sha256 = load_segment_activation_authority(
+            Path(args.segment_activation_authority),
+            calendar,
+            v2_now,
+            v2_runtime_sha,
+        )
+        v2_activation_session = resolve_v2_activation_session(v2_authority)
+        print(f"SEGMENT_ACTIVATION_SESSION = {v2_activation_session.isoformat()}")
+
     attempts = [0]
 
     def _count() -> None:
@@ -231,10 +271,13 @@ def main(
     print(f"STATE_DIR = {state_dir}")
     if args.segment_id:
         print(f"SEGMENT_ID = {args.segment_id}")
-    calendar = NyseCa1Calendar()
     binding_path = _stage_c_binding_path
 
-    if not args.execute_network:
+    # --local-preflight exercises the complete would-be live local path
+    # (authorities, intent, CA, freshness, guards) WITHOUT consuming the
+    # attempt and WITHOUT network. Plain dry-run (no flags) stays
+    # informational and never requires session authorities.
+    if not args.execute_network and not args.local_preflight:
         # PRETEST: full local contract validation, zero network.
         print("PRETEST-DRY-RUN: zero network. Validating local contracts.")
         pretest_state_dir = state_dir
@@ -248,25 +291,32 @@ def main(
             except Exception:
                 pass
 
-        pretest_binding_file = binding_path or (
-            STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
-        )
-        pretest_recovery_auth = (
-            load_stage_c_recovery_authority(calendar, pretest_binding_file)
-            if (pretest_binding_file and pretest_binding_file.is_file())
-            else None
-        )
-        pretest_activation = resolve_operational_activation(
-            calendar=calendar,
-            now_utc=pretest_now,
-            stage_c_binding_path=binding_path,
-            committed_observations=pretest_committed_count,
-        )
+        if is_v2:
+            assert v2_activation_session is not None
+            assert segment_activation_sha256 is not None
+            pretest_activation = v2_activation_session
+            pretest_recovery_auth = None
+        else:
+            pretest_binding_file = binding_path or (
+                STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+            )
+            pretest_recovery_auth = (
+                load_stage_c_recovery_authority(calendar, pretest_binding_file)
+                if (pretest_binding_file and pretest_binding_file.is_file())
+                else None
+            )
+            pretest_activation = resolve_operational_activation(
+                calendar=calendar,
+                now_utc=pretest_now,
+                stage_c_binding_path=binding_path,
+                committed_observations=pretest_committed_count,
+            )
         pretest_verified = verify_chain(
             pretest_state_dir,
             expected_activation=pretest_activation,
             expected_recovery_authority=pretest_recovery_auth,
             expected_segment_id=args.segment_id if args.segment_id else None,
+            expected_segment_activation_sha256=segment_activation_sha256,
         )
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
         pretest_target = _expected_next(pretest_observed, calendar, pretest_activation)
@@ -305,35 +355,48 @@ def main(
         except Exception:
             pass
 
-    actual_binding_file = binding_path or (
-        STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
-    )
-    recovery_auth = (
-        load_stage_c_recovery_authority(calendar, actual_binding_file)
-        if (actual_binding_file and actual_binding_file.is_file())
-        else None
-    )
+    if is_v2:
+        # V2 activation is the validated SegmentActivationAuthority session.
+        # V1 Stage-C recovery machinery is never consulted here.
+        assert v2_activation_session is not None
+        assert segment_activation_sha256 is not None
+        activation_session = v2_activation_session
+        recovery_auth = None
+    else:
+        actual_binding_file = binding_path or (
+            STAGE_C_RECOVERY_BINDING_PATH if STAGE_C_RECOVERY_BINDING_PATH.is_file() else None
+        )
+        recovery_auth = (
+            load_stage_c_recovery_authority(calendar, actual_binding_file)
+            if (actual_binding_file and actual_binding_file.is_file())
+            else None
+        )
 
-    # Pre-network local validation: resolve operational activation.
-    # Fails closed (e.g. SHADOW_RECOVERY_BINDING_REQUIRED) before any network call.
-    activation_session = resolve_operational_activation(
-        calendar=calendar,
-        now_utc=now_utc,
-        stage_c_binding_path=binding_path,
-        committed_observations=committed_count,
-    )
+        # Pre-network local validation: resolve operational activation.
+        # Fails closed (e.g. SHADOW_RECOVERY_BINDING_REQUIRED) before any network call.
+        activation_session = resolve_operational_activation(
+            calendar=calendar,
+            now_utc=now_utc,
+            stage_c_binding_path=binding_path,
+            committed_observations=committed_count,
+        )
 
     verified = verify_chain(
         state_dir,
         expected_activation=activation_session,
         expected_recovery_authority=recovery_auth,
         expected_segment_id=args.segment_id if args.segment_id else None,
+        expected_segment_activation_sha256=segment_activation_sha256,
     )
     observed: List[str] = list(verified.get("observed_sessions", []))
     expected_ordinal = len(observed) + 1
 
+    # V2 never inherits the V1 Stage-C recovery attempt numbering: a fresh
+    # V2 segment always dispatches ordinal 1 attempt 1 under its own
+    # SegmentActivationAuthority.
     is_recovery = (
-        len(observed) == 0
+        (not is_v2)
+        and len(observed) == 0
         and activation_session > FAILED_ACTIVATION_SESSION
     )
     if is_recovery:
@@ -374,12 +437,14 @@ def main(
         f"attempt {expected_dispatch_attempt}: ACCEPTED."
     )
 
-    # F15: DispatchAuthority manifest is REQUIRED on the live path for any
-    # post-first observation. Bare tokens remain valid only for ordinal 1
-    # (session one), preserving the sealed Obs #1 lineage semantics.
+    # DispatchAuthority manifest requirement. V1 compatibility allows a bare
+    # token for session one (preserving the sealed Obs #1 lineage semantics).
+    # V2 never inherits that exception: V2 ordinal 1 MUST bind a
+    # RegisteredIntent + DispatchAuthority from its first session.
+    requires_dispatch_authority = is_v2 or len(observed) >= 1
     authority_doc: Dict[str, Any] | None = None
     authority_file_sha: str | None = None
-    if len(observed) >= 1 and not args.dispatch_authority:
+    if requires_dispatch_authority and not args.dispatch_authority:
         raise DataContractError(
             "SHADOW_DISPATCH_AUTHORITY_REQUIRED: live dispatch for "
             f"ordinal {expected_ordinal} requires an explicit "
@@ -443,10 +508,19 @@ def main(
     # F15: full authority validation (when a manifest was supplied).
     if authority_doc is not None:
         if not ca_file_bytes:
-            raise DataContractError(
-                "SHADOW_AUTHORITY_CA_BINDING_UNAVAILABLE: a supplied "
-                "DispatchAuthority requires bound CA evidence bytes."
-            )
+            if is_v2 and expected_ordinal == 1 and not observed:
+                # V2 session one holds no prior position, so there is no CA
+                # file to bind. The dispatch authority instead binds the
+                # deterministic session-one non-event digest: an explicit
+                # non-required representation, never an invented event.
+                ca_binding_sha256 = session_one_ca_binding_sha256()
+            else:
+                raise DataContractError(
+                    "SHADOW_AUTHORITY_CA_BINDING_UNAVAILABLE: a supplied "
+                    "DispatchAuthority requires bound CA evidence bytes."
+                )
+        else:
+            ca_binding_sha256 = hashlib.sha256(ca_file_bytes).hexdigest()
         runtime_sha = resolve_runtime_sha(
             _runtime_sha if _runtime_sha is not None else (args.runtime_sha or None)
         )
@@ -459,7 +533,7 @@ def main(
             dispatch_attempt=args.dispatch_attempt,
             state_prev_sha256=verified.get("last_observation_sha256"),
             runtime_sha=runtime_sha,
-            ca_file_sha256=hashlib.sha256(ca_file_bytes).hexdigest(),
+            ca_file_sha256=ca_binding_sha256,
         )
         print(f"DispatchAuthority ACCEPTED: {validated_authority.authority_sha256()[:16]}...")
         # F17: the authority must bind a PHYSICALLY preregistered intent
@@ -751,6 +825,8 @@ def main(
     }
     if args.segment_id:
         observation["segment_id"] = args.segment_id
+    if segment_activation_sha256 is not None:
+        observation["segment_activation_authority_sha256"] = segment_activation_sha256
     digest = append_observation(
         state_dir,
         target,

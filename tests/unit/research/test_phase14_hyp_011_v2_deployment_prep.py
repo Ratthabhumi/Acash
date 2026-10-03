@@ -139,6 +139,28 @@ def test_v2_dry_run_zero_network_isolated(
     repo_root = Path(__file__).resolve().parents[3]
     v1_state = repo_root / "data" / "hyp_011" / "prospective" / "state.json"
     v1_before = v1_state.read_bytes() if v1_state.is_file() else None
+    # V2 dry-run derives its target SOLELY from the SegmentActivationAuthority
+    # (here: fresh prospective session 2026-09-29), never from V1 machinery.
+    activation_path = tmp_path / "segment_activation_authority.json"
+    activation_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "segment_id": SEGMENT_ID_V2,
+                "hypothesis_id": "HYP_011",
+                "activation_session": "2026-09-29",
+                "runtime_commit_sha": "e" * 40,
+                "starting_aum": "100000.00",
+                "paper_trading": False,
+                "live_trading": False,
+                "real_capital_authority_usd": "0.00",
+                "no_real_orders": True,
+                "authorized_at_utc": "2026-09-28T12:00:00+00:00",
+                "authority_identity": "TEST_V2",
+            }
+        ),
+        encoding="utf-8",
+    )
     assert (
         runner.main(
             [
@@ -146,6 +168,10 @@ def test_v2_dry_run_zero_network_isolated(
                 str(v2_root),
                 "--segment-id",
                 SEGMENT_ID_V2,
+                "--segment-activation-authority",
+                str(activation_path),
+                "--runtime-sha",
+                "e" * 40,
             ],
             _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc),
         )
@@ -155,7 +181,7 @@ def test_v2_dry_run_zero_network_isolated(
     assert f"STATE_DIR = {v2_root}" in out
     assert f"SEGMENT_ID = {SEGMENT_ID_V2}" in out
     assert "PRETEST" in out
-    assert "EXPECTED_SESSION = 2026-09-28" in out
+    assert "EXPECTED_SESSION = 2026-09-29" in out
     assert "NETWORK_REQUESTS = 0" in out
     # Dry-run is read-only: no state materialized in the external root ...
     assert not (v2_root / "state.json").exists()
@@ -194,9 +220,22 @@ def test_v2_manifest_binding() -> None:
     assert "--segment-id" in wrapper
     timer = (ops / "acash-hyp011-v2.timer").read_text(encoding="utf-8")
     assert "AUTHORIZE_HYP_011_V2_ACTIVATION" in timer
+    # Enabling the timer must never pull the service up immediately.
+    assert "Requires=acash-hyp011-v2.service" not in timer
+    assert "Unit=acash-hyp011-v2.service" in timer
+    assert "RemainAfterElapse=false" in timer
     assert not any(
         line.strip().startswith("OnCalendar=")
         for line in timer.splitlines()
     )
+    # The activation drop-in shape clears stale values before setting the
+    # validated calendar-derived expression.
+    assert "OnCalendar=" in timer
     assert (ops / "HYP_011_V2_HOMELAB_DEPLOYMENT.md").is_file()
+    runbook = (ops / "HYP_011_V2_HOMELAB_DEPLOYMENT.md").read_text(encoding="utf-8")
+    assert "49b26f1" not in runbook
+    assert "APPROVED_RUNTIME_SHA" in runbook
+    assert not any(
+        line.strip().startswith("Timezone=") for line in runbook.splitlines()
+    )
     assert V2_STATE_ROOT == "/var/lib/acash/hyp011/v2"
