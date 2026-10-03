@@ -1,7 +1,7 @@
 # ACASH SESSION HANDOFF — HYP_011 OBS #1 COMMITTED / POST-OBS REPAIR BRANCH
 
 **Document Authority**: `docs/SESSION_HANDOFF.md`<br>
-**Date Context**: 2026-10-01<br>
+**Date Context**: 2026-10-03<br>
 **Classification**: Single Canonical ACASH Session Handoff (Current Working Checkpoint)<br>
 **Parent Canonical Main**: `becec27f5eacf283dcb191cf72d0858682d8e055`
 
@@ -9,7 +9,7 @@
 > **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
 > This document is an operational navigation and continuation checkpoint; it is **NOT** self-authenticating operational truth.
 > Status labels used throughout this document:
-> `FACT` | `OPERATOR-SUPPLIED HOST EVIDENCE` | `REPOSITORY-VERIFIED` | `AUDIT FINDING` | `GOVERNANCE BOUNDARY` | `UNKNOWN / NOT LIVE-VERIFIED` | `NEXT HARD GATE`
+> `FACT` | `OPERATOR-SUPPLIED HOST EVIDENCE` | `REPOSITORY-VERIFIED` | `AUDIT FINDING` | `GOVERNANCE BOUNDARY` | `NEXT HARD GATE`
 
 ---
 
@@ -48,13 +48,13 @@
   - **Historical replication support is NOT paper trading authority.**
   - **Historical replication support is NOT live trading authority.**
 - **`GOVERNANCE BOUNDARY — SCIENTIFIC ACCEPTANCE THRESHOLDS`**:
-  - Full scientific evaluation requires: $\ge 504$ committed daily observations **AND** $\ge 2$ completed annual rebalances.
-  - Intermediate staging checkpoint ($S_1$): $20$ committed observations.
-  - **Current Status**: `V1_PLATFORM_VALIDATION_OBSERVATIONS = 1`
-    (Observation #1 COMMITTED_AND_RECONCILED 2026-09-30; see `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`);
-    `V1_CLOSURE = PROPOSED_FOR_RATIFICATION`; `V2_S1_PROGRESS = 0/20`
-    (V2 proposed, NOT activated). Do not use an ambiguous global `S1 = 1/20`.
-    Do not confuse $S_1$ progress with final strategy qualification or trading admission.
+    - Full scientific evaluation requires: $\ge 504$ committed daily observations **AND** $\ge 2$ completed annual rebalances.
+    - Intermediate staging checkpoint ($S_1$): $20$ committed observations.
+    - **Current Status**: `V1_PLATFORM_VALIDATION_OBSERVATIONS = 1`
+      (Observation #1 COMMITTED_AND_RECONCILED 2026-09-30; see `docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md`);
+      `V1_CLOSURE = RATIFIED`; `V2_S1_PROGRESS = 0/20`
+      (V2 proposed, NOT activated). Do not use an ambiguous global `S1 = 1/20`.
+      Do not confuse $S_1$ progress with final strategy qualification or trading admission.
 
 ---
 
@@ -112,25 +112,23 @@
 ACASH PRE-ATTEMPT #2 FROZEN OPERATIONAL REGISTER — SUPERSEDED 2026-10-02
 ================================================================================
 PRE_ATTEMPT_0002_STATE           = SUPERSEDED (Attempt #2 is historical
-                                   completed evidence; do NOT reuse this
-                                   register for new dispatches)
+                                    completed evidence; do NOT reuse this
+                                    register for new dispatches)
 
 CANONICAL_MAIN                   = becec27f5eacf283dcb191cf72d0858682d8e055
 AUDIT_BRANCH                     = audit/repo-closure-20260930
 
 OBSERVATION_0001                 = COMMITTED_AND_RECONCILED (2026-09-30; record:
-                                    docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md)
+                                     docs/audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md)
 OBSERVATION_0002                 = NOT_AUTHORIZED (Timer must NOT be set)
 
 HYP_011_PROSPECTIVE_V1           = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING
-V1_COMMITTED_OBSERVATIONS        = 1 (2026-09-30; preserved platform-validation
-                                    evidence, never mixed into V2)
+V1_COMMITED_OBSERVATIONS         = 1 (2026-09-30; preserved platform-validation
+                                     evidence, never mixed into V2)
 V1_PLATFORM_VALIDATION_OBSERVATIONS = 1
-V1_CLOSURE                       = PROPOSED_FOR_RATIFICATION (agent-written
-                                    segment policy only; no explicit human
-                                    ratification record exists — do NOT treat
-                                    as ratified)
-HYP_011_V2                       = PROPOSED_PENDING_HUMAN_RATIFICATION
+V1_CLOSURE                       = RATIFIED (human-ratified 2026-10-03)
+HYP_011_PROSPECTIVE_V1           = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING
+HYP_011_PROSPECTIVE_V2           = PROPOSED_PENDING_HUMAN_RATIFICATION
 V2_S1_PROGRESS                   = 0/20 (no ambiguous global S1 counter)
 
 MERGE_STATUS                     = STRICT_HOLD
@@ -306,8 +304,8 @@ At handoff preparation, live GitHub API inspection confirmed:
 - Pull Requests: `[]` (empty)
 - *Invariant*: Zero commit statuses does **NOT** constitute CI assurance. All assurance currently derives from local verified test execution.
 
-**UPDATE 2026-10-02 (current)**: remote CI now EXISTS and is GREEN on the
-repair branch — runs 37029140943 + 37029592071 both SUCCESS (T1 hermetic
-pytest + MyPy strict). The `0 runs` lines above are a HISTORICAL SNAPSHOT
-of the pre-CI state. Rulesets still `[]`; PRs still `[]`; `origin/main`
-still `becec27f5eacf283dcb191cf72d0858682d8e055`.
+**UPDATE 2026-10-03 (current)**: remote CI now EXISTS and is GREEN on the
+repair branch — runs 37029140943 + 37029592071 + 37029140943 + 37037917876
+all SUCCESS (T1 hermetic pytest + MyPy strict). The `0 runs` lines above are a
+HISTORICAL SNAPSHOT of the pre-CI state. Rulesets still `[]`; PRs still `[]`;
+`origin/main` still `becec27f5eacf283dcb191cf72d0858682d8e055`.
