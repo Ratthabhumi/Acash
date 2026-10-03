@@ -339,7 +339,8 @@ def append_observation(
     if state_path.exists():
         state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     else:
-        state_doc = build_initial_state(activation_session)
+        segment_id = observation.get("segment_id") if isinstance(observation, dict) else None
+        state_doc = build_initial_state(activation_session, segment_id)
     # Re-stamp fixed identity fields (never inferred from a partial doc).
     act = activation_session or (
         date.fromisoformat(state_doc["activation_session"])
@@ -395,10 +396,13 @@ def append_observation(
     return digest
 
 
-def build_initial_state(activation_session: Optional[date] = None) -> Dict[str, Any]:
+def build_initial_state(
+    activation_session: Optional[date] = None,
+    segment_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Complete canonical initial state document (never a bare {})."""
     act = activation_session or STATE_ACTIVATION_SESSION
-    return {
+    state = {
         "schema_version": STATE_SCHEMA_VERSION,
         "hypothesis_id": STATE_HYPOTHESIS_ID,
         "activation_session": act.isoformat(),
@@ -422,6 +426,9 @@ def build_initial_state(activation_session: Optional[date] = None) -> Dict[str, 
             "no_real_orders": True,
         },
     }
+    if segment_id is not None:
+        state["segment_id"] = segment_id
+    return state
 
 
 def validate_initial_state(
@@ -627,6 +634,7 @@ def verify_chain(
     state_dir: Path,
     expected_activation: Optional[date] = None,
     expected_recovery_authority: Optional[StageCRecoveryAuthority] = None,
+    expected_segment_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Recompute the full observation chain BEFORE any network execution.
 
@@ -647,7 +655,7 @@ def verify_chain(
                 f"BLOCK_SHADOW_STATE_INTEGRITY: orphan observation files "
                 f"{on_disk_all} exist without state.json."
             )
-        return build_initial_state(expected_activation)
+        return build_initial_state(expected_activation, expected_segment_id)
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
     # Fixed identity fields (every state, empty or not).
     if state_doc.get("schema_version") != STATE_SCHEMA_VERSION:
@@ -660,6 +668,18 @@ def verify_chain(
     ).isoformat()
     if state_doc.get("activation_session") != exp_act:
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: activation_session.")
+    # Segment identity validation (V2)
+    if expected_segment_id is not None:
+        actual_segment = state_doc.get("segment_id")
+        if actual_segment != expected_segment_id:
+            raise DataContractError(
+                f"BLOCK_SHADOW_STATE_INTEGRITY: segment_id mismatch, "
+                f"expected {expected_segment_id}, got {actual_segment}."
+            )
+    else:
+        # V1: ensure no segment_id contamination
+        if state_doc.get("segment_id") is not None:
+            raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: unexpected segment_id.")
     if str(state_doc.get("starting_aum")) != str(SIMULATED_STARTING_AUM):
         raise DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: starting_aum.")
     locks = state_doc.get("locks", {})

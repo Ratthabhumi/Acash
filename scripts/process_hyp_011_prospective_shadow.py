@@ -75,9 +75,12 @@ from acash.research.hyp_011.shadow_ops import (
 
 SYMBOLS = ("ACWI", "AGG", "SPY")
 STATE_DIR = Path("data/hyp_011/prospective")
+V1_EVIDENCE_STATE_DIR = Path("data/hyp_011/prospective")
 
 EXIT_OK = 0
 EXIT_BLOCKED = 2
+
+SEGMENT_ID_V2 = "HYP_011_PROSPECTIVE_V2"
 
 
 def _check_split_continuity(
@@ -172,7 +175,52 @@ def main(
         default="",
         help="Explicit runtime commit SHA pin (else resolved from the git checkout).",
     )
+    parser.add_argument(
+        "--state-dir",
+        default="",
+        help="Absolute path to mutable state directory (required for V2 production; "
+        "defaults to data/hyp_011/prospective for V1 backward compatibility).",
+    )
+    parser.add_argument(
+        "--segment-id",
+        default="",
+        help="Prospective segment identifier (V2 requires HYP_011_PROSPECTIVE_V2).",
+    )
     args = parser.parse_args(argv)
+
+    # State directory resolution with V2 contract enforcement
+    if args.state_dir:
+        state_dir = Path(args.state_dir)
+        if not state_dir.is_absolute():
+            raise DataContractError(
+                "SHADOW_STATE_DIR_MUST_BE_ABSOLUTE: --state-dir must be an absolute path."
+            )
+        # Reject V1 evidence path for V2 production runs
+        try:
+            state_dir.resolve().relative_to(V1_EVIDENCE_STATE_DIR.resolve())
+            raise DataContractError(
+                "SHADOW_STATE_DIR_OVERLAPS_V1_EVIDENCE: --state-dir must not overlap "
+                f"with V1 evidence path ({V1_EVIDENCE_STATE_DIR})."
+            )
+        except ValueError:
+            # Not a subpath of V1 evidence dir - OK
+            pass
+    else:
+        state_dir = _state_dir if _state_dir is not None else STATE_DIR
+
+    # Segment identity validation for V2. V1 invocations pass neither
+    # flag and keep the historical default state dir (backward compatible).
+    if args.segment_id:
+        if args.segment_id != SEGMENT_ID_V2:
+            raise DataContractError(
+                f"SHADOW_INVALID_SEGMENT_ID: got {args.segment_id}, "
+                f"expected {SEGMENT_ID_V2}."
+            )
+        # V2 requires explicit state-dir
+        if not args.state_dir:
+            raise DataContractError(
+                "SHADOW_V2_REQUIRES_STATE_DIR: --state-dir is required when --segment-id is set."
+            )
 
     attempts = [0]
 
@@ -180,13 +228,16 @@ def main(
         attempts[0] += 1
 
     print("=== HYP_011 PROSPECTIVE SHADOW (single atomic session) ===")
+    print(f"STATE_DIR = {state_dir}")
+    if args.segment_id:
+        print(f"SEGMENT_ID = {args.segment_id}")
     calendar = NyseCa1Calendar()
     binding_path = _stage_c_binding_path
 
     if not args.execute_network:
         # PRETEST: full local contract validation, zero network.
         print("PRETEST-DRY-RUN: zero network. Validating local contracts.")
-        pretest_state_dir = _state_dir if _state_dir is not None else STATE_DIR
+        pretest_state_dir = state_dir
         pretest_now = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
         pretest_state_file = pretest_state_dir / "state.json"
         pretest_committed_count: int = 0
@@ -215,6 +266,7 @@ def main(
             pretest_state_dir,
             expected_activation=pretest_activation,
             expected_recovery_authority=pretest_recovery_auth,
+            expected_segment_id=args.segment_id if args.segment_id else None,
         )
         pretest_observed: List[str] = list(pretest_verified.get("observed_sessions", []))
         pretest_target = _expected_next(pretest_observed, calendar, pretest_activation)
@@ -243,7 +295,6 @@ def main(
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
 
-    state_dir = _state_dir if _state_dir is not None else STATE_DIR
     now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
     state_file = state_dir / "state.json"
     committed_count: int = 0
@@ -276,6 +327,7 @@ def main(
         state_dir,
         expected_activation=activation_session,
         expected_recovery_authority=recovery_auth,
+        expected_segment_id=args.segment_id if args.segment_id else None,
     )
     observed: List[str] = list(verified.get("observed_sessions", []))
     expected_ordinal = len(observed) + 1
@@ -697,6 +749,8 @@ def main(
         "capital": "0.00",
         "no_real_orders": True,
     }
+    if args.segment_id:
+        observation["segment_id"] = args.segment_id
     digest = append_observation(
         state_dir,
         target,

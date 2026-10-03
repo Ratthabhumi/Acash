@@ -1,0 +1,29 @@
+# acash-hyp011-v2.timer
+# Systemd timer for HYP_011 V2 prospective shadow observation
+# Template only — NOT INSTALLED without AUTHORIZE_HYP_011_V2_CANONICAL_DEPLOYMENT
+# NOT ARMED without AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>
+#
+# One governed session per invocation. Timer triggers the service with
+# environment variables set via drop-in or systemd-environment-d generator.
+# The actual authorization values are injected at activation time.
+
+[Unit]
+Description=ACASH HYP_011 V2 Prospective Shadow Observation Timer
+Documentation=file:///home/mew/Acash/docs/operations/HYP_011_V2_HOMELAB_DEPLOYMENT.md
+Requires=acash-hyp011-v2.service
+
+[Timer]
+# No OnCalendar here by design: the exact fire time (session eligibility =
+# NYSE close + 15 min SIP delay, America/New_York) is provided by a per-session
+# drop-in ONLY under AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>, e.g.:
+#   [Timer]
+#   OnCalendar=2026-10-06 20:15:00
+#   Timezone=America/New_York
+# Without the drop-in this timer never fires. The unit is installed but
+# DISABLED until ACTIVATION authority.
+Persistent=false
+AccuracySec=1min
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target
