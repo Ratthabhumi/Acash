@@ -1,0 +1,56 @@
+# acash-hyp011-v2.service
+# Systemd service for HYP_011 V2 prospective shadow observation
+# Template only — NOT INSTALLED without AUTHORIZE_HYP_011_V2_CANONICAL_DEPLOYMENT
+# 
+# V2 Architecture:
+# - Repository code: /home/mew/Acash (immutable deployment checkout)
+# - Mutable state: /var/lib/acash/hyp011/v2 (external to git)
+# - Secrets: /etc/acash/hyp011-v2.env (0600, separate from state)
+# - Python: explicit pinned interpreter from .venv
+# - Zero restart loop, fail-closed, one governed session per invocation
+
+[Unit]
+Description=ACASH HYP_011 V2 Prospective Shadow Observation
+Documentation=file:///home/mew/Acash/docs/operations/HYP_011_V2_HOMELAB_DEPLOYMENT.md
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+# No restart loop — each invocation is one atomic session
+# Failure = investigation required, not automatic retry
+
+[Service]
+Type=oneshot
+User=mew
+Group=mew
+WorkingDirectory=/home/mew/Acash
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/acash/hyp011-v2.env
+# Per-session dispatch arguments (AUTHORIZATION, ORDINAL, DISPATCH_ATTEMPT,
+# CA_DETERMINATIONS, DISPATCH_AUTHORITY, CA_EVIDENCE_BUNDLE, RUNTIME_SHA) are
+# injected via a systemd drop-in Environment= set ONLY under
+# AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>. This template alone can never
+# dispatch: without the drop-in the variables expand empty and the runner
+# fails closed (SHADOW_AUTHORIZATION_REQUIRED).
+ExecStart=/home/mew/Acash/docs/operations/acash-hyp011-v2.sh --execute-network --authorization ${AUTHORIZATION} --ordinal ${ORDINAL} --dispatch-attempt ${DISPATCH_ATTEMPT} --ca-determinations ${CA_DETERMINATIONS} --dispatch-authority ${DISPATCH_AUTHORITY} --ca-evidence-bundle ${CA_EVIDENCE_BUNDLE} --runtime-sha ${RUNTIME_SHA}
+# Fail closed: no restart, no retry
+Restart=no
+TimeoutStartSec=300
+TimeoutStopSec=30
+# Resource limits
+MemoryMax=512M
+CPUQuota=50%
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/acash/hyp011/v2
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target
