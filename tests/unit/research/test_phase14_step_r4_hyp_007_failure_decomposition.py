@@ -188,6 +188,7 @@ def test_executed_notional() -> None:
     assert executed_notional([], "BASELINE") == Decimal("0")
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_007/m1_trade_ledger.parquet, absent from fresh clones
 def test_sealed_repo_load_and_full_decomposition_runs() -> None:
     # Integrates against sealed M1/M2 evidence; asserts output is self-consistent.
     m1_trades = load_trades(".", "M1")

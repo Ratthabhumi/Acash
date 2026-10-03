@@ -251,7 +251,6 @@ def test_no_forbidden_access_mocks() -> None:
     def _boom(request: httpx.Request) -> httpx.Response:
         raise AssertionError("network must not be invoked")
 
-    import httpx
     from datetime import datetime, timezone
     from acash.data.qualification.models import MarketDataFeed, PriceAdjustment
 

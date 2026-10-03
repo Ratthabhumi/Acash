@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 from typing import Dict, List, Optional, Set, Tuple
 import unicodedata
 
@@ -209,11 +210,14 @@ class HumanGORecordPayload(BaseModel):
 def is_reparse_point(path: Path) -> bool:
     """Check if a path is an NTFS reparse point or symlink."""
     try:
-        import ctypes
-        FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
-        attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
-        if attrs != 0xFFFFFFFF and (attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0:
-            return True
+        # sys.platform (not bare try/except) so static typing narrows the
+        # Win32-only ctypes API on every host; runtime fallback unchanged.
+        if sys.platform == "win32":
+            import ctypes
+            FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+            if attrs != 0xFFFFFFFF and (attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0:
+                return True
     except Exception:
         pass
     return path.is_symlink()

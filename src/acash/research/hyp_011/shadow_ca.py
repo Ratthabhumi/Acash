@@ -99,6 +99,8 @@ class CADetermination:
             payable = date.fromisoformat(str(doc["payable_date"]))
         except (KeyError, ValueError, TypeError, ArithmeticError) as exc:
             raise DataContractError(f"CA_EVENT_INCOMPLETE for {symbol}: {exc}.") from exc
+        if not amount.is_finite():
+            raise DataContractError(f"CA_EVENT_AMOUNT_NONFINITE for {symbol}.")
         if amount <= Decimal("0"):
             raise DataContractError(f"CA_EVENT_NONPOSITIVE_AMOUNT for {symbol}.")
         record = doc.get("record_date")

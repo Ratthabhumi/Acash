@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "hyp_009"
 RESULT_MANIFEST = REPO_ROOT / "docs" / "phase14" / "manifests" / "HYP_009_R2_M1_RESULT.json"
@@ -20,6 +22,7 @@ def _load(path: Path) -> Dict[str, Any]:
     return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/signal_ledger.json, absent from fresh clones
 def test_sealed_files_cr_free_and_hashes_match() -> None:
     pairs = [
         ("signal_ledger_sha256", DATA_DIR / "signal_ledger.json"),

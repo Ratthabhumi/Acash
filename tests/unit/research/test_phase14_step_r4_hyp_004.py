@@ -67,6 +67,7 @@ from acash.research.step_r4_hyp_004 import (
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_1_upstream_hashes_match() -> None:
     """Test 1: Preconditions verify HYP/R1/R2/R3/prereg hashes match canonical pins."""
     res = validate_r4_preconditions(BASE_DIR)
@@ -79,6 +80,7 @@ def test_1_upstream_hashes_match() -> None:
     assert res["r3_parquet_sha256"] == EXPECTED_R3_PARQUET_SHA256
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_2_r3_return_dataset_sha_matches() -> None:
     """Test 2: R3 return dataset Parquet file exists and matches pinned SHA-256."""
     r3_path = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet"
@@ -107,6 +109,7 @@ def test_4_2023_plus_rows_rejected() -> None:
         execute_internal_oos_diagnostic(fake_rows)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_5_evaluation_window_begins_2020_and_ends_2022() -> None:
     """Test 5: Evaluation window strictly begins 2020-01-01 and ends 2022-12-31."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -116,6 +119,7 @@ def test_5_evaluation_window_begins_2020_and_ends_2022() -> None:
     assert eval_rows[-1]["trading_date"] == "2022-12-30"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_6_first_january_2020_model_uses_data_only_through_2019() -> None:
     """Test 6: First January 2020 model fit uses historical data strictly through 2019-12-31."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -126,6 +130,7 @@ def test_6_first_january_2020_model_uses_data_only_through_2019() -> None:
     assert jan_fit.estimation_window_start == "2017-01-04"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_7_february_2020_model_uses_data_only_through_2020_01() -> None:
     """Test 7: February 2020 model fit expands to use historical data through 2020-01-31."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -135,6 +140,7 @@ def test_7_february_2020_model_uses_data_only_through_2020_01() -> None:
     assert feb_fit.estimation_observation_count > EXPECTED_INITIAL_TRAIN_OBSERVATIONS
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_8_monthly_coefficient_fit_constant_within_month() -> None:
     """Test 8: Monthly coefficient fit (alpha, beta) is strictly constant across all days in the same month."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -148,6 +154,7 @@ def test_8_monthly_coefficient_fit_constant_within_month() -> None:
         assert r.monthly_beta_hat == first_beta
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_9_current_month_targets_never_enter_current_month_estimation() -> None:
     """Test 9: Estimation window strictly excludes current month targets (zero intra-month lookahead)."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -157,6 +164,7 @@ def test_9_current_month_targets_never_enter_current_month_estimation() -> None:
         assert fit.estimation_window_end < f"{m}-01"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_10_r1_t_may_enter_forecast_for_t() -> None:
     """Test 10: Forecast for session t uses current-day predictor r1_t linearly: alpha + beta * r1_t."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -166,6 +174,7 @@ def test_10_r1_t_may_enter_forecast_for_t() -> None:
         assert r.model_forecast_r13 == expected_pred
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_11_benchmark_mean_uses_observations_strictly_through_t_minus_1() -> None:
     """Test 11: Benchmark historical mean uses observations strictly through session t-1 (zero lookahead)."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -180,6 +189,7 @@ def test_11_benchmark_mean_uses_observations_strictly_through_t_minus_1() -> Non
     assert res.forecast_rows[0].benchmark_mean_r13 == expected_b0
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_12_excluded_r2_r3_rows_cannot_enter() -> None:
     """Test 12: Excluded R2/R3 rows (9 sessions) cannot enter estimation or evaluation sample."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -206,6 +216,7 @@ def test_13_r2_os_known_synthetic_fixture() -> None:
     assert r2_os == Decimal("0.75")
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_14_benchmark_sse_zero_fails_closed() -> None:
     """Test 14: If benchmark SSE <= 0, computation must fail closed with DataContractError."""
     # 1. Test execute_internal_oos_diagnostic fails closed when actual r13 == benchmark mean (SSE_benchmark = 0)
@@ -226,6 +237,7 @@ def test_14_benchmark_sse_zero_fails_closed() -> None:
         fit_monthly_ols(zero_var_hist)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_15_exactly_one_forecast_per_eligible_evaluation_date() -> None:
     """Test 15: Exactly 750 unique forecasts for the 750 eligible evaluation sessions."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -242,6 +254,7 @@ def test_16_no_alternate_window_search() -> None:
     assert EVALUATION_END_DATE == "2022-12-31"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_17_no_hac_significance_gating() -> None:
     """Test 17: Monthly OLS fits are mechanical: no HAC p-value filtering or coefficient suppression."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -281,6 +294,7 @@ def test_19_local_oos_artifact_contains_no_2023_rows() -> None:
             build_canonical_oos_forecasts_parquet([invalid_row], tmp_parquet)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_20_primary_result_cannot_be_mutated_by_r4_outcome() -> None:
     """Test 20: R4 manifest strictly records primary outcome as immutable PRIMARY_REPLICATION_NOT_ACCEPTED."""
     rows = load_r3_primary_returns(BASE_DIR)
@@ -292,6 +306,7 @@ def test_20_primary_result_cannot_be_mutated_by_r4_outcome() -> None:
     assert manifest["governance_and_execution_invariants"]["primary_outcome_changed"] is False
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_21_sealed_r1_r2_r3_artifacts_remain_unchanged() -> None:
     """Test 21: Sealed R1, R2, and R3 manifests and Parquets match their sealed hash pins."""
     r1_p = BASE_DIR / "docs/phase14/manifests/manifest_r1_HYP_004.json"

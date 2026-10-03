@@ -8,11 +8,12 @@ derivation + zero counting, activation from real commit timestamps, guards
 
 import io
 import json
+import hashlib
 from contextlib import redirect_stdout
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 import pytest
 
@@ -213,12 +214,21 @@ def test_eligibility_strictly_after_close() -> None:
     assert state.observed_count == 1
 
 
-def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
-    import sys
+def _load_runner_module() -> Any:
+    import importlib.util
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "process_hyp_011_prospective_shadow.py"
+    spec = importlib.util.spec_from_file_location("process_hyp_011_prospective_shadow", script_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
 
+def test_dry_run_eligibility_messaging_zero_network(
+    tmp_path: Path, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _load_runner_module()
+    monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
     state_dir = tmp_path
 
     def _dry_run(now_utc: datetime) -> str:
@@ -271,6 +281,12 @@ def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
             "next_dispatch_attempt": 2,
             "backfill_allowed": False,
             "retry_failed_session_allowed": False,
+            "locks": {
+                "paper_trading": False,
+                "live_trading": False,
+                "real_capital_authority_usd": "0.00",
+                "no_real_orders": True,
+            },
         }),
         encoding="utf-8",
     )
@@ -289,3 +305,397 @@ def test_dry_run_eligibility_messaging_zero_network(tmp_path: Path) -> None:
     assert "NETWORK_REQUESTS = 0" in after
     assert not (state_dir / "observations").exists()
     assert SH.STATE_ACTIVATION_SESSION == date(2026, 9, 28)
+
+
+# =============================================================================
+# F14 continuation / no-backfill contract (PROPOSED_PENDING_HUMAN_RATIFICATION)
+# =============================================================================
+
+
+def _f14_binding(tmp_path: Path) -> Dict[str, Any]:
+    """LF-canonical Stage C-B fixture binding (avoids F03 CRLF checkout variance)."""
+    import hashlib as _hashlib
+
+    binding_path = tmp_path / "f14_stage_c_binding.json"
+    doc = {
+        "binding_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+        "binding_commit_sha": "08530b1ab4ec64788d0eadfaf821aa01e07d0a5f",
+        "binding_commit_utc": "2026-09-29T17:12:46+00:00",
+        "activation_session": "2026-09-30",
+        "scientific_prospective_boundary": "2026-09-25",
+        "failed_dispatch_session": "2026-09-28",
+        "failed_dispatch_attempt": 1,
+        "next_observation_ordinal": 1,
+        "next_dispatch_attempt": 2,
+        "backfill_allowed": False,
+        "retry_failed_session_allowed": False,
+        "locks": {
+            "paper_trading": False,
+            "live_trading": False,
+            "real_capital_authority_usd": "0.00",
+            "no_real_orders": True,
+        },
+    }
+    raw = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    binding_path.write_bytes(raw)
+    return {
+        "path": binding_path,
+        "sha256": _hashlib.sha256(raw).hexdigest(),
+        "commit_sha": doc["binding_commit_sha"],
+        "commit_utc": doc["binding_commit_utc"],
+    }
+
+
+def _f14_reconciled_state(tmp_path: Path, binding: Dict[str, Any]) -> Path:
+    """Minimal reconciled Obs #1 pair (2026-09-30) for F14 script-level tests."""
+    import hashlib as _hashlib
+
+    state_dir = tmp_path / "prospective"
+    obs_dir = state_dir / "observations"
+    obs_dir.mkdir(parents=True)
+    obs_iso = "2026-09-30"
+    strategy_frag = {
+        "holdings": {"ACWI": 500, "AGG": 300},
+        "cash": "20000.00",
+        "market_value": "80000.00",
+        "receivable": "0",
+        "equity": "100000.00",
+        "daily_return": "0.00000000",
+        "running_peak": "100000.00",
+        "drawdown": "0.00000000",
+        "entitlements": [],
+        "trades": [],
+    }
+    benchmark_frag = {
+        "entry": {"side": "BUY", "quantity": "200", "fill": "500.00"},
+        "entitlements": [],
+        "shares": 200,
+        "cash": "0.00",
+        "market_value": "100000.00",
+        "receivable": "0",
+        "equity": "100000.00",
+        "daily_return": "0.00000000",
+        "running_peak": "100000.00",
+        "drawdown": "0.00000000",
+    }
+    obs_doc = {
+        "schema_version": 1,
+        "hypothesis_id": "HYP_011",
+        "session": obs_iso,
+        "processed_at_utc": "2026-09-30T20:20:00+00:00",
+        "previous_observation_sha256": None,
+        "authority": {
+            "activation_binding": str(binding["path"]),
+            "activation_binding_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+            "activation_binding_sha256": binding["sha256"],
+            "activation_binding_commit_sha": binding["commit_sha"],
+            "activation_binding_commit_utc": binding["commit_utc"],
+            "operational_activation_session": "2026-09-30",
+            "ordinal": 1,
+            "dispatch_attempt": 2,
+        },
+        "strategy": strategy_frag,
+        "benchmark": benchmark_frag,
+    }
+    obs_raw = json.dumps(obs_doc, indent=2, sort_keys=True) + "\n"
+    (obs_dir / f"{obs_iso}.json").write_bytes(obs_raw.encode("utf-8"))
+    obs_sha = _hashlib.sha256(obs_raw.encode("utf-8")).hexdigest()
+    state_doc = {
+        "schema_version": 1,
+        "hypothesis_id": "HYP_011",
+        "activation_session": "2026-09-30",
+        "starting_aum": "100000.00",
+        "locks": {
+            "paper_authorized": False,
+            "live_authorized": False,
+            "capital_authority_usd": "0.00",
+            "no_real_orders": True,
+        },
+        "activation_authority_id": "HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C",
+        "activation_authority_sha256": binding["sha256"],
+        "activation_commit_sha": binding["commit_sha"],
+        "observed_sessions": [obs_iso],
+        "observed_session_count": 1,
+        "last_processed_session": obs_iso,
+        "last_observation_sha256": obs_sha,
+        "strategy": {
+            "cash": "20000.00",
+            "holdings": {"ACWI": 500, "AGG": 300},
+            "receivables": [],
+            "running_peak": "100000.00",
+            "previous_equity": "100000.00",
+        },
+        "benchmark": {
+            "cash": "0.00",
+            "SPY_shares": 200,
+            "receivables": [],
+            "running_peak": "100000.00",
+            "previous_equity": "100000.00",
+            "entered": True,
+        },
+        "last_closes_raw": {"ACWI": "100.00", "AGG": "100.00", "SPY": "500.00"},
+        "last_closes_split": {"ACWI": "100.00", "AGG": "100.00", "SPY": "500.00"},
+        "completed_annual_rebalances": 0,
+    }
+    (state_dir / "state.json").write_text(json.dumps(state_doc, indent=2), encoding="utf-8")
+    return state_dir
+
+
+def test_f14_fresh_target_allowed_before_next_open() -> None:
+    """Target immediately after provider eligibility, before next open -> allowed."""
+    cal = NyseCa1Calendar()
+    # 2026-09-30 (Wed) target; next session 2026-10-01 opens 13:30Z.
+    fresh_now = datetime(2026, 10, 1, 0, 0, 0, tzinfo=timezone.utc)
+    assert SH.assert_target_session_fresh(date(2026, 9, 30), cal, fresh_now) == date(2026, 10, 1)
+
+
+def test_f14_target_blocked_before_provider_eligibility() -> None:
+    """Target before provider eligibility instant is not yet processable (strict >)."""
+    cal = NyseCa1Calendar()
+    eligible_after = SH.observation_eligible_after(date(2026, 9, 30), cal)
+    # At exactly the eligibility instant the session is NOT YET PROCESSABLE.
+    assert not (eligible_after > eligible_after)
+    assert datetime(2026, 9, 30, 20, 15, 0, tzinfo=timezone.utc) <= eligible_after
+
+
+def test_f14_target_exactly_at_next_open_blocked() -> None:
+    """Target exactly at next session open -> blocked (strictly-before rule)."""
+    cal = NyseCa1Calendar()
+    next_session, next_open = SH.next_trading_session_open(date(2026, 9, 30), cal)
+    assert next_session == date(2026, 10, 1)
+    with pytest.raises(DataContractError, match="MISSED_REACTIVATION_REQUIRED"):
+        SH.assert_target_session_fresh(date(2026, 9, 30), cal, next_open)
+
+
+def test_f14_target_after_next_open_blocked() -> None:
+    """Target after next session open -> blocked as MISSED_UNOBSERVED."""
+    cal = NyseCa1Calendar()
+    stale_now = datetime(2026, 10, 5, 0, 0, 0, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError, match="MISSED_REACTIVATION_REQUIRED"):
+        SH.assert_target_session_fresh(date(2026, 9, 30), cal, stale_now)
+
+
+def test_f14_zero_commit_activation_pinned() -> None:
+    """Zero-commit activation session remains pinned (no auto-advance)."""
+    runner = _load_runner_module()
+    cal = NyseCa1Calendar()
+    assert runner._expected_next([], cal, date(2026, 9, 30)) == date(2026, 9, 30)
+
+
+def test_f14_no_automatic_skip_to_later_date() -> None:
+    """Target selection never skips: after 2026-09-30 the target is 2026-10-01 even days later."""
+    runner = _load_runner_module()
+    cal = NyseCa1Calendar()
+    assert runner._expected_next(["2026-09-30"], cal, date(2026, 9, 30)) == date(2026, 10, 1)
+
+
+def test_f14_no_historical_backfill() -> None:
+    """A target earlier than activation is rejected (backfill forbidden)."""
+    cal = NyseCa1Calendar()
+    guard = SH.ShadowState(activation_session=date(2026, 9, 30))
+    with pytest.raises(DataContractError):
+        guard.record_session(
+            date(2026, 9, 29), cal, datetime(2026, 10, 5, tzinfo=timezone.utc)
+        )
+
+
+def test_f14_live_path_stale_target_blocked_zero_network(tmp_path: Path) -> None:
+    """Script live path with a stale target fails BEFORE any network side effect.
+
+    Supplies a fully valid DispatchAuthority + CA package so the F14
+    freshness gate itself (not an earlier gate) is proven to block.
+    """
+    import hashlib as _hashlib
+
+    from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+    from acash.research.hyp_011.shadow_authority import (
+        ObservationIntent,
+        validate_observation_intent,
+    )
+
+    runner = _load_runner_module()
+    binding = _f14_binding(tmp_path)
+    state_dir = _f14_reconciled_state(tmp_path / "state", binding)
+
+    class _NoNetworkClient:
+        def fetch_single_session(self, **kwargs: Any) -> Any:
+            raise AssertionError("network must not be reached for a stale target")
+
+    dummy_prov = EnvAlpacaCredentialProvider(
+        environ={"ACASH_ALPACA_API_KEY_ID": "mock_k", "ACASH_ALPACA_API_SECRET": "mock_s"}
+    )
+    # Valid CA package (bytes-bound by the authority below).
+    # F19: digests are recomputed bundle-evidence digests over fixture bytes.
+    sponsors = {
+        "ACWI": "BLACKROCK_ISHARES_OFFICIAL",
+        "AGG": "BLACKROCK_ISHARES_OFFICIAL",
+        "SPY": "STATE_STREET_SPDR_OFFICIAL",
+    }
+    urls = {
+        "ACWI": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+        "AGG": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+        "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
+    }
+    identities = {
+        "ACWI": {"product_id": "239600", "ticker": "ACWI", "cusip": "464288257",
+                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "AGG": {"product_id": "239458", "ticker": "AGG",
+                "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
+                "cusip": "78462F103", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    bundle_root = tmp_path / "ca_bundle_2026-10-01"
+    bundle_digests = {}
+    marker_bytes = {
+        "ACWI": b"OFFICIAL-FIXTURE-EVIDENCE::ACWI::239600::464288257::2026-10-01\n",
+        "AGG": b"OFFICIAL-FIXTURE-EVIDENCE::AGG::239458::2026-10-01\n",
+        "SPY": b"OFFICIAL-FIXTURE-EVIDENCE::SPY::78462F103::State Street::2026-10-01\n",
+    }
+    for symbol in sponsors:
+        sdir = bundle_root / symbol
+        edir = sdir / "evidence"
+        edir.mkdir(parents=True)
+        ev_bytes = marker_bytes[symbol]
+        sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-10-01\n".encode()
+        ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+        sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
+        (edir / ev_name).write_bytes(ev_bytes)
+        (edir / sched_name).write_bytes(sched_bytes)
+        ev_sha = _hashlib.sha256(ev_bytes).hexdigest()
+        sched_sha = _hashlib.sha256(sched_bytes).hexdigest()
+        manifest = {
+            "schema_version": 1, "symbol": symbol, "target_session": "2026-10-01",
+            "authority_source": sponsors[symbol], "official_url": urls[symbol],
+            "product_identity": identities[symbol], "evidence_file": ev_name,
+            "evidence_sha256": ev_sha,
+            "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "retrieval_representation": "NORMALIZED_RETRIEVAL_REPRESENTATION",
+            "scope_type": "NO_EVENT_SCOPE",
+            "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
+            "note": "Fixture bundle.",
+        }
+        (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        bundle_digests[symbol] = {"sha": ev_sha, "ref": ev_name, "sched_sha": sched_sha}
+    ca_doc = {
+        symbol: {
+            "symbol": symbol,
+            "session": "2026-10-01",
+            "has_event": False,
+            "authority_source": sponsors[symbol],
+            "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            "source_sha256": bundle_digests[symbol]["sha"],
+            "evidence_ref": bundle_digests[symbol]["ref"],
+            "scope_evidence": {
+                "schedule_id": "FIXTURE_SCOPE",
+                "schedule_sha256": bundle_digests[symbol]["sched_sha"],
+                "scope_note": "Fixture scope.",
+                "retrieved_at_utc": "2026-10-01T12:00:00+00:00",
+            },
+        }
+        for symbol in sponsors
+    }
+    ca_path = tmp_path / "ca_2026-10-01.json"
+    ca_bytes = (json.dumps(ca_doc, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    ca_path.write_bytes(ca_bytes)
+    # Valid authority (window covers the stale now; F14 must still block).
+    # F17: binds the physically preregistered intent digest.
+    from acash.research.hyp_011.shadow_authority import register_observation_intent
+
+    fixture_runtime = "f" * 40
+    reg_path = register_observation_intent(
+        registry_dir=state_dir / "intent_registry",
+        calendar=NyseCa1Calendar(),
+        target_session=date(2026, 10, 1),
+        observation_ordinal=2,
+        previous_observation_sha256=json.loads(
+            (state_dir / "state.json").read_text(encoding="utf-8")
+        )["last_observation_sha256"],
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        authority_identity="TEST_FIXTURE",
+        now_utc=datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    registered_sha = str(json.loads(reg_path.read_text(encoding="utf-8"))["intent_sha256"])
+    intent = ObservationIntent(
+        hypothesis_id="HYP_011",
+        target_session=date(2026, 10, 1),
+        observation_ordinal=2,
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        previous_observation_sha256=json.loads(
+            (state_dir / "state.json").read_text(encoding="utf-8")
+        )["last_observation_sha256"],
+        backfill_allowed=False,
+        automatic_skip_allowed=False,
+        created_at_utc=datetime(2026, 9, 30, 12, 0, 0, tzinfo=timezone.utc),
+        authority_identity="TEST_FIXTURE",
+    )
+    cal = NyseCa1Calendar()
+    validated_intent = validate_observation_intent(
+        intent.canonical_doc(), cal, datetime(2026, 10, 1, 0, 0, 0, tzinfo=timezone.utc)
+    )
+    authority_doc = {
+        "schema_version": 1,
+        "intent_sha256": registered_sha,
+        "intent": intent.canonical_doc(),
+        "runtime_commit_sha": fixture_runtime,
+        "target_session": "2026-10-01",
+        "observation_ordinal": 2,
+        "dispatch_attempt": 1,
+        "valid_after_utc": "2026-10-01T00:00:00+00:00",
+        "expires_at_utc": "2026-10-06T00:00:00+00:00",
+        "ca_manifest_sha256": _hashlib.sha256(ca_bytes).hexdigest(),
+        "paper_trading": False,
+        "live_trading": False,
+        "real_capital_authority_usd": "0.00",
+        "no_real_orders": True,
+        "authority_identity": "TEST_FIXTURE",
+    }
+    authority_path = tmp_path / "dispatch_authority_stale.json"
+    authority_path.write_text(json.dumps(authority_doc, indent=2), encoding="utf-8")
+    argv = [
+        "--execute-network",
+        "--authorization",
+        "AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0002",
+        "--ordinal",
+        "2",
+        "--dispatch-attempt",
+        "1",
+        "--dispatch-authority",
+        str(authority_path),
+        "--ca-determinations",
+        str(ca_path),
+        "--ca-evidence-bundle",
+        str(bundle_root),
+    ]
+    with pytest.raises(DataContractError, match="MISSED_REACTIVATION_REQUIRED"):
+        runner.main(
+            argv,
+            _now_utc=datetime(2026, 10, 5, 0, 0, 0, tzinfo=timezone.utc),
+            _state_dir=state_dir,
+            _client=_NoNetworkClient(),
+            _credential_provider=dummy_prov,
+            _stage_c_binding_path=binding["path"],
+            _runtime_sha=fixture_runtime,
+        )
+
+
+def test_f14_pretest_reports_freshness_zero_network(tmp_path: Path) -> None:
+    """Dry-run pretest reports TARGET_FRESH without network or state mutation."""
+    import io
+    from contextlib import redirect_stdout
+
+    runner = _load_runner_module()
+    binding = _f14_binding(tmp_path)
+    state_dir = _f14_reconciled_state(tmp_path / "state", binding)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = runner.main(
+            [],
+            _now_utc=datetime(2026, 10, 1, 0, 0, 0, tzinfo=timezone.utc),
+            _state_dir=state_dir,
+            _stage_c_binding_path=binding["path"],
+        )
+    assert rc == 0
+    out = buf.getvalue()
+    assert "EXPECTED_SESSION = 2026-10-01" in out
+    assert "TARGET_FRESH = true" in out
+    assert "NEXT_SESSION_NOT_YET_OPEN = 2026-10-02" in out

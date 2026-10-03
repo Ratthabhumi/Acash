@@ -246,6 +246,7 @@ def test_gate_evaluator_fails_on_any_gate() -> None:
     assert len(report_g7.rejection_reasons) == 1
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_007/ qualified Parquet evidence files, absent from fresh clones
 def test_deterministic_r3_reproducibility() -> None:
     """Verify that running the strategy reproduces the exact sealed R3 package SHA-256 after IMPLEMENTATION_CORRECTION_001."""
     repo_root = Path(__file__).resolve().parents[3]

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import shutil
 import subprocess
+import sys
 from typing import Generator
 from uuid import uuid4
 
@@ -275,6 +276,9 @@ def test_directory_durability_barrier_contract(tmp_path: Path) -> None:
 
 def test_directory_flush_on_read_only_directory_fails_closed(tmp_path: Path) -> None:
     """Test B89/B98: Directory flush on read-only directory MUST fail closed with StorageDurabilityError (never swallowed)."""
+    if sys.platform != "win32":
+        pytest.skip("Windows-only: NTFS read-only flush must raise win_error=5")
+    test_dir = tmp_path / "ro_barrier_dir"
     test_dir = tmp_path / "ro_barrier_dir"
     test_dir.mkdir()
     child_file = test_dir / "child.txt"

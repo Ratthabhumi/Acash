@@ -5,6 +5,13 @@ plus an explicit --authorization identifier whose --ordinal equals
 state.observed_session_count + 1. Exactly one expected session per invocation:
 no ranges, no catch-up, no backfill. Accounting/benchmark/chain commit happens
 only after all price + corporate-action qualification passes.
+
+F15 single-use dispatch: every live invocation consumes one attempt from the
+append-only dispatch ledger BEFORE any network call; replay fails closed.
+For ordinal >= 2 the live path additionally requires an explicit
+--dispatch-authority manifest bound to intent, runtime, CA evidence, expiry,
+and trading locks. F16: CA intake is validated pre-network and provenance is
+preserved in the sealed observation.
 """
 
 from __future__ import annotations
@@ -27,6 +34,19 @@ from acash.execution.alpaca.credentials import (
     EnvAlpacaCredentialProvider,
 )
 from acash.research.hyp_011.shadow_ca import CADetermination
+from acash.research.hyp_011.shadow_ca_bundle import (
+    verify_determination_evidence_binding,
+    verify_evidence_bundle,
+)
+from acash.research.hyp_011.shadow_ca_intake import validate_intake_document
+from acash.research.hyp_011.shadow_authority import (
+    INTENT_REGISTRY_DIRNAME,
+    attempt_ledger_key,
+    consume_dispatch_attempt,
+    resolve_runtime_sha,
+    validate_dispatch_authority,
+    verify_registered_intent_binding,
+)
 from acash.research.hyp_011.accounting import BASELINE_SLIPPAGE_BPS
 from acash.research.hyp_011.shadow import (
     FAILED_ACTIVATION_SESSION,
@@ -37,6 +57,7 @@ from acash.research.hyp_011.shadow import (
     STAGE_C_RECOVERY_BINDING_PATH,
     ShadowState,
     StageCRecoveryAuthority,
+    assert_target_session_fresh,
     candidate_schedule_time,
     load_stage_c_recovery_authority,
     observation_eligible_after,
@@ -116,6 +137,7 @@ def main(
     _client: Any | None = None,
     _credential_provider: Any | None = None,
     _stage_c_binding_path: Path | None = None,
+    _runtime_sha: str | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="HYP_011 prospective shadow runner.")
     parser.add_argument("--execute-network", action="store_true", default=False)
@@ -123,6 +145,33 @@ def main(
     parser.add_argument("--ordinal", type=int, default=0)
     parser.add_argument("--dispatch-attempt", type=int, default=0)
     parser.add_argument("--ca-determinations", default="")
+    parser.add_argument(
+        "--dispatch-authority",
+        default="",
+        help="Explicit DispatchAuthority manifest (required on live path for ordinal >= 2).",
+    )
+    parser.add_argument(
+        "--ca-evidence-bundle",
+        default="",
+        help="Per-symbol CA evidence bundle root (required on live path beyond session one).",
+    )
+    parser.add_argument(
+        "--intent-registry",
+        default="",
+        help="Preregistered-intent registry dir (defaults to <state_dir>/intent_registry).",
+    )
+    parser.add_argument(
+        "--local-preflight",
+        action="store_true",
+        default=False,
+        help="Validate the complete zero-network preflight without consuming "
+        "the dispatch attempt and without network.",
+    )
+    parser.add_argument(
+        "--runtime-sha",
+        default="",
+        help="Explicit runtime commit SHA pin (else resolved from the git checkout).",
+    )
     args = parser.parse_args(argv)
 
     attempts = [0]
@@ -181,6 +230,15 @@ def main(
         print(f"SESSION_CLOSE_UTC = {pretest_session.close_utc.isoformat()}")
         print(f"PROVIDER_ELIGIBLE_AFTER_UTC = {pretest_eligible_after.isoformat()}")
         print(f"OBSERVATION_ELIGIBLE = {str(pretest_eligible).lower()}")
+        try:
+            pretest_next = assert_target_session_fresh(
+                pretest_target, calendar, pretest_now
+            )
+            print(f"TARGET_FRESH = true")
+            print(f"NEXT_SESSION_NOT_YET_OPEN = {pretest_next.isoformat()}")
+        except DataContractError as exc:
+            print(f"TARGET_FRESH = false")
+            print(f"TARGET_STALE_REASON = {exc}")
         print("NETWORK_REQUESTS = 0")
         print("DRY-RUN: no network. Use --execute-network with --authorization.")
         return 0
@@ -264,6 +322,173 @@ def main(
         f"attempt {expected_dispatch_attempt}: ACCEPTED."
     )
 
+    # F15: DispatchAuthority manifest is REQUIRED on the live path for any
+    # post-first observation. Bare tokens remain valid only for ordinal 1
+    # (session one), preserving the sealed Obs #1 lineage semantics.
+    authority_doc: Dict[str, Any] | None = None
+    authority_file_sha: str | None = None
+    if len(observed) >= 1 and not args.dispatch_authority:
+        raise DataContractError(
+            "SHADOW_DISPATCH_AUTHORITY_REQUIRED: live dispatch for "
+            f"ordinal {expected_ordinal} requires an explicit "
+            "--dispatch-authority manifest."
+        )
+    if args.dispatch_authority:
+        try:
+            authority_raw_bytes = Path(args.dispatch_authority).read_bytes()
+        except OSError as exc:
+            raise DataContractError(f"SHADOW_AUTHORITY_FILE_UNREADABLE: {exc}.") from exc
+        try:
+            loaded_authority = json.loads(authority_raw_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise DataContractError(f"SHADOW_AUTHORITY_FILE_CORRUPT: {exc}.") from exc
+        if not isinstance(loaded_authority, dict):
+            raise DataContractError("SHADOW_AUTHORITY_FILE_MALFORMED.")
+        authority_doc = loaded_authority
+        authority_file_sha = hashlib.sha256(authority_raw_bytes).hexdigest()
+
+    target = _expected_next(observed, calendar, activation_session)
+    print(f"Expected next session: {target.isoformat()}")
+
+    # F15: single-use ledger gate BEFORE any burn or network side effect.
+    # The key binds authority (or bare token) + ordinal + attempt + target.
+    ledger_key = attempt_ledger_key(
+        authority_sha256=authority_file_sha,
+        authorization=args.authorization,
+        observation_ordinal=expected_ordinal,
+        dispatch_attempt=args.dispatch_attempt,
+        target_session=target,
+    )
+    if (state_dir / "dispatch_ledger" / f"{ledger_key}.json").is_file():
+        raise DataContractError(
+            "BLOCK_DISPATCH_AUTHORITY_REPLAY: this dispatch attempt was "
+            "already consumed; a new attempt requires a new explicit "
+            "DispatchAuthority."
+        )
+
+    obs_path = state_dir / "observations" / f"{target.isoformat()}.json"
+    if obs_path.exists():
+        print("ALREADY_PROCESSED_NO_ACTION")
+        print("NETWORK_REQUESTS_ISSUED = 0")
+        return EXIT_OK
+
+    # F18: the attempt ledger is consumed ONLY after every local preflight
+    # passes (see below). The read-only replay pre-check above stays early;
+    # the destructive consume moved to immediately before network transport.
+
+    # F16: load CA evidence bytes once (prior observations imply CA required).
+    ca_file_bytes = b""
+    if observed:
+        if not args.ca_determinations:
+            raise DataContractError(
+                "SHADOW_CA_DETERMINATIONS_REQUIRED_BEYOND_SESSION_ONE."
+            )
+        try:
+            ca_file_bytes = Path(args.ca_determinations).read_bytes()
+        except OSError as exc:
+            raise DataContractError(f"SHADOW_CA_FILE_UNREADABLE: {exc}.") from exc
+
+    # F15: full authority validation (when a manifest was supplied).
+    if authority_doc is not None:
+        if not ca_file_bytes:
+            raise DataContractError(
+                "SHADOW_AUTHORITY_CA_BINDING_UNAVAILABLE: a supplied "
+                "DispatchAuthority requires bound CA evidence bytes."
+            )
+        runtime_sha = resolve_runtime_sha(
+            _runtime_sha if _runtime_sha is not None else (args.runtime_sha or None)
+        )
+        validated_authority = validate_dispatch_authority(
+            authority_doc,
+            calendar=calendar,
+            now_utc=now_utc,
+            target_session=target,
+            observation_ordinal=expected_ordinal,
+            dispatch_attempt=args.dispatch_attempt,
+            state_prev_sha256=verified.get("last_observation_sha256"),
+            runtime_sha=runtime_sha,
+            ca_file_sha256=hashlib.sha256(ca_file_bytes).hexdigest(),
+        )
+        print(f"DispatchAuthority ACCEPTED: {validated_authority.authority_sha256()[:16]}...")
+        # F17: the authority must bind a PHYSICALLY preregistered intent
+        # (server-side registry timestamp, O_EXCL create-once). A backdated
+        # unregistered JSON can never satisfy this check.
+        registry_dir = (
+            Path(args.intent_registry)
+            if args.intent_registry
+            else (state_dir / INTENT_REGISTRY_DIRNAME)
+        )
+        registered_intent = verify_registered_intent_binding(
+            registry_dir=registry_dir,
+            bound_intent_sha256=str(authority_doc.get("intent_sha256") or ""),
+            target_session=target,
+            observation_ordinal=expected_ordinal,
+            state_prev_sha256=verified.get("last_observation_sha256"),
+        )
+        print(
+            "RegisteredIntent BOUND: "
+            f"{registered_intent.registered_sha256()[:16]}... "
+            f"registered_at={registered_intent.registered_at_utc.isoformat()}"
+        )
+
+    # F16: corporate-action intake gate BEFORE any market-data network call.
+    # The offline intake contract (evidence_ref, source SHA, scope evidence
+    # for no-event, exact amount for events) is enforced here so a bad CA
+    # package fails with zero requests. Session one records explicit
+    # non-required status (no prior holdings, no entitlement possible).
+    ca_section: Dict[str, Any] = {}
+    dividends: Dict[str, CADetermination] = {}
+    if observed:
+        # ca_file_bytes was loaded once pre-authority-validation; re-parse here
+        # without re-reading (single source of bytes for binding + intake).
+        try:
+            ca_doc = json.loads(ca_file_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise DataContractError(f"SHADOW_CA_FILE_CORRUPT: {exc}.") from exc
+        if not isinstance(ca_doc, dict):
+            raise DataContractError("SHADOW_CA_FILE_MALFORMED.")
+        for symbol in SYMBOLS:
+            raw = ca_doc.get(symbol)
+            if not isinstance(raw, dict):
+                raise DataContractError(f"SHADOW_CA_MISSING_{symbol}.")
+            determination = validate_intake_document(raw, symbol, target, now_utc)
+            dividends[symbol] = determination
+            # F16-B: preserve intake provenance in the sealed observation;
+            # never silently strip evidence_ref / scope_evidence.
+            enriched = determination.to_dict()
+            enriched["evidence_ref"] = str(raw["evidence_ref"])
+            if raw.get("scope_evidence") is not None:
+                enriched["scope_evidence"] = raw["scope_evidence"]
+            ca_section[symbol] = enriched
+    else:
+        for symbol in SYMBOLS:
+            ca_section[symbol] = {
+                "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
+            }
+    print("Corporate-action qualification: PASS.")
+
+    # F19: raw-byte evidence bundle verification per symbol (before any
+    # network). Recomputes digests from preserved official bytes, validates
+    # sponsor/product identity (239707 is IWB, never ACWI), and binds each
+    # sealed determination to its verified bundle digest. Invented digests,
+    # missing bytes, and wrong identities fail here with zero requests.
+    if observed:
+        if not args.ca_evidence_bundle:
+            raise DataContractError(
+                "SHADOW_CA_BUNDLE_REQUIRED_BEYOND_SESSION_ONE."
+            )
+        bundle_root = Path(args.ca_evidence_bundle)
+        for symbol in SYMBOLS:
+            verified_manifest = verify_evidence_bundle(
+                bundle_root / symbol, symbol, target, now_utc
+            )
+            verify_determination_evidence_binding(
+                ca_section[symbol], verified_manifest, symbol
+            )
+        print("Corporate-action evidence bundles: VERIFIED.")
+
+    # Credential presence check (F18 order: after CA/evidence preflight,
+    # still before attempt consumption and network).
     cred_prov = _credential_provider or EnvAlpacaCredentialProvider()
     try:
         cred_prov.load()
@@ -271,14 +496,11 @@ def main(
         print(f"BLOCKED_MISSING_CREDENTIALS: {exc}")
         return EXIT_BLOCKED
 
-    target = _expected_next(observed, calendar, activation_session)
-    print(f"Expected next session: {target.isoformat()}")
-
-    obs_path = state_dir / "observations" / f"{target.isoformat()}.json"
-    if obs_path.exists():
-        print("ALREADY_PROCESSED_NO_ACTION")
-        print("NETWORK_REQUESTS_ISSUED = 0")
-        return EXIT_OK
+    # F14 continuation/freshness gate (PROPOSED_PENDING_HUMAN_RATIFICATION):
+    # the target may only be processed while the next NYSE session has not
+    # opened. A stale target fails here before any network side effect.
+    fresh_next = assert_target_session_fresh(target, calendar, now_utc)
+    print(f"NEXT_SESSION_NOT_YET_OPEN = {fresh_next.isoformat()}")
 
     # Full guard validation pre-network (duplicate/order/early/stress/
     # quarantine/completion via close_utc).
@@ -296,6 +518,31 @@ def main(
             f"eligible strictly after {provider_eligible_after_utc.isoformat()}, "
             f"now is {now_utc.isoformat()}."
         )
+
+    # Complete zero-network local dispatch preflight (H): every local check
+    # above passed and NOTHING has been consumed or fetched. This mode proves
+    # the full live path is green without touching the attempt ledger.
+    if args.local_preflight:
+        print("LOCAL_PREFLIGHT = PASS")
+        print("ATTEMPT_CONSUMED = false")
+        print("NETWORK_REQUESTS = 0")
+        return EXIT_OK
+
+    # F18: consume the attempt atomically (one-shot) ONLY after ALL local
+    # preflight passed, immediately before market-data transport. Any crash
+    # or failure after this point burns the attempt; reuse fails closed.
+    # Local preflight failures above leave the ledger UNCHANGED.
+    consume_dispatch_attempt(
+        state_dir,
+        ledger_key,
+        {
+            "authorization": args.authorization,
+            "authority_sha256": authority_file_sha,
+            "observation_ordinal": expected_ordinal,
+            "dispatch_attempt": args.dispatch_attempt,
+            "target_session": target.isoformat(),
+        },
+    )
 
     client = _client if _client is not None else HYP011AlpacaClient(http_attempt_listener=_count)
     fetched: Dict[str, Dict[str, Any]] = {}
@@ -360,33 +607,6 @@ def main(
         split_section[symbol] = _check_split_continuity(
             symbol, market_closes, market_split_closes, prior_closes,
         )
-
-    # Corporate-action determinations via the canonical CADetermination parser.
-    # Session one: no prior holdings, so no entitlement is possible; record the
-    # explicit status WITHOUT claiming whether a distribution exists.
-    ca_section: Dict[str, Any] = {}
-    dividends: Dict[str, CADetermination] = {}
-    if observed:
-        if not args.ca_determinations:
-            raise DataContractError(
-                "SHADOW_CA_DETERMINATIONS_REQUIRED_BEYOND_SESSION_ONE."
-            )
-        ca_doc = json.loads(Path(args.ca_determinations).read_text(encoding="utf-8"))
-        for symbol in SYMBOLS:
-            raw = ca_doc.get(symbol)
-            if not isinstance(raw, dict):
-                raise DataContractError(f"SHADOW_CA_MISSING_{symbol}.")
-            determination = CADetermination.from_dict(
-                raw, symbol, target, now_utc
-            )
-            dividends[symbol] = determination
-            ca_section[symbol] = determination.to_dict()
-    else:
-        for symbol in SYMBOLS:
-            ca_section[symbol] = {
-                "status": "CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS"
-            }
-    print("Corporate-action qualification: PASS.")
 
     # Restore economic state (fresh on session one).
     if observed:

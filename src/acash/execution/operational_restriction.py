@@ -66,6 +66,8 @@ the existing RiskState / KillSwitch controls. ``RestrictionAuthority != RiskEngi
 This module is pure (no I/O, no clock). All timestamps are supplied by callers.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import Enum

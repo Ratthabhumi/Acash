@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "hyp_009"
 RESULT = (
@@ -33,6 +35,7 @@ def _load(path: Path) -> Dict[str, Any]:
     return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_dataset_dividend_corrected_001.json, absent from fresh clones
 def test_corrected_dataset_seal_16_events() -> None:
     ds = _load(DATASET_MANIFEST)
     assert ds["dataset_state"] == "M2_DIVIDEND_CORRECTED_DATASET_SEALED_PERFORMANCE_REPLAYED_ONCE"
@@ -82,6 +85,7 @@ def test_corrected_gates_g4_fail_verdict() -> None:
     assert r["invalidation"] == "M2_INVALIDATED_BY_DIVIDEND_AUTHORITY_GAP"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_signal_ledger_dividend_corrected_001.json, absent from fresh clones
 def test_corrected_signal_structure() -> None:
     sig = _load(DATA_DIR / "m2_signal_ledger_dividend_corrected_001.json")
     assert len(sig["rows"]) == 48
@@ -93,6 +97,7 @@ def test_corrected_signal_structure() -> None:
     assert len(base_exec["rows"]) == 9
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_signal_ledger_dividend_corrected_001.json, absent from fresh clones
 def test_corrected_ledger_pins_and_locks() -> None:
     r = _load(RESULT)
     pairs = [

@@ -27,7 +27,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Final, List, Optional, Sequence, Tuple
 
-import MetaTrader5 as mt5  # type: ignore[import-untyped]
+import MetaTrader5 as mt5
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.domain.portfolio import PortfolioState

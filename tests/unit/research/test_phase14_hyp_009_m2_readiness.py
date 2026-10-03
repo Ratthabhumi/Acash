@@ -61,6 +61,7 @@ def test_first_m2_execution_derived_from_calendar() -> None:
     assert resolved[date(2020, 12, 31)] == date(2021, 1, 4)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/signal_ledger_reproducibility_001.json, absent from fresh clones
 def test_dec2020_frozen_state_binding() -> None:
     import json
     from pathlib import Path

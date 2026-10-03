@@ -22,6 +22,8 @@ from acash.execution.mt5.exceptions import MT5ValidationError
 from acash.execution.mt5.reconciliation import MT5DealCategory
 from scripts.phase13_layer_b_harness import LayerBDemoMT5Transport
 
+pytestmark = pytest.mark.native_mt5
+
 # Namedtuple mimicking MT5 C-extension TradeDeal struct faithfully
 RawMT5Deal = namedtuple(
     "RawMT5Deal",

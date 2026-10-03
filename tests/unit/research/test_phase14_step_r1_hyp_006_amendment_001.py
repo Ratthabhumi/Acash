@@ -42,6 +42,7 @@ def test_1_r1_artifacts_immutability() -> None:
     assert cfg["strategy_rules"]["execution_rules"]["quote_conditions_policy"]["acceptable_conditions"] == ["R", "?"]
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/HYP_006_R1_QUOTE_PROVENANCE_AMENDMENT_001.json, absent from fresh clones
 def test_2_amendment_document_and_manifest_integrity() -> None:
     """Invariant 2: Additive Amendment 001 document and manifest are properly formed and sealed."""
     doc_path = Path("docs/phase14/HYP_006_R1_QUOTE_PROVENANCE_AMENDMENT_001.md")

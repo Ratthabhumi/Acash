@@ -41,6 +41,8 @@ from scripts.phase13_layer_b_harness import (
     validate_a3_lifecycle_binding,
 )
 
+pytestmark = pytest.mark.native_mt5
+
 
 def _make_deal(
     *,

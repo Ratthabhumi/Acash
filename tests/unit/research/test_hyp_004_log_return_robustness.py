@@ -74,6 +74,7 @@ R2_PARQUET_PATH = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R2_session_
 R3_PARQUET_PATH = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_01_all_upstream_hashes_pinned() -> None:
     """1. Verify that all upstream governance and data hashes are pinned in constants."""
     preconditions = validate_robustness_preconditions(BASE_DIR)
@@ -86,6 +87,7 @@ def test_01_all_upstream_hashes_pinned() -> None:
     assert preconditions["r4_manifest_sha256"] == EXPECTED_R4_MANIFEST_SHA256
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_02_r2_dataset_hash_exact() -> None:
     """2. Verify that the R2 session endpoints Parquet hash matches the pinned value exactly."""
     assert R2_PARQUET_PATH.exists()
@@ -93,6 +95,7 @@ def test_02_r2_dataset_hash_exact() -> None:
     assert computed_sha == EXPECTED_R2_PARQUET_SHA256
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_03_sample_t_equals_1489() -> None:
     """3. Verify that the eligible sample size is exactly T = 1489."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -100,6 +103,7 @@ def test_03_sample_t_equals_1489() -> None:
     assert len(rows) == 1489
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R3_primary_returns.parquet, absent from fresh clones
 def test_04_exact_same_eligible_dates_as_r3() -> None:
     """4. Verify that eligible dates match R3 primary returns and R2 eligibility exactly."""
     assert R3_PARQUET_PATH.exists()
@@ -120,6 +124,7 @@ def test_04_exact_same_eligible_dates_as_r3() -> None:
     assert set(log_dates) == set(r2_eligible_dates)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_05_exact_same_9_exclusions() -> None:
     """5. Verify that exactly the same 9 dates are excluded as in R2/R3."""
     _, excluded_dates = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -138,6 +143,7 @@ def test_05_exact_same_9_exclusions() -> None:
     assert excluded_dates == expected_exclusions
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_06_natural_log_formulas() -> None:
     """6. Verify that natural log formulas ln(p1/p0) and ln(p13/p12) are applied strictly."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -211,6 +217,7 @@ def test_08_no_simple_return_result_overwritten() -> None:
     assert PRIMARY_ALPHA == Decimal("-0.000125752897293718")
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_09_only_one_log_regression() -> None:
     """9. Verify that execution runs exactly one univariate regression without grid search."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -223,6 +230,7 @@ def test_09_only_one_log_regression() -> None:
     assert isinstance(result.beta_log, Decimal)
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_10_intercept_included() -> None:
     """10. Verify that an intercept alpha_log is included in the model."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -243,6 +251,7 @@ def test_11_hac_lag_equals_7() -> None:
     assert EXPECTED_HAC_LAG == 7
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_12_bartlett_kernel() -> None:
     """12. Verify Bartlett kernel weighting in HAC standard error calculation."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -254,6 +263,7 @@ def test_12_bartlett_kernel() -> None:
     assert abs(float(t) - (float(beta) / float(se))) < 1e-4
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_13_two_sided_p() -> None:
     """13. Verify that two-sided p-value calculation is strictly enforced."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -297,6 +307,7 @@ def test_17_no_r12() -> None:
     assert "r12" not in source or "log_r12" not in source
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_18_no_alternate_sample() -> None:
     """18. Verify that no alternate date filtering, clipping, or sample manipulation is performed."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -304,6 +315,7 @@ def test_18_no_alternate_sample() -> None:
     assert rows[-1].trading_date == "2022-12-30"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_19_no_2023_plus_access() -> None:
     """19. Verify that zero data >= 2023 is accessed."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)
@@ -316,6 +328,7 @@ def test_20_primary_outcome_immutable() -> None:
     assert PRIMARY_OUTCOME_LABEL == "PRIMARY_REPLICATION_NOT_ACCEPTED"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_21_local_artifact_cardinality_and_hash(tmp_path: Path) -> None:
     """21. Verify that the Parquet builder creates a valid file with exactly 1489 rows."""
     rows, _ = load_and_compute_log_returns(R2_PARQUET_PATH)

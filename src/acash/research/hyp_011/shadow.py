@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
@@ -74,9 +74,10 @@ def load_stage_c_recovery_authority(
     """Validate Stage C-B recovery binding manifest and return authoritative metadata.
 
     Computes deterministic SHA-256 digest over the raw canonical file bytes on disk.
-    Enforces all 11 required fields, valid 40-character hex commit SHA,
+    Enforces all 12 required fields, valid 40-character hex commit SHA,
     timezone-aware commit timestamp, matching NYSE-derived activation session,
-    failed session invariants, and advance beyond 2026-09-28.
+    failed session invariants, exact trading locks, and advance beyond 2026-09-28.
+    The manifest file itself is never mutated; only read.
     """
     path = stage_c_binding_path or STAGE_C_RECOVERY_BINDING_PATH
     if not path.is_file():
@@ -102,6 +103,7 @@ def load_stage_c_recovery_authority(
         "next_dispatch_attempt",
         "backfill_allowed",
         "retry_failed_session_allowed",
+        "locks",
     )
     for req_field in required_fields:
         if req_field not in data:
@@ -162,6 +164,31 @@ def load_stage_c_recovery_authority(
         raise DataContractError("SHADOW_RECOVERY_BINDING_BACKFILL_NOT_FORBIDDEN.")
     if data["retry_failed_session_allowed"] is not False:
         raise DataContractError("SHADOW_RECOVERY_BINDING_RETRY_NOT_FORBIDDEN.")
+    # F09: the locks subdocument must exist and exactly enforce the
+    # no-trading locks. A corrupt manifest permitting paper/live trading or
+    # capital authority fails closed here.
+    locks = data.get("locks")
+    if not isinstance(locks, dict):
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_LOCKS_MISSING: locks dictionary required."
+        )
+    if locks.get("paper_trading") is not False:
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_LOCKS_INVALID: paper_trading must be false."
+        )
+    if locks.get("live_trading") is not False:
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_LOCKS_INVALID: live_trading must be false."
+        )
+    if str(locks.get("real_capital_authority_usd")) != "0.00":
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_LOCKS_INVALID: "
+            "real_capital_authority_usd must be 0.00."
+        )
+    if locks.get("no_real_orders") is not True:
+        raise DataContractError(
+            "SHADOW_RECOVERY_BINDING_LOCKS_INVALID: no_real_orders must be true."
+        )
 
     if derived_act <= FAILED_ACTIVATION_SESSION:
         raise DataContractError(
@@ -270,6 +297,49 @@ def observation_eligible_after(
     At exactly eligible_after the session is NOT YET PROCESSABLE.
     """
     return provider_observation_eligible_after(session_date, calendar)
+
+
+def next_trading_session_open(
+    target: date, calendar: NyseCa1Calendar
+) -> Tuple[date, datetime]:
+    """First NYSE trading session strictly after target plus its open_utc."""
+    cursor = date.fromordinal(target.toordinal() + 1)
+    for _ in range(30):
+        if calendar.is_trading_session(cursor):
+            session = calendar.get_session(cursor)
+            open_utc = session.open_utc
+            if open_utc is None:
+                raise DataContractError(f"SHADOW_NO_OPEN_TIME: {cursor}.")
+            return cursor, open_utc
+        cursor = date.fromordinal(cursor.toordinal() + 1)
+    raise DataContractError("SHADOW_NO_NEXT_SESSION_WITHIN_30_DAYS.")
+
+
+def assert_target_session_fresh(
+    target: date, calendar: NyseCa1Calendar, now_utc: datetime
+) -> date:
+    """F14 continuation/freshness gate (PROPOSED_PENDING_HUMAN_RATIFICATION).
+
+    A target session may only be processed while the NEXT NYSE trading session
+    has not yet opened. Once it opens, an unobserved target becomes
+    MISSED_UNOBSERVED and cannot be backfilled: fail with
+    SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED. Never advances,
+    rewrites, or fabricates authority; a later target requires explicit
+    additive recovery/continuation governance.
+
+    Returns the next session date when fresh.
+    """
+    if now_utc.tzinfo is None:
+        raise DataContractError("SHADOW_NOW_MUST_BE_TIMEZONE_AWARE.")
+    now = now_utc.astimezone(timezone.utc)
+    next_session, next_open = next_trading_session_open(target, calendar)
+    if now >= next_open:
+        raise DataContractError(
+            f"SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED: target "
+            f"{target.isoformat()} is stale; next session "
+            f"{next_session.isoformat()} opened at {next_open.isoformat()}."
+        )
+    return next_session
 SHADOW_STARTING_AUM: Decimal = Decimal("100000.00")
 
 

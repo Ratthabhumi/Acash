@@ -108,6 +108,7 @@ def test_11_no_market_data_network_imports_in_registration_script() -> None:
         assert f"from {token}" not in code
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/hypotheses/HYP_004.json, absent from fresh clones
 def test_12_sealed_mirrors_byte_identical() -> None:
     """Invariant 12: Canonical Git-tracked hypothesis mirrors and local runtime mirror are byte-identical."""
     p85 = Path("docs/phase8.5/hypotheses/HYP_004.json").read_bytes()
@@ -122,6 +123,7 @@ def test_12_sealed_mirrors_byte_identical() -> None:
     assert manifest["hypothesis_sha256"] == calculated_spec_sha
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/manifests/research/manifest_r1_HYP_004.json, absent from fresh clones
 def test_13_manifest_mirrors_byte_identical_and_valid() -> None:
     """Invariant 13: Canonical Git-tracked manifest and local runtime manifest mirror are byte-identical."""
     m14 = Path("docs/phase14/manifests/manifest_r1_HYP_004.json").read_bytes()

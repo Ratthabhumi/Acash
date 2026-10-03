@@ -27,6 +27,17 @@ from acash.research.hyp_011.shadow_ops import (
 )
 
 
+def _load_runner_module() -> Any:
+    import importlib.util
+
+    script_path = Path(__file__).resolve().parents[3] / "scripts" / "process_hyp_011_prospective_shadow.py"
+    spec = importlib.util.spec_from_file_location("process_hyp_011_prospective_shadow", script_path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _market(session: date, level: str = "100") -> SessionMarket:
     px = Decimal(level)
     return SessionMarket(
@@ -180,13 +191,19 @@ def test_benchmark_independent_and_first_day_anchor() -> None:
     assert Decimal(frag2["daily_return"]) == Decimal(frag2["equity"]) / first_equity - Decimal("1")
 
 
-def test_runner_dry_run_zero_network(capsys: Any) -> None:
-    import sys
+def test_runner_dry_run_zero_network(
+    capsys: Any, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = _load_runner_module()
+    monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
 
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
-
-    assert runner.main([], _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc)) == 0
+    assert (
+        runner.main(
+            [],
+            _now_utc=datetime(2026, 9, 28, 15, 0, 0, tzinfo=timezone.utc),
+        )
+        == 0
+    )
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PRETEST" in out
@@ -248,10 +265,7 @@ def test_verify_chain_blocks_tamper_and_orphan() -> None:
 
 
 def test_runner_ordinal_and_chain_guards() -> None:
-    import sys
-
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
+    runner = _load_runner_module()
 
     # Wrong ordinal rejected pre-network (no --execute-network needed for arg parse,
     # but ordinal check happens after chain verify which needs no network).
@@ -307,6 +321,12 @@ def _make_test_stage_c_binding(tmp_path: Path) -> Path:
         "next_dispatch_attempt": 2,
         "backfill_allowed": False,
         "retry_failed_session_allowed": False,
+        "locks": {
+            "paper_trading": False,
+            "live_trading": False,
+            "real_capital_authority_usd": "0.00",
+            "no_real_orders": True,
+        },
     }
     binding_path.write_text(json.dumps(doc), encoding="utf-8")
     return binding_path
@@ -322,11 +342,11 @@ def _run_observation(
     ca_file: str = "",
     stage_c_binding: Optional[Path] = None,
     dispatch_attempt: int = 1,
+    authority_path: str = "",
+    runtime_sha: Optional[str] = None,
+    bundle_path: str = "",
 ) -> int:
-    import sys
-
-    sys.path.insert(0, "scripts")
-    import process_hyp_011_prospective_shadow as runner
+    runner = _load_runner_module()
 
     if dispatch_attempt > 1:
         auth = f"AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal:04d}_ATTEMPT_{dispatch_attempt:04d}"
@@ -344,6 +364,10 @@ def _run_observation(
     ]
     if ca_file:
         argv += ["--ca-determinations", ca_file]
+    if authority_path:
+        argv += ["--dispatch-authority", authority_path]
+    if bundle_path:
+        argv += ["--ca-evidence-bundle", bundle_path]
     from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
 
     dummy_prov = EnvAlpacaCredentialProvider(
@@ -357,6 +381,7 @@ def _run_observation(
             _client=_MockClient(calls, level),
             _credential_provider=dummy_prov,
             _stage_c_binding_path=stage_c_binding,
+            _runtime_sha=runtime_sha,
         )
     )
 
@@ -405,7 +430,56 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     state1 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     cash1 = state1["strategy"]["cash"]
     # Second session: needs canonical CA determinations (has prior holdings now).
+    # F16 intake contract: no-event docs carry scope evidence + evidence refs.
+    # F19: digests are recomputed bundle-evidence digests over fixture bytes.
     sponsors = {"ACWI": "BLACKROCK_ISHARES_OFFICIAL", "AGG": "BLACKROCK_ISHARES_OFFICIAL", "SPY": "STATE_STREET_SPDR_OFFICIAL"}
+    urls = {
+        "ACWI": "https://www.ishares.com/us/products/239600/ishares-msci-acwi-etf",
+        "AGG": "https://www.ishares.com/us/products/239458/ishares-core-us-aggregate-bond-etf",
+        "SPY": "https://www.ssga.com/us/en/institutional/etfs/spdr-sp-500-etf-trust-spy",
+    }
+    identities = {
+        "ACWI": {"product_id": "239600", "ticker": "ACWI", "cusip": "464288257",
+                 "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "AGG": {"product_id": "239458", "ticker": "AGG",
+                "sponsor": "BLACKROCK_ISHARES_OFFICIAL"},
+        "SPY": {"schedule": "SSGA_OFFICIAL_2026_DISTRIBUTIONS", "ticker": "SPY",
+                "cusip": "78462F103", "sponsor": "STATE_STREET_SPDR_OFFICIAL"},
+    }
+    # F19: fixture evidence bytes MUST carry the semantic identity markers
+    # the bundle gate derives (ticker/product/CUSIP/sponsor).
+    marker_bytes = {
+        "ACWI": b"OFFICIAL-FIXTURE-EVIDENCE::ACWI::239600::464288257::2026-09-30\n",
+        "AGG": b"OFFICIAL-FIXTURE-EVIDENCE::AGG::239458::2026-09-30\n",
+        "SPY": b"OFFICIAL-FIXTURE-EVIDENCE::SPY::78462F103::State Street::2026-09-30\n",
+    }
+    bundle_root = tmp_path / "ca_bundle_2026-09-30"
+    bundle_digests = {}
+    for symbol in ("ACWI", "AGG", "SPY"):
+        sdir = bundle_root / symbol
+        edir = sdir / "evidence"
+        edir.mkdir(parents=True)
+        ev_bytes = marker_bytes[symbol]
+        sched_bytes = f"OFFICIAL-FIXTURE-SCHEDULE::{symbol}::2026-09-30\n".encode()
+        ev_name = f"{symbol.lower()}-scope-fixture.pdf"
+        sched_name = f"{symbol.lower()}-schedule-fixture.pdf"
+        (edir / ev_name).write_bytes(ev_bytes)
+        (edir / sched_name).write_bytes(sched_bytes)
+        ev_sha = hashlib.sha256(ev_bytes).hexdigest()
+        sched_sha = hashlib.sha256(sched_bytes).hexdigest()
+        manifest = {
+            "schema_version": 1, "symbol": symbol, "target_session": "2026-09-30",
+            "authority_source": sponsors[symbol], "official_url": urls[symbol],
+            "product_identity": identities[symbol], "evidence_file": ev_name,
+            "evidence_sha256": ev_sha,
+            "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
+            "retrieval_representation": "NORMALIZED_RETRIEVAL_REPRESENTATION",
+            "scope_type": "NO_EVENT_SCOPE",
+            "schedule_evidence": {"file": sched_name, "sha256": sched_sha},
+            "note": "Fixture bundle.",
+        }
+        (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        bundle_digests[symbol] = {"sha": ev_sha, "ref": ev_name, "sched_sha": sched_sha}
     ca_doc = {
         symbol: {
             "symbol": symbol,
@@ -413,17 +487,81 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
             "has_event": False,
             "authority_source": sponsors[symbol],
             "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
-            "source_sha256": "c" * 64,
+            "source_sha256": bundle_digests[symbol]["sha"],
+            "evidence_ref": bundle_digests[symbol]["ref"],
+            "scope_evidence": {
+                "schedule_id": "FIXTURE_OFFICIAL_SCOPE_2026_09_30",
+                "schedule_sha256": bundle_digests[symbol]["sched_sha"],
+                "scope_note": "Fixture official-scope coverage for 2026-09-30.",
+                "retrieved_at_utc": "2026-09-30T21:00:00+00:00",
+            },
         }
         for symbol in ("ACWI", "AGG", "SPY")
     }
     ca_path = tmp_path / "ca_2026-09-30.json"
     ca_path.write_text(json.dumps(ca_doc), encoding="utf-8")
+    # F15 ceremony: mint a DispatchAuthority bound to intent + runtime + CA bytes.
+    # F17: the authority binds the PHYSICALLY preregistered intent digest.
+    from acash.research.hyp_011.shadow_authority import (
+        ObservationIntent,
+        register_observation_intent,
+        validate_observation_intent,
+    )
+
+    fixture_runtime_sha = "e" * 40
+    reg_path = register_observation_intent(
+        registry_dir=tmp_path / "intent_registry",
+        calendar=NyseCa1Calendar(),
+        target_session=date(2026, 9, 30),
+        observation_ordinal=2,
+        previous_observation_sha256=state1["last_observation_sha256"],
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        authority_identity="TEST_FIXTURE",
+        now_utc=datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    registered_sha = str(json.loads(reg_path.read_text(encoding="utf-8"))["intent_sha256"])
+    intent = ObservationIntent(
+        hypothesis_id="HYP_011",
+        target_session=date(2026, 9, 30),
+        observation_ordinal=2,
+        scientific_inclusion_intent="INCLUDE_PROSPECTIVE",
+        previous_observation_sha256=state1["last_observation_sha256"],
+        backfill_allowed=False,
+        automatic_skip_allowed=False,
+        created_at_utc=datetime(2026, 9, 29, 12, 0, 0, tzinfo=timezone.utc),
+        authority_identity="TEST_FIXTURE",
+    )
+    cal = NyseCa1Calendar()
+    validated_intent = validate_observation_intent(
+        intent.canonical_doc(), cal, datetime(2026, 9, 30, 0, 0, 0, tzinfo=timezone.utc)
+    )
+    ca_bytes = ca_path.read_bytes()
+    authority_doc = {
+        "schema_version": 1,
+        "intent_sha256": registered_sha,
+        "intent": intent.canonical_doc(),
+        "runtime_commit_sha": fixture_runtime_sha,
+        "target_session": "2026-09-30",
+        "observation_ordinal": 2,
+        "dispatch_attempt": 1,
+        "valid_after_utc": "2026-09-30T00:00:00+00:00",
+        "expires_at_utc": "2026-10-01T00:00:00+00:00",
+        "ca_manifest_sha256": hashlib.sha256(ca_bytes).hexdigest(),
+        "paper_trading": False,
+        "live_trading": False,
+        "real_capital_authority_usd": "0.00",
+        "no_real_orders": True,
+        "authority_identity": "TEST_FIXTURE",
+    }
+    authority_path = tmp_path / "dispatch_authority_0002.json"
+    authority_path.write_text(json.dumps(authority_doc, indent=2), encoding="utf-8")
     assert _run_observation(
         tmp_path, "2026-09-30", 2,
         datetime(2026, 9, 30, 21, 0, 0, tzinfo=timezone.utc), calls,
         level="101", ca_file=str(ca_path),
         stage_c_binding=binding, dispatch_attempt=1,
+        authority_path=str(authority_path), runtime_sha=fixture_runtime_sha,
+        bundle_path=str(bundle_root),
     ) == 0
     state2 = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert state2["observed_sessions"] == ["2026-09-29", "2026-09-30"]
@@ -438,6 +576,22 @@ def test_second_mocked_observation_continuity(tmp_path: Path) -> None:
     assert state2["last_observation_sha256"] == hashlib.sha256(
         (tmp_path / "observations" / "2026-09-30.json").read_bytes()
     ).hexdigest()
+    # F16-B: intake provenance survives into the sealed observation.
+    # F19: sealed digests are recomputed bundle-evidence digests.
+    for symbol, sponsor in (
+        ("ACWI", "BLACKROCK_ISHARES_OFFICIAL"),
+        ("AGG", "BLACKROCK_ISHARES_OFFICIAL"),
+        ("SPY", "STATE_STREET_SPDR_OFFICIAL"),
+    ):
+        section = obs2["corporate_actions"][symbol]
+        assert section["authority_source"] == sponsor
+        assert section["source_sha256"] == bundle_digests[symbol]["sha"]
+        assert section["evidence_ref"] == bundle_digests[symbol]["ref"]
+        assert section["scope_evidence"]["schedule_sha256"] == bundle_digests[symbol]["sched_sha"]
+        assert section["has_event"] is False
+    # F15: each live dispatch consumed exactly one ledger entry (bare ordinal-1
+    # attempt + authority-bound ordinal-2 attempt).
+    assert len(list((tmp_path / "dispatch_ledger").glob("*.json"))) == 2
 
 
 def _ca_doc(

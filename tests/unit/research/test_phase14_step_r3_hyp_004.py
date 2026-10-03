@@ -53,6 +53,7 @@ from acash.research.step_r3_hyp_004 import (
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_1_governance_preconditions_verified() -> None:
     """Invariant 1: All upstream governance digests and R2 dataset hashes match exact pins."""
     res = validate_r3_preconditions(BASE_DIR)
@@ -63,6 +64,7 @@ def test_1_governance_preconditions_verified() -> None:
     assert res["r2_parquet_sha256"] == EXPECTED_R2_PARQUET_SHA256
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_2_r2_dataset_hash_pin() -> None:
     """Invariant 2: Local R2 Parquet dataset exists and matches pinned SHA-256."""
     parquet_path = BASE_DIR / "data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet"
@@ -256,6 +258,7 @@ def test_11_r3_manifest_structure_and_hashing() -> None:
     assert len(manifest["manifest_sha256"]) == 64
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/parquet/research/HYP_004_MEC0014A_R2_session_endpoints.parquet, absent from fresh clones
 def test_12_exclusion_lineage_and_admitted_dates_invariants() -> None:
     """Invariant 12: R3 admitted dates equal R2 primary_regression_eligible dates exactly.
 

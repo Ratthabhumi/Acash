@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "hyp_009"
 RESULT = REPO_ROOT / "docs" / "phase14" / "manifests" / "HYP_009_R2_M2_RESULT.json"
@@ -20,6 +22,7 @@ def _load(path: Path) -> Dict[str, Any]:
     return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_dataset.json, absent from fresh clones
 def test_m2_dataset_seal() -> None:
     ds = _load(DATASET_MANIFEST)
     assert ds["dataset_state"] == "M2_DATASET_QUALIFIED_AND_SEALED_PERFORMANCE_REPLAYED_ONCE"
@@ -69,6 +72,7 @@ def test_m2_gates_g4_fail_verdict() -> None:
     assert r["first_m2_execution_date"] == "2021-01-04"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_signal_ledger.json, absent from fresh clones
 def test_m2_signal_structure() -> None:
     sig = _load(DATA_DIR / "m2_signal_ledger.json")
     assert len(sig["rows"]) == 48
@@ -80,6 +84,7 @@ def test_m2_signal_structure() -> None:
     assert sig["dec2020_injected_state"] == "LONG"
 
 
+@pytest.mark.sealed_data  # T1 20261002: requires untracked data/hyp_009/m2_signal_ledger.json, absent from fresh clones
 def test_m2_ledger_pins_and_locks() -> None:
     r = _load(RESULT)
     pairs = [

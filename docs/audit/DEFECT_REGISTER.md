@@ -1,0 +1,285 @@
+# ACASH Repository Defect Register & Audit Findings
+
+**Date Context**: 2026-09-30<br>
+**Baseline Anchor**: Canonical `origin/main` at `becec27f5eacf283dcb191cf72d0858682d8e055`<br>
+**Classification Authority**: Canonical Audit Register (F01 – F19)<br>
+**Contract Enforcement Classification**: `CONTRACT_ENFORCEMENT = FAIL_CLOSED_WITH_REPAIRED_F01_F02_F09_ON_REPAIR_BRANCH`<br>
+**Runtime Repair Status**: `RUNTIME_REPAIR_STATUS = IMPLEMENTED_ON_REPAIR_BRANCH_PENDING_HUMAN_REVIEW`<br>
+**Offline Reproductions Invariant**: `PASSING_REPRODUCTION_TEST != DEFECT_REPAIRED`
+
+---
+
+## 1. Canonical Audit Summary Table (F01 – F16)
+
+| ID | Finding Title / Description | Component / Location | Operational Risk for Attempt #2 | Required Timing | Status |
+| :---: | :--- | :--- | :--- | :--- | :--- |
+| **F01** | Economic-state reconciliation gap (tampered state values accepted) | `src/acash/research/hyp_011/shadow_ops.py` (`_reconcile_terminal_economics`) | LOW (initial state is pure starting AUM $100k) | Post-Attempt #2 (Before Obs #2) | REPAIRED_IMPLEMENTED (repair branch; acceptance-proven; Obs #1 backward-compatible) |
+| **F02** | Orphan observation bypass when `state.json` absent | `src/acash/research/hyp_011/shadow_ops.py` (`verify_chain` head) | LOW (mitigated by wrapper preflight) | Post-Attempt #2 (Before Obs #2) | REPAIRED_IMPLEMENTED (repair branch; pristine-empty still valid) |
+| **F03** | CRLF/LF historical seal/hash mismatch on Windows checkouts | `docs/phase14/manifests/` | NONE (Stage C-B verified LF `eea52f69...`) | IMMEDIATE (audit register) | REGISTER CREATED |
+| **F04** | Stale HYP_011 test assumptions after Stage C-B integration | `tests/unit/research/test_phase14_hyp_011_*.py` | NONE (test assumptions) | IMMEDIATE (audit branch) | RESOLVED VIA FIXTURES |
+| ↳ **F04-A** | `stage_c_b_absent` fixture isolation for pre-recovery boundaries | `tests/conftest.py`, `test_phase14_hyp_011_sip_recovery.py` | NONE (test isolation) | IMMEDIATE (audit branch) | RESOLVED VIA FIXTURE |
+| ↳ **F04-B** | Historical target/session fixture isolation in dry-run tests | `test_phase14_hyp_011_prospective_shadow.py` | NONE (test isolation) | IMMEDIATE (audit branch) | RESOLVED VIA FIXTURE |
+| **F05** | Module-level `sys.path.insert(0, "scripts")` contamination | `tests/unit/research/test_phase14_hyp_011_*.py` | NONE (test environment hygiene) | IMMEDIATE (audit branch) | RESOLVED VIA LOADER |
+| ↳ **F05-A** | Dynamic script module isolation (`spec_from_file_location`) | `tests/unit/research/test_phase14_hyp_011_*.py` | NONE (environment hygiene) | IMMEDIATE (audit branch) | RESOLVED VIA LOADER |
+| **F06** | Missing CI execution / branch protection assurance | GitHub Repository Settings / Actions | LOW (human review active) | Pre-Merge to Canonical `main` | DOCUMENTED / MATRIX DEFINED |
+| **F07** | Stale README / ROADMAP / status / handoff summaries | `README.md`, `ROADMAP.md`, `docs/handoffs/` | NONE (informational docs) | Post-Attempt #2 Documentation Pass | REGISTERED |
+| **F08** | Non-hermetic / native / sealed-data / Git reproducibility dependencies | Repository Test Suite Partitioning | NONE (operational freeze) | IMMEDIATE (audit branch) | PARTITIONED (Hermetic + Audit) |
+| ↳ **F08-A** | Synthetic temp Git repository fixture for builder unit tests | `test_phase14_hyp_011_sip_recovery.py` | NONE (hermeticity) | IMMEDIATE (audit branch) | RESOLVED VIA FIXTURE |
+| ↳ **F08-B** | Non-hermetic historical Git audit partitioned via pytest marker | `test_phase14_hyp_011_sip_recovery.py` | NONE (governance lineage check) | IMMEDIATE (audit branch) | PARTITIONED (`@pytest.mark.non_hermetic`) |
+| **F09** | Stage C-B loader does not enforce `locks` subdocument | `src/acash/research/hyp_011/shadow.py` (`load_stage_c_recovery_authority`) | LOW (production Stage C-B has valid locks) | Post-Attempt #2 (Before Obs #2) | REPAIRED_IMPLEMENTED (repair branch; production manifest loads, bytes preserved) |
+| **F10** | CA operational intake pipeline absent for Observation $\ge 2$ | Research Operations & Corporate Actions Pipeline | BLOCKING FOR OBS #2 (Non-blocking for Obs #1) | Prior to Obs #2 Authorization | REGISTERED / HARD STOP GATE |
+| **F11** | Docker / install / execution image provenance gap | Deployment & Runtime Container Infrastructure | LOW (homelab uses direct virtualenv) | Prior to Production Activation | REGISTERED |
+| **F12** | API / network exposure assumptions require deployment isolation | Homelab Network Architecture & Broker API | LOW (homelab is local, orders locked) | Ongoing Operational Invariant | REGISTERED |
+| **F13** | Public repository vs confidential / proprietary wording inconsistency | Repository Metadata & Documentation Tone | NONE (governance alignment) | Post-Attempt #2 Documentation Pass | REGISTERED |
+| **F14** | Post-observation missed-session / silent-backfill continuation gap | `src/acash/research/hyp_011/shadow.py` (`assert_target_session_fresh`) + `scripts/process_hyp_011_prospective_shadow.py` (`_expected_next` call site) | CRITICAL (stale target would silently backfill) | Before Obs #2 Authorization | FORMALLY_REGISTERED; CONTRACT_IMPLEMENTED_AS_PROPOSED_PENDING_HUMAN_RATIFICATION |
+| **F15** | Dispatch authority replay gap (no single-use attempt ledger) | `scripts/process_hyp_011_prospective_shadow.py` (authorization gate) | HIGH (same token re-runnable after pre-commit failure) | Before Obs #2 Authorization | REPAIRED_IMPLEMENTED (this pack: intent + authority + O_EXCL ledger; bare tokens ordinal-1 only) |
+| **F16** | CA intake enforcement + provenance gap (runner bypasses intake; provenance stripped; CA validated post-fetch) | `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py` | HIGH (unscoped no-event accepted; evidence dropped; network before CA fail) | Before Obs #2 Authorization | REPAIRED_IMPLEMENTED (this pack: pre-network intake gate + enriched provenance + CA-before-fetch) |
+| **F17** | ObservationIntent preregistration attestation gap (self-declared timestamp; backdatable) | `src/acash/research/hyp_011/shadow_authority.py` (intent registry) | HIGH (post-hoc session selection not disproven) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
+| **F18** | Premature dispatch-attempt consumption ordering (ledger burned before local preflight) | `scripts/process_hyp_011_prospective_shadow.py` (live path) | MEDIUM (invalid inputs burn single-use attempts) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
+| **F19** | CA raw-evidence byte verification + source-identity gap (syntax-only SHA; 239707 mislabeled as ACWI) | `src/acash/research/hyp_011/shadow_ca_bundle.py` + `docs/audit/CA_2026_10_01_OFFICIAL_SCOPE_NOTE.md` §§5–6 | HIGH (invented digests pass; wrong-product evidence usable) | Before Obs #2 Authorization | REPAIRED_ON_BRANCH (this pack) |
+
+---
+
+## 2. Detailed Technical Defect Records
+
+### F01: Economic-State Reconciliation Gap (State Tamper Accepted)
+- **Location**: `src/acash/research/hyp_011/shadow_ops.py:600-602`
+- **Mechanism**:
+  ```python
+  ShadowPortfolio.from_dict(state_doc["strategy"])
+  ShadowBenchmark.from_dict(state_doc["benchmark"])
+  ```
+  `verify_chain()` verifies that state subdocuments can be deserialized into domain dataclasses. It does **not** cross-verify that the accumulated balances (`cash`, `previous_equity`, `holdings`, `SPY_shares`) match the corresponding fields in the terminal observation artifact in the backward hash chain. Tampered or divergent economic values are accepted if the schema is syntactically valid.
+- **Operational Impact on Attempt #2**: Negligible for Observation #1 because starting equity is fixed at `$100,000.00` with zero prior observations.
+- **Remediation Plan**: In post-Attempt #2 runtime repair, implement cross-document validation verifying that `state_doc["strategy"]["cash"]`, `previous_equity`, `holdings` match the terminal observation artifact.
+- **Offline Reproduction**: `test_reproduce_f01_economic_state_not_reconciled_with_terminal_observation` in [`tests/unit/research/test_hyp011_audit_reproductions.py`](tests/unit/research/test_hyp011_audit_reproductions.py#L40).
+
+---
+
+### F02: Orphan Observation Bypass When `state.json` Absent
+- **Location**: `src/acash/research/hyp_011/shadow_ops.py:496-497`
+- **Mechanism**:
+  ```python
+  state_path = state_dir / "state.json"
+  if not state_path.exists():
+      return build_initial_state(expected_activation)
+  ```
+  If `state.json` is missing while orphaned observation artifacts exist in `observations/`, `verify_chain()` returns `build_initial_state` immediately. Orphan inspection at line 604 is bypassed.
+- **Operational Impact on Attempt #2**: Mitigated because `/usr/local/sbin/acash-hyp011-observation-0001-attempt-0002` explicitly verifies that `data/hyp_011/prospective/observations/2026-09-30.json` and `state.json` are absent before invocation.
+- **Remediation Plan**: In post-Attempt #2 runtime repair, check for orphaned observation files before generating initial state; raise `DataContractError("BLOCK_SHADOW_STATE_INTEGRITY: orphan observation files exist without state.json.")`.
+- **Offline Reproduction**: `test_reproduce_f02_orphan_detection_bypassed_when_state_json_absent` in [`tests/unit/research/test_hyp011_audit_reproductions.py`](tests/unit/research/test_hyp011_audit_reproductions.py#L149).
+
+---
+
+### F03: CRLF/LF Historical Seal/Hash Mismatch
+- **Location**: `docs/phase14/manifests/`, `docs/phase8.5/hypotheses/`, git checkout layer
+- **Mechanism**:
+  On Windows environments with `core.autocrlf = true`, files checked out with `\r\n` (CRLF) produce divergent raw binary SHA-256 digests (`read_bytes()`) compared to canonical Linux/Git-tree representations (`\n` LF).
+- **Remediation**: Documented in [`docs/audit/LINE_ENDING_HASH_CONVENTION_REGISTER.md`](docs/audit/LINE_ENDING_HASH_CONVENTION_REGISTER.md). Canonical point of authority is the binary LF representation; historical sealed digests remain immutable.
+
+---
+
+### F04: Stale HYP_011 Test Assumptions After Stage C-B Integration
+- **Location**: `tests/unit/research/test_phase14_hyp_011_sip_recovery.py`, `test_phase14_hyp_011_prospective_shadow.py`, `test_phase14_hyp_011_shadow_ops.py`
+- **Sub-Findings**:
+  - **F04-A**: Tests expecting pre-recovery failure behavior (e.g. absent manifest, same-day retry block) failed because commit `becec27f...` added `HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json` to the filesystem. Resolved via explicit [`stage_c_b_absent`](tests/conftest.py) monkeypatch fixture.
+  - **F04-B**: Dry-run tests assumed hardcoded target session `2026-09-28`. Resolved by binding dynamic or isolated test fixtures.
+
+---
+
+### F05: Module-Level `sys.path.insert(0, "scripts")` Contamination
+- **Location**: `tests/unit/research/test_phase14_hyp_011_*.py`
+- **Sub-Finding F05-A**: Multiple test modules mutated Python's global `sys.path` at module import time, violating test environment hygiene and risking test ordering contamination. Resolved by replacing module-scope `sys.path.insert` with localized `_load_script_module()` dynamic loaders via `importlib.util.spec_from_file_location`.
+
+---
+
+### F06: Missing CI / Branch Protection Assurance
+- **Location**: GitHub Repository Settings / Actions Workflows
+- **Mechanism**: Currently zero GitHub Actions CI runs and zero commit statuses exist on `main`. Repository rulesets are empty. Verification currently relies exclusively on local human audits.
+- **Remediation**: Documented in [`docs/audit/CI_TEST_MATRIX.md`](docs/audit/CI_TEST_MATRIX.md); CI pipeline configuration scheduled post-Attempt #2.
+
+---
+
+### F07: Stale Status Documents
+- **Location**: `README.md`, `ROADMAP.md`, `docs/handoffs/`
+- **Mechanism**: Certain top-level documentation summaries lag behind Phase 14 prospective execution realities.
+- **Remediation**: Scheduled for post-Attempt #2 documentation synchronization.
+
+---
+
+### F08: Non-Hermetic / Native / Sealed-Data / Git Reproducibility Dependencies
+- **Location**: Repository-wide test suite
+- **Sub-Findings**:
+  - **F08-A**: `test_builder_dry_run_and_invariants` depended on the live repository's Git commit history (`git log`), failing if run in shallow clones or modified branches. Resolved by replacing with an isolated synthetic temp Git repository fixture.
+  - **F08-B**: Live repository ancestry audit was preserved as a dedicated non-hermetic test `test_builder_historical_git_audit` marked `@pytest.mark.non_hermetic`.
+
+---
+
+### F09: Stage C-B Loader Does Not Enforce `locks` Subdocument
+- **Location**: `src/acash/research/hyp_011/shadow.py:93-105`
+- **Mechanism**:
+  `load_stage_c_recovery_authority()` verifies 11 top-level keys but ignores the `locks` sub-dictionary. A corrupt manifest permitting paper trading or capital authorization would be accepted without error.
+- **Operational Impact on Attempt #2**: Low, because production manifest `HYP_011_PROSPECTIVE_SHADOW_RECOVERY_STAGE_C_B.json` contains valid locks matching `paper_trading: false`, `live_trading: false`, `real_capital_authority_usd: "0.00"`, `no_real_orders: true`.
+- **Remediation Plan**: In post-Attempt #2 runtime repair, strictly validate `locks` sub-dictionary.
+- **Offline Reproduction**: `test_reproduce_f09_stage_c_b_loader_ignores_locks` in [`tests/unit/research/test_hyp011_audit_reproductions.py`](tests/unit/research/test_hyp011_audit_reproductions.py#L178).
+
+---
+
+### F10: Corporate Actions (CA) Operational Intake Missing for Observation $\ge 2$
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py:382-409`
+- **Mechanism**:
+  Observation #1 requires no prior close ratio check (`NO_PRIOR_HISTORY_SINGLE_SESSION`). However, starting at Observation #2, `_check_split_continuity()` requires verified official split and dividend determinations. If unprovided, corporate action processing fails closed.
+- **Operational Impact**: Observation #1 is unblocked. Observation #2 cannot proceed without an audited CA determination workflow.
+- **Remediation Plan**: Bound to Hard Stop Gate in [`docs/audit/OBSERVATION_0002_READINESS_CHECKLIST.md`](docs/audit/OBSERVATION_0002_READINESS_CHECKLIST.md).
+
+---
+
+### F11: Docker / Install / Image Provenance Gap
+- **Location**: Containerization Infrastructure
+- **Mechanism**: Docker images and container execution wrappers lack formal image digest pinning and reproducible multi-stage build manifests.
+- **Remediation**: Operationalized prior to live broker activation.
+
+---
+
+### F12: API / Network Exposure Assumptions Require Deployment Isolation
+- **Location**: Broker Network Boundary
+- **Mechanism**: Assumption that execution hosts will operate within airgapped or strictly firewall-isolated network perimeters without explicit host network security verification.
+- **Remediation**: Ongoing operational security invariant.
+
+---
+
+### F13: Public Repository vs Confidential / Proprietary Policy Inconsistency
+- **Location**: Documentation License & Proprietary Disclaimers
+- **Mechanism**: Inconsistent wording across historical docs regarding proprietary vs public open-source status.
+- **Remediation**: Scheduled for post-Attempt #2 documentation cleanup.
+
+---
+
+### F14: Post-Observation Missed-Session / Silent-Backfill Continuation Gap
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` (`_expected_next()` call site) + `src/acash/research/hyp_011/shadow.py` (`assert_target_session_fresh()`, `next_trading_session_open()`)
+- **Mechanism**:
+  `_expected_next()` selects the next trading day strictly after the last observed session with no upper-bound freshness rule. A delayed invocation days later would process a stale session retroactively — an unauthorized silent backfill violating `backfill_allowed = false`. Conversely the zero-commit activation target never auto-advances without formal recovery governance.
+- **Bounded Contract (PROPOSED_PENDING_HUMAN_RATIFICATION)**:
+  A target may only be processed if (1) it is exactly the next session allowed by persisted/recovery authority, (2) `now` is strictly after provider observation eligibility, and (3) `now` is still strictly before the next NYSE session open. Once the next session opens, an unobserved target is `MISSED_UNOBSERVED` and raises `SHADOW_TARGET_SESSION_MISSED_REACTIVATION_REQUIRED`. No auto-advance, no observed_sessions rewrite, no auto-created recovery authority. Retry authority is unchanged: a failed dispatch gains nothing from target freshness alone.
+- **Operational Impact**: CRITICAL HARD BLOCK FOR OBSERVATION #2 until ratified. Session 2026-10-01 eligibility must additionally be adjudicated under this contract.
+- **Acceptance Tests**: `test_f14_*` in `tests/unit/research/test_phase14_hyp_011_prospective_shadow.py` (fresh allowed / pre-eligibility blocked / exact-open blocked / post-open blocked / activation pinned / no skip / no backfill / stale live-path zero-network / pretest freshness report).
+
+---
+
+### F15: Dispatch Authority Replay Gap (No Single-Use Attempt Ledger)
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` (live-path authorization gate)
+- **Mechanism**:
+  For non-recovery observations the runner accepts a bare
+  `AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_{ordinal}` token with
+  `dispatch_attempt` 0 or 1. If execution fails before observation commit,
+  the same authorization can be replayed in a later process invocation
+  because no durable attempt-consumption ledger exists. Policy text forbidding
+  retry is not runtime enforcement.
+- **Remediation Direction**: two-stage authority — `ObservationIntent`
+  (ratified before target session opens) + `DispatchAuthority` (bound to
+  intent, runtime SHA, CA evidence SHA, expiry, trading locks) + append-only
+  atomic single-use `DispatchAttemptLedger` consumed before any market-data
+  network call. Implemented in `src/acash/research/hyp_011/shadow_authority.py`;
+  `DispatchAuthority` manifest required on the live path for ordinal >= 2.
+- **Acceptance Tests**: `test_f15_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (replay BLOCK / crash-reuse BLOCK / expiry BLOCK / runtime-SHA mismatch BLOCK / CA-SHA mismatch BLOCK / missing authority BLOCK).
+- **Implementation (this pack)**: `src/acash/research/hyp_011/shadow_authority.py` (`ObservationIntent`, `validate_observation_intent`, `DispatchAuthority`, `validate_dispatch_authority`, `attempt_ledger_key`, `consume_dispatch_attempt` O_EXCL); runner live path requires `--dispatch-authority` for ordinal >= 2, checks the ledger read-only gate early, consumes atomically, and validates the full binding pre-network.
+
+---
+
+### F16: CA Intake Enforcement and Provenance Gap
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` + `src/acash/research/hyp_011/shadow_ca_intake.py`
+- **Mechanism (three sub-findings)**:
+  - **F16-A**: `shadow_ca_intake.py` validates scope evidence, but the
+    production runner calls `CADetermination.from_dict()` directly, so an
+    operator-crafted no-event document without `ScopeEvidence` passes whenever
+    the base fields are complete.
+  - **F16-B**: the runner converts determinations back through
+    `CADetermination.to_dict()`, dropping `evidence_ref` and `scope_evidence`
+    from the sealed observation artifact.
+  - **F16-C**: CA determinations are validated only AFTER the six Alpaca
+    series requests, so malformed/missing CA evidence does not fail before
+    network.
+- **Remediation Direction**: runner-side intake gate (`validate_intake_document`)
+  enforced pre-network for every symbol; enriched `corporate_actions` section
+  retaining `authority_source`, `retrieved_at_utc`, `source_sha256`,
+  `evidence_ref`, and `scope_evidence` (no-event) / event fields; CA block
+  moved before market-data fetch so a bad package proves zero network calls.
+- **Acceptance Tests**: `test_f16_*` in `tests/unit/research/test_phase14_hyp_011_dispatch_authority.py` (no-scope BLOCK zero-network / bad-SHA BLOCK zero-network / authority-CA-SHA mismatch BLOCK zero-network / provenance survival).
+- **Implementation (this pack)**: `validate_intake_document()` / `validate_scope_mapping()` in `shadow_ca_intake.py`; runner CA block moved before market-data fetch with single-source CA bytes; `corporate_actions` sections enriched with `evidence_ref` + `scope_evidence`.
+
+---
+
+### F17: ObservationIntent Preregistration Attestation Gap
+- **Location**: `src/acash/research/hyp_011/shadow_authority.py` (intent registry: `register_observation_intent`, `load_registered_intent`, `verify_registered_intent_binding`)
+- **Mechanism**:
+  `ObservationIntent.created_at_utc` is supplied inside the JSON itself.
+  Validation proved only that the DECLARED timestamp precedes market open —
+  not that the artifact actually existed before open. A post-session actor
+  could fabricate a backdated intent document.
+- **Remediation (this pack)**: create-once `register_observation_intent()`
+  captures `now_utc` itself (production callers supply no timestamp),
+  refuses registration unless strictly before target `open_utc`, persists
+  via O_EXCL (`intent_registry/<session>_ordNNNN.json`) carrying
+  `registered_at_utc` + sealed `intent_sha256`. `DispatchAuthority`
+  `intent_sha256` now names the REGISTERED digest; dispatch proves
+  existence + byte-integrity + SHA match + chain-head match.
+  Honest boundary: privileged-host clock/operator fabrication while the
+  market is still closed remains a governance-trust boundary, documented in
+  the module docstring.
+- **Acceptance Tests**: `test_f17_*` in `tests/unit/research/test_phase14_hyp_011_evidence_kernel_hardening.py` (pre-open PASS / at-open + post-open BLOCK / unregistered backdate BLOCK / tamper BLOCK / duplicate BLOCK / wrong chain head BLOCK / ordinal-1 chain-start rule / runner dispatch-without-registry BLOCK with ledger unchanged).
+
+---
+
+### F18: Premature Dispatch-Attempt Consumption Ordering
+- **Location**: `scripts/process_hyp_011_prospective_shadow.py` (live path)
+- **Mechanism**:
+  The runner consumed the single-use attempt ledger BEFORE full
+  DispatchAuthority validation, CA intake, freshness, provider eligibility,
+  and credential readiness — so malformed local inputs burned attempts
+  before the network boundary.
+- **Remediation (this pack)**: live path reordered to state/chain →
+  target → registered-intent + authority → CA bundle + intake →
+  credentials → F14 freshness → guards → provider eligibility →
+  `LOCAL_PREFLIGHT = PASS` → atomically consume → transport. New
+  `--local-preflight` mode proves the full path green with
+  `ATTEMPT_CONSUMED = false, NETWORK_REQUESTS = 0`. Invariant:
+  local failure ⇒ ledger unchanged + zero network; post-consume
+  crash/error ⇒ attempt burned, replay blocked.
+- **Acceptance Tests**: `test_f18_*` (bad authority/CA/bundle/credentials/
+  stale/too-early ⇒ ledger empty + zero network; transport crash ⇒
+  consumed + replay BLOCK; full success seals; preflight mode clean).
+
+---
+
+### F19: CA Raw-Evidence Byte Verification and Source-Identity Gap
+- **Location**: `src/acash/research/hyp_011/shadow_ca_bundle.py` (new) + runner `--ca-evidence-bundle` gate
+- **Mechanism (two sub-findings)**:
+  - **F19-A**: `validate_intake_document` regex-checked `source_sha256`
+    syntax but never recomputed the digest from official source bytes —
+    an invented 64-hex digest passed.
+  - **F19-B**: no sponsor/product-identity check existed: the 2026-10-01
+    research note labeled iShares product **239707 (IWB)** as ACWI
+    evidence. Corrected: 239600 = ACWI; 239458 = AGG; SPY = SSGA schedule.
+    Raw bytes for the prior note's rows 1–5 were never preserved in-repo.
+- **Remediation (this pack)**: per-symbol `ca_bundle/<SYM>/manifest.json` +
+  `evidence/` raw files; dispatch recomputes SHA-256 over actual bytes,
+  enforces frozen `PRODUCT_IDENTITY_BY_SYMBOL`, recomputes no-event
+  schedule digests, and binds each sealed determination
+  (`source_sha256` + `evidence_ref`) to its verified bundle. Runner
+  requires `--ca-evidence-bundle` beyond session one. Corrected raw
+  evidence preserved under `docs/audit/ca_evidence_2026_10_01/` with
+  recomputed SHAs; scope note §§5–6 invalidate the row-2 attribution and
+  record the fix.
+- **Acceptance Tests**: `test_f19_*` (invented digest / modified byte /
+  missing evidence / wrong file / 239707-as-ACWI identity / schedule
+  digest mismatch BLOCK; valid bundle + binding PASS; runner bad-bundle
+  ⇒ ledger unchanged).
+- **Semantic-identity hardening (this pack)**: `derive_evidence_identity_markers()`
+  parses the preserved evidence body itself (ACWI: ticker + 239600 + CUSIP
+  464288257; AGG: ticker + 239458; SPY: ticker + CUSIP 78462F103 + State
+  Street) — IWB/239707 bytes behind an ACWI/239600 manifest now BLOCK with
+  `EVIDENCE_IDENTITY_UNPROVEN` even when all digests match. Manifests must
+  declare `retrieval_representation` (`NORMALIZED_RETRIEVAL_REPRESENTATION`
+  vs `RAW_HTTP_BODY`); the current AGG .md / SPY .txt / ACWI .html evidence
+  is honestly labeled NORMALIZED, never falsely described as byte-identical
+  HTTP bodies. Proven against the real preserved files in-repo.

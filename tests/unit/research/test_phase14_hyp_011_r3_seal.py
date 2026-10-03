@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, cast
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "hyp_011"
 RESULT = REPO_ROOT / "docs" / "phase14" / "manifests" / "HYP_011_R3_HISTORICAL_RESULT.json"
@@ -20,6 +22,7 @@ def _load(path: Path) -> Dict[str, Any]:
     return cast(Dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
+@pytest.mark.sealed_data
 def test_dataset_seal() -> None:
     ds = _load(DATASET_MANIFEST)
     assert ds["dataset_state"] == "HISTORICAL_DATASET_QUALIFIED_AND_SEALED_PERFORMANCE_REPLAYED_ONCE"
@@ -58,6 +61,7 @@ def test_exact_metrics() -> None:
     assert acwi["ending_aum"] == "240741.694289"
 
 
+@pytest.mark.sealed_data
 def test_gates_verdict_rebalances() -> None:
     r = _load(RESULT)
     assert r["gates"] == {
@@ -77,6 +81,7 @@ def test_gates_verdict_rebalances() -> None:
     ]
 
 
+@pytest.mark.sealed_data
 def test_ledger_pins_cash_leverage_dividends() -> None:
     r = _load(RESULT)
     pairs = [
