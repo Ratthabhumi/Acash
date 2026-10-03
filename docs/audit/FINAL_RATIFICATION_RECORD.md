@@ -94,7 +94,7 @@ The following have received EXPLICIT HUMAN AUTHORIZATION:
 
 ---
 
-**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. All readiness confirmed; awaiting explicit human ratification record before any merge action.
+**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. All readiness confirmed; human ratification complete — merge authorized.
 
 ---
 

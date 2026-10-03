@@ -108,30 +108,30 @@ Ratified rules:
 4. RI-01 Zero-Outcome Data Feasibility Audit (separate explicit authorization)
 5. PPDS synthetic runtime → real-statement adapters (parallel lane)
 
-## Human Authorization Required (This Pack Does NOT Self-Ratify)
+## Human Authorization — COMPLETED 2026-10-03
 
-The following require EXPLICIT HUMAN AUTHORIZATION (not agent-written):
+The following have received EXPLICIT HUMAN AUTHORIZATION:
 
-1. **Evidence Kernel V1 integration** into canonical main
-2. **HYP_011 V1 closure** (`CLOSED_INCOMPLETE_GOVERNANCE_HARDENING`)
-3. **F14/F15 continuation contract** (joint ratification before F15 activation)
-4. **Canonical merge** `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main`
+1. **Evidence Kernel V1 integration** into canonical main — **RATIFIED**
+2. **HYP_011 V1 closure** (`CLOSED_INCOMPLETE_GOVERNANCE_HARDENING`) — **RATIFIED**
+2. **F14/F15 continuation contract** (joint ratification before F15 activation) — **RATIFIED**
+3. **Canonical merge** `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main` — **AUTHORIZED**
 
 ## Next Steps (After Human Ratification)
 
 1. Open PR: `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main`
 2. Wait for required status checks (T1 gate 3.12/3.13/3.14 + MyPy)
 3. Merge via MERGE COMMIT (preserve 18+ commit lineage)
-4. Activate GitHub branch protection ruleset on main (T1 gate + MyPy required, block force-push/delete)
-5. HYP_011 V2 starts fresh (S1=0/20, fresh AUM/chain/intent registry)
-6. RI-01 Zero-Outcome Data Feasibility (separate authorization)
-6. PPDS synthetic runtime → real-statement adapters (parallel lane)
+3. Activate GitHub branch protection ruleset on main (T1 gate + MyPy required, block force-push/delete)
+4. HYP_011 V2 starts fresh (S1=0/20, fresh AUM/chain/intent registry)
+5. RI-01 Zero-Outcome Data Feasibility (separate authorization)
+5. PPDS synthetic runtime → real-statement adapters (parallel lane)
 
 ---
 
 ---
 
-**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. All readiness confirmed; awaiting explicit human ratification.
+**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. All readiness confirmed; human ratification complete — merge authorized.
 
 ---
 
