@@ -1,8 +1,13 @@
 # HYP_011 V2 Homelab Deployment Runbook
 
 **Status**: `PREPARATION_ONLY` — NOT DEPLOYED, NOT ACTIVATED
-**Branch**: `research/hyp011-v2-activation-prep`
-**Base**: `origin/main` @ `49b26f1ee4fc71a4726162bbbb0e318f38be2d8f`
+**Branch**: `fix/hyp011-v2-activation-safety-20261004`
+**Base**: `origin/main` @ `5e1eb1877e2a9106bd0673bd7f8331bf54fab1a9`
+
+> SHA rule: this document NEVER pins a deployment commit. The exact runtime
+> commit is bound by the deployment authorization as `APPROVED_RUNTIME_SHA`
+> AFTER the correction PR merges. Any `APPROVED_RUNTIME_SHA` below is a
+> placeholder filled at authorization time, never a hardcoded SHA.
 
 ---
 
@@ -44,10 +49,14 @@
 
 ### Repository State
 ```bash
-# On homelab
+# On homelab. APPROVED_RUNTIME_SHA comes from
+# AUTHORIZE_HYP_011_V2_CANONICAL_DEPLOYMENT (bound after the correction PR
+# merges) — never hardcode a commit from an older doc revision here.
 cd /home/mew/Acash
-git fetch origin
-git checkout 49b26f1ee4fc71a4726162bbbb0e318f38be2d8f  # exact canonical main
+git fetch origin main
+test "$(git rev-parse origin/main)" = "$APPROVED_RUNTIME_SHA"
+git merge --ff-only origin/main
+test "$(git rev-parse HEAD)" = "$APPROVED_RUNTIME_SHA"
 git status --short --branch  # clean
 ```
 
@@ -126,9 +135,13 @@ sudo systemctl daemon-reload
 ## 4. Deployment Procedure (Authority A)
 
 ```bash
-# 1. Verify canonical code
+# 1. Verify canonical code (APPROVED_RUNTIME_SHA from deployment authorization)
 cd /home/mew/Acash
-git rev-parse HEAD  # must equal 49b26f1ee4fc71a4726162bbbb0e318f38be2d8f
+git fetch origin main
+test "$(git rev-parse origin/main)" = "$APPROVED_RUNTIME_SHA"
+git merge --ff-only origin/main
+test "$(git rev-parse HEAD)" = "$APPROVED_RUNTIME_SHA"
+git status --short --branch  # clean
 
 # 2. Sync locked dependencies
 uv sync --locked
@@ -152,12 +165,16 @@ sudo cp docs/operations/acash-hyp011-v2.sh /home/mew/Acash/docs/operations/
 chmod +x /home/mew/Acash/docs/operations/acash-hyp011-v2.sh
 sudo systemctl daemon-reload
 
-# 6. Verify timer is DISABLED
+# 6. Verify timer is DISABLED and service is INACTIVE
 systemctl is-enabled acash-hyp011-v2.timer  # must be "disabled"
+systemctl is-active acash-hyp011-v2.service  # must be "inactive"
 
-# 7. Run local preflight (zero network)
-/home/mew/Acash/docs/operations/acash-hyp011-v2.sh --local-preflight
-# Expected: LOCAL_PREFLIGHT = PASS, NETWORK_REQUESTS = 0
+# 7. Run informational dry-run (zero network, no session authorities).
+#    Plain dry-run (no flags) validates local contracts read-only.
+#    The FULL dispatch preflight (--local-preflight with session authorities)
+#    runs later under Authority B, before arming the timer.
+/home/mew/Acash/docs/operations/acash-hyp011-v2.sh
+# Expected: DRY-RUN, NETWORK_REQUESTS = 0
 
 # 8. Verify V1 evidence untouched
 sha256sum data/hyp_011/prospective/state.json
@@ -169,38 +186,75 @@ sha256sum data/hyp_011/prospective/observations/2026-09-30.json
 ## 5. Activation Procedure (Authority B)
 
 ```bash
-# For target session YYYY-MM-DD
-TARGET_SESSION="2026-10-05"  # example
+# AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION> binds, for ONE future session:
+#   APPROVED_RUNTIME_SHA, V2 SegmentActivationAuthority file, TARGET_SESSION,
+#   RegisteredIntent SHA, DispatchAuthority file, CA binding, dispatch time.
+# Do NOT execute any step below without that authority.
 
-# 1. Register intent (before session opens) via the existing authority API.
-#    No new intent-registration CLI is introduced in this prep task; the
-#    canonical entry point remains
-#    `acash.research.hyp_011.shadow_authority.register_observation_intent`
-#    (registry dir: /var/lib/acash/hyp011/v2/intent_registry, ordinal starts at 1).
-#    Do NOT execute this step without AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>.
+# 1. Write the V2 SegmentActivationAuthority file, e.g.
+#    /var/lib/acash/hyp011/v2/segment_activation_authority.json
+#    (schema: segment_id HYP_011_PROSPECTIVE_V2, hypothesis HYP_011,
+#    activation_session = TARGET_SESSION, runtime_commit_sha =
+#    APPROVED_RUNTIME_SHA, starting_aum 100000.00, paper/live false,
+#    capital 0.00, no_real_orders true, authorized_at_utc strictly before
+#    the session open, human authority_identity).
+#    The runner validates every field pre-network; the raw file digest is
+#    recorded into V2 state identity.
 
-# 2. Prepare CA evidence bundle (official scope/no-event)
-#    Per F16/F19 intake contract
+# 2. Register intent (strictly before the session opens) via the existing
+#    authority API `register_observation_intent`
+#    (registry dir: /var/lib/acash/hyp011/v2/intent_registry, ordinal 1,
+#    previous_observation_sha256 null). V2 session one REQUIRES a physically
+#    preregistered intent — the V1 bare-token exception does not apply.
 
 # 3. Create DispatchAuthority bound to:
-#    - RegisteredIntent SHA
-#    - Runtime commit SHA (49b26f1...)
-#    - CA evidence bundle SHA
-#    - Target session
-#    - Ordinal = 1, Attempt = 1
+#    - RegisteredIntent SHA (the physical registry artifact, F17)
+#    - Runtime commit SHA (APPROVED_RUNTIME_SHA)
+#    - Session-one CA binding digest
+#      (CA_NOT_ECONOMICALLY_REQUIRED_NO_PRIOR_HOLDINGS — deterministic,
+#      no invented event)
+#    - Target session, ordinal = 1, attempt = 1, chain head = null
+#    - Validity window covering the dispatch instant
 #    - Locks: paper=false, live=false, capital=0, no_real_orders=true
+#    V2 session one REQUIRES a DispatchAuthority — the V1 bare-token
+#    exception does not apply.
 
-# 4. Arm timer with session-specific drop-in
+# 4. Derive the exact dispatch time from canonical code (never hand-compute):
+#      dispatch_at = candidate_schedule_time(TARGET_SESSION, NyseCa1Calendar())
+#                = session.close_utc + 15-minute SIP delay + 5-minute margin
+#    Render SYSTEMD_ONCALENDAR_EXPRESSION, e.g. "2026-10-06 20:20:00 UTC"
+#    (exact value is calendar-derived per session; the example offset is NOT
+#    a constant). Validate on the host:
+#      systemd-analyze calendar "<expression>"
+#    and confirm the normalized next elapse equals dispatch_at exactly.
+
+# 5. Run the FULL zero-network dispatch preflight (consumes nothing):
+#      acash-hyp011-v2.sh --local-preflight \
+#        --authorization AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001 \
+#        --ordinal 1 --dispatch-attempt 1 \
+#        --dispatch-authority <authority file> \
+#        --runtime-sha "$APPROVED_RUNTIME_SHA"
+#    Required output: LOCAL_PREFLIGHT = PASS, ATTEMPT_CONSUMED = false,
+#    NETWORK_REQUESTS = 0. A stale target must FAIL here (nonzero) — never
+#    arm the timer on a failed preflight.
+
+# 6. Arm the timer with a session-specific drop-in that FIRST clears any
+#    previous value, then sets the validated expression:
 sudo systemctl edit --force acash-hyp011-v2.timer
 # [Timer]
-# OnCalendar=2026-10-05 20:15:00
-# Timezone=America/New_York
+# OnCalendar=
+# OnCalendar=<validated SYSTEMD_ONCALENDAR_EXPRESSION, e.g. 2026-10-06 20:20:00 UTC>
+# (No Timezone= directive: the expression is UTC-normalized.)
+# Plus a service drop-in providing the per-session Environment=
+# (AUTHORIZATION, ORDINAL, DISPATCH_ATTEMPT, DISPATCH_AUTHORITY,
+# RUNTIME_SHA, SEGMENT_ACTIVATION_AUTHORITY, ...).
 
-# 5. Enable timer for THIS SESSION ONLY
+# 7. Enable timer for THIS SESSION ONLY
 sudo systemctl enable --now acash-hyp011-v2.timer
 
-# 6. Verify armed
+# 8. Verify armed AND service NOT started by enabling
 systemctl list-timers acash-hyp011-v2.timer
+systemctl is-active acash-hyp011-v2.service  # must be "inactive" until elapse
 ```
 
 ---
@@ -208,21 +262,23 @@ systemctl list-timers acash-hyp011-v2.timer
 ## 6. Verification Checklists
 
 ### Post-Deployment (Authority A Complete)
-- [ ] `git rev-parse HEAD` = `49b26f1ee4fc71a4726162bbbb0e318f38be2d8f`
+- [ ] `origin/main == HEAD == APPROVED_RUNTIME_SHA` (from deployment authorization)
 - [ ] `uv sync --locked` succeeds
 - [ ] `/var/lib/acash/hyp011/v2/` exists, 700, mew:mew
 - [ ] `/etc/acash/hyp011-v2.env` exists, 600, mew:mew
 - [ ] Systemd units installed, `daemon-reload` done
-- [ ] Timer `disabled`, service `inactive`
-- [ ] Local preflight: `LOCAL_PREFLIGHT = PASS`, `NETWORK_REQUESTS = 0`
+- [ ] Timer `disabled`, service `inactive` (enabling the timer later must NOT start the service)
+- [ ] Informational dry-run: `DRY-RUN`, `NETWORK_REQUESTS = 0`
 - [ ] V1 evidence hashes unchanged
 
 ### Post-Activation (Authority B Complete)
-- [ ] RegisteredIntent created and bound
-- [ ] DispatchAuthority created and bound
-- [ ] Timer drop-in installed for exact session
-- [ ] Timer `enabled` and armed
-- [ ] Next elapse matches target session eligibility
+- [ ] SegmentActivationAuthority written, validated, digest bound into V2 state identity
+- [ ] RegisteredIntent created strictly before session open, ordinal 1, chain head null
+- [ ] DispatchAuthority created and bound (intent + runtime + session-one CA digest + window + locks)
+- [ ] Full local preflight: `LOCAL_PREFLIGHT = PASS`, `ATTEMPT_CONSUMED = false`, `NETWORK_REQUESTS = 0`
+- [ ] Timer drop-in installed: clears `OnCalendar` first, sets validated UTC expression
+- [ ] `systemd-analyze calendar` next elapse equals canonical `candidate_schedule_time`
+- [ ] Timer `enabled` and armed; service stays `inactive` until elapse
 
 ---
 
@@ -238,8 +294,11 @@ systemctl list-timers acash-hyp011-v2.timer
 - Absolute `--state-dir` (rejects relative)
 - Reject V1 evidence path
 - Segment ID `HYP_011_PROSPECTIVE_V2` required with `--state-dir`
-- Fresh ordinal = 1, S1 = 0/20
-- Zero network in `--local-preflight` / `--dry-run`
+- `--segment-activation-authority` required; first target comes ONLY from it
+- Fresh ordinal = 1, S1 = 0/20; V1 Stage-B/Stage-C never consulted
+- V2 ordinal 1 REQUIRES RegisteredIntent + DispatchAuthority (no bare token)
+- Session-one CA binding is the deterministic non-event digest (no invented event)
+- `--local-preflight` validates the full live path with zero consumption and zero network; stale targets fail nonzero
 - Capital locks: paper=false, live=false, capital=0, no_real_orders=true
 
 ---
