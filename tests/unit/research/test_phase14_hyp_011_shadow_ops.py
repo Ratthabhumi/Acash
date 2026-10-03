@@ -192,10 +192,14 @@ def test_benchmark_independent_and_first_day_anchor() -> None:
 
 
 def test_runner_dry_run_zero_network(
-    capsys: Any, stage_c_b_absent: Path, monkeypatch: pytest.MonkeyPatch
+    capsys: Any,
+    stage_c_b_absent: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     runner = _load_runner_module()
     monkeypatch.setattr(runner, "STAGE_C_RECOVERY_BINDING_PATH", stage_c_b_absent)
+    monkeypatch.setattr(runner, "STATE_DIR", tmp_path / "prospective")
 
     assert (
         runner.main(
