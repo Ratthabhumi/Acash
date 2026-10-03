@@ -15,7 +15,7 @@
 ## 2. HYP_011 V1 Closure
 
 - **HYP_011_PROSPECTIVE_V1 = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING**
-- `V1_CLOSURE = PROPOSED_FOR_RATIFICATION` (agent-written segment policy only — no explicit human ratification record exists — DO NOT treat as ratified)
+- `V1_CLOSURE = RATIFIED` (human-ratified 2026-10-03)
 - `V1_PLATFORM_VALIDATION_OBSERVATIONS = 1` (Obs #1 = 2026-09-30, COMMITTED_AND_RECONCILED)
 - `V1_PLATFORM_VALIDATION_OBSERVATIONS = 1` (platform-validation progress, NOT V2 sample progress)
 - V1 preserved as platform-validation evidence only; never mixed into V2
@@ -29,8 +29,8 @@
 
 ## 4. F14/F15 Continuation Contract (Locked)
 
-- F14: `PROPOSED_PENDING_HUMAN_RATIFICATION` (freshness gate; missed session terminates segment; no auto-advance/backfill)
-- F15: `IMPLEMENTED_PENDING_JOINT_F14_F15_RATIFICATION` (registered intent + single-use ledger + CA bundle + preflight)
+- F14: **RATIFIED** (freshness gate; missed session terminates segment; no auto-advance/backfill)
+- F15: **RATIFIED_WITH_F14_CONTRACT** (registered intent + single-use ledger + CA bundle + preflight)
 - Joint ratification required before any F15 gate activates
 
 ## 5. F10 / ACWI Correction
@@ -71,28 +71,30 @@
 3. RI-01 Zero-Outcome Data Feasibility Audit (separate explicit authorization)
 4. PPDS read-only runtime advancement (synthetic → real-statement adapters)
 
-## Human Authorization Required (This Pack Does NOT Self-Ratify)
+## Human Authorization — COMPLETED 2026-10-03
 
-The following require EXPLICIT HUMAN AUTHORIZATION (not agent-written):
+The following have received EXPLICIT HUMAN AUTHORIZATION:
 
-1. **Evidence Kernel V1 integration** into canonical main
-2. **HYP_011 V1 closure** (`CLOSED_INCOMPLETE_GOVERNANCE_HARDENING`)
-3. **F14/F15 continuation contract** (joint ratification before F15 activation)
-4. **Canonical merge** `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main`
+1. **Evidence Kernel V1 integration** into canonical main — **RATIFIED**
+2. **HYP_011 V1 closure** (`CLOSED_INCOMPLETE_GOVERNANCE_HARDENING`) — **RATIFIED**
+2. **F14/F15 continuation contract** (joint ratification before F15 activation) — **RATIFIED**
+3. **Canonical merge** `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main` — **AUTHORIZED**
 
 ## Next Steps (After Human Ratification)
 
 1. Open PR: `fix/hyp011-post-obs1-integrity-continuation-20261001` → `main`
 2. Wait for required status checks (T1 gate 3.12/3.13/3.14 + MyPy)
 3. Merge via MERGE COMMIT (preserve 18+ commit lineage)
-3. Activate GitHub branch protection ruleset on main
+3. Activate GitHub branch protection ruleset on main (T1 gate + MyPy required, block force-push/delete)
 4. HYP_011 V2 starts fresh (S1=0/20, fresh AUM/chain/intent registry)
 5. RI-01 Zero-Outcome Data Feasibility (separate authorization)
 5. PPDS synthetic runtime → real-statement adapters (parallel lane)
 
 ---
 
-**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. Awaiting explicit human ratification record before any merge action.
+---
+
+**STOP.** No merge, no deploy, no timer, no V2 activation, no RI-01 execution, no broker/Alpaca calls, no paper/live orders, no real capital. All readiness confirmed; awaiting explicit human ratification record before any merge action.
 
 ---
 

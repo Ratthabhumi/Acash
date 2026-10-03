@@ -1,7 +1,6 @@
 # HYP_011 Prospective Segment Policy — V1 Closure / V2 Proposal
 
-**Status**: `V1 = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING` (ratified by this
-amendment's acceptance) · `V2 = PROPOSED_PENDING_HUMAN_RATIFICATION`.
+**Status**: `V1 = CLOSED_INCOMPLETE_GOVERNANCE_HARDENING` (ratified by explicit human governance authority recorded in `docs/governance/ACASH_CANONICAL_INTEGRATION_RATIFICATION_20261003.md`) · `V2 = PROPOSED_PENDING_HUMAN_RATIFICATION`.
 **This document activates nothing.** V2 activation requires a separate
 explicit human authorization after all V2 gates pass.
 
