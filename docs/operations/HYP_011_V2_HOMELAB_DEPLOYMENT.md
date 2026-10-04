@@ -35,9 +35,9 @@
 - Create SegmentActivationAuthority + RegisteredIntent for target session
 - Create DispatchAuthority bound to intent + runtime + CA evidence
 - Generate + install the timer for that exact session (template + validated trigger)
-- Run full zero-network dispatch preflight (`--local-preflight` with authorities)
-- Arm timer for that specific session
-- Execute live observation with `--execute-network`
+- Arm timer for that specific session (pre-arm dispatch preflight is NOT run — the session is still open)
+- Rely on the elapse-time ExecStartPre gate for the full zero-network dispatch preflight (`--local-preflight` with authorities)
+- Execute live observation with `--execute-network` (only if ExecStartPre passed at elapse)
 
 **Requires**: Authority A already completed
 
@@ -178,7 +178,8 @@ systemctl is-active acash-hyp011-v2.service  # must be "inactive"
 #    This checks host/runtime/state/secrets/install contracts ONLY — it never
 #    invokes the runner and never needs a SegmentActivationAuthority.
 #    The FULL dispatch preflight (--local-preflight with session authorities)
-#    runs later under Authority B, before arming the timer.
+#    runs later under Authority B at timer ELAPSE via the service ExecStartPre
+#    gate — never pre-arm (the session has not closed yet at arm time).
 APPROVED_RUNTIME_SHA="$APPROVED_RUNTIME_SHA" /usr/local/sbin/acash-hyp011-v2 --deployment-preflight
 # Expected: DEPLOYMENT_PREFLIGHT = PASS, NETWORK_REQUESTS = 0,
 #           V2_STATE_CREATED = false, V2_TIMER_INSTALLED = false
@@ -235,15 +236,19 @@ sha256sum data/hyp_011/prospective/observations/2026-09-30.json
 #      systemd-analyze calendar "<expression>"
 #    and confirm the normalized next elapse equals dispatch_at exactly.
 
-# 5. Run the FULL zero-network dispatch preflight (consumes nothing):
-#      acash-hyp011-v2.sh --local-preflight \
-#        --authorization AUTHORIZE_HYP_011_PROSPECTIVE_OBSERVATION_0001 \
-#        --ordinal 1 --dispatch-attempt 1 \
-#        --dispatch-authority <authority file> \
-#        --runtime-sha "$APPROVED_RUNTIME_SHA"
-#    Required output: LOCAL_PREFLIGHT = PASS, ATTEMPT_CONSUMED = false,
-#    NETWORK_REQUESTS = 0. A stale target must FAIL here (nonzero) — never
-#    arm the timer on a failed preflight.
+# 5. Do NOT run the full dispatch preflight now. It validates session
+#    completion + provider eligibility, so before the session closes it fails
+#    SHADOW_INCOMPLETE_SESSION by design — that is correct behavior, not a
+#    defect, and must never block arming. The full preflight instead runs
+#    UNATTENDED at timer elapse via the service ExecStartPre gate:
+#      elapse → ExecStartPre (--local-preflight, zero network, zero consume)
+#        → on failure: service stops, ExecStart NEVER runs, no market-data
+#          call, no attempt consumed, no retry (Restart=no); investigate,
+#          then issue a fresh Authority B if governance allows
+#        → on PASS: ExecStart runs the live observation immediately, and the
+#          live runner independently revalidates every gate before transport.
+#    PRE-OPEN ACTIVATION VALIDATION (this procedure: files, bindings, timer)
+#    is therefore distinct from DISPATCH-TIME FULL LOCAL PREFLIGHT (elapse).
 
 # 6. Generate + install the timer from the canonical template with the
 #    validated trigger baked in (never install the bare triggerless
@@ -297,14 +302,19 @@ systemctl is-active acash-hyp011-v2.service  # must be "inactive" until elapse
 - [ ] Deployment preflight: `DEPLOYMENT_PREFLIGHT = PASS`, `NETWORK_REQUESTS = 0`, `V2_TIMER_INSTALLED = false`
 - [ ] V1 evidence hashes unchanged
 
-### Post-Activation (Authority B Complete)
+### Post-Activation (Authority B Complete, BEFORE session close)
 - [ ] SegmentActivationAuthority written, validated, digest bound into V2 state identity
 - [ ] RegisteredIntent created strictly before session open, ordinal 1, chain head null
 - [ ] DispatchAuthority created and bound (intent + runtime + session-one CA digest + window + locks)
-- [ ] Full local preflight: `LOCAL_PREFLIGHT = PASS`, `ATTEMPT_CONSUMED = false`, `NETWORK_REQUESTS = 0`
-- [ ] Timer drop-in installed: clears `OnCalendar` first, sets validated UTC expression
+- [ ] Service drop-in installed with per-session Environment (all bindings, incl. SEGMENT_ACTIVATION_AUTHORITY)
+- [ ] Generated timer installed with validated UTC `OnCalendar` trigger (bare template never installed)
 - [ ] `systemd-analyze calendar` next elapse equals canonical `candidate_schedule_time`
 - [ ] Timer `enabled` and armed; service stays `inactive` until elapse
+- [ ] NO pre-arm dispatch preflight attempted (it would fail SHADOW_INCOMPLETE_SESSION by design)
+
+### Post-Elapse (unattended)
+- [ ] Either: observation sealed, attempt ledger holds exactly one entry
+- [ ] Or (preflight failed): NO observation file, NO ledger entry, NO network call, service failed with `Restart=no` — investigate, then a fresh Authority B if governance allows
 
 ---
 
@@ -324,7 +334,7 @@ systemctl is-active acash-hyp011-v2.service  # must be "inactive" until elapse
 - Fresh ordinal = 1, S1 = 0/20; V1 Stage-B/Stage-C never consulted
 - V2 ordinal 1 REQUIRES RegisteredIntent + DispatchAuthority (no bare token)
 - Session-one CA binding is the deterministic non-event digest (no invented event)
-- `--local-preflight` validates the full live path with zero consumption and zero network; stale targets fail nonzero
+- `--local-preflight` validates the full live path with zero consumption and zero network; stale targets fail nonzero; it runs at timer ELAPSE via ExecStartPre, never pre-arm
 - Capital locks: paper=false, live=false, capital=0, no_real_orders=true
 
 ---

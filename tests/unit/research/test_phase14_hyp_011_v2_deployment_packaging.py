@@ -238,7 +238,10 @@ def test_service_uses_installed_wrapper_path() -> None:
         / "acash-hyp011-v2.service"
     ).read_text(encoding="utf-8")
     assert "ExecStart=/usr/local/sbin/acash-hyp011-v2 " in service
-    assert "--segment-activation-authority" in service
+    # Session bindings travel via drop-in Environment; the wrapper maps them
+    # to runner flags (stub-recording tests prove the --segment-activation-
+    # authority flag itself).
+    assert "SEGMENT_ACTIVATION_AUTHORITY" in service
     # The oneshot service must not introduce automatic startup: no real
     # [Install] section (mentions in comments do not count).
     assert not any(
