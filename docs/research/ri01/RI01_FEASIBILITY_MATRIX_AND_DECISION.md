@@ -6,26 +6,37 @@ All provider facts below are `PROVEN_IN_REPO` or `UNKNOWN` (see
 
 ## 1. Matrix
 
-| # | Requirement | Source | Available? | Deterministic? | PIT safe? | Cost | Blocker | Evidence | Verdict |
-|---|-------------|--------|------------|----------------|-----------|------|---------|----------|---------|
-| R1 | Instrument universe | Governance (to freeze) | Partial | Yes | Yes | $0 | Universe choice unmade | R0 intake §9 | `PASS_WITH_LIMITATION` |
-| R2 | Exchange calendar CA-1 | In-repo | Yes | Yes | Yes | $0 | None | `NyseCa1Calendar`, hermetic tests herein | `PASS` |
-| R3 | Session open semantics | In-repo | Yes | Yes | Yes | $0 | None | CA-1 + tests herein | `PASS` |
-| R4 | Previous close authority | Alpaca (auction vs daily) | Unknown | Unknown | Unknown | Unknown | **Contract test unexecuted** | MEC-0014 §10.2 | `BLOCKED` |
-| R5 | Opening print semantics | Trade/auction authority | Unknown | Unknown | Unknown | Unknown | **No trade-level authority** | This pack §1 | `BLOCKED` |
-| R6 | RTH-complete 1Min raw | Alpaca SIP | Unknown (RI-01 scope) | In-principle | Unknown | Unknown | **Coverage/entitlement/depth unverified** | MEC-0015 (6 SPY sessions only) | `BLOCKED` |
-| R7 | Daily bars | Alpaca SIP | Partial (1Day path exists, narrow) | Yes | Partial | Unknown | Depth/entitlement unverified | HYP_011 qual client | `PASS_WITH_LIMITATION` |
-| R8 | Per-minute volume | Alpaca SIP | Unknown (RI-01 scope) | In-principle | Unknown | Unknown | Same as R6 | — | `BLOCKED` |
-| R9 | TZ/DST handling | In-repo | Yes | Yes | Yes | $0 | None | CA-1 + tests herein | `PASS` |
-| R10 | Corporate actions | Alpaca `/v1/corporate-actions` | Partial | Partial | **No (vintage)** | Unknown | **PIT vintage not guaranteed** | MEC-0015 §7.3 | `BLOCKED` |
-| R11 | Symbol lifecycle | Vendor master | Unknown | Unknown | Unknown | Unknown | **Never contract-tested** | — | `BLOCKED` |
-| R12 | Missing-bar policy | Governance | Yes (defined) | Yes | Yes | $0 | None | `FAIL_CLOSED_SESSION_EXCLUSION` | `PASS` |
-| R13 | Per-field PIT proofs | Contract tests | No | — | — | $0 | **Unexecuted by design here** | `RI01_POINT_IN_TIME.md` | `BLOCKED` |
-| R14 | Provider delay semantics | Alpaca SIP rules | Unknown (minute path) | — | Unknown | $0 | **Unverified for 1Min** | HYP_011 daily-path rule only | `BLOCKED` |
-| R15 | Revision behavior | Vendor re-fetch test | Unknown | Unknown | Unknown | Unknown | **Never tested** | — | `BLOCKED` |
+Availability is NOT one field. Each requirement is classified on five
+independent axes; collapsing them would hide exactly the evidence gaps that
+matter. `UNKNOWN` means uncharacterized (never convert to PASS by assumption).
 
-Verdict key: `PASS` (proven) / `PASS_WITH_LIMITATION` (proven-narrow, needs widening) /
-`BLOCKED` (known gap with a designed test) / `UNKNOWN` (not yet characterized).
+| # | Requirement | API_CAPABILITY | ENTITLEMENT | COVERAGE | PIT_SAFETY | REVISION | OVERALL |
+|---|-------------|----------------|-------------|----------|------------|----------|---------|
+| R1 | Instrument universe | n/a (governance) | n/a | n/a | n/a | n/a | `PASS_WITH_LIMITATION` (choice unmade) |
+| R2 | Exchange calendar CA-1 | Proven in-repo | n/a | Full (2013–2026) | Proven | n/a | `PASS` |
+| R3 | Session open semantics | Proven in-repo | n/a | Full | Proven | n/a | `PASS` |
+| R4 | Previous close authority | Testable path (trades + O/6 conditions documented) | Unknown | Unknown | Unknown | Unknown | `BLOCKED` (contract test unexecuted) |
+| R5 | Opening print semantics | Testable path (trades + O/Q conditions documented) | Unknown | Unknown | Unknown | Unknown | `BLOCKED` (no trade-level authority yet) |
+| R6 | RTH-complete 1Min raw | **Documented** (1Min/sip/raw) | Unknown | Unknown (RI-01 scope; 6 SPY sessions proven) | Unknown | Unknown | `BLOCKED` |
+| R7 | Daily bars | **Documented** + narrow in-repo path | Unknown | Partial (narrow) | Partial | Unknown | `PASS_WITH_LIMITATION` |
+| R8 | Per-minute volume | **Documented** (same endpoint) | Unknown | Unknown (RI-01 scope) | Unknown | Unknown | `BLOCKED` |
+| R9 | TZ/DST handling | Proven in-repo | n/a | Full | Proven | n/a | `PASS` |
+| R10 | Corporate actions | **Documented with warning** (no creation-time guarantee) | Unknown | Partial | **No** (historical vintage unrecoverable; SSE prospective path unimplemented) | **No** (historical) | `BLOCKED` |
+| R11 | Symbol lifecycle | **Documented** (asof + rename-day lag admitted) | Unknown | Unknown | Unknown (lag) | n/a | `BLOCKED` (contract test unexecuted) |
+| R12 | Missing-bar policy | Defined (`FAIL_CLOSED_SESSION_EXCLUSION`) | n/a | n/a | n/a | n/a | `PASS` |
+| R13 | Per-field PIT proofs | Methodology defined | n/a | n/a | Unexecuted by design | n/a | `BLOCKED` |
+| R14 | Provider delay semantics | **Documented** (historical SIP `end` ≥ 15 min) | Unknown (credential-specific) | n/a | n/a | n/a | `PASS_WITH_LIMITATION` (bounded verification still needed) |
+| R15 | Revision behavior | Untested | Unknown | Unknown | Unknown | Unknown | `BLOCKED` |
+
+OVERALL key: `PASS` (proven) / `PASS_WITH_LIMITATION` (proven-narrow or
+documented-but-unverified-in-our-tier, needs widening) / `BLOCKED` (known
+gap with a designed test).
+
+Count: 8 `BLOCKED` (R4, R5, R6, R8, R10, R11, R13, R15), 3
+`PASS_WITH_LIMITATION` (R1, R7, R14), 4 `PASS` (R2, R3, R9, R12).
+R14 moved out of `BLOCKED` on the now-quoted official FAQ wording
+(historical SIP `end` ≥ 15 min); every other row keeps its prior verdict —
+nothing was regraded merely to shrink the count.
 
 ## 2. Decision
 
@@ -35,11 +46,15 @@ RI01_DATA_FEASIBILITY = RI01_DATA_FEASIBILITY_INSUFFICIENT_EVIDENCE
 
 Rationale: methodology is CONSTRUCTIBLE (calendar, bar semantics, exclusion
 policy, PIT labelling, evidence envelope are all defined and partly proven),
-but 8 of 15 requirements are `BLOCKED` on evidence that can only be produced
-by entitled network probes executed under separate authorization. This pack
-deliberately performed zero of those probes. Nothing here justifies PASS; and
-nothing proves impossibility either, so BLOCKED would overclaim — the honest
-state is insufficient evidence with a precise shopping list (§3 below).
+and official documentation now settles API capability for minute bars,
+SIP delay, asof mapping, trade conditions, and the CA vintage warning — but
+8 of 15 requirements remain `BLOCKED` on evidence that can only be produced
+by entitled network probes executed under separate authorization
+(entitlement, RI-01-scope coverage, close/open authority, lifecycle and PIT
+contracts, revision behavior). This pack deliberately performed zero of those
+probes. Nothing here justifies PASS; and nothing proves impossibility either,
+so BLOCKED would overclaim — the honest state is insufficient evidence with
+a precise shopping list (§3 below).
 
 ## 3. Evidence that would change the decision (authorized probes, NOT done here)
 

@@ -6,7 +6,7 @@ deterministic evidence hashing. Computes NOTHING predictive: no returns, no
 PnL, no Sharpe, no hit-rate, no thresholds. Zero network.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import pytest
@@ -147,13 +147,101 @@ def test_missing_opening_bar_is_unavailable_not_imputed() -> None:
         opening_bar_index([], datetime(2026, 10, 5, 13, 30, tzinfo=timezone.utc))
 
 
-def test_require_complete_rth_grid() -> None:
-    bars = [_bar(f"2026-10-05T13:{30 + i // 60:02d}:{i % 60:02d}+00:00") for i in range(390)]
-    require_complete_rth_grid(bars, 390, "ctx")
+def _true_rth_grid(session: date, calendar: NyseCa1Calendar) -> List[Dict[str, Any]]:
+    """Build the exact canonical minute grid for a session (test oracle)."""
+    bounds = session_utc_bounds(session, calendar)
+    open_utc = datetime.fromisoformat(bounds["open_utc"])
+    close_utc = datetime.fromisoformat(bounds["close_utc"])
+    count = int((close_utc - open_utc).total_seconds() // 60)
+    return [
+        _bar((open_utc + timedelta(minutes=k)).isoformat()) for k in range(count)
+    ]
+
+
+def test_require_complete_rth_grid_regular_session() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    assert len(bars) == 390
+    require_complete_rth_grid(bars, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_require_complete_rth_grid_half_day() -> None:
+    calendar = NyseCa1Calendar()
+    session = date(2026, 11, 27)
+    bars = _true_rth_grid(session, calendar)
+    # Late November is EST: 14:30 UTC open, 18:00 UTC early close = 210 minutes.
+    assert len(bars) == 210
+    require_complete_rth_grid(bars, session, calendar, "ctx")
+
+
+def test_grid_rejects_shortfall() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
     with pytest.raises(DataContractError):
-        require_complete_rth_grid(bars[:389], 390, "ctx")
+        require_complete_rth_grid(bars[:389], date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_missing_middle_masked_by_duplicate() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    tampered = bars[:100] + [bars[99]] + bars[101:]
+    assert len(tampered) == 390  # same count: count-only checks would pass
     with pytest.raises(DataContractError):
-        require_complete_rth_grid(bars, 0, "ctx")
+        require_complete_rth_grid(tampered, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_duplicate_minute() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    tampered = bars[:200] + [bars[50]] + bars[200:-1]
+    assert len(tampered) == 390
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid(tampered, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_out_of_order_bar() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    tampered = list(bars)
+    tampered[10], tampered[11] = tampered[11], tampered[10]
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid(tampered, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_second_spacing_masquerade() -> None:
+    calendar = NyseCa1Calendar()
+    session = date(2026, 10, 5)
+    bounds = session_utc_bounds(session, calendar)
+    open_utc = datetime.fromisoformat(bounds["open_utc"])
+    # 390 records at 1-SECOND spacing cover ~6.5 minutes, not a session.
+    bars = [
+        _bar((open_utc + timedelta(seconds=k)).isoformat()) for k in range(390)
+    ]
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid(bars, session, calendar, "ctx")
+
+
+def test_grid_rejects_wrong_opening_timestamp() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    shifted = [_bar("2026-10-05T13:31:00+00:00")] + bars[1:]
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid(shifted, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_post_close_contamination() -> None:
+    calendar = NyseCa1Calendar()
+    bars = _true_rth_grid(date(2026, 10, 5), calendar)
+    # Final left-edge (19:59) replaced by a post-close 20:00 record.
+    tampered = bars[:-1] + [_bar("2026-10-05T20:00:00+00:00")]
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid(tampered, date(2026, 10, 5), calendar, "ctx")
+
+
+def test_grid_rejects_non_session() -> None:
+    calendar = NyseCa1Calendar()
+    with pytest.raises(DataContractError):
+        require_complete_rth_grid([], date(2026, 7, 4), calendar, "ctx")
 
 
 def test_session_bounds_summer_vs_winter_dst() -> None:

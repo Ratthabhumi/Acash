@@ -9,7 +9,7 @@ reuses the canonical JSON serializer.
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, Mapping, Sequence
 
@@ -121,20 +121,55 @@ def opening_bar_index(
 
 
 def require_complete_rth_grid(
-    bars: Sequence[Mapping[str, Any]], expected_count: int, context: str
+    bars: Sequence[Mapping[str, Any]],
+    session_date: date,
+    calendar: NyseCa1Calendar,
+    context: str,
 ) -> None:
-    """Enforce session completeness: exactly the expected minute count.
+    """Enforce an exact canonical RTH minute grid for one trading session.
 
-    Any shortfall is DATA_UNAVAILABLE for the whole session (fail-closed
-    session exclusion). Never imputes.
+    The expected left-edge timestamps are DERIVED from the calendar
+    (open_utc + k*60s), never operator-supplied: exact session open, exact
+    minute increments, no duplicates, no gaps, no out-of-order records, no
+    pre/post-market records, exact regular- or half-day count, exact final
+    left-edge minute before close. Any deviation is DATA_UNAVAILABLE for the
+    whole session (fail-closed session exclusion). Never imputes.
     """
-    if not isinstance(expected_count, int) or isinstance(expected_count, bool) or expected_count < 1:
-        raise DataContractError(f"RI01_BAD_EXPECTED_COUNT: {context}.")
+    if not calendar.is_trading_session(session_date):
+        raise DataContractError(
+            f"RI01_NON_SESSION_GRID: {session_date.isoformat()} is not a trading session."
+        )
+    session = calendar.get_session(session_date)
+    if session.open_utc is None or session.close_utc is None:
+        raise DataContractError(
+            f"RI01_SESSION_BOUNDS_MISSING: {session_date.isoformat()}."
+        )
+    open_utc = session.open_utc.astimezone(timezone.utc)
+    close_utc = session.close_utc.astimezone(timezone.utc)
+    span_seconds = (close_utc - open_utc).total_seconds()
+    if span_seconds <= 0 or span_seconds % 60 != 0:
+        raise DataContractError(
+            f"RI01_SESSION_SPAN_NOT_MINUTE_ALIGNED: {session_date.isoformat()}."
+        )
+    expected_count = int(span_seconds // 60)
     if len(bars) != expected_count:
         raise DataContractError(
             f"RI01_INCOMPLETE_SESSION_GRID: {context} has {len(bars)} bars, "
             f"expected {expected_count}."
         )
+    expected_ts = open_utc
+    for index, bar in enumerate(bars):
+        if not isinstance(bar, Mapping) or "timestamp" not in bar:
+            raise DataContractError(
+                f"RI01_BAR_MISSING_FIELD: {context}[{index}].timestamp."
+            )
+        actual = parse_utc_timestamp(bar["timestamp"], f"{context}[{index}].timestamp")
+        if actual != expected_ts:
+            raise DataContractError(
+                f"RI01_SESSION_GRID_MISMATCH: {context}[{index}] is "
+                f"{actual.isoformat()}, expected {expected_ts.isoformat()}."
+            )
+        expected_ts += timedelta(minutes=1)
 
 
 def session_utc_bounds(session: date, calendar: NyseCa1Calendar) -> Dict[str, str]:

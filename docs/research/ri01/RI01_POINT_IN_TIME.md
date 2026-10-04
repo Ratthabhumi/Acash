@@ -30,7 +30,7 @@ proven per field by contract test, never assumed from field names.
 | Split ratio / ex-date | `UNKNOWN` | `BLOCKED_ON_VENDOR_CONTRACT` |
 | Symbol master (ticker/CUSIP mapping) | `UNKNOWN` | `BLOCKED_ON_VENDOR_CONTRACT` |
 | Quote/spread at decision boundary | `UNKNOWN` (endpoint unqualified for RI-01) | `BLOCKED_ON_VENDOR_CONTRACT` |
-| Provider request latency / delay | `UNKNOWN` (15-min SIP rule known for HYP_011 daily path only) | `NEEDS_CONTRACT_TEST` |
+| Provider request latency / delay | `UNKNOWN` (15-min historical-SIP rule now documented officially, but credential-specific behavior unproven) | `NEEDS_CONTRACT_TEST` |
 
 ## 3. Lookahead invariants (binding on any future implementation)
 
