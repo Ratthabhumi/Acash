@@ -1,7 +1,8 @@
 # acash-hyp011-v2.timer
-# Systemd timer for HYP_011 V2 prospective shadow observation
-# Template only — NOT INSTALLED without AUTHORIZE_HYP_011_V2_CANONICAL_DEPLOYMENT
-# NOT ARMED without AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>
+# CANONICAL TIMER TEMPLATE — never install this bare file: without a trigger
+# systemd refuses it (Timer unit lacks value setting). Authority A installs
+# NO timer. Authority B generates the installed unit from this template with
+# the validated OnCalendar trigger, and only then enables it.
 #
 # One governed session per invocation. Timer triggers the service with
 # environment variables set via drop-in or systemd-environment-d generator.

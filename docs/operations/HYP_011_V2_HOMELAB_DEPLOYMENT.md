@@ -16,14 +16,15 @@
 ### Authority A: `AUTHORIZE_HYP_011_V2_CANONICAL_DEPLOYMENT`
 **Allows**:
 - Create `/var/lib/acash/hyp011/v2/` state directory (700, owned by mew:mew)
-- Install systemd units: `acash-hyp011-v2.service`, `acash-hyp011-v2.timer`
-- Install wrapper: `/home/mew/Acash/docs/operations/acash-hyp011-v2.sh` (755)
+- Install the wrapper as `/usr/local/sbin/acash-hyp011-v2` (0755, root:root)
+- Install the SERVICE ONLY: `/etc/systemd/system/acash-hyp011-v2.service`
 - Create secrets file: `/etc/acash/hyp011-v2.env` (600, owned by mew:mew)
-- Run zero-network local preflight (`--local-preflight`)
+- Run zero-network deployment preflight (`--deployment-preflight`)
 
 **Does NOT allow**:
-- Enable/arm timer
-- Create ObservationIntent
+- Install/enable/arm any timer (no triggerless timer may enter systemd)
+- chmod or otherwise mutate the tracked repository checkout
+- Create ObservationIntent / SegmentActivationAuthority
 - Choose activation session
 - Issue `--execute-network` calls
 - Paper/Live orders
@@ -31,8 +32,10 @@
 
 ### Authority B: `AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION>`
 **Allows** (for a specific prospective session):
-- Create RegisteredIntent for target session
+- Create SegmentActivationAuthority + RegisteredIntent for target session
 - Create DispatchAuthority bound to intent + runtime + CA evidence
+- Generate + install the timer for that exact session (template + validated trigger)
+- Run full zero-network dispatch preflight (`--local-preflight` with authorities)
 - Arm timer for that specific session
 - Execute live observation with `--execute-network`
 
@@ -101,15 +104,17 @@ sudo chmod 600 /etc/acash/hyp011-v2.env
 # ACASH_ALPACA_API_SECRET=...
 ```
 
-### Systemd Units
+### Systemd Units (Authority A: SERVICE ONLY — never the timer)
 ```bash
-# Installed ONLY under Authority A
+# Installed ONLY under Authority A. The bare timer template is NEVER copied
+# into systemd (a triggerless timer is refused at load); the timer is
+# generated + installed later, only under Authority B.
+sudo install -o root -g root -m 0755 \
+  /home/mew/Acash/docs/operations/acash-hyp011-v2.sh \
+  /usr/local/sbin/acash-hyp011-v2
 sudo cp /home/mew/Acash/docs/operations/acash-hyp011-v2.service /etc/systemd/system/
-sudo cp /home/mew/Acash/docs/operations/acash-hyp011-v2.timer /etc/systemd/system/
-sudo cp /home/mew/Acash/docs/operations/acash-hyp011-v2.sh /home/mew/Acash/docs/operations/
-chmod +x /home/mew/Acash/docs/operations/acash-hyp011-v2.sh
 sudo systemctl daemon-reload
-# Timer remains DISABLED until Authority B
+# No timer installed. The tracked checkout stays clean (no chmod, no edits).
 ```
 
 ---
@@ -158,23 +163,25 @@ sudo chown mew:mew /etc/acash/hyp011-v2.env
 sudo chmod 600 /etc/acash/hyp011-v2.env
 # EDIT /etc/acash/hyp011-v2.env with credentials
 
-# 5. Install systemd units
+# 5. Install wrapper (outside the repo) + SERVICE ONLY (never the timer)
+sudo install -o root -g root -m 0755 \
+  docs/operations/acash-hyp011-v2.sh \
+  /usr/local/sbin/acash-hyp011-v2
 sudo cp docs/operations/acash-hyp011-v2.service /etc/systemd/system/
-sudo cp docs/operations/acash-hyp011-v2.timer /etc/systemd/system/
-sudo cp docs/operations/acash-hyp011-v2.sh /home/mew/Acash/docs/operations/
-chmod +x /home/mew/Acash/docs/operations/acash-hyp011-v2.sh
 sudo systemctl daemon-reload
 
-# 6. Verify timer is DISABLED and service is INACTIVE
-systemctl is-enabled acash-hyp011-v2.timer  # must be "disabled"
+# 6. Verify NO timer installed and service is INACTIVE
+systemctl cat acash-hyp011-v2.timer  # must FAIL (unit absent)
 systemctl is-active acash-hyp011-v2.service  # must be "inactive"
 
-# 7. Run informational dry-run (zero network, no session authorities).
-#    Plain dry-run (no flags) validates local contracts read-only.
+# 7. Run deployment preflight (zero network, no session authorities).
+#    This checks host/runtime/state/secrets/install contracts ONLY — it never
+#    invokes the runner and never needs a SegmentActivationAuthority.
 #    The FULL dispatch preflight (--local-preflight with session authorities)
 #    runs later under Authority B, before arming the timer.
-/home/mew/Acash/docs/operations/acash-hyp011-v2.sh
-# Expected: DRY-RUN, NETWORK_REQUESTS = 0
+APPROVED_RUNTIME_SHA="$APPROVED_RUNTIME_SHA" /usr/local/sbin/acash-hyp011-v2 --deployment-preflight
+# Expected: DEPLOYMENT_PREFLIGHT = PASS, NETWORK_REQUESTS = 0,
+#           V2_STATE_CREATED = false, V2_TIMER_INSTALLED = false
 
 # 8. Verify V1 evidence untouched
 sha256sum data/hyp_011/prospective/state.json
@@ -238,13 +245,31 @@ sha256sum data/hyp_011/prospective/observations/2026-09-30.json
 #    NETWORK_REQUESTS = 0. A stale target must FAIL here (nonzero) — never
 #    arm the timer on a failed preflight.
 
-# 6. Arm the timer with a session-specific drop-in that FIRST clears any
-#    previous value, then sets the validated expression:
-sudo systemctl edit --force acash-hyp011-v2.timer
-# [Timer]
-# OnCalendar=
-# OnCalendar=<validated SYSTEMD_ONCALENDAR_EXPRESSION, e.g. 2026-10-06 20:20:00 UTC>
+# 6. Generate + install the timer from the canonical template with the
+#    validated trigger baked in (never install the bare triggerless
+#    template). The drop-in form below clears first, then sets:
+sudo tee /etc/systemd/system/acash-hyp011-v2.timer > /dev/null <<EOF
+# Generated under AUTHORIZE_HYP_011_V2_ACTIVATION_<SESSION> from
+# docs/operations/acash-hyp011-v2.timer + validated dispatch expression.
+[Unit]
+Description=ACASH HYP_011 V2 Prospective Shadow Observation Timer
+Documentation=file:///home/mew/Acash/docs/operations/HYP_011_V2_HOMELAB_DEPLOYMENT.md
+
+[Timer]
+Unit=acash-hyp011-v2.service
+OnCalendar=<validated SYSTEMD_ONCALENDAR_EXPRESSION, e.g. 2026-10-06 20:20:00 UTC>
+Persistent=false
+AccuracySec=1min
+RandomizedDelaySec=0
+RemainAfterElapse=false
+
+[Install]
+WantedBy=timers.target
+EOF
 # (No Timezone= directive: the expression is UTC-normalized.)
+sudo systemd-analyze verify acash-hyp011-v2.timer
+sudo systemctl daemon-reload
+sudo systemctl cat acash-hyp011-v2.timer  # must show the real OnCalendar trigger
 # Plus a service drop-in providing the per-session Environment=
 # (AUTHORIZATION, ORDINAL, DISPATCH_ATTEMPT, DISPATCH_AUTHORITY,
 # RUNTIME_SHA, SEGMENT_ACTIVATION_AUTHORITY, ...).
@@ -266,9 +291,10 @@ systemctl is-active acash-hyp011-v2.service  # must be "inactive" until elapse
 - [ ] `uv sync --locked` succeeds
 - [ ] `/var/lib/acash/hyp011/v2/` exists, 700, mew:mew
 - [ ] `/etc/acash/hyp011-v2.env` exists, 600, mew:mew
-- [ ] Systemd units installed, `daemon-reload` done
-- [ ] Timer `disabled`, service `inactive` (enabling the timer later must NOT start the service)
-- [ ] Informational dry-run: `DRY-RUN`, `NETWORK_REQUESTS = 0`
+- [ ] Wrapper installed at `/usr/local/sbin/acash-hyp011-v2` (0755); repo checkout clean (no chmod, no edits)
+- [ ] Service installed, `daemon-reload` done; NO timer installed (`systemctl cat` fails)
+- [ ] Service `inactive`
+- [ ] Deployment preflight: `DEPLOYMENT_PREFLIGHT = PASS`, `NETWORK_REQUESTS = 0`, `V2_TIMER_INSTALLED = false`
 - [ ] V1 evidence hashes unchanged
 
 ### Post-Activation (Authority B Complete)
@@ -308,12 +334,12 @@ systemctl is-active acash-hyp011-v2.service  # must be "inactive" until elapse
 If V2 deployment needs reversal before activation:
 
 ```bash
-# 1. Disable timer (if somehow enabled)
-sudo systemctl disable --now acash-hyp011-v2.timer
+# 1. Disable + remove timer (Authority B only ever creates it)
+sudo systemctl disable --now acash-hyp011-v2.timer 2>/dev/null || true
+sudo rm -f /etc/systemd/system/acash-hyp011-v2.timer
 
-# 2. Remove systemd units
+# 2. Remove service unit
 sudo rm /etc/systemd/system/acash-hyp011-v2.service
-sudo rm /etc/systemd/system/acash-hyp011-v2.timer
 sudo systemctl daemon-reload
 
 # 3. Remove state root (V2 only — V1 preserved)
@@ -323,8 +349,8 @@ sudo rm -rf /var/lib/acash/hyp011/v2
 sudo rm /etc/acash/hyp011-v2.env
 sudo rmdir /etc/acash 2>/dev/null || true
 
-# 5. Remove wrapper
-rm /home/mew/Acash/docs/operations/acash-hyp011-v2.sh
+# 5. Remove the INSTALLED wrapper copy (never touch the tracked repo file)
+sudo rm /usr/local/sbin/acash-hyp011-v2
 ```
 
 ---
