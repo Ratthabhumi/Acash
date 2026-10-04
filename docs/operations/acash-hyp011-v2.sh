@@ -140,8 +140,27 @@ if [[ "${1:-}" == "--deployment-preflight" ]]; then
 fi
 
 # ------------------------------------------------------------------------------
-# Dispatch path (Authority B only): validate, then exec the canonical runner.
+# Dispatch path (Authority B only): validate, build the deterministic runner
+# invocation, then exec the canonical runner.
+#
+# The service calls this wrapper with a BARE mode flag only
+# (--local-preflight for ExecStartPre, --execute-network for ExecStart).
+# Every session binding comes from the service drop-in Environment; the
+# builder below passes optional CA inputs ONLY when actually present — never
+# as empty expansions, never as fabricated /dev/null evidence. V2 ordinal 1
+# therefore carries no CA file, while later observations can supply real ones.
 # ------------------------------------------------------------------------------
+
+MODE="${1:-}"
+if [[ "${MODE}" != "--local-preflight" && "${MODE}" != "--execute-network" ]]; then
+    echo "ERROR: first argument must be --local-preflight or --execute-network." >&2
+    exit 1
+fi
+shift
+if [[ "$#" -gt 0 ]]; then
+    echo "ERROR: wrapper takes no per-invocation arguments; session inputs come from Environment." >&2
+    exit 1
+fi
 
 if [[ ! -d "${ACASH_REPO}" ]]; then
     echo "ERROR: ACASH_REPO not found at ${ACASH_REPO}" >&2
@@ -184,6 +203,41 @@ if [[ "${SECRETS_PERMS}" != "600" ]]; then
     exit 1
 fi
 
+require_binding() {
+    if [[ -z "${2}" ]]; then
+        echo "ERROR: dispatch requires ${1} (Authority-B drop-in Environment)." >&2
+        exit 1
+    fi
+}
+
+require_binding "AUTHORIZATION" "${AUTHORIZATION:-}"
+require_binding "ORDINAL" "${ORDINAL:-}"
+require_binding "DISPATCH_ATTEMPT" "${DISPATCH_ATTEMPT:-}"
+require_binding "DISPATCH_AUTHORITY" "${DISPATCH_AUTHORITY:-}"
+require_binding "RUNTIME_SHA" "${RUNTIME_SHA:-}"
+require_binding "SEGMENT_ACTIVATION_AUTHORITY" "${SEGMENT_ACTIVATION_AUTHORITY:-}"
+
+RUNNER_ARGS=(
+    "${MODE}"
+    --state-dir "${STATE_ROOT}"
+    --segment-id "${SEGMENT_ID}"
+    --authorization "${AUTHORIZATION}"
+    --ordinal "${ORDINAL}"
+    --dispatch-attempt "${DISPATCH_ATTEMPT}"
+    --dispatch-authority "${DISPATCH_AUTHORITY}"
+    --runtime-sha "${RUNTIME_SHA}"
+    --segment-activation-authority "${SEGMENT_ACTIVATION_AUTHORITY}"
+)
+if [[ -n "${CA_DETERMINATIONS:-}" ]]; then
+    RUNNER_ARGS+=(--ca-determinations "${CA_DETERMINATIONS}")
+fi
+if [[ -n "${CA_EVIDENCE_BUNDLE:-}" ]]; then
+    RUNNER_ARGS+=(--ca-evidence-bundle "${CA_EVIDENCE_BUNDLE}")
+fi
+if [[ -n "${INTENT_REGISTRY:-}" ]]; then
+    RUNNER_ARGS+=(--intent-registry "${INTENT_REGISTRY}")
+fi
+
 cd "${ACASH_REPO}"
 
 # Source secrets (ACASH_ALPACA_API_KEY_ID, ACASH_ALPACA_API_SECRET)
@@ -194,7 +248,4 @@ set +a
 
 # Run the canonical runner with V2 contract.
 # NOTE: scripts/ is not a Python package, so invoke the runner file directly.
-exec "${PYTHON_BIN}" "${ACASH_REPO}/scripts/process_hyp_011_prospective_shadow.py" \
-    --state-dir "${STATE_ROOT}" \
-    --segment-id "${SEGMENT_ID}" \
-    "$@"
+exec "${PYTHON_BIN}" "${ACASH_REPO}/scripts/process_hyp_011_prospective_shadow.py" "${RUNNER_ARGS[@]}"

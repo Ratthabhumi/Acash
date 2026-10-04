@@ -560,8 +560,10 @@ def test_v2_timer_template_wiring() -> None:
     # Activation drop-in shape: clear first, then set the validated expression.
     assert "OnCalendar=" in timer
     service = (ops / "acash-hyp011-v2.service").read_text(encoding="utf-8")
-    assert "--segment-activation-authority" in service
-    assert "${SEGMENT_ACTIVATION_AUTHORITY}" in service
+    # Bare mode flags: bindings travel via drop-in Environment, mapped by the
+    # wrapper (no empty-expansion interpolation in the unit).
+    assert "SEGMENT_ACTIVATION_AUTHORITY" in service
+    assert "${SEGMENT_ACTIVATION_AUTHORITY}" not in service
 
 
 def test_runbook_binds_no_stale_sha() -> None:
