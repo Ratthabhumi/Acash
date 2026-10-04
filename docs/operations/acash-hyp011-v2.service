@@ -24,6 +24,11 @@ Group=mew
 WorkingDirectory=/home/mew/Acash
 Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/acash/hyp011-v2.env
+# The executed binary is the INSTALLED deployment copy, never the tracked
+# repository file (which stays mode 0644). Installed under Authority A via:
+#   sudo install -o root -g root -m 0755 \
+#     /home/mew/Acash/docs/operations/acash-hyp011-v2.sh \
+#     /usr/local/sbin/acash-hyp011-v2
 # Per-session dispatch arguments (AUTHORIZATION, ORDINAL, DISPATCH_ATTEMPT,
 # CA_DETERMINATIONS, DISPATCH_AUTHORITY, CA_EVIDENCE_BUNDLE, RUNTIME_SHA,
 # SEGMENT_ACTIVATION_AUTHORITY) are injected via a systemd drop-in
@@ -31,7 +36,7 @@ EnvironmentFile=/etc/acash/hyp011-v2.env
 # This template alone can never dispatch: without the drop-in the variables
 # expand empty and the runner fails closed (SHADOW_AUTHORIZATION_REQUIRED,
 # SHADOW_V2_ACTIVATION_AUTHORITY_REQUIRED).
-ExecStart=/home/mew/Acash/docs/operations/acash-hyp011-v2.sh --execute-network --authorization ${AUTHORIZATION} --ordinal ${ORDINAL} --dispatch-attempt ${DISPATCH_ATTEMPT} --ca-determinations ${CA_DETERMINATIONS} --dispatch-authority ${DISPATCH_AUTHORITY} --ca-evidence-bundle ${CA_EVIDENCE_BUNDLE} --runtime-sha ${RUNTIME_SHA} --segment-activation-authority ${SEGMENT_ACTIVATION_AUTHORITY}
+ExecStart=/usr/local/sbin/acash-hyp011-v2 --execute-network --authorization ${AUTHORIZATION} --ordinal ${ORDINAL} --dispatch-attempt ${DISPATCH_ATTEMPT} --ca-determinations ${CA_DETERMINATIONS} --dispatch-authority ${DISPATCH_AUTHORITY} --ca-evidence-bundle ${CA_EVIDENCE_BUNDLE} --runtime-sha ${RUNTIME_SHA} --segment-activation-authority ${SEGMENT_ACTIVATION_AUTHORITY}
 # Fail closed: no restart, no retry
 Restart=no
 TimeoutStartSec=300
@@ -53,5 +58,6 @@ RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
 
-[Install]
-WantedBy=multi-user.target
+# No [Install] section by design: this oneshot service is started ONLY by
+# its timer at elapse time. Omitting [Install] makes `systemctl enable`
+# fail closed, so the service can never introduce automatic startup.

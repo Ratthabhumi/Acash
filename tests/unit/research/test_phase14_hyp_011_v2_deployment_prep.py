@@ -212,9 +212,11 @@ def test_v2_manifest_binding() -> None:
     # No V1 unit names reused.
     assert "acash-hyp011-observation-0001" not in service
     wrapper = (ops / "acash-hyp011-v2.sh").read_text(encoding="utf-8")
-    assert 'STATE_ROOT="/var/lib/acash/hyp011/v2"' in wrapper
+    assert 'STATE_ROOT="${V2_STATE_ROOT:-/var/lib/acash/hyp011/v2}"' in wrapper
     assert 'SEGMENT_ID="HYP_011_PROSPECTIVE_V2"' in wrapper
-    assert 'SECRETS_FILE="/etc/acash/hyp011-v2.env"' in wrapper
+    assert 'SECRETS_FILE="${V2_SECRETS_FILE:-/etc/acash/hyp011-v2.env}"' in wrapper
+    assert "--deployment-preflight" in wrapper
+    assert "DEPLOYMENT_PREFLIGHT = PASS" in wrapper
     assert "process_hyp_011_prospective_shadow.py" in wrapper
     assert "--state-dir" in wrapper
     assert "--segment-id" in wrapper
