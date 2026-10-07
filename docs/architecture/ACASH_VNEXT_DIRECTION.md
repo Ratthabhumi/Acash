@@ -121,6 +121,7 @@ Evidence Kernel.
    - **RI-05**: Renamed from "Dealer Gamma / GEX" to "Gamma Exposure Proxy". Public OI alone does not identify net dealer long/short positioning.
 3. **Execution Roadmap Realignment**:
    - Complete PR #10 (Evidence Plane V1.1 + pre-live correctness + canonical docs).
-   - Complete HYP_011 V2 forensic check on Homelab.
+   - Complete HYP_011 V2 forensic check on Homelab: **CLOSED as MISSED_UNOBSERVED_DUE_TO_HOST_OFFLINE** (see `docs/audit/HYP011_V2_OBS1_FORENSIC_CLOSURE_20261007.md`).
+   - Pinned runtime policy: Retain HYP_011 execution pinned at commit `6395b38` to preserve empirical stationarity without unnecessary code churn.
    - Execute staged canary provider qualification for RI-01 (Canary 1: 2021-06-01 bars → Canary 2: 2018-06-01 bars → Canary 3: 2021-11-26 half-day bars → trades windows).
    - Stop architecture hardening loops; move toward empirical evidence generation under strict scientific governance.

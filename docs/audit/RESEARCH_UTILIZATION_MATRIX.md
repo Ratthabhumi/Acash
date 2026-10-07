@@ -122,7 +122,7 @@ Nothing on the repair branch becomes canonical merely by existing.
 | **RI-09** (Time-Series Momentum) | `USED_AS_NEGATIVE_CONTROL` | `DO_NOT_RECYCLE`. Explicitly quarantined to prevent hypothesis contamination. |
 | **PPDS** (Portfolio Decision Support) | `CANONICAL_SYNTHETIC_READONLY_RUNTIME` / `CANONICAL_PROVENANCE_CONSUMER` | Merged to canonical `main` in PR #9. Evidence Plane V1.1 consumer. Decoupled from RI-01; imports runtime identity from `acash.core.runtime_identity`. Synthetic read-only runtime only. Real credentials/orders forbidden. |
 | **HYP_011 V1 Obs #1** | `COMMITTED_AND_RECONCILED` | Validated 2026-09-30 session. Historical V1 milestone. |
-| **HYP_011 V2 Obs #1** | `AWAITING_RUNTIME_EVIDENCE` | Scheduled 2026-10-06. Preserved in `AWAITING_RUNTIME_EVIDENCE` state pending host forensic proof. |
+| **HYP_011 V2 Obs #1** | `MISSED_UNOBSERVED_DUE_TO_HOST_OFFLINE_AT_DISPATCH` | Scheduled 2026-10-06 03:20 ICT (session 2026-10-05). Closed via physical host boot telemetry (~71h outage from 2026-10-04 21:38 to 2026-10-07 21:06 ICT). Zero network requests, zero attempts consumed, sample advancement = 0. See `docs/audit/HYP011_V2_OBS1_FORENSIC_CLOSURE_20261007.md`. |
 
 ### B. Platform & Governance Invariants
 
