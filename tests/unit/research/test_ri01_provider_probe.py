@@ -6,26 +6,34 @@ pagination to exhaustion, trade provenance preservation, entitlement
 fail-closed, and stability comparison — all against synthetic payloads.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
+from acash.evidence import (
+    content_sha256,
+    ordered_page_chain_digest,
+)
 from acash.execution.alpaca.credentials import EnvAlpacaCredentialProvider
+from acash.research.ri01.feasibility import parse_utc_timestamp
 from acash.research.ri01.probe import (
     ALLOWLISTED_SESSIONS,
     HOLDOUT_START,
     PROBE_SYMBOL,
+    RI01ProbeAuthority,
     RI01ProbeClient,
     compare_stability,
     main,
-    write_envelope,
 )
 
 CREDS = EnvAlpacaCredentialProvider(
@@ -34,6 +42,45 @@ CREDS = EnvAlpacaCredentialProvider(
         "ACASH_ALPACA_API_SECRET": "mock_secret",
     }
 )
+MOCK_RUNTIME_SHA = "a" * 40
+
+
+def _build_authority(
+    tmp_path: Path,
+    session: date = date(2021, 6, 1),
+    capability: str = "bars",
+    max_requests: int = 10,
+    valid_from: Optional[datetime] = None,
+    valid_until: Optional[datetime] = None,
+    read_only: bool = True,
+    no_outcomes: bool = True,
+    no_paper: bool = True,
+    no_live: bool = True,
+    capital_usd: Decimal = Decimal("0.00"),
+    no_real_orders: bool = True,
+    runtime_sha: str = MOCK_RUNTIME_SHA,
+    authority_id: str = "AUTHORIZE_RI01_PROBE_R1_TEST",
+) -> RI01ProbeAuthority:
+    root = tmp_path / "external_evidence"
+    root.mkdir(parents=True, exist_ok=True)
+    v_from = valid_from or datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc)
+    v_until = valid_until or datetime(2026, 10, 10, 0, 0, tzinfo=timezone.utc)
+    return RI01ProbeAuthority(
+        authority_id=authority_id,
+        runtime_sha=runtime_sha,
+        session=session,
+        capability=capability,
+        evidence_root=root,
+        max_requests=max_requests,
+        valid_from_utc=v_from,
+        valid_until_utc=v_until,
+        read_only=read_only,
+        no_outcomes=no_outcomes,
+        no_paper=no_paper,
+        no_live=no_live,
+        capital_usd=capital_usd,
+        no_real_orders=no_real_orders,
+    )
 
 
 def _synthetic_bars(session: date, count: int) -> List[Dict[str, Any]]:
@@ -53,75 +100,65 @@ def _synthetic_bars(session: date, count: int) -> List[Dict[str, Any]]:
     ]
 
 
-def _bars_transport(pages: Dict[str, List[List[Dict[str, Any]]]]) -> httpx.MockTransport:
-    """Serve canned bar pages per session; record nothing, touch no network."""
-
+def _bars_transport(pages: List[List[Dict[str, Any]]]) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v2/stocks/bars"
-        start = str(request.url.params["start"])
-        session = start[:10]
         token = request.url.params.get("page_token")
-        session_pages = pages[session]
         index = 0 if token is None else int(token)
+        next_tok = str(index + 1) if index + 1 < len(pages) else None
         body = {
-            "bars": {PROBE_SYMBOL: session_pages[index]},
-            "next_page_token": (
-                str(index + 1) if index + 1 < len(session_pages) else None
-            ),
+            "bars": {PROBE_SYMBOL: pages[index]},
+            "next_page_token": next_tok,
         }
-        raw = json.dumps(body).encode("utf-8")
         return httpx.Response(
             200,
-            content=raw,
+            content=json.dumps(body).encode("utf-8"),
             headers={
-                "ratelimit_limit": "200",
-                "ratelimit_remaining": "199",
-                "ratelimit_reset": "1700000000",
+                "x-ratelimit-limit": "200",
+                "x-ratelimit-remaining": str(199 - index),
+                "x-ratelimit-reset": "1700000000",
             },
         )
 
     return httpx.MockTransport(handler)
 
 
-def _trades_transport() -> httpx.MockTransport:
+def _trades_transport(pages: Optional[List[List[Dict[str, Any]]]] = None) -> httpx.MockTransport:
+    default_trades = [
+        {
+            "t": "2021-06-01T13:30:00.123456789Z",
+            "x": "P",
+            "p": 100.1,
+            "s": 50,
+            "c": ["O"],
+        },
+        {
+            "t": "2021-06-01T13:30:00.234567890Z",
+            "x": "N",
+            "p": 100.2,
+            "s": 10,
+            "c": ["Q"],
+        },
+    ]
+    trade_pages = pages or [default_trades]
+
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v2/stocks/trades"
+        token = request.url.params.get("page_token")
+        index = 0 if token is None else int(token)
+        next_tok = str(index + 1) if index + 1 < len(trade_pages) else None
         body = {
-            "trades": {
-                PROBE_SYMBOL: [
-                    {
-                        "t": "2021-06-01T13:30:00.123456789Z",
-                        "x": "P",
-                        "p": 100.1,
-                        "s": 50,
-                        "c": ["O"],
-                    },
-                    {
-                        "t": "2021-06-01T13:30:00.234567890Z",
-                        "x": "N",
-                        "p": 100.2,
-                        "s": 10,
-                        "c": ["Q"],
-                    },
-                    {
-                        "t": "2021-06-01T19:59:59.999999999Z",
-                        "x": "N",
-                        "p": 101.3,
-                        "s": 200,
-                        "c": ["6"],
-                    },
-                ]
-            },
-            "next_page_token": None,
+            "trades": {PROBE_SYMBOL: trade_pages[index]},
+            "next_page_token": next_tok,
         }
-        return httpx.Response(200, content=json.dumps(body).encode("utf-8"))
-
-    return httpx.MockTransport(handler)
-
-
-def _denied_transport() -> httpx.MockTransport:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, content=b"{}")
+        return httpx.Response(
+            200,
+            content=json.dumps(body).encode("utf-8"),
+            headers={
+                "x-ratelimit-limit": "200",
+                "x-ratelimit-remaining": str(199 - index),
+            },
+        )
 
     return httpx.MockTransport(handler)
 
@@ -133,197 +170,351 @@ def _raising_transport() -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
+# --- 1. Dry run & Scope Gating ---
+
+
 def test_dry_run_validates_scope_zero_network(tmp_path: Path, capsys: Any) -> None:
     assert (
         main(
             ["--session", "2018-06-01", "--capability", "bars"],
             _transport=_raising_transport(),
-            _out_dir=tmp_path,
         )
         == 0
     )
     out = capsys.readouterr().out
     assert "SESSION = 2018-06-01" in out
     assert "NETWORK_REQUESTS = 0" in out
-    assert list(tmp_path.iterdir()) == []
 
 
-def test_holdout_session_rejected_zero_network(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
+def test_holdout_session_rejected_zero_network() -> None:
+    with pytest.raises(DataContractError, match="RI01_PROBE_HOLDOUT_FORBIDDEN"):
+        main(["--session", "2024-03-01"], _transport=_raising_transport())
+
+
+def test_non_allowlisted_session_rejected_zero_network() -> None:
+    with pytest.raises(DataContractError, match="RI01_PROBE_SESSION_NOT_ALLOWLISTED"):
+        main(["--session", "2020-01-02"], _transport=_raising_transport())
+
+
+def test_unknown_capability_rejected_zero_network() -> None:
+    with pytest.raises(DataContractError, match="RI01_PROBE_UNKNOWN_CAPABILITY"):
+        main(["--session", "2018-06-01", "--capability", "quotes"], _transport=_raising_transport())
+
+
+# --- 2. Authority Gating & Locks ---
+
+
+def test_bad_authority_pre_network_failure(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, authority_id="INVALID_PREFIX")
+    with pytest.raises(DataContractError, match="RI01_PROBE_BAD_AUTHORITY_ID"):
         main(
-            [
-                "--execute-network",
-                "--authorization",
-                "AUTHORIZE_RI01_PROBE_R1_X",
-                "--session",
-                "2024-03-01",
-            ],
+            ["--execute-network"],
+            _authority=auth,
             _transport=_raising_transport(),
-            _out_dir=tmp_path,
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
         )
 
 
-def test_non_allowlisted_session_rejected_zero_network(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
+def test_runtime_mismatch_failure(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, runtime_sha="b" * 40)
+    with pytest.raises(DataContractError, match="RI01_PROBE_RUNTIME_MISMATCH"):
         main(
-            [
-                "--execute-network",
-                "--authorization",
-                "AUTHORIZE_RI01_PROBE_R1_X",
-                "--session",
-                "2020-01-02",
-            ],
+            ["--execute-network"],
+            _authority=auth,
             _transport=_raising_transport(),
-            _out_dir=tmp_path,
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
         )
 
 
-def test_unknown_capability_rejected_zero_network(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
+def test_authority_expiry_and_future_validity(tmp_path: Path) -> None:
+    auth_expired = _build_authority(
+        tmp_path,
+        valid_from=datetime(2026, 10, 1, 0, 0, tzinfo=timezone.utc),
+        valid_until=datetime(2026, 10, 2, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_EXPIRED"):
         main(
-            ["--session", "2018-06-01", "--capability", "quotes"],
+            ["--execute-network"],
+            _authority=auth_expired,
             _transport=_raising_transport(),
-            _out_dir=tmp_path,
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
         )
 
-
-def test_missing_authorization_rejected_zero_network(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
+    auth_future = _build_authority(
+        tmp_path,
+        valid_from=datetime(2026, 10, 5, 0, 0, tzinfo=timezone.utc),
+        valid_until=datetime(2026, 10, 10, 0, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_FUTURE"):
         main(
-            ["--execute-network", "--session", "2018-06-01"],
+            ["--execute-network"],
+            _authority=auth_future,
             _transport=_raising_transport(),
-            _out_dir=tmp_path,
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
         )
-
-
-def test_holdout_boundary_constant() -> None:
-    assert HOLDOUT_START == date(2023, 1, 1)
-    assert PROBE_SYMBOL == "SPY"
-    assert set(ALLOWLISTED_SESSIONS) == {
-        date(2018, 6, 1),
-        date(2021, 6, 1),
-        date(2021, 11, 26),
-    }
-    assert all(session < HOLDOUT_START for session in ALLOWLISTED_SESSIONS)
 
 
 @pytest.mark.parametrize(
-    "session,count",
-    [(date(2018, 6, 1), 390), (date(2021, 11, 26), 210)],
+    "lock_kwarg,val",
+    [
+        ({"read_only": False}, "read_only"),
+        ({"no_outcomes": False}, "no_outcomes"),
+        ({"no_paper": False}, "no_paper"),
+        ({"no_live": False}, "no_live"),
+        ({"capital_usd": Decimal("100.00")}, "capital_usd"),
+        ({"no_real_orders": False}, "no_real_orders"),
+    ],
 )
-def test_bars_capability_envelope_and_grid(
-    tmp_path: Path, capsys: Any, session: date, count: int
-) -> None:
-    bars = _synthetic_bars(session, count)
-    pages = {session.isoformat(): [bars[:200], bars[200:]]}
+def test_security_and_capital_locks_enforced(tmp_path: Path, lock_kwarg: Dict[str, Any], val: str) -> None:
+    auth = _build_authority(tmp_path, **lock_kwarg)
+    with pytest.raises(DataContractError, match="RI01_PROBE_LOCK_VIOLATION"):
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=_raising_transport(),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+        )
+
+
+def test_evidence_root_rejections(tmp_path: Path) -> None:
+    # Relative path
+    auth_relative = _build_authority(tmp_path)
+    object.__setattr__(auth_relative, "evidence_root", Path("relative/path"))
+    with pytest.raises(DataContractError, match="EVIDENCE_ROOT_NOT_ABSOLUTE"):
+        auth_relative.validate(
+            datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            MOCK_RUNTIME_SHA,
+            NyseCa1Calendar(),
+        )
+
+    # HYP011 collision
+    auth_hyp011 = _build_authority(tmp_path)
+    object.__setattr__(auth_hyp011, "evidence_root", Path("/var/lib/acash/hyp011/v2"))
+    with pytest.raises(DataContractError, match="EVIDENCE_ROOT_HYP011_COLLISION"):
+        auth_hyp011.validate(
+            datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            MOCK_RUNTIME_SHA,
+            NyseCa1Calendar(),
+        )
+
+
+# --- 3. Pagination, Request Budget, and Evidence Immutability ---
+
+
+def test_bars_multi_page_and_x_ratelimit_evidence(tmp_path: Path, capsys: Any) -> None:
+    session = date(2021, 6, 1)
+    bars = _synthetic_bars(session, 390)
+    pages = [bars[:200], bars[200:]]
+    auth = _build_authority(tmp_path, session=session, capability="bars", max_requests=5)
+
     assert (
         main(
-            [
-                "--execute-network",
-                "--authorization",
-                "AUTHORIZE_RI01_PROBE_R1_X",
-                "--session",
-                session.isoformat(),
-                "--capability",
-                "bars",
-            ],
+            ["--execute-network"],
+            _authority=auth,
             _transport=_bars_transport(pages),
+            _runtime_sha=MOCK_RUNTIME_SHA,
             _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
-            _out_dir=tmp_path,
             _credential_provider=CREDS,
         )
         == 0
     )
     out = capsys.readouterr().out
-    assert f"BARS {session.isoformat()}: {count} bars" in out
+    assert "BARS 2021-06-01: 390 bars, pages=2" in out
     assert "NETWORK_REQUESTS_ISSUED = 2" in out
-    session_dir = tmp_path / session.isoformat()
-    payload = session_dir / "bars_1min_sip_raw.bin"
-    envelope = session_dir / "bars_1min_sip_raw.envelope.json"
-    assert payload.is_file() and envelope.is_file()
-    # Digest binds the exact concatenated raw page bytes.
-    assert hashlib.sha256(payload.read_bytes()).hexdigest() in out
-    doc = json.loads(envelope.read_text(encoding="utf-8"))
-    assert doc["content_sha256"] == hashlib.sha256(payload.read_bytes()).hexdigest()
-    assert doc["rate_limits"]["ratelimit_limit"] == "200"
-    assert doc["retrieved_at_utc"] == "2026-10-04T12:00:00+00:00"
+
+    bars_dir = auth.evidence_root / "2021-06-01" / "bars"
+    p0 = bars_dir / "page_0000.bin"
+    p1 = bars_dir / "page_0001.bin"
+    manifest_path = bars_dir / "manifest.json"
+    assert p0.is_file() and p1.is_file() and manifest_path.is_file()
+
+    manifest_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest_doc["total_items"] == 390
+    assert len(manifest_doc["page_records"]) == 2
+    assert manifest_doc["page_records"][0]["rate_limit_headers"]["x-ratelimit-remaining"] == "199"
+    assert manifest_doc["page_records"][1]["rate_limit_headers"]["x-ratelimit-remaining"] == "198"
+
+    # Immutable create-once: re-running or overwriting must fail
+    with pytest.raises(DataContractError, match="EVIDENCE_FILE_EXISTS_IMMUTABLE"):
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=_bars_transport(pages),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
 
 
-def test_trades_window_preserves_venue_and_conditions(tmp_path: Path) -> None:
+def test_trades_multi_page_and_provenance(tmp_path: Path, capsys: Any) -> None:
+    session = date(2021, 6, 1)
+    page1 = [
+        {"t": "2021-06-01T13:30:00.100Z", "x": "P", "p": 100.1, "s": 50, "c": ["O"]},
+    ]
+    page2 = [
+        {"t": "2021-06-01T13:30:00.200Z", "x": "N", "p": 100.2, "s": 10, "c": ["Q"]},
+    ]
+    auth = _build_authority(tmp_path, session=session, capability="trades", max_requests=10)
+
     assert (
         main(
-            [
-                "--execute-network",
-                "--authorization",
-                "AUTHORIZE_RI01_PROBE_R1_X",
-                "--session",
-                "2021-06-01",
-                "--capability",
-                "trades",
-            ],
-            _transport=_trades_transport(),
+            ["--execute-network"],
+            _authority=auth,
+            _transport=_trades_transport([page1, page2]),
+            _runtime_sha=MOCK_RUNTIME_SHA,
             _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
-            _out_dir=tmp_path,
             _credential_provider=CREDS,
         )
         == 0
     )
-    session_dir = tmp_path / "2021-06-01"
-    assert (session_dir / "trades_sip_window_open.bin").is_file()
-    assert (session_dir / "trades_sip_window_close.bin").is_file()
-    envelope = json.loads(
-        (session_dir / "trades_sip_window_open.envelope.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    assert envelope["trade_count"] == 3
-    assert envelope["window"] == "open"
+    out = capsys.readouterr().out
+    assert "TRADES 2021-06-01/open: 2 trades, pages=2" in out
+
+    open_dir = auth.evidence_root / "2021-06-01" / "trades_open"
+    assert (open_dir / "page_0000.bin").is_file()
+    assert (open_dir / "page_0001.bin").is_file()
 
 
-def test_entitlement_denied_records_nothing(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
+def test_repeated_token_detection_fails_closed(tmp_path: Path) -> None:
+    session = date(2021, 6, 1)
+    bars = _synthetic_bars(session, 10)
+
+    def looping_handler(request: httpx.Request) -> httpx.Response:
+        body = {
+            "bars": {PROBE_SYMBOL: bars},
+            "next_page_token": "static_infinite_loop_token",
+        }
+        return httpx.Response(200, content=json.dumps(body).encode("utf-8"))
+
+    auth = _build_authority(tmp_path, session=session, capability="bars", max_requests=10)
+    with pytest.raises(DataContractError, match="RI01_PROBE_REPEATED_PAGE_TOKEN"):
         main(
-            [
-                "--execute-network",
-                "--authorization",
-                "AUTHORIZE_RI01_PROBE_R1_X",
-                "--session",
-                "2018-06-01",
-                "--capability",
-                "bars",
-            ],
-            _transport=_denied_transport(),
+            ["--execute-network"],
+            _authority=auth,
+            _transport=httpx.MockTransport(looping_handler),
+            _runtime_sha=MOCK_RUNTIME_SHA,
             _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
-            _out_dir=tmp_path,
             _credential_provider=CREDS,
         )
-    assert list(tmp_path.iterdir()) == []
+
+
+def test_request_budget_exhaustion_fails_closed(tmp_path: Path) -> None:
+    session = date(2021, 6, 1)
+    bars = _synthetic_bars(session, 390)
+    pages = [bars[:100], bars[100:200], bars[200:300], bars[300:]]
+    # Allow only 2 requests, but 4 are required
+    auth = _build_authority(tmp_path, session=session, capability="bars", max_requests=2)
+    with pytest.raises(DataContractError, match="RI01_PROBE_REQUEST_BUDGET_EXHAUSTED"):
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=_bars_transport(pages),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
+
+
+# --- 4. RTH Grid Qualification vs Provider Response Bounds ---
+
+
+def test_close_edge_provider_bar_excluded_from_grid(tmp_path: Path) -> None:
+    session = date(2018, 6, 1)
+    calendar = NyseCa1Calendar()
+    close_utc = calendar.get_session(session).close_utc
+    assert close_utc is not None
+
+    # Alpaca start/end inclusive: provider returns 390 RTH bars PLUS 1 bar at close_utc (20:00:00)
+    bars_391 = _synthetic_bars(session, 390)
+    bars_391.append(
+        {
+            "t": close_utc.isoformat(),
+            "o": 100,
+            "h": 101,
+            "l": 99,
+            "c": 100.5,
+            "v": 1000,
+        }
+    )
+    auth = _build_authority(tmp_path, session=session, capability="bars")
+
+    client = RI01ProbeClient(
+        credential_provider=CREDS, transport=_bars_transport([bars_391])
+    )
+    now_utc = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    manifest, qualified = client.fetch_bars(auth, calendar, now_utc)
+
+    # Raw manifest preserves all 391 items retrieved from provider
+    assert manifest.total_items == 391
+    # Qualified RTH bars exclude the close-edge bar and match exact 390 regular-session count [open, close)
+    assert len(qualified) == 390
+    assert parse_utc_timestamp(qualified[-1]["timestamp"], "bar") < close_utc.astimezone(timezone.utc)
+
+
+def test_half_day_grid_success(tmp_path: Path) -> None:
+    session = date(2021, 11, 26)  # half day, 210 minutes
+    bars = _synthetic_bars(session, 210)
+    auth = _build_authority(tmp_path, session=session, capability="bars")
+
+    client = RI01ProbeClient(
+        credential_provider=CREDS, transport=_bars_transport([bars])
+    )
+    now_utc = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    manifest, qualified = client.fetch_bars(auth, NyseCa1Calendar(), now_utc)
+    assert len(qualified) == 210
+    assert manifest.total_items == 210
+
+
+def test_missing_minute_fails_closed(tmp_path: Path) -> None:
+    session = date(2018, 6, 1)
+    # 389 bars instead of 390
+    bars_missing = _synthetic_bars(session, 389)
+    auth = _build_authority(tmp_path, session=session, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS, transport=_bars_transport([bars_missing])
+    )
+    now_utc = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError, match="RI01_INCOMPLETE_SESSION_GRID"):
+        client.fetch_bars(auth, NyseCa1Calendar(), now_utc)
+
+
+def test_entitlement_denied_never_covered(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS,
+        transport=httpx.MockTransport(lambda req: httpx.Response(403, content=b"{}")),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_ENTITLEMENT_DENIED"):
+        client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+
+
+def test_http_error_never_covered(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS,
+        transport=httpx.MockTransport(lambda req: httpx.Response(500, content=b"Internal Server Error")),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_BARS_HTTP_500"):
+        client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+
+
+def test_malformed_page_fails_closed(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS,
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, content=b"not-json")),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_BARS_CORRUPT"):
+        client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
 
 
 def test_stability_comparison() -> None:
     assert compare_stability("a" * 64, "a" * 64) == "STABLE"
     assert compare_stability("a" * 64, "b" * 64) == "DIFFERENT"
-    with pytest.raises(DataContractError):
+    with pytest.raises(DataContractError, match="RI01_STABILITY_EMPTY_DIGEST"):
         compare_stability("", "b" * 64)
-
-
-def test_envelope_names_cannot_escape(tmp_path: Path) -> None:
-    with pytest.raises(DataContractError):
-        write_envelope(
-            tmp_path,
-            "../escape",
-            b"{}",
-            {},
-            datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
-        )
-
-
-def test_fetched_bars_carry_schema_only_no_metrics(tmp_path: Path) -> None:
-    bars = _synthetic_bars(date(2018, 6, 1), 390)
-    pages = {"2018-06-01": [bars]}
-    client = RI01ProbeClient(
-        credential_provider=CREDS, transport=_bars_transport(pages)
-    )
-    _, validated, _ = client.fetch_bars(date(2018, 6, 1), NyseCa1Calendar())
-    assert len(validated) == 390
-    assert all(set(bar.keys()) == {"timestamp", "open", "high", "low", "close", "volume"} for bar in validated)

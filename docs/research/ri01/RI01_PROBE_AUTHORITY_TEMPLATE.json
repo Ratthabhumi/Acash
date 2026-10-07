@@ -1,0 +1,18 @@
+{
+  "_notice": "BOUNDED RI-01 PROBE AUTHORITY TEMPLATE ONLY. DO NOT EXECUTE WITHOUT EXPLICIT SEPARATE HUMAN AUTHORIZATION.",
+  "authority_id": "AUTHORIZE_RI01_PROBE_R1_TEMPLATE_UNEXECUTED",
+  "runtime_sha": "0000000000000000000000000000000000000000",
+  "session": "2021-06-01",
+  "capability": "bars",
+  "symbol": "SPY",
+  "evidence_root": "/var/tmp/acash_evidence_ri01_r1",
+  "max_requests": 10,
+  "valid_from_utc": "2026-10-01T00:00:00+00:00",
+  "valid_until_utc": "2026-10-01T01:00:00+00:00",
+  "read_only": true,
+  "no_outcomes": true,
+  "no_paper": true,
+  "no_live": true,
+  "capital_usd": "0.00",
+  "no_real_orders": true
+}

@@ -22,22 +22,30 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import httpx
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
+from acash.evidence import (
+    RetrievalPageRecord,
+    RetrievalRunManifest,
+    ordered_page_chain_digest,
+    validate_external_evidence_root,
+    write_immutable_bytes,
+)
 from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
     EnvAlpacaCredentialProvider,
 )
 from acash.research.ri01.feasibility import (
-    evidence_digest,
     parse_utc_timestamp,
     require_complete_rth_grid,
     validate_provider_bar,
@@ -61,6 +69,155 @@ ALLOWLISTED_SESSIONS: tuple[date, ...] = (
 )
 
 CAPABILITIES: tuple[str, ...] = ("bars", "trades")
+
+
+def get_current_runtime_sha(repo_root: Optional[Path] = None) -> str:
+    """Read HEAD commit SHA from git or repository metadata."""
+    try:
+        resolved_repo = repo_root or Path(__file__).resolve().parents[4]
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=resolved_repo,
+        )
+        sha = result.stdout.strip()
+        if len(sha) == 40 and re.match(r"^[0-9a-f]{40}$", sha):
+            return sha
+    except Exception:
+        pass
+    raise DataContractError("RI01_PROBE_CANNOT_RESOLVE_RUNTIME_SHA.")
+
+
+@dataclass(frozen=True)
+class RI01ProbeAuthority:
+    """Structured, cryptographic network authorization for RI-01 bounded probe."""
+
+    authority_id: str
+    runtime_sha: str
+    session: date
+    capability: str
+    evidence_root: Path
+    max_requests: int
+    valid_from_utc: datetime
+    valid_until_utc: datetime
+    symbol: str = PROBE_SYMBOL
+    read_only: bool = True
+    no_outcomes: bool = True
+    no_paper: bool = True
+    no_live: bool = True
+    capital_usd: Decimal = Decimal("0.00")
+    no_real_orders: bool = True
+
+    def validate(
+        self,
+        now_utc: datetime,
+        current_runtime_sha: str,
+        calendar: NyseCa1Calendar,
+    ) -> None:
+        """Validate authority fail-closed against time windows, commit hash, and locks."""
+        if not self.authority_id or not self.authority_id.startswith("AUTHORIZE_RI01_PROBE_R1_"):
+            raise DataContractError(
+                f"RI01_PROBE_BAD_AUTHORITY_ID: must start with AUTHORIZE_RI01_PROBE_R1_, got '{self.authority_id}'."
+            )
+        if not isinstance(self.runtime_sha, str) or not re.match(r"^[0-9a-f]{40}$", self.runtime_sha):
+            raise DataContractError(
+                f"RI01_PROBE_BAD_RUNTIME_SHA: authority runtime_sha must be 40-char hex, got '{self.runtime_sha}'."
+            )
+        if self.runtime_sha != current_runtime_sha:
+            raise DataContractError(
+                f"RI01_PROBE_RUNTIME_MISMATCH: authority bound to {self.runtime_sha}, current runtime is {current_runtime_sha}."
+            )
+        if self.symbol != PROBE_SYMBOL:
+            raise DataContractError(
+                f"RI01_PROBE_SYMBOL_FORBIDDEN: only {PROBE_SYMBOL} is allowed, got '{self.symbol}'."
+            )
+        if self.session >= HOLDOUT_START:
+            raise DataContractError(
+                f"RI01_PROBE_HOLDOUT_FORBIDDEN: {self.session.isoformat()} is in sealed 2023-2026 holdout."
+            )
+        if self.session not in ALLOWLISTED_SESSIONS:
+            raise DataContractError(
+                f"RI01_PROBE_SESSION_NOT_ALLOWLISTED: {self.session.isoformat()}."
+            )
+        if not calendar.is_trading_session(self.session):
+            raise DataContractError(
+                f"RI01_PROBE_NON_SESSION: {self.session.isoformat()}."
+            )
+        if self.capability not in CAPABILITIES:
+            raise DataContractError(
+                f"RI01_PROBE_UNKNOWN_CAPABILITY: {self.capability}."
+            )
+        validate_external_evidence_root(self.evidence_root)
+        if self.max_requests <= 0:
+            raise DataContractError(
+                f"RI01_PROBE_INVALID_REQUEST_BUDGET: max_requests must be > 0, got {self.max_requests}."
+            )
+        if self.valid_from_utc.tzinfo is None or self.valid_until_utc.tzinfo is None:
+            raise DataContractError("RI01_PROBE_AUTHORITY_NAIVE_TIME.")
+        if not self.valid_from_utc < self.valid_until_utc:
+            raise DataContractError("RI01_PROBE_AUTHORITY_WINDOW_INVERTED.")
+        if now_utc < self.valid_from_utc:
+            raise DataContractError(
+                f"RI01_PROBE_AUTHORITY_FUTURE: valid from {self.valid_from_utc.isoformat()}, now is {now_utc.isoformat()}."
+            )
+        if now_utc > self.valid_until_utc:
+            raise DataContractError(
+                f"RI01_PROBE_AUTHORITY_EXPIRED: valid until {self.valid_until_utc.isoformat()}, now is {now_utc.isoformat()}."
+            )
+        # Lock enforcement
+        if not self.read_only:
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: read_only must be True.")
+        if not self.no_outcomes:
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: no_outcomes must be True.")
+        if not self.no_paper:
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: no_paper must be True.")
+        if not self.no_live:
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: no_live must be True.")
+        if self.capital_usd != Decimal("0.00"):
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: capital_usd must be 0.00.")
+        if not self.no_real_orders:
+            raise DataContractError("RI01_PROBE_LOCK_VIOLATION: no_real_orders must be True.")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "authority_id": self.authority_id,
+            "runtime_sha": self.runtime_sha,
+            "session": self.session.isoformat(),
+            "capability": self.capability,
+            "symbol": self.symbol,
+            "evidence_root": str(self.evidence_root),
+            "max_requests": self.max_requests,
+            "valid_from_utc": self.valid_from_utc.isoformat(),
+            "valid_until_utc": self.valid_until_utc.isoformat(),
+            "read_only": self.read_only,
+            "no_outcomes": self.no_outcomes,
+            "no_paper": self.no_paper,
+            "no_live": self.no_live,
+            "capital_usd": str(self.capital_usd),
+            "no_real_orders": self.no_real_orders,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "RI01ProbeAuthority":
+        return cls(
+            authority_id=str(data["authority_id"]),
+            runtime_sha=str(data["runtime_sha"]),
+            session=date.fromisoformat(str(data["session"])),
+            capability=str(data["capability"]),
+            symbol=str(data.get("symbol", PROBE_SYMBOL)),
+            evidence_root=Path(str(data["evidence_root"])),
+            max_requests=int(data["max_requests"]),
+            valid_from_utc=datetime.fromisoformat(str(data["valid_from_utc"])),
+            valid_until_utc=datetime.fromisoformat(str(data["valid_until_utc"])),
+            read_only=bool(data.get("read_only", True)),
+            no_outcomes=bool(data.get("no_outcomes", True)),
+            no_paper=bool(data.get("no_paper", True)),
+            no_live=bool(data.get("no_live", True)),
+            capital_usd=Decimal(str(data.get("capital_usd", "0.00"))),
+            no_real_orders=bool(data.get("no_real_orders", True)),
+        )
 
 
 @dataclass(frozen=True)
@@ -104,46 +261,14 @@ class ProbeTrade:
         )
 
 
-def compare_stability(first_sha256: str, second_sha256: str) -> str:
-    """Compare two evidence digests (pure; used by scheduled revisits)."""
-    if not first_sha256 or not second_sha256:
-        raise DataContractError("RI01_STABILITY_EMPTY_DIGEST.")
-    return "STABLE" if first_sha256 == second_sha256 else "DIFFERENT"
-
-
-def write_envelope(
-    out_dir: Path,
-    name: str,
-    raw_bytes: bytes,
-    metadata: Mapping[str, Any],
-    retrieved_at_utc: datetime,
-) -> str:
-    """Persist raw payload bytes plus a JSON envelope; return content SHA-256.
-
-    Crash-safe ordering (bytes first, envelope second). Creates NOTHING else.
-    """
-    if not name or "/" in name or "\\" in name:
-        raise DataContractError("RI01_ENVELOPE_BAD_NAME.")
-    digest = evidence_digest(raw_bytes)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    payload_path = out_dir / f"{name}.bin"
-    tmp_payload = payload_path.with_suffix(".bin.tmp")
-    tmp_payload.write_bytes(raw_bytes)
-    tmp_payload.replace(payload_path)
-    envelope = dict(metadata)
-    envelope.update(
-        {
-            "content_sha256": digest,
-            "retrieved_at_utc": retrieved_at_utc.isoformat(),
-        }
-    )
-    envelope_path = out_dir / f"{name}.envelope.json"
-    tmp_envelope = envelope_path.with_suffix(".json.tmp")
-    tmp_envelope.write_text(
-        json.dumps(envelope, indent=2, sort_keys=True), encoding="utf-8"
-    )
-    tmp_envelope.replace(envelope_path)
-    return digest
+def _extract_rate_limit_headers(headers: httpx.Headers) -> Dict[str, str]:
+    """Capture all Alpaca rate-limit response headers."""
+    captured: Dict[str, str] = {}
+    for key, val in headers.items():
+        k_lower = key.lower()
+        if "ratelimit" in k_lower:
+            captured[k_lower] = val
+    return captured
 
 
 def _auth_headers(credential_provider: EnvAlpacaCredentialProvider) -> Dict[str, str]:
@@ -170,40 +295,62 @@ class RI01ProbeClient:
         self.requests_issued = 0
 
     def fetch_bars(
-        self, session: date, calendar: NyseCa1Calendar
-    ) -> Tuple[bytes, List[Dict[str, Any]], Dict[str, str]]:
+        self,
+        authority: RI01ProbeAuthority,
+        calendar: NyseCa1Calendar,
+        now_utc: datetime,
+    ) -> Tuple[RetrievalRunManifest, List[Dict[str, Any]]]:
         """Fetch one session of 1Min SIP raw bars, paginated to exhaustion.
 
-        Returns (concatenated raw page bytes, validated bar mappings,
-        rate-limit headers). Any 401/403 fails closed as an entitlement
-        signal with NOTHING recorded.
+        Enforces:
+        - Strict request budget
+        - Loop detection on repeated page tokens
+        - Immutable raw page storage in Evidence Plane BEFORE qualification
+        - Per-page rate limit header capture
+        - Canonical RTH qualification [open, close) with close-edge provider bar trimming
         """
-        bounds_session = calendar.get_session(session)
-        if bounds_session.open_utc is None or bounds_session.close_utc is None:
-            raise DataContractError(f"RI01_SESSION_BOUNDS_MISSING: {session.isoformat()}.")
+        bounds = calendar.get_session(authority.session)
+        if bounds.open_utc is None or bounds.close_utc is None:
+            raise DataContractError(f"RI01_SESSION_BOUNDS_MISSING: {authority.session.isoformat()}.")
+        open_utc = bounds.open_utc.astimezone(timezone.utc)
+        close_utc = bounds.close_utc.astimezone(timezone.utc)
+
+        target_dir = authority.evidence_root / authority.session.isoformat() / "bars"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
         params: Dict[str, Any] = {
             "symbols": PROBE_SYMBOL,
             "timeframe": PROBE_TIMEFRAME,
-            "start": bounds_session.open_utc.isoformat(),
-            "end": bounds_session.close_utc.isoformat(),
+            "start": open_utc.isoformat(),
+            "end": close_utc.isoformat(),
             "feed": PROBE_FEED,
             "adjustment": PROBE_ADJUSTMENT,
             "sort": "asc",
             "limit": 1000,
         }
-        raw_pages: List[bytes] = []
-        bars: List[Dict[str, Any]] = []
-        rate_limits: Dict[str, str] = {}
+
+        page_records: List[RetrievalPageRecord] = []
+        raw_bars: List[Dict[str, Any]] = []
+        seen_tokens: set[str] = set()
         page_token: Optional[str] = None
+        page_index = 0
+
         while True:
+            if self.requests_issued >= authority.max_requests:
+                raise DataContractError(
+                    f"RI01_PROBE_REQUEST_BUDGET_EXHAUSTED: issued {self.requests_issued} >= limit {authority.max_requests}."
+                )
+
             if page_token is not None:
                 params["page_token"] = page_token
+
             self.requests_issued += 1
             response = self._http.get(
                 f"{DATA_HOST}/v2/stocks/bars",
                 params=params,
                 headers=_auth_headers(self._credential_provider),
             )
+
             if response.status_code in (401, 403):
                 raise DataContractError(
                     "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
@@ -213,21 +360,25 @@ class RI01ProbeClient:
                 raise DataContractError(
                     f"RI01_PROBE_BARS_HTTP_{response.status_code}."
                 )
-            raw_pages.append(response.content)
-            for header in ("ratelimit_limit", "ratelimit_remaining", "ratelimit_reset"):
-                if header in response.headers and header not in rate_limits:
-                    rate_limits[header] = response.headers[header]
+
+            rate_limits = _extract_rate_limit_headers(response.headers)
+            page_filename = f"page_{page_index:04d}.bin"
+            page_path = target_dir / page_filename
+            page_sha256 = write_immutable_bytes(page_path, response.content)
+
             try:
                 doc = response.json()
             except ValueError as exc:
                 raise DataContractError(f"RI01_PROBE_BARS_CORRUPT: {exc}.") from exc
+
             entries = doc.get("bars", {}).get(PROBE_SYMBOL, [])
             if not isinstance(entries, list):
                 raise DataContractError("RI01_PROBE_BARS_MALFORMED.")
+
             for position, entry in enumerate(entries):
                 if not isinstance(entry, Mapping):
                     raise DataContractError("RI01_PROBE_BAR_NOT_A_MAPPING.")
-                bars.append(
+                raw_bars.append(
                     validate_provider_bar(
                         {
                             "timestamp": entry.get("t"),
@@ -237,26 +388,87 @@ class RI01ProbeClient:
                             "close": entry.get("c"),
                             "volume": entry.get("v"),
                         },
-                        f"{session.isoformat()}[{position}]",
+                        f"{authority.session.isoformat()}[{len(raw_bars)}]",
                     )
                 )
-            page_token = doc.get("next_page_token")
-            if not page_token:
+
+            next_token = doc.get("next_page_token")
+
+            page_records.append(
+                RetrievalPageRecord(
+                    page_index=page_index,
+                    request_token=page_token,
+                    next_page_token=next_token,
+                    item_count=len(entries),
+                    raw_bytes_sha256=page_sha256,
+                    page_file=page_filename,
+                    rate_limit_headers=rate_limits,
+                    retrieved_at_utc=now_utc.isoformat(),
+                )
+            )
+
+            if not next_token:
                 break
-        return b"".join(raw_pages), bars, rate_limits
+
+            if next_token in seen_tokens:
+                raise DataContractError(
+                    f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                )
+            seen_tokens.add(next_token)
+            page_token = next_token
+            page_index += 1
+
+        chain_digest = ordered_page_chain_digest([p.raw_bytes_sha256 for p in page_records])
+        manifest = RetrievalRunManifest(
+            run_id=f"RUN_{authority.session.isoformat()}_bars",
+            authority_id=authority.authority_id,
+            session=authority.session.isoformat(),
+            capability="bars",
+            symbol=PROBE_SYMBOL,
+            runtime_sha=authority.runtime_sha,
+            page_records=tuple(page_records),
+            page_chain_sha256=chain_digest,
+            total_items=len(raw_bars),
+            total_requests=len(page_records),
+            status="COMPLETED",
+            error_message=None,
+            created_at_utc=now_utc.isoformat(),
+        )
+        manifest.write_immutable(target_dir / "manifest.json")
+
+        # Canonical RTH qualification [open, close)
+        # Provider start/end are inclusive; exclude any bar at or after close_utc
+        qualified_bars = [
+            b
+            for b in raw_bars
+            if open_utc <= parse_utc_timestamp(b["timestamp"], "bar") < close_utc
+        ]
+        require_complete_rth_grid(
+            qualified_bars, authority.session, calendar, f"{authority.session.isoformat()}/bars"
+        )
+        return manifest, qualified_bars
 
     def fetch_trades_window(
-        self, window_start_utc: datetime, window_end_utc: datetime
-    ) -> Tuple[bytes, List[ProbeTrade]]:
-        """Fetch historical SIP trades in a narrow window, provenance intact.
-
-        Returns (raw bytes, parsed trades). Empty windows are valid data
-        (zero trades recorded), never an error.
-        """
+        self,
+        window_start_utc: datetime,
+        window_end_utc: datetime,
+        window_label: str,
+        authority: RI01ProbeAuthority,
+        now_utc: datetime,
+    ) -> Tuple[RetrievalRunManifest, List[ProbeTrade]]:
+        """Fetch historical SIP trades in a window, paginated to exhaustion."""
         if window_start_utc.tzinfo is None or window_end_utc.tzinfo is None:
             raise DataContractError("RI01_PROBE_WINDOW_NAIVE_TIME.")
         if not window_start_utc < window_end_utc:
             raise DataContractError("RI01_PROBE_WINDOW_INVERTED.")
+
+        target_dir = (
+            authority.evidence_root
+            / authority.session.isoformat()
+            / f"trades_{window_label}"
+        )
+        target_dir.mkdir(parents=True, exist_ok=True)
+
         params: Dict[str, Any] = {
             "symbols": PROBE_SYMBOL,
             "start": window_start_utc.isoformat(),
@@ -265,35 +477,106 @@ class RI01ProbeClient:
             "sort": "asc",
             "limit": 1000,
         }
-        self.requests_issued += 1
-        response = self._http.get(
-            f"{DATA_HOST}/v2/stocks/trades",
-            params=params,
-            headers=_auth_headers(self._credential_provider),
-        )
-        if response.status_code in (401, 403):
-            raise DataContractError(
-                "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
-                f"SIP access (HTTP {response.status_code})."
+
+        page_records: List[RetrievalPageRecord] = []
+        trades: List[ProbeTrade] = []
+        seen_tokens: set[str] = set()
+        page_token: Optional[str] = None
+        page_index = 0
+
+        while True:
+            if self.requests_issued >= authority.max_requests:
+                raise DataContractError(
+                    f"RI01_PROBE_REQUEST_BUDGET_EXHAUSTED: issued {self.requests_issued} >= limit {authority.max_requests}."
+                )
+
+            if page_token is not None:
+                params["page_token"] = page_token
+
+            self.requests_issued += 1
+            response = self._http.get(
+                f"{DATA_HOST}/v2/stocks/trades",
+                params=params,
+                headers=_auth_headers(self._credential_provider),
             )
-        if response.status_code != 200:
-            raise DataContractError(f"RI01_PROBE_TRADES_HTTP_{response.status_code}.")
-        try:
-            doc = response.json()
-        except ValueError as exc:
-            raise DataContractError(f"RI01_PROBE_TRADES_CORRUPT: {exc}.") from exc
-        entries = doc.get("trades", {}).get(PROBE_SYMBOL, [])
-        if not isinstance(entries, list):
-            raise DataContractError("RI01_PROBE_TRADES_MALFORMED.")
-        trades = [
-            ProbeTrade.from_dict(entry, f"trades[{position}]")
-            for position, entry in enumerate(entries)
-        ]
-        return response.content, trades
+
+            if response.status_code in (401, 403):
+                raise DataContractError(
+                    "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
+                    f"SIP access (HTTP {response.status_code})."
+                )
+            if response.status_code != 200:
+                raise DataContractError(
+                    f"RI01_PROBE_TRADES_HTTP_{response.status_code}."
+                )
+
+            rate_limits = _extract_rate_limit_headers(response.headers)
+            page_filename = f"page_{page_index:04d}.bin"
+            page_path = target_dir / page_filename
+            page_sha256 = write_immutable_bytes(page_path, response.content)
+
+            try:
+                doc = response.json()
+            except ValueError as exc:
+                raise DataContractError(f"RI01_PROBE_TRADES_CORRUPT: {exc}.") from exc
+
+            entries = doc.get("trades", {}).get(PROBE_SYMBOL, [])
+            if not isinstance(entries, list):
+                raise DataContractError("RI01_PROBE_TRADES_MALFORMED.")
+
+            for position, entry in enumerate(entries):
+                trades.append(
+                    ProbeTrade.from_dict(entry, f"trades[{len(trades)}]")
+                )
+
+            next_token = doc.get("next_page_token")
+
+            page_records.append(
+                RetrievalPageRecord(
+                    page_index=page_index,
+                    request_token=page_token,
+                    next_page_token=next_token,
+                    item_count=len(entries),
+                    raw_bytes_sha256=page_sha256,
+                    page_file=page_filename,
+                    rate_limit_headers=rate_limits,
+                    retrieved_at_utc=now_utc.isoformat(),
+                )
+            )
+
+            if not next_token:
+                break
+
+            if next_token in seen_tokens:
+                raise DataContractError(
+                    f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                )
+            seen_tokens.add(next_token)
+            page_token = next_token
+            page_index += 1
+
+        chain_digest = ordered_page_chain_digest([p.raw_bytes_sha256 for p in page_records])
+        manifest = RetrievalRunManifest(
+            run_id=f"RUN_{authority.session.isoformat()}_trades_{window_label}",
+            authority_id=authority.authority_id,
+            session=authority.session.isoformat(),
+            capability="trades",
+            symbol=PROBE_SYMBOL,
+            runtime_sha=authority.runtime_sha,
+            page_records=tuple(page_records),
+            page_chain_sha256=chain_digest,
+            total_items=len(trades),
+            total_requests=len(page_records),
+            status="COMPLETED",
+            error_message=None,
+            created_at_utc=now_utc.isoformat(),
+        )
+        manifest.write_immutable(target_dir / "manifest.json")
+        return manifest, trades
 
 
 def _validate_scope(
-    sessions: List[date], capabilities: List[str], calendar: NyseCa1Calendar
+    sessions: Sequence[date], capabilities: Sequence[str], calendar: NyseCa1Calendar
 ) -> None:
     if not sessions:
         raise DataContractError("RI01_PROBE_NO_SESSIONS.")
@@ -318,114 +601,97 @@ def _validate_scope(
             )
 
 
+def compare_stability(first_sha256: str, second_sha256: str) -> str:
+    """Compare two evidence digests (pure; used by scheduled revisits)."""
+    if not first_sha256 or not second_sha256:
+        raise DataContractError("RI01_STABILITY_EMPTY_DIGEST.")
+    return "STABLE" if first_sha256 == second_sha256 else "DIFFERENT"
+
+
 def main(
     argv: List[str] | None = None,
     _transport: Optional[httpx.BaseTransport] = None,
     _now_utc: Optional[datetime] = None,
-    _out_dir: Optional[Path] = None,
+    _authority: Optional[RI01ProbeAuthority] = None,
+    _runtime_sha: Optional[str] = None,
     _credential_provider: Optional[EnvAlpacaCredentialProvider] = None,
 ) -> int:
     parser = argparse.ArgumentParser(description="RI-01 provider probe R1 (bounded, zero-outcome).")
     parser.add_argument("--execute-network", action="store_true", default=False)
-    parser.add_argument("--authorization", default="")
+    parser.add_argument("--authority-file", default="")
     parser.add_argument("--session", action="append", default=[])
     parser.add_argument("--capability", action="append", default=[])
     args = parser.parse_args(argv)
 
     calendar = NyseCa1Calendar()
-    try:
-        sessions = [date.fromisoformat(str(raw)) for raw in args.session]
-    except (ValueError, TypeError) as exc:
-        raise DataContractError(f"RI01_PROBE_BAD_SESSION: {exc}.") from exc
-    capabilities = list(args.capability) or ["bars"]
-
-    # Scope is validated BEFORE any network, in every mode.
-    _validate_scope(sessions, capabilities, calendar)
 
     if not args.execute_network:
+        # Dry-run mode: validates scope and bounds with ZERO network requests
+        try:
+            sessions = [date.fromisoformat(str(raw)) for raw in args.session] or [ALLOWLISTED_SESSIONS[0]]
+        except (ValueError, TypeError) as exc:
+            raise DataContractError(f"RI01_PROBE_BAD_SESSION: {exc}.") from exc
+        capabilities = list(args.capability) or ["bars"]
+        _validate_scope(sessions, capabilities, calendar)
+
         print("RI01-PROBE-DRY-RUN: zero network. Scope validated.")
         print(f"SYMBOL = {PROBE_SYMBOL}")
-        for session in sessions:
-            print(f"SESSION = {session.isoformat()}")
-        for capability in capabilities:
-            print(f"CAPABILITY = {capability}")
+        for s in sessions:
+            print(f"SESSION = {s.isoformat()}")
+        for c in capabilities:
+            print(f"CAPABILITY = {c}")
         print("NETWORK_REQUESTS = 0")
         return 0
 
-    if not args.authorization or not args.authorization.startswith(
-        "AUTHORIZE_RI01_PROBE_R1_"
-    ):
-        raise DataContractError(
-            "RI01_PROBE_AUTHORIZATION_REQUIRED: live probe needs an explicit "
-            "AUTHORIZE_RI01_PROBE_R1_* authority."
-        )
-    out_dir = _out_dir if _out_dir is not None else Path("data/ri01/probe_r1")
-    now_utc = _now_utc if _now_utc is not None else datetime.now(timezone.utc)
-    if now_utc.tzinfo is None:
-        raise DataContractError("RI01_PROBE_NOW_NAIVE_TIME.")
+    # Live execution requested: require explicit authority
+    current_sha = _runtime_sha or get_current_runtime_sha()
+    now_utc = _now_utc or datetime.now(timezone.utc)
+
+    authority = _authority
+    if authority is None:
+        if not args.authority_file:
+            raise DataContractError(
+                "RI01_PROBE_AUTHORITY_REQUIRED: live probe requires explicit RI01ProbeAuthority."
+            )
+        authority_path = Path(args.authority_file)
+        if not authority_path.is_file():
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_FILE_NOT_FOUND: {authority_path}.")
+        try:
+            doc = json.loads(authority_path.read_text(encoding="utf-8"))
+            authority = RI01ProbeAuthority.from_dict(doc)
+        except Exception as exc:
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_LOAD_FAILED: {exc}.") from exc
+
+    authority.validate(now_utc, current_sha, calendar)
+
     client = RI01ProbeClient(
         credential_provider=_credential_provider, transport=_transport
     )
-    for session in sessions:
-        if "bars" in capabilities:
-            raw, bars, rate_limits = client.fetch_bars(session, calendar)
-            digest = write_envelope(
-                out_dir / session.isoformat(),
-                "bars_1min_sip_raw",
-                raw,
-                {
-                    "symbol": PROBE_SYMBOL,
-                    "session": session.isoformat(),
-                    "timeframe": PROBE_TIMEFRAME,
-                    "feed": PROBE_FEED,
-                    "adjustment": PROBE_ADJUSTMENT,
-                    "rate_limits": rate_limits,
-                    "authorization": args.authorization,
-                },
-                now_utc,
+
+    if authority.capability == "bars":
+        manifest, bars = client.fetch_bars(authority, calendar, now_utc)
+        print(
+            f"BARS {authority.session.isoformat()}: {len(bars)} bars, "
+            f"pages={len(manifest.page_records)}, chain_sha256={manifest.page_chain_sha256}"
+        )
+    elif authority.capability == "trades":
+        bounds = calendar.get_session(authority.session)
+        if bounds.open_utc is None or bounds.close_utc is None:
+            raise DataContractError(f"RI01_SESSION_BOUNDS_MISSING: {authority.session.isoformat()}.")
+        for label, anchor in (
+            ("open", bounds.open_utc.astimezone(timezone.utc)),
+            ("close", bounds.close_utc.astimezone(timezone.utc)),
+        ):
+            window_start = anchor - timedelta(minutes=5)
+            window_end = anchor + timedelta(minutes=5)
+            manifest, trades = client.fetch_trades_window(
+                window_start, window_end, label, authority, now_utc
             )
-            require_complete_rth_grid(
-                bars, session, calendar, f"{session.isoformat()}/bars"
+            print(
+                f"TRADES {authority.session.isoformat()}/{label}: {len(trades)} trades, "
+                f"pages={len(manifest.page_records)}, chain_sha256={manifest.page_chain_sha256}"
             )
-            print(f"BARS {session.isoformat()}: {len(bars)} bars, sha256={digest}")
-        if "trades" in capabilities:
-            bounds = calendar.get_session(session)
-            if bounds.open_utc is None or bounds.close_utc is None:
-                raise DataContractError(
-                    f"RI01_SESSION_BOUNDS_MISSING: {session.isoformat()}."
-                )
-            # Narrow ±5-minute probe windows around open/close. Widths are
-            # probe-bounding choices (limit bytes transferred), NOT research
-            # parameters and NOT preregistered signal windows.
-            for label, anchor in (
-                ("open", bounds.open_utc),
-                ("close", bounds.close_utc),
-            ):
-                window_start = anchor - timedelta(minutes=5)
-                window_end = anchor + timedelta(minutes=5)
-                raw_trades, trades = client.fetch_trades_window(
-                    window_start, window_end
-                )
-                digest = write_envelope(
-                    out_dir / session.isoformat(),
-                    f"trades_sip_window_{label}",
-                    raw_trades,
-                    {
-                        "symbol": PROBE_SYMBOL,
-                        "session": session.isoformat(),
-                        "window": label,
-                        "window_start_utc": window_start.isoformat(),
-                        "window_end_utc": window_end.isoformat(),
-                        "feed": PROBE_FEED,
-                        "trade_count": len(trades),
-                        "authorization": args.authorization,
-                    },
-                    now_utc,
-                )
-                print(
-                    f"TRADES {session.isoformat()}/{label}: {len(trades)} trades, "
-                    f"sha256={digest}"
-                )
+
     print(f"NETWORK_REQUESTS_ISSUED = {client.requests_issued}")
     return 0
 
