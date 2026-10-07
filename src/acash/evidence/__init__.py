@@ -6,6 +6,7 @@ from acash.evidence.digest import (
     ordered_page_chain_digest,
 )
 from acash.evidence.manifest import (
+    VALID_RETRIEVAL_STATUSES,
     RetrievalPageRecord,
     RetrievalRunManifest,
 )
@@ -18,6 +19,7 @@ from acash.evidence.writer import (
 __all__ = [
     "RetrievalPageRecord",
     "RetrievalRunManifest",
+    "VALID_RETRIEVAL_STATUSES",
     "canonical_manifest_sha256",
     "content_sha256",
     "ordered_page_chain_digest",

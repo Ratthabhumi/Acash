@@ -101,3 +101,34 @@ Nothing on the repair branch becomes canonical merely by existing.
 | Evidence Kernel extraction plan | `RESEARCH_ONLY` | `docs/audit/EVIDENCE_KERNEL_EXTRACTION_PLAN.md`; design only, no package move |
 | RI-01 Zero-Outcome Data Feasibility Pack | `READY_FOR_DATA_FEASIBILITY` | Questions pack prepared; execution needs separate authorization |
 | PPDS Read-Only Runtime Skeleton Pack | `USED_IN_RUNTIME` (tooling, repair branch) | Implemented synthetic runtime (see §3); real statements/broker/credentials/orders still forbidden |
+
+---
+
+## 7. Addendum 2026-10-07 — Evidence Plane V1.1 / Canonical Main Checkpoint
+
+**Date Context**: 2026-10-07
+**Parent Canonical Merges**: PR #8 (`fcd3256f884829ceb0cfa5be30840496ce11fc65`), PR #9 (`9ed7751e05a50f2a335feebbd260da85a87654f8`)
+**Active Working Branch**: PR #10 (`fix/evidence-plane-v11-prelive-correctness-20261007`)
+
+### A. Current Asset Classification Matrix
+
+| Asset | Status | Authority & Scientific Lineage |
+|---|---|---|
+| **RI-01** (Opening-State Momentum) | `FEASIBILITY_IMPLEMENTED` / `PROVIDER_PROBE_PREPARED` | Bounded probe harness implemented (`src/acash/research/ri01/probe.py`). Pre-live corrections integrated (V1.1). `NETWORK_REQUESTS_PERFORMED = 0`. Status: `PRE_LIVE_CORRECTION_REQUIRED`. No empirical provider qualification yet. |
+| **RI-03A / RI-04A** (SIP / L1 Observable Proxy) | `READY_FOR_DATA_FEASIBILITY` | Alpaca historical trades/quotes proxy research. Scientific constraint: SIP lacks order IDs, true depth, and explicit aggressor tags (inference required). Must NOT be labeled "true OFI" or "true book absorption". |
+| **RI-03B / RI-04B** (Direct-Feed Microstructure) | `READY_FOR_DATA_FEASIBILITY` | Direct-feed / depth research (e.g. Databento). Full book depth, explicit aggressor side, odd lots, and auction imbalances. Gated by provider entitlement / subscription cost. |
+| **RI-05** (Gamma Exposure Proxy) | `READY_FOR_DATA_FEASIBILITY` | **Renamed from 'Dealer Gamma / GEX' to 'Gamma Exposure Proxy'**. Public open interest alone does not identify dealer inventory long/short positioning or customer flow direction. |
+| **RI-06 / RI-08** (Options OI / IV Regimes) | `READY_FOR_DATA_FEASIBILITY` | Data feasibility path identified (Databento OPRA historical back to 2013; Alpaca options historical delayed/limited to Feb 2024). Feasibility gated by licensing/cost policy (F13). |
+| **RI-09** (Time-Series Momentum) | `USED_AS_NEGATIVE_CONTROL` | `DO_NOT_RECYCLE`. Explicitly quarantined to prevent hypothesis contamination. |
+| **PPDS** (Portfolio Decision Support) | `CANONICAL_SYNTHETIC_READONLY_RUNTIME` / `CANONICAL_PROVENANCE_CONSUMER` | Merged to canonical `main` in PR #9. Evidence Plane V1.1 consumer. Decoupled from RI-01; imports runtime identity from `acash.core.runtime_identity`. Synthetic read-only runtime only. Real credentials/orders forbidden. |
+| **HYP_011 V1 Obs #1** | `COMMITTED_AND_RECONCILED` | Validated 2026-09-30 session. Historical V1 milestone. |
+| **HYP_011 V2 Obs #1** | `AWAITING_RUNTIME_EVIDENCE` | Scheduled 2026-10-06. Preserved in `AWAITING_RUNTIME_EVIDENCE` state pending host forensic proof. |
+
+### B. Platform & Governance Invariants
+
+- `REAL_CAPITAL_AUTHORITY` = `$0.00` (Strictly enforced).
+- `NO_REAL_ORDERS` = `true`.
+- `PAPER_TRADING_AUTHORITY` = `false`.
+- `LIVE_TRADING_AUTHORITY` = `false`.
+- `NETWORK_REQUESTS_PERFORMED` = `0`.
+- GitHub Merge Enforcement: Repository settings (`allow_squash_merge=false`, `allow_rebase_merge=false`, `allow_merge_commit=true`) and Ruleset 24409400 strictly enforce `MERGE COMMIT` only.
