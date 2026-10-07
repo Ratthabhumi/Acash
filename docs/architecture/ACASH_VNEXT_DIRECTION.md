@@ -105,3 +105,22 @@ Evidence Kernel.
 4. Stand up PPDS read-only ingestion skeleton (statement → ledger) as a
    pure software task with synthetic fixtures, no real statements.
 5. Revisit B/C lanes only after A-feasibility reports.
+
+---
+
+## 6. Canonical Checkpoint & Research Realignment (2026-10-07)
+
+**Status**: CANONICAL INTEGRATION COMPLETE (PR #8 & PR #9 MERGED TO MAIN; PR #10 PRE-LIVE CORRECTED).
+
+1. **Retrieval Evidence Plane V1.1 Established**:
+   - Provider-neutral and consumer-neutral primitives (`src/acash/evidence/`).
+   - Consumers: RI-01 provider probe and PPDS synthetic statement ingestion.
+   - Decoupled Git runtime identity in `acash.core.runtime_identity`. PPDS has zero imports from RI-01; Evidence Plane has zero imports from research or execution domains.
+2. **Scientific Separation for Shortlists B & C**:
+   - **RI-03 / RI-04**: Decoupled into `RI-03A/04A` (SIP/L1 observable proxy research) vs `RI-03B/04B` (direct-feed / order-book microstructure research). SIP proxies must not be conflated with full-book order flow or true aggressor absorption.
+   - **RI-05**: Renamed from "Dealer Gamma / GEX" to "Gamma Exposure Proxy". Public OI alone does not identify net dealer long/short positioning.
+3. **Execution Roadmap Realignment**:
+   - Complete PR #10 (Evidence Plane V1.1 + pre-live correctness + canonical docs).
+   - Complete HYP_011 V2 forensic check on Homelab.
+   - Execute staged canary provider qualification for RI-01 (Canary 1: 2021-06-01 bars → Canary 2: 2018-06-01 bars → Canary 3: 2021-11-26 half-day bars → trades windows).
+   - Stop architecture hardening loops; move toward empirical evidence generation under strict scientific governance.

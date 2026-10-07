@@ -3,11 +3,13 @@
 No live network, no credentials, no Homelab, no outcomes. Proves scope
 gating (allowlist/holdout/capability/authorization), envelope integrity,
 pagination to exhaustion, trade provenance preservation, entitlement
-fail-closed, and stability comparison — all against synthetic payloads.
+fail-closed, qualification separation, strict decoding, and stability comparison
+— all against synthetic payloads.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -32,6 +34,7 @@ from acash.research.ri01.probe import (
     PROBE_SYMBOL,
     RI01ProbeAuthority,
     RI01ProbeClient,
+    _extract_rate_limit_headers,
     compare_stability,
     main,
 )
@@ -201,7 +204,7 @@ def test_unknown_capability_rejected_zero_network() -> None:
         main(["--session", "2018-06-01", "--capability", "quotes"], _transport=_raising_transport())
 
 
-# --- 2. Authority Gating & Locks ---
+# --- 2. Authority Gating, Locks, and Strict Decoding ---
 
 
 def test_bad_authority_pre_network_failure(tmp_path: Path) -> None:
@@ -303,7 +306,77 @@ def test_evidence_root_rejections(tmp_path: Path) -> None:
         )
 
 
-# --- 3. Pagination, Request Budget, and Evidence Immutability ---
+def test_authority_strict_decoding_adversarial(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path)
+    base_dict = auth.to_dict()
+
+    # 1. String booleans fail closed
+    d_str_false = copy.deepcopy(base_dict)
+    d_str_false["no_live"] = "false"
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_str_false)
+
+    d_str_true = copy.deepcopy(base_dict)
+    d_str_true["read_only"] = "true"
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_str_true)
+
+    # 2. Integer booleans fail closed (0, 1)
+    d_int_zero = copy.deepcopy(base_dict)
+    d_int_zero["no_paper"] = 0
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_int_zero)
+
+    d_int_one = copy.deepcopy(base_dict)
+    d_int_one["read_only"] = 1
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_int_one)
+
+    # 3. String max_requests fails closed
+    d_str_req = copy.deepcopy(base_dict)
+    d_str_req["max_requests"] = "10"
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_str_req)
+
+    # 4. Bool max_requests fails closed (bool is subclass of int)
+    d_bool_req = copy.deepcopy(base_dict)
+    d_bool_req["max_requests"] = True
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_bool_req)
+
+    # 5. Unknown fields fail closed
+    d_unknown = copy.deepcopy(base_dict)
+    d_unknown["malicious_extra_field"] = "payload"
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_UNKNOWN_FIELDS"):
+        RI01ProbeAuthority.from_dict(d_unknown)
+
+    # 6. Missing mandatory fields fail closed
+    d_missing = copy.deepcopy(base_dict)
+    del d_missing["runtime_sha"]
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_MISSING_FIELD"):
+        RI01ProbeAuthority.from_dict(d_missing)
+
+    # 7. Naive timestamp fails closed
+    d_naive = copy.deepcopy(base_dict)
+    d_naive["valid_from_utc"] = "2026-10-01T00:00:00"  # no tz
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_NAIVE_TIME"):
+        RI01ProbeAuthority.from_dict(d_naive)
+
+    # 8. Bad runtime SHA fails closed
+    d_bad_sha = copy.deepcopy(base_dict)
+    d_bad_sha["runtime_sha"] = "not_a_valid_sha"
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHORITY_BAD_TYPE"):
+        RI01ProbeAuthority.from_dict(d_bad_sha)
+
+
+def test_authority_sha256_sensitivity(tmp_path: Path) -> None:
+    auth1 = _build_authority(tmp_path, max_requests=10)
+    auth2 = _build_authority(tmp_path, max_requests=11)
+    assert auth1.authority_sha256 != auth2.authority_sha256
+    assert len(auth1.authority_sha256) == 64
+
+
+# --- 3. Pagination, Request Budget, Rate Limits, and Evidence Immutability ---
 
 
 def test_bars_multi_page_and_x_ratelimit_evidence(tmp_path: Path, capsys: Any) -> None:
@@ -331,13 +404,23 @@ def test_bars_multi_page_and_x_ratelimit_evidence(tmp_path: Path, capsys: Any) -
     p0 = bars_dir / "page_0000.bin"
     p1 = bars_dir / "page_0001.bin"
     manifest_path = bars_dir / "manifest.json"
-    assert p0.is_file() and p1.is_file() and manifest_path.is_file()
+    qual_path = bars_dir / "qualification.json"
+    assert p0.is_file() and p1.is_file() and manifest_path.is_file() and qual_path.is_file()
 
     manifest_doc = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest_doc["total_items"] == 390
+    assert manifest_doc["item_count"] == 390
+    assert manifest_doc["status"] == "RETRIEVED"
+    assert manifest_doc["authority_sha256"] == auth.authority_sha256
     assert len(manifest_doc["page_records"]) == 2
     assert manifest_doc["page_records"][0]["rate_limit_headers"]["x-ratelimit-remaining"] == "199"
     assert manifest_doc["page_records"][1]["rate_limit_headers"]["x-ratelimit-remaining"] == "198"
+
+    # Qualification record proves consumer validation passed
+    qual_doc = json.loads(qual_path.read_text(encoding="utf-8"))
+    assert qual_doc["status"] == "QUALIFIED"
+    assert qual_doc["qualified_item_count"] == 390
+    assert qual_doc["expected_item_count"] == 390
+    assert qual_doc["authority_sha256"] == auth.authority_sha256
 
     # Immutable create-once: re-running or overwriting must fail
     with pytest.raises(DataContractError, match="EVIDENCE_FILE_EXISTS_IMMUTABLE"):
@@ -378,6 +461,8 @@ def test_trades_multi_page_and_provenance(tmp_path: Path, capsys: Any) -> None:
     open_dir = auth.evidence_root / "2021-06-01" / "trades_open"
     assert (open_dir / "page_0000.bin").is_file()
     assert (open_dir / "page_0001.bin").is_file()
+    assert (open_dir / "manifest.json").is_file()
+    assert (open_dir / "qualification.json").is_file()
 
 
 def test_repeated_token_detection_fails_closed(tmp_path: Path) -> None:
@@ -402,6 +487,12 @@ def test_repeated_token_detection_fails_closed(tmp_path: Path) -> None:
             _credential_provider=CREDS,
         )
 
+    # Proves terminal failure manifest written
+    manifest_path = auth.evidence_root / "2021-06-01" / "bars" / "manifest.json"
+    assert manifest_path.is_file()
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert doc["status"] == "MALFORMED_RESPONSE"
+
 
 def test_request_budget_exhaustion_fails_closed(tmp_path: Path) -> None:
     session = date(2021, 6, 1)
@@ -418,6 +509,12 @@ def test_request_budget_exhaustion_fails_closed(tmp_path: Path) -> None:
             _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
             _credential_provider=CREDS,
         )
+
+    # Proves partial run recorded
+    manifest_path = auth.evidence_root / "2021-06-01" / "bars" / "manifest.json"
+    assert manifest_path.is_file()
+    doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert doc["status"] == "PARTIAL"
 
 
 # --- 4. RTH Grid Qualification vs Provider Response Bounds ---
@@ -449,8 +546,9 @@ def test_close_edge_provider_bar_excluded_from_grid(tmp_path: Path) -> None:
     now_utc = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
     manifest, qualified = client.fetch_bars(auth, calendar, now_utc)
 
-    # Raw manifest preserves all 391 items retrieved from provider
-    assert manifest.total_items == 391
+    # Raw manifest preserves all 391 items retrieved from provider with status RETRIEVED
+    assert manifest.item_count == 391
+    assert manifest.status == "RETRIEVED"
     # Qualified RTH bars exclude the close-edge bar and match exact 390 regular-session count [open, close)
     assert len(qualified) == 390
     assert parse_utc_timestamp(qualified[-1]["timestamp"], "bar") < close_utc.astimezone(timezone.utc)
@@ -467,7 +565,8 @@ def test_half_day_grid_success(tmp_path: Path) -> None:
     now_utc = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
     manifest, qualified = client.fetch_bars(auth, NyseCa1Calendar(), now_utc)
     assert len(qualified) == 210
-    assert manifest.total_items == 210
+    assert manifest.item_count == 210
+    assert manifest.status == "RETRIEVED"
 
 
 def test_missing_minute_fails_closed(tmp_path: Path) -> None:
@@ -482,6 +581,18 @@ def test_missing_minute_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(DataContractError, match="RI01_INCOMPLETE_SESSION_GRID"):
         client.fetch_bars(auth, NyseCa1Calendar(), now_utc)
 
+    # CRITICAL INVARIANT: Incomplete grid writes manifest RETRIEVED + qualification CONTRACT_FAILED
+    bars_dir = auth.evidence_root / "2018-06-01" / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "RETRIEVED"
+    assert manifest_doc["item_count"] == 389
+
+    qual_doc = json.loads((bars_dir / "qualification.json").read_text(encoding="utf-8"))
+    assert qual_doc["status"] == "CONTRACT_FAILED"
+    assert qual_doc["qualified_item_count"] == 389
+    assert qual_doc["expected_item_count"] == 390
+    assert "RI01_INCOMPLETE_SESSION_GRID" in str(qual_doc["error_message"])
+
 
 def test_entitlement_denied_never_covered(tmp_path: Path) -> None:
     auth = _build_authority(tmp_path, capability="bars")
@@ -491,6 +602,11 @@ def test_entitlement_denied_never_covered(tmp_path: Path) -> None:
     )
     with pytest.raises(DataContractError, match="RI01_PROBE_ENTITLEMENT_DENIED"):
         client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+
+    bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "ENTITLEMENT_DENIED"
+    assert not (bars_dir / "qualification.json").exists()
 
 
 def test_http_error_never_covered(tmp_path: Path) -> None:
@@ -502,6 +618,10 @@ def test_http_error_never_covered(tmp_path: Path) -> None:
     with pytest.raises(DataContractError, match="RI01_PROBE_BARS_HTTP_500"):
         client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
 
+    bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "HTTP_FAILED"
+
 
 def test_malformed_page_fails_closed(tmp_path: Path) -> None:
     auth = _build_authority(tmp_path, capability="bars")
@@ -511,6 +631,30 @@ def test_malformed_page_fails_closed(tmp_path: Path) -> None:
     )
     with pytest.raises(DataContractError, match="RI01_PROBE_BARS_CORRUPT"):
         client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+
+    bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "MALFORMED_RESPONSE"
+
+
+def test_extract_rate_limit_headers_exact_prefix_only() -> None:
+    headers = httpx.Headers(
+        {
+            "X-RateLimit-Limit": "200",
+            "x-ratelimit-remaining": "199",
+            "X-RATELIMIT-RESET": "1700000000",
+            "Content-Type": "application/json",
+            "custom-ratelimit-other": "ignored",
+            "some-other-header": "val",
+        }
+    )
+    extracted = _extract_rate_limit_headers(headers)
+    assert set(extracted.keys()) == {
+        "x-ratelimit-limit",
+        "x-ratelimit-remaining",
+        "x-ratelimit-reset",
+    }
+    assert "custom-ratelimit-other" not in extracted
 
 
 def test_stability_comparison() -> None:

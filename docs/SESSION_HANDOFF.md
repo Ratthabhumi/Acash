@@ -309,3 +309,37 @@ repair branch — runs 37029140943 + 37029592071 + 37029140943 + 37037917876
 all SUCCESS (T1 hermetic pytest + MyPy strict). The `0 runs` lines above are a
 HISTORICAL SNAPSHOT of the pre-CI state. Rulesets still `[]`; PRs still `[]`;
 `origin/main` still `becec27f5eacf283dcb191cf72d0858682d8e055`.
+
+---
+
+## 16. Canonical Checkpoint — Evidence Plane V1.1 / PR #10 (2026-10-07)
+
+**Date Context**: 2026-10-07
+**Parent Canonical Main**: `9ed7751e05a50f2a335feebbd260da85a87654f8`
+**PR #8 Merge Commit**: `fcd3256f884829ceb0cfa5be30840496ce11fc65`
+**PR #9 Merge Commit**: `9ed7751e05a50f2a335feebbd260da85a87654f8`
+**Active Working Branch**: `fix/evidence-plane-v11-prelive-correctness-20261007` (PR #10)
+
+### Operational & Governance Invariants
+
+1. **GitHub Branch Protection & Merge Enforcement**:
+   - Repository settings patched: `allow_squash_merge = false`, `allow_rebase_merge = false`, `allow_merge_commit = true`.
+   - Ruleset `24409400` active on `main`: enforces `allowed_merge_methods = ["merge"]` only.
+   - Required status checks (5/5 strict): T1 hermetic pytest (3.12, 3.13, 3.14), MyPy strict, T1 hermetic gate.
+2. **Retrieval Evidence Plane V1.1**:
+   - Provider-neutral and consumer-neutral primitives (`src/acash/evidence/`).
+   - Two active software consumers: RI-01 bounded provider probe and PPDS synthetic statement ingestion.
+   - Runtime Git identity centralized in `acash.core.runtime_identity`. Architectural invariant: PPDS never imports RI-01; Evidence Plane never imports research or execution domains.
+3. **RI-01 Probe Verdict**:
+   - Status: `RI01_PROBE = PRE_LIVE_CORRECTION_REQUIRED` (NOT `LIVE_READY`).
+   - Real network calls performed: `NETWORK_REQUESTS_PERFORMED = 0`.
+   - Lifecycle separation: Generic retrieval (`RETRIEVED`, `PARTIAL`, `ENTITLEMENT_DENIED`, etc.) separated from consumer qualification (`QUALIFIED`, `DATA_UNAVAILABLE`, `CONTRACT_FAILED`). Incomplete session grids (e.g. 389 bars) write `status="CONTRACT_FAILED"`, preserving raw evidence without ever marking the session qualified.
+   - Authority binding: Documented honestly as hash-bound operator authorization artifact (`authority_sha256`), not PKI signed. Strict fail-closed type validation.
+4. **HYP_011 V2 Forensic Status**:
+   - `HYP_011 V1 Obs #1` != `HYP_011 V2 Obs #1`.
+   - `HYP_011 V2 Obs #1` remains `AWAITING_RUNTIME_EVIDENCE` until host forensic proof is obtained.
+5. **Capital & Execution Locks**:
+   - `REAL_CAPITAL_AUTHORITY` = `$0.00`.
+   - `NO_REAL_ORDERS` = `true`.
+   - `PAPER_TRADING_AUTHORITY` = `false`.
+   - `LIVE_TRADING_AUTHORITY` = `false`.

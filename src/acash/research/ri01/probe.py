@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -33,6 +32,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 import httpx
 
 from acash.core.domain.exceptions import DataContractError
+from acash.core.runtime_identity import get_current_runtime_sha
+from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.evidence import (
     RetrievalPageRecord,
@@ -40,6 +41,7 @@ from acash.evidence import (
     ordered_page_chain_digest,
     validate_external_evidence_root,
     write_immutable_bytes,
+    write_immutable_json,
 )
 from acash.execution.alpaca.credentials import (
     AlpacaCredentialError,
@@ -58,6 +60,9 @@ PROBE_TIMEFRAME = "1Min"
 PROBE_ADJUSTMENT = "raw"
 HOLDOUT_START: date = date(2023, 1, 1)
 
+_HEX40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_HEX64_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
 # Already-consumed (MEC-0015 probes) or pre-holdout sessions ONLY:
 # - 2018-06-01: early-depth regular session (390 min expected)
 # - 2021-06-01: normal later in-sample regular session (390 min expected)
@@ -71,28 +76,13 @@ ALLOWLISTED_SESSIONS: tuple[date, ...] = (
 CAPABILITIES: tuple[str, ...] = ("bars", "trades")
 
 
-def get_current_runtime_sha(repo_root: Optional[Path] = None) -> str:
-    """Read HEAD commit SHA from git or repository metadata."""
-    try:
-        resolved_repo = repo_root or Path(__file__).resolve().parents[4]
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=resolved_repo,
-        )
-        sha = result.stdout.strip()
-        if len(sha) == 40 and re.match(r"^[0-9a-f]{40}$", sha):
-            return sha
-    except Exception:
-        pass
-    raise DataContractError("RI01_PROBE_CANNOT_RESOLVE_RUNTIME_SHA.")
-
-
 @dataclass(frozen=True)
 class RI01ProbeAuthority:
-    """Structured, cryptographic network authorization for RI-01 bounded probe."""
+    """Structured, hash-bound operator authorization artifact for RI-01 bounded probe.
+
+    NOTE: This is a hash-bound operator authorization artifact, NOT a
+    cryptographically signed PKI credential.
+    """
 
     authority_id: str
     runtime_sha: str
@@ -110,6 +100,11 @@ class RI01ProbeAuthority:
     capital_usd: Decimal = Decimal("0.00")
     no_real_orders: bool = True
 
+    @property
+    def authority_sha256(self) -> str:
+        """Deterministic SHA-256 digest over the canonical authority document."""
+        return CanonicalConfigSerializer.compute_sha256(self.to_dict())
+
     def validate(
         self,
         now_utc: datetime,
@@ -121,7 +116,7 @@ class RI01ProbeAuthority:
             raise DataContractError(
                 f"RI01_PROBE_BAD_AUTHORITY_ID: must start with AUTHORIZE_RI01_PROBE_R1_, got '{self.authority_id}'."
             )
-        if not isinstance(self.runtime_sha, str) or not re.match(r"^[0-9a-f]{40}$", self.runtime_sha):
+        if not isinstance(self.runtime_sha, str) or not _HEX40_PATTERN.match(self.runtime_sha):
             raise DataContractError(
                 f"RI01_PROBE_BAD_RUNTIME_SHA: authority runtime_sha must be 40-char hex, got '{self.runtime_sha}'."
             )
@@ -201,23 +196,226 @@ class RI01ProbeAuthority:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RI01ProbeAuthority":
-        return cls(
-            authority_id=str(data["authority_id"]),
-            runtime_sha=str(data["runtime_sha"]),
-            session=date.fromisoformat(str(data["session"])),
-            capability=str(data["capability"]),
-            symbol=str(data.get("symbol", PROBE_SYMBOL)),
-            evidence_root=Path(str(data["evidence_root"])),
-            max_requests=int(data["max_requests"]),
-            valid_from_utc=datetime.fromisoformat(str(data["valid_from_utc"])),
-            valid_until_utc=datetime.fromisoformat(str(data["valid_until_utc"])),
-            read_only=bool(data.get("read_only", True)),
-            no_outcomes=bool(data.get("no_outcomes", True)),
-            no_paper=bool(data.get("no_paper", True)),
-            no_live=bool(data.get("no_live", True)),
-            capital_usd=Decimal(str(data.get("capital_usd", "0.00"))),
-            no_real_orders=bool(data.get("no_real_orders", True)),
+        if not isinstance(data, Mapping):
+            raise DataContractError(
+                f"RI01_PROBE_AUTHORITY_NOT_MAPPING: expected mapping, got {type(data).__name__}."
+            )
+
+        allowed_fields = {
+            "authority_id",
+            "runtime_sha",
+            "session",
+            "capability",
+            "symbol",
+            "evidence_root",
+            "max_requests",
+            "valid_from_utc",
+            "valid_until_utc",
+            "read_only",
+            "no_outcomes",
+            "no_paper",
+            "no_live",
+            "capital_usd",
+            "no_real_orders",
+        }
+        unknown = set(data.keys()) - allowed_fields
+        if unknown:
+            raise DataContractError(
+                f"RI01_PROBE_AUTHORITY_UNKNOWN_FIELDS: unexpected fields {sorted(unknown)}."
+            )
+
+        mandatory_fields = (
+            "authority_id",
+            "runtime_sha",
+            "session",
+            "capability",
+            "evidence_root",
+            "max_requests",
+            "valid_from_utc",
+            "valid_until_utc",
         )
+        for field in mandatory_fields:
+            if field not in data:
+                raise DataContractError(
+                    f"RI01_PROBE_AUTHORITY_MISSING_FIELD: '{field}' is required."
+                )
+
+        authority_id = data["authority_id"]
+        if not isinstance(authority_id, str):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: authority_id must be str.")
+
+        runtime_sha = data["runtime_sha"]
+        if not isinstance(runtime_sha, str) or not _HEX40_PATTERN.match(runtime_sha):
+            raise DataContractError(
+                "RI01_PROBE_AUTHORITY_BAD_TYPE: runtime_sha must be 40-char hex string."
+            )
+
+        raw_session = data["session"]
+        if isinstance(raw_session, date) and not isinstance(raw_session, datetime):
+            session = raw_session
+        elif isinstance(raw_session, str) and re.match(r"^\d{4}-\d{2}-\d{2}$", raw_session):
+            try:
+                session = date.fromisoformat(raw_session)
+            except ValueError as exc:
+                raise DataContractError(f"RI01_PROBE_AUTHORITY_BAD_SESSION: {exc}.") from exc
+        else:
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: session must be YYYY-MM-DD date.")
+
+        capability = data["capability"]
+        if not isinstance(capability, str):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: capability must be str.")
+
+        symbol = data.get("symbol", PROBE_SYMBOL)
+        if not isinstance(symbol, str) or symbol != PROBE_SYMBOL:
+            raise DataContractError(
+                f"RI01_PROBE_AUTHORITY_BAD_SYMBOL: symbol must be {PROBE_SYMBOL}."
+            )
+
+        evidence_root_raw = data["evidence_root"]
+        if not isinstance(evidence_root_raw, (str, Path)):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: evidence_root must be str or Path.")
+        evidence_root = Path(evidence_root_raw)
+
+        max_requests = data["max_requests"]
+        if (
+            not isinstance(max_requests, int)
+            or isinstance(max_requests, bool)
+            or max_requests <= 0
+        ):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: max_requests must be positive int.")
+
+        raw_from = data["valid_from_utc"]
+        if not isinstance(raw_from, (str, datetime)):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: valid_from_utc must be str or datetime.")
+        try:
+            valid_from_utc = (
+                raw_from if isinstance(raw_from, datetime) else datetime.fromisoformat(raw_from)
+            )
+            if valid_from_utc.tzinfo is None:
+                raise DataContractError("RI01_PROBE_AUTHORITY_NAIVE_TIME: valid_from_utc must be timezone-aware.")
+        except (ValueError, TypeError) as exc:
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_BAD_TIMESTAMP: {exc}.") from exc
+
+        raw_until = data["valid_until_utc"]
+        if not isinstance(raw_until, (str, datetime)):
+            raise DataContractError("RI01_PROBE_AUTHORITY_BAD_TYPE: valid_until_utc must be str or datetime.")
+        try:
+            valid_until_utc = (
+                raw_until if isinstance(raw_until, datetime) else datetime.fromisoformat(raw_until)
+            )
+            if valid_until_utc.tzinfo is None:
+                raise DataContractError("RI01_PROBE_AUTHORITY_NAIVE_TIME: valid_until_utc must be timezone-aware.")
+        except (ValueError, TypeError) as exc:
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_BAD_TIMESTAMP: {exc}.") from exc
+
+        # Strict fail-closed bool decoding (reject string "false"/"true", int 0/1)
+        bool_fields = ("read_only", "no_outcomes", "no_paper", "no_live", "no_real_orders")
+        bool_vals = {}
+        for bf in bool_fields:
+            if bf in data:
+                v = data[bf]
+                if type(v) is not bool:
+                    raise DataContractError(
+                        f"RI01_PROBE_AUTHORITY_BAD_TYPE: {bf} must be bool, got {type(v).__name__}."
+                    )
+                bool_vals[bf] = v
+            else:
+                bool_vals[bf] = True
+
+        raw_cap = data.get("capital_usd", "0.00")
+        try:
+            capital_usd = Decimal(str(raw_cap))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_BAD_NUMERIC: capital_usd: {exc}.") from exc
+        if capital_usd != Decimal("0.00"):
+            raise DataContractError(f"RI01_PROBE_AUTHORITY_NONZERO_CAPITAL: got {capital_usd}.")
+
+        return cls(
+            authority_id=authority_id,
+            runtime_sha=runtime_sha,
+            session=session,
+            capability=capability,
+            symbol=symbol,
+            evidence_root=evidence_root,
+            max_requests=max_requests,
+            valid_from_utc=valid_from_utc,
+            valid_until_utc=valid_until_utc,
+            read_only=bool_vals["read_only"],
+            no_outcomes=bool_vals["no_outcomes"],
+            no_paper=bool_vals["no_paper"],
+            no_live=bool_vals["no_live"],
+            capital_usd=capital_usd,
+            no_real_orders=bool_vals["no_real_orders"],
+        )
+
+
+@dataclass(frozen=True)
+class RI01QualificationRecord:
+    """Canonical consumer qualification record for an RI-01 dataset.
+
+    Separates consumer qualification from generic retrieval.
+    Only sessions satisfying exact [session_open, session_close) calendar-derived
+    RTH grid receive status="QUALIFIED".
+    """
+
+    qualification_id: str
+    session: str
+    symbol: str
+    capability: str
+    status: str  # QUALIFIED, DATA_UNAVAILABLE, CONTRACT_FAILED
+    retrieval_run_id: str
+    retrieval_manifest_sha256: str
+    authority_sha256: str
+    raw_item_count: int
+    qualified_item_count: int
+    expected_item_count: int
+    evaluated_at_utc: str
+    schema_version: str = "1.0"
+    error_message: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.status not in ("QUALIFIED", "DATA_UNAVAILABLE", "CONTRACT_FAILED"):
+            raise DataContractError(
+                f"RI01_QUALIFICATION_BAD_STATUS: '{self.status}'."
+            )
+        if not _HEX64_PATTERN.match(self.retrieval_manifest_sha256):
+            raise DataContractError(
+                f"RI01_QUALIFICATION_BAD_MANIFEST_SHA: '{self.retrieval_manifest_sha256}'."
+            )
+        if not _HEX64_PATTERN.match(self.authority_sha256):
+            raise DataContractError(
+                f"RI01_QUALIFICATION_BAD_AUTHORITY_SHA: '{self.authority_sha256}'."
+            )
+        try:
+            ts = datetime.fromisoformat(self.evaluated_at_utc)
+            if ts.tzinfo is None:
+                raise DataContractError("RI01_QUALIFICATION_NAIVE_TIME.")
+        except (ValueError, TypeError) as exc:
+            raise DataContractError(f"RI01_QUALIFICATION_BAD_TIMESTAMP: {exc}.") from exc
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "qualification_id": self.qualification_id,
+            "session": self.session,
+            "symbol": self.symbol,
+            "capability": self.capability,
+            "status": self.status,
+            "retrieval_run_id": self.retrieval_run_id,
+            "retrieval_manifest_sha256": self.retrieval_manifest_sha256,
+            "authority_sha256": self.authority_sha256,
+            "raw_item_count": self.raw_item_count,
+            "qualified_item_count": self.qualified_item_count,
+            "expected_item_count": self.expected_item_count,
+            "error_message": self.error_message,
+            "evaluated_at_utc": self.evaluated_at_utc,
+        }
+
+    def qualification_sha256(self) -> str:
+        return CanonicalConfigSerializer.compute_sha256(self.to_dict())
+
+    def write_immutable(self, target_file: Path) -> str:
+        return write_immutable_json(target_file, self.to_dict())
 
 
 @dataclass(frozen=True)
@@ -262,12 +460,12 @@ class ProbeTrade:
 
 
 def _extract_rate_limit_headers(headers: httpx.Headers) -> Dict[str, str]:
-    """Capture all Alpaca rate-limit response headers."""
+    """Capture only response header names beginning case-insensitively with 'x-ratelimit-'."""
     captured: Dict[str, str] = {}
     for key, val in headers.items():
         k_lower = key.lower()
-        if "ratelimit" in k_lower:
-            captured[k_lower] = val
+        if k_lower.startswith("x-ratelimit-"):
+            captured[k_lower] = str(val)
     return captured
 
 
@@ -293,6 +491,47 @@ class RI01ProbeClient:
         self._credential_provider = credential_provider or EnvAlpacaCredentialProvider()
         self._http = httpx.Client(transport=transport, timeout=30.0)
         self.requests_issued = 0
+        self.last_qualification_record: Optional[RI01QualificationRecord] = None
+
+    def _write_terminal_manifest(
+        self,
+        target_dir: Path,
+        authority: RI01ProbeAuthority,
+        capability: str,
+        page_records: Sequence[RetrievalPageRecord],
+        raw_items_count: int,
+        status: str,
+        error_message: str,
+        now_utc: datetime,
+    ) -> RetrievalRunManifest:
+        chain_digest = (
+            ordered_page_chain_digest(page_records)
+            if page_records
+            else CanonicalConfigSerializer.compute_sha256([])
+        )
+        manifest = RetrievalRunManifest(
+            schema_version="1.1",
+            run_id=f"RUN_{authority.session.isoformat()}_{capability}",
+            consumer_id="ri01",
+            operation=f"fetch_{capability}",
+            subject_metadata={
+                "symbol": PROBE_SYMBOL,
+                "session": authority.session.isoformat(),
+                "capability": capability,
+            },
+            runtime_sha=authority.runtime_sha,
+            authority_ref=authority.authority_id,
+            authority_sha256=authority.authority_sha256,
+            page_records=tuple(page_records),
+            page_chain_sha256=chain_digest,
+            item_count=raw_items_count,
+            operation_count=self.requests_issued,
+            status=status,
+            error_message=error_message,
+            created_at_utc=now_utc.isoformat(),
+        )
+        manifest.write_immutable(target_dir / "manifest.json")
+        return manifest
 
     def fetch_bars(
         self,
@@ -306,8 +545,9 @@ class RI01ProbeClient:
         - Strict request budget
         - Loop detection on repeated page tokens
         - Immutable raw page storage in Evidence Plane BEFORE qualification
-        - Per-page rate limit header capture
-        - Canonical RTH qualification [open, close) with close-edge provider bar trimming
+        - Per-page rate limit header capture (x-ratelimit- prefix only)
+        - Disentangles generic retrieval (RETRIEVED) from consumer qualification (QUALIFIED)
+        - Incomplete sessions receive qualification status CONTRACT_FAILED, NEVER QUALIFIED
         """
         bounds = calendar.get_session(authority.session)
         if bounds.open_utc is None or bounds.close_utc is None:
@@ -337,9 +577,20 @@ class RI01ProbeClient:
 
         while True:
             if self.requests_issued >= authority.max_requests:
-                raise DataContractError(
+                err_msg = (
                     f"RI01_PROBE_REQUEST_BUDGET_EXHAUSTED: issued {self.requests_issued} >= limit {authority.max_requests}."
                 )
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="PARTIAL",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             if page_token is not None:
                 params["page_token"] = page_token
@@ -352,14 +603,34 @@ class RI01ProbeClient:
             )
 
             if response.status_code in (401, 403):
-                raise DataContractError(
+                err_msg = (
                     "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
                     f"SIP access (HTTP {response.status_code})."
                 )
-            if response.status_code != 200:
-                raise DataContractError(
-                    f"RI01_PROBE_BARS_HTTP_{response.status_code}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="ENTITLEMENT_DENIED",
+                    error_message=err_msg,
+                    now_utc=now_utc,
                 )
+                raise DataContractError(err_msg)
+            if response.status_code != 200:
+                err_msg = f"RI01_PROBE_BARS_HTTP_{response.status_code}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="HTTP_FAILED",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             rate_limits = _extract_rate_limit_headers(response.headers)
             page_filename = f"page_{page_index:04d}.bin"
@@ -369,15 +640,48 @@ class RI01ProbeClient:
             try:
                 doc = response.json()
             except ValueError as exc:
-                raise DataContractError(f"RI01_PROBE_BARS_CORRUPT: {exc}.") from exc
+                err_msg = f"RI01_PROBE_BARS_CORRUPT: {exc}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg) from exc
 
             entries = doc.get("bars", {}).get(PROBE_SYMBOL, [])
             if not isinstance(entries, list):
-                raise DataContractError("RI01_PROBE_BARS_MALFORMED.")
+                err_msg = "RI01_PROBE_BARS_MALFORMED."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             for position, entry in enumerate(entries):
                 if not isinstance(entry, Mapping):
-                    raise DataContractError("RI01_PROBE_BAR_NOT_A_MAPPING.")
+                    err_msg = "RI01_PROBE_BAR_NOT_A_MAPPING."
+                    self._write_terminal_manifest(
+                        target_dir=target_dir,
+                        authority=authority,
+                        capability="bars",
+                        page_records=page_records,
+                        raw_items_count=len(raw_bars),
+                        status="MALFORMED_RESPONSE",
+                        error_message=err_msg,
+                        now_utc=now_utc,
+                    )
+                    raise DataContractError(err_msg)
                 raw_bars.append(
                     validate_provider_bar(
                         {
@@ -411,26 +715,44 @@ class RI01ProbeClient:
                 break
 
             if next_token in seen_tokens:
-                raise DataContractError(
-                    f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                err_msg = f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability="bars",
+                    page_records=page_records,
+                    raw_items_count=len(raw_bars),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
                 )
+                raise DataContractError(err_msg)
             seen_tokens.add(next_token)
             page_token = next_token
             page_index += 1
 
-        chain_digest = ordered_page_chain_digest([p.raw_bytes_sha256 for p in page_records])
+        chain_digest = ordered_page_chain_digest(page_records)
         manifest = RetrievalRunManifest(
+            schema_version="1.1",
             run_id=f"RUN_{authority.session.isoformat()}_bars",
-            authority_id=authority.authority_id,
-            session=authority.session.isoformat(),
-            capability="bars",
-            symbol=PROBE_SYMBOL,
+            consumer_id="ri01",
+            operation="fetch_bars",
+            subject_metadata={
+                "symbol": PROBE_SYMBOL,
+                "session": authority.session.isoformat(),
+                "capability": "bars",
+                "timeframe": PROBE_TIMEFRAME,
+                "feed": PROBE_FEED,
+                "adjustment": PROBE_ADJUSTMENT,
+            },
             runtime_sha=authority.runtime_sha,
+            authority_ref=authority.authority_id,
+            authority_sha256=authority.authority_sha256,
             page_records=tuple(page_records),
             page_chain_sha256=chain_digest,
-            total_items=len(raw_bars),
-            total_requests=len(page_records),
-            status="COMPLETED",
+            item_count=len(raw_bars),
+            operation_count=len(page_records),
+            status="RETRIEVED",
             error_message=None,
             created_at_utc=now_utc.isoformat(),
         )
@@ -438,14 +760,55 @@ class RI01ProbeClient:
 
         # Canonical RTH qualification [open, close)
         # Provider start/end are inclusive; exclude any bar at or after close_utc
+        session_info = calendar.get_session(authority.session)
+        expected_bars = session_info.expected_minute_count
         qualified_bars = [
             b
             for b in raw_bars
             if open_utc <= parse_utc_timestamp(b["timestamp"], "bar") < close_utc
         ]
-        require_complete_rth_grid(
-            qualified_bars, authority.session, calendar, f"{authority.session.isoformat()}/bars"
-        )
+        qual_id = f"QUAL_{authority.session.isoformat()}_bars"
+        try:
+            require_complete_rth_grid(
+                qualified_bars, authority.session, calendar, f"{authority.session.isoformat()}/bars"
+            )
+            qual_record = RI01QualificationRecord(
+                qualification_id=qual_id,
+                session=authority.session.isoformat(),
+                symbol=PROBE_SYMBOL,
+                capability="bars",
+                status="QUALIFIED",
+                retrieval_run_id=manifest.run_id,
+                retrieval_manifest_sha256=manifest.manifest_sha256(),
+                authority_sha256=authority.authority_sha256,
+                raw_item_count=len(raw_bars),
+                qualified_item_count=len(qualified_bars),
+                expected_item_count=expected_bars,
+                evaluated_at_utc=now_utc.isoformat(),
+                error_message=None,
+            )
+            qual_record.write_immutable(target_dir / "qualification.json")
+            self.last_qualification_record = qual_record
+        except Exception as exc:
+            qual_record = RI01QualificationRecord(
+                qualification_id=qual_id,
+                session=authority.session.isoformat(),
+                symbol=PROBE_SYMBOL,
+                capability="bars",
+                status="CONTRACT_FAILED",
+                retrieval_run_id=manifest.run_id,
+                retrieval_manifest_sha256=manifest.manifest_sha256(),
+                authority_sha256=authority.authority_sha256,
+                raw_item_count=len(raw_bars),
+                qualified_item_count=len(qualified_bars),
+                expected_item_count=expected_bars,
+                evaluated_at_utc=now_utc.isoformat(),
+                error_message=str(exc),
+            )
+            qual_record.write_immutable(target_dir / "qualification.json")
+            self.last_qualification_record = qual_record
+            raise
+
         return manifest, qualified_bars
 
     def fetch_trades_window(
@@ -486,9 +849,20 @@ class RI01ProbeClient:
 
         while True:
             if self.requests_issued >= authority.max_requests:
-                raise DataContractError(
+                err_msg = (
                     f"RI01_PROBE_REQUEST_BUDGET_EXHAUSTED: issued {self.requests_issued} >= limit {authority.max_requests}."
                 )
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="PARTIAL",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             if page_token is not None:
                 params["page_token"] = page_token
@@ -501,14 +875,34 @@ class RI01ProbeClient:
             )
 
             if response.status_code in (401, 403):
-                raise DataContractError(
+                err_msg = (
                     "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
                     f"SIP access (HTTP {response.status_code})."
                 )
-            if response.status_code != 200:
-                raise DataContractError(
-                    f"RI01_PROBE_TRADES_HTTP_{response.status_code}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="ENTITLEMENT_DENIED",
+                    error_message=err_msg,
+                    now_utc=now_utc,
                 )
+                raise DataContractError(err_msg)
+            if response.status_code != 200:
+                err_msg = f"RI01_PROBE_TRADES_HTTP_{response.status_code}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="HTTP_FAILED",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             rate_limits = _extract_rate_limit_headers(response.headers)
             page_filename = f"page_{page_index:04d}.bin"
@@ -518,11 +912,33 @@ class RI01ProbeClient:
             try:
                 doc = response.json()
             except ValueError as exc:
-                raise DataContractError(f"RI01_PROBE_TRADES_CORRUPT: {exc}.") from exc
+                err_msg = f"RI01_PROBE_TRADES_CORRUPT: {exc}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg) from exc
 
             entries = doc.get("trades", {}).get(PROBE_SYMBOL, [])
             if not isinstance(entries, list):
-                raise DataContractError("RI01_PROBE_TRADES_MALFORMED.")
+                err_msg = "RI01_PROBE_TRADES_MALFORMED."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
+                )
+                raise DataContractError(err_msg)
 
             for position, entry in enumerate(entries):
                 trades.append(
@@ -548,30 +964,68 @@ class RI01ProbeClient:
                 break
 
             if next_token in seen_tokens:
-                raise DataContractError(
-                    f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                err_msg = f"RI01_PROBE_REPEATED_PAGE_TOKEN: loop detected on token {next_token}."
+                self._write_terminal_manifest(
+                    target_dir=target_dir,
+                    authority=authority,
+                    capability=f"trades_{window_label}",
+                    page_records=page_records,
+                    raw_items_count=len(trades),
+                    status="MALFORMED_RESPONSE",
+                    error_message=err_msg,
+                    now_utc=now_utc,
                 )
+                raise DataContractError(err_msg)
             seen_tokens.add(next_token)
             page_token = next_token
             page_index += 1
 
-        chain_digest = ordered_page_chain_digest([p.raw_bytes_sha256 for p in page_records])
+        chain_digest = ordered_page_chain_digest(page_records)
         manifest = RetrievalRunManifest(
+            schema_version="1.1",
             run_id=f"RUN_{authority.session.isoformat()}_trades_{window_label}",
-            authority_id=authority.authority_id,
-            session=authority.session.isoformat(),
-            capability="trades",
-            symbol=PROBE_SYMBOL,
+            consumer_id="ri01",
+            operation=f"fetch_trades_{window_label}",
+            subject_metadata={
+                "symbol": PROBE_SYMBOL,
+                "session": authority.session.isoformat(),
+                "capability": "trades",
+                "window": window_label,
+                "start": window_start_utc.isoformat(),
+                "end": window_end_utc.isoformat(),
+            },
             runtime_sha=authority.runtime_sha,
+            authority_ref=authority.authority_id,
+            authority_sha256=authority.authority_sha256,
             page_records=tuple(page_records),
             page_chain_sha256=chain_digest,
-            total_items=len(trades),
-            total_requests=len(page_records),
-            status="COMPLETED",
+            item_count=len(trades),
+            operation_count=len(page_records),
+            status="RETRIEVED",
             error_message=None,
             created_at_utc=now_utc.isoformat(),
         )
         manifest.write_immutable(target_dir / "manifest.json")
+
+        qual_id = f"QUAL_{authority.session.isoformat()}_trades_{window_label}"
+        qual_record = RI01QualificationRecord(
+            qualification_id=qual_id,
+            session=authority.session.isoformat(),
+            symbol=PROBE_SYMBOL,
+            capability=f"trades_{window_label}",
+            status="QUALIFIED",
+            retrieval_run_id=manifest.run_id,
+            retrieval_manifest_sha256=manifest.manifest_sha256(),
+            authority_sha256=authority.authority_sha256,
+            raw_item_count=len(trades),
+            qualified_item_count=len(trades),
+            expected_item_count=len(trades),
+            evaluated_at_utc=now_utc.isoformat(),
+            error_message=None,
+        )
+        qual_record.write_immutable(target_dir / "qualification.json")
+        self.last_qualification_record = qual_record
+
         return manifest, trades
 
 

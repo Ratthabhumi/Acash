@@ -1,55 +1,74 @@
-# RI-01 Provider Probe R1 — Design (HARNESS BUILT, NEVER EXECUTED)
+# RI-01 Provider Probe R1 — Design (HARNESS BUILT, PRE-LIVE CORRECTIONS V1.1)
 
-**Status**: `CODE_PREPARATION_ONLY`. The harness in
-`src/acash/research/ri01/probe.py` (13 hermetic mock-transport tests) has
-NEVER touched a live endpoint and MUST NOT run before ALL of:
+**Status**: `PRE_LIVE_CORRECTION_REQUIRED`. The harness in
+`src/acash/research/ri01/probe.py` (28 hermetic mock-transport tests) has
+NEVER touched a live endpoint (`NETWORK_REQUESTS_PERFORMED = 0`) and MUST NOT run before ALL of:
 
-1. HYP_011 Observation #1 forensic check complete (2026-10-06 session),
-2. a future single explicit network authority with a bounded scope,
-3. execution from an ISOLATED worktree — never `/home/mew/Acash` while
-   HYP_011 V2 is armed (that checkout's runtime SHA is pinned by the live
-   timer; any branch switch there would fail V2 preflight itself).
+1. Verification and merge of PR #10 (`fix/evidence-plane-v11-prelive-correctness-20261007`),
+2. HYP_011 Observation #1 forensic check completed on Homelab,
+3. A separate, single, explicit operator network authority candidate ratified,
+4. Execution from an ISOLATED worktree — never `/home/mew/Acash` while
+   HYP_011 V2 is armed.
 
-## 1. Frozen scope
+---
 
-- Symbol: SPY only (hardcoded; anything else is rejected pre-network).
-- Sessions (allowlisted, already-consumed or pre-holdout ONLY):
+## 1. Frozen Scope
+
+- **Symbol**: SPY only (hardcoded; anything else is rejected pre-network).
+- **Sessions** (allowlisted, already-consumed or pre-holdout ONLY):
   - `2018-06-01` — early-depth regular session (390 min)
   - `2021-06-01` — normal later in-sample regular session (390 min)
   - `2021-11-26` — historical half-day (210 min)
-- Hard holdout guard: any session ≥ 2023-01-01 is rejected BEFORE any
-  network, even with a valid authorization.
-- Capabilities: `bars` (1Min SIP raw, paginated to exhaustion, full-grid
-  validated), `trades` (narrow ±5-min windows around open/close, exchange +
-  conditions preserved).
+- **Hard Holdout Guard**: Any session ≥ `2023-01-01` is strictly rejected BEFORE any
+  network, even with an otherwise valid authority.
+- **Capabilities**:
+  - `bars`: 1Min SIP raw, paginated to exhaustion, exact RTH grid `[session_open, session_close)`.
+  - `trades`: narrow ±5-min windows around open/close, exchange + conditions preserved.
 
-## 2. What execution records (and only that)
+---
 
-Per session×capability: raw response bytes + JSON envelope (endpoint,
-parameters, retrieved_at_utc, content SHA-256, rate-limit headers,
-authorization string). Coverage statistics are the only quantitative output.
-No returns, no PnL, no Sharpe, no hit-rate, no thresholds, no signal — the
-module contains no price-arithmetic code path by construction.
+## 2. Separation of Generic Retrieval vs Consumer Qualification
 
-## 3. Stability / revision-vintage plan (future, scheduled)
+In Evidence Plane V1.1, generic retrieval and consumer qualification are decoupled:
 
-The envelope's `retrieved_at_utc` + content digest make a later re-fetch
-comparable via `compare_stability()`. Revision-vintage evidence that needs
-real time separation is a FUTURE SCHEDULED collection (re-run the same
-bounded scope ≥30 days later, diff digests) — it is NOT faked by immediate
-re-fetch, and it is NOT part of R1 execution.
+1. **Retrieval Evidence Plane (`manifest.json`)**:
+   - Status represents retrieval outcome only: `RETRIEVED`, `PARTIAL`, `ENTITLEMENT_DENIED`, `HTTP_FAILED`, `MALFORMED_RESPONSE`.
+   - `RETRIEVED` indicates only that all network pages were acquired from the provider; it **NEVER** means qualified or covered.
+   - Terminal retrieval evidence is immutably recorded even on network/provider failures.
+2. **RI-01 Consumer Qualification (`qualification.json`)**:
+   - Status represents market-data qualification: `QUALIFIED`, `DATA_UNAVAILABLE`, `CONTRACT_FAILED`.
+   - Evaluated **AFTER** raw retrieval evidence is sealed.
+   - Only exact `[session_open, session_close)` calendar-derived RTH grid receives `status = "QUALIFIED"`.
+   - Any incomplete session (e.g. 389 bars instead of 390) writes `status = "CONTRACT_FAILED"`, preserving raw evidence while failing closed without ever marking the session as `QUALIFIED` or `COVERED`.
 
-## 4. Execution gate (all required, in order)
+---
 
-1. Dry-run first: scope validation, `NETWORK_REQUESTS = 0`.
-2. Live requires `--execute-network` PLUS `--authorization
-   AUTHORIZE_RI01_PROBE_R1_*` (shape-checked; the real string comes from the
-   future authority, not from this document).
-3. Entitlement failures (401/403) fail closed with NOTHING recorded.
-4. Missing data is `DATA_UNAVAILABLE`; grid mismatches fail the session.
+## 3. Ordered Page-Chain Provenance & Authority Binding
 
-## 5. Explicit non-goals for R1
+- **Page-Chain Provenance**:
+  - `ordered_page_chain_digest()` binds the canonical tuple:
+    `(page_index, request_token, next_page_token, raw_bytes_sha256, item_count)`.
+  - Serialized via `acash.core.serialization.CanonicalConfigSerializer`.
+  - Sensitive to page order, raw byte hashes, request tokens, next tokens, and item counts.
+- **Authority Binding**:
+  - `RI01ProbeAuthority` is classified honestly as a **hash-bound operator authorization artifact** (NOT a cryptographically signed PKI credential).
+  - Deterministic `authority_sha256` is computed over canonical authority JSON and immutably bound into `RetrievalRunManifest` and `RI01QualificationRecord`.
+  - Strict type validation: rejects string booleans (`"false"`, `"true"`), integer booleans (`0`, `1`), string ints, unknown fields, and naive timestamps fail-closed.
+- **Rate-Limit Capture**:
+  - Only response header names beginning case-insensitively with `x-ratelimit-` are recorded.
 
-- No preregistration, no outcome evaluation, no parameter choices.
-- No Evidence Kernel extraction (reuse assessment stands as documented).
-- No PPDS ingestion, no broker orders, no capital, no Homelab changes.
+---
+
+## 4. Staged Canary Empirical Sequence (Proposed Post-PR #10)
+
+Upon separate explicit human authorization, empirical probe execution must follow a strict staged canary sequence:
+
+1. **CANARY 1**: SPY `2021-06-01` 1Min bars (raw SIP), max request budget tightly bounded.
+   - Verify retrieval status `RETRIEVED` and qualification status `QUALIFIED` (390 bars).
+   - If Canary 1 passes:
+2. **CANARY 2**: SPY `2018-06-01` bars (historical depth check, 390 bars).
+3. **CANARY 3**: SPY `2021-11-26` half-day bars (210 bars).
+4. **CANARY 4**: Narrow historical trades windows around open/close (`±5m`).
+   - Page size limit up to 10,000 where appropriate to minimize request count while preserving pagination.
+
+**Zero Outcome Invariant**: No returns, no PnL, no Sharpe, no hit-rate, no predictive indicators. Missing data is `DATA_UNAVAILABLE`, never imputed. Sealed holdout (`>= 2023-01-01`) is never touched.
