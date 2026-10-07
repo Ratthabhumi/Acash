@@ -335,9 +335,14 @@ HISTORICAL SNAPSHOT of the pre-CI state. Rulesets still `[]`; PRs still `[]`;
    - Real network calls performed: `NETWORK_REQUESTS_PERFORMED = 0`.
    - Lifecycle separation: Generic retrieval (`RETRIEVED`, `PARTIAL`, `ENTITLEMENT_DENIED`, etc.) separated from consumer qualification (`QUALIFIED`, `DATA_UNAVAILABLE`, `CONTRACT_FAILED`). Incomplete session grids (e.g. 389 bars) write `status="CONTRACT_FAILED"`, preserving raw evidence without ever marking the session qualified.
    - Authority binding: Documented honestly as hash-bound operator authorization artifact (`authority_sha256`), not PKI signed. Strict fail-closed type validation.
-4. **HYP_011 V2 Forensic Status**:
+4. **HYP_011 V2 Forensic Status (CLOSED)**:
    - `HYP_011 V1 Obs #1` != `HYP_011 V2 Obs #1`.
-   - `HYP_011 V2 Obs #1` remains `AWAITING_RUNTIME_EVIDENCE` until host forensic proof is obtained.
+   - Classification: `HYP_011_V2_OBSERVATION_0001 = MISSED_UNOBSERVED_DUE_TO_HOST_OFFLINE_AT_DISPATCH`.
+   - Closed via host telemetry (host outage from `2026-10-04 21:38` to `2026-10-07 21:06 ICT`; scheduled dispatch at `2026-10-06 03:20 ICT`).
+   - Zero network requests, zero attempts consumed, sample advancement = 0.
+   - Retries for `2026-10-05` and backfills are strictly FORBIDDEN.
+   - Pinned checkout on Homelab retained at `6395b384893ac0160b4ce8df3f4bcc0d332b3d9e` to preserve experiment stationarity.
+   - See canonical closure dossier: `docs/audit/HYP011_V2_OBS1_FORENSIC_CLOSURE_20261007.md`.
 5. **Capital & Execution Locks**:
    - `REAL_CAPITAL_AUTHORITY` = `$0.00`.
    - `NO_REAL_ORDERS` = `true`.
