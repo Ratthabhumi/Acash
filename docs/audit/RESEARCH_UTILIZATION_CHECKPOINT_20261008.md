@@ -19,20 +19,24 @@ standing; B blocked/parked progression; T retired/terminal. `1` source-verified,
 `?` unknown/unverified. C does **not** certify current host deployment or trades.
 Status dimensions can coexist. Negative findings are scoped to inspected paths,
 not proof that no code exists anywhere in all historical branches.
+A negative result alone does not establish negative-control use; terminal
+HYP001/002/009 control standing remains unknown. HYP003/004/007 reference-use
+labels are recorded in the preserved matrix, not a new authorization to reuse
+their samples.
 
 ## Hypotheses
 
 | Asset | RO | I | C | D | O | N | B | T | Primary source/evidence and interpretation |
 |---|---|---|---|---|---|---|---|---|---|
-| HYP_001 | 0 | ? | ? | R | R | R | 0 | R | [Phase 8.5 closure](../phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md): terminal falsification, not merely missing Phase 14 JSON |
-| HYP_002 | 0 | ? | ? | R | R | R | 0 | R | [Phase 8.5 closure](../phase8.5/phase8_5_hyp_tsmom_eurusd_002_terminal_falsification_dossier.md): terminal falsification; do not recycle quarantined samples |
+| HYP_001 | 0 | ? | ? | R | R | ? | 0 | R | [Phase 8.5 closure](../phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md): terminal falsification, not merely missing Phase 14 JSON |
+| HYP_002 | 0 | ? | ? | R | R | ? | 0 | R | [Phase 8.5 closure](../phase8.5/phase8_5_hyp_tsmom_eurusd_002_terminal_falsification_dossier.md): terminal falsification; do not recycle quarantined samples |
 | HYP_003 | 0 | 1 | ? | R | R | R | 0 | R | [Terminal dossier](../phase14/hyp_003_terminal_falsification_dossier.md), `src/acash/research/step_r3_hyp_003.py`; rejected registered mechanism |
 | HYP_004 | 0 | 1 | ? | R | R | R | 0 | R | [Terminal closure](../phase14/hyp_004_terminal_closure_dossier.md), `src/acash/research/step_r4_hyp_004.py`; replication not supported; sealed external holdout preserved |
 | HYP_005 | 0 | 1 | ? | 0 | 0 | 0 | R | 0 | [Entitlement block](../phase14/HYP_005_DATA_ENTITLEMENT_BLOCK_001.md), `src/acash/data/qualification/mec_0015_bar_contract.py`; contract code, no strategy outcome; non-falsifying |
 | HYP_006 | 0 | 1 | ? | 0 | 0 | 0 | R | 0 | [Quote provenance amendment](../phase14/HYP_006_R1_QUOTE_PROVENANCE_AMENDMENT_001.md), `src/acash/data/qualification/mec_0016_early_quote_contract.py`; execution-data provenance unresolved, not disproven |
 | HYP_007 | 0 | 1 | ? | R | R | R | 0 | R | [Post-R4 closure](../phase14/HYP_007_POST_R4_OPERATIONAL_CLOSURE.md), `src/acash/research/step_r4_hyp_007.py`; M1 supported, M2 current edge not supported; not universally disproven |
 | HYP_008 | R | 0 | 0 | 0 | 0 | 0 | 0 | R | [Pre-R1 retirement](../phase14/HYP_008_PRE_R1_RETIREMENT.md); administrative priority retirement, no empirical falsification |
-| HYP_009 | 0 | 1 | 1 | R | R | R | 0 | R | [Terminal M2 decision](../phase14/HYP_009_TERMINAL_M2_DECISION.md) + result manifest, `src/acash/research/hyp_009/`, reused `hyp_009_daily_client.py`; latest lifecycle is terminal, superseding older entitlement-block wording |
+| HYP_009 | 0 | 1 | 1 | R | R | ? | 0 | R | [Terminal M2 decision](../phase14/HYP_009_TERMINAL_M2_DECISION.md) + result manifest, `src/acash/research/hyp_009/`, reused `hyp_009_daily_client.py`; latest lifecycle is terminal, superseding older entitlement-block wording |
 | HYP_010 | 0 | 1 | ? | R | 0 | 0 | R | 0 | [Qualification summary](../phase14/HYP_010_R2_QUALIFICATION_SUMMARY.md), [parked decision](../phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md), `hyp_010_qual_client.py`; tiny provider probe recorded, full economic dataset blocked by VEU authority |
 | HYP_011 historical | 0 | 1 | 1 | R | R | R | 0 | 0 | [Corrected result manifest](../phase14/manifests/HYP_011_R3_CORRECTED_REPRODUCIBILITY_RESULT.json): historical replication supports prospective shadow only; platform/control baseline, not trading eligibility |
 | HYP_011 V1 | 0 | 1 | R | R | R | R | 0 | R | [Segment policy](../phase14/HYP_011_PROSPECTIVE_SEGMENT_POLICY_V1_V2.md): Obs1 committed/reconciled, segment closed incomplete; one platform observation is not predictive qualification |
