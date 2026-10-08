@@ -1,0 +1,17 @@
+{
+  "authority_id": "UNISSUED_RI01_CANARY1_20261008",
+  "runtime_sha": "cf63f15800099967f4c45d3df66e87a66a012eac",
+  "session": "2021-06-01",
+  "capability": "bars",
+  "symbol": "SPY",
+  "evidence_root": "C:/ACASH-Evidence/ri01/canary1/20261008-cf63f158",
+  "max_requests": 3,
+  "valid_from_utc": null,
+  "valid_until_utc": null,
+  "read_only": true,
+  "no_outcomes": true,
+  "no_paper": true,
+  "no_live": true,
+  "capital_usd": "0.00",
+  "no_real_orders": true
+}

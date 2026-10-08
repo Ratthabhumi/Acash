@@ -1,0 +1,18 @@
+{
+  "status": "UNISSUED_PROPOSAL",
+  "segment_id": "HYP_011_PROSPECTIVE_V3_CANDIDATE",
+  "authority_namespace": "UNISSUED_HYP_011_PROSPECTIVE_V3_CANDIDATE",
+  "state_namespace": "hyp_011_prospective_v3_candidate",
+  "activation_session": null,
+  "runtime_sha": null,
+  "prior_state": null,
+  "prior_authority": null,
+  "miss_policy": "TERMINATE_NO_BACKFILL",
+  "persistent": false,
+  "locks": {
+    "paper_authorized": false,
+    "live_authorized": false,
+    "capital_authority_usd": "0.00",
+    "no_real_orders": true
+  }
+}
