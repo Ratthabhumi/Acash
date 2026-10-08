@@ -25,6 +25,8 @@ VALID_RETRIEVAL_STATUSES = frozenset(
         "PARTIAL",
         "ENTITLEMENT_DENIED",
         "AUTHENTICATION_FAILED",
+        "ACCESS_FORBIDDEN",
+        "TRANSPORT_FAILED",
         "HTTP_FAILED",
         "MALFORMED_RESPONSE",
     }

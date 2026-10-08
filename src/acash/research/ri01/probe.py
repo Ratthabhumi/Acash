@@ -480,27 +480,34 @@ def _auth_headers(credential_provider: EnvAlpacaCredentialProvider) -> Dict[str,
     }
 
 
-def _auth_failure_outcome(status_code: int) -> Tuple[str, str]:
-    """Classify a provider auth-plane HTTP failure into (error_message, terminal_status).
+def _auth_failure_outcome(response: httpx.Response) -> Tuple[str, str]:
+    """Classify observed failures without inferring entitlement from HTTP alone.
 
-    HTTP 401 means the presented credentials were rejected: an authentication
-    failure, recorded as AUTHENTICATION_FAILED. HTTP 403 means access was
-    denied for presented (accepted) credentials: an entitlement denial,
-    recorded as ENTITLEMENT_DENIED. The two must never be conflated: a 401
-    is evidence about credential validity, never evidence about entitlements.
+    Alpaca's documented SIP restriction requires both the machine code and
+    the exact allowlisted message: 42210000 is also used for unrelated errors.
+    Arbitrary response bodies are never retained in terminal evidence.
     """
+    status_code = response.status_code
     if status_code == 401:
-        return (
-            "RI01_PROBE_AUTHENTICATION_FAILED: Alpaca rejected the presented "
-            "credentials (HTTP 401). Check credential validity; this is not "
-            "an entitlement determination.",
-            "AUTHENTICATION_FAILED",
-        )
-    return (
-        "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
-        f"SIP access (HTTP {status_code}).",
-        "ENTITLEMENT_DENIED",
-    )
+        return ("RI01_PROBE_AUTHENTICATION_FAILED: HTTP 401.", "AUTHENTICATION_FAILED")
+    if status_code in (403, 422) and len(response.content) <= 4096:
+        try:
+            doc = response.json()
+        except ValueError:
+            doc = None
+        if (
+            isinstance(doc, dict)
+            and type(doc.get("code")) is int
+            and doc.get("code") in (42210000, 40010001)
+            and doc.get("message") == "subscription does not permit querying recent SIP data"
+        ):
+            return (
+                "RI01_PROBE_ENTITLEMENT_DENIED: provider confirmed recent SIP subscription restriction.",
+                "ENTITLEMENT_DENIED",
+            )
+    if status_code == 403:
+        return ("RI01_PROBE_ACCESS_FORBIDDEN: HTTP 403; reason unconfirmed.", "ACCESS_FORBIDDEN")
+    return (f"RI01_PROBE_HTTP_FAILED: HTTP {status_code}.", "HTTP_FAILED")
 
 
 class RI01ProbeClient:
@@ -526,6 +533,7 @@ class RI01ProbeClient:
         status: str,
         error_message: str,
         now_utc: datetime,
+        failure_metadata: Optional[Mapping[str, Any]] = None,
     ) -> RetrievalRunManifest:
         chain_digest = (
             ordered_page_chain_digest(page_records)
@@ -541,6 +549,7 @@ class RI01ProbeClient:
                 "symbol": PROBE_SYMBOL,
                 "session": authority.session.isoformat(),
                 "capability": capability,
+                **(failure_metadata or {}),
             },
             runtime_sha=authority.runtime_sha,
             authority_ref=authority.authority_id,
@@ -618,15 +627,31 @@ class RI01ProbeClient:
             if page_token is not None:
                 params["page_token"] = page_token
 
-            self.requests_issued += 1
-            response = self._http.get(
-                f"{DATA_HOST}/v2/stocks/bars",
-                params=params,
-                headers=_auth_headers(self._credential_provider),
-            )
+            headers = _auth_headers(self._credential_provider)
+            self.requests_issued += 1  # Local invocation count, not provider receipt.
+            try:
+                response = self._http.get(
+                    f"{DATA_HOST}/v2/stocks/bars", params=params, headers=headers,
+                )
+            except httpx.RequestError:
+                err_msg = "RI01_PROBE_TRANSPORT_FAILED: no HTTP response observed; provider acceptance unknown."
+                self._write_terminal_manifest(
+                    target_dir=target_dir, authority=authority,
+                    capability="bars", page_records=page_records,
+                    raw_items_count=len(raw_bars), status="TRANSPORT_FAILED",
+                    error_message=err_msg, now_utc=now_utc,
+                    failure_metadata={
+                        "invocation_initiated": True,
+                        "provider_acceptance": "UNKNOWN",
+                        "http_response_observed": False,
+                        "retrieval_completed": False,
+                        "previous_pages_observed": len(page_records),
+                    },
+                )
+                raise DataContractError(err_msg) from None
 
-            if response.status_code in (401, 403):
-                err_msg, term_status = _auth_failure_outcome(response.status_code)
+            if response.status_code in (401, 403, 422):
+                err_msg, term_status = _auth_failure_outcome(response)
                 self._write_terminal_manifest(
                     target_dir=target_dir,
                     authority=authority,
@@ -636,6 +661,11 @@ class RI01ProbeClient:
                     status=term_status,
                     error_message=err_msg,
                     now_utc=now_utc,
+                    failure_metadata={"http_status": response.status_code,
+                                      "http_response_observed": True,
+                                      "invocation_initiated": True,
+                                      "provider_acceptance": "RESPONSE_OBSERVED",
+                                      "retrieval_completed": False},
                 )
                 raise DataContractError(err_msg)
             if response.status_code != 200:
@@ -887,15 +917,31 @@ class RI01ProbeClient:
             if page_token is not None:
                 params["page_token"] = page_token
 
-            self.requests_issued += 1
-            response = self._http.get(
-                f"{DATA_HOST}/v2/stocks/trades",
-                params=params,
-                headers=_auth_headers(self._credential_provider),
-            )
+            headers = _auth_headers(self._credential_provider)
+            self.requests_issued += 1  # Local invocation count, not provider receipt.
+            try:
+                response = self._http.get(
+                    f"{DATA_HOST}/v2/stocks/trades", params=params, headers=headers,
+                )
+            except httpx.RequestError:
+                err_msg = "RI01_PROBE_TRANSPORT_FAILED: no HTTP response observed; provider acceptance unknown."
+                self._write_terminal_manifest(
+                    target_dir=target_dir, authority=authority,
+                    capability=f"trades_{window_label}", page_records=page_records,
+                    raw_items_count=len(trades), status="TRANSPORT_FAILED",
+                    error_message=err_msg, now_utc=now_utc,
+                    failure_metadata={
+                        "invocation_initiated": True,
+                        "provider_acceptance": "UNKNOWN",
+                        "http_response_observed": False,
+                        "retrieval_completed": False,
+                        "previous_pages_observed": len(page_records),
+                    },
+                )
+                raise DataContractError(err_msg) from None
 
-            if response.status_code in (401, 403):
-                err_msg, term_status = _auth_failure_outcome(response.status_code)
+            if response.status_code in (401, 403, 422):
+                err_msg, term_status = _auth_failure_outcome(response)
                 self._write_terminal_manifest(
                     target_dir=target_dir,
                     authority=authority,
@@ -905,6 +951,11 @@ class RI01ProbeClient:
                     status=term_status,
                     error_message=err_msg,
                     now_utc=now_utc,
+                    failure_metadata={"http_status": response.status_code,
+                                      "http_response_observed": True,
+                                      "invocation_initiated": True,
+                                      "provider_acceptance": "RESPONSE_OBSERVED",
+                                      "retrieval_completed": False},
                 )
                 raise DataContractError(err_msg)
             if response.status_code != 200:
