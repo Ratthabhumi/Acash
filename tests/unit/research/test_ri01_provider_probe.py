@@ -609,6 +609,60 @@ def test_entitlement_denied_never_covered(tmp_path: Path) -> None:
     assert not (bars_dir / "qualification.json").exists()
 
 
+def test_401_is_authentication_failure_not_entitlement_bars(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS,
+        transport=httpx.MockTransport(lambda req: httpx.Response(401, content=b"{}")),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHENTICATION_FAILED") as excinfo:
+        client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+    assert "ENTITLEMENT" not in str(excinfo.value)
+
+    bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "AUTHENTICATION_FAILED"
+    assert manifest_doc["status"] != "ENTITLEMENT_DENIED"
+    assert not (bars_dir / "qualification.json").exists()
+
+
+def test_403_stays_entitlement_denied_trades(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, session=date(2021, 6, 1), capability="trades")
+    with pytest.raises(DataContractError, match="RI01_PROBE_ENTITLEMENT_DENIED") as excinfo:
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=httpx.MockTransport(lambda req: httpx.Response(403, content=b"{}")),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
+    assert "AUTHENTICATION" not in str(excinfo.value)
+
+    trades_dir = auth.evidence_root / "2021-06-01" / "trades_open"
+    manifest_doc = json.loads((trades_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "ENTITLEMENT_DENIED"
+
+
+def test_401_is_authentication_failure_not_entitlement_trades(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, session=date(2021, 6, 1), capability="trades")
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHENTICATION_FAILED") as excinfo:
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=httpx.MockTransport(lambda req: httpx.Response(401, content=b"{}")),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
+    assert "ENTITLEMENT" not in str(excinfo.value)
+
+    trades_dir = auth.evidence_root / "2021-06-01" / "trades_open"
+    manifest_doc = json.loads((trades_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "AUTHENTICATION_FAILED"
+    assert not (trades_dir / "qualification.json").exists()
+
+
 def test_http_error_never_covered(tmp_path: Path) -> None:
     auth = _build_authority(tmp_path, capability="bars")
     client = RI01ProbeClient(

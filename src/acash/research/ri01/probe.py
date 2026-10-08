@@ -480,6 +480,29 @@ def _auth_headers(credential_provider: EnvAlpacaCredentialProvider) -> Dict[str,
     }
 
 
+def _auth_failure_outcome(status_code: int) -> Tuple[str, str]:
+    """Classify a provider auth-plane HTTP failure into (error_message, terminal_status).
+
+    HTTP 401 means the presented credentials were rejected: an authentication
+    failure, recorded as AUTHENTICATION_FAILED. HTTP 403 means access was
+    denied for presented (accepted) credentials: an entitlement denial,
+    recorded as ENTITLEMENT_DENIED. The two must never be conflated: a 401
+    is evidence about credential validity, never evidence about entitlements.
+    """
+    if status_code == 401:
+        return (
+            "RI01_PROBE_AUTHENTICATION_FAILED: Alpaca rejected the presented "
+            "credentials (HTTP 401). Check credential validity; this is not "
+            "an entitlement determination.",
+            "AUTHENTICATION_FAILED",
+        )
+    return (
+        "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
+        f"SIP access (HTTP {status_code}).",
+        "ENTITLEMENT_DENIED",
+    )
+
+
 class RI01ProbeClient:
     """Minimal read-only Alpaca client for the R1 probe (injectable transport)."""
 
@@ -603,17 +626,14 @@ class RI01ProbeClient:
             )
 
             if response.status_code in (401, 403):
-                err_msg = (
-                    "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
-                    f"SIP access (HTTP {response.status_code})."
-                )
+                err_msg, term_status = _auth_failure_outcome(response.status_code)
                 self._write_terminal_manifest(
                     target_dir=target_dir,
                     authority=authority,
                     capability="bars",
                     page_records=page_records,
                     raw_items_count=len(raw_bars),
-                    status="ENTITLEMENT_DENIED",
+                    status=term_status,
                     error_message=err_msg,
                     now_utc=now_utc,
                 )
@@ -875,17 +895,14 @@ class RI01ProbeClient:
             )
 
             if response.status_code in (401, 403):
-                err_msg = (
-                    "RI01_PROBE_ENTITLEMENT_DENIED: credentials lack historical "
-                    f"SIP access (HTTP {response.status_code})."
-                )
+                err_msg, term_status = _auth_failure_outcome(response.status_code)
                 self._write_terminal_manifest(
                     target_dir=target_dir,
                     authority=authority,
                     capability=f"trades_{window_label}",
                     page_records=page_records,
                     raw_items_count=len(trades),
-                    status="ENTITLEMENT_DENIED",
+                    status=term_status,
                     error_message=err_msg,
                     now_utc=now_utc,
                 )
