@@ -594,19 +594,73 @@ def test_missing_minute_fails_closed(tmp_path: Path) -> None:
     assert "RI01_INCOMPLETE_SESSION_GRID" in str(qual_doc["error_message"])
 
 
-def test_entitlement_denied_never_covered(tmp_path: Path) -> None:
+def test_generic_forbidden_never_covered(tmp_path: Path) -> None:
     auth = _build_authority(tmp_path, capability="bars")
     client = RI01ProbeClient(
         credential_provider=CREDS,
         transport=httpx.MockTransport(lambda req: httpx.Response(403, content=b"{}")),
     )
-    with pytest.raises(DataContractError, match="RI01_PROBE_ENTITLEMENT_DENIED"):
+    with pytest.raises(DataContractError, match="RI01_PROBE_ACCESS_FORBIDDEN"):
         client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
 
     bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
     manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest_doc["status"] == "ENTITLEMENT_DENIED"
+    assert manifest_doc["status"] == "ACCESS_FORBIDDEN"
     assert not (bars_dir / "qualification.json").exists()
+
+
+def test_401_is_authentication_failure_not_entitlement_bars(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, capability="bars")
+    client = RI01ProbeClient(
+        credential_provider=CREDS,
+        transport=httpx.MockTransport(lambda req: httpx.Response(401, content=b"{}")),
+    )
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHENTICATION_FAILED") as excinfo:
+        client.fetch_bars(auth, NyseCa1Calendar(), datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc))
+    assert "ENTITLEMENT" not in str(excinfo.value)
+
+    bars_dir = auth.evidence_root / auth.session.isoformat() / "bars"
+    manifest_doc = json.loads((bars_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "AUTHENTICATION_FAILED"
+    assert manifest_doc["status"] != "ENTITLEMENT_DENIED"
+    assert not (bars_dir / "qualification.json").exists()
+
+
+def test_403_reason_unconfirmed_trades(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, session=date(2021, 6, 1), capability="trades")
+    with pytest.raises(DataContractError, match="RI01_PROBE_ACCESS_FORBIDDEN") as excinfo:
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=httpx.MockTransport(lambda req: httpx.Response(403, content=b"{}")),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
+    assert "AUTHENTICATION" not in str(excinfo.value)
+
+    trades_dir = auth.evidence_root / "2021-06-01" / "trades_open"
+    manifest_doc = json.loads((trades_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "ACCESS_FORBIDDEN"
+
+
+def test_401_is_authentication_failure_not_entitlement_trades(tmp_path: Path) -> None:
+    auth = _build_authority(tmp_path, session=date(2021, 6, 1), capability="trades")
+    with pytest.raises(DataContractError, match="RI01_PROBE_AUTHENTICATION_FAILED") as excinfo:
+        main(
+            ["--execute-network"],
+            _authority=auth,
+            _transport=httpx.MockTransport(lambda req: httpx.Response(401, content=b"{}")),
+            _runtime_sha=MOCK_RUNTIME_SHA,
+            _now_utc=datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc),
+            _credential_provider=CREDS,
+        )
+    assert "ENTITLEMENT" not in str(excinfo.value)
+
+    trades_dir = auth.evidence_root / "2021-06-01" / "trades_open"
+    manifest_doc = json.loads((trades_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest_doc["status"] == "AUTHENTICATION_FAILED"
+    assert not (trades_dir / "qualification.json").exists()
 
 
 def test_http_error_never_covered(tmp_path: Path) -> None:
@@ -662,3 +716,87 @@ def test_stability_comparison() -> None:
     assert compare_stability("a" * 64, "b" * 64) == "DIFFERENT"
     with pytest.raises(DataContractError, match="RI01_STABILITY_EMPTY_DIGEST"):
         compare_stability("", "b" * 64)
+
+
+@pytest.mark.parametrize("capability", ["bars", "trades"])
+@pytest.mark.parametrize("status,body,expected", [
+    (401, {"code": 42210000, "message": "subscription does not permit querying recent SIP data"}, "AUTHENTICATION_FAILED"),
+    (403, {"message": "secret mock_secret"}, "ACCESS_FORBIDDEN"),
+    (422, {"code": 42210000, "message": "market orders must not have trail_price"}, "HTTP_FAILED"),
+    (422, {"code": "42210000", "message": "subscription does not permit querying recent SIP data"}, "HTTP_FAILED"),
+    (403, {"code": True, "message": "subscription does not permit querying recent SIP data"}, "ACCESS_FORBIDDEN"),
+    (422, {"code": 42210000, "message": "subscription does not permit querying recent SIP data"}, "ENTITLEMENT_DENIED"),
+    (403, {"code": 40010001, "message": "subscription does not permit querying recent SIP data"}, "ENTITLEMENT_DENIED"),
+    (403, [42210000], "ACCESS_FORBIDDEN"),
+    (403, {"code": 42210000, "message": "subscription does not permit querying recent SIP data", "extra": "x" * 4096}, "ACCESS_FORBIDDEN"),
+])
+def test_http_failure_evidence_requires_positive_entitlement(
+    tmp_path: Path, capability: str, status: int, body: Any, expected: str,
+) -> None:
+    auth = _build_authority(tmp_path, capability=capability)
+    client = RI01ProbeClient(CREDS, httpx.MockTransport(lambda request: httpx.Response(status, json=body)))
+    now = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError):
+        if capability == "bars":
+            client.fetch_bars(auth, NyseCa1Calendar(), now)
+        else:
+            client.fetch_trades_window(
+                datetime(2021, 6, 1, 13, 25, tzinfo=timezone.utc),
+                datetime(2021, 6, 1, 13, 35, tzinfo=timezone.utc), "open", auth, now,
+            )
+    folder = auth.evidence_root / "2021-06-01" / ("bars" if capability == "bars" else "trades_open")
+    raw = (folder / "manifest.json").read_text()
+    doc = json.loads(raw)
+    assert doc["status"] == expected
+    assert doc["subject_metadata"]["http_status"] == status
+    assert doc["subject_metadata"]["http_response_observed"] is True
+    assert "mock_secret" not in raw and "trail_price" not in raw
+    assert not (folder / "qualification.json").exists()
+    assert client.requests_issued == 1
+
+
+@pytest.mark.parametrize("capability", ["bars", "trades"])
+@pytest.mark.parametrize("error_type", [httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadError])
+@pytest.mark.parametrize("partial", [False, True])
+def test_transport_failure_preserves_partial_pages_without_retry(
+    tmp_path: Path, capability: str, error_type: type[httpx.RequestError], partial: bool,
+) -> None:
+    auth = _build_authority(tmp_path, capability=capability)
+    calls = 0
+    first_bytes = json.dumps({capability: {"SPY": []}, "next_page_token": "next"}).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if partial and calls == 1:
+            return httpx.Response(200, content=first_bytes)
+        raise error_type("mock_secret https://user:password@private.invalid", request=request)
+
+    client = RI01ProbeClient(CREDS, httpx.MockTransport(handler))
+    now = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
+    with pytest.raises(DataContractError, match="RI01_PROBE_TRANSPORT_FAILED") as excinfo:
+        if capability == "bars":
+            client.fetch_bars(auth, NyseCa1Calendar(), now)
+        else:
+            client.fetch_trades_window(
+                datetime(2021, 6, 1, 13, 25, tzinfo=timezone.utc),
+                datetime(2021, 6, 1, 13, 35, tzinfo=timezone.utc), "open", auth, now,
+            )
+    folder = auth.evidence_root / "2021-06-01" / ("bars" if capability == "bars" else "trades_open")
+    raw = (folder / "manifest.json").read_text()
+    doc = json.loads(raw)
+    assert doc["status"] == "TRANSPORT_FAILED"
+    assert doc["operation_count"] == calls == (2 if partial else 1)
+    assert len(doc["page_records"]) == int(partial)
+    metadata = doc["subject_metadata"]
+    assert metadata["provider_acceptance"] == "UNKNOWN"
+    assert metadata["invocation_initiated"] is True
+    assert metadata["http_response_observed"] is False
+    assert metadata["retrieval_completed"] is False
+    assert "http_status" not in metadata
+    assert "mock_secret" not in raw + str(excinfo.value)
+    assert "password" not in raw + str(excinfo.value)
+    assert not (folder / "qualification.json").exists()
+    if partial:
+        assert (folder / "page_0000.bin").read_bytes() == first_bytes
+        assert doc["page_records"][0]["raw_bytes_sha256"] == content_sha256(first_bytes)

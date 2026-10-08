@@ -10,6 +10,20 @@ from acash.core.domain.exceptions import DataContractError
 _HYP011_ROOT_CANONICAL = "/var/lib/acash/hyp011"
 
 
+def _targets_hyp011_runtime(posix_lower_path: str) -> bool:
+    """Single authority for the HYP_011 runtime collision rule.
+
+    Matches the canonical runtime directory itself, anything beneath it, or
+    any path embedding the canonical substring (conservative against `..`
+    segments in unresolved spellings).
+    """
+    return (
+        posix_lower_path == _HYP011_ROOT_CANONICAL
+        or posix_lower_path.startswith(_HYP011_ROOT_CANONICAL + "/")
+        or "/var/lib/acash/hyp011" in posix_lower_path
+    )
+
+
 def _detect_repository_root() -> Path:
     """Locate the repository root by walking up from current module until pyproject.toml."""
     current = Path(__file__).resolve().parent
@@ -39,11 +53,7 @@ def validate_external_evidence_root(
             ) from exc
 
     posix_str = str(root_path).replace("\\", "/").lower()
-    if (
-        posix_str == _HYP011_ROOT_CANONICAL
-        or posix_str.startswith(_HYP011_ROOT_CANONICAL + "/")
-        or "/var/lib/acash/hyp011" in posix_str
-    ):
+    if _targets_hyp011_runtime(posix_str):
         raise DataContractError(
             f"EVIDENCE_ROOT_HYP011_COLLISION: evidence root {root_path} must not target HYP_011 runtime storage."
         )
@@ -54,6 +64,16 @@ def validate_external_evidence_root(
         )
 
     resolved_root = root_path.resolve()
+
+    # Re-apply the HYP_011 collision rule AFTER canonical resolution. The
+    # unresolved-string check above cannot see through symlinks (or
+    # equivalent indirection): e.g. /tmp/outer_link resolving to
+    # /var/lib/acash/hyp011 must fail closed here even though its spelling
+    # avoids the HYP_011 substring.
+    if _targets_hyp011_runtime(str(resolved_root).replace("\\", "/").lower()):
+        raise DataContractError(
+            f"EVIDENCE_ROOT_HYP011_COLLISION: resolved evidence root {resolved_root} targets HYP_011 runtime storage."
+        )
 
     # Reject repository-local root
     resolved_repo = (repo_root or _detect_repository_root()).resolve()
