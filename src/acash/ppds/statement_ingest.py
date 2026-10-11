@@ -26,6 +26,7 @@ class AccountSnapshot:
     as_of: date
     cash_lots: Tuple[CashLot, ...]
     position_lots: Tuple[PositionLot, ...]
+    account_id: str = "DEFAULT"
 
     def cash_by_currency(self) -> Dict[str, Decimal]:
         totals: Dict[str, Decimal] = {}
@@ -64,16 +65,27 @@ def parse_statement_csv(text: str) -> List[Dict[str, Any]]:
 
 
 def ingest_account_snapshot(
-    rows: Sequence[Mapping[str, Any]], as_of: date
+    rows: Sequence[Mapping[str, Any]], as_of: date, account_id: str = "DEFAULT"
 ) -> AccountSnapshot:
     """Build an AccountSnapshot from parsed synthetic rows (fail closed)."""
     if not isinstance(rows, list) or not rows:
         raise DataContractError("PPDS_STATEMENT_NO_ROWS.")
+    clean_account_id = str(account_id or "").strip()
+    if not clean_account_id:
+        raise DataContractError("PPDS_ACCOUNT_ID_INVALID: empty account_id.")
+
     cash_lots: List[CashLot] = []
     position_lots: List[PositionLot] = []
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise DataContractError(f"PPDS_STATEMENT_ROW_NOT_MAPPING: {index}.")
+        row_acc = row.get("account_id")
+        if row_acc is not None:
+            clean_row_acc = str(row_acc).strip()
+            if clean_row_acc and clean_row_acc != clean_account_id:
+                raise DataContractError(
+                    f"PPDS_STATEMENT_ACCOUNT_ID_MISMATCH: row {index} has '{clean_row_acc}', expected '{clean_account_id}'."
+                )
         kind = str(row.get("record_type") or "").strip().upper()
         if kind == "CASH":
             cash_lots.append(CashLot.from_mapping({
@@ -94,5 +106,8 @@ def ingest_account_snapshot(
                 f"PPDS_STATEMENT_UNKNOWN_RECORD_TYPE: {row.get('record_type')!r}."
             )
     return AccountSnapshot(
-        as_of=as_of, cash_lots=tuple(cash_lots), position_lots=tuple(position_lots)
+        as_of=as_of,
+        cash_lots=tuple(cash_lots),
+        position_lots=tuple(position_lots),
+        account_id=clean_account_id,
     )

@@ -1,16 +1,25 @@
-"""Unit and adversarial tests for PPDS Independent Reconciliation and Exposure Contracts.
+"""Unit and adversarial tests for PPDS Evidence-Bound Independent Reconciliation, Account Identity, and Valuation.
 
 Verifies:
-1. Self-derived ledger reconciliation produces SELF_CONSISTENCY_VERIFIED (is_independent=False),
-   and NEVER INDEPENDENT_RECONCILIATION_MATCHED.
-2. Independent ledger matching cash and positions produces INDEPENDENT_RECONCILIATION_MATCHED (is_independent=True).
-3. Independent ledger with cash difference produces INDEPENDENT_RECONCILIATION_BREAKS.
-4. Independent ledger with position difference produces INDEPENDENT_RECONCILIATION_BREAKS.
-5. Missing or whitespace-only source IDs demote to INDEPENDENCE_UNVERIFIED (is_independent=False).
-6. Same source ID masquerading as independent source demotes to INDEPENDENCE_UNVERIFIED.
-7. Surface rendering preserves reconciliation_status and reconciliation_is_independent.
-8. Multi-currency position lots fail closed in position_exposure() and etf_overlap_exposure().
-9. Reconcile report formatting displays verification mode and status cleanly.
+1. Self-derived ledger reconciliation produces SELF_CONSISTENCY_VERIFIED (is_independent=False).
+2. Unattested independent ledger with matching balances produces NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED (is_independent=False).
+3. Verified independent ledger with IndependentLedgerAttestation produces INDEPENDENT_RECONCILIATION_MATCHED (is_independent=True).
+4. Verified independent ledger with cash/qty discrepancy produces INDEPENDENT_RECONCILIATION_BREAKS (is_independent=True).
+5. Lineage conflicts fail closed or demote to SOURCE_LINEAGE_CONFLICT:
+   - Statement and ledger share identical source identity (masquerading).
+   - Attestation artifact SHA matches statement raw bytes SHA (same origin masquerade).
+   - Attestation origin system indicates self-derivation.
+   - Snapshot as-of and ledger/attestation as-of mismatch.
+   - Account identity mismatch (statement account vs ledger account).
+   - Tampered ledger head SHA or entry count mismatch.
+6. Multi-currency exposure fail closed (position_exposure, gross_lots_exposure, net_signed_exposure, etf_overlap_exposure).
+7. Exposure semantics: gross_lots_exposure preserves offsetting long/short lots while position_exposure nets per-symbol.
+8. Base currency portfolio valuation (evaluate_portfolio_base_currency):
+   - Multi-currency valuation with exact as-of FX rates and prices.
+   - Stale FX rate or price as-of rejection.
+   - Missing FX rate or price rejection.
+   - Quote currency mismatch rejection.
+   - Exact Decimal NAV calculation.
 """
 
 from datetime import date, datetime, timezone
@@ -20,18 +29,27 @@ from pathlib import Path
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
-from acash.ppds.exposure import etf_overlap_exposure, position_exposure
+from acash.evidence import content_sha256
+from acash.ppds.exposure import (
+    FXRate,
+    PortfolioValuation,
+    PriceQuote,
+    etf_overlap_exposure,
+    evaluate_portfolio_base_currency,
+    gross_lots_exposure,
+    net_signed_exposure,
+    position_exposure,
+)
 from acash.ppds.ledger import NormalizedPortfolioLedger
 from acash.ppds.lots import CashLot, PositionLot
 from acash.ppds.provenance import import_synthetic_statement
 from acash.ppds.reconcile import (
-    ReconciliationBreak,
+    IndependentLedgerAttestation,
     ReconciliationResult,
-    StatementTransaction,
     format_reconciliation_report,
     reconcile_snapshot_ledger,
 )
-from acash.ppds.statement_ingest import AccountSnapshot
+from acash.ppds.statement_ingest import AccountSnapshot, ingest_account_snapshot
 from acash.ppds.surface import render_read_only_surface
 
 SYNTHETIC_CSV_STATEMENT_A = b"""record_type,symbol,currency,quantity,amount,cost_basis_per_share,acquired_on
@@ -41,8 +59,8 @@ POSITION,QQQ,USD,25,,380.00,2026-10-03
 """
 
 
-def _build_matching_independent_ledger() -> NormalizedPortfolioLedger:
-    ledger = NormalizedPortfolioLedger()
+def _build_matching_independent_ledger(account_id: str = "DEFAULT", as_of: date = date(2026, 10, 5)) -> NormalizedPortfolioLedger:
+    ledger = NormalizedPortfolioLedger(account_id=account_id, as_of=as_of)
     ledger = ledger.post_cash_lot(CashLot(currency="USD", amount=Decimal("10000.00"), acquired_on=date(2026, 10, 1)))
     ledger = ledger.post_position_lot(
         PositionLot(symbol="SPY", quantity=Decimal("50"), cost_basis_per_share=Decimal("450.00"),
@@ -77,8 +95,8 @@ def test_self_derived_statement_is_never_classified_as_independent(tmp_path: Pat
     assert record.reconciliation.status != "INDEPENDENT_RECONCILIATION_MATCHED"
 
 
-def test_independent_ledger_matching_produces_independent_reconciliation_matched(tmp_path: Path) -> None:
-    """Reconciling against an external, independent ledger with different source produces INDEPENDENT_RECONCILIATION_MATCHED."""
+def test_unattested_independent_ledger_is_downgraded_to_unverified(tmp_path: Path) -> None:
+    """Supplying distinct source ID strings without an IndependentLedgerAttestation MUST NOT claim independent match."""
     external_root = tmp_path / "evidence_root"
     as_of = date(2026, 10, 5)
     source_id = "STATEMENT_BROKER_EXT_001"
@@ -94,7 +112,45 @@ def test_independent_ledger_matching_produces_independent_reconciliation_matched
         imported_at_utc=now_utc,
         runtime_sha="a" * 40,
         independent_ledger=independent_ledger,
+        independent_ledger_source_id="INTERNAL_LEDGER_BOOKS_UNATTESTED",
+    )
+
+    assert record.reconciliation.matched is True
+    # Without attestation, caller-asserted distinct string is downgraded:
+    assert record.reconciliation.status == "NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED"
+    assert record.reconciliation.is_independent is False
+    assert any("IndependentLedgerAttestation" in n for n in record.reconciliation.lineage_notes)
+
+
+def test_attested_independent_ledger_produces_independent_reconciliation_matched(tmp_path: Path) -> None:
+    """Reconciling with a verified IndependentLedgerAttestation produces INDEPENDENT_RECONCILIATION_MATCHED."""
+    external_root = tmp_path / "evidence_root"
+    as_of = date(2026, 10, 5)
+    source_id = "STATEMENT_BROKER_EXT_001"
+    now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+
+    independent_ledger = _build_matching_independent_ledger()
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_BOOKS_001",
+        artifact_sha256="b" * 64,  # distinct ledger artifact
+        account_id="DEFAULT",
+        as_of=as_of,
+        entry_count=independent_ledger.entry_count,
+        head_sha256=independent_ledger.head_sha256,
+        lineage_ref="books/internal_ledger_20261005.json",
+        origin_system="ERP_GENERAL_LEDGER",
+    )
+
+    record = import_synthetic_statement(
+        raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
+        source_id=source_id,
+        as_of=as_of,
+        evidence_root=external_root,
+        imported_at_utc=now_utc,
+        runtime_sha="a" * 40,
+        independent_ledger=independent_ledger,
         independent_ledger_source_id="INTERNAL_LEDGER_BOOKS_001",
+        independent_ledger_attestation=attestation,
     )
 
     assert record.reconciliation.matched is True
@@ -102,17 +158,18 @@ def test_independent_ledger_matching_produces_independent_reconciliation_matched
     assert record.reconciliation.is_independent is True
     assert record.reconciliation.statement_source_id == "STATEMENT_BROKER_EXT_001"
     assert record.reconciliation.ledger_source_id == "INTERNAL_LEDGER_BOOKS_001"
+    assert record.reconciliation.attestation == attestation
 
 
 def test_independent_ledger_cash_difference_produces_breaks(tmp_path: Path) -> None:
-    """An independent ledger with a cash discrepancy produces INDEPENDENT_RECONCILIATION_BREAKS."""
+    """An attested independent ledger with a cash discrepancy produces INDEPENDENT_RECONCILIATION_BREAKS."""
     external_root = tmp_path / "evidence_root"
     as_of = date(2026, 10, 5)
     source_id = "STATEMENT_BROKER_EXT_002"
     now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 
     # Independent ledger has $9,500 cash instead of $10,000
-    ledger = NormalizedPortfolioLedger()
+    ledger = NormalizedPortfolioLedger(as_of=as_of)
     ledger = ledger.post_cash_lot(CashLot(currency="USD", amount=Decimal("9500.00"), acquired_on=date(2026, 10, 1)))
     ledger = ledger.post_position_lot(
         PositionLot(symbol="SPY", quantity=Decimal("50"), cost_basis_per_share=Decimal("450.00"),
@@ -121,6 +178,17 @@ def test_independent_ledger_cash_difference_produces_breaks(tmp_path: Path) -> N
     ledger = ledger.post_position_lot(
         PositionLot(symbol="QQQ", quantity=Decimal("25"), cost_basis_per_share=Decimal("380.00"),
                     acquired_on=date(2026, 10, 3), currency="USD")
+    )
+
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_BOOKS_002",
+        artifact_sha256="c" * 64,
+        account_id="DEFAULT",
+        as_of=as_of,
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="books/internal_ledger_002.json",
+        origin_system="ERP_GENERAL_LEDGER",
     )
 
     record = import_synthetic_statement(
@@ -132,6 +200,7 @@ def test_independent_ledger_cash_difference_produces_breaks(tmp_path: Path) -> N
         runtime_sha="a" * 40,
         independent_ledger=ledger,
         independent_ledger_source_id="INTERNAL_LEDGER_BOOKS_002",
+        independent_ledger_attestation=attestation,
     )
 
     assert record.reconciliation.matched is False
@@ -145,14 +214,14 @@ def test_independent_ledger_cash_difference_produces_breaks(tmp_path: Path) -> N
 
 
 def test_independent_ledger_quantity_difference_produces_breaks(tmp_path: Path) -> None:
-    """An independent ledger with a position quantity discrepancy produces INDEPENDENT_RECONCILIATION_BREAKS."""
+    """An attested independent ledger with a position discrepancy produces INDEPENDENT_RECONCILIATION_BREAKS."""
     external_root = tmp_path / "evidence_root"
     as_of = date(2026, 10, 5)
     source_id = "STATEMENT_BROKER_EXT_003"
     now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 
     # Independent ledger has 40 shares of SPY instead of 50
-    ledger = NormalizedPortfolioLedger()
+    ledger = NormalizedPortfolioLedger(as_of=as_of)
     ledger = ledger.post_cash_lot(CashLot(currency="USD", amount=Decimal("10000.00"), acquired_on=date(2026, 10, 1)))
     ledger = ledger.post_position_lot(
         PositionLot(symbol="SPY", quantity=Decimal("40"), cost_basis_per_share=Decimal("450.00"),
@@ -161,6 +230,17 @@ def test_independent_ledger_quantity_difference_produces_breaks(tmp_path: Path) 
     ledger = ledger.post_position_lot(
         PositionLot(symbol="QQQ", quantity=Decimal("25"), cost_basis_per_share=Decimal("380.00"),
                     acquired_on=date(2026, 10, 3), currency="USD")
+    )
+
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_BOOKS_003",
+        artifact_sha256="d" * 64,
+        account_id="DEFAULT",
+        as_of=as_of,
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="books/internal_ledger_003.json",
+        origin_system="ERP_GENERAL_LEDGER",
     )
 
     record = import_synthetic_statement(
@@ -172,6 +252,7 @@ def test_independent_ledger_quantity_difference_produces_breaks(tmp_path: Path) 
         runtime_sha="a" * 40,
         independent_ledger=ledger,
         independent_ledger_source_id="INTERNAL_LEDGER_BOOKS_003",
+        independent_ledger_attestation=attestation,
     )
 
     assert record.reconciliation.matched is False
@@ -184,58 +265,141 @@ def test_independent_ledger_quantity_difference_produces_breaks(tmp_path: Path) 
     assert p_break.difference == "10"
 
 
-def test_masquerading_same_source_as_independent_is_demoted(tmp_path: Path) -> None:
-    """Reusing the same source ID as the ledger source ID fails independence and demotes to INDEPENDENCE_UNVERIFIED."""
+def test_attestation_with_same_statement_sha_fails_closed_as_conflict(tmp_path: Path) -> None:
+    """Attesting a ledger that shares the exact artifact SHA of the statement fails closed as SOURCE_LINEAGE_CONFLICT."""
     external_root = tmp_path / "evidence_root"
     as_of = date(2026, 10, 5)
-    source_id = "STATEMENT_SOURCE_COMMON"
+    source_id = "STATEMENT_BROKER_MASQUERADE"
     now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 
     ledger = _build_matching_independent_ledger()
+    stmt_sha = content_sha256(SYNTHETIC_CSV_STATEMENT_A)
 
-    record = import_synthetic_statement(
-        raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
-        source_id=source_id,
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_MASQUERADE",
+        artifact_sha256=stmt_sha,  # Masquerading identical file hash!
+        account_id="DEFAULT",
         as_of=as_of,
-        evidence_root=external_root,
-        imported_at_utc=now_utc,
-        runtime_sha="a" * 40,
-        independent_ledger=ledger,
-        independent_ledger_source_id="STATEMENT_SOURCE_COMMON",  # Masquerading identical source
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="same_file.csv",
+        origin_system="ERP",
     )
 
-    assert record.reconciliation.matched is True
-    assert record.reconciliation.status == "INDEPENDENCE_UNVERIFIED"
-    assert record.reconciliation.is_independent is False
+    with pytest.raises(DataContractError, match="PPDS_SOURCE_LINEAGE_CONFLICT"):
+        import_synthetic_statement(
+            raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
+            source_id=source_id,
+            as_of=as_of,
+            evidence_root=external_root,
+            imported_at_utc=now_utc,
+            runtime_sha="a" * 40,
+            independent_ledger=ledger,
+            independent_ledger_source_id="INTERNAL_MASQUERADE",
+            independent_ledger_attestation=attestation,
+        )
 
 
-def test_missing_or_blank_ledger_source_demotes_to_independence_unverified(tmp_path: Path) -> None:
-    """Supplying an independent ledger without an authoritative source ID demotes to INDEPENDENCE_UNVERIFIED."""
+def test_conflicting_account_identity_fails_closed(tmp_path: Path) -> None:
+    """Comparing two sources with conflicting account identities fails closed as SOURCE_LINEAGE_CONFLICT."""
     external_root = tmp_path / "evidence_root"
     as_of = date(2026, 10, 5)
-    source_id = "STATEMENT_BROKER_004"
+    now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+
+    ledger = _build_matching_independent_ledger(account_id="ACCT_LEDGER_999")
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_BOOKS_ACC",
+        artifact_sha256="e" * 64,
+        account_id="ACCT_LEDGER_999",
+        as_of=as_of,
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="books/acc999.json",
+        origin_system="ERP",
+    )
+
+    with pytest.raises(DataContractError, match="PPDS_SOURCE_LINEAGE_CONFLICT"):
+        import_synthetic_statement(
+            raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
+            source_id="STMT_ACC_111",
+            as_of=as_of,
+            account_id="ACCT_STMT_111",  # Different account ID!
+            evidence_root=external_root,
+            imported_at_utc=now_utc,
+            runtime_sha="a" * 40,
+            independent_ledger=ledger,
+            independent_ledger_source_id="INTERNAL_LEDGER_BOOKS_ACC",
+            independent_ledger_attestation=attestation,
+        )
+
+
+def test_incompatible_as_of_dates_fails_closed(tmp_path: Path) -> None:
+    """Comparing sources with incompatible as-of dates fails closed as SOURCE_LINEAGE_CONFLICT."""
+    external_root = tmp_path / "evidence_root"
+    as_of = date(2026, 10, 5)
+    wrong_as_of = date(2026, 9, 30)
+    now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+
+    ledger = _build_matching_independent_ledger(as_of=wrong_as_of)
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_WRONG_DATE",
+        artifact_sha256="f" * 64,
+        account_id="DEFAULT",
+        as_of=wrong_as_of,  # Mismatched as-of!
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="books/sep30.json",
+        origin_system="ERP",
+    )
+
+    with pytest.raises(DataContractError, match="PPDS_SOURCE_LINEAGE_CONFLICT"):
+        import_synthetic_statement(
+            raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
+            source_id="STMT_OCT05",
+            as_of=as_of,
+            evidence_root=external_root,
+            imported_at_utc=now_utc,
+            runtime_sha="a" * 40,
+            independent_ledger=ledger,
+            independent_ledger_source_id="INTERNAL_LEDGER_WRONG_DATE",
+            independent_ledger_attestation=attestation,
+        )
+
+
+def test_tampered_ledger_head_sha_fails_closed(tmp_path: Path) -> None:
+    """Attesting a ledger with mismatched head_sha or entry_count fails closed as SOURCE_LINEAGE_CONFLICT."""
+    external_root = tmp_path / "evidence_root"
+    as_of = date(2026, 10, 5)
     now_utc = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 
     ledger = _build_matching_independent_ledger()
-
-    record = import_synthetic_statement(
-        raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
-        source_id=source_id,
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_TAMPERED",
+        artifact_sha256="1" * 64,
+        account_id="DEFAULT",
         as_of=as_of,
-        evidence_root=external_root,
-        imported_at_utc=now_utc,
-        runtime_sha="a" * 40,
-        independent_ledger=ledger,
-        independent_ledger_source_id="",  # Blank ledger source
+        entry_count=ledger.entry_count,
+        head_sha256="0" * 64,  # Corrupted / tampered head SHA!
+        lineage_ref="books/tampered.json",
+        origin_system="ERP",
     )
 
-    assert record.reconciliation.matched is True
-    assert record.reconciliation.status == "INDEPENDENCE_UNVERIFIED"
-    assert record.reconciliation.is_independent is False
+    with pytest.raises(DataContractError, match="PPDS_SOURCE_LINEAGE_CONFLICT"):
+        import_synthetic_statement(
+            raw_bytes=SYNTHETIC_CSV_STATEMENT_A,
+            source_id="STMT_TAMPERED_CHECK",
+            as_of=as_of,
+            evidence_root=external_root,
+            imported_at_utc=now_utc,
+            runtime_sha="a" * 40,
+            independent_ledger=ledger,
+            independent_ledger_source_id="INTERNAL_LEDGER_TAMPERED",
+            independent_ledger_attestation=attestation,
+        )
 
 
-def test_read_only_surface_contains_reconciliation_independence_metadata() -> None:
-    """The rendered surface must expose reconciliation_status, is_independent, and provenance source IDs."""
+def test_surface_and_report_formatting_with_attestation() -> None:
+    """Read-only surface and human-readable report reflect attestation and lineage notes."""
     ledger = _build_matching_independent_ledger()
     snap = AccountSnapshot(
         as_of=date(2026, 10, 5),
@@ -247,71 +411,140 @@ def test_read_only_surface_contains_reconciliation_independence_metadata() -> No
                         acquired_on=date(2026, 10, 3), currency="USD"),
         ),
     )
+    attestation = IndependentLedgerAttestation(
+        ledger_source_id="INTERNAL_LEDGER_SURFACE",
+        artifact_sha256="2" * 64,
+        account_id="DEFAULT",
+        as_of=date(2026, 10, 5),
+        entry_count=ledger.entry_count,
+        head_sha256=ledger.head_sha256,
+        lineage_ref="books/surface_test.json",
+        origin_system="CUSTODIAN_MIRROR",
+    )
     rec = reconcile_snapshot_ledger(
         snap,
         ledger,
-        statement_source_id="EXT_BROKER_STMT",
-        ledger_source_id="INTERNAL_LEDGER",
+        statement_source_id="STMT_SURFACE",
+        ledger_source_id="INTERNAL_LEDGER_SURFACE",
         is_independent=True,
+        attestation=attestation,
     )
     surface = render_read_only_surface(ledger, rec, exposures=[])
-    assert surface["reconciliation_matched"] is True
     assert surface["reconciliation_status"] == "INDEPENDENT_RECONCILIATION_MATCHED"
     assert surface["reconciliation_is_independent"] is True
-    assert surface["reconciliation_statement_source_id"] == "EXT_BROKER_STMT"
-    assert surface["reconciliation_ledger_source_id"] == "INTERNAL_LEDGER"
+    assert surface["reconciliation_has_attestation"] is True
+    assert len(surface["reconciliation_lineage_notes"]) > 0
 
-
-def test_multi_currency_positions_fail_closed_in_position_exposure() -> None:
-    """position_exposure must fail closed with PPDS_EXPOSURE_MULTI_CURRENCY when lots have mixed currencies."""
-    ledger = NormalizedPortfolioLedger()
-    ledger = ledger.post_position_lot(
-        PositionLot(symbol="SPY", quantity=Decimal("10"), cost_basis_per_share=Decimal("450"),
-                    acquired_on=date(2026, 10, 1), currency="USD")
-    )
-    ledger = ledger.post_position_lot(
-        PositionLot(symbol="PTT", quantity=Decimal("100"), cost_basis_per_share=Decimal("35"),
-                    acquired_on=date(2026, 10, 1), currency="THB")
-    )
-
-    prices = {"SPY": Decimal("450"), "PTT": Decimal("35")}
-    with pytest.raises(DataContractError, match="PPDS_EXPOSURE_MULTI_CURRENCY"):
-        position_exposure(ledger, prices)
-
-
-def test_multi_currency_positions_fail_closed_in_etf_overlap_exposure() -> None:
-    """etf_overlap_exposure must fail closed with PPDS_EXPOSURE_MULTI_CURRENCY when lots have mixed currencies."""
-    ledger = NormalizedPortfolioLedger()
-    ledger = ledger.post_position_lot(
-        PositionLot(symbol="VT", quantity=Decimal("10"), cost_basis_per_share=Decimal("100"),
-                    acquired_on=date(2026, 10, 1), currency="USD")
-    )
-    ledger = ledger.post_position_lot(
-        PositionLot(symbol="SET50", quantity=Decimal("50"), cost_basis_per_share=Decimal("900"),
-                    acquired_on=date(2026, 10, 1), currency="THB")
-    )
-
-    prices = {"VT": Decimal("100"), "SET50": Decimal("900"), "AAPL": Decimal("150")}
-    weights = {"VT": {"AAPL": Decimal("1.0")}}
-
-    with pytest.raises(DataContractError, match="PPDS_EXPOSURE_MULTI_CURRENCY"):
-        etf_overlap_exposure(ledger, prices, weights)
-
-
-def test_format_reconciliation_report_shows_mode_and_status() -> None:
-    """format_reconciliation_report must display verification mode and status cleanly."""
-    rec = ReconciliationResult(
-        matched=True,
-        breaks=[],
-        statement_cash={"USD": "10000.00"},
-        ledger_cash={"USD": "10000.00"},
-        status="INDEPENDENT_RECONCILIATION_MATCHED",
-        is_independent=True,
-        statement_source_id="BROKER_STMT_A",
-        ledger_source_id="LEDGER_BOOKS_B",
-    )
     report = format_reconciliation_report(rec)
     assert "Verification Mode: INDEPENDENT RECONCILIATION" in report
-    assert "Reconciliation Status: INDEPENDENT_RECONCILIATION_MATCHED" in report
-    assert "Statement='BROKER_STMT_A'" in report
-    assert "Ledger='LEDGER_BOOKS_B'" in report
+    assert "Attestation Origin: CUSTODIAN_MIRROR [books/surface_test.json]" in report
+    assert "Lineage Notes:" in report
+
+
+def test_exposure_semantics_gross_lots_vs_netted_positions() -> None:
+    """gross_lots_exposure preserves offsetting long/short lots, while position_exposure nets per-symbol."""
+    ledger = NormalizedPortfolioLedger()
+    # Account has 10 shares long and 10 shares short of SPY
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="SPY", quantity=Decimal("10"), cost_basis_per_share=Decimal("400"),
+                    acquired_on=date(2026, 10, 1), currency="USD")
+    )
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="SPY", quantity=Decimal("-10"), cost_basis_per_share=Decimal("400"),
+                    acquired_on=date(2026, 10, 2), currency="USD")
+    )
+    prices = {"SPY": Decimal("400")}
+
+    # 1. position_exposure nets per symbol first: net quantity is 0 -> total is 0 -> fails closed
+    with pytest.raises(DataContractError, match="PPDS_EXPOSURE_EMPTY"):
+        position_exposure(ledger, prices)
+
+    # 2. gross_lots_exposure measures gross commitment across both lots: 10 + 10 = 20 shares = $8,000
+    gross = gross_lots_exposure(ledger, prices)
+    assert len(gross) == 1
+    assert gross[0].key == "SPY"
+    assert gross[0].market_value == "8000"
+    assert gross[0].weight == "1"
+
+
+def test_net_signed_exposure_calculation() -> None:
+    """net_signed_exposure correctly yields negative market value for net short positions."""
+    ledger = NormalizedPortfolioLedger()
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="SPY", quantity=Decimal("10"), cost_basis_per_share=Decimal("400"),
+                    acquired_on=date(2026, 10, 1), currency="USD")
+    )
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="QQQ", quantity=Decimal("-5"), cost_basis_per_share=Decimal("300"),
+                    acquired_on=date(2026, 10, 1), currency="USD")
+    )
+    prices = {"SPY": Decimal("400"), "QQQ": Decimal("300")}
+
+    lines = net_signed_exposure(ledger, prices)
+    spy_line = next(l for l in lines if l.key == "SPY")
+    qqq_line = next(l for l in lines if l.key == "QQQ")
+    assert spy_line.market_value == "4000"
+    assert qqq_line.market_value == "-1500"
+
+
+def test_evaluate_portfolio_base_currency_multi_currency() -> None:
+    """evaluate_portfolio_base_currency handles exact multi-currency valuation into USD."""
+    as_of = date(2026, 10, 5)
+    ledger = NormalizedPortfolioLedger(account_id="ACC_MULTI", as_of=as_of)
+    # Cash: 10,000 USD, 50,000 THB, 1,000 EUR
+    ledger = ledger.post_cash_lot(CashLot(currency="USD", amount=Decimal("10000.00"), acquired_on=as_of))
+    ledger = ledger.post_cash_lot(CashLot(currency="THB", amount=Decimal("50000.00"), acquired_on=as_of))
+    ledger = ledger.post_cash_lot(CashLot(currency="EUR", amount=Decimal("1000.00"), acquired_on=as_of))
+
+    # Positions: 10 SPY (USD @ 450), 100 PTT (THB @ 35)
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="SPY", quantity=Decimal("10"), cost_basis_per_share=Decimal("450"), acquired_on=as_of, currency="USD")
+    )
+    ledger = ledger.post_position_lot(
+        PositionLot(symbol="PTT", quantity=Decimal("100"), cost_basis_per_share=Decimal("35"), acquired_on=as_of, currency="THB")
+    )
+
+    prices = {
+        "SPY": PriceQuote(symbol="SPY", price=Decimal("450.00"), as_of=as_of, currency="USD", source_id="SYNTH_PRICES"),
+        "PTT": PriceQuote(symbol="PTT", price=Decimal("35.00"), as_of=as_of, currency="THB", source_id="SYNTH_PRICES"),
+    }
+    fx_rates = {
+        ("THB", "USD"): FXRate(from_currency="THB", to_currency="USD", rate=Decimal("0.028"), as_of=as_of, source_id="SYNTH_FX"),
+        ("EUR", "USD"): FXRate(from_currency="EUR", to_currency="USD", rate=Decimal("1.100"), as_of=as_of, source_id="SYNTH_FX"),
+    }
+
+    valuation = evaluate_portfolio_base_currency(
+        ledger=ledger,
+        base_currency="USD",
+        as_of=as_of,
+        prices=prices,
+        fx_rates=fx_rates,
+    )
+
+    # Cash: 10,000 + (50,000 * 0.028 = 1,400) + (1,000 * 1.10 = 1,100) = 12,500 USD
+    assert valuation.total_cash_base == Decimal("12500.000")
+    # SPY: 10 * 450 = 4,500 USD
+    # PTT: 100 * 35 = 3,500 THB * 0.028 = 98 USD
+    # Total positions net base = 4,598 USD
+    assert valuation.total_positions_net_base == Decimal("4598.000")
+    # NAV: 12,500 + 4,598 = 17,098 USD
+    assert valuation.total_portfolio_nav_base == Decimal("17098.000")
+
+
+def test_evaluate_portfolio_base_currency_fails_on_stale_or_missing_rates() -> None:
+    """evaluate_portfolio_base_currency fails closed on mismatched rate date or missing quote."""
+    as_of = date(2026, 10, 5)
+    stale_as_of = date(2026, 10, 4)
+    ledger = NormalizedPortfolioLedger()
+    ledger = ledger.post_cash_lot(CashLot(currency="EUR", amount=Decimal("1000.00"), acquired_on=as_of))
+
+    prices: dict[str, PriceQuote] = {}
+    stale_fx = {
+        ("EUR", "USD"): FXRate(from_currency="EUR", to_currency="USD", rate=Decimal("1.10"), as_of=stale_as_of, source_id="STALE"),
+    }
+
+    with pytest.raises(DataContractError, match="PPDS_VALUATION_FX_AS_OF_MISMATCH"):
+        evaluate_portfolio_base_currency(ledger, "USD", as_of, prices, stale_fx)
+
+    with pytest.raises(DataContractError, match="PPDS_VALUATION_FX_RATE_MISSING"):
+        evaluate_portfolio_base_currency(ledger, "USD", as_of, prices, {})

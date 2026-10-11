@@ -63,6 +63,20 @@ class ReconciliationBreak:
 
 
 @dataclass(frozen=True)
+class IndependentLedgerAttestation:
+    """Documented evidence attestation binding an independently supplied ledger to verified origin."""
+
+    ledger_source_id: str
+    artifact_sha256: str
+    account_id: str
+    as_of: date
+    entry_count: int
+    head_sha256: str
+    lineage_ref: str
+    origin_system: str
+
+
+@dataclass(frozen=True)
 class ReconciliationResult:
     matched: bool
     breaks: List[ReconciliationBreak]
@@ -72,6 +86,8 @@ class ReconciliationResult:
     is_independent: bool = False
     statement_source_id: Optional[str] = None
     ledger_source_id: Optional[str] = None
+    attestation: Optional[IndependentLedgerAttestation] = None
+    lineage_notes: Tuple[str, ...] = ()
 
 
 def _fmt(amount: Decimal) -> str:
@@ -280,16 +296,23 @@ def reconcile_snapshot_ledger(
     *,
     transactions: Sequence[StatementTransaction] = (),
     statement_source_id: Optional[str] = None,
+    statement_raw_sha256: Optional[str] = None,
     ledger_source_id: Optional[str] = None,
     is_independent: bool = False,
+    attestation: Optional[IndependentLedgerAttestation] = None,
 ) -> ReconciliationResult:
     """Reconcile a statement snapshot against a normalized ledger exactly.
 
     If transactions are provided, breaks are evaluated against documented
     evidence to classify as SUPPORTED_EXPLANATION, POSSIBLE_CAUSE, or UNEXPLAINED_MISMATCH.
 
-    Distinguishes SELF_CONSISTENCY (statement checked against its own derived ledger)
-    from INDEPENDENT_RECONCILIATION (checked against an independently established ledger).
+    Distinguishes:
+    - SELF_CONSISTENCY_VERIFIED: Statement checked against its own derived ledger.
+    - INDEPENDENT_RECONCILIATION_MATCHED: Checked against independently attested ledger.
+    - INDEPENDENT_RECONCILIATION_BREAKS: Checked against independent ledger with breaks.
+    - NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED: Balances match but independent lineage unverified.
+    - SOURCE_LINEAGE_CONFLICT: Attestation conflicts (account mismatch, as-of mismatch, tampered hash, self-masquerade).
+    - INDEPENDENCE_UNVERIFIED: Missing or identical source IDs when claiming independence.
     """
     seen_tx_ids: set[str] = set()
     duplicate_tx_ids: set[str] = set()
@@ -345,28 +368,108 @@ def reconcile_snapshot_ledger(
             ))
 
     matched = not breaks
+    lineage_notes: List[str] = []
+
     if is_independent:
         stmt_src = (statement_source_id or "").strip()
-        led_src = (ledger_source_id or "").strip()
+        led_src = (ledger_source_id or (attestation.ledger_source_id if attestation else "")).strip()
+
         if not stmt_src or not led_src:
             rec_status = "INDEPENDENCE_UNVERIFIED"
             is_indep = False
+            lineage_notes.append("Missing source identity for statement or ledger.")
         elif stmt_src == led_src:
-            # Cannot claim independence when both sources share the same identity
             rec_status = "INDEPENDENCE_UNVERIFIED"
             is_indep = False
-        elif matched:
-            rec_status = "INDEPENDENT_RECONCILIATION_MATCHED"
-            is_indep = True
+            lineage_notes.append("Statement and ledger share identical source identity.")
+        elif attestation is None:
+            # Caller asserted independence with different names, but supplied no verified lineage attestation!
+            if matched:
+                rec_status = "NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED"
+            else:
+                rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
+            is_indep = False
+            lineage_notes.append("Caller claimed independent reconciliation without verifiable IndependentLedgerAttestation.")
         else:
-            rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
-            is_indep = True
+            # Rigorous lineage attestation verification
+            conflict = False
+            if attestation.ledger_source_id != led_src:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Attestation ledger_source_id '{attestation.ledger_source_id}' does not match '{led_src}'."
+                )
+                conflict = True
+            elif statement_raw_sha256 and attestation.artifact_sha256 == statement_raw_sha256:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    "Attestation artifact SHA256 matches statement raw content SHA256 (self-origin masquerade)."
+                )
+                conflict = True
+            elif attestation.origin_system.upper() in {"SELF", "STATEMENT_DERIVATION", "STATEMENT_SYNTHETIC_DERIVATION"}:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Attestation origin_system '{attestation.origin_system}' indicates non-independent statement derivation."
+                )
+                conflict = True
+            elif snapshot.as_of != attestation.as_of:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Incompatible as-of dates: snapshot is {snapshot.as_of.isoformat()} but attestation is {attestation.as_of.isoformat()}."
+                )
+                conflict = True
+            elif ledger.as_of is not None and ledger.as_of != snapshot.as_of:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Incompatible as-of dates: snapshot is {snapshot.as_of.isoformat()} but ledger is {ledger.as_of.isoformat()}."
+                )
+                conflict = True
+            elif getattr(snapshot, "account_id", None) and attestation.account_id and snapshot.account_id != attestation.account_id:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Conflicting account identities: snapshot '{snapshot.account_id}' vs attestation '{attestation.account_id}'."
+                )
+                conflict = True
+            elif getattr(ledger, "account_id", None) and attestation.account_id and ledger.account_id != attestation.account_id:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Conflicting account identities: ledger '{ledger.account_id}' vs attestation '{attestation.account_id}'."
+                )
+                conflict = True
+            elif attestation.head_sha256 != ledger.head_sha256:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Ledger head SHA mismatch: expected {attestation.head_sha256[:16]}, got {ledger.head_sha256[:16]}."
+                )
+                conflict = True
+            elif attestation.entry_count != ledger.entry_count:
+                rec_status = "SOURCE_LINEAGE_CONFLICT"
+                lineage_notes.append(
+                    f"Ledger entry count mismatch: expected {attestation.entry_count}, got {ledger.entry_count}."
+                )
+                conflict = True
+
+            if conflict:
+                is_indep = False
+            elif matched:
+                rec_status = "INDEPENDENT_RECONCILIATION_MATCHED"
+                is_indep = True
+                lineage_notes.append(
+                    f"Verified independent ledger from '{attestation.origin_system}' [{attestation.lineage_ref}]."
+                )
+            else:
+                rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
+                is_indep = True
+                lineage_notes.append(
+                    f"Verified independent ledger from '{attestation.origin_system}' [{attestation.lineage_ref}] with breaks."
+                )
     else:
         is_indep = False
         if matched:
             rec_status = "SELF_CONSISTENCY_VERIFIED"
+            lineage_notes.append("Statement reconciled against self-derived ledger.")
         else:
             rec_status = "SELF_CONSISTENCY_BREAKS"
+            lineage_notes.append("Self-consistency breaks detected between statement and self-derived ledger.")
 
     return ReconciliationResult(
         matched=matched,
@@ -377,6 +480,8 @@ def reconcile_snapshot_ledger(
         is_independent=is_indep,
         statement_source_id=statement_source_id,
         ledger_source_id=ledger_source_id,
+        attestation=attestation,
+        lineage_notes=tuple(lineage_notes),
     )
 
 
@@ -391,8 +496,16 @@ def format_reconciliation_report(result: ReconciliationResult) -> str:
             f"Sources: Statement='{result.statement_source_id or 'UNKNOWN'}' vs "
             f"Ledger='{result.ledger_source_id or 'UNKNOWN'}'"
         )
+    if result.attestation:
+        lines.append(
+            f"Attestation Origin: {result.attestation.origin_system} [{result.attestation.lineage_ref}]"
+        )
     status_str = "MATCHED (NO BREAKS)" if result.matched else f"BREAKS DETECTED ({len(result.breaks)} breaks)"
     lines.append(f"Result: {status_str}")
+    if result.lineage_notes:
+        lines.append("Lineage Notes:")
+        for note in result.lineage_notes:
+            lines.append(f"  - {note}")
     lines.append("")
     if result.breaks:
         lines.append("Break Details:")

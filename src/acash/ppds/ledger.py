@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.ppds.lots import CashLot, PositionLot
@@ -51,6 +52,8 @@ class NormalizedPortfolioLedger:
     position_lots: Tuple[PositionLot, ...] = ()
     head_sha256: str = GENESIS_SHA256
     entry_count: int = 0
+    account_id: str = "DEFAULT"
+    as_of: Optional[date] = None
 
     def post_cash_lot(self, lot: CashLot) -> "NormalizedPortfolioLedger":
         head = _entry_sha256(self.head_sha256, "CASH_LOT", lot)
@@ -59,6 +62,8 @@ class NormalizedPortfolioLedger:
             position_lots=self.position_lots,
             head_sha256=head,
             entry_count=self.entry_count + 1,
+            account_id=self.account_id,
+            as_of=self.as_of,
         )
 
     def post_position_lot(self, lot: PositionLot) -> "NormalizedPortfolioLedger":
@@ -68,6 +73,8 @@ class NormalizedPortfolioLedger:
             position_lots=self.position_lots + (lot,),
             head_sha256=head,
             entry_count=self.entry_count + 1,
+            account_id=self.account_id,
+            as_of=self.as_of,
         )
 
     def cash_by_currency(self) -> Dict[str, Decimal]:
