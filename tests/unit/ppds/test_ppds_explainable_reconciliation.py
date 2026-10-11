@@ -79,6 +79,8 @@ def test_cash_break_supported_by_dividend_transaction() -> None:
         symbol="ACWI",
         description="Quarterly Dividend Distribution",
         provenance="SYNTHETIC_DIV_STMT_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     assert result.matched is False
@@ -99,6 +101,8 @@ def test_cash_break_ambiguous_transactions_is_possible_cause() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_REF_A",
+        settled=True,
+        already_reflected=False,
     )
     tx2 = StatementTransaction(
         transaction_id="TX_TRANSFER_002",
@@ -107,6 +111,8 @@ def test_cash_break_ambiguous_transactions_is_possible_cause() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_REF_B",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx1, tx2))
     cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
@@ -126,6 +132,8 @@ def test_position_break_supported_by_trade_transaction() -> None:
         symbol="ACWI",
         description="Market Buy 10 shares",
         provenance="SYNTHETIC_TRADE_CONFIRM_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     pos_break = next(b for b in result.breaks if b.scope == "POSITION" and b.key == "ACWI")
@@ -145,6 +153,8 @@ def test_position_break_unexplained_when_symbol_or_quantity_mismatches() -> None
         quantity=Decimal("10"),
         symbol="SPY",  # Target is ACWI
         provenance="SYNTHETIC_REF",
+        settled=True,
+        already_reflected=False,
     )
     wrong_qty_tx = StatementTransaction(
         transaction_id="TX_WRONG_QTY",
@@ -155,6 +165,8 @@ def test_position_break_unexplained_when_symbol_or_quantity_mismatches() -> None
         quantity=Decimal("9"),  # Target delta is 10
         symbol="ACWI",
         provenance="SYNTHETIC_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(wrong_symbol_tx, wrong_qty_tx))
     pos_break = next(b for b in result.breaks if b.scope == "POSITION" and b.key == "ACWI")
@@ -170,6 +182,8 @@ def test_conflicting_currency_never_explains_cash_break() -> None:
         currency="EUR",  # Target delta is in USD
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_EUR_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(eur_tx,))
     cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
@@ -185,6 +199,8 @@ def test_format_reconciliation_report_with_breaks() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_DIV_STMT_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     report = format_reconciliation_report(result)
@@ -204,6 +220,8 @@ def test_surface_rendering_with_diagnostic_breaks() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_DIV_STMT_REF",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     surface = render_read_only_surface(_ledger(), result, exposures=[])
@@ -224,6 +242,8 @@ def test_unproven_provenance_demotes_to_possible_cause() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="",  # Missing provenance
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
@@ -330,6 +350,8 @@ def test_same_transaction_cannot_explain_two_breaks() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_USD_PROV",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(snap, ledger, transactions=(tx_usd,))
     usd_break = next(b for b in result.breaks if b.key == "USD")
@@ -348,9 +370,50 @@ def test_invalid_record_type_demotes_to_possible_cause() -> None:
         currency="USD",
         amount=Decimal("150.00"),
         provenance="SYNTHETIC_PROV",
+        settled=True,
+        already_reflected=False,
     )
     result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
     cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
     assert cash_break.status == "POSSIBLE_CAUSE"
     assert "invalid record type" in (cash_break.explanation or "")
+
+
+def test_unspecified_settlement_status_demotes_to_possible_cause() -> None:
+    # Caller does not attest settled status (defaults to None / unverified)
+    tx = StatementTransaction(
+        transaction_id="TX_SETTLED_UNKNOWN",
+        transaction_date=date(2026, 9, 29),
+        record_type="DIVIDEND",
+        currency="USD",
+        amount=Decimal("150.00"),
+        provenance="SYNTHETIC_PROV",
+        settled=None,  # Unverified
+        already_reflected=False,
+    )
+    result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
+    cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
+    assert cash_break.status == "POSSIBLE_CAUSE"
+    assert "settlement status is unverified/unknown" in (cash_break.explanation or "")
+    assert cash_break.evidence_refs == ("TX_SETTLED_UNKNOWN",)
+
+
+def test_unspecified_already_reflected_status_demotes_to_possible_cause() -> None:
+    # Caller does not attest whether transaction is already reflected (defaults to None / unverified)
+    tx = StatementTransaction(
+        transaction_id="TX_REFLECTED_UNKNOWN",
+        transaction_date=date(2026, 9, 29),
+        record_type="DIVIDEND",
+        currency="USD",
+        amount=Decimal("150.00"),
+        provenance="SYNTHETIC_PROV",
+        settled=True,
+        already_reflected=None,  # Unverified
+    )
+    result = reconcile_snapshot_ledger(_snapshot(), _ledger(), transactions=(tx,))
+    cash_break = next(b for b in result.breaks if b.scope == "CASH" and b.key == "USD")
+    assert cash_break.status == "POSSIBLE_CAUSE"
+    assert "ledger posting status is unverified/unknown" in (cash_break.explanation or "")
+    assert cash_break.evidence_refs == ("TX_REFLECTED_UNKNOWN",)
+
 

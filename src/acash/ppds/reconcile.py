@@ -37,9 +37,9 @@ class StatementTransaction:
     quantity: Optional[Decimal] = None  # Share quantity delta for positions
     symbol: Optional[str] = None
     description: str = ""
-    settled: bool = True
+    settled: Optional[bool] = None  # None = unknown/unverified, True = confirmed settled, False = pending
     provenance: str = ""  # Documented source statement or audit confirmation ref
-    already_reflected: bool = False  # True if transaction is already posted in internal ledger
+    already_reflected: Optional[bool] = None  # None = unknown/unverified, True = posted to ledger, False = unposted
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,7 @@ def _diagnose_cash_break(
         tx for tx in transactions
         if tx.currency == currency and tx.amount == delta
     ]
-    unreflected_matching = [tx for tx in all_matching if not tx.already_reflected]
+    unreflected_matching = [tx for tx in all_matching if tx.already_reflected is not True]
 
     if not unreflected_matching:
         if all_matching:
@@ -128,10 +128,24 @@ def _diagnose_cash_break(
         )
         return "POSSIBLE_CAUSE", expl, (tx_id,)
 
+    if tx.settled is None:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but settlement status is unverified/unknown"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
     if not tx.settled:
         expl = (
             f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
             f"but transaction status is unsettled/pending"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.already_reflected is None:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but ledger posting status is unverified/unknown"
         )
         return "POSSIBLE_CAUSE", expl, (tx_id,)
 
@@ -171,7 +185,7 @@ def _diagnose_position_break(
         tx for tx in transactions
         if tx.symbol == symbol and tx.quantity == delta
     ]
-    unreflected_matching = [tx for tx in all_matching if not tx.already_reflected]
+    unreflected_matching = [tx for tx in all_matching if tx.already_reflected is not True]
 
     if not unreflected_matching:
         if all_matching:
@@ -212,10 +226,24 @@ def _diagnose_position_break(
         )
         return "POSSIBLE_CAUSE", expl, (tx_id,)
 
+    if tx.settled is None:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but settlement status is unverified/unknown"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
     if not tx.settled:
         expl = (
             f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
             f"but transaction status is unsettled/pending"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.already_reflected is None:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but ledger posting status is unverified/unknown"
         )
         return "POSSIBLE_CAUSE", expl, (tx_id,)
 
