@@ -33,6 +33,10 @@ def render_read_only_surface(
             for symbol, quantity in sorted(ledger.quantity_by_symbol().items())
         },
         "reconciliation_matched": reconciliation.matched,
+        "reconciliation_status": reconciliation.status,
+        "reconciliation_is_independent": reconciliation.is_independent,
+        "reconciliation_statement_source_id": reconciliation.statement_source_id,
+        "reconciliation_ledger_source_id": reconciliation.ledger_source_id,
         "reconciliation_breaks": [
             {
                 "scope": item.scope,
