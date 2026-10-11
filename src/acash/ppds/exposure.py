@@ -35,7 +35,21 @@ def _require_price(prices: Mapping[str, Decimal], symbol: str) -> Decimal:
 def position_exposure(
     ledger: NormalizedPortfolioLedger, prices: Mapping[str, Decimal]
 ) -> List[ExposureLine]:
-    """Per-symbol market-value exposure with exact weights (sum to 1)."""
+    """Gross absolute per-symbol market-value concentration with exact weights (sum to 1).
+
+    Semantics:
+    - Calculates gross absolute concentration using abs(quantity).
+    - Requires all positions to share a single currency domain. If multiple currencies
+      are present, fails closed with DataContractError until explicit FX conversion is supplied.
+    - Does NOT represent net directional exposure or multi-currency portfolio allocation.
+    """
+    currencies = {lot.currency for lot in ledger.position_lots}
+    if len(currencies) > 1:
+        raise DataContractError(
+            f"PPDS_EXPOSURE_MULTI_CURRENCY: positions span multiple currencies {sorted(currencies)}; "
+            "cannot aggregate gross exposure without explicit FX conversion."
+        )
+
     quantities = ledger.quantity_by_symbol()
     values: Dict[str, Decimal] = {}
     for symbol, quantity in quantities.items():
@@ -63,6 +77,12 @@ def etf_overlap_exposure(
     weights summing to exactly 1 per ETF. Constituent prices come from the
     explicit prices map.
     """
+    currencies = {lot.currency for lot in ledger.position_lots}
+    if len(currencies) > 1:
+        raise DataContractError(
+            f"PPDS_EXPOSURE_MULTI_CURRENCY: ETF overlap positions span multiple currencies {sorted(currencies)}; "
+            "cannot aggregate decomposition without explicit FX conversion."
+        )
     decomposed: Dict[str, Decimal] = {}
     for lot in ledger.position_lots:
         weights = constituent_weights.get(lot.symbol)

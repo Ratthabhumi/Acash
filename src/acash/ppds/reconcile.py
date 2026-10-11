@@ -68,6 +68,10 @@ class ReconciliationResult:
     breaks: List[ReconciliationBreak]
     statement_cash: Dict[str, str]
     ledger_cash: Dict[str, str]
+    status: str = "SELF_CONSISTENCY_VERIFIED"
+    is_independent: bool = False
+    statement_source_id: Optional[str] = None
+    ledger_source_id: Optional[str] = None
 
 
 def _fmt(amount: Decimal) -> str:
@@ -275,11 +279,17 @@ def reconcile_snapshot_ledger(
     ledger: NormalizedPortfolioLedger,
     *,
     transactions: Sequence[StatementTransaction] = (),
+    statement_source_id: Optional[str] = None,
+    ledger_source_id: Optional[str] = None,
+    is_independent: bool = False,
 ) -> ReconciliationResult:
-    """Reconcile a statement snapshot against the normalized ledger exactly.
+    """Reconcile a statement snapshot against a normalized ledger exactly.
 
     If transactions are provided, breaks are evaluated against documented
     evidence to classify as SUPPORTED_EXPLANATION, POSSIBLE_CAUSE, or UNEXPLAINED_MISMATCH.
+
+    Distinguishes SELF_CONSISTENCY (statement checked against its own derived ledger)
+    from INDEPENDENT_RECONCILIATION (checked against an independently established ledger).
     """
     seen_tx_ids: set[str] = set()
     duplicate_tx_ids: set[str] = set()
@@ -334,19 +344,55 @@ def reconcile_snapshot_ledger(
                 evidence_refs=evidence_refs,
             ))
 
+    matched = not breaks
+    if is_independent:
+        stmt_src = (statement_source_id or "").strip()
+        led_src = (ledger_source_id or "").strip()
+        if not stmt_src or not led_src:
+            rec_status = "INDEPENDENCE_UNVERIFIED"
+            is_indep = False
+        elif stmt_src == led_src:
+            # Cannot claim independence when both sources share the same identity
+            rec_status = "INDEPENDENCE_UNVERIFIED"
+            is_indep = False
+        elif matched:
+            rec_status = "INDEPENDENT_RECONCILIATION_MATCHED"
+            is_indep = True
+        else:
+            rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
+            is_indep = True
+    else:
+        is_indep = False
+        if matched:
+            rec_status = "SELF_CONSISTENCY_VERIFIED"
+        else:
+            rec_status = "SELF_CONSISTENCY_BREAKS"
+
     return ReconciliationResult(
-        matched=not breaks,
+        matched=matched,
         breaks=breaks,
         statement_cash={k: _fmt(v) for k, v in snap_cash.items()},
         ledger_cash={k: _fmt(v) for k, v in led_cash.items()},
+        status=rec_status,
+        is_independent=is_indep,
+        statement_source_id=statement_source_id,
+        ledger_source_id=ledger_source_id,
     )
 
 
 def format_reconciliation_report(result: ReconciliationResult) -> str:
     """Generate a deterministic human-readable text report for operator review."""
     lines: List[str] = ["=== PPDS RECONCILIATION REPORT ==="]
+    mode_str = "INDEPENDENT RECONCILIATION" if result.is_independent else "SELF-CONSISTENCY CHECK"
+    lines.append(f"Verification Mode: {mode_str}")
+    lines.append(f"Reconciliation Status: {result.status}")
+    if result.statement_source_id or result.ledger_source_id:
+        lines.append(
+            f"Sources: Statement='{result.statement_source_id or 'UNKNOWN'}' vs "
+            f"Ledger='{result.ledger_source_id or 'UNKNOWN'}'"
+        )
     status_str = "MATCHED (NO BREAKS)" if result.matched else f"BREAKS DETECTED ({len(result.breaks)} breaks)"
-    lines.append(f"Status: {status_str}")
+    lines.append(f"Result: {status_str}")
     lines.append("")
     if result.breaks:
         lines.append("Break Details:")
@@ -362,3 +408,4 @@ def format_reconciliation_report(result: ReconciliationResult) -> str:
     else:
         lines.append("All cash balances and position quantities match ledger perfectly.")
     return "\n".join(lines)
+

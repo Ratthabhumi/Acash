@@ -17,7 +17,11 @@ from acash.evidence import (
     write_immutable_bytes,
 )
 from acash.ppds.ledger import NormalizedPortfolioLedger
-from acash.ppds.reconcile import ReconciliationResult, reconcile_snapshot_ledger
+from acash.ppds.reconcile import (
+    ReconciliationResult,
+    StatementTransaction,
+    reconcile_snapshot_ledger,
+)
 from acash.ppds.statement_ingest import AccountSnapshot, ingest_account_snapshot, parse_statement_csv
 
 
@@ -88,6 +92,9 @@ def import_synthetic_statement(
     adapter: Optional[BrokerStatementAdapter] = None,
     imported_at_utc: Optional[datetime] = None,
     runtime_sha: Optional[str] = None,
+    independent_ledger: Optional[NormalizedPortfolioLedger] = None,
+    independent_ledger_source_id: Optional[str] = None,
+    transactions: Sequence[StatementTransaction] = (),
 ) -> ImportedStatementRecord:
     """Import raw synthetic statement bytes into immutable Evidence Plane and normalize.
 
@@ -96,7 +103,9 @@ def import_synthetic_statement(
     2. Write raw payload immutably to Evidence Plane (never overwrite).
     3. Parse rows using adapter (Protocol-based, synthetic only).
     4. Normalize into AccountSnapshot and post sequentially to NormalizedPortfolioLedger.
-    5. Reconcile snapshot against ledger (exact equality required).
+    5. Reconcile snapshot against target ledger (exact equality required).
+       - If independent_ledger is provided: reconciles against independent ledger.
+       - If independent_ledger is omitted: reconciles against self-derived ledger (SELF_CONSISTENCY).
     6. Seal provenance manifest immutably using neutral Evidence Plane V1.1 RetrievalRunManifest.
     """
     if not isinstance(raw_bytes, (bytes, bytearray)) or not raw_bytes:
@@ -129,19 +138,39 @@ def import_synthetic_statement(
     # Step 4: Normalize lots and build snapshot
     snapshot = ingest_account_snapshot(rows, as_of)
 
-    # Step 5: Post lots to normalized ledger
-    ledger = NormalizedPortfolioLedger()
+    # Step 5: Post lots to self-derived normalized ledger
+    self_ledger = NormalizedPortfolioLedger()
     for cash_lot in snapshot.cash_lots:
-        ledger = ledger.post_cash_lot(cash_lot)
+        self_ledger = self_ledger.post_cash_lot(cash_lot)
     for pos_lot in snapshot.position_lots:
-        ledger = ledger.post_position_lot(pos_lot)
+        self_ledger = self_ledger.post_position_lot(pos_lot)
 
-    # Step 6: Exact reconciliation
-    reconciliation = reconcile_snapshot_ledger(snapshot, ledger)
-    if not reconciliation.matched:
-        raise DataContractError(
-            f"PPDS_IMPORT_RECONCILIATION_FAILED: breaks={reconciliation.breaks}."
+    # Step 6: Reconciliation
+    if independent_ledger is not None:
+        target_ledger = independent_ledger
+        target_ledger_source = (independent_ledger_source_id or "").strip()
+        reconciliation = reconcile_snapshot_ledger(
+            snapshot,
+            target_ledger,
+            transactions=transactions,
+            statement_source_id=source_id,
+            ledger_source_id=target_ledger_source,
+            is_independent=True,
         )
+    else:
+        target_ledger = self_ledger
+        reconciliation = reconcile_snapshot_ledger(
+            snapshot,
+            self_ledger,
+            transactions=transactions,
+            statement_source_id=source_id,
+            ledger_source_id=source_id,
+            is_independent=False,
+        )
+        if not reconciliation.matched:
+            raise DataContractError(
+                f"PPDS_IMPORT_SELF_CONSISTENCY_FAILED: breaks={reconciliation.breaks}."
+            )
 
     # Step 7: Seal provenance run manifest in Evidence Plane V1.1
     current_sha = runtime_sha or get_current_runtime_sha()
@@ -166,6 +195,8 @@ def import_synthetic_statement(
             "statement_as_of": as_of.isoformat(),
             "adapter_id": active_adapter.adapter_id,
             "ingestion_mode": "SYNTHETIC_INGESTION",
+            "reconciliation_status": reconciliation.status,
+            "reconciliation_is_independent": reconciliation.is_independent,
         },
         runtime_sha=current_sha,
         authority_ref=None,
@@ -196,7 +227,7 @@ def import_synthetic_statement(
         manifest_sha256=manifest.manifest_sha256(),
         adapter_id=active_adapter.adapter_id,
         snapshot=snapshot,
-        ledger=ledger,
+        ledger=target_ledger,
         reconciliation=reconciliation,
         evidence_path=target_dir,
         bound_cash_lots=bound_cash,
