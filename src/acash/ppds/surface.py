@@ -35,6 +35,8 @@ def render_read_only_surface(
         "reconciliation_matched": reconciliation.matched,
         "reconciliation_status": reconciliation.status,
         "reconciliation_is_independent": reconciliation.is_independent,
+        "reconciliation_evidence_integrity_status": getattr(reconciliation, "evidence_integrity_status", "UNATTESTED"),
+        "reconciliation_source_independence_status": getattr(reconciliation, "source_independence_status", "SELF_ORIGIN"),
         "reconciliation_statement_source_id": reconciliation.statement_source_id,
         "reconciliation_ledger_source_id": reconciliation.ledger_source_id,
         "reconciliation_has_attestation": reconciliation.attestation is not None,
