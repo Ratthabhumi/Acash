@@ -8,9 +8,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 
 import httpx
 
@@ -23,9 +24,39 @@ from acash.research.ri01.probe import RI01ProbeAuthority, RI01ProbeClient
 PINNED_RUNTIME = "cf63f15800099967f4c45d3df66e87a66a012eac"
 
 
+class _DispatchWindowEnforcingTransport(httpx.BaseTransport):
+    """Fail-closed dispatch-time authority window enforcement before every HTTP request."""
+
+    def __init__(
+        self,
+        inner: httpx.BaseTransport,
+        authority: RI01ProbeAuthority,
+        calendar: NyseCa1Calendar,
+        runtime: str,
+        clock: Callable[[], datetime],
+    ) -> None:
+        self._inner = inner
+        self._authority = authority
+        self._calendar = calendar
+        self._runtime = runtime
+        self._clock = clock
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        current_time = self._clock()
+        self._authority.validate(current_time, self._runtime, self._calendar)
+        return self._inner.handle_request(request)
+
+    def close(self) -> None:
+        self._inner.close()
+
+
 def execute_once(
-    authority: RI01ProbeAuthority, claims_dir: Path, expected_driver_sha256: str,
-    *, transport: Optional[httpx.BaseTransport] = None, now: Optional[datetime] = None,
+    authority: RI01ProbeAuthority,
+    claims_dir: Path,
+    expected_driver_sha256: str,
+    *,
+    transport: Optional[httpx.BaseTransport] = None,
+    now: Optional[Union[datetime, Callable[[], datetime]]] = None,
 ) -> Dict[str, Any]:
     """One Canary2 operation. Claims persist across processes and all failures."""
     driver_path = Path(__file__).resolve()
@@ -35,7 +66,16 @@ def execute_once(
     runtime = get_current_runtime_sha()
     if runtime != PINNED_RUNTIME or authority.runtime_sha != PINNED_RUNTIME:
         raise DataContractError("CANARY_RUNTIME_MISMATCH")
-    instant = now or datetime.now(timezone.utc)
+
+    clock: Callable[[], datetime]
+    if callable(now):
+        clock = now
+    elif isinstance(now, datetime):
+        clock = lambda: now
+    else:
+        clock = lambda: datetime.now(timezone.utc)
+
+    instant = clock()
     calendar = NyseCa1Calendar()
     authority.validate(instant, runtime, calendar)
     if authority.session.isoformat() != "2018-06-01" or authority.capability != "bars" or authority.max_requests != 3:
@@ -62,20 +102,55 @@ def execute_once(
     write_immutable_json(claims / f"authority-hash-{authority.authority_sha256}.json", receipt)
     write_immutable_json(claims / f"root-{root_key}.json", receipt)
     write_immutable_json(root / "single-operation-start.json", receipt)
-    client = RI01ProbeClient(transport=transport)
+
+    inner_transport = transport if transport is not None else httpx.HTTPTransport()
+    enforcing_transport = _DispatchWindowEnforcingTransport(
+        inner=inner_transport,
+        authority=authority,
+        calendar=calendar,
+        runtime=runtime,
+        clock=clock,
+    )
+    client = RI01ProbeClient(transport=enforcing_transport)
     failure: Optional[str] = None
     try:
         # Recheck the real clock immediately before HTTP, after reservations.
-        authority.validate(now or datetime.now(timezone.utc), runtime, calendar)
-        client.fetch_bars(authority, calendar, now or datetime.now(timezone.utc))
+        authority.validate(clock(), runtime, calendar)
+        client.fetch_bars(authority, calendar, clock())
     except Exception as exc:
         failure = type(exc).__name__  # Never persist arbitrary provider/error text.
     finally:
         client._http.close()
+
+    target_dir = root / authority.session.isoformat() / "bars"
+    manifest_path = target_dir / "manifest.json"
+    qual_path = target_dir / "qualification.json"
+
+    retrieval_status: Optional[str] = None
+    if manifest_path.is_file():
+        try:
+            retrieval_status = json.loads(manifest_path.read_text()).get("status")
+        except Exception:
+            pass
+
+    qualification_status: Optional[str] = None
+    if client.last_qualification_record is not None:
+        qualification_status = client.last_qualification_record.status
+    elif qual_path.is_file():
+        try:
+            qualification_status = json.loads(qual_path.read_text()).get("status")
+        except Exception:
+            pass
+
     result: Dict[str, Any] = {
-        "authority_sha256": authority.authority_sha256, "driver_sha256": driver_sha,
-        "runtime_sha": runtime, "local_http_invocations": client.requests_issued,
-        "failure_type": failure, "requires_independent_disk_audit": True,
+        "authority_sha256": authority.authority_sha256,
+        "driver_sha256": driver_sha,
+        "runtime_sha": runtime,
+        "local_http_invocations": client.requests_issued,
+        "failure_type": failure,
+        "retrieval_status": retrieval_status,
+        "qualification_status": qualification_status,
+        "requires_independent_disk_audit": True,
     }
     write_immutable_json(root / "single-operation-result.json", result)
     return result
@@ -96,7 +171,10 @@ def main() -> None:
     if subprocess.check_output(["git", "status", "--porcelain"], text=True).strip():
         raise DataContractError("CANARY_CHECKOUT_DIRTY")
     authority = RI01ProbeAuthority.from_dict(json.loads(Path(args.authority_file).read_text()))
-    print(json.dumps(execute_once(authority, Path(args.claims_dir), args.expected_driver_sha256)))
+    result = execute_once(authority, Path(args.claims_dir), args.expected_driver_sha256)
+    print(json.dumps(result))
+    if result.get("failure_type") is not None or result.get("qualification_status") != "QUALIFIED":
+        sys.exit(1)
 
 
 if __name__ == "__main__":
