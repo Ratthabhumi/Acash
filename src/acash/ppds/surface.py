@@ -37,6 +37,8 @@ def render_read_only_surface(
         "reconciliation_is_independent": reconciliation.is_independent,
         "reconciliation_statement_source_id": reconciliation.statement_source_id,
         "reconciliation_ledger_source_id": reconciliation.ledger_source_id,
+        "reconciliation_has_attestation": reconciliation.attestation is not None,
+        "reconciliation_lineage_notes": list(reconciliation.lineage_notes),
         "reconciliation_breaks": [
             {
                 "scope": item.scope,

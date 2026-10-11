@@ -18,6 +18,7 @@ from acash.evidence import (
 )
 from acash.ppds.ledger import NormalizedPortfolioLedger
 from acash.ppds.reconcile import (
+    IndependentLedgerAttestation,
     ReconciliationResult,
     StatementTransaction,
     reconcile_snapshot_ledger,
@@ -95,6 +96,8 @@ def import_synthetic_statement(
     independent_ledger: Optional[NormalizedPortfolioLedger] = None,
     independent_ledger_source_id: Optional[str] = None,
     transactions: Sequence[StatementTransaction] = (),
+    independent_ledger_attestation: Optional[IndependentLedgerAttestation] = None,
+    account_id: str = "DEFAULT",
 ) -> ImportedStatementRecord:
     """Import raw synthetic statement bytes into immutable Evidence Plane and normalize.
 
@@ -102,9 +105,10 @@ def import_synthetic_statement(
     1. Validate external evidence root (fail-closed against repo-local and HYP_011).
     2. Write raw payload immutably to Evidence Plane (never overwrite).
     3. Parse rows using adapter (Protocol-based, synthetic only).
-    4. Normalize into AccountSnapshot and post sequentially to NormalizedPortfolioLedger.
-    5. Reconcile snapshot against target ledger (exact equality required).
-       - If independent_ledger is provided: reconciles against independent ledger.
+    4. Normalize into AccountSnapshot with validated account_id.
+    5. Reconcile snapshot against target ledger:
+       - If independent_ledger is provided: reconciles against independent ledger, validating
+         any supplied IndependentLedgerAttestation for cryptographic/lineage proof.
        - If independent_ledger is omitted: reconciles against self-derived ledger (SELF_CONSISTENCY).
     6. Seal provenance manifest immutably using neutral Evidence Plane V1.1 RetrievalRunManifest.
     """
@@ -135,11 +139,11 @@ def import_synthetic_statement(
     if not rows:
         raise DataContractError("PPDS_IMPORT_NO_DATA_ROWS.")
 
-    # Step 4: Normalize lots and build snapshot
-    snapshot = ingest_account_snapshot(rows, as_of)
+    # Step 4: Normalize lots and build snapshot with account_id
+    snapshot = ingest_account_snapshot(rows, as_of, account_id=account_id)
 
     # Step 5: Post lots to self-derived normalized ledger
-    self_ledger = NormalizedPortfolioLedger()
+    self_ledger = NormalizedPortfolioLedger(account_id=account_id, as_of=as_of)
     for cash_lot in snapshot.cash_lots:
         self_ledger = self_ledger.post_cash_lot(cash_lot)
     for pos_lot in snapshot.position_lots:
@@ -148,15 +152,24 @@ def import_synthetic_statement(
     # Step 6: Reconciliation
     if independent_ledger is not None:
         target_ledger = independent_ledger
-        target_ledger_source = (independent_ledger_source_id or "").strip()
+        target_ledger_source = (
+            independent_ledger_source_id
+            or (independent_ledger_attestation.ledger_source_id if independent_ledger_attestation else "")
+        ).strip()
         reconciliation = reconcile_snapshot_ledger(
             snapshot,
             target_ledger,
             transactions=transactions,
             statement_source_id=source_id,
+            statement_raw_sha256=raw_sha,
             ledger_source_id=target_ledger_source,
             is_independent=True,
+            attestation=independent_ledger_attestation,
         )
+        if reconciliation.status == "SOURCE_LINEAGE_CONFLICT":
+            raise DataContractError(
+                f"PPDS_SOURCE_LINEAGE_CONFLICT: {'; '.join(reconciliation.lineage_notes)}"
+            )
     else:
         target_ledger = self_ledger
         reconciliation = reconcile_snapshot_ledger(
@@ -164,6 +177,7 @@ def import_synthetic_statement(
             self_ledger,
             transactions=transactions,
             statement_source_id=source_id,
+            statement_raw_sha256=raw_sha,
             ledger_source_id=source_id,
             is_independent=False,
         )
@@ -192,11 +206,13 @@ def import_synthetic_statement(
         operation="statement_import",
         subject_metadata={
             "source_id": source_id,
+            "account_id": account_id,
             "statement_as_of": as_of.isoformat(),
             "adapter_id": active_adapter.adapter_id,
             "ingestion_mode": "SYNTHETIC_INGESTION",
             "reconciliation_status": reconciliation.status,
             "reconciliation_is_independent": reconciliation.is_independent,
+            "has_attestation": independent_ledger_attestation is not None,
         },
         runtime_sha=current_sha,
         authority_ref=None,
