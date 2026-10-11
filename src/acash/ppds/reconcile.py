@@ -17,18 +17,29 @@ from acash.ppds.ledger import NormalizedPortfolioLedger
 from acash.ppds.statement_ingest import AccountSnapshot
 
 
+VALID_CASH_RECORD_TYPES = {
+    "DIVIDEND", "FEE", "TRANSFER", "INTEREST", "TAX", "TRADE", "CORPORATE_ACTION"
+}
+VALID_POSITION_RECORD_TYPES = {
+    "TRADE", "CORPORATE_ACTION", "TRANSFER", "SPLIT"
+}
+
+
 @dataclass(frozen=True)
 class StatementTransaction:
     """Read-only synthetic transaction evidence item (dividend, trade, fee, etc.)."""
 
     transaction_id: str
     transaction_date: date
-    record_type: str  # DIVIDEND, FEE, TRADE, CORPORATE_ACTION, TRANSFER
+    record_type: str  # DIVIDEND, FEE, TRADE, CORPORATE_ACTION, TRANSFER, TAX, INTEREST
     currency: str
     amount: Decimal  # Cash delta or value
     quantity: Optional[Decimal] = None  # Share quantity delta for positions
     symbol: Optional[str] = None
     description: str = ""
+    settled: bool = True
+    provenance: str = ""  # Documented source statement or audit confirmation ref
+    already_reflected: bool = False  # True if transaction is already posted in internal ledger
 
 
 @dataclass(frozen=True)
@@ -67,52 +78,168 @@ def _diagnose_cash_break(
     currency: str,
     delta: Decimal,
     transactions: Sequence[StatementTransaction],
+    as_of: date,
+    duplicate_tx_ids: set[str],
+    consumed_tx_ids: set[str],
 ) -> Tuple[str, Optional[str], Tuple[str, ...]]:
-    """Match cash difference against explicit transaction evidence (never guess)."""
-    matches: List[StatementTransaction] = [
+    """Match cash difference against explicit transaction evidence with causal validation."""
+    all_matching = [
         tx for tx in transactions
         if tx.currency == currency and tx.amount == delta
     ]
-    if len(matches) == 1:
-        tx = matches[0]
-        desc = f" ({tx.description})" if tx.description else ""
-        expl = (
-            f"Documented {tx.record_type} transaction {tx.transaction_id}"
-            f" matches cash difference {delta} {currency}{desc}"
-        )
-        return "SUPPORTED_EXPLANATION", expl, (tx.transaction_id,)
-    if len(matches) > 1:
-        ids = tuple(tx.transaction_id for tx in matches)
+    unreflected_matching = [tx for tx in all_matching if not tx.already_reflected]
+
+    if not unreflected_matching:
+        if all_matching:
+            ids = tuple(tx.transaction_id for tx in all_matching)
+            expl = (
+                f"Matching transactions ({', '.join(ids)}) are already reflected in internal ledger; "
+                f"cannot explain unreflected cash difference {delta} {currency}"
+            )
+            return "UNEXPLAINED_MISMATCH", expl, ()
+        return "UNEXPLAINED_MISMATCH", None, ()
+
+    if len(unreflected_matching) > 1:
+        ids = tuple(tx.transaction_id for tx in unreflected_matching)
         expl = f"Multiple candidate transactions match cash difference {delta} {currency}: {', '.join(ids)}"
         return "POSSIBLE_CAUSE", expl, ids
 
-    return "UNEXPLAINED_MISMATCH", None, ()
+    tx = unreflected_matching[0]
+    tx_id = tx.transaction_id
+
+    if tx_id in consumed_tx_ids:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but was already consumed by another reconciliation break"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx_id in duplicate_tx_ids:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but transaction ID is duplicated across evidence records"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.transaction_date > as_of:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but transaction date {tx.transaction_date.isoformat()} is after statement as-of {as_of.isoformat()}"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if not tx.settled:
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but transaction status is unsettled/pending"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if not tx.provenance or not tx.provenance.strip():
+        expl = (
+            f"Candidate transaction {tx_id} matches cash difference {delta} {currency} "
+            f"but lacks documented source provenance"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.record_type.upper() not in VALID_CASH_RECORD_TYPES:
+        expl = (
+            f"Candidate transaction {tx_id} matches amount {delta} {currency} "
+            f"but has invalid record type '{tx.record_type}' for cash discrepancy"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    consumed_tx_ids.add(tx_id)
+    desc = f" ({tx.description})" if tx.description else ""
+    expl = (
+        f"Documented {tx.record_type} transaction {tx_id} [{tx.provenance}]"
+        f" matches cash difference {delta} {currency}{desc}"
+    )
+    return "SUPPORTED_EXPLANATION", expl, (tx_id,)
 
 
 def _diagnose_position_break(
     symbol: str,
     delta: Decimal,
     transactions: Sequence[StatementTransaction],
+    as_of: date,
+    duplicate_tx_ids: set[str],
+    consumed_tx_ids: set[str],
 ) -> Tuple[str, Optional[str], Tuple[str, ...]]:
-    """Match position quantity difference against explicit transaction evidence."""
-    matches: List[StatementTransaction] = [
+    """Match position quantity difference against explicit transaction evidence with causal validation."""
+    all_matching = [
         tx for tx in transactions
         if tx.symbol == symbol and tx.quantity == delta
     ]
-    if len(matches) == 1:
-        tx = matches[0]
-        desc = f" ({tx.description})" if tx.description else ""
-        expl = (
-            f"Documented {tx.record_type} transaction {tx.transaction_id}"
-            f" matches position difference {delta} shares of {symbol}{desc}"
-        )
-        return "SUPPORTED_EXPLANATION", expl, (tx.transaction_id,)
-    if len(matches) > 1:
-        ids = tuple(tx.transaction_id for tx in matches)
+    unreflected_matching = [tx for tx in all_matching if not tx.already_reflected]
+
+    if not unreflected_matching:
+        if all_matching:
+            ids = tuple(tx.transaction_id for tx in all_matching)
+            expl = (
+                f"Matching transactions ({', '.join(ids)}) are already reflected in internal ledger; "
+                f"cannot explain unreflected position difference {delta} {symbol}"
+            )
+            return "UNEXPLAINED_MISMATCH", expl, ()
+        return "UNEXPLAINED_MISMATCH", None, ()
+
+    if len(unreflected_matching) > 1:
+        ids = tuple(tx.transaction_id for tx in unreflected_matching)
         expl = f"Multiple candidate transactions match position difference {delta} {symbol}: {', '.join(ids)}"
         return "POSSIBLE_CAUSE", expl, ids
 
-    return "UNEXPLAINED_MISMATCH", None, ()
+    tx = unreflected_matching[0]
+    tx_id = tx.transaction_id
+
+    if tx_id in consumed_tx_ids:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but was already consumed by another reconciliation break"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx_id in duplicate_tx_ids:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but transaction ID is duplicated across evidence records"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.transaction_date > as_of:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but transaction date {tx.transaction_date.isoformat()} is after statement as-of {as_of.isoformat()}"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if not tx.settled:
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but transaction status is unsettled/pending"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if not tx.provenance or not tx.provenance.strip():
+        expl = (
+            f"Candidate transaction {tx_id} matches position difference {delta} shares of {symbol} "
+            f"but lacks documented source provenance"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    if tx.record_type.upper() not in VALID_POSITION_RECORD_TYPES:
+        expl = (
+            f"Candidate transaction {tx_id} matches quantity {delta} {symbol} "
+            f"but has invalid record type '{tx.record_type}' for position discrepancy"
+        )
+        return "POSSIBLE_CAUSE", expl, (tx_id,)
+
+    consumed_tx_ids.add(tx_id)
+    desc = f" ({tx.description})" if tx.description else ""
+    expl = (
+        f"Documented {tx.record_type} transaction {tx_id} [{tx.provenance}]"
+        f" matches position difference {delta} shares of {symbol}{desc}"
+    )
+    return "SUPPORTED_EXPLANATION", expl, (tx_id,)
 
 
 def reconcile_snapshot_ledger(
@@ -126,6 +253,16 @@ def reconcile_snapshot_ledger(
     If transactions are provided, breaks are evaluated against documented
     evidence to classify as SUPPORTED_EXPLANATION, POSSIBLE_CAUSE, or UNEXPLAINED_MISMATCH.
     """
+    seen_tx_ids: set[str] = set()
+    duplicate_tx_ids: set[str] = set()
+    for tx in transactions:
+        if tx.transaction_id in seen_tx_ids:
+            duplicate_tx_ids.add(tx.transaction_id)
+        seen_tx_ids.add(tx.transaction_id)
+
+    consumed_tx_ids: set[str] = set()
+    as_of = snapshot.as_of
+
     breaks: List[ReconciliationBreak] = []
     snap_cash = snapshot.cash_by_currency()
     led_cash = ledger.cash_by_currency()
@@ -134,7 +271,9 @@ def reconcile_snapshot_ledger(
         right = led_cash.get(currency, Decimal("0"))
         if left != right:
             delta = left - right
-            status, explanation, evidence_refs = _diagnose_cash_break(currency, delta, transactions)
+            status, explanation, evidence_refs = _diagnose_cash_break(
+                currency, delta, transactions, as_of, duplicate_tx_ids, consumed_tx_ids
+            )
             breaks.append(ReconciliationBreak(
                 scope="CASH",
                 key=currency,
@@ -153,7 +292,9 @@ def reconcile_snapshot_ledger(
         right = led_qty.get(symbol, Decimal("0"))
         if left != right:
             delta = left - right
-            status, explanation, evidence_refs = _diagnose_position_break(symbol, delta, transactions)
+            status, explanation, evidence_refs = _diagnose_position_break(
+                symbol, delta, transactions, as_of, duplicate_tx_ids, consumed_tx_ids
+            )
             breaks.append(ReconciliationBreak(
                 scope="POSITION",
                 key=symbol,
