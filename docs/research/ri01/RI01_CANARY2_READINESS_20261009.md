@@ -57,9 +57,17 @@ never success. Preserve it; do not rerun or increase the budget automatically.
    ```powershell
    uv run python -m acash.research.ri01.probe --session 2018-06-01 --capability bars
    ```
-5. Only after separate human network approval, execute the single operation:
+5. **Do not execute the pinned CLI directly.** Its request counter is per client;
+   it may invoke HTTP on reuse before discovering an immutable page collision.
+   Before approval, copy the reviewed `scripts/ri01_canary_single_use.py` as raw
+   bytes to external operator storage; compute its literal SHA-256 with the
+   existing `content_sha256`. Record external driver path/hash and the stable
+   external claims directory in the operator review packet. Run that copy from
+   the clean pinned checkout, using its pinned installed `acash` package.
+   The driver and its imported runtime identities must both match the packet.
+   Only after separate human network approval, execute:
    ```powershell
-   uv run python -m acash.research.ri01.probe --execute-network --authority-file $env:ACASH_CANARY2_AUTHORITY_FILE
+   uv run python $env:ACASH_CANARY2_DRIVER --execute-approved --authority-file $env:ACASH_CANARY2_AUTHORITY_FILE --claims-dir $env:ACASH_RI01_CLAIMS_DIR --expected-driver-sha256 $env:ACASH_CANARY2_DRIVER_SHA256
    ```
    This command is **UNEXECUTED**.
 6. Preserve raw bytes and audit manifest, qualification, token chain, and exact 390 RTH grid with `require_complete_rth_grid`.
@@ -114,3 +122,31 @@ operator-specific checks remain pending until a resolved packet exists.
   no universal 99.9% gate is imposed by this review. Existing V2 authority and
   Homelab runtime are untouched. PPDS remains synthetic/read-only; no real
   statement, tax workflow, depth entitlement or options dataset is certified.
+
+
+## Single-operation correction — 2026-10-11
+
+The external driver creates exclusive persistent claims for authority identity,
+canonical authority digest and resolved evidence-root identity, then an immutable
+root start receipt **before constructing the HTTP client**. Existing identity
+claims block a changed window/root under the same ID; an occupied or previously
+claimed root blocks a different authority. Exclusive creation has one winner in
+concurrent attempts. A crash or a failure after any claim consumes the attempt;
+there is no rollback/retry or automatic budget/window extension.
+
+All operators must use the same reviewed persistent claims directory. Never
+switch registries, remove claims/receipts, empty evidence roots or replace the
+reviewed driver to retry. This is a local operator procedure, not tamper-proof
+cross-machine enforcement: deletion, a new unreviewed registry, or bypassing the
+driver breaks its trust boundary. Such actions require a new explicit decision.
+Canonical authority JSON still contains only accepted RI01 fields; claims and
+driver identity are separate private audit artifacts. Keep raw data/paths and
+receipts out of public Git. A start receipt proves local reservation, not provider
+receipt or data qualification. It remains consumed after corruption/transport
+failure. A fresh operation needs a separately approved identity/root, never a
+rerun of the consumed authority.
+
+Mock tests cover reuse across newly constructed clients, changed root/window
+under the same identity, a new identity with an occupied root, partial crash
+claims, driver-hash mismatch and competing exclusive writers. No pinned
+`src/` implementation, economics, seal or runtime hash was modified.
