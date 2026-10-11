@@ -259,6 +259,13 @@ def evaluate_portfolio_base_currency(
     if len(clean_base) != 3 or not clean_base.isalpha():
         raise DataContractError(f"PPDS_VALUATION_BASE_CURRENCY_INVALID: '{base_currency}'.")
 
+    # Guard ledger as_of compatibility
+    ledger_as_of = getattr(ledger, "as_of", None)
+    if ledger_as_of is not None and ledger_as_of != as_of:
+        raise DataContractError(
+            f"PPDS_VALUATION_LEDGER_AS_OF_MISMATCH: ledger as_of {ledger_as_of.isoformat()} != valuation as_of {as_of.isoformat()}."
+        )
+
     # 1. Value cash lots
     cash_local = ledger.cash_by_currency()
     cash_base: Dict[str, Decimal] = {}
@@ -272,6 +279,15 @@ def evaluate_portfolio_base_currency(
                     f"PPDS_VALUATION_FX_RATE_MISSING: missing FX conversion {currency}->{clean_base}."
                 )
             fx = fx_rates[fx_key]
+            if fx.from_currency.strip().upper() != currency or fx.to_currency.strip().upper() != clean_base:
+                raise DataContractError(
+                    f"PPDS_VALUATION_FX_ORIENTATION_MISMATCH: FXRate internal currencies ({fx.from_currency}->{fx.to_currency}) "
+                    f"do not match mapping key ({currency}->{clean_base})."
+                )
+            if not fx.source_id or not fx.source_id.strip():
+                raise DataContractError(
+                    f"PPDS_VALUATION_FX_SOURCE_INVALID: FXRate {currency}->{clean_base} has missing or blank source_id."
+                )
             if fx.as_of != as_of:
                 raise DataContractError(
                     f"PPDS_VALUATION_FX_AS_OF_MISMATCH: rate {currency}->{clean_base} as_of {fx.as_of.isoformat()} != valuation as_of {as_of.isoformat()}."
@@ -302,6 +318,14 @@ def evaluate_portfolio_base_currency(
         if symbol not in prices:
             raise DataContractError(f"PPDS_VALUATION_PRICE_MISSING: missing price quote for {symbol}.")
         quote = prices[symbol]
+        if quote.symbol != symbol:
+            raise DataContractError(
+                f"PPDS_VALUATION_QUOTE_SYMBOL_MISMATCH: PriceQuote symbol '{quote.symbol}' does not match requested symbol '{symbol}'."
+            )
+        if not quote.source_id or not quote.source_id.strip():
+            raise DataContractError(
+                f"PPDS_VALUATION_PRICE_SOURCE_INVALID: PriceQuote for {symbol} has missing or blank source_id."
+            )
         if quote.as_of != as_of:
             raise DataContractError(
                 f"PPDS_VALUATION_PRICE_AS_OF_MISMATCH: price for {symbol} as_of {quote.as_of.isoformat()} != valuation as_of {as_of.isoformat()}."
@@ -324,6 +348,15 @@ def evaluate_portfolio_base_currency(
                     f"PPDS_VALUATION_FX_RATE_MISSING: missing FX conversion {pos_currency}->{clean_base} for {symbol}."
                 )
             fx = fx_rates[fx_key]
+            if fx.from_currency.strip().upper() != pos_currency or fx.to_currency.strip().upper() != clean_base:
+                raise DataContractError(
+                    f"PPDS_VALUATION_FX_ORIENTATION_MISMATCH: FXRate internal currencies ({fx.from_currency}->{fx.to_currency}) "
+                    f"do not match mapping key ({pos_currency}->{clean_base})."
+                )
+            if not fx.source_id or not fx.source_id.strip():
+                raise DataContractError(
+                    f"PPDS_VALUATION_FX_SOURCE_INVALID: FXRate {pos_currency}->{clean_base} has missing or blank source_id."
+                )
             if fx.as_of != as_of:
                 raise DataContractError(
                     f"PPDS_VALUATION_FX_AS_OF_MISMATCH: rate {pos_currency}->{clean_base} as_of {fx.as_of.isoformat()} != valuation as_of {as_of.isoformat()}."

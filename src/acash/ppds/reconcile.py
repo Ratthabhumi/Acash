@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+import hashlib
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from acash.ppds.ledger import NormalizedPortfolioLedger
@@ -88,6 +89,8 @@ class ReconciliationResult:
     ledger_source_id: Optional[str] = None
     attestation: Optional[IndependentLedgerAttestation] = None
     lineage_notes: Tuple[str, ...] = ()
+    evidence_integrity_status: str = "UNATTESTED"
+    source_independence_status: str = "SELF_ORIGIN"
 
 
 def _fmt(amount: Decimal) -> str:
@@ -300,6 +303,7 @@ def reconcile_snapshot_ledger(
     ledger_source_id: Optional[str] = None,
     is_independent: bool = False,
     attestation: Optional[IndependentLedgerAttestation] = None,
+    ledger_artifact_bytes: Optional[bytes] = None,
 ) -> ReconciliationResult:
     """Reconcile a statement snapshot against a normalized ledger exactly.
 
@@ -311,6 +315,7 @@ def reconcile_snapshot_ledger(
     - INDEPENDENT_RECONCILIATION_MATCHED: Checked against independently attested ledger.
     - INDEPENDENT_RECONCILIATION_BREAKS: Checked against independent ledger with breaks.
     - NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED: Balances match but independent lineage unverified.
+    - BREAKS_INDEPENDENCE_UNVERIFIED: Balances differ and independent lineage unverified.
     - SOURCE_LINEAGE_CONFLICT: Attestation conflicts (account mismatch, as-of mismatch, tampered hash, self-masquerade).
     - INDEPENDENCE_UNVERIFIED: Missing or identical source IDs when claiming independence.
     """
@@ -369,6 +374,8 @@ def reconcile_snapshot_ledger(
 
     matched = not breaks
     lineage_notes: List[str] = []
+    evidence_integrity_status = "UNATTESTED"
+    source_independence_status = "SELF_ORIGIN"
 
     if is_independent:
         stmt_src = (statement_source_id or "").strip()
@@ -377,22 +384,42 @@ def reconcile_snapshot_ledger(
         if not stmt_src or not led_src:
             rec_status = "INDEPENDENCE_UNVERIFIED"
             is_indep = False
+            source_independence_status = "INDEPENDENCE_UNVERIFIED"
             lineage_notes.append("Missing source identity for statement or ledger.")
         elif stmt_src == led_src:
             rec_status = "INDEPENDENCE_UNVERIFIED"
             is_indep = False
+            source_independence_status = "INDEPENDENCE_UNVERIFIED"
             lineage_notes.append("Statement and ledger share identical source identity.")
         elif attestation is None:
             # Caller asserted independence with different names, but supplied no verified lineage attestation!
             if matched:
                 rec_status = "NUMERICALLY_MATCHED_INDEPENDENCE_UNVERIFIED"
             else:
-                rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
+                rec_status = "BREAKS_INDEPENDENCE_UNVERIFIED"
             is_indep = False
+            source_independence_status = "INDEPENDENCE_UNVERIFIED"
             lineage_notes.append("Caller claimed independent reconciliation without verifiable IndependentLedgerAttestation.")
         else:
             # Rigorous lineage attestation verification
             conflict = False
+            if ledger_artifact_bytes is not None:
+                computed_bytes_sha = hashlib.sha256(ledger_artifact_bytes).hexdigest()
+                if computed_bytes_sha != attestation.artifact_sha256:
+                    rec_status = "SOURCE_LINEAGE_CONFLICT"
+                    lineage_notes.append(
+                        f"Ledger artifact bytes SHA256 mismatch: expected {attestation.artifact_sha256[:16]}, got {computed_bytes_sha[:16]}."
+                    )
+                    conflict = True
+                    evidence_integrity_status = "INTEGRITY_COMPROMISED"
+                else:
+                    evidence_integrity_status = "BYTES_VERIFIED"
+                    lineage_notes.append(
+                        f"Cryptographically verified artifact bytes digest against attestation [{computed_bytes_sha[:16]}...]."
+                    )
+            else:
+                evidence_integrity_status = "METADATA_ATTESTED"
+
             if attestation.ledger_source_id != led_src:
                 rec_status = "SOURCE_LINEAGE_CONFLICT"
                 lineage_notes.append(
@@ -450,20 +477,24 @@ def reconcile_snapshot_ledger(
 
             if conflict:
                 is_indep = False
+                source_independence_status = "SOURCE_LINEAGE_CONFLICT"
             elif matched:
                 rec_status = "INDEPENDENT_RECONCILIATION_MATCHED"
                 is_indep = True
+                source_independence_status = "INDEPENDENT_VERIFIED"
                 lineage_notes.append(
                     f"Verified independent ledger from '{attestation.origin_system}' [{attestation.lineage_ref}]."
                 )
             else:
                 rec_status = "INDEPENDENT_RECONCILIATION_BREAKS"
                 is_indep = True
+                source_independence_status = "INDEPENDENT_VERIFIED"
                 lineage_notes.append(
                     f"Verified independent ledger from '{attestation.origin_system}' [{attestation.lineage_ref}] with breaks."
                 )
     else:
         is_indep = False
+        source_independence_status = "SELF_ORIGIN"
         if matched:
             rec_status = "SELF_CONSISTENCY_VERIFIED"
             lineage_notes.append("Statement reconciled against self-derived ledger.")
@@ -482,6 +513,8 @@ def reconcile_snapshot_ledger(
         ledger_source_id=ledger_source_id,
         attestation=attestation,
         lineage_notes=tuple(lineage_notes),
+        evidence_integrity_status=evidence_integrity_status,
+        source_independence_status=source_independence_status,
     )
 
 
@@ -491,6 +524,8 @@ def format_reconciliation_report(result: ReconciliationResult) -> str:
     mode_str = "INDEPENDENT RECONCILIATION" if result.is_independent else "SELF-CONSISTENCY CHECK"
     lines.append(f"Verification Mode: {mode_str}")
     lines.append(f"Reconciliation Status: {result.status}")
+    lines.append(f"Evidence Integrity: {result.evidence_integrity_status}")
+    lines.append(f"Source Independence: {result.source_independence_status}")
     if result.statement_source_id or result.ledger_source_id:
         lines.append(
             f"Sources: Statement='{result.statement_source_id or 'UNKNOWN'}' vs "
