@@ -566,3 +566,76 @@ def test_governance_independent_constraint_violation() -> None:
     assert decision.cash_weight == Decimal("1.0")
     assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
     assert "CONSTRAINT_VIOLATION" in decision.rationale
+
+
+# S. Passive Core Policy Separation Tests
+def test_passive_core_requires_ratified_mandate() -> None:
+    """PASSIVE_CORE policy tier fails closed to cash without explicit owner_mandate_id."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(policy_tier="PASSIVE_CORE", owner_mandate_id=None)
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_NOT_AUTHORIZED" in decision.rationale
+
+
+def test_passive_core_exempt_from_active_hurdle_when_mandate_authorized() -> None:
+    """PASSIVE_CORE with ratified mandate approves candidate even if active hurdle_rate_cleared=False."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="MANDATE_CANDIDATE_20261012_USD1000",
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    # Create candidate with hurdle_rate_cleared=False (passive beta return, no active alpha claim)
+    eval_unhurdled = AllocationEvaluation(
+        candidate_id=candidates[0].candidate_id,
+        candidate_digest=candidates[0].candidate_digest,
+        normalized_weights=evaluations[0].normalized_weights,
+        normalized_cash_weight=evaluations[0].normalized_cash_weight,
+        oos_sharpe_ratio=evaluations[0].oos_sharpe_ratio,
+        oos_cvar_95=evaluations[0].oos_cvar_95,
+        turnover_required=evaluations[0].turnover_required,
+        estimated_transaction_cost=evaluations[0].estimated_transaction_cost,
+        net_expected_excess_return=Decimal("-0.01"),
+        hurdle_rate_cleared=False,  # Did not clear active hurdle
+        constraints_satisfied=True,
+        rank_score=evaluations[0].rank_score,
+        evaluation_metadata=evaluations[0].evaluation_metadata,
+    )
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=[eval_unhurdled],
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.gate_verdict == "APPROVED_PASSIVE_CORE_ALLOCATION"
+    assert decision.selected_candidate_id == candidates[0].candidate_id
+    assert "MANDATE_CANDIDATE_20261012_USD1000" in decision.rationale
+
+
+def test_invalid_policy_tier_raises_data_contract_error() -> None:
+    """Providing unknown policy tier raises DataContractError fail-closed."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(policy_tier="UNKNOWN_TIER")
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    with pytest.raises(DataContractError, match="Unsupported governance policy_tier"):
+        gate.evaluate_and_decide(
+            candidates=candidates,
+            ranked_evaluations=evaluations,
+            risk_snapshot=_healthy_risk_snapshot(),
+            constraints=_default_constraints(),
+        )

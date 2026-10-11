@@ -28,6 +28,9 @@ class GovernanceConfig(BaseModel):
     require_evidence_threshold_met: bool = False
     require_dsr_significance: bool = False
     min_dsr_probability: Decimal = Decimal("0.95")
+    policy_tier: str = "ACTIVE_RESEARCH"  # "ACTIVE_RESEARCH" or "PASSIVE_CORE"
+    owner_mandate_id: Optional[str] = None
+    require_hurdle_clearance: bool = True
 
 
 class PortfolioGovernanceGate:
@@ -78,12 +81,20 @@ class PortfolioGovernanceGate:
             if verdict == "APPROVED":
                 # Candidate approved by sovereign governance!
                 is_cash = (candidate.allocator_name == "CASH")
-                gate_verdict = "CASH_SOVEREIGN_FALLBACK" if is_cash else "APPROVED_INVESTABLE_ALLOCATION"
-                rationale_text = (
-                    f"Candidate '{candidate.candidate_id}' satisfied all sovereign risk, hurdle, and constraint gates."
-                    if not is_cash
-                    else f"Cash fallback baseline authorized: {candidate.candidate_id}."
-                )
+                if is_cash:
+                    gate_verdict = "CASH_SOVEREIGN_FALLBACK"
+                    rationale_text = f"Cash fallback baseline authorized: {candidate.candidate_id}."
+                elif self.config.policy_tier == "PASSIVE_CORE":
+                    gate_verdict = "APPROVED_PASSIVE_CORE_ALLOCATION"
+                    rationale_text = (
+                        f"Candidate '{candidate.candidate_id}' authorized under ratified passive mandate "
+                        f"'{self.config.owner_mandate_id}'."
+                    )
+                else:
+                    gate_verdict = "APPROVED_INVESTABLE_ALLOCATION"
+                    rationale_text = (
+                        f"Candidate '{candidate.candidate_id}' satisfied all sovereign risk, hurdle, and constraint gates."
+                    )
                 return AllocationDecision(
                     decision_id=f"DEC_{candidate.candidate_id}_{int(auth_ts.timestamp())}",
                     selected_candidate_id=candidate.candidate_id,
@@ -227,14 +238,35 @@ class PortfolioGovernanceGate:
         if not evaluation.constraints_satisfied:
             return "CONSTRAINT_VIOLATION", "CONSTRAINT_VIOLATION: Candidate evaluation flagged constraints_satisfied = False."
 
-        # 4. Evidence threshold policy verification (if enabled)
-        if self.config.require_evidence_threshold_met and candidate.allocator_name != "CASH":
+        # 0. Policy tier validation
+        if self.config.policy_tier not in ("ACTIVE_RESEARCH", "PASSIVE_CORE"):
+            raise DataContractError(
+                f"Unsupported governance policy_tier '{self.config.policy_tier}'. Must be 'ACTIVE_RESEARCH' or 'PASSIVE_CORE'."
+            )
+
+        if self.config.policy_tier == "PASSIVE_CORE":
+            if not self.config.owner_mandate_id or not self.config.owner_mandate_id.strip():
+                return (
+                    "MANDATE_NOT_AUTHORIZED",
+                    "MANDATE_NOT_AUTHORIZED: PASSIVE_CORE policy tier requires an explicit, ratified owner_mandate_id.",
+                )
+
+        # 4. Evidence threshold policy verification (if enabled in active research)
+        if (
+            self.config.policy_tier == "ACTIVE_RESEARCH"
+            and self.config.require_evidence_threshold_met
+            and candidate.allocator_name != "CASH"
+        ):
             status = evaluation.evaluation_metadata.get("sample_sufficiency_status")
             if status != "EVIDENCE_THRESHOLD_MET":
                 return "EVIDENCE_THRESHOLD_NOT_MET", f"EVIDENCE_THRESHOLD_NOT_MET: Sample evidence threshold not met (status: {status})."
 
-        # 5. DSR significance verification (if enabled)
-        if self.config.require_dsr_significance and candidate.allocator_name != "CASH":
+        # 5. DSR significance verification (if enabled in active research)
+        if (
+            self.config.policy_tier == "ACTIVE_RESEARCH"
+            and self.config.require_dsr_significance
+            and candidate.allocator_name != "CASH"
+        ):
             dsr_prob_str = evaluation.evaluation_metadata.get("dsr_probability", "0.0")
             try:
                 dsr_prob = Decimal(dsr_prob_str)
@@ -243,9 +275,14 @@ class PortfolioGovernanceGate:
             except Exception:
                 return "DSR_PROBABILITY_INVALID", "DSR_PROBABILITY_INVALID: Failed to parse DSR probability from evaluation metadata."
 
-        # 6. Hurdle verification (Cash candidates exempt)
-        if candidate.allocator_name != "CASH" and not evaluation.hurdle_rate_cleared:
-            return "HURDLE_REJECTION", f"HURDLE_REJECTION: Net expected excess return ({evaluation.net_expected_excess_return}) failed hurdle margin."
+        # 6. Hurdle verification (Cash candidates exempt; Passive Core exempt under ratified mandate)
+        if candidate.allocator_name != "CASH":
+            if self.config.policy_tier == "ACTIVE_RESEARCH" and self.config.require_hurdle_clearance:
+                if not evaluation.hurdle_rate_cleared:
+                    return (
+                        "HURDLE_REJECTION",
+                        f"HURDLE_REJECTION: Net expected excess return ({evaluation.net_expected_excess_return}) failed hurdle margin.",
+                    )
 
         return "APPROVED", "All gates satisfied."
 
