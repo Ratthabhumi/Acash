@@ -39,6 +39,10 @@ def render_read_only_surface(
                 "key": item.key,
                 "statement_value": item.statement_value,
                 "ledger_value": item.ledger_value,
+                "difference": item.difference,
+                "status": item.status,
+                "explanation": item.explanation,
+                "evidence_refs": list(item.evidence_refs),
             }
             for item in reconciliation.breaks
         ],
