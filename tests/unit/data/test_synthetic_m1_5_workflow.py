@@ -306,16 +306,8 @@ def test_distribution_ex_payable_separation() -> None:
     assert bench.nav_history[-1] == Decimal("991.795")
 
 
-def test_same_day_split_and_distribution_post_split_basis() -> None:
-    """Same-session split + distribution uses POST-SPLIT shares for entitlement.
-
-    Golden adversarial case: 5 shares, 2:1 split, $0.50 per POST-SPLIT share
-    on the same ex-date. Matches build_total_return_panel() semantics where
-    one pre-split share becomes split_ratio post-split shares each earning
-    cash_amount. Pre-fix code booked 5 x 0.50 = $2.50 (pre-split basis);
-    correct is 10 x 0.50 = $5.00. Resupply on a later date must not
-    double-count.
-    """
+def _init_single_voo_5_shares() -> "HoldingsBasedBenchmark":
+    """5 VOO shares @ $100 with zero residual cash (friction-exact NAV)."""
     bench = HoldingsBasedBenchmark(
         target_weights={"VOO": Decimal("1.0")},
         rebalance_dates=set(),
@@ -330,7 +322,85 @@ def test_same_day_split_and_distribution_post_split_basis() -> None:
     )
     assert bench._shares == {"VOO": Decimal("5")}
     assert bench._cash == Decimal("0")
+    return bench
 
+
+def test_same_day_split_and_distribution_post_split_basis() -> None:
+    """POST_SPLIT: 5 shares, 2:1 split, $0.50/post-split share -> $5.00."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        payable_date=event_day,
+        gross_amount=Decimal("0.50"),
+        share_basis=DistributionShareBasis.POST_SPLIT,
+    )
+    nav = bench.step(
+        event_day,
+        {"VOO": Decimal("50.00")},
+        distributions=[dist],
+        splits=[split],
+    )
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("5.00")
+    # NOTE: $50 is a synthetic price NOT reflecting the ex-div adjustment —
+    # this asserts entitlement arithmetic, not ex-div NAV neutrality.
+    assert nav == Decimal("505.00")
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"VOO": Decimal("50.00")},
+        distributions=[dist],
+    )
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("5.00")
+    assert bench.nav_history[-1] == Decimal("505.00")
+
+
+def test_same_day_split_and_distribution_pre_split_basis() -> None:
+    """PRE_SPLIT: 5 shares, 2:1 split, $0.50/pre-split share -> $2.50."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        payable_date=event_day,
+        gross_amount=Decimal("0.50"),
+        share_basis=DistributionShareBasis.PRE_SPLIT,
+    )
+    nav = bench.step(
+        event_day,
+        {"VOO": Decimal("50.00")},
+        distributions=[dist],
+        splits=[split],
+    )
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("2.50")
+    assert nav == Decimal("502.50")
+
+
+def test_same_day_split_and_distribution_unknown_basis_rejected() -> None:
+    """UNKNOWN basis with a same-session split fails closed before mutation."""
+    bench = _init_single_voo_5_shares()
     event_day = VALID_SYNTHETIC_WEEK[1]
     split = EtfSplitRecord(
         symbol="VOO",
@@ -344,29 +414,154 @@ def test_same_day_split_and_distribution_post_split_basis() -> None:
         payable_date=event_day,
         gross_amount=Decimal("0.50"),
     )
+    snap_shares = dict(bench._shares)
+    with pytest.raises(DataContractError, match="AMBIGUOUS_SHARE_BASIS"):
+        bench.step(
+            event_day,
+            {"VOO": Decimal("50.00")},
+            distributions=[dist],
+            splits=[split],
+        )
+    assert bench._shares == snap_shares
+    assert bench._cash == Decimal("0")
+    assert bench.outstanding_receivables() == {}
+    # NAV after friction-exact init: 5x$100 equity, $0 cash, $0.70 sunk cost.
+    assert bench.nav_history[-1] == Decimal("500.00")
+
+
+def test_same_day_split_and_distribution_nav_conservation() -> None:
+    """Pure economics: $500 pre-event stays $500 total (no market move)."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        payable_date=VALID_SYNTHETIC_WEEK[2],
+        gross_amount=Decimal("0.50"),
+        share_basis=DistributionShareBasis.POST_SPLIT,
+    )
     nav = bench.step(
         event_day,
-        {"VOO": Decimal("50.00")},
+        {"VOO": Decimal("49.50")},
         distributions=[dist],
         splits=[split],
     )
-    # Post-split shares and post-split-basis entitlement, settled same day.
     assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {
+        ("VOO", VALID_SYNTHETIC_WEEK[2]): Decimal("5.00")
+    }
+    assert bench._cash == Decimal("0")
+    assert nav == Decimal("500.00")
+    nav2 = bench.step(VALID_SYNTHETIC_WEEK[2], {"VOO": Decimal("49.50")})
     assert bench.outstanding_receivables() == {}
     assert bench._cash == Decimal("5.00")
-    # Split conserves equity (10 x $50 = $500); distribution adds $5 cash.
-    assert nav == Decimal("505.00")
+    assert nav2 == Decimal("500.00")
 
-    # Resupplying the same record later must not book again or pay twice.
-    bench.step(
-        VALID_SYNTHETIC_WEEK[2],
-        {"VOO": Decimal("50.00")},
-        distributions=[dist],
+
+def test_intra_batch_duplicate_split_rejected_atomically() -> None:
+    """Two identical splits in one batch fail closed without mutation."""
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
     )
+    with pytest.raises(DataContractError, match="DUPLICATE_SPLIT"):
+        bench.step(
+            event_day, {"VOO": Decimal("50.00")}, splits=[split, split]
+        )
+    assert bench._shares == {"VOO": Decimal("5")}
+    # Pre-event NAV: 5x$100 equity after sunk $0.70 friction.
+    assert bench.nav_history[-1] == Decimal("500.00")
+    nav = bench.step(event_day, {"VOO": Decimal("50.00")}, splits=[split])
     assert bench._shares == {"VOO": Decimal("10")}
-    assert bench.outstanding_receivables() == {}
-    assert bench._cash == Decimal("5.00")
-    assert bench.nav_history[-1] == Decimal("505.00")
+    assert nav == Decimal("500.00")
+
+
+def test_intra_batch_conflicting_split_rejected_atomically() -> None:
+    """Same (symbol, ex-date) with conflicting ratios fails closed."""
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split2 = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    split3 = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("3.0"),
+    )
+    with pytest.raises(DataContractError, match="CONFLICTING_SPLIT"):
+        bench.step(
+            event_day, {"VOO": Decimal("50.00")}, splits=[split2, split3]
+        )
+    assert bench._shares == {"VOO": Decimal("5")}
+    # Pre-event NAV: 5x$100 equity after sunk $0.70 friction.
+    assert bench.nav_history[-1] == Decimal("500.00")
+
+
+def test_revised_provider_event_rejected_atomically() -> None:
+    """Same event_id with revised amount fails closed, not double-booked."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    bench = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("1.0")},
+        rebalance_dates=set(),
+        friction_model=_friction_model(),
+    )
+    bench.initialize(
+        nav=Decimal("500.70"),
+        prices={"VOO": Decimal("100.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    first = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=VALID_SYNTHETIC_WEEK[1],
+        payable_date=VALID_SYNTHETIC_WEEK[2],
+        gross_amount=Decimal("0.50"),
+        event_id="ALPACA-DIV-001",
+        share_basis=DistributionShareBasis.POST_SPLIT,
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[1],
+        {"VOO": Decimal("50.00")},
+        distributions=[first],
+    )
+    assert bench.outstanding_receivables() == {
+        ("VOO", VALID_SYNTHETIC_WEEK[2]): Decimal("2.50")
+    }
+    # Provider revises the same event to $0.60 — must NOT book $0.60 more.
+    revised = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=VALID_SYNTHETIC_WEEK[1],
+        payable_date=VALID_SYNTHETIC_WEEK[2],
+        gross_amount=Decimal("0.60"),
+        event_id="ALPACA-DIV-001",
+        share_basis=DistributionShareBasis.POST_SPLIT,
+    )
+    with pytest.raises(DataContractError, match="REVISED_EVENT"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[2],
+            {"VOO": Decimal("50.00")},
+            distributions=[revised],
+        )
+    # Atomic: original $2.50 receivable untouched by the rejected revision.
+    assert bench.outstanding_receivables() == {
+        ("VOO", VALID_SYNTHETIC_WEEK[2]): Decimal("2.50")
+    }
 
 
 def test_missing_price_fail_closed() -> None:

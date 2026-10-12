@@ -132,6 +132,22 @@ class DistributionTaxClassification(str, Enum):
     UNKNOWN_TAX_BASIS = "UNKNOWN_TAX_BASIS"                  # Ambiguous — fail-closed for research
 
 
+class DistributionShareBasis(str, Enum):
+    """Declared share basis for a distribution on the same ex-date as a split.
+
+    Single canonical authority for interpreting simultaneous split/dividend
+    economics. POST_SPLIT matches build_total_return_panel() where one
+    pre-split share becomes split_ratio post-split shares each earning
+    cash_amount. PRE_SPLIT means cash_amount applies per pre-split share.
+    UNKNOWN (default for legacy records) fails closed when a same-session
+    split exists for the symbol — the adapter must declare the basis.
+    """
+
+    PRE_SPLIT = "PRE_SPLIT"
+    POST_SPLIT = "POST_SPLIT"
+    UNKNOWN = "UNKNOWN"
+
+
 class EtfDistributionRecord(BaseModel):
     """Immutable record of an ETF dividend/capital gain cash distribution.
 
@@ -151,6 +167,7 @@ class EtfDistributionRecord(BaseModel):
     tax_classification: DistributionTaxClassification = DistributionTaxClassification.GROSS_BEFORE_WITHHOLDING
     distribution_type: str = "DIVIDEND_CASH"
     event_id: Optional[str] = None                          # Source-provided event identity (if any)
+    share_basis: DistributionShareBasis = DistributionShareBasis.UNKNOWN
 
     # Legacy compatibility: cash_amount resolves to net if available, gross otherwise
     @property
@@ -724,8 +741,12 @@ class HoldingsBasedBenchmark:
         # Booked key is the FULL event identity: distinct events sharing a
         # symbol/ex-date/payable triple (e.g. dividend + capital gain) never
         # merge silently; settlement stays keyed by (symbol, payable) because
-        # cash is fungible on arrival.
-        self._booked_entitlements: Set[Tuple[str, date, date, str, str, str, str]] = set()
+        # cash is fungible on arrival. A second record reusing the same
+        # provider event_id with DIFFERENT economics (revised amount) is a
+        # provider revision, not a new event — it fails closed
+        # (REVISED_EVENT) instead of double-booking.
+        self._booked_entitlements: Set[Tuple[str, date, date, str, str, str, str, str]] = set()
+        self._booked_provider_event_ids: Set[Tuple[str, str]] = set()
         self._settled_payables: Set[Tuple[str, date]] = set()
         self._applied_splits: Set[Tuple[str, date]] = set()
         self._initialized: bool = False
@@ -742,7 +763,7 @@ class HoldingsBasedBenchmark:
         return dict(self._receivables)
 
     @staticmethod
-    def _entitlement_key(dist: "EtfDistributionRecord") -> Tuple[str, date, date, str, str, str, str]:
+    def _entitlement_key(dist: "EtfDistributionRecord") -> Tuple[str, date, date, str, str, str, str, str]:
         """Full economic-event identity for duplicate detection.
 
         Distinct distributions may share symbol/ex-date/payable-date (e.g. a
@@ -759,6 +780,7 @@ class HoldingsBasedBenchmark:
             dist.distribution_type,
             str(dist.gross_amount),
             str(dist.net_amount) if dist.net_amount is not None else "",
+            dist.share_basis.value,
         )
 
     def _compute_nav(self, prices: Dict[str, Decimal]) -> Decimal:
@@ -975,10 +997,13 @@ class HoldingsBasedBenchmark:
         form ONE atomic unit: every event identity is validated before any
         mutation, and any failure restores all state bit-identically.
         Distribution lifecycle (ex-date entitlement vs payable-date cash):
-        on a record's ex-date, book a receivable fixed by POST-SPLIT shares
-        held that day: same-session splits apply BEFORE entitlements, matching
-        build_total_return_panel() where one pre-split share becomes
-        split_ratio post-split shares each earning cash_amount. Payable-date settlement is driven by the BOOKED LEDGER — every
+        on a record's ex-date, book a receivable fixed by the record's
+        declared share_basis: POST_SPLIT uses post-split shares (same-session
+        splits apply BEFORE entitlements, matching build_total_return_panel()
+        where one pre-split share becomes split_ratio post-split shares each
+        earning cash_amount); PRE_SPLIT uses pre-split shares. UNKNOWN basis
+        with a same-session split fails closed (AMBIGUOUS_SHARE_BASIS) — the
+        adapter must declare the basis. Payable-date settlement is driven by the BOOKED LEDGER — every
         receivable whose payable date has arrived settles into cash whether
         or not the record is resupplied — so a data adapter that emits each
         event once cannot strand cash. Amount basis is the record's
@@ -1009,10 +1034,15 @@ class HoldingsBasedBenchmark:
         snap_booked = set(self._booked_entitlements)
         snap_settled = set(self._settled_payables)
         snap_splits = set(self._applied_splits)
+        snap_provider_ids = set(self._booked_provider_event_ids)
         snap_tx_len = len(self.transactions)
         snap_hist_len = len(self.nav_history)
         try:
+            # Precompute same-session split factors from the snapshot (pre-split
+            # shares stay available for PRE_SPLIT-basis entitlements).
+            batch_split_factor: Dict[str, Decimal] = {}
             if splits:
+                seen_in_batch: Dict[Tuple[str, date], Decimal] = {}
                 for split in splits:
                     self._validate_split(split, trading_date)
                     if split.symbol not in self.target_weights:
@@ -1024,6 +1054,23 @@ class HoldingsBasedBenchmark:
                             f"DUPLICATE_SPLIT: {split.symbol} split for ex-date "
                             f"{split.ex_date} already applied."
                         )
+                    batch_key = (split.symbol, split.ex_date)
+                    if batch_key in seen_in_batch:
+                        if seen_in_batch[batch_key] != split.split_ratio:
+                            raise DataContractError(
+                                f"CONFLICTING_SPLIT: {split.symbol} split for ex-date "
+                                f"{split.ex_date} has conflicting ratios in one batch."
+                            )
+                        raise DataContractError(
+                            f"DUPLICATE_SPLIT: {split.symbol} split for ex-date "
+                            f"{split.ex_date} appears twice in one batch."
+                        )
+                    seen_in_batch[batch_key] = split.split_ratio
+                for (sym, _), ratio in seen_in_batch.items():
+                    batch_split_factor[sym] = (
+                        batch_split_factor.get(sym, Decimal("1")) * ratio
+                    )
+            split_symbols = set(batch_split_factor)
             if splits:
                 for split in splits:
                     self._applied_splits.add((split.symbol, split.ex_date))
@@ -1035,25 +1082,64 @@ class HoldingsBasedBenchmark:
                 for dist in distributions:
                     if dist.symbol not in self.target_weights:
                         continue
+                    # Provider revision guard (checked BEFORE ex-date
+                    # filtering): same event_id with different economics is
+                    # a correction, not a new event — fail closed instead
+                    # of double-booking the revised amount, even when the
+                    # revision arrives on a later session.
+                    provider_key = (
+                        (dist.symbol, dist.event_id) if dist.event_id else None
+                    )
+                    entitlement_key = self._entitlement_key(dist)
+                    if (
+                        provider_key is not None
+                        and provider_key in self._booked_provider_event_ids
+                        and entitlement_key not in self._booked_entitlements
+                    ):
+                        raise DataContractError(
+                            f"REVISED_EVENT: {dist.symbol} event_id "
+                            f"{dist.event_id} already booked with different "
+                            "economics. Provider revisions require adapter "
+                            "reconciliation, not silent re-booking."
+                        )
                     if trading_date == dist.ex_date:
-                        entitlement_key = self._entitlement_key(dist)
                         if entitlement_key in self._booked_entitlements:
                             raise DataContractError(
                                 f"DUPLICATE_ENTITLEMENT: {dist.symbol} ex-date "
                                 f"{dist.ex_date} entitlement already booked."
                             )
-                        # POST-SPLIT basis: same-session splits already applied
-                        # above, matching build_total_return_panel() where one
-                        # pre-split share becomes split_ratio post-split shares
-                        # each earning cash_amount.
-                        shares_held = self._shares.get(dist.symbol, Decimal("0"))
-                        if shares_held > Decimal("0"):
+                        if (
+                            dist.symbol in split_symbols
+                            and dist.share_basis == DistributionShareBasis.UNKNOWN
+                        ):
+                            raise DataContractError(
+                                f"AMBIGUOUS_SHARE_BASIS: {dist.symbol} distribution "
+                                f"on split ex-date {dist.ex_date} has undeclared "
+                                "share_basis. Declare PRE_SPLIT or POST_SPLIT."
+                            )
+                        if dist.share_basis == DistributionShareBasis.PRE_SPLIT:
+                            factor = batch_split_factor.get(
+                                dist.symbol, Decimal("1")
+                            )
+                            shares_basis = self._shares.get(
+                                dist.symbol, Decimal("0")
+                            ) / factor
+                        else:
+                            # POST_SPLIT (same-session splits already applied
+                            # above) or non-simultaneous legacy records where
+                            # the basis is immaterial (factor == 1).
+                            shares_basis = self._shares.get(
+                                dist.symbol, Decimal("0")
+                            )
+                        if shares_basis > Decimal("0"):
                             key = (dist.symbol, dist.payable_date)
                             self._receivables[key] = (
                                 self._receivables.get(key, Decimal("0"))
-                                + shares_held * dist.cash_amount
+                                + shares_basis * dist.cash_amount
                             )
                         self._booked_entitlements.add(entitlement_key)
+                        if provider_key is not None:
+                            self._booked_provider_event_ids.add(provider_key)
             # Payable-date settlement is ledger-driven: every booked
             # receivable whose payable date has arrived settles into cash,
             # with or without the record being resupplied. Cash is fungible
@@ -1079,6 +1165,7 @@ class HoldingsBasedBenchmark:
             self._booked_entitlements = snap_booked
             self._settled_payables = snap_settled
             self._applied_splits = snap_splits
+            self._booked_provider_event_ids = snap_provider_ids
             del self.transactions[snap_tx_len:]
             del self.nav_history[snap_hist_len:]
             del self.date_history[snap_hist_len:]
