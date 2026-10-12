@@ -202,6 +202,14 @@ class EtfDistributionRecord(BaseModel):
             raise DataContractError(
                 "withholding_rate is set but net_amount is None. Compute net_amount = gross * (1 - rate)."
             )
+        if self.withholding_rate is not None and self.net_amount is not None:
+            expected_net = self.gross_amount * (Decimal("1") - self.withholding_rate)
+            if self.net_amount != expected_net:
+                raise DataContractError(
+                    f"net_amount ({self.net_amount}) is inconsistent with "
+                    f"gross_amount * (1 - withholding_rate) = {expected_net}. "
+                    "Net must be exactly computed, never hand-adjusted."
+                )
         return self
 
 
@@ -363,9 +371,11 @@ class SmallOrderFrictionModel(BaseModel):
     def calculate_cost(self, notional_traded: Decimal, shares_traded: Decimal) -> Decimal:
         """Calculate total transaction friction (Tiered per-share + floor + cap).
 
-        `shares_traded` must be the executed whole-share quantity. A positive
-        notional with zero shares is inconsistent under the whole-share basis
-        and fails closed.
+        `shares_traded` must be the executed whole-share quantity. Fractional
+        quantities are rejected: this tariff models whole shares only, and
+        IBKR prices fractional trades under separate terms (documented but
+        unmodeled here). A positive notional with zero shares is inconsistent
+        under the whole-share basis and fails closed.
         """
         ensure_finite_decimal(notional_traded, field_name="notional_traded")
         ensure_finite_decimal(shares_traded, field_name="shares_traded")
@@ -376,6 +386,12 @@ class SmallOrderFrictionModel(BaseModel):
         if shares_traded == Decimal("0"):
             raise DataContractError(
                 "Positive notional with zero shares is inconsistent under WHOLE_SHARE basis."
+            )
+        if shares_traded != shares_traded.to_integral_value():
+            raise DataContractError(
+                f"FRACTIONAL_SHARES_UNSUPPORTED: {shares_traded} shares cannot pass "
+                "through the WHOLE_SHARE tariff. Fractional execution requires a "
+                "separately documented fractional fee model."
             )
 
         per_share_commission = shares_traded * self.per_share_commission
@@ -667,11 +683,22 @@ class HoldingsBasedBenchmark:
         allow_fractional_shares: bool = False,
         model_classification: str = HOLDINGS_BENCHMARK_CLASSIFICATION,
     ) -> None:
+        if not target_weights:
+            raise DataContractError("Target weights must name at least one holding.")
+        for sym, wt in target_weights.items():
+            ensure_finite_decimal(wt, field_name=f"target_weight[{sym}]")
+            if wt < Decimal("0"):
+                raise DataContractError(
+                    f"LONG_ONLY_VIOLATION: target weight for {sym} is negative ({wt}). "
+                    "Short positions are prohibited in this benchmark."
+                )
         total_weight = sum(target_weights.values(), Decimal("0"))
         if abs(total_weight - Decimal("1")) > Decimal("0.0001"):
             raise DataContractError(
                 f"Target weights must sum to 1.0, got {total_weight}."
             )
+        # All weights are finite and non-negative and sum to 1.0, therefore
+        # gross exposure equals 1.0 exactly: no hidden leverage is expressible.
         self.target_weights = dict(target_weights)
         self.rebalance_dates = rebalance_dates
         self.friction_model = friction_model
@@ -684,6 +711,11 @@ class HoldingsBasedBenchmark:
         # Entitlement is fixed by shares held on ex-date; cash arrives on
         # payable date. NAV includes receivables (economic entitlement).
         self._receivables: Dict[Tuple[str, date], Decimal] = {}
+        # Event identity sets for replay safety (monotonic processing below
+        # makes replays unreachable, these are defense-in-depth lineage).
+        self._booked_entitlements: Set[Tuple[str, date, date]] = set()  # (symbol, ex, payable)
+        self._settled_payables: Set[Tuple[str, date]] = set()
+        self._applied_splits: Set[Tuple[str, date]] = set()
         self._initialized: bool = False
         self.nav_history: List[Decimal] = []
         self.date_history: List[date] = []
@@ -732,6 +764,54 @@ class HoldingsBasedBenchmark:
                 total += notional + self.friction_model.calculate_cost(notional, delta)
         return total
 
+    def _plan_targets(
+        self,
+        trading_date: date,
+        prices: Dict[str, Decimal],
+        target_shares: Dict[str, Decimal],
+    ) -> List[Tuple[str, Decimal, Decimal, Decimal]]:
+        """Side-effect-free rebalance plan: ordered (symbol, delta, notional, friction).
+
+        Sells precede buys in execution order. Funding is simulated over the
+        ordered plan: running cash must never go negative at any step and the
+        final balance must cover the batch. Any violation fails closed BEFORE
+        any state mutation, so a failed rebalance leaves shares, cash,
+        receivables, and history exactly untouched (atomicity).
+        """
+        sells: List[Tuple[str, Decimal, Decimal, Decimal]] = []
+        buys: List[Tuple[str, Decimal, Decimal, Decimal]] = []
+        for sym in self.target_weights:
+            price = prices.get(sym)
+            if price is None or price <= Decimal("0"):
+                raise DataContractError(
+                    f"MISSING_PRICE: Cannot rebalance {sym} on {trading_date}: price={price}"
+                )
+            delta = target_shares[sym] - self._shares.get(sym, Decimal("0"))
+            if delta == Decimal("0"):
+                continue
+            notional = abs(delta) * price
+            friction = self.friction_model.calculate_cost(notional, abs(delta))
+            if delta < Decimal("0"):
+                sells.append((sym, delta, notional, friction))
+            else:
+                buys.append((sym, delta, notional, friction))
+        running_cash = self._cash
+        for sym, delta, notional, friction in sells:
+            running_cash += notional - friction
+            if running_cash < Decimal("0"):
+                raise DataContractError(
+                    f"NEGATIVE_CASH_AFTER_SELL: Friction exceeded proceeds for {sym} "
+                    f"on {trading_date} (running cash would be {running_cash})."
+                )
+        for sym, delta, notional, friction in buys:
+            running_cash -= notional + friction
+            if running_cash < Decimal("0"):
+                raise DataContractError(
+                    f"INSUFFICIENT_CASH: Cannot buy {delta} shares of {sym} on {trading_date}. "
+                    f"Batch needs funding beyond available cash. No implicit borrowing."
+                )
+        return sells + buys
+
     def _apply_targets(
         self,
         trading_date: date,
@@ -739,61 +819,21 @@ class HoldingsBasedBenchmark:
         target_shares: Dict[str, Decimal],
         reason: str,
     ) -> None:
-        """Execute sells-then-buys toward precomputed whole-share targets.
+        """Execute a preflight-validated rebalance plan atomically.
 
-        Sells first (to generate cash), then buys. Any buy that exceeds
+        The plan phase proves funding before any mutation; the commit phase
+        below therefore cannot fail financially. Any buy that exceeds
         available cash fails closed (INSUFFICIENT_CASH): no silent borrowing,
-        no partial fills.
+        no partial fills, no partially-mutated state.
         """
-        # Phase 1: sells (generate cash before buying)
-        for sym in self.target_weights:
-            price = prices.get(sym)
-            if price is None or price <= Decimal("0"):
-                raise DataContractError(
-                    f"MISSING_PRICE: Cannot rebalance {sym} on {trading_date}: price={price}"
-                )
-            current_shares = self._shares.get(sym, Decimal("0"))
-            delta = target_shares[sym] - current_shares
-
-            if delta >= Decimal("0"):
-                continue  # Buy phase handles this
-
-            notional = abs(delta) * price
-            friction = self.friction_model.calculate_cost(notional, abs(delta))
-            self._cash += notional - friction
-            if self._cash < Decimal("0"):
-                raise DataContractError(
-                    f"NEGATIVE_CASH_AFTER_SELL: Friction exceeded proceeds for {sym} on {trading_date}."
-                )
-            self._shares[sym] = current_shares + delta
-            self.transactions.append(HoldingsBenchmarkTransaction(
-                trading_date=trading_date, symbol=sym, shares_delta=delta,
-                price=price, notional=notional, friction_cost=friction, reason=reason,
-            ))
-
-        # Phase 2: buys
-        for sym in self.target_weights:
-            price = prices.get(sym)
-            if price is None or price <= Decimal("0"):
-                raise DataContractError(
-                    f"MISSING_PRICE: Cannot rebalance {sym} on {trading_date}: price={price}"
-                )
-            current_shares = self._shares.get(sym, Decimal("0"))
-            delta = target_shares[sym] - current_shares
-
-            if delta <= Decimal("0"):
-                continue
-
-            notional = delta * price
-            friction = self.friction_model.calculate_cost(notional, delta)
-            total_cost = notional + friction
-            if self._cash < total_cost:
-                raise DataContractError(
-                    f"INSUFFICIENT_CASH: Cannot buy {delta} shares of {sym} on {trading_date}. "
-                    f"Need {total_cost}, have {self._cash}. No implicit borrowing."
-                )
-            self._cash -= total_cost
-            self._shares[sym] = current_shares + delta
+        actions = self._plan_targets(trading_date, prices, target_shares)
+        for sym, delta, notional, friction in actions:
+            price = prices[sym]
+            if delta < Decimal("0"):
+                self._cash += notional - friction
+            else:
+                self._cash -= notional + friction
+            self._shares[sym] = self._shares.get(sym, Decimal("0")) + delta
             self.transactions.append(HoldingsBenchmarkTransaction(
                 trading_date=trading_date, symbol=sym, shares_delta=delta,
                 price=price, notional=notional, friction_cost=friction, reason=reason,
@@ -832,6 +872,11 @@ class HoldingsBasedBenchmark:
         """
         if self._initialized:
             raise DataContractError("HoldingsBasedBenchmark already initialized.")
+        ensure_finite_decimal(nav, field_name="nav")
+        if nav <= Decimal("0"):
+            raise DataContractError(
+                f"Initial NAV must be strictly positive, got {nav}."
+            )
         for sym in self.target_weights:
             if sym not in prices or prices[sym] <= Decimal("0"):
                 raise DataContractError(
@@ -883,50 +928,126 @@ class HoldingsBasedBenchmark:
         investor-net when net is set, gross otherwise. Records whose date
         matches neither ex- nor payable-date are ignored on this step.
         Rebalances only if trading_date is in rebalance_dates.
+        Sessions must be strictly increasing: replaying an already-processed
+        date fails closed with REPLAYED_SESSION and mutates nothing.
         Returns current NAV (equity + cash + outstanding receivables).
         """
         if not self._initialized:
             raise DataContractError("Must call initialize() before step().")
+        if self.date_history and trading_date <= self.date_history[-1]:
+            raise DataContractError(
+                f"REPLAYED_SESSION: {trading_date} is not strictly after last "
+                f"processed session {self.date_history[-1]}. Sessions must advance "
+                "monotonically; replaying a session would double-count economics."
+            )
         for sym in self.target_weights:
             if sym not in prices or prices[sym] <= Decimal("0"):
                 raise DataContractError(
                     f"MISSING_PRICE: {sym} price missing or non-positive on {trading_date}."
                 )
-        if distributions:
-            for dist in distributions:
-                if dist.symbol not in self.target_weights:
-                    continue
-                if trading_date == dist.ex_date:
-                    shares_held = self._shares.get(dist.symbol, Decimal("0"))
-                    if shares_held > Decimal("0"):
+        # Snapshot for atomicity: any failure below restores every field.
+        snap_shares = dict(self._shares)
+        snap_cash = self._cash
+        snap_receivables = dict(self._receivables)
+        snap_booked = set(self._booked_entitlements)
+        snap_settled = set(self._settled_payables)
+        snap_tx_len = len(self.transactions)
+        snap_hist_len = len(self.nav_history)
+        try:
+            if distributions:
+                for dist in distributions:
+                    if dist.symbol not in self.target_weights:
+                        continue
+                    if trading_date == dist.ex_date:
+                        entitlement_key = (dist.symbol, dist.ex_date, dist.payable_date)
+                        if entitlement_key in self._booked_entitlements:
+                            raise DataContractError(
+                                f"DUPLICATE_ENTITLEMENT: {dist.symbol} ex-date "
+                                f"{dist.ex_date} entitlement already booked."
+                            )
+                        shares_held = self._shares.get(dist.symbol, Decimal("0"))
+                        if shares_held > Decimal("0"):
+                            key = (dist.symbol, dist.payable_date)
+                            self._receivables[key] = (
+                                self._receivables.get(key, Decimal("0"))
+                                + shares_held * dist.cash_amount
+                            )
+                        self._booked_entitlements.add(entitlement_key)
+                    if trading_date == dist.payable_date:
                         key = (dist.symbol, dist.payable_date)
-                        self._receivables[key] = (
-                            self._receivables.get(key, Decimal("0"))
-                            + shares_held * dist.cash_amount
-                        )
-                if trading_date == dist.payable_date:
-                    key = (dist.symbol, dist.payable_date)
-                    settled = self._receivables.pop(key, Decimal("0"))
-                    self._cash += settled
+                        settled = self._receivables.pop(key, Decimal("0"))
+                        self._cash += settled
+                        self._settled_payables.add(key)
 
-        if trading_date in self.rebalance_dates:
-            self._execute_rebalance(trading_date, prices, reason="SCHEDULED_REBALANCE")
+            if trading_date in self.rebalance_dates:
+                self._execute_rebalance(trading_date, prices, reason="SCHEDULED_REBALANCE")
 
-        nav = self._compute_nav(prices)
-        self.nav_history.append(nav)
-        self.date_history.append(trading_date)
-        self.weight_history.append(self._compute_weights(prices))
-        return nav
+            nav = self._compute_nav(prices)
+            self.nav_history.append(nav)
+            self.date_history.append(trading_date)
+            self.weight_history.append(self._compute_weights(prices))
+            return nav
+        except DataContractError:
+            self._shares = snap_shares
+            self._cash = snap_cash
+            self._receivables = snap_receivables
+            self._booked_entitlements = snap_booked
+            self._settled_payables = snap_settled
+            del self.transactions[snap_tx_len:]
+            del self.nav_history[snap_hist_len:]
+            del self.date_history[snap_hist_len:]
+            del self.weight_history[snap_hist_len:]
+            raise
 
-    def apply_split(self, symbol: str, split_ratio: Decimal) -> None:
-        """Multiply share count by split_ratio. Call before step() on split ex-date.
+    def apply_split(self, symbol: str, split_ratio: Decimal, ex_date: date) -> None:
+        """Multiply share count by split_ratio for the split ex-date.
 
         split_ratio = split_to / split_from (e.g., 2.0 for 2:1 split).
         This preserves investment value when the price series reflects post-split prices.
+        Unknown symbols fail closed (no silent no-op); applying the same
+        (symbol, ex-date) split twice fails closed (no double multiplication).
+        Validation precedes mutation, so a rejected split changes nothing.
         """
         if symbol not in self._shares:
-            return
+            raise DataContractError(
+                f"UNKNOWN_SPLIT_SYMBOL: {symbol} is not a benchmark holding."
+            )
         ensure_finite_decimal(split_ratio, field_name="split_ratio")
         if split_ratio <= Decimal("0"):
             raise DataContractError(f"split_ratio must be positive, got {split_ratio}")
+        split_key = (symbol, ex_date)
+        if split_key in self._applied_splits:
+            raise DataContractError(
+                f"DUPLICATE_SPLIT: {symbol} split for ex-date {ex_date} already applied."
+            )
+        self._applied_splits.add(split_key)
         self._shares[symbol] = self._shares[symbol] * split_ratio
+
+    def allocation_snapshot(self, prices: Dict[str, Decimal]) -> Dict[str, object]:
+        """Read-only disclosure: target vs realized allocation (no mutation).
+
+        A nominal 60/40 target under whole-share constraints realizes as, e.g.,
+        ~50/40/10 (assets/cash): this snapshot reports target weights,
+        realized asset weights, residual cash weight, cumulative commission
+        drag, and maximum absolute weight deviation so no allocation is ever
+        reported as exactly invested at target when it is not.
+        """
+        nav = self._compute_nav(prices)
+        if nav <= Decimal("0"):
+            raise DataContractError("NAV is non-positive; cannot snapshot allocation.")
+        realized = self._compute_weights(prices)
+        cumulative_friction = sum((t.friction_cost for t in self.transactions), Decimal("0"))
+        max_deviation = max(
+            (abs(realized[sym] - self.target_weights[sym]) for sym in self.target_weights),
+            default=Decimal("0"),
+        )
+        return {
+            "model_classification": self.model_classification,
+            "nav": nav,
+            "target_weights": {sym: wt for sym, wt in self.target_weights.items()},
+            "realized_weights": dict(realized),
+            "residual_cash_weight": self._cash / nav,
+            "receivables_weight": self._receivables_total() / nav,
+            "cumulative_friction": cumulative_friction,
+            "max_abs_weight_deviation": max_deviation,
+        }

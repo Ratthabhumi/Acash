@@ -183,7 +183,7 @@ def test_buy_and_hold_weight_drift_and_zero_trades() -> None:
     for day in VALID_SYNTHETIC_WEEK[1:]:
         prices = {"VOO": WEEK_PRICES_VOO[day], "BND": WEEK_PRICES_BND[day]}
         if day == VALID_SYNTHETIC_WEEK[1]:
-            bench.apply_split("VOO", Decimal("2.0"))
+            bench.apply_split("VOO", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
         bench.step(day, prices)
     # Prices moved: weights must have drifted away from the Day-1 snapshot.
     assert bench.weight_history[-1] != initial_weights
@@ -265,7 +265,7 @@ def test_split_value_conservation_holdings() -> None:
     # = 0.35 + 0.70 = 1.05 > $0 residual -> trim to 9 shares.
     assert bench._shares == {"VOO": Decimal("9")}
     nav_before_split = bench.nav_history[-1]
-    bench.apply_split("VOO", Decimal("2.0"))
+    bench.apply_split("VOO", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
     assert bench._shares == {"VOO": Decimal("18")}
     # Post-split $50 price on the doubled share count preserves position value.
     nav_after = bench.step(VALID_SYNTHETIC_WEEK[1], {"VOO": Decimal("50.00")})
@@ -274,7 +274,7 @@ def test_split_value_conservation_holdings() -> None:
 
 def test_distribution_ex_payable_separation() -> None:
     bench = _init_6040()
-    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio)
+    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)
     bench.step(
         VALID_SYNTHETIC_WEEK[1],
         {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[1]],
@@ -355,7 +355,7 @@ def test_deterministic_lineage() -> None:
         for day in VALID_SYNTHETIC_WEEK[1:]:
             prices = {"VOO": WEEK_PRICES_VOO[day], "BND": WEEK_PRICES_BND[day]}
             if day == VALID_SYNTHETIC_WEEK[1]:
-                bench.apply_split("VOO", Decimal("2.0"))
+                bench.apply_split("VOO", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
             dists = [WEEK_BND_DISTRIBUTION] if day in (
                 VALID_SYNTHETIC_WEEK[2], VALID_SYNTHETIC_WEEK[4]) else None
             bench.step(day, prices, distributions=dists)
@@ -368,6 +368,179 @@ def test_deterministic_lineage() -> None:
     assert [(t.symbol, t.shares_delta, t.price) for t in first.transactions] == [
         (t.symbol, t.shares_delta, t.price) for t in second.transactions
     ]
+
+
+def test_long_only_weights_reject_shorts_and_nonfinite() -> None:
+    # -50% VOO / +150% BND sums to 1.0 but means short VOO: prohibited.
+    with pytest.raises(DataContractError, match="LONG_ONLY_VIOLATION"):
+        HoldingsBasedBenchmark(
+            target_weights={"VOO": Decimal("-0.50"), "BND": Decimal("1.50")},
+            rebalance_dates=set(),
+            friction_model=_friction_model(),
+        )
+    with pytest.raises(DataContractError, match="LONG_ONLY_VIOLATION"):
+        HoldingsBasedBenchmark(
+            target_weights={"VOO": Decimal("0.60"), "BND": Decimal("-0.10"), "GLD": Decimal("0.50")},
+            rebalance_dates=set(),
+            friction_model=_friction_model(),
+        )
+    for bad in (Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")):
+        with pytest.raises(Exception):
+            HoldingsBasedBenchmark(
+                target_weights={"VOO": bad, "BND": Decimal("1.0")},
+                rebalance_dates=set(),
+                friction_model=_friction_model(),
+            )
+    # Weights must still sum to 1.0 (gross exposure above 1.0 rejected).
+    with pytest.raises(DataContractError, match="must sum to 1.0"):
+        HoldingsBasedBenchmark(
+            target_weights={"VOO": Decimal("0.60"), "BND": Decimal("0.50")},
+            rebalance_dates=set(),
+            friction_model=_friction_model(),
+        )
+    with pytest.raises(DataContractError, match="at least one holding"):
+        HoldingsBasedBenchmark(
+            target_weights={},
+            rebalance_dates=set(),
+            friction_model=_friction_model(),
+        )
+    # Zero/negative starting NAV rejected (valid allocations pass).
+    for bad_nav in (Decimal("0"), Decimal("-100")):
+        with pytest.raises(DataContractError, match="strictly positive"):
+            HoldingsBasedBenchmark(
+                target_weights={"VOO": Decimal("1.0")},
+                rebalance_dates=set(),
+                friction_model=_friction_model(),
+            ).initialize(
+                nav=bad_nav,
+                prices={"VOO": Decimal("100.00")},
+                trading_date=VALID_SYNTHETIC_WEEK[0],
+            )
+
+
+def test_failed_rebalance_preserves_all_state_atomically() -> None:
+    bench2 = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("0.60"), "BND": Decimal("0.40")},
+        rebalance_dates={VALID_SYNTHETIC_WEEK[1]},
+        friction_model=_friction_model(),
+    )
+    bench2.initialize(
+        nav=Decimal("901.33"),
+        prices={"VOO": Decimal("100.00"), "BND": Decimal("80.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    before = (
+        dict(bench2._shares),
+        bench2._cash,
+        bench2.outstanding_receivables(),
+        len(bench2.transactions),
+        list(bench2.nav_history),
+        list(bench2.date_history),
+        [dict(w) for w in bench2.weight_history],
+    )
+    with pytest.raises(DataContractError, match="INSUFFICIENT_CASH"):
+        bench2.step(
+            VALID_SYNTHETIC_WEEK[1],
+            {"VOO": Decimal("80.00"), "BND": Decimal("80.00")},
+        )
+    # A failed rebalance must leave every observable state bit identical:
+    # shares, cash, receivables, transactions, and all histories.
+    assert dict(bench2._shares) == before[0]
+    assert bench2._cash == before[1]
+    assert bench2.outstanding_receivables() == before[2]
+    assert len(bench2.transactions) == before[3]
+    assert list(bench2.nav_history) == before[4]
+    assert list(bench2.date_history) == before[5]
+    assert [dict(w) for w in bench2.weight_history] == before[6]
+
+
+def test_replay_safety_sessions_splits_settlements() -> None:
+    bench = _init_6040()
+    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)
+    bench.step(
+        VALID_SYNTHETIC_WEEK[1],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[1]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[1]]},
+    )
+    nav_len = len(bench.nav_history)
+    # Replaying the same session fails closed and mutates nothing.
+    with pytest.raises(DataContractError, match="REPLAYED_SESSION"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[1],
+            {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[1]],
+             "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[1]]},
+        )
+    assert len(bench.nav_history) == nav_len
+    # Out-of-order session fails closed.
+    with pytest.raises(DataContractError, match="REPLAYED_SESSION"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[0],
+            {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[0]],
+             "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[0]]},
+        )
+    # Re-applying the same split would double shares: rejected, count intact.
+    with pytest.raises(DataContractError, match="DUPLICATE_SPLIT"):
+        bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)
+    assert bench._shares["VOO"] == Decimal("10")
+    # Unknown split symbols fail closed instead of silent no-op.
+    with pytest.raises(DataContractError, match="UNKNOWN_SPLIT_SYMBOL"):
+        bench.apply_split("FAKE", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
+
+
+def test_double_settlement_blocked_by_session_monotonicity() -> None:
+    bench = _init_6040()
+    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)
+    bench.step(
+        VALID_SYNTHETIC_WEEK[1],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[1]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[1]]},
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[2]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[2]]},
+        distributions=[WEEK_BND_DISTRIBUTION],
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[4],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[4]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[4]]},
+        distributions=[WEEK_BND_DISTRIBUTION],
+    )
+    cash_after_settle = bench._cash
+    assert cash_after_settle == Decimal("98.67") + Decimal("2.125")
+    # Replaying the payable date (the only way to double-settle) is rejected
+    # before any mutation: cash cannot be credited twice.
+    with pytest.raises(DataContractError, match="REPLAYED_SESSION"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[4],
+            {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[4]],
+             "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[4]]},
+            distributions=[WEEK_BND_DISTRIBUTION],
+        )
+    assert bench._cash == cash_after_settle
+    assert bench.outstanding_receivables() == {}
+
+
+def test_allocation_snapshot_target_vs_realized() -> None:
+    bench = _init_6040()
+    snap = bench.allocation_snapshot(
+        {"VOO": Decimal("100.00"), "BND": Decimal("80.00")}
+    )
+    assert snap["model_classification"] == HOLDINGS_BENCHMARK_CLASSIFICATION
+    assert snap["target_weights"] == {"VOO": Decimal("0.60"), "BND": Decimal("0.40")}
+    # Nominal 60/40 target realizes as ~50.07/40.05 + ~9.88% cash drag:
+    # never reported as an exact invested 60/40 allocation.
+    assert snap["realized_weights"] == {
+        "VOO": Decimal("500") / Decimal("998.67"),
+        "BND": Decimal("400") / Decimal("998.67"),
+    }
+    assert snap["residual_cash_weight"] == Decimal("98.67") / Decimal("998.67")
+    assert snap["cumulative_friction"] == Decimal("1.33")
+    assert snap["max_abs_weight_deviation"] == abs(
+        Decimal("500") / Decimal("998.67") - Decimal("0.60")
+    )
+    assert snap["nav"] == Decimal("998.67")
 
 
 def test_synthetic_golden_benchmark_workflow_usd1000() -> None:
@@ -384,7 +557,7 @@ def test_synthetic_golden_benchmark_workflow_usd1000() -> None:
 
     # Holdings-based BM-6040 golden path (hand-verified day by day).
     bench = _init_6040()
-    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio)
+    bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)
     for day in VALID_SYNTHETIC_WEEK[1:]:
         prices = {"VOO": WEEK_PRICES_VOO[day], "BND": WEEK_PRICES_BND[day]}
         dists = [WEEK_BND_DISTRIBUTION] if day in (
@@ -419,7 +592,7 @@ def test_synthetic_golden_benchmark_workflow_usd1000() -> None:
         trading_date=VALID_SYNTHETIC_WEEK[0],
     )
     assert voo_bh._shares == {"VOO": Decimal("9")}
-    voo_bh.apply_split("VOO", Decimal("2.0"))
+    voo_bh.apply_split("VOO", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
     for day in VALID_SYNTHETIC_WEEK[1:]:
         voo_bh.step(day, {"VOO": WEEK_PRICES_VOO[day]})
     # 18*49 + 99.02 = 882 + 99.02 = 981.02.

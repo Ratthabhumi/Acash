@@ -291,6 +291,62 @@ def test_small_order_broker_friction_minimum_drag() -> None:
         model.calculate_cost(Decimal("50.0"), Decimal("0"))
 
 
+def test_fractional_shares_rejected_under_whole_share_tariff() -> None:
+    """Fractional quantities must not silently pass through the whole-share tariff.
+
+    IBKR prices fractional trades under separate terms (documented but
+    unmodeled); this model fails closed instead of mispricing them.
+    """
+    model = SmallOrderFrictionModel()
+    with pytest.raises(DataContractError, match="FRACTIONAL_SHARES_UNSUPPORTED"):
+        model.calculate_cost(Decimal("50.0"), Decimal("0.5"))
+    # Integral values expressed with a decimal point still pass.
+    assert model.calculate_cost(Decimal("50.0"), Decimal("1.0")) == Decimal("0.385")
+
+
+def test_total_return_panel_declares_its_amount_basis() -> None:
+    """TR panels use gross when net is absent and net when the owner set it.
+
+    Issuer gross total return and owner-specific after-tax NAV stay reported
+    separately via the record fields; the panel never blends them silently.
+    """
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("100.0")),
+        (date(2020, 1, 3), Decimal("99.0")),
+    ]
+    gross_panel = build_total_return_panel(
+        voo,
+        raw_bars,
+        distributions=[
+            EtfDistributionRecord(
+                symbol="VOO",
+                ex_date=date(2020, 1, 3),
+                payable_date=date(2020, 1, 8),
+                gross_amount=Decimal("1.0"),
+            )
+        ],
+    )
+    net_panel = build_total_return_panel(
+        voo,
+        raw_bars,
+        distributions=[
+            EtfDistributionRecord(
+                symbol="VOO",
+                ex_date=date(2020, 1, 3),
+                payable_date=date(2020, 1, 8),
+                gross_amount=Decimal("1.0"),
+                net_amount=Decimal("0.85"),
+                withholding_rate=Decimal("0.15"),
+            )
+        ],
+    )
+    # Gross basis: (99 + 1.0) / 100 = 1.00. Net basis: (99 + 0.85) / 100 = 0.9985.
+    assert gross_panel[1].total_return_factor == Decimal("1.00")
+    assert net_panel[1].total_return_factor == Decimal("0.9985")
+    assert gross_panel[1].total_return_factor != net_panel[1].total_return_factor
+
+
 def test_split_regression_2_for_1_zero_economic_loss() -> None:
     """A 2-for-1 split drops price from 100 to 50 with zero economic loss (return == 0.0)."""
     gld = KNOWN_ETF_REGISTRY["GLD"]
