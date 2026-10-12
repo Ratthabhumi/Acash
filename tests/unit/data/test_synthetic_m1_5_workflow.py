@@ -306,6 +306,69 @@ def test_distribution_ex_payable_separation() -> None:
     assert bench.nav_history[-1] == Decimal("991.795")
 
 
+def test_same_day_split_and_distribution_post_split_basis() -> None:
+    """Same-session split + distribution uses POST-SPLIT shares for entitlement.
+
+    Golden adversarial case: 5 shares, 2:1 split, $0.50 per POST-SPLIT share
+    on the same ex-date. Matches build_total_return_panel() semantics where
+    one pre-split share becomes split_ratio post-split shares each earning
+    cash_amount. Pre-fix code booked 5 x 0.50 = $2.50 (pre-split basis);
+    correct is 10 x 0.50 = $5.00. Resupply on a later date must not
+    double-count.
+    """
+    bench = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("1.0")},
+        rebalance_dates=set(),
+        friction_model=_friction_model(),
+    )
+    # 5 shares @ $100: notional $500 + friction $0.70 (min $0.35 + 0.07%
+    # spread/slippage) = $500.70 exactly, zero residual cash.
+    bench.initialize(
+        nav=Decimal("500.70"),
+        prices={"VOO": Decimal("100.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    assert bench._shares == {"VOO": Decimal("5")}
+    assert bench._cash == Decimal("0")
+
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        payable_date=event_day,
+        gross_amount=Decimal("0.50"),
+    )
+    nav = bench.step(
+        event_day,
+        {"VOO": Decimal("50.00")},
+        distributions=[dist],
+        splits=[split],
+    )
+    # Post-split shares and post-split-basis entitlement, settled same day.
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("5.00")
+    # Split conserves equity (10 x $50 = $500); distribution adds $5 cash.
+    assert nav == Decimal("505.00")
+
+    # Resupplying the same record later must not book again or pay twice.
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"VOO": Decimal("50.00")},
+        distributions=[dist],
+    )
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("5.00")
+    assert bench.nav_history[-1] == Decimal("505.00")
+
+
 def test_missing_price_fail_closed() -> None:
     bench = _init_6040()
     with pytest.raises(DataContractError, match="MISSING_PRICE"):

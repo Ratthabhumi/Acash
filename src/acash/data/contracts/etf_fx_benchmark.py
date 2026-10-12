@@ -975,8 +975,10 @@ class HoldingsBasedBenchmark:
         form ONE atomic unit: every event identity is validated before any
         mutation, and any failure restores all state bit-identically.
         Distribution lifecycle (ex-date entitlement vs payable-date cash):
-        on a record's ex-date, book a receivable fixed by shares held that
-        day. Payable-date settlement is driven by the BOOKED LEDGER — every
+        on a record's ex-date, book a receivable fixed by POST-SPLIT shares
+        held that day: same-session splits apply BEFORE entitlements, matching
+        build_total_return_panel() where one pre-split share becomes
+        split_ratio post-split shares each earning cash_amount. Payable-date settlement is driven by the BOOKED LEDGER — every
         receivable whose payable date has arrived settles into cash whether
         or not the record is resupplied — so a data adapter that emits each
         event once cannot strand cash. Amount basis is the record's
@@ -1022,6 +1024,13 @@ class HoldingsBasedBenchmark:
                             f"DUPLICATE_SPLIT: {split.symbol} split for ex-date "
                             f"{split.ex_date} already applied."
                         )
+            if splits:
+                for split in splits:
+                    self._applied_splits.add((split.symbol, split.ex_date))
+                    self._shares[split.symbol] = (
+                        self._shares.get(split.symbol, Decimal("0"))
+                        * split.split_ratio
+                    )
             if distributions:
                 for dist in distributions:
                     if dist.symbol not in self.target_weights:
@@ -1033,6 +1042,10 @@ class HoldingsBasedBenchmark:
                                 f"DUPLICATE_ENTITLEMENT: {dist.symbol} ex-date "
                                 f"{dist.ex_date} entitlement already booked."
                             )
+                        # POST-SPLIT basis: same-session splits already applied
+                        # above, matching build_total_return_panel() where one
+                        # pre-split share becomes split_ratio post-split shares
+                        # each earning cash_amount.
                         shares_held = self._shares.get(dist.symbol, Decimal("0"))
                         if shares_held > Decimal("0"):
                             key = (dist.symbol, dist.payable_date)
@@ -1050,14 +1063,6 @@ class HoldingsBasedBenchmark:
             ):
                 self._cash += self._receivables.pop(key)
                 self._settled_payables.add(key)
-
-            if splits:
-                for split in splits:
-                    self._applied_splits.add((split.symbol, split.ex_date))
-                    self._shares[split.symbol] = (
-                        self._shares.get(split.symbol, Decimal("0"))
-                        * split.split_ratio
-                    )
 
             if trading_date in self.rebalance_dates:
                 self._execute_rebalance(trading_date, prices, reason="SCHEDULED_REBALANCE")
