@@ -472,12 +472,17 @@ def build_total_return_panel(
                 "Double-counting hazard: cannot apply cash distributions to a DIVIDEND_ADJUSTED_PRICE series."
             )
 
-    # Index distributions by ex_date
-    dist_map: Dict[date, List[Decimal]] = {}
+    # Index distributions by ex_date, preserving declared share basis.
+    # Same-session splits apply BEFORE entitlements: POST_SPLIT amounts are
+    # per post-split share (TR-panel canonical convention); PRE_SPLIT
+    # amounts are normalized to post-split-per-share (divided by the
+    # same-session split ratio) so both engines agree. UNKNOWN basis with a
+    # same-session split fails closed (AMBIGUOUS_SHARE_BASIS).
+    dist_map: Dict[date, List[EtfDistributionRecord]] = {}
     for d in distributions:
         if d.symbol != instrument.symbol:
             raise DataContractError(f"Distribution symbol {d.symbol} != instrument {instrument.symbol}")
-        dist_map.setdefault(d.ex_date, []).append(d.cash_amount)
+        dist_map.setdefault(d.ex_date, []).append(d)
 
     # Index splits by ex_date
     split_map: Dict[date, Decimal] = {}
@@ -511,10 +516,24 @@ def build_total_return_panel(
 
         # 3. Handle distributions and splits on ex-date
         divs_today = dist_map.get(trading_date, [])
-        div_amount_today = sum(divs_today, Decimal("0.0"))
+        split_ratio_today = split_map.get(trading_date, Decimal("1.0"))
+        div_amount_today = Decimal("0.0")
+        for d in divs_today:
+            if split_ratio_today != Decimal("1.0"):
+                if d.share_basis == DistributionShareBasis.UNKNOWN:
+                    raise DataContractError(
+                        f"AMBIGUOUS_SHARE_BASIS: {d.symbol} distribution "
+                        f"on split ex-date {d.ex_date} has undeclared "
+                        "share_basis. Declare PRE_SPLIT or POST_SPLIT."
+                    )
+                if d.share_basis == DistributionShareBasis.PRE_SPLIT:
+                    # Normalize to post-split-per-share so the TR formula
+                    # (split_ratio * (price + div)) matches holdings.
+                    div_amount_today += d.cash_amount / split_ratio_today
+                    continue
+            div_amount_today += d.cash_amount
         cum_div += div_amount_today
 
-        split_ratio_today = split_map.get(trading_date, Decimal("1.0"))
         cum_split_factor *= split_ratio_today
 
         # 4. Total return factor progression
@@ -1071,6 +1090,24 @@ class HoldingsBasedBenchmark:
                         batch_split_factor.get(sym, Decimal("1")) * ratio
                     )
             split_symbols = set(batch_split_factor)
+            # Standalone-split boundary: a split for this ex-date applied via
+            # the legacy apply_split() primitive (recorded in _applied_splits
+            # but absent from this call's batch) leaves no batch factor, so a
+            # same-ex-date distribution cannot be basis-validated. Fail closed
+            # instead of silently treating it as post-split.
+            if distributions and not splits:
+                for dist in distributions:
+                    if (
+                        trading_date == dist.ex_date
+                        and (dist.symbol, dist.ex_date) in self._applied_splits
+                        and dist.symbol not in split_symbols
+                    ):
+                        raise DataContractError(
+                            f"STANDALONE_SPLIT_BASIS: {dist.symbol} distribution "
+                            f"on ex-date {dist.ex_date} follows a standalone "
+                            "split outside this step() call. Pass the split "
+                            "and distribution to the SAME step() call."
+                        )
             if splits:
                 for split in splits:
                     self._applied_splits.add((split.symbol, split.ex_date))
@@ -1199,6 +1236,14 @@ class HoldingsBasedBenchmark:
         Validation precedes mutation, so a rejected split changes nothing.
         Prefer passing splits to step() so the split joins the atomic session
         envelope (a later step() failure cannot strand an applied split).
+
+        WARNING: a standalone split applied outside step() is recorded in
+        _applied_splits but NOT in the step() same-session batch factor.
+        A same-ex-date distribution passed to a LATER step() call therefore
+        fails closed (STANDALONE_SPLIT_BASIS): pass the split and the
+        distribution to the SAME step() call so share-basis validation
+        applies. This boundary is intentional — standalone splits are a
+        legacy primitive, not a same-session corporate-action path.
         """
         if symbol not in self._shares:
             raise DataContractError(

@@ -564,6 +564,32 @@ def test_revised_provider_event_rejected_atomically() -> None:
     }
 
 
+def test_standalone_split_then_distribution_rejected() -> None:
+    """Legacy apply_split() + later same-ex-date dist fails closed."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    bench = _init_single_voo_5_shares()
+    event_day = VALID_SYNTHETIC_WEEK[1]
+    bench.apply_split("VOO", Decimal("2.0"), event_day)
+    assert bench._shares == {"VOO": Decimal("10")}
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=event_day,
+        payable_date=event_day,
+        gross_amount=Decimal("0.50"),
+        share_basis=DistributionShareBasis.POST_SPLIT,
+    )
+    with pytest.raises(DataContractError, match="STANDALONE_SPLIT_BASIS"):
+        bench.step(
+            event_day, {"VOO": Decimal("50.00")}, distributions=[dist]
+        )
+    # Atomic: split from the legacy primitive stands (outside the envelope),
+    # but the rejected step booked nothing.
+    assert bench._shares == {"VOO": Decimal("10")}
+    assert bench._cash == Decimal("0")
+    assert bench.outstanding_receivables() == {}
+
+
 def test_missing_price_fail_closed() -> None:
     bench = _init_6040()
     with pytest.raises(DataContractError, match="MISSING_PRICE"):

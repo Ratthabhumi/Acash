@@ -396,7 +396,9 @@ def test_split_regression_2_for_1_zero_economic_loss() -> None:
 
 
 def test_simultaneous_split_and_dividend_exact_math() -> None:
-    """Simultaneous 2:1 split and $1.00 dividend on ex-date calculates correct compounding."""
+    """Simultaneous 2:1 split and $1.00 POST_SPLIT dividend: correct compounding."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
     voo = KNOWN_ETF_REGISTRY["VOO"]
     raw_bars = [
         (date(2020, 1, 2), Decimal("100.0")),
@@ -416,6 +418,7 @@ def test_simultaneous_split_and_dividend_exact_math() -> None:
             ex_date=date(2020, 1, 3),
             payable_date=date(2020, 1, 8),
             gross_amount=Decimal("1.0"),
+            share_basis=DistributionShareBasis.POST_SPLIT,
         )
     ]
 
@@ -426,6 +429,141 @@ def test_simultaneous_split_and_dividend_exact_math() -> None:
     assert obs[1].total_return_factor == Decimal("1.02")
     assert obs[1].cumulative_dividend == Decimal("1.0")
     assert obs[1].split_factor == Decimal("2.0")
+
+
+def test_tr_panel_pre_split_basis_matches_holdings() -> None:
+    """PRE_SPLIT $1.00/pre-share == POST_SPLIT $0.50/post-share: same TR 1.01."""
+    from acash.data.contracts.etf_fx_benchmark import DistributionShareBasis
+
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("100.0")),
+        (date(2020, 1, 3), Decimal("50.0")),
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("1.0"),
+            split_to=Decimal("2.0"),
+        )
+    ]
+    pre = build_total_return_panel(
+        voo,
+        raw_bars,
+        distributions=[
+            EtfDistributionRecord(
+                symbol="VOO",
+                ex_date=date(2020, 1, 3),
+                payable_date=date(2020, 1, 8),
+                gross_amount=Decimal("1.0"),
+                share_basis=DistributionShareBasis.PRE_SPLIT,
+            )
+        ],
+        splits=splits,
+    )
+    post = build_total_return_panel(
+        voo,
+        raw_bars,
+        distributions=[
+            EtfDistributionRecord(
+                symbol="VOO",
+                ex_date=date(2020, 1, 3),
+                payable_date=date(2020, 1, 8),
+                gross_amount=Decimal("0.5"),
+                share_basis=DistributionShareBasis.POST_SPLIT,
+            )
+        ],
+        splits=splits,
+    )
+    # Both: 1 pre-share -> 2 post-shares; economics $100 -> 2x$50 + $1 = $101.
+    assert pre[1].total_return_factor == Decimal("1.01")
+    assert post[1].total_return_factor == Decimal("1.01")
+    assert pre[1].cumulative_dividend == Decimal("0.5")
+    assert post[1].cumulative_dividend == Decimal("0.5")
+
+
+def test_tr_panel_unknown_basis_with_split_rejected() -> None:
+    """UNKNOWN basis on a split ex-date fails closed in the TR panel."""
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("100.0")),
+        (date(2020, 1, 3), Decimal("50.0")),
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("1.0"),
+            split_to=Decimal("2.0"),
+        )
+    ]
+    with pytest.raises(DataContractError, match="AMBIGUOUS_SHARE_BASIS"):
+        build_total_return_panel(
+            voo,
+            raw_bars,
+            distributions=[
+                EtfDistributionRecord(
+                    symbol="VOO",
+                    ex_date=date(2020, 1, 3),
+                    payable_date=date(2020, 1, 8),
+                    gross_amount=Decimal("1.0"),
+                )
+            ],
+            splits=splits,
+        )
+
+
+def test_cross_engine_parity_pre_split() -> None:
+    """Holdings ($502.50) and TR panel (1.005) agree on PRE_SPLIT economics."""
+    from acash.data.contracts.etf_fx_benchmark import (
+        DistributionShareBasis,
+        HoldingsBasedBenchmark,
+        SmallOrderFrictionModel,
+    )
+
+    bench = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("1.0")},
+        rebalance_dates=set(),
+        friction_model=SmallOrderFrictionModel(),
+    )
+    # 5 shares @ $100, friction-exact: $500.70 NAV, $0 cash.
+    bench.initialize(
+        nav=Decimal("500.70"),
+        prices={"VOO": Decimal("100.00")},
+        trading_date=date(2020, 1, 2),
+    )
+    split = EtfSplitRecord(
+        symbol="VOO",
+        ex_date=date(2020, 1, 3),
+        split_from=Decimal("1.0"),
+        split_to=Decimal("2.0"),
+    )
+    dist = EtfDistributionRecord(
+        symbol="VOO",
+        ex_date=date(2020, 1, 3),
+        payable_date=date(2020, 1, 3),
+        gross_amount=Decimal("0.50"),
+        share_basis=DistributionShareBasis.PRE_SPLIT,
+    )
+    nav = bench.step(
+        date(2020, 1, 3), {"VOO": Decimal("50.00")},
+        distributions=[dist], splits=[split],
+    )
+    # Holdings: 10x$50 + 5x$0.50 = $502.50.
+    assert nav == Decimal("502.50")
+    # TR panel on equivalent PRE_SPLIT event: (2x(50+0.25))/100 = 1.005... per
+    # post-share normalization: 2*(50 + 0.50/2)/100 = 100.50/100.
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    obs = build_total_return_panel(
+        voo,
+        [(date(2020, 1, 2), Decimal("100.0")), (date(2020, 1, 3), Decimal("50.0"))],
+        distributions=[dist],
+        splits=[split],
+    )
+    assert obs[1].total_return_factor == Decimal("1.005")
+    # Cross-check: holdings total $502.50 / $500.00 pre-event equity = 1.005.
+    assert nav / Decimal("500.00") == obs[1].total_return_factor
 
 
 def test_fractional_split_3_for_2() -> None:
