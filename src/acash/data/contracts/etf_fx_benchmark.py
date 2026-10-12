@@ -31,6 +31,16 @@ class AssetClass(str, Enum):
     CASH_EQUIVALENT = "CASH_EQUIVALENT"
 
 
+class PriceBasis(str, Enum):
+    """Declared epistemic basis of historical prices to prevent double-adjustment."""
+    RAW_UNADJUSTED_PRICE = "RAW_UNADJUSTED_PRICE"
+    SPLIT_ADJUSTED_PRICE = "SPLIT_ADJUSTED_PRICE"
+    DIVIDEND_ADJUSTED_PRICE = "DIVIDEND_ADJUSTED_PRICE"
+    TOTAL_RETURN_ADJUSTED_PRICE = "TOTAL_RETURN_ADJUSTED_PRICE"
+    ETF_NAV = "ETF_NAV"
+    EXECUTABLE_MARKET_PRICE = "EXECUTABLE_MARKET_PRICE"
+
+
 class DayCountConvention(str, Enum):
     ACT_360 = "ACT/360"
     ACT_365 = "ACT/365"
@@ -162,6 +172,7 @@ class EtfDailyObservation(BaseModel):
     symbol: str
     trading_date: date
     raw_close: Decimal
+    price_basis: PriceBasis = PriceBasis.RAW_UNADJUSTED_PRICE
     split_factor: Decimal = Decimal("1.0")
     cumulative_dividend: Decimal = Decimal("0.0")
     total_return_factor: Decimal = Decimal("1.0")
@@ -264,40 +275,73 @@ class CashAccrualModel(BaseModel):
 
 
 class SmallOrderFrictionModel(BaseModel):
-    """Cost model enforcing broker order minimums critical for small ($1,000) accounts."""
+    """Cost model enforcing broker order minimums and percentage caps critical for small ($1,000) accounts."""
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     commission_rate: Decimal = Decimal("0.0005")       # 5 bps
     min_commission_usd: Decimal = Decimal("0.35")      # IBKR Tiered minimum $0.35
+    max_commission_pct: Decimal = Decimal("0.01")      # IBKR rule: Maximum 1.0% of order value
     half_spread: Decimal = Decimal("0.0005")           # 5 bps
     slippage: Decimal = Decimal("0.0002")              # 2 bps
 
     def calculate_cost(self, notional_traded: Decimal) -> Decimal:
-        """Calculate total transaction friction including minimum commission floor."""
+        """Calculate total transaction friction including minimum commission floor and percentage cap."""
         ensure_finite_decimal(notional_traded, field_name="notional_traded")
         if notional_traded <= Decimal("0"):
             return Decimal("0.0")
 
         linear_commission = notional_traded * self.commission_rate
-        actual_commission = max(linear_commission, self.min_commission_usd)
+        max_cap = notional_traded * self.max_commission_pct
+        actual_commission = min(max(linear_commission, self.min_commission_usd), max_cap)
         spread_and_slippage = notional_traded * (self.half_spread + self.slippage)
         return actual_commission + spread_and_slippage
 
 
 def build_total_return_panel(
     instrument: EtfInstrumentContract,
-    raw_bars: Sequence[Tuple[date, Decimal]],  # (trading_date, raw_close)
+    raw_bars: Sequence[Tuple[date, Decimal]],  # (trading_date, price)
     distributions: Sequence[EtfDistributionRecord] = (),
+    splits: Sequence[EtfSplitRecord] = (),
+    price_basis: PriceBasis = PriceBasis.RAW_UNADJUSTED_PRICE,
 ) -> List[EtfDailyObservation]:
-    """Construct an immutable sequence of total return observations with dividend reinvestment.
+    """Construct an immutable sequence of total return observations with split and dividend reinvestment.
 
     Fails closed if:
     - Observations precede fund inception date.
     - Dates are not strictly monotonically increasing.
     - Prices are non-positive or non-finite.
+    - Double-counting hazard: applying splits/distributions to already adjusted series.
+    - Unknown price_basis provided.
     """
     if not raw_bars:
         raise DataContractError("Cannot build total return panel from empty raw bars.")
+
+    if not isinstance(price_basis, PriceBasis):
+        try:
+            price_basis = PriceBasis(str(price_basis))
+        except ValueError:
+            raise DataContractError(f"Unknown or invalid price_basis: '{price_basis}'")
+
+    # Double-counting prevention guards
+    if price_basis == PriceBasis.TOTAL_RETURN_ADJUSTED_PRICE:
+        if len(distributions) > 0:
+            raise DataContractError(
+                "Double-counting hazard: cannot apply cash distributions to a TOTAL_RETURN_ADJUSTED_PRICE series."
+            )
+        if len(splits) > 0:
+            raise DataContractError(
+                "Double-counting hazard: cannot apply splits to a TOTAL_RETURN_ADJUSTED_PRICE series."
+            )
+    elif price_basis == PriceBasis.SPLIT_ADJUSTED_PRICE:
+        if len(splits) > 0:
+            raise DataContractError(
+                "Double-counting hazard: cannot apply splits to a SPLIT_ADJUSTED_PRICE series."
+            )
+    elif price_basis == PriceBasis.DIVIDEND_ADJUSTED_PRICE:
+        if len(distributions) > 0:
+            raise DataContractError(
+                "Double-counting hazard: cannot apply cash distributions to a DIVIDEND_ADJUSTED_PRICE series."
+            )
 
     # Index distributions by ex_date
     dist_map: Dict[date, List[Decimal]] = {}
@@ -306,13 +350,23 @@ def build_total_return_panel(
             raise DataContractError(f"Distribution symbol {d.symbol} != instrument {instrument.symbol}")
         dist_map.setdefault(d.ex_date, []).append(d.cash_amount)
 
+    # Index splits by ex_date
+    split_map: Dict[date, Decimal] = {}
+    for s in splits:
+        if s.symbol != instrument.symbol:
+            raise DataContractError(f"Split symbol {s.symbol} != instrument {instrument.symbol}")
+        if s.ex_date in split_map:
+            raise DataContractError(f"Duplicate split record on ex_date {s.ex_date} for {s.symbol}")
+        split_map[s.ex_date] = s.split_ratio
+
     observations: List[EtfDailyObservation] = []
     prev_date: Optional[date] = None
     prev_price: Optional[Decimal] = None
     cum_tr_factor = Decimal("1.0")
     cum_div = Decimal("0.0")
+    cum_split_factor = Decimal("1.0")
 
-    for trading_date, raw_close in raw_bars:
+    for trading_date, price in raw_bars:
         # 1. Enforce inception boundary
         instrument.validate_observation_date(trading_date)
 
@@ -322,32 +376,46 @@ def build_total_return_panel(
                 f"Non-monotonic date sequence detected: {trading_date} <= {prev_date}."
             )
 
-        ensure_finite_decimal(raw_close, field_name="raw_close")
-        if raw_close <= Decimal("0"):
-            raise DomainValidationError(f"Price must be strictly positive (> 0), got {raw_close}")
+        ensure_finite_decimal(price, field_name="price")
+        if price <= Decimal("0"):
+            raise DomainValidationError(f"Price must be strictly positive (> 0), got {price}")
 
-        # 3. Handle distributions on ex-date
+        # 3. Handle distributions and splits on ex-date
         divs_today = dist_map.get(trading_date, [])
         div_amount_today = sum(divs_today, Decimal("0.0"))
         cum_div += div_amount_today
 
+        split_ratio_today = split_map.get(trading_date, Decimal("1.0"))
+        cum_split_factor *= split_ratio_today
+
         # 4. Total return factor progression
         if prev_price is not None:
-            # Reinvestment formula: (P_t + D_t) / P_{t-1}
-            period_gross_return = (raw_close + div_amount_today) / prev_price
+            if price_basis == PriceBasis.TOTAL_RETURN_ADJUSTED_PRICE:
+                period_gross_return = price / prev_price
+            elif price_basis == PriceBasis.SPLIT_ADJUSTED_PRICE:
+                period_gross_return = (price + div_amount_today) / prev_price
+            elif price_basis == PriceBasis.DIVIDEND_ADJUSTED_PRICE:
+                period_gross_return = (split_ratio_today * price) / prev_price
+            else:
+                # RAW_UNADJUSTED_PRICE, EXECUTABLE_MARKET_PRICE, ETF_NAV
+                # 1 pre-split share at t-1 becomes split_ratio_today shares at t, each with price + dividend
+                period_gross_return = (split_ratio_today * (price + div_amount_today)) / prev_price
+
             cum_tr_factor *= period_gross_return
 
         obs = EtfDailyObservation(
             symbol=instrument.symbol,
             trading_date=trading_date,
-            raw_close=raw_close,
-            split_factor=Decimal("1.0"),
+            raw_close=price,
+            price_basis=price_basis,
+            split_factor=cum_split_factor,
             cumulative_dividend=cum_div,
             total_return_factor=cum_tr_factor,
         )
         observations.append(obs)
 
         prev_date = trading_date
-        prev_price = raw_close
+        prev_price = price
 
     return observations
+

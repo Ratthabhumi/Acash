@@ -222,5 +222,137 @@ def test_small_order_broker_friction_minimum_drag() -> None:
     # Total cost = 5.00 + 7.00 = $12.00.
     assert cost_large == Decimal("12.0")
 
+    # Micro order: $10 trade (IBKR 1.0% cap applies: 10 * 0.01 = $0.10 < $0.35 minimum)
+    cost_micro = model.calculate_cost(Decimal("10.0"))
+    # Max cap = 10 * 0.01 = 0.10.
+    # Spread + slippage = 10 * 0.0007 = 0.007.
+    # Total = 0.10 + 0.007 = 0.107.
+    assert cost_micro == Decimal("0.107")
+
     # Zero order: $0 cost
     assert model.calculate_cost(Decimal("0.0")) == Decimal("0.0")
+
+
+def test_split_regression_2_for_1_zero_economic_loss() -> None:
+    """A 2-for-1 split drops price from 100 to 50 with zero economic loss (return == 0.0)."""
+    gld = KNOWN_ETF_REGISTRY["GLD"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("100.0")),
+        (date(2020, 1, 3), Decimal("50.0")),  # Price halved due to 2:1 split
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="GLD",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("1.0"),
+            split_to=Decimal("2.0"),
+        )
+    ]
+
+    obs = build_total_return_panel(gld, raw_bars, splits=splits)
+    assert len(obs) == 2
+    # Day 1: base TR = 1.0
+    assert obs[0].total_return_factor == Decimal("1.0")
+    assert obs[0].split_factor == Decimal("1.0")
+
+    # Day 2: split factor = 2.0, total return factor must remain 1.0 (0.0% return)
+    assert obs[1].split_factor == Decimal("2.0")
+    assert obs[1].total_return_factor == Decimal("1.0")
+
+
+def test_simultaneous_split_and_dividend_exact_math() -> None:
+    """Simultaneous 2:1 split and $1.00 dividend on ex-date calculates correct compounding."""
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("100.0")),
+        (date(2020, 1, 3), Decimal("50.0")),  # Split 2:1 and pays $1.00 dividend
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("1.0"),
+            split_to=Decimal("2.0"),
+        )
+    ]
+    distributions = [
+        EtfDistributionRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            payable_date=date(2020, 1, 8),
+            cash_amount=Decimal("1.0"),
+        )
+    ]
+
+    obs = build_total_return_panel(voo, raw_bars, distributions=distributions, splits=splits)
+    assert len(obs) == 2
+    # Holding 1 share at $100 becomes 2 shares at $50 = $100 + 2 * $1 dividend = $102
+    # Gross return = 2.0 * (50 + 1) / 100 = 102 / 100 = 1.02 (+2.0%)
+    assert obs[1].total_return_factor == Decimal("1.02")
+    assert obs[1].cumulative_dividend == Decimal("1.0")
+    assert obs[1].split_factor == Decimal("2.0")
+
+
+def test_fractional_split_3_for_2() -> None:
+    """A 3-for-2 split (ratio 1.5) preserves economic value accurately."""
+    bnd = KNOWN_ETF_REGISTRY["BND"]
+    raw_bars = [
+        (date(2020, 1, 2), Decimal("90.0")),
+        (date(2020, 1, 3), Decimal("60.0")),  # 90 / 1.5 = 60
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="BND",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("2.0"),
+            split_to=Decimal("3.0"),
+        )
+    ]
+
+    obs = build_total_return_panel(bnd, raw_bars, splits=splits)
+    assert len(obs) == 2
+    assert obs[1].total_return_factor == Decimal("1.0")
+    assert obs[1].split_factor == Decimal("1.5")
+
+
+def test_double_counting_guards_fail_closed() -> None:
+    """Applying corporate actions to already-adjusted series raises DataContractError fail-closed."""
+    from acash.data.contracts.etf_fx_benchmark import PriceBasis
+
+    voo = KNOWN_ETF_REGISTRY["VOO"]
+    raw_bars = [(date(2020, 1, 2), Decimal("100.0")), (date(2020, 1, 3), Decimal("101.0"))]
+    dists = [
+        EtfDistributionRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            payable_date=date(2020, 1, 8),
+            cash_amount=Decimal("1.0"),
+        )
+    ]
+    splits = [
+        EtfSplitRecord(
+            symbol="VOO",
+            ex_date=date(2020, 1, 3),
+            split_from=Decimal("1.0"),
+            split_to=Decimal("2.0"),
+        )
+    ]
+
+    # Cannot apply distributions to TOTAL_RETURN_ADJUSTED_PRICE
+    with pytest.raises(DataContractError, match="cannot apply cash distributions to a TOTAL_RETURN_ADJUSTED_PRICE"):
+        build_total_return_panel(
+            voo, raw_bars, distributions=dists, price_basis=PriceBasis.TOTAL_RETURN_ADJUSTED_PRICE
+        )
+
+    # Cannot apply splits to SPLIT_ADJUSTED_PRICE
+    with pytest.raises(DataContractError, match="cannot apply splits to a SPLIT_ADJUSTED_PRICE"):
+        build_total_return_panel(
+            voo, raw_bars, splits=splits, price_basis=PriceBasis.SPLIT_ADJUSTED_PRICE
+        )
+
+    # Cannot apply distributions to DIVIDEND_ADJUSTED_PRICE
+    with pytest.raises(DataContractError, match="cannot apply cash distributions to a DIVIDEND_ADJUSTED_PRICE"):
+        build_total_return_panel(
+            voo, raw_bars, distributions=dists, price_basis=PriceBasis.DIVIDEND_ADJUSTED_PRICE
+        )
+
