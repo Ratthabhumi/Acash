@@ -693,6 +693,34 @@ def test_passive_core_unregistered_mandate_fails_closed() -> None:
     assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
 
 
+def test_passive_core_empty_registry_fails_closed_adversarial() -> None:
+    """Adversarial check: Empty ratified registry must NEVER confer approved allocation.
+
+    A caller cannot bypass validation by leaving ratified_mandate_registry=() while setting
+    mandate_status='MANDATE_RATIFIED'.
+    """
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="UNRATIFIED_CALLER_STRING_ID",
+            mandate_status="MANDATE_RATIFIED",
+            ratified_mandate_registry=(),  # Empty registry by default
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
+
+
+
 
 def test_invalid_policy_tier_raises_data_contract_error() -> None:
     """Providing unknown policy tier raises DataContractError fail-closed."""

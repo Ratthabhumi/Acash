@@ -262,15 +262,16 @@ class PortfolioGovernanceGate:
 
             if self.config.mandate_status == "MANDATE_RATIFIED":
                 if (
-                    self.config.ratified_mandate_registry
-                    and self.config.owner_mandate_id not in self.config.ratified_mandate_registry
+                    not self.config.ratified_mandate_registry
+                    or self.config.owner_mandate_id not in self.config.ratified_mandate_registry
                 ):
                     return (
                         "MANDATE_UNVERIFIED_IN_REGISTRY",
-                        f"MANDATE_UNVERIFIED_IN_REGISTRY: Mandate '{self.config.owner_mandate_id}' is not present in ratified mandate registry.",
+                        f"MANDATE_UNVERIFIED_IN_REGISTRY: Mandate '{self.config.owner_mandate_id}' is not verified in ratified mandate registry.",
                     )
             elif self.config.mandate_status == "SIMULATION_PROPOSAL":
                 pass  # Permitted for offline simulation proposals (emits SIMULATED_PASSIVE_CORE_PROPOSAL)
+
             else:
                 return (
                     "MANDATE_DRAFT_NOT_RATIFIED",
