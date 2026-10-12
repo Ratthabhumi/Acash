@@ -22,6 +22,7 @@ from acash.data.contracts.etf_fx_benchmark import (
     AssetClass,
     CashAccrualModel,
     DayCountConvention,
+    DistributionTaxClassification,
     EtfDailyObservation,
     EtfDistributionRecord,
     EtfInstrumentContract,
@@ -63,14 +64,16 @@ def test_synthetic_proxy_allowed_pre_inception() -> None:
 
 
 def test_distribution_record_invariants() -> None:
-    """Payable date cannot precede ex-date, and cash amount must be strictly positive."""
-    # Valid distribution
+    """Payable date cannot precede ex-date, and gross amount must be strictly positive."""
+    # Valid distribution (gross basis)
     dist = EtfDistributionRecord(
         symbol="VOO",
         ex_date=date(2023, 3, 24),
         payable_date=date(2023, 3, 29),
-        cash_amount=Decimal("1.442"),
+        gross_amount=Decimal("1.442"),
     )
+    assert dist.gross_amount == Decimal("1.442")
+    assert dist.net_amount is None
     assert dist.cash_amount == Decimal("1.442")
 
     # Inverted dates fail closed
@@ -79,16 +82,62 @@ def test_distribution_record_invariants() -> None:
             symbol="VOO",
             ex_date=date(2023, 3, 24),
             payable_date=date(2023, 3, 20),
-            cash_amount=Decimal("1.442"),
+            gross_amount=Decimal("1.442"),
         )
 
-    # Non-positive cash amount fails validation
-    with pytest.raises(DomainValidationError, match="cash_amount must be strictly positive"):
+    # Non-positive gross amount fails validation
+    with pytest.raises(DomainValidationError, match="gross_amount must be strictly positive"):
         EtfDistributionRecord(
             symbol="VOO",
             ex_date=date(2023, 3, 24),
             payable_date=date(2023, 3, 29),
-            cash_amount=Decimal("0.0"),
+            gross_amount=Decimal("0.0"),
+        )
+
+
+def test_distribution_gross_net_separation_no_universal_withholding() -> None:
+    """Gross is issuer-reported; net requires an explicit owner rate. No universal 15%."""
+    # Gross-only record: no withholding assumed, cash basis stays gross.
+    gross_only = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=date(2023, 3, 24),
+        payable_date=date(2023, 3, 29),
+        gross_amount=Decimal("0.50"),
+    )
+    assert gross_only.tax_classification.value == "GROSS_BEFORE_WITHHOLDING"
+    assert gross_only.cash_amount == Decimal("0.50")
+
+    # Explicit owner rate (15% DTA example): net must be computed and consistent.
+    netted = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=date(2023, 3, 24),
+        payable_date=date(2023, 3, 29),
+        gross_amount=Decimal("0.50"),
+        net_amount=Decimal("0.425"),
+        withholding_rate=Decimal("0.15"),
+        tax_classification=DistributionTaxClassification.NET_AFTER_WITHHOLDING,
+    )
+    assert netted.cash_amount == Decimal("0.425")
+
+    # Net exceeding gross is impossible: fail closed.
+    with pytest.raises(DataContractError, match="cannot exceed gross_amount"):
+        EtfDistributionRecord(
+            symbol="BND",
+            ex_date=date(2023, 3, 24),
+            payable_date=date(2023, 3, 29),
+            gross_amount=Decimal("0.50"),
+            net_amount=Decimal("0.60"),
+            withholding_rate=Decimal("0.15"),
+        )
+
+    # A withholding rate without a computed net amount is ambiguous: fail closed.
+    with pytest.raises(DataContractError, match="withholding_rate is set but net_amount is None"):
+        EtfDistributionRecord(
+            symbol="BND",
+            ex_date=date(2023, 3, 24),
+            payable_date=date(2023, 3, 29),
+            gross_amount=Decimal("0.50"),
+            withholding_rate=Decimal("0.15"),
         )
 
 
@@ -124,7 +173,7 @@ def test_total_return_panel_mathematical_precision() -> None:
             symbol="VOO",
             ex_date=date(2020, 1, 3),
             payable_date=date(2020, 1, 8),
-            cash_amount=Decimal("2.0"),
+            gross_amount=Decimal("2.0"),
         )
     ]
 
@@ -196,41 +245,50 @@ def test_cash_accrual_model_exact_math() -> None:
 
 
 def test_small_order_broker_friction_minimum_drag() -> None:
-    """Verifies that for small accounts ($1,000), minimum ticket commission dominates linear rate."""
-    model = SmallOrderFrictionModel(
-        commission_rate=Decimal("0.0005"),   # 5 bps
-        min_commission_usd=Decimal("0.35"),  # $0.35 IBKR Tiered minimum
-        half_spread=Decimal("0.0005"),       # 5 bps
-        slippage=Decimal("0.0002"),          # 2 bps
-    )
+    """IBKR Tiered per-share commission: $0.0035/share, $0.35 minimum, 1% cap.
 
-    # Small order: $50 trade (e.g. 5% rebalance on $1,000)
-    cost_small = model.calculate_cost(Decimal("50.0"))
-    # Linear commission would be 50 * 0.0005 = $0.025.
-    # Minimum commission of $0.35 applies!
-    # Spread + slippage = 50 * 0.0007 = $0.035.
-    # Total cost = 0.35 + 0.035 = $0.385.
+    Classification must stay IBKR_INSPIRED_SYNTHETIC_FRICTION (never presented
+    as account-verified fees). Whole-share basis; fractional terms unmodeled.
+    """
+    from acash.data.contracts.etf_fx_benchmark import IBKR_COST_MODEL_CLASSIFICATION
+
+    model = SmallOrderFrictionModel()
+    assert model.pricing_schedule == "IBKR_TIERED_US_SYNTHETIC"
+    assert model.share_quantity_basis == "WHOLE_SHARE"
+    assert IBKR_COST_MODEL_CLASSIFICATION == "IBKR_INSPIRED_SYNTHETIC_FRICTION"
+
+    # Small order: 1 share @ $50 (e.g. 5% rebalance on $1,000).
+    # Per-share commission = 1 * 0.0035 = $0.0035 -> $0.35 minimum applies.
+    # Spread + slippage = 50 * 0.0007 = $0.035. Total = $0.385.
+    cost_small = model.calculate_cost(Decimal("50.0"), Decimal("1"))
     assert cost_small == Decimal("0.385")
-    # Percentage drag on $50 trade: 0.385 / 50 = 0.77% (over 10x larger than nominal 5 bps)!
+    # Percentage drag on $50 trade: 0.385 / 50 = 0.77%.
     drag_pct = cost_small / Decimal("50.0")
     assert drag_pct == Decimal("0.0077")
 
-    # Large order: $10,000 trade
-    cost_large = model.calculate_cost(Decimal("10000.0"))
-    # Linear commission = 10000 * 0.0005 = $5.00 > $0.35 minimum.
-    # Spread + slippage = 10000 * 0.0007 = $7.00.
-    # Total cost = 5.00 + 7.00 = $12.00.
-    assert cost_large == Decimal("12.0")
+    # Large per-share-driven order: 2000 shares @ $5 = $10,000.
+    # Per-share commission = 2000 * 0.0035 = $7.00 (cap 1% = $100 does not bind).
+    # Spread + slippage = 10000 * 0.0007 = $7.00. Total = $14.00.
+    cost_large = model.calculate_cost(Decimal("10000.0"), Decimal("2000"))
+    assert cost_large == Decimal("14.0")
 
-    # Micro order: $10 trade (IBKR 1.0% cap applies: 10 * 0.01 = $0.10 < $0.35 minimum)
-    cost_micro = model.calculate_cost(Decimal("10.0"))
-    # Max cap = 10 * 0.01 = 0.10.
-    # Spread + slippage = 10 * 0.0007 = 0.007.
-    # Total = 0.10 + 0.007 = 0.107.
+    # Cap binds: 1000 shares @ $0.20 = $200 notional.
+    # Per-share = 1000 * 0.0035 = $3.50, capped at 1% of $200 = $2.00.
+    # Spread + slippage = 200 * 0.0007 = $0.14. Total = $2.14.
+    cost_capped = model.calculate_cost(Decimal("200.0"), Decimal("1000"))
+    assert cost_capped == Decimal("2.14")
+
+    # Micro order: 1 share @ $10 (cap $0.10 binds below the $0.35 minimum).
+    # Spread + slippage = 10 * 0.0007 = $0.007. Total = $0.107.
+    cost_micro = model.calculate_cost(Decimal("10.0"), Decimal("1"))
     assert cost_micro == Decimal("0.107")
 
-    # Zero order: $0 cost
-    assert model.calculate_cost(Decimal("0.0")) == Decimal("0.0")
+    # Zero order: $0 cost.
+    assert model.calculate_cost(Decimal("0.0"), Decimal("0")) == Decimal("0.0")
+
+    # Positive notional with zero shares is inconsistent under WHOLE_SHARE basis.
+    with pytest.raises(DataContractError, match="zero shares is inconsistent"):
+        model.calculate_cost(Decimal("50.0"), Decimal("0"))
 
 
 def test_split_regression_2_for_1_zero_economic_loss() -> None:
@@ -280,7 +338,7 @@ def test_simultaneous_split_and_dividend_exact_math() -> None:
             symbol="VOO",
             ex_date=date(2020, 1, 3),
             payable_date=date(2020, 1, 8),
-            cash_amount=Decimal("1.0"),
+            gross_amount=Decimal("1.0"),
         )
     ]
 
@@ -326,7 +384,7 @@ def test_double_counting_guards_fail_closed() -> None:
             symbol="VOO",
             ex_date=date(2020, 1, 3),
             payable_date=date(2020, 1, 8),
-            cash_amount=Decimal("1.0"),
+            gross_amount=Decimal("1.0"),
         )
     ]
     splits = [

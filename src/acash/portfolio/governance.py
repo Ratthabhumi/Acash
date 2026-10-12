@@ -261,6 +261,13 @@ class PortfolioGovernanceGate:
                 )
 
             if self.config.mandate_status == "MANDATE_RATIFIED":
+                # TRUST BOUNDARY (see docs/governance/MANDATE_RATIFICATION_EVIDENCE_BOUNDARY.md):
+                # this check verifies REGISTRY MEMBERSHIP ONLY (exact match, empty
+                # registry fails closed). Both mandate_status and the registry
+                # entries are caller-provided, so membership is necessary but NOT
+                # sufficient proof of human operator ratification. Real-capital
+                # execution stays blocked independently (REAL_CAPITAL_AUTHORITY
+                # $0, NO_REAL_ORDERS); simulation proposals must stay labeled.
                 if (
                     not self.config.ratified_mandate_registry
                     or self.config.owner_mandate_id not in self.config.ratified_mandate_registry

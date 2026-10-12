@@ -81,15 +81,36 @@ data_qualification_probe:
 
 ## 3. Strict Verification & Failure Classifications
 
-Every probe response must be parsed and classified against fail-closed validation rules:
+Every probe response must be parsed and classified against fail-closed validation rules.
+The probe is split into two separately ratified lanes:
+
+**Lane A — Daily smoke qualification:** entitlement, schema, date/session
+semantics, raw-vs-adjusted price-basis conventions, pagination and response
+limits, immutable raw-response evidence.
+
+**Lane B — Corporate-action event qualification:** verified preselected
+actual corporate-action events; ex-date and payable-date semantics; adjusted
+price consistency; issuer/provider source comparison; no assumption of
+historical PIT publication certainty.
 
 | Verification Check | Expected Canonical Invariant | Failure Classification | Consequence |
 | :--- | :--- | :--- | :--- |
-| **Price Basis Transparency** | Response includes explicit indicator of whether prices are raw, split-adjusted, or dividend-adjusted | `PROBE_ERR_UNVERIFIED_PRICE_BASIS` | Provider rejected for backtest ingestion. |
+| **Price Basis Transparency** | Response includes explicit indicator of whether prices are raw, split-adjusted, or dividend-adjusted; missing metadata fails closed | `PROBE_ERR_UNVERIFIED_PRICE_BASIS` | Provider rejected for backtest ingestion. |
 | **Split Ratio Representation** | Split records explicitly denote pre/post ratio with ex-date | `PROBE_ERR_INVALID_SPLIT_FORMAT` | Splits require manual regulatory filing reconciliation. |
-| **Dividend Cash Net vs. Gross** | Cash distributions indicate gross amount; foreign withholding tax rate can be deterministically calculated | `PROBE_ERR_AMBIGUOUS_DIVIDEND_TAX` | Assume gross and apply standard 15% DTA withholding explicitly. |
-| **Timestamp Alignment** | Bar close timestamp matches NYSE/Nasdaq official closing auction ($16:00:00 EST) | `PROBE_ERR_MISALIGNED_SESSION_CLOSE` | Data cannot be matched against official closing prices. |
+| **Dividend Gross vs. Net** | Cash distributions record provider-reported GROSS amount only; owner withholding is applied explicitly by the operator, never inferred, never a universal 15% | `PROBE_ERR_AMBIGUOUS_DIVIDEND_TAX` | Record gross; net computed only with a stated owner rate. |
+| **Timestamp Alignment** | Daily bar timestamps are provider aggregation labels; they MUST NOT be equated with official closing-auction cross timestamps ($16:00 ET) without a dedicated auction-cross contract test | `PROBE_ERR_MISALIGNED_SESSION_CLOSE` | Bars cannot be matched against official closing prices. |
+| **asof Symbol Mapping** | `asof` links pre/post-rename symbols; it is NOT a historical data-vintage guarantee | `PROBE_ERR_ASOF_VINTAGE_ASSUMED` | Mapping accepted for identity only, never for PIT certainty. |
 | **Holiday / Zero-Volume Handling** | Missing weekend/holiday records are omissions, not zero-filled price bars ($0.00) | `PROBE_ERR_ZERO_PRICE_POLLUTION` | Immediate fail-closed abort. |
+| **Authentication** | HTTP 401 or missing/invalid credentials | `PROBE_ERR_AUTHENTICATION_FAILURE` | Abort; no retry with different credentials. |
+| **Entitlement** | HTTP 403 or insufficient-permissions body; entitlement is NEVER inferred from public documentation | `PROBE_ERR_ENTITLEMENT_FAILURE` | Abort; provider tier unresolved. |
+| **Rate Limit** | HTTP 429 or documented quota breach | `PROBE_ERR_RATE_LIMIT` | Abort; back off, do not retry aggressively. |
+| **Revision Unknown** | No evidence whether the vendor revises published bars | `PROBE_ERR_REVISION_UNKNOWN` | Historical replication only; prospective use blocked. |
+| **Event Unavailable** | Preselected corporate-action event absent from provider | `PROBE_ERR_EVENT_UNAVAILABLE` | Lane B blocked for that event. |
+| **Source Inconsistency** | Issuer filing vs. provider record disagree | `PROBE_ERR_SOURCE_INCONSISTENCY` | Manual reconciliation required. |
+| **Budget Exhaustion** | Requests exceed 12 or payload exceeds 512 KB | `PROBE_ERR_BUDGET_EXHAUSTION` | Abort; shrink scope, do not continue. |
+
+No five-day smoke window is assumed to contain an ETF split; split coverage
+is verified only against preselected Lane B events.
 
 ---
 
