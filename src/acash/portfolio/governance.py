@@ -261,16 +261,24 @@ class PortfolioGovernanceGate:
                 )
 
             if self.config.mandate_status == "MANDATE_RATIFIED":
+                # TRUST BOUNDARY (see docs/governance/MANDATE_RATIFICATION_EVIDENCE_BOUNDARY.md):
+                # this check verifies REGISTRY MEMBERSHIP ONLY (exact match, empty
+                # registry fails closed). Both mandate_status and the registry
+                # entries are caller-provided, so membership is necessary but NOT
+                # sufficient proof of human operator ratification. Real-capital
+                # execution stays blocked independently (REAL_CAPITAL_AUTHORITY
+                # $0, NO_REAL_ORDERS); simulation proposals must stay labeled.
                 if (
-                    self.config.ratified_mandate_registry
-                    and self.config.owner_mandate_id not in self.config.ratified_mandate_registry
+                    not self.config.ratified_mandate_registry
+                    or self.config.owner_mandate_id not in self.config.ratified_mandate_registry
                 ):
                     return (
                         "MANDATE_UNVERIFIED_IN_REGISTRY",
-                        f"MANDATE_UNVERIFIED_IN_REGISTRY: Mandate '{self.config.owner_mandate_id}' is not present in ratified mandate registry.",
+                        f"MANDATE_UNVERIFIED_IN_REGISTRY: Mandate '{self.config.owner_mandate_id}' is not verified in ratified mandate registry.",
                     )
             elif self.config.mandate_status == "SIMULATION_PROPOSAL":
                 pass  # Permitted for offline simulation proposals (emits SIMULATED_PASSIVE_CORE_PROPOSAL)
+
             else:
                 return (
                     "MANDATE_DRAFT_NOT_RATIFIED",

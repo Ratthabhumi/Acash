@@ -693,6 +693,69 @@ def test_passive_core_unregistered_mandate_fails_closed() -> None:
     assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
 
 
+def test_passive_core_empty_registry_fails_closed_adversarial() -> None:
+    """Adversarial check: Empty ratified registry must NEVER confer approved allocation.
+
+    A caller cannot bypass validation by leaving ratified_mandate_registry=() while setting
+    mandate_status='MANDATE_RATIFIED'.
+    """
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="UNRATIFIED_CALLER_STRING_ID",
+            mandate_status="MANDATE_RATIFIED",
+            ratified_mandate_registry=(),  # Empty registry by default
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
+
+
+@pytest.mark.parametrize(
+    "forged_id",
+    [
+        "MANDATE_RATIFIED_20261012_USD100",  # strict prefix of the registered ID
+        "mandate_ratified_20261012_usd1000",  # case variant must not match
+        " MANDATE_RATIFIED_20261012_USD1000 ",  # padded whitespace must not match
+        "MANDATE_RATIFIED_20261012_USD1000_EXTRA",  # superstring must not match
+    ],
+)
+def test_passive_core_mandate_id_binding_is_exact_adversarial(forged_id: str) -> None:
+    """Adversarial check: registry membership is EXACT match only.
+
+    Prefix, case-variant, padded, or superstring IDs must never confer
+    ratified authority. Membership remains necessary-but-insufficient proof
+    of human ratification (see MANDATE_RATIFICATION_EVIDENCE_BOUNDARY.md).
+    """
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id=forged_id,
+            mandate_status="MANDATE_RATIFIED",
+            ratified_mandate_registry=("MANDATE_RATIFIED_20261012_USD1000",),
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
+
 
 def test_invalid_policy_tier_raises_data_contract_error() -> None:
     """Providing unknown policy tier raises DataContractError fail-closed."""
