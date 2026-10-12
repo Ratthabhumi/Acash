@@ -95,7 +95,7 @@ historical PIT publication certainty.
 
 | Verification Check | Expected Canonical Invariant | Failure Classification | Consequence |
 | :--- | :--- | :--- | :--- |
-| **Price Basis Transparency** | Response includes explicit indicator of whether prices are raw, split-adjusted, or dividend-adjusted; missing metadata fails closed | `PROBE_ERR_UNVERIFIED_PRICE_BASIS` | Provider rejected for backtest ingestion. |
+| **Price Basis Transparency** | Price basis is declared in trusted request provenance (`adjustment=raw` in request params + captured request record); do NOT demand that each response bar carry its own adjustment field unless the documented schema actually provides one. Missing request-side basis declaration fails closed | `PROBE_ERR_UNVERIFIED_PRICE_BASIS` | Provider rejected for backtest ingestion. |
 | **Split Ratio Representation** | Split records explicitly denote pre/post ratio with ex-date | `PROBE_ERR_INVALID_SPLIT_FORMAT` | Splits require manual regulatory filing reconciliation. |
 | **Dividend Gross vs. Net** | Cash distributions record provider-reported GROSS amount only; owner withholding is applied explicitly by the operator, never inferred, never a universal 15% | `PROBE_ERR_AMBIGUOUS_DIVIDEND_TAX` | Record gross; net computed only with a stated owner rate. |
 | **Timestamp Alignment** | Daily bar timestamps are provider aggregation labels; they MUST NOT be equated with official closing-auction cross timestamps ($16:00 ET) without a dedicated auction-cross contract test | `PROBE_ERR_MISALIGNED_SESSION_CLOSE` | Bars cannot be matched against official closing prices. |
@@ -111,6 +111,15 @@ historical PIT publication certainty.
 
 No five-day smoke window is assumed to contain an ETF split; split coverage
 is verified only against preselected Lane B events.
+
+## 3.1 Historical Calendar Coverage Boundary
+
+The canonical `NyseCa1Calendar` spans 2013–2026. Candidate universe
+instruments predate it (VOO inception 2010-09-07): any future use of
+2010–2012 history requires separately authorized historical-calendar
+evidence — calendar days must never be inferred by copying weekday patterns
+or guessing holidays. The September 2026 smoke window above lies inside
+already-ratified coverage and needs no extension.
 
 ---
 

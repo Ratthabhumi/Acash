@@ -487,6 +487,239 @@ def test_replay_safety_sessions_splits_settlements() -> None:
         bench.apply_split("FAKE", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
 
 
+def test_payable_settles_from_ledger_without_resupply() -> None:
+    # P0-A core: a data adapter emitting each event once must not strand cash.
+    # The ex-date record is supplied ONLY on Oct 7; Oct 9 passes prices alone.
+    bench = HoldingsBasedBenchmark(
+        target_weights={"BND": Decimal("1.0")},
+        rebalance_dates={VALID_SYNTHETIC_WEEK[4]},
+        friction_model=_friction_model(),
+    )
+    bench.initialize(
+        nav=Decimal("1000.00"),
+        prices={"BND": Decimal("10.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    # 99 shares @ $10 ($990 + $1.043 friction), $8.957 residual cash.
+    assert bench._shares == {"BND": Decimal("99")}
+    assert bench._cash == Decimal("8.957")
+    big_dist = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=VALID_SYNTHETIC_WEEK[2],
+        payable_date=VALID_SYNTHETIC_WEEK[4],
+        gross_amount=Decimal("2.00"),
+        event_id="EVT-BND-20261007-DIV",
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"BND": Decimal("10.00")},
+        distributions=[big_dist],
+    )
+    assert bench.outstanding_receivables() == {("BND", VALID_SYNTHETIC_WEEK[4]): Decimal("198.00")}
+    # Oct 9 WITHOUT resupplying the record: ledger settles $198 into cash.
+    # The scheduled rebalance then executes a 20-share buy ($200.49 total:
+    # $200 + $0.35 floor commission + $0.14 spread/slippage) that the $8.957
+    # pre-settlement cash alone could never fund: settled cash is spendable.
+    bench.step(
+        VALID_SYNTHETIC_WEEK[4],
+        {"BND": Decimal("10.00")},
+    )
+    assert bench.outstanding_receivables() == {}
+    assert bench._shares == {"BND": Decimal("119")}
+    assert bench._cash == Decimal("206.957") - Decimal("200.49")
+    # Settlement itself is value-neutral; only the $0.49 buy friction leaves NAV:
+    # 990 + 8.957 + 198 - 0.49 = 1196.467.
+    assert bench.nav_history[-1] == Decimal("1196.467")
+    # Twin control: no ex-date record -> no entitlement -> no cash -> hold.
+    twin = HoldingsBasedBenchmark(
+        target_weights={"BND": Decimal("1.0")},
+        rebalance_dates={VALID_SYNTHETIC_WEEK[4]},
+        friction_model=_friction_model(),
+    )
+    twin.initialize(
+        nav=Decimal("1000.00"),
+        prices={"BND": Decimal("10.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    twin.step(VALID_SYNTHETIC_WEEK[2], {"BND": Decimal("10.00")})
+    twin.step(VALID_SYNTHETIC_WEEK[4], {"BND": Decimal("10.00")})
+    assert twin.outstanding_receivables() == {}
+    assert twin._cash == Decimal("8.957")
+    assert twin._shares == {"BND": Decimal("99")}
+
+
+def test_weekend_payable_settles_next_session() -> None:
+    # Payable Saturday 2026-10-10 is not a session: cash arrives Monday.
+    bench = _init_6040()
+    sat_payable = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=VALID_SYNTHETIC_WEEK[2],
+        payable_date=date(2026, 10, 10),
+        gross_amount=Decimal("0.50"),
+        net_amount=Decimal("0.425"),
+        withholding_rate=Decimal("0.15"),
+        tax_classification=DistributionTaxClassification.NET_AFTER_WITHHOLDING,
+        event_id="EVT-BND-20261007-DIV",
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[2]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[2]]},
+        distributions=[sat_payable],
+    )
+    # Friday Oct 9 arrives before the Saturday payable date: still outstanding,
+    # cash untouched.
+    bench.step(
+        VALID_SYNTHETIC_WEEK[4],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[4]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[4]]},
+    )
+    assert bench.outstanding_receivables() == {("BND", date(2026, 10, 10)): Decimal("2.125")}
+    assert bench._cash == Decimal("98.67")
+    # Monday Oct 12 settles without any resupply.
+    bench.step(
+        date(2026, 10, 12),
+        {"VOO": Decimal("49.00"), "BND": Decimal("80.20")},
+    )
+    assert bench.outstanding_receivables() == {}
+    assert bench._cash == Decimal("98.67") + Decimal("2.125")
+
+
+def test_distinct_events_sharing_payable_never_merge_silently() -> None:
+    bench = _init_6040()
+    dividend = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=VALID_SYNTHETIC_WEEK[2],
+        payable_date=VALID_SYNTHETIC_WEEK[4],
+        gross_amount=Decimal("0.50"),
+        net_amount=Decimal("0.425"),
+        withholding_rate=Decimal("0.15"),
+        tax_classification=DistributionTaxClassification.NET_AFTER_WITHHOLDING,
+        event_id="EVT-BND-20261007-DIV",
+    )
+    gain = EtfDistributionRecord(
+        symbol="BND",
+        ex_date=VALID_SYNTHETIC_WEEK[2],
+        payable_date=VALID_SYNTHETIC_WEEK[4],
+        gross_amount=Decimal("0.10"),
+        net_amount=Decimal("0.10"),
+        distribution_type="CAPITAL_GAIN_CASH",
+        event_id="EVT-BND-20261007-GAIN",
+    )
+    bench.step(
+        VALID_SYNTHETIC_WEEK[2],
+        {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[2]],
+         "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[2]]},
+        distributions=[dividend, gain],
+    )
+    # Two identities booked; cash merges only on arrival (fungible).
+    assert len(bench._booked_entitlements) == 2
+    assert bench.outstanding_receivables() == {
+        ("BND", VALID_SYNTHETIC_WEEK[4]): Decimal("2.125") + Decimal("0.50")
+    }
+    # The identical record twice in one step is a duplicate event, not a double.
+    with pytest.raises(DataContractError, match="DUPLICATE_ENTITLEMENT"):
+        bench2 = _init_6040()
+        bench2.step(
+            VALID_SYNTHETIC_WEEK[2],
+            {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[2]],
+             "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[2]]},
+            distributions=[dividend, dividend],
+        )
+    assert bench2.outstanding_receivables() == {}
+    assert bench2._cash == Decimal("98.67")
+
+
+def test_split_session_atomicity_rollback_and_retry() -> None:
+    # P0-B core: split + rebalance in one session envelope. The split applies
+    # first; when the scheduled rebalance then fails funding, EVERYTHING rolls
+    # back — including the already-applied split record.
+    bench = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("0.60"), "BND": Decimal("0.40")},
+        rebalance_dates={VALID_SYNTHETIC_WEEK[1]},
+        friction_model=_friction_model(),
+    )
+    bench.initialize(
+        nav=Decimal("901.33"),
+        prices={"VOO": Decimal("100.00"), "BND": Decimal("80.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    assert bench._shares == {"VOO": Decimal("5"), "BND": Decimal("4")}
+    split = EtfSplitRecord(
+        symbol="VOO", ex_date=VALID_SYNTHETIC_WEEK[1],
+        split_from=Decimal("1.0"), split_to=Decimal("2.0"),
+    )
+    with pytest.raises(DataContractError, match="INSUFFICIENT_CASH"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[1],
+            {"VOO": Decimal("80.00"), "BND": Decimal("80.00")},
+            splits=[split],
+        )
+    # Failed session leaves no half-applied split, no share change, no lineage.
+    assert bench._shares == {"VOO": Decimal("5"), "BND": Decimal("4")}
+    assert bench._cash == Decimal("80.056")
+    assert bench._applied_splits == set()
+    assert len(bench.transactions) == 2
+    assert len(bench.nav_history) == 1
+    assert len(bench.date_history) == 1
+    # Retry with fundable prices: split applies exactly once, books correctly.
+    bench.step(
+        VALID_SYNTHETIC_WEEK[1],
+        {"VOO": Decimal("41.00"), "BND": Decimal("80.00")},
+        splits=[split],
+    )
+    assert bench._shares == {"VOO": Decimal("11"), "BND": Decimal("4")}
+    assert bench._cash == Decimal("80.056") - Decimal("41.3787")
+    assert bench._applied_splits == {( "VOO", VALID_SYNTHETIC_WEEK[1])}
+    with pytest.raises(DataContractError, match="DUPLICATE_SPLIT"):
+        bench.apply_split("VOO", Decimal("2.0"), VALID_SYNTHETIC_WEEK[1])
+
+
+def test_split_wrong_session_rejected() -> None:
+    bench = _init_6040()
+    before_shares = dict(bench._shares)
+    misdated = EtfSplitRecord(
+        symbol="VOO", ex_date=VALID_SYNTHETIC_WEEK[2],
+        split_from=Decimal("1.0"), split_to=Decimal("2.0"),
+    )
+    with pytest.raises(DataContractError, match="WRONG_SPLIT_SESSION"):
+        bench.step(
+            VALID_SYNTHETIC_WEEK[1],
+            {"VOO": WEEK_PRICES_VOO[VALID_SYNTHETIC_WEEK[1]],
+             "BND": WEEK_PRICES_BND[VALID_SYNTHETIC_WEEK[1]]},
+            splits=[misdated],
+        )
+    assert dict(bench._shares) == before_shares
+    assert bench._applied_splits == set()
+
+
+def test_initialize_failure_leaves_no_phantoms_and_retry_works() -> None:
+    bench = HoldingsBasedBenchmark(
+        target_weights={"VOO": Decimal("1.0")},
+        rebalance_dates=set(),
+        friction_model=_friction_model(),
+    )
+    with pytest.raises(DataContractError, match="INSUFFICIENT_CASH"):
+        bench.initialize(
+            nav=Decimal("10.00"),
+            prices={"VOO": Decimal("100.00")},
+            trading_date=VALID_SYNTHETIC_WEEK[0],
+        )
+    assert bench._initialized is False
+    assert bench._shares == {}
+    assert bench._cash == Decimal("0")
+    assert bench.transactions == []
+    assert bench.nav_history == [] and bench.date_history == [] and bench.weight_history == []
+    # Corrected retry on the same instance succeeds cleanly.
+    bench.initialize(
+        nav=Decimal("1000.00"),
+        prices={"VOO": Decimal("100.00")},
+        trading_date=VALID_SYNTHETIC_WEEK[0],
+    )
+    assert bench._initialized is True
+    assert bench._shares == {"VOO": Decimal("9")}
+
+
 def test_double_settlement_blocked_by_session_monotonicity() -> None:
     bench = _init_6040()
     bench.apply_split("VOO", WEEK_VOO_SPLIT.split_ratio, WEEK_VOO_SPLIT.ex_date)

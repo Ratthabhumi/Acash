@@ -140,6 +140,27 @@ def test_distribution_gross_net_separation_no_universal_withholding() -> None:
             withholding_rate=Decimal("0.15"),
         )
 
+    # Net inconsistent with gross*(1-rate) is rejected (no hand-adjustment).
+    with pytest.raises(DataContractError, match="inconsistent with"):
+        EtfDistributionRecord(
+            symbol="BND",
+            ex_date=date(2023, 3, 24),
+            payable_date=date(2023, 3, 29),
+            gross_amount=Decimal("0.50"),
+            net_amount=Decimal("0.40"),
+            withholding_rate=Decimal("0.15"),
+        )
+
+    # Blank event identity is rejected; absent identity stays None.
+    with pytest.raises(DomainValidationError, match="non-blank"):
+        EtfDistributionRecord(
+            symbol="BND",
+            ex_date=date(2023, 3, 24),
+            payable_date=date(2023, 3, 29),
+            gross_amount=Decimal("0.50"),
+            event_id="   ",
+        )
+
 
 def test_etf_split_record() -> None:
     """Stock split calculates split ratio and enforces strictly positive values."""

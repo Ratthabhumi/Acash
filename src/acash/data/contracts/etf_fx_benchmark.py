@@ -150,6 +150,7 @@ class EtfDistributionRecord(BaseModel):
     withholding_rate: Optional[Decimal] = None              # Owner-specific rate (e.g. 0.15 for DTA)
     tax_classification: DistributionTaxClassification = DistributionTaxClassification.GROSS_BEFORE_WITHHOLDING
     distribution_type: str = "DIVIDEND_CASH"
+    event_id: Optional[str] = None                          # Source-provided event identity (if any)
 
     # Legacy compatibility: cash_amount resolves to net if available, gross otherwise
     @property
@@ -186,6 +187,13 @@ class EtfDistributionRecord(BaseModel):
             ensure_finite_decimal(v, field_name="withholding_rate")
             if not (Decimal("0") <= v < Decimal("1")):
                 raise DomainValidationError(f"withholding_rate must be in [0, 1), got {v}")
+        return v
+
+    @field_validator("event_id")
+    @classmethod
+    def validate_event_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise DomainValidationError("event_id, when provided, must be non-blank.")
         return v
 
     @model_validator(mode="after")
@@ -713,7 +721,11 @@ class HoldingsBasedBenchmark:
         self._receivables: Dict[Tuple[str, date], Decimal] = {}
         # Event identity sets for replay safety (monotonic processing below
         # makes replays unreachable, these are defense-in-depth lineage).
-        self._booked_entitlements: Set[Tuple[str, date, date]] = set()  # (symbol, ex, payable)
+        # Booked key is the FULL event identity: distinct events sharing a
+        # symbol/ex-date/payable triple (e.g. dividend + capital gain) never
+        # merge silently; settlement stays keyed by (symbol, payable) because
+        # cash is fungible on arrival.
+        self._booked_entitlements: Set[Tuple[str, date, date, str, str, str, str]] = set()
         self._settled_payables: Set[Tuple[str, date]] = set()
         self._applied_splits: Set[Tuple[str, date]] = set()
         self._initialized: bool = False
@@ -728,6 +740,26 @@ class HoldingsBasedBenchmark:
     def outstanding_receivables(self) -> Dict[Tuple[str, date], Decimal]:
         """Current ex-date entitlements awaiting payable-date cash (read-only copy)."""
         return dict(self._receivables)
+
+    @staticmethod
+    def _entitlement_key(dist: "EtfDistributionRecord") -> Tuple[str, date, date, str, str, str, str]:
+        """Full economic-event identity for duplicate detection.
+
+        Distinct distributions may share symbol/ex-date/payable-date (e.g. a
+        dividend and a capital gain payable together); identity therefore
+        binds event_id (when the source provides one), distribution type,
+        and both amounts. Cash settlement remains keyed by (symbol, payable)
+        because arriving cash is fungible.
+        """
+        return (
+            dist.symbol,
+            dist.ex_date,
+            dist.payable_date,
+            dist.event_id or "",
+            dist.distribution_type,
+            str(dist.gross_amount),
+            str(dist.net_amount) if dist.net_amount is not None else "",
+        )
 
     def _compute_nav(self, prices: Dict[str, Decimal]) -> Decimal:
         """Total NAV = sum(shares * price) + cash + ex-date receivables."""
@@ -882,6 +914,24 @@ class HoldingsBasedBenchmark:
                 raise DataContractError(
                     f"MISSING_PRICE: Cannot initialize {sym} on {trading_date}."
                 )
+        # A failed initialization must leave no phantom holdings, cash,
+        # transactions, or history behind: reset to pristine so the instance
+        # stays uninitialized and a corrected retry is safe. (The rebalance
+        # plan itself is atomic, so transactions/histories cannot be partial
+        # here; only _cash/_shares need resetting.)
+        try:
+            return self._initialize_inner(nav, prices, trading_date)
+        except DataContractError:
+            self._cash = Decimal("0")
+            self._shares = {}
+            raise
+
+    def _initialize_inner(
+        self,
+        nav: Decimal,
+        prices: Dict[str, Decimal],
+        trading_date: date,
+    ) -> None:
         self._cash = nav
         self._shares = {sym: Decimal("0") for sym in self.target_weights}
         target_shares = {
@@ -917,19 +967,24 @@ class HoldingsBasedBenchmark:
         trading_date: date,
         prices: Dict[str, Decimal],
         distributions: Optional[List[EtfDistributionRecord]] = None,
+        splits: Optional[List[EtfSplitRecord]] = None,
     ) -> Decimal:
-        """Advance the benchmark by one trading session.
+        """Advance the benchmark by one trading session (atomic event envelope).
 
+        The session's prices, splits, distributions, and scheduled rebalance
+        form ONE atomic unit: every event identity is validated before any
+        mutation, and any failure restores all state bit-identically.
         Distribution lifecycle (ex-date entitlement vs payable-date cash):
         on a record's ex-date, book a receivable fixed by shares held that
-        day; on its payable date, settle booked receivables into cash.
-        Amount basis is the record's `cash_amount` (net_amount when the owner
-        withholding is known, else gross_amount) — so benchmark NAV is
-        investor-net when net is set, gross otherwise. Records whose date
-        matches neither ex- nor payable-date are ignored on this step.
+        day. Payable-date settlement is driven by the BOOKED LEDGER — every
+        receivable whose payable date has arrived settles into cash whether
+        or not the record is resupplied — so a data adapter that emits each
+        event once cannot strand cash. Amount basis is the record's
+        `cash_amount` (net_amount when the owner withholding is known, else
+        gross_amount) — so benchmark NAV is investor-net when net is set,
+        gross otherwise. Split records must carry this session as ex-date.
         Rebalances only if trading_date is in rebalance_dates.
-        Sessions must be strictly increasing: replaying an already-processed
-        date fails closed with REPLAYED_SESSION and mutates nothing.
+        Sessions must be strictly increasing (replay fails closed).
         Returns current NAV (equity + cash + outstanding receivables).
         """
         if not self._initialized:
@@ -951,15 +1006,28 @@ class HoldingsBasedBenchmark:
         snap_receivables = dict(self._receivables)
         snap_booked = set(self._booked_entitlements)
         snap_settled = set(self._settled_payables)
+        snap_splits = set(self._applied_splits)
         snap_tx_len = len(self.transactions)
         snap_hist_len = len(self.nav_history)
         try:
+            if splits:
+                for split in splits:
+                    self._validate_split(split, trading_date)
+                    if split.symbol not in self.target_weights:
+                        raise DataContractError(
+                            f"UNKNOWN_SPLIT_SYMBOL: {split.symbol} is not a benchmark holding."
+                        )
+                    if (split.symbol, split.ex_date) in self._applied_splits:
+                        raise DataContractError(
+                            f"DUPLICATE_SPLIT: {split.symbol} split for ex-date "
+                            f"{split.ex_date} already applied."
+                        )
             if distributions:
                 for dist in distributions:
                     if dist.symbol not in self.target_weights:
                         continue
                     if trading_date == dist.ex_date:
-                        entitlement_key = (dist.symbol, dist.ex_date, dist.payable_date)
+                        entitlement_key = self._entitlement_key(dist)
                         if entitlement_key in self._booked_entitlements:
                             raise DataContractError(
                                 f"DUPLICATE_ENTITLEMENT: {dist.symbol} ex-date "
@@ -973,11 +1041,23 @@ class HoldingsBasedBenchmark:
                                 + shares_held * dist.cash_amount
                             )
                         self._booked_entitlements.add(entitlement_key)
-                    if trading_date == dist.payable_date:
-                        key = (dist.symbol, dist.payable_date)
-                        settled = self._receivables.pop(key, Decimal("0"))
-                        self._cash += settled
-                        self._settled_payables.add(key)
+            # Payable-date settlement is ledger-driven: every booked
+            # receivable whose payable date has arrived settles into cash,
+            # with or without the record being resupplied. Cash is fungible
+            # on arrival, so settlement stays keyed by (symbol, payable).
+            for key in sorted(
+                [k for k in self._receivables if k[1] <= trading_date]
+            ):
+                self._cash += self._receivables.pop(key)
+                self._settled_payables.add(key)
+
+            if splits:
+                for split in splits:
+                    self._applied_splits.add((split.symbol, split.ex_date))
+                    self._shares[split.symbol] = (
+                        self._shares.get(split.symbol, Decimal("0"))
+                        * split.split_ratio
+                    )
 
             if trading_date in self.rebalance_dates:
                 self._execute_rebalance(trading_date, prices, reason="SCHEDULED_REBALANCE")
@@ -993,11 +1073,29 @@ class HoldingsBasedBenchmark:
             self._receivables = snap_receivables
             self._booked_entitlements = snap_booked
             self._settled_payables = snap_settled
+            self._applied_splits = snap_splits
             del self.transactions[snap_tx_len:]
             del self.nav_history[snap_hist_len:]
             del self.date_history[snap_hist_len:]
             del self.weight_history[snap_hist_len:]
             raise
+
+    @staticmethod
+    def _validate_split(split: "EtfSplitRecord", trading_date: date) -> None:
+        """Pure split validation shared by step() staging and apply_split().
+
+        A split applies only to its own ex-date session: silently attaching
+        it to an unrelated date is prohibited.
+        """
+        if split.split_ratio <= Decimal("0"):
+            raise DataContractError(
+                f"split_ratio must be positive, got {split.split_ratio}"
+            )
+        if split.ex_date != trading_date:
+            raise DataContractError(
+                f"WRONG_SPLIT_SESSION: split ex-date {split.ex_date} does not match "
+                f"session {trading_date}. Splits apply only on their ex-date."
+            )
 
     def apply_split(self, symbol: str, split_ratio: Decimal, ex_date: date) -> None:
         """Multiply share count by split_ratio for the split ex-date.
@@ -1007,6 +1105,8 @@ class HoldingsBasedBenchmark:
         Unknown symbols fail closed (no silent no-op); applying the same
         (symbol, ex-date) split twice fails closed (no double multiplication).
         Validation precedes mutation, so a rejected split changes nothing.
+        Prefer passing splits to step() so the split joins the atomic session
+        envelope (a later step() failure cannot strand an applied split).
         """
         if symbol not in self._shares:
             raise DataContractError(
