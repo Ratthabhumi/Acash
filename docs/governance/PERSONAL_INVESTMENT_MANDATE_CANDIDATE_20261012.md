@@ -25,7 +25,7 @@ The system owner has provided specific planning parameters for the Personal Syst
 | **Investment Horizon** | `10 years` | Not specified | `investment_horizon = UNKNOWN` | Unapproved assumption; pending operator confirmation. |
 | **Reporting Currency** | `THB` | Not specified | `reporting_currency = UNDECIDED` | Primary working currency USD; THB secondary view. |
 | **Emergency Cash Reserve** | `0.00` | Not specified | `emergency_cash_reserve = UNKNOWN` | Affordability cannot be inferred without cash buffer audit. |
-| **Broker Selection** | Dime, InnovestX, IBKR | Not specified | `broker = UNDECIDED` | Execution venue unratified; friction calibrated to IBKR/Dime. |
+| **Broker Selection** | Dime, InnovestX, IBKR | Interactive Brokers (IBKR) | `preferred_broker_candidate = IBKR`<br>`broker_account_verified = false`<br>`broker_execution_authority = false` | Target execution venue registered; live account unverified and execution disabled. |
 | **Research Sleeve Allocation** | `10% - 30%` | Not specified | `active_strategy_real_allocation = 0.0` | 0% real capital to research sleeve until separate admission. |
 
 ---
@@ -48,6 +48,13 @@ The system owner has provided specific planning parameters for the Personal Syst
    - Global ETFs (VOO, BND, GLD, BIL) trade and clear in USD.
    - For an individual based in Thailand, portfolio wealth is subject to USD/THB exchange rate fluctuation.
    - The canonical simulation engine operates in **USD** (asset native currency) to avoid confounding strategy returns with currency drift. An informational **THB** view is computed using authoritative Bank of Thailand (BOT) daily fixing rates.
+
+5. **Broker Reality Check (IBKR Fee Drag on $1,000 Capital)**:
+   - Preferred Broker Candidate: **Interactive Brokers LLC (IBKR)**.
+   - Pro Tiered Tariff: $0.0035/share, minimum $0.35/order, capped at 1.0% of order value.
+   - Pro Fixed Tariff: $0.005/share, minimum $1.00/order, capped at 1.0% of order value.
+   - On a $1,000 account rebalancing 4 ETFs with $50 order adjustments, 4 tickets at $0.35 = $1.40 per rebalance event (0.14% of NAV). If performed monthly, annual friction is ~1.68% before spreads, FX conversion, and wire fees.
+   - A single $0.35 assumption does not account for exchange fees, clearing fees, FX conversion spreads (typically $2.00 minimum on IBKR), or Thai bank international transfer fees.
 
 ---
 
@@ -88,10 +95,17 @@ personal_investment_mandate_candidate:
     direction_policy: "LONG_ONLY"
     leverage_ceiling: 1.00
     
+  broker_configuration:
+    preferred_broker_candidate: "IBKR"
+    broker_account_verified: false
+    broker_execution_authority: false
+    fee_structure_candidate: "PRO_TIERED"
+    minimum_commission_usd: 0.35
+    maximum_commission_pct: 0.01
+
   governance:
     execution_authority: "ZERO_ORDER_READ_ONLY"
     operator_decision_channel: "DISCRETIONARY_HUMAN_CONFIRMATION"
-    broker_target: "UNDECIDED"
 ```
 
 ---
@@ -101,3 +115,4 @@ personal_investment_mandate_candidate:
 - Contract Enforcement: **STRICT FAIL-CLOSED**
 - Authority Status: **DRAFT_NOT_RATIFIED**
 - Real Capital: **$0.00**
+- Preferred Broker: **IBKR (Candidate Only — Zero Order Authority)**

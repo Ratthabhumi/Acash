@@ -16,11 +16,13 @@ To prevent self-deceptive quantitative research, any proposed investment strateg
 ┌────────────────────────────────────────────────────────┐
 │                   SOVEREIGN HURDLES                    │
 ├──────────────────────────┬─────────────────────────────┤
-│ 1. Cash / T-Bills (BIL)  │ Risk-free return; zero drawdown baseline │
-│ 2. S&P 500 Buy-and-Hold  │ Broad-market equity beta (VOO Total Return) │
-│ 3. 60/40 Balanced Core   │ 60% Equity / 40% Bond (VOO/BND) quarterly │
-│ 4. Naive Equal Weight    │ 1/N across universe; zero estimation error │
-│ 5. Inverse Volatility    │ 1/σ heuristic; covariance-free risk balance│
+│ 1. Zero Cash (Nominal)   │ BM-ZERO-CASH: 0.00% nominal return, cash idle in account │
+│ 2. Theoretical T-Bill    │ BM-TBILL-THEORETICAL: DTB3 discount-converted accrual   │
+│ 3. Traded T-Bill ETF     │ BM-BIL-ETF: Traded ETF, secondary market price/yield   │
+│ 4. S&P 500 Buy-and-Hold  │ Broad-market equity beta (VOO Total Return)             │
+│ 5. 60/40 Balanced Core   │ 60% Equity / 40% Bond (VOO/BND) quarterly rebalanced    │
+│ 6. Naive Equal Weight    │ 1/N across universe; zero estimation error              │
+│ 7. Inverse Volatility    │ 1/σ heuristic; covariance-free risk balance             │
 └──────────────────────────┴─────────────────────────────┘
                              │
                              ▼
@@ -29,6 +31,7 @@ To prevent self-deceptive quantitative research, any proposed investment strateg
 │  - Evaluated on PRE-REGISTERED PRIMARY ENDPOINT        │
 │  - Not forced to beat every metric simultaneously      │
 │  - Friction-adjusted with small-order minimum fees     │
+│  - All risk thresholds tagged PROPOSED_FOR_RESEARCH    │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -36,30 +39,68 @@ To prevent self-deceptive quantitative research, any proposed investment strateg
 
 ## 2. Benchmark Definitions & Total Return Conventions
 
-### 2.1 Cash / Risk-Free Baseline (`BM-CASH`)
-- **Instrument**: U.S. 3-Month Treasury Bill Secondary Market Rate (`DTB3` via FRED) or SPDR 1-3 Month T-Bill ETF (`BIL`).
-- **Accrual Convention**: Daily compounding in Decimal space using ACT/360.
-- **Role**: The uncompromised capital preservation baseline. If a candidate cannot clear this hurdle net of friction, capital remains in cash.
+### 2.1 Cash & Risk-Free Benchmarks (Strictly Disaggregated)
+
+Prior documentation loosely conflated cash, Treasury yield quotes, and traded T-Bill ETFs. In Milestone M1.5, they are strictly separated into three distinct benchmarks:
+
+#### A. Zero-Yield Nominal Cash (`BM-ZERO-CASH`)
+- **Definition**: Uninvested base currency (USD) held as idle broker cash earning zero interest ($r_t = 0.00\%$).
+- **Role**: Represents the purest capital-preservation floor. An investment strategy must beat uninvested cash net of transaction friction and exchange fees.
+- **Drawdown**: Exactly 0.00% nominal drawdown in base currency (USD).
+
+#### B. Theoretical Treasury Bill Accrual (`BM-TBILL-THEORETICAL`)
+- **Instrument**: U.S. 3-Month Treasury Bill Secondary Market Rate (`DTB3` via FRED).
+- **Mathematical Transformation (Strict Fail-Closed)**:
+  - `DTB3` is quoted as an annualized bank discount rate $d$ on an ACT/360 day-count basis:
+    $$d = \frac{\text{Discount}}{\text{Face Value}} \times \frac{360}{t}$$
+  - It is **NOT** a daily compounding deposit rate and must **NOT** be compounded directly.
+  - To convert to an annualized Bond Equivalent Yield (BEY) on an ACT/365 basis for period $t \le 182$ days:
+    $$y_{\text{BEY}} = \frac{365 \times d}{360 - d \times t}$$
+  - Daily accrual factor is derived canonically from the converted bond yield.
+- **Role**: Economic opportunity cost of risk-free lending to the sovereign government.
+
+#### C. Traded Short-Term T-Bill ETF (`BM-BIL-ETF`)
+- **Instrument**: SPDR Bloomberg 1-3 Month T-Bill ETF (`BIL`).
+- **Empirical Reality**:
+  - `BIL` is an exchange-traded fund trading on the secondary market.
+  - It is **NOT** guaranteed zero drawdown or risk-free.
+  - Subject to secondary-market bid-ask spread, intraday price fluctuations, broker commission, expense ratio (0.135% gross / 0.135% net as of 2026), and cash distribution schedule.
+  - Monthly dividend payouts cause ex-dividend price drops followed by cash settlement on payable date.
+- **Role**: Practical, investable short-term cash vehicle achievable by retail accounts on an exchange without direct Treasury auction access.
+
+> **CRITICAL INVARIANT**: Never use `BM-ZERO-CASH`, `BM-TBILL-THEORETICAL`, and `BM-BIL-ETF` interchangeably in reporting, Sharpe calculations, or gate assessments.
 
 ### 2.2 Broad Equity Market Buy-and-Hold (`BM-SP500`)
 - **Instrument**: Vanguard S&P 500 ETF (`VOO`).
-- **Inception Boundary**: September 7, 2010. Observations prior to this date require explicit `SPX_SYNTHETIC_PROXY` notation.
-- **Return Space**: Total Return (dividends reinvested on ex-date net of withholding tax).
+- **Inception Boundary**: September 7, 2010. Observations prior to this date require explicit `SPX_SYNTHETIC_PROXY` notation and must not be passed off as authentic ETF market prints.
+- **Return Space**: Total Return with dividend reinvestment on ex-date net of applicable withholding tax (see Section 2.6).
 - **Role**: Evaluates whether active timing generates positive value beyond passive market risk premium.
 
 ### 2.3 Classical Balanced Core (`BM-6040`)
 - **Allocation**: 60% VOO / 40% BND (Vanguard Total Bond Market ETF).
-- **Rebalance Schedule**: Calendar quarterly with frictionless target resetting for baseline purposes, and realistic friction when comparing portfolio implementations.
-- **Role**: Industry standard asset-allocation benchmark for retail wealth compounding.
+- **Rebalance Schedule**: Calendar quarterly with frictionless target resetting for baseline comparison, and friction-adjusted modeling for retail implementation.
+- **Role**: Standard benchmark for retail wealth compounding.
 
 ### 2.4 Naive Equal Weight (`BM-EW`)
 - **Allocation**: $w_i = \frac{1}{N}$ across the eligible investable universe (`VOO`, `BND`, `GLD`, `BIL`).
 - **Rebalance Schedule**: Monthly rebalancing.
-- **Role**: Transparent benchmark with zero estimation risk, demonstrating the pure value of naive diversification.
+- **Role**: Benchmark with zero parameter estimation risk.
 
 ### 2.5 Inverse Volatility Heuristic (`BM-INVVOL`)
 - **Allocation**: $w_{i,t} \propto \frac{1}{\sigma_{i,t}}$, where $\sigma_{i,t}$ is the 60-day rolling sample return standard deviation.
 - **Role**: Robust risk-budgeting heuristic avoiding inverted covariance matrix instability.
+
+### 2.6 Execution Timing, Taxes, and Data Conventions
+- **Decision vs. Execution Timing**:
+  - Allocation signals computed on daily close $P_{t}$ cannot be executed at $P_{t}$ without lookahead bias.
+  - Realistic modeling must execute at next-session open $O_{t+1}$ or volume-weighted average price $\text{VWAP}_{t+1}$.
+- **Dividend Withholding Tax**:
+  - For Thai tax resident individuals holding US-domiciled ETFs (`VOO`, `BND`, `GLD`, `BIL`) via W-8BEN, the statutory withholding tax rate on distributions is **15.0%** under the US-Thailand Double Tax Agreement (DTA).
+  - Net dividend received: $D_{\text{net}} = D_{\text{gross}} \times (1 - 0.15)$.
+  - (Optional Future Architecture): UCITS ETFs domiciled in Ireland (e.g., `CSPX`, `AGGU`) experience 15% internal US withholding on equities and 0% outbound withholding, avoiding US estate tax exposure ($60,000 threshold for non-resident aliens).
+- **Exchange Fees & Currency**:
+  - Base currency: USD.
+  - Cross-currency reporting: THB via Bank of Thailand (BOT) official fixing rate, preserving bid/offer spread when simulating repatriations.
 
 ---
 
@@ -75,31 +116,43 @@ To prevent self-deceptive quantitative research, any proposed investment strateg
   - **Defensive Mechanism**: When 12-month momentum is non-positive ($R_{i, 12M} \le 0$), capital rotates into Cash / T-Bills (`BIL`), rather than initiating short positions.
   - **Epistemic Standing**: This is an **asymmetric capital-preservation adaptation**, NOT an academic replication of Moskowitz et al. (2012).
 
-### 3.2 Scientifically Correct Evaluation Protocol (Avoiding Multi-Metric Traps)
-In PR #22's draft, the falsification rule asserted that Trend Following must beat 60/40 on CAGR, Sharpe, *and* Maximum Drawdown simultaneously. This is mathematically flawed:
-- Trend-following strategies commonly exhibit lower CAGR than 100% equity during secular bull markets due to rebalancing lag ("whipsaw" during sudden trend reversals).
-- Their primary economic utility is **downside tail-risk reduction** (crisis alpha / capital preservation during deep recessions and market panics).
+### 3.2 Evaluation Protocol & Governance Classification
 
-#### Pre-Registered Evaluation Design
-1. **Primary Success Endpoint**: Net-of-Friction Out-of-Sample **Calmar Ratio** ($\text{CAGR} / |\text{Max Drawdown}|$) over the evaluation timeline.
-2. **Hard Risk Constraints (Mandate Enforced)**:
-   - Maximum Peak-to-Trough Drawdown $\le 50.0\%$ (Personal Mandate ceiling).
-   - Maximum Annualized Volatility $\le 18.0\%$.
-   - Gross Leverage $\le 1.00$.
-3. **Secondary Diagnostics (Informational)**:
-   - Annualized Sharpe Ratio net of small-order friction.
-   - Monthly turnover and ticket count (to monitor small-account commission drag).
-   - CVaR 95% tail risk.
-4. **Pass/Fail Decision Rule**:
-   - The candidate passes if and only if:
-     $$\text{Calmar}_{\text{OOS}}(\text{Trend}) > \text{Calmar}_{\text{OOS}}(\text{BM-6040})$$
-     $$\text{AND } \text{MaxDD}_{\text{OOS}}(\text{Trend}) \le 50.0\%$$
-     $$\text{AND Expected Return Net of Friction} > \text{Cash Hurdle}$$
+All target metrics and thresholds defined below are classified strictly as `PROPOSED_FOR_RESEARCH` until formally ratified by the human operator.
+
+#### A. Candidate Primary Metric: Calmar Ratio
+- **Formula**:
+  $$\text{Calmar} = \frac{\text{CAGR}}{|\text{Max Drawdown}|}$$
+- **Mathematical Edge Cases & Boundaries**:
+  - **Zero Drawdown**: If $|\text{Max Drawdown}| = 0.00$, the Calmar ratio is mathematically undefined. In this case, the system must emit `CALMAR_UNDEFINED_ZERO_DRAWDOWN` rather than fabricating an artificial infinite ratio.
+  - **Negative CAGR**: When $\text{CAGR} < 0$, a larger drawdown produces a less negative ratio, distorting rankings. The metric must be conditioned on $\text{CAGR} > 0$.
+  - **Sample Sensitivity**: Calmar is heavily driven by single outlier drawdowns and sample endpoints. It must be paired with continuous drawdown diagnostics (Ulcer Index, CDaR).
+- **Status**: `CANDIDATE_PRIMARY_ENDPOINT` (Pending scientific preregistration).
+
+#### B. Risk Ceilings (Status: `PROPOSED_FOR_RESEARCH`)
+The following parameters are engineering proposals and **NOT ratified personal mandate policies**:
+- Maximum Peak-to-Trough Drawdown $\le 50.0\%$ (Aligned with personal tolerance profile).
+- Maximum Annualized Volatility $\le 18.0\%$ (`PROPOSED_FOR_RESEARCH` — Not operator-ratified).
+- Monthly rebalance frequency with threshold $\Delta w \ge 3.0\%$ (`PROPOSED_FOR_RESEARCH` — Not operator-ratified).
+- Gross Leverage $\le 1.00$ (Architecturally enforced).
+
+#### C. Candidate Pass/Fail Decision Rule (Status: `PROPOSED_FOR_RESEARCH`)
+$$\text{Calmar}_{\text{OOS}}(\text{Trend}) > \text{Calmar}_{\text{OOS}}(\text{BM-6040})$$
+$$\text{AND } \text{MaxDD}_{\text{OOS}}(\text{Trend}) \le 50.0\%$$
+$$\text{AND Expected Return Net of Friction} > \text{Cash Hurdle}$$
 
 ---
 
 ## 4. Friction & Small-Account Reality Check ($1,000 Portfolio)
+
 For a $1,000 portfolio:
-- A $50 rebalance ticket incurring an IBKR Tiered minimum commission of $0.35 represents a **0.70% one-way cost drag**.
-- High-frequency daily or weekly rebalancing will rapidly destroy capital through ticket minimums.
-- **Mandatory Policy**: Rebalance frequency is strictly limited to **Monthly** with a minimum rebalance threshold $\Delta w \ge 3.0\%$ to filter out micro-turnover noise.
+- **Broker Tariff (Interactive Brokers LLC)**:
+  - Pro Tiered: $0.0035/share, minimum $0.35/order, capped at **1.0% of trade value**.
+  - Pro Fixed: $0.005/share, minimum $1.00/order, capped at **1.0% of trade value**.
+  - Pass-through exchange, clearing (FINRA/SEC), and regulatory fees.
+- **Impact on Small Orders**:
+  - For a $10 micro-rebalance order, the 1.0% cap applies: commission = $0.10.
+  - For a $50 rebalance order, the $0.35 floor applies: commission = $0.35 (0.70% one-way cost drag).
+  - High-frequency daily or weekly rebalancing will rapidly destroy capital through ticket minimums.
+- **Research Safeguard**:
+  - Rebalance schedules must be evaluated net of actual broker friction tables across normal, conservative, and stress scenarios.

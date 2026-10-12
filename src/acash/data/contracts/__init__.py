@@ -10,6 +10,7 @@ from acash.data.contracts.etf_fx_benchmark import (
     EtfSplitRecord,
     FxFixingRecord,
     KNOWN_ETF_REGISTRY,
+    PriceBasis,
     SmallOrderFrictionModel,
     build_total_return_panel,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "EtfSplitRecord",
     "FxFixingRecord",
     "KNOWN_ETF_REGISTRY",
+    "PriceBasis",
     "SmallOrderFrictionModel",
     "build_total_return_panel",
 ]

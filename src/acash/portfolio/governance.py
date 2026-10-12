@@ -30,6 +30,8 @@ class GovernanceConfig(BaseModel):
     min_dsr_probability: Decimal = Decimal("0.95")
     policy_tier: str = "ACTIVE_RESEARCH"  # "ACTIVE_RESEARCH" or "PASSIVE_CORE"
     owner_mandate_id: Optional[str] = None
+    mandate_status: str = "MANDATE_DRAFT"  # "SIMULATION_PROPOSAL", "MANDATE_DRAFT", or "MANDATE_RATIFIED"
+    ratified_mandate_registry: tuple[str, ...] = ()
     require_hurdle_clearance: bool = True
 
 
@@ -85,11 +87,18 @@ class PortfolioGovernanceGate:
                     gate_verdict = "CASH_SOVEREIGN_FALLBACK"
                     rationale_text = f"Cash fallback baseline authorized: {candidate.candidate_id}."
                 elif self.config.policy_tier == "PASSIVE_CORE":
-                    gate_verdict = "APPROVED_PASSIVE_CORE_ALLOCATION"
-                    rationale_text = (
-                        f"Candidate '{candidate.candidate_id}' authorized under ratified passive mandate "
-                        f"'{self.config.owner_mandate_id}'."
-                    )
+                    if self.config.mandate_status == "SIMULATION_PROPOSAL":
+                        gate_verdict = "SIMULATED_PASSIVE_CORE_PROPOSAL"
+                        rationale_text = (
+                            f"Candidate '{candidate.candidate_id}' evaluated under simulation proposal "
+                            f"'{self.config.owner_mandate_id}'. Zero execution authority."
+                        )
+                    else:
+                        gate_verdict = "APPROVED_PASSIVE_CORE_ALLOCATION"
+                        rationale_text = (
+                            f"Candidate '{candidate.candidate_id}' authorized under verified ratified mandate "
+                            f"'{self.config.owner_mandate_id}'."
+                        )
                 else:
                     gate_verdict = "APPROVED_INVESTABLE_ALLOCATION"
                     rationale_text = (
@@ -248,7 +257,24 @@ class PortfolioGovernanceGate:
             if not self.config.owner_mandate_id or not self.config.owner_mandate_id.strip():
                 return (
                     "MANDATE_NOT_AUTHORIZED",
-                    "MANDATE_NOT_AUTHORIZED: PASSIVE_CORE policy tier requires an explicit, ratified owner_mandate_id.",
+                    "MANDATE_NOT_AUTHORIZED: PASSIVE_CORE policy tier requires an explicit owner_mandate_id.",
+                )
+
+            if self.config.mandate_status == "MANDATE_RATIFIED":
+                if (
+                    self.config.ratified_mandate_registry
+                    and self.config.owner_mandate_id not in self.config.ratified_mandate_registry
+                ):
+                    return (
+                        "MANDATE_UNVERIFIED_IN_REGISTRY",
+                        f"MANDATE_UNVERIFIED_IN_REGISTRY: Mandate '{self.config.owner_mandate_id}' is not present in ratified mandate registry.",
+                    )
+            elif self.config.mandate_status == "SIMULATION_PROPOSAL":
+                pass  # Permitted for offline simulation proposals (emits SIMULATED_PASSIVE_CORE_PROPOSAL)
+            else:
+                return (
+                    "MANDATE_DRAFT_NOT_RATIFIED",
+                    f"MANDATE_DRAFT_NOT_RATIFIED: Mandate '{self.config.owner_mandate_id}' has unratified status '{self.config.mandate_status}'. Cannot confer investment decision authority.",
                 )
 
         # 4. Evidence threshold policy verification (if enabled in active research)

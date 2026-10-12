@@ -587,12 +587,57 @@ def test_passive_core_requires_ratified_mandate() -> None:
     assert "MANDATE_NOT_AUTHORIZED" in decision.rationale
 
 
-def test_passive_core_exempt_from_active_hurdle_when_mandate_authorized() -> None:
-    """PASSIVE_CORE with ratified mandate approves candidate even if active hurdle_rate_cleared=False."""
+def test_passive_core_draft_mandate_fails_closed_to_cash() -> None:
+    """PASSIVE_CORE policy tier with unratified MANDATE_DRAFT fails closed to cash."""
     gate = PortfolioGovernanceGate(
         config=GovernanceConfig(
             policy_tier="PASSIVE_CORE",
             owner_mandate_id="MANDATE_CANDIDATE_20261012_USD1000",
+            mandate_status="MANDATE_DRAFT",
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_DRAFT_NOT_RATIFIED" in decision.rationale
+
+
+def test_passive_core_simulation_proposal_emits_simulation_verdict() -> None:
+    """PASSIVE_CORE with SIMULATION_PROPOSAL emits read-only proposal without approved allocation."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="MANDATE_CANDIDATE_20261012_USD1000",
+            mandate_status="SIMULATION_PROPOSAL",
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.gate_verdict == "SIMULATED_PASSIVE_CORE_PROPOSAL"
+    assert "simulation proposal" in decision.rationale
+
+
+def test_passive_core_exempt_from_active_hurdle_when_mandate_ratified() -> None:
+    """PASSIVE_CORE with verified MANDATE_RATIFIED approves candidate even if active hurdle_rate_cleared=False."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="MANDATE_RATIFIED_20261012_USD1000",
+            mandate_status="MANDATE_RATIFIED",
+            ratified_mandate_registry=("MANDATE_RATIFIED_20261012_USD1000",),
         )
     )
     candidates, evaluations = _sample_candidates_and_evaluations()
@@ -622,7 +667,31 @@ def test_passive_core_exempt_from_active_hurdle_when_mandate_authorized() -> Non
     )
     assert decision.gate_verdict == "APPROVED_PASSIVE_CORE_ALLOCATION"
     assert decision.selected_candidate_id == candidates[0].candidate_id
-    assert "MANDATE_CANDIDATE_20261012_USD1000" in decision.rationale
+    assert "MANDATE_RATIFIED_20261012_USD1000" in decision.rationale
+
+
+def test_passive_core_unregistered_mandate_fails_closed() -> None:
+    """PASSIVE_CORE claiming MANDATE_RATIFIED but missing from registry fails closed to cash."""
+    gate = PortfolioGovernanceGate(
+        config=GovernanceConfig(
+            policy_tier="PASSIVE_CORE",
+            owner_mandate_id="FABRICATED_MANDATE_ID",
+            mandate_status="MANDATE_RATIFIED",
+            ratified_mandate_registry=("GENUINE_RATIFIED_MANDATE",),
+        )
+    )
+    candidates, evaluations = _sample_candidates_and_evaluations()
+
+    decision = gate.evaluate_and_decide(
+        candidates=candidates,
+        ranked_evaluations=evaluations,
+        risk_snapshot=_healthy_risk_snapshot(),
+        constraints=_default_constraints(),
+    )
+    assert decision.cash_weight == Decimal("1.0")
+    assert decision.gate_verdict == "REJECT_NO_ELIGIBLE_CANDIDATE"
+    assert "MANDATE_UNVERIFIED_IN_REGISTRY" in decision.rationale
+
 
 
 def test_invalid_policy_tier_raises_data_contract_error() -> None:
