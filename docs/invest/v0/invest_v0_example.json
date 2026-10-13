@@ -1,16 +1,28 @@
 {
   "allocation_nav_inclusive": [
     {
+      "fx_rate_to_base": "1",
+      "fx_source_id": "",
       "key": "ETF_A",
       "kind": "POSITION",
       "market_value_base": "400",
-      "nav_weight": "0.4"
+      "nav_weight": "0.4",
+      "price": "100",
+      "price_as_of": "2026-10-02",
+      "price_source_id": "SYNTHETIC_FIXTURE",
+      "pricing_currency": "USD"
     },
     {
+      "fx_rate_to_base": "1",
+      "fx_source_id": "",
       "key": "ETF_B",
       "kind": "POSITION",
       "market_value_base": "450",
-      "nav_weight": "0.45"
+      "nav_weight": "0.45",
+      "price": "50",
+      "price_as_of": "2026-10-02",
+      "price_source_id": "SYNTHETIC_FIXTURE",
+      "pricing_currency": "USD"
     },
     {
       "key": "CASH:USD",
@@ -80,12 +92,53 @@
     "No tax, FX funding, or market-impact evidence."
   ],
   "nav_base": "1000",
+  "ppds_surface": {
+    "status": "ESTABLISHED",
+    "surface": {
+      "cash_by_currency": {
+        "USD": "150"
+      },
+      "entry_count": 3,
+      "exposures": [
+        {
+          "key": "ETF_A",
+          "market_value": "400",
+          "weight": "0.4705882352941176470588235294"
+        },
+        {
+          "key": "ETF_B",
+          "market_value": "450",
+          "weight": "0.5294117647058823529411764706"
+        }
+      ],
+      "head_sha256": "3f5a0e327d76c2650f1a8df4fc614fdf5526a3e47bfe6f71489c51091b39c2c7",
+      "order_controls": null,
+      "quantity_by_symbol": {
+        "ETF_A": "4",
+        "ETF_B": "9"
+      },
+      "reconciliation_breaks": [],
+      "reconciliation_evidence_integrity_status": "UNATTESTED",
+      "reconciliation_has_attestation": false,
+      "reconciliation_is_independent": false,
+      "reconciliation_ledger_source_id": "SYNTHETIC_LEDGER",
+      "reconciliation_lineage_notes": [
+        "Statement reconciled against self-derived ledger."
+      ],
+      "reconciliation_matched": true,
+      "reconciliation_source_independence_status": "SELF_ORIGIN",
+      "reconciliation_statement_source_id": "SYNTHETIC_STATEMENT",
+      "reconciliation_status": "SELF_CONSISTENCY_VERIFIED",
+      "surface_version": 1
+    }
+  },
   "reconciliation": {
     "basis": "Self-consistency between the supplied statement and the derived ledger only; NOT independent broker reconciliation.",
+    "breaks": [],
     "is_independent": false,
     "matched": true,
     "reconciliation_status": "SELF_CONSISTENCY_VERIFIED",
-    "status": "ESTABLISHED"
+    "status": "COMPUTED_MATCH"
   },
   "report_kind": "ACASH_INVEST_V0_READ_ONLY",
   "report_schema_version": 1,

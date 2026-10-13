@@ -8,11 +8,11 @@
 
 ## Allocation (NAV-inclusive)
 
-| Holding | Kind | Market value | NAV weight |
-|---|---|---|---|
-| ETF_A | POSITION | 400 | 0.4 |
-| ETF_B | POSITION | 450 | 0.45 |
-| CASH:USD | CASH | 150 | 0.15 |
+| Holding | Kind | Market value | NAV weight | Price | Price as-of | Price source |
+|---|---|---|---|---|---|---|
+| ETF_A | POSITION | 400 | 0.4 | 100 (USD) | 2026-10-02 | SYNTHETIC_FIXTURE |
+| ETF_B | POSITION | 450 | 0.45 | 50 (USD) | 2026-10-02 | SYNTHETIC_FIXTURE |
+| CASH:USD | CASH | 150 | 0.15 | n/a | n/a | n/a |
 
 ## Invested-only exposure (cash excluded by construction)
 - Status: `ESTABLISHED`
@@ -20,9 +20,15 @@
 - ETF_B: value `450`, weight `0.5294117647058823529411764706`
 
 ## Reconciliation
-- Status: `ESTABLISHED`
+- Status: `COMPUTED_MATCH`
 - Matched: `True`
 - Independent: `False`
+
+## PPDS read-only surface (reused, not recomputed)
+- Status: `ESTABLISHED`
+- Ledger head: `3f5a0e327d76c2650f1a8df4fc614fdf5526a3e47bfe6f71489c51091b39c2c7` (3 entries)
+- Surface matched: `True`
+- Order controls: `None`
 
 ## Costs
 - commission_floor [MODELLED]: IBKR Tiered-style per-order minimum assumption; NOT account-verified. (amount: 0.35)

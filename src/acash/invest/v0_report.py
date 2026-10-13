@@ -20,6 +20,12 @@ real account data, no expected returns, no Sharpe/VaR/drawdown/alpha/ranking,
 no invented statistics, no silent zero-cost assumptions, no currency mixing
 without an explicit qualified FX rate. Missing data yields BLOCKED sections,
 never fabricated metrics.
+
+Supported-input policy: LONG-ONLY. Negative position quantities and negative
+cash lots are rejected fail-closed: V0 has no margin, derivatives, or
+leverage accounting, and the personal mandate candidate (itself unratified)
+is long-only. Short exposure would make invested-only gross exposure
+positive while NAV weights go negative — ambiguous output V0 refuses to emit.
 """
 
 from __future__ import annotations
@@ -100,8 +106,21 @@ def _validate_costs(costs: Sequence[V0CostAssumption]) -> List[Dict[str, Any]]:
             raise DataContractError(
                 f"INVEST_V0_COST_BASIS_INVALID: {cost.basis!r}."
             )
+        if cost.basis == COST_BASIS_ACCOUNT_VERIFIED:
+            raise DataContractError(
+                f"INVEST_V0_COST_UNVERIFIED_CLAIM: {cost.name!r} claims "
+                "ACCOUNT_VERIFIED without an attestation this layer can "
+                "check. V0 is restricted to MODELLED and UNKNOWN until a "
+                "fee-provenance contract exists."
+            )
         if cost.amount_base is not None:
             _require_money(cost.amount_base, f"cost {cost.name}")
+            if cost.amount_base < Decimal("0"):
+                raise DataContractError(
+                    f"INVEST_V0_COST_NEGATIVE: ordinary fee {cost.name!r} "
+                    "must be non-negative. Rebates/credits need distinct "
+                    "semantics that do not exist here; they are not netted."
+                )
         validated.append(
             {
                 "name": cost.name,
@@ -140,6 +159,21 @@ def build_invest_v0_report(
             f"INVEST_V0_BASE_CURRENCY_INVALID: {base_currency!r}."
         )
 
+    for position_lot in ledger.position_lots:
+        if position_lot.quantity < Decimal("0"):
+            raise DataContractError(
+                f"INVEST_V0_SHORT_POSITION_UNSUPPORTED: {position_lot.symbol} "
+                f"quantity {position_lot.quantity}. V0 is long-only; short exposure "
+                "would make gross exposure positive while NAV weights go "
+                "negative, which this report refuses to emit."
+            )
+    for cash_lot in ledger.cash_lots:
+        if cash_lot.amount < Decimal("0"):
+            raise DataContractError(
+                f"INVEST_V0_NEGATIVE_CASH_UNSUPPORTED: {cash_lot.currency} "
+                f"amount {cash_lot.amount}. V0 has no overdraft/margin accounting."
+            )
+
     valuation = evaluate_portfolio_base_currency(
         ledger, clean_base, as_of, prices, fx_rates
     )
@@ -151,14 +185,29 @@ def build_invest_v0_report(
 
     # NAV-inclusive allocation (positions + cash). Distinct from the
     # invested-only exposure below, which excludes cash by construction.
+    # Position lines carry full valuation provenance (price, date, source,
+    # FX); a non-empty source ID attests the quote was supplied, never that
+    # it is qualified market data.
     allocation: List[Dict[str, str]] = []
     for position in valuation.positions:
+        quote = prices[position.symbol]
+        fx_source_id = ""
+        if position.pricing_currency != clean_base:
+            fx_source_id = fx_rates[
+                (position.pricing_currency, clean_base)
+            ].source_id
         allocation.append(
             {
                 "key": position.symbol,
                 "kind": "POSITION",
                 "market_value_base": str(position.net_market_value_base),
                 "nav_weight": str(position.net_market_value_base / nav),
+                "price": str(position.price),
+                "price_as_of": position.price_as_of.isoformat(),
+                "price_source_id": quote.source_id,
+                "pricing_currency": position.pricing_currency,
+                "fx_rate_to_base": str(position.fx_rate_to_base),
+                "fx_source_id": fx_source_id,
             }
         )
     for currency in sorted(valuation.cash_base):
@@ -174,6 +223,7 @@ def build_invest_v0_report(
     # Invested-only exposure reuses position_exposure (single-currency lots
     # only); multi-currency position sets are BLOCKED, not approximated.
     position_currencies = {lot.currency for lot in ledger.position_lots}
+    exposure_lines = []
     if not ledger.position_lots:
         invested_exposure: Dict[str, Any] = {
             "status": "NOT_ESTABLISHED",
@@ -194,7 +244,7 @@ def build_invest_v0_report(
         base_prices = {
             symbol: quote.price for symbol, quote in prices.items()
         }
-        lines = position_exposure(ledger, base_prices)
+        exposure_lines = position_exposure(ledger, base_prices)
         invested_exposure = {
             "status": "ESTABLISHED",
             "basis": (
@@ -204,21 +254,25 @@ def build_invest_v0_report(
             "lines": [
                 {"key": line.key, "market_value": line.market_value,
                  "weight": line.weight}
-                for line in lines
+                for line in exposure_lines
             ],
         }
 
     # Reconciliation: self-consistency only. Independence is never claimed
-    # without an attestation this layer cannot produce.
+    # without an attestation this layer cannot produce. Status labels say
+    # what COMPUTED means: a computed mismatch is still computed output,
+    # never a pass.
+    reconciliation_result = None
     if statement is None:
         reconciliation: Dict[str, Any] = {
             "status": "NOT_ESTABLISHED",
             "reason": "No statement snapshot supplied; nothing reconciled.",
             "matched": False,
             "is_independent": False,
+            "breaks": [],
         }
     else:
-        result = reconcile_snapshot_ledger(
+        reconciliation_result = reconcile_snapshot_ledger(
             statement,
             ledger,
             statement_source_id=statement_source_id or "SYNTHETIC_STATEMENT",
@@ -226,13 +280,48 @@ def build_invest_v0_report(
             is_independent=False,
         )
         reconciliation = {
-            "status": "ESTABLISHED",
-            "matched": bool(result.matched),
-            "reconciliation_status": result.status,
+            "status": (
+                "COMPUTED_MATCH"
+                if reconciliation_result.matched
+                else "COMPUTED_MISMATCH"
+            ),
+            "matched": bool(reconciliation_result.matched),
+            "reconciliation_status": reconciliation_result.status,
             "is_independent": False,
             "basis": (
                 "Self-consistency between the supplied statement and the "
                 "derived ledger only; NOT independent broker reconciliation."
+            ),
+            "breaks": [
+                {
+                    "scope": item.scope,
+                    "key": item.key,
+                    "statement_value": item.statement_value,
+                    "ledger_value": item.ledger_value,
+                    "difference": item.difference,
+                    "status": item.status,
+                }
+                for item in reconciliation_result.breaks
+            ],
+        }
+
+    # PPDS read-only surface, genuinely reused (not duplicated): it carries
+    # the reconciliation breaks, lineage notes, and attestation presence that
+    # this report does not recompute. Available only when both reconciliation
+    # and invested-only exposure computed; otherwise honestly absent.
+    if reconciliation_result is not None and exposure_lines:
+        ppds_surface: Dict[str, Any] = {
+            "status": "ESTABLISHED",
+            "surface": render_read_only_surface(
+                ledger, reconciliation_result, exposure_lines
+            ),
+        }
+    else:
+        ppds_surface = {
+            "status": "NOT_ESTABLISHED",
+            "reason": (
+                "Requires both a supplied statement and single-currency "
+                "positions; absent inputs are not synthesized."
             ),
         }
 
@@ -277,6 +366,7 @@ def build_invest_v0_report(
             "nav_weight": str(concentration_weight),
         },
         "reconciliation": reconciliation,
+        "ppds_surface": ppds_surface,
         "costs": {
             "lines": cost_lines,
             "total_base": costs_total,
@@ -335,16 +425,23 @@ def render_v0_markdown(report: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("## Allocation (NAV-inclusive)")
     lines.append("")
-    lines.append("| Holding | Kind | Market value | NAV weight |")
-    lines.append("|---|---|---|---|")
+    lines.append("| Holding | Kind | Market value | NAV weight | Price | Price as-of | Price source |")
+    lines.append("|---|---|---|---|---|---|---|")
     allocation = report["allocation_nav_inclusive"]
     assert isinstance(allocation, list)
     for entry in allocation:
         assert isinstance(entry, dict)
-        lines.append(
-            f"| {entry['key']} | {entry['kind']} | {entry['market_value_base']} "
-            f"| {entry['nav_weight']} |"
-        )
+        if entry["kind"] == "POSITION":
+            lines.append(
+                f"| {entry['key']} | {entry['kind']} | {entry['market_value_base']} "
+                f"| {entry['nav_weight']} | {entry['price']} ({entry['pricing_currency']}) "
+                f"| {entry['price_as_of']} | {entry['price_source_id']} |"
+            )
+        else:
+            lines.append(
+                f"| {entry['key']} | {entry['kind']} | {entry['market_value_base']} "
+                f"| {entry['nav_weight']} | n/a | n/a | n/a |"
+            )
     lines.append("")
     lines.append("## Invested-only exposure (cash excluded by construction)")
     invested = report["invested_only_exposure"]
@@ -361,11 +458,33 @@ def render_v0_markdown(report: Mapping[str, Any]) -> str:
     reconciliation = report["reconciliation"]
     assert isinstance(reconciliation, dict)
     lines.append(f"- Status: `{reconciliation['status']}`")
-    if reconciliation["status"] == "ESTABLISHED":
+    if reconciliation["status"] in ("COMPUTED_MATCH", "COMPUTED_MISMATCH"):
         lines.append(f"- Matched: `{reconciliation['matched']}`")
         lines.append(f"- Independent: `{reconciliation['is_independent']}`")
+        for break_item in reconciliation["breaks"]:
+            assert isinstance(break_item, dict)
+            lines.append(
+                f"- Break [{break_item['scope']}/{break_item['key']}]: "
+                f"statement `{break_item['statement_value']}` vs ledger "
+                f"`{break_item['ledger_value']}` "
+                f"(diff `{break_item['difference']}`, {break_item['status']})"
+            )
     else:
         lines.append(f"- Reason: {reconciliation['reason']}")
+    lines.append("")
+    lines.append("## PPDS read-only surface (reused, not recomputed)")
+    surface_section = report["ppds_surface"]
+    assert isinstance(surface_section, dict)
+    lines.append(f"- Status: `{surface_section['status']}`")
+    if surface_section["status"] == "ESTABLISHED":
+        surface = surface_section["surface"]
+        assert isinstance(surface, dict)
+        lines.append(f"- Ledger head: `{surface['head_sha256']}` "
+                     f"({surface['entry_count']} entries)")
+        lines.append(f"- Surface matched: `{surface['reconciliation_matched']}`")
+        lines.append(f"- Order controls: `{surface['order_controls']}`")
+    else:
+        lines.append(f"- Reason: {surface_section['reason']}")
     lines.append("")
     lines.append("## Costs")
     costs = report["costs"]
