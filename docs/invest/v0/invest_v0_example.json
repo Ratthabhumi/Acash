@@ -1,0 +1,95 @@
+{
+  "allocation_nav_inclusive": [
+    {
+      "key": "ETF_A",
+      "kind": "POSITION",
+      "market_value_base": "400",
+      "nav_weight": "0.4"
+    },
+    {
+      "key": "ETF_B",
+      "kind": "POSITION",
+      "market_value_base": "450",
+      "nav_weight": "0.45"
+    },
+    {
+      "key": "CASH:USD",
+      "kind": "CASH",
+      "market_value_base": "150",
+      "nav_weight": "0.15"
+    }
+  ],
+  "as_of": "2026-10-02",
+  "base_currency": "USD",
+  "comparisons_available": {
+    "allocation_ranking": "BLOCKED: ranking requires statistical evidence.",
+    "buy_and_hold_path": "BLOCKED: requires qualified historical series.",
+    "cash_no_trade_path": "BLOCKED: requires qualified historical series."
+  },
+  "costs": {
+    "lines": [
+      {
+        "amount_base": "0.35",
+        "basis": "MODELLED",
+        "detail": "IBKR Tiered-style per-order minimum assumption; NOT account-verified.",
+        "name": "commission_floor"
+      },
+      {
+        "amount_base": null,
+        "basis": "UNKNOWN",
+        "detail": "Owner-specific tax treatment unestablished; never assumed zero.",
+        "name": "withholding_tax"
+      }
+    ],
+    "total_base": null,
+    "total_basis": "NOT_ESTABLISHED"
+  },
+  "evidence_classification": "SYNTHETIC_DEMONSTRATION",
+  "execution": {
+    "capital_authority_usd": "0.00",
+    "order_submission_authorized": false,
+    "recommendation": "BLOCKED: synthetic demonstration only. No investment recommendation is authorized. NO_REAL_ORDERS."
+  },
+  "invested_only_exposure": {
+    "basis": "Invested-positions-only weights (cash excluded by construction); NOT portfolio NAV weights.",
+    "lines": [
+      {
+        "key": "ETF_A",
+        "market_value": "400",
+        "weight": "0.4705882352941176470588235294"
+      },
+      {
+        "key": "ETF_B",
+        "market_value": "450",
+        "weight": "0.5294117647058823529411764706"
+      }
+    ],
+    "status": "ESTABLISHED"
+  },
+  "largest_concentration": {
+    "key": "ETF_B",
+    "nav_weight": "0.45"
+  },
+  "ledger_entry_count": 3,
+  "ledger_head_sha256": "3f5a0e327d76c2650f1a8df4fc614fdf5526a3e47bfe6f71489c51091b39c2c7",
+  "missing_data_and_uncertainty": [
+    "No qualified historical ETF price history.",
+    "No expected returns, risk forecasts, or drawdown estimates.",
+    "No independent broker reconciliation.",
+    "No account-verified fees; all costs are assumptions unless stated.",
+    "No tax, FX funding, or market-impact evidence."
+  ],
+  "nav_base": "1000",
+  "reconciliation": {
+    "basis": "Self-consistency between the supplied statement and the derived ledger only; NOT independent broker reconciliation.",
+    "is_independent": false,
+    "matched": true,
+    "reconciliation_status": "SELF_CONSISTENCY_VERIFIED",
+    "status": "ESTABLISHED"
+  },
+  "report_kind": "ACASH_INVEST_V0_READ_ONLY",
+  "report_schema_version": 1,
+  "total_cash_base": "150",
+  "total_positions_net_base": "850",
+  "valuation_basis": "Point-in-time synthetic fixture valuation; not market data."
+}
