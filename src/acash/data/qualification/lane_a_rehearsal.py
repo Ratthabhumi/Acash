@@ -86,11 +86,13 @@ class ScriptedTransport:
     """Sealed offline transport: canned script, call recording, zero I/O.
 
     This is the ONLY transport ``run_rehearsal`` accepts (enforced by an
-    isinstance gate): arbitrary callers cannot inject a live HTTP adapter
-    because any non-ScriptedTransport object fails closed with zero
-    dispatches. There is deliberately no URL, credential, socket, or retry
-    surface anywhere on this class. A future real transport, if ever
-    authorized, lives in a separate audited API — never here.
+    exact-type gate: ``type(transport) is ScriptedTransport``): arbitrary
+    callers cannot inject a live HTTP adapter, and even a subclass
+    overriding ``.get()`` fails closed with zero dispatches, because
+    ``@final`` alone does not prohibit subclassing at runtime. There is
+    deliberately no URL, credential, socket, or retry surface anywhere on
+    this class. A future real transport, if ever authorized, lives in a
+    separate audited API — never here.
     """
 
     def __init__(
@@ -292,10 +294,17 @@ def run_rehearsal(
     conventions). Execution outcomes return (manifest, verdict); the manifest
     is fully deterministic (no timestamps, no wall-clock).
     """
-    if not isinstance(transport, ScriptedTransport):
+    # Exact-type seal (not isinstance): @final is a static-typing-only
+    # restriction in Python, so a subclass overriding .get() would still
+    # satisfy isinstance. The offline guarantee therefore checks the exact
+    # runtime type. Threat-model note: this stops accidental or in-process
+    # misuse within trusted code; it is NOT an operating-system network
+    # sandbox, and no such sandbox is claimed here.
+    if type(transport) is not ScriptedTransport:
         raise DataContractError(
-            "Rehearsal transport must be a ScriptedTransport (sealed offline "
-            "script); arbitrary transports are rejected with zero dispatches."
+            "Rehearsal transport must be exactly a ScriptedTransport (sealed "
+            "offline script); subclasses and arbitrary transports are "
+            "rejected with zero dispatches."
         )
     clean_sha = _require_runtime_sha(runtime_sha)
     valid = validate_authority(authority, now_utc)

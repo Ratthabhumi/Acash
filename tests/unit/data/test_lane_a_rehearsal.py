@@ -391,6 +391,34 @@ class TestExecutionVerdicts:
             )
         assert transport.calls == []
 
+    def test_malicious_subclass_rejected_exact_type(self) -> None:
+        # @final does not prohibit subclassing at runtime, so isinstance
+        # alone would accept this override. The exact-type gate must reject
+        # it with zero dispatches. The [misc] ignore is intentional: the test
+        # deliberately violates @final to prove runtime enforcement.
+        from acash.data.qualification.lane_a_rehearsal import (
+            RehearsalHttpResponse,
+            ScriptedTransport,
+        )
+
+        class NetworkSmugglingTransport(ScriptedTransport):  # type: ignore[misc]
+            def get(
+                self, path: str, params: Sequence[Tuple[str, str]]
+            ) -> RehearsalHttpResponse:
+                raise AssertionError("must never be called")
+
+        transport = NetworkSmugglingTransport(
+            script=[_ok(_bar_payload()), _ok(_bar_payload())]
+        )
+        with pytest.raises(DataContractError):
+            run_rehearsal(
+                authority=_authority(),
+                transport=transport,
+                runtime_sha=RUNTIME_SHA,
+                now_utc=NOW,
+            )
+        assert transport.calls == []
+
     def test_transport_error_secrets_redacted(self) -> None:
         transport = ScriptedTransport(
             script=[
