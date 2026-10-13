@@ -19,17 +19,17 @@ Qualify a corporate-action data path (dividend cash amounts and split factors fo
 
 ## 3. Preselected Real-Event Validation Anchors
 
-Validation uses **preselected, externally documented real corporate actions** — never vendor data self-certified by the same provider that serves prices. Each anchor must be independently confirmable from sponsor-official sources (fund distributor declarations, SEC filings):
+Validation uses **preselected, externally documented real corporate actions** — never vendor data self-certified by the same provider that serves prices. Each anchor must be independently confirmable from sponsor-official sources (fund distributor declarations, SEC filings) and carries a mandatory SOURCE-SPECIFIC EVIDENCE BINDING recorded before first use: the exact sponsor document/source name, the window that source covers, and the source's date-field conventions (distributor distribution tables and SEC filings may use different date-field semantics; they are not interchangeable). An anchor whose binding is incomplete may not be used for validation, and disagreement between admissible sources falls to rule 5 (quarantine), never to a silent choice of source:
 
 1. **SPY quarterly cash distribution** (State Street SPDR official declaration; one ex-date per calendar quarter in 2016–2024).
-2. **AGG monthly distribution** (iShares official distribution history; Feb–Dec plus December extra; January systematically absent per `hyp_010_sponsor_authority.py` evidence).
+2. **AGG monthly distribution** (iShares official distribution history; Feb–Dec plus December extra; January absent across the 2016–2024 HYP_010 panel — an observed empirical pattern within that cited window, NOT a guaranteed schedule law for any other window).
 3. **ACWI semi-annual distribution** (June and December halves each contain >= 1 ex-date).
 4. **A known ETF split or reverse split** in the universe (if none exists in-window, the split path is validated against a synthetic-but-documented case and labeled HEURISTIC, never presented as empirical coverage).
 
 ## 4. Qualification Rules (Fail-Closed)
 
 1. **UNKNOWN-basis rejection:** any corporate-action record whose source identity cannot be bound to a sponsor-official or explicitly licensed authority is classified `UNKNOWN_BASIS` and REJECTED. There is no implied-zero: an absent record is a coverage gap, never a zero dividend (inherited from `hyp_010_sponsor_authority.py`).
-2. **Schedule contradictions fail closed:** a January ex-date for AGG/BIL anywhere in authority history contradicts the documented schedule and must raise `DataContractError`, not be silently absorbed.
+2. **Schedule-pattern deviations quarantine, never auto-absorb, never auto-reject canonical data:** sponsor-schedule *patterns* evidenced within a cited window (e.g., January AGG/BIL ex-dates absent in the 2016–2024 HYP_010 panel) are empirical heuristics, not canonical law. An event deviating from such a pattern must be classified `PATTERN_DEVIATION` and quarantined (as `CONTRADICTORY`) for human adjudication against the sponsor-official source for that record's window; it is neither silently absorbed nor raised as an automatic `DataContractError` against otherwise admissible data. Sponsor-official confirmation admits the record, and the pattern update is recorded in a NEW additive document. An event whose source cannot be verified remains `UNKNOWN_BASIS` and is REJECTED (rule 1).
 3. **Amount sign and type bounds:** cash amounts must be finite, >= 0, and within `validate_decimal128_bounds`; splits must be positive rational factors. Violations raise, never clamp.
 4. **Date ordering:** ex-date <= record-date <= pay-date per record; violations are contradictions.
 5. **Dual-source disagreement:** if two admissible authorities disagree on an event, the event is quarantined `CONTRADICTORY` until a human adjudicates. No silent majority rule.

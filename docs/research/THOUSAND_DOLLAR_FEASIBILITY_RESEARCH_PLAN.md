@@ -10,10 +10,12 @@ Given $1,000 of hypothetical committed capital, which ACASH research paths are e
 
 ## 2. Candidate Alternatives (Descriptive)
 
+These four paths are scenarios to COMPARE (desk-research framing) — not recommendations, commitments, or authorizations. Every economic claim in the table is an assumption to be re-verified against live published schedules before any decision.
+
 | # | Path | Rough Economic Reality at $1,000 | Primary Gate Dependency |
 | :-- | :--- | :--- | :--- |
-| A | US ETF swing/trend (VOO/BND/GLD/BIL panel) | $0 commissions at IBKR/Alpaca; $1,000 = 1-4 shares per name; position granularity (share-level) is the binding constraint, not fees | Lane A data admission -> benchmark -> paper R1 |
-| B | Broad optimizer/rebalancer over same ETFs | Same fee structure; needs >= 4 names with meaningful weights — feasible but variance of allocation error is high at share granularity | Same as A + allocator evaluation on admitted data |
+| A | US ETF swing/trend (VOO/BND/GLD/BIL panel) | Commissions are broker-dependent, NOT uniformly $0: Alpaca advertises $0 commission on US equities; IBKR PRO's published schedule carries per-order minimums (Tiered min US$0.35, Fixed min US$1.00; $0 exists only on IBKR Lite) plus exchange/regulatory fees on Tiered; $1,000 = 1-4 shares per name, so the IBKR PRO fee floor is material at this size — share-level position granularity is the binding constraint in the Alpaca scenario, fees in the IBKR PRO scenario | Lane A data admission -> benchmark -> paper R1 |
+| B | Broad optimizer/rebalancer over same ETFs | Same broker-dependent commission structure as A (including IBKR PRO per-order minimums); needs >= 4 names with meaningful weights — feasible but variance of allocation error is high at share granularity | Same as A + allocator evaluation on admitted data |
 | C | Futures/micro contracts (e.g., MES) | Margin feasible at $1,000, but roll mechanics and contract data admission do not exist in ACASH; would be a new data lane entirely | New qualification lane (out of M1.7 scope) |
 | D | FX/cryptovernight carry hypotheses | 24/7 data path exists only as synthetic; no admitted real feed; leverage rules differ | Out of scope; new admission required |
 
@@ -39,5 +41,5 @@ Human issues Lane A authority
 ## 5. Honest Boundaries
 
 - Nothing in this plan demonstrates profitability; M1.6/M1.7 establish correctness and data admissibility only.
-- $1,000 feasibility conclusions here are desk arithmetic on documented fee schedules, not empirical fill data.
+- $1,000 feasibility conclusions here are desk arithmetic against published fee schedules as of 2026-10-13 (IBKR PRO: Tiered min US$0.35/order, Fixed min US$1.00/order, $0 only on IBKR Lite — see `https://investors.interactivebrokers.com/en/pricing/commissions-stocks.php`; Alpaca: advertised $0 commission on US equities), not empirical fill data. The repository's own friction model is classified `IBKR_INSPIRED_SYNTHETIC_FRICTION` (`src/acash/data/contracts/etf_fx_benchmark.py`) and is explicitly NOT account-verified.
 - A profitable paper result, if ever obtained, does not itself authorize live capital; that boundary remains human.

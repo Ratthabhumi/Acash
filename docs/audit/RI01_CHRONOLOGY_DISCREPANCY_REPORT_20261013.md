@@ -36,7 +36,22 @@ A human governance authority must adjudicate which record is canonical:
 
 Until such a decision exists, RI-01 Canary 2 lineage status is **UNRESOLVED — NO AUTHORITY GRANTED**, and no downstream gate may consume Canary 2 as admitted evidence.
 
-## 5. Verification Ledger
+## 5. Timestamp & Provenance Separation (Additive Clarification)
+
+The records in §1 reference DIFFERENT kinds of timestamps with different provenances; they must not be read as one homogeneous chronology, and day-granularity record dates are not interchangeable with sub-day event timestamps:
+
+| Concept | What it denotes | Value/evidence as recorded | Provenance (source record) |
+| :--- | :--- | :--- | :--- |
+| UNISSUED status | Governance classification of Canary 2 at a record date | "unissued" at 2026-10-09 (per later checkpoint); checkpoint dated 2026-10-12 states "Canary 2 unissued" | RI-01 chronology; `docs/audit/RESEARCH_UTILIZATION_CHECKPOINT_20261012.md` |
+| Approval time | Moment the human approval decision was recorded | Referenced by the admission record; 102 s AFTER its `valid_from_utc` | Admission record (dated 2026-10-11) |
+| Dispatch time | Moment the measurement request was dispatched | Canary 2 event dated 2026-10-09 | RI-01 chronology |
+| `valid_from_utc` | Start of the admitted validity window | 102 s BEFORE the recorded approval time | Admission record (dated 2026-10-11) |
+| Measurement window | Period the auction measurement itself covers | Not specified in the records cited here | Measurement artifact |
+| Admission write | Moment the admission record was written | Record dated 2026-10-11 | Admission record |
+
+Cross-concept ordering claims (e.g., "dispatch precedes admission", "validity precedes approval") are only as trustworthy as each source record's own clock and provenance; none of these orderings is independently verified in this report, and this section resolves none of them. The adjudication options in §4 remain the only path to a canonical chronology.
+
+## 6. Verification Ledger
 
 - Implementation Status: COMPLETE (documentation only; zero code changes)
 - Contract Enforcement: N/A (no runtime path touched)
