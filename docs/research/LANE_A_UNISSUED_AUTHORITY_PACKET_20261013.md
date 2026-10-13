@@ -15,10 +15,13 @@ qualification.
   Alpaca docs; consumer treats end as inclusive date bound)
 - Adjustments requested: `raw` and `all` (2 variants; `all` is a retroactive
   snapshot, NOT PIT-guaranteed — compare raw vs all for corporate-action drift)
-- Feed: account-entitlement-dependent (`iex` vs `sip` semantics differ);
-  entitlement uncertainty recorded, not assumed
-- Max HTTP requests: 12 (4 symbols × 2 adjustments = 8 base + 4 pagination spare;
-  stop at budget even if pages remain → PARTIAL)
+- Feed: operator-bound at issuance to exactly one of `iex`|`sip` (`iex` vs `sip`
+  semantics differ; entitlement uncertainty recorded, not assumed). No
+  server-side default is trusted and no fallback feed is permitted; `otc`/`boats`
+  are excluded from Lane A scope
+- Max HTTP requests: 12 (canonical multi-symbol shape: 2 base requests
+  [all 4 symbols × 2 adjustments] + 10 pagination spare; stop at budget even if
+  pages remain → PARTIAL)
 - Max response payload: 524288 bytes total (accounted across successes AND
   failures/pagination; abort on exceed)
 - Paid budget: USD 0 (Basic free only; no $99 upgrade; 2016+ coverage only —
@@ -27,13 +30,21 @@ qualification.
 
 ## Request semantics (exact)
 
-- Base: `https://data.alpaca.markets/v2/stocks/bars?symbols=VOO,BND,GLD,BIL&timeframe=1Day&start=2026-09-28T00:00:00Z&end=2026-10-02T23:59:59Z&adjustment={raw,all}&feed={entitled}&sort=asc&limit=1000`
+- Base: `https://data.alpaca.markets/v2/stocks/bars?symbols=VOO,BND,GLD,BIL&timeframe=1Day&start=2026-09-28&end=2026-10-02&adjustment={raw,all}&feed={iex|sip, operator-chosen}&sort=asc&limit=1000&currency=USD`
   (verified 2026-10-13 against official `stockbars` reference: endpoint
-  `/v2/stocks/bars`, `page_token` pagination, `sort=asc|desc`,
-  `feed=sip|iex|otc|boats`, currency default USD; 4xx/429 taxonomy per reference)
+  `/v2/stocks/bars`, `start`/`end` INCLUSIVE accepting YYYY-MM-DD, `page_token`
+  pagination, `sort=asc|desc`, `feed=sip|iex|otc|boats` with a server-side
+  default of sip (hence bound explicitly, never trusted), currency default USD
+  (bound explicitly here); 4xx/429 taxonomy per reference. The exact first-page
+  binding is canonicalized in `canonical_query_parameters()` in
+  `src/acash/data/qualification/lane_a_authority.py`)
 - Timezone: UTC bounds; NYSE session mapping validated per-bar (no weekend/holiday bars accepted)
 - Pagination: follow `next_page_token` until absent/empty; each page = 1 request
   against budget; incomplete at budget → PARTIAL, no auto-retry/extension
+- Accounting: every page fetch (base or continuation) is pre-reserved via the
+  dispatch-reserve ledger (`begin_dispatch` consumes budget BEFORE send;
+  failed/timed-out attempts still consume budget; duplicate settlement and
+  byte-budget overruns terminate execution — `LaneARequestLedger`)
 - Rate limits: honor 429 + Retry-After as STOP (no retry within this packet)
 
 ## Evidence & lineage
@@ -54,8 +65,9 @@ qualification.
 - Non-monotonic/duplicate/off-calendar bars → contract failure, unqualified
 - Corporate-action fields present but share-basis undeclared → Lane B scope,
   not inferred here
-- UTC validity: unissued (operator fills `valid_from_utc >= approved_at_utc`
-  per the 2026-10-11 invariant; retroactive windows rejected)
+- UTC validity: unissued (operator binds `approved_at_utc` AND fills
+  `valid_from_utc >= approved_at_utc` per the 2026-10-11 invariant; naive
+  timestamps and retroactive windows rejected)
 
 ## Out of scope
 
