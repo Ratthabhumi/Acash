@@ -9,9 +9,8 @@ no auth headers by construction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 import pytest
 
@@ -28,6 +27,7 @@ from acash.data.qualification.lane_a_rehearsal import (
     RehearsalHttpResponse,
     RehearsalTransportError,
     RehearsalVerdict,
+    ScriptedTransport,
     run_rehearsal,
 )
 
@@ -89,24 +89,7 @@ def _bar_payload(
     return json.dumps({"bars": bars, "next_page_token": token}).encode("utf-8")
 
 
-@dataclass
-class FakeTransport:
-    """Scripted synthetic transport; records every call for budget proofs."""
 
-    calls: List[Tuple[str, Tuple[Tuple[str, str], ...]]] = field(default_factory=list)
-    script: List[object] = field(default_factory=list)
-
-    def get(
-        self, path: str, params: Sequence[Tuple[str, str]]
-    ) -> RehearsalHttpResponse:
-        self.calls.append((path, tuple(params)))
-        if not self.script:
-            raise AssertionError("FakeTransport script exhausted: unexpected request.")
-        action = self.script.pop(0)
-        if isinstance(action, Exception):
-            raise action
-        assert isinstance(action, RehearsalHttpResponse)
-        return action
 
 
 def _ok(content: bytes) -> RehearsalHttpResponse:
@@ -115,7 +98,7 @@ def _ok(content: bytes) -> RehearsalHttpResponse:
 
 class TestHappyPath:
     def test_full_run_passes_with_complete_coverage(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         manifest, verdict = run_rehearsal(
@@ -127,7 +110,10 @@ class TestHappyPath:
         assert verdict is RehearsalVerdict.PASS
         assert manifest.planned_operations == 2
         assert manifest.dispatched_operations == 2
-        assert manifest.network_requests_issued == 2
+        # Synthetic dispatches are budgeted attempts, never real HTTP:
+        # fake-transport calls must not be reported as network requests.
+        assert manifest.synthetic_dispatch_attempts == 2
+        assert manifest.actual_network_requests_issued == 0
         assert len(manifest.receipts) == 2
         assert manifest.runtime_commit_sha == RUNTIME_SHA
         assert manifest.authority_reference == "OP-APPROVAL-TEST-001"
@@ -141,7 +127,7 @@ class TestHappyPath:
         first_doc = json.loads(first.decode("utf-8"))
         first_doc["next_page_token"] = "page2"
         first = json.dumps(first_doc).encode("utf-8")
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(first), _ok(second), _ok(_bar_payload())]
         )
         manifest, verdict = run_rehearsal(
@@ -160,7 +146,7 @@ class TestHappyPath:
 
     def test_deterministic_manifests(self) -> None:
         def run_once() -> object:
-            transport = FakeTransport(
+            transport = ScriptedTransport(
                 script=[_ok(_bar_payload()), _ok(_bar_payload())]
             )
             return run_rehearsal(
@@ -173,7 +159,7 @@ class TestHappyPath:
         assert run_once() == run_once()
 
     def test_scope_digest_stable(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         manifest, _ = run_rehearsal(
@@ -187,7 +173,7 @@ class TestHappyPath:
 
 class TestFailClosedAuthority:
     def test_missing_authority_raises_before_network(self) -> None:
-        transport = FakeTransport(script=[])
+        transport = ScriptedTransport(script=[])
         with pytest.raises(DataContractError):
             run_rehearsal(
                 authority=None,
@@ -198,7 +184,7 @@ class TestFailClosedAuthority:
         assert transport.calls == []
 
     def test_unissued_authority_raises_before_network(self) -> None:
-        transport = FakeTransport(script=[])
+        transport = ScriptedTransport(script=[])
         with pytest.raises(DataContractError):
             run_rehearsal(
                 authority=_authority(status=LaneAAuthorityStatus.UNISSUED),
@@ -209,7 +195,7 @@ class TestFailClosedAuthority:
         assert transport.calls == []
 
     def test_malformed_runtime_sha_raises_before_network(self) -> None:
-        transport = FakeTransport(script=[])
+        transport = ScriptedTransport(script=[])
         with pytest.raises(DataContractError):
             run_rehearsal(
                 authority=_authority(),
@@ -220,7 +206,7 @@ class TestFailClosedAuthority:
         assert transport.calls == []
 
     def test_naive_now_raises(self) -> None:
-        transport = FakeTransport(script=[])
+        transport = ScriptedTransport(script=[])
         with pytest.raises(DataContractError):
             run_rehearsal(
                 authority=_authority(),
@@ -233,7 +219,7 @@ class TestFailClosedAuthority:
 
 class TestExecutionVerdicts:
     def test_entitlement_denial_blocks_without_evidence(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 RehearsalHttpResponse(status_code=401, content=b"{}", headers={}),
                 _ok(_bar_payload()),
@@ -250,7 +236,7 @@ class TestExecutionVerdicts:
         assert manifest.receipts == ()
 
     def test_rate_limit_blocks_without_retry(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 RehearsalHttpResponse(status_code=429, content=b"{}", headers={}),
             ]
@@ -264,7 +250,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.BLOCKED
 
     def test_server_error_blocks(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 RehearsalHttpResponse(status_code=500, content=b"{}", headers={}),
             ]
@@ -278,7 +264,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.BLOCKED
 
     def test_unexpected_status_rejects(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 RehearsalHttpResponse(status_code=418, content=b"{}", headers={}),
             ]
@@ -292,7 +278,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.REJECTED
 
     def test_transport_timeout_blocks_and_conserves_budget(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[RehearsalTransportError("simulated timeout")]
         )
         manifest, verdict = run_rehearsal(
@@ -305,7 +291,7 @@ class TestExecutionVerdicts:
         assert manifest.dispatched_operations == 1
 
     def test_invalid_json_rejects(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(b"not-json{{{")]
         )
         _, verdict = run_rehearsal(
@@ -316,8 +302,11 @@ class TestExecutionVerdicts:
         )
         assert verdict is RehearsalVerdict.REJECTED
 
-    def test_missing_symbol_rejects(self) -> None:
-        transport = FakeTransport(
+    def test_incomplete_coverage_partial_not_pass(self) -> None:
+        # A structurally valid page missing one scope symbol is incomplete
+        # evidence (PARTIAL), not provider misconduct: absence is
+        # DATA_UNAVAILABLE and blocks qualification without imputing.
+        transport = ScriptedTransport(
             script=[
                 _ok(_bar_payload(symbols=("VOO", "BND", "GLD"))),
                 _ok(_bar_payload()),
@@ -329,7 +318,156 @@ class TestExecutionVerdicts:
             runtime_sha=RUNTIME_SHA,
             now_utc=NOW,
         )
+        assert verdict is RehearsalVerdict.PARTIAL
+
+    def test_out_of_window_bar_rejected(self) -> None:
+        # Full in-window coverage PLUS one valid trading session outside the
+        # authorized 2026-09-28..2026-10-02 window must not PASS: off-scope
+        # observations are rejected even when complete and ordered.
+        import json
+
+        bars = {
+            symbol: [
+                {
+                    "t": f"{day.isoformat()}T13:30:00+00:00",
+                    "o": 100,
+                    "h": 101,
+                    "l": 99,
+                    "c": 100.5,
+                    "v": 1000,
+                }
+                for day in SESSIONS + [date(2026, 10, 5)]
+            ]
+            for symbol in SYMBOLS
+        }
+        body = json.dumps({"bars": bars, "next_page_token": None}).encode("utf-8")
+        transport = ScriptedTransport(script=[_ok(body), _ok(_bar_payload())])
+        manifest, verdict = run_rehearsal(
+            authority=_authority(),
+            transport=transport,
+            runtime_sha=RUNTIME_SHA,
+            now_utc=NOW,
+        )
         assert verdict is RehearsalVerdict.REJECTED
+        assert "2026-10-05" in manifest.verdict_reason
+
+    def test_unexpected_symbol_rejected_not_discarded(self) -> None:
+        # An extra unauthorized symbol (SPY) alongside complete scope data
+        # must be rejected/quarantined, never silently discarded.
+        import json
+
+        doc = json.loads(_bar_payload().decode("utf-8"))
+        doc["bars"]["SPY"] = doc["bars"]["VOO"]
+        body = json.dumps(doc).encode("utf-8")
+        transport = ScriptedTransport(script=[_ok(body), _ok(_bar_payload())])
+        manifest, verdict = run_rehearsal(
+            authority=_authority(),
+            transport=transport,
+            runtime_sha=RUNTIME_SHA,
+            now_utc=NOW,
+        )
+        assert verdict is RehearsalVerdict.REJECTED
+        assert "SPY" in manifest.verdict_reason
+
+    def test_non_scripted_transport_rejected(self) -> None:
+        # The offline seal is structural: only ScriptedTransport is accepted.
+        # An arbitrary object implementing .get() (e.g. a live HTTP adapter)
+        # fails closed with zero dispatches.
+        class LiveLikeTransport:
+            def __init__(self) -> None:
+                self.calls: List[Any] = []
+
+            def get(self, path: str, params: object) -> object:
+                self.calls.append((path, params))
+                raise AssertionError("must never be called")
+
+        transport = LiveLikeTransport()
+        with pytest.raises(DataContractError):
+            run_rehearsal(
+                authority=_authority(),
+                transport=transport,  # type: ignore[arg-type]
+                runtime_sha=RUNTIME_SHA,
+                now_utc=NOW,
+            )
+        assert transport.calls == []
+
+    def test_transport_error_secrets_redacted(self) -> None:
+        transport = ScriptedTransport(
+            script=[
+                RehearsalTransportError(
+                    "timeout after header APCA-API-KEY-ID: abc123secret "
+                    "and Bearer xyz789token"
+                )
+            ]
+        )
+        manifest, verdict = run_rehearsal(
+            authority=_authority(),
+            transport=transport,
+            runtime_sha=RUNTIME_SHA,
+            now_utc=NOW,
+        )
+        assert verdict is RehearsalVerdict.BLOCKED
+        assert "abc123secret" not in manifest.verdict_reason
+        assert "xyz789token" not in manifest.verdict_reason
+        assert "[REDACTED]" in manifest.verdict_reason
+
+    def test_utc_midnight_edge_maps_to_prior_ny_date(self) -> None:
+        # 00:30 UTC is still the prior New York calendar day: these bars are
+        # off-scope (and off-calendar for 09-27 Sunday), so they must REJECT.
+        # A naive UTC-date reading would wrongly PASS them as in-window.
+        import json
+
+        bars = {
+            symbol: [
+                {
+                    "t": f"{day.isoformat()}T00:30:00+00:00",
+                    "o": 100,
+                    "h": 101,
+                    "l": 99,
+                    "c": 100.5,
+                    "v": 1000,
+                }
+                for day in SESSIONS
+            ]
+            for symbol in SYMBOLS
+        }
+        body = json.dumps({"bars": bars, "next_page_token": None}).encode("utf-8")
+        transport = ScriptedTransport(script=[_ok(body), _ok(_bar_payload())])
+        _, verdict = run_rehearsal(
+            authority=_authority(),
+            transport=transport,
+            runtime_sha=RUNTIME_SHA,
+            now_utc=NOW,
+        )
+        assert verdict is RehearsalVerdict.REJECTED
+
+    def test_non_utc_offset_normalized_to_ny_date(self) -> None:
+        # 13:30+05:00 == 04:30 New York on the same session date: PASS.
+        import json
+
+        bars = {
+            symbol: [
+                {
+                    "t": f"{day.isoformat()}T13:30:00+05:00",
+                    "o": 100,
+                    "h": 101,
+                    "l": 99,
+                    "c": 100.5,
+                    "v": 1000,
+                }
+                for day in SESSIONS
+            ]
+            for symbol in SYMBOLS
+        }
+        body = json.dumps({"bars": bars, "next_page_token": None}).encode("utf-8")
+        transport = ScriptedTransport(script=[_ok(body), _ok(_bar_payload())])
+        _, verdict = run_rehearsal(
+            authority=_authority(),
+            transport=transport,
+            runtime_sha=RUNTIME_SHA,
+            now_utc=NOW,
+        )
+        assert verdict is RehearsalVerdict.PASS
 
     def test_duplicate_cursor_rejects(self) -> None:
         import json
@@ -342,7 +480,7 @@ class TestExecutionVerdicts:
         doc2 = json.loads(second.decode("utf-8"))
         doc2["next_page_token"] = "loop"
         second = json.dumps(doc2).encode("utf-8")
-        transport = FakeTransport(script=[_ok(first), _ok(second)])
+        transport = ScriptedTransport(script=[_ok(first), _ok(second)])
         _, verdict = run_rehearsal(
             authority=_authority(),
             transport=transport,
@@ -352,7 +490,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.REJECTED
 
     def test_off_calendar_bar_rejects(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 _ok(_bar_payload(sessions=[date(2026, 9, 27)])),
                 _ok(_bar_payload()),
@@ -367,7 +505,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.REJECTED
 
     def test_non_monotonic_bars_reject(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 _ok(_bar_payload(sessions=list(reversed(SESSIONS)))),
                 _ok(_bar_payload()),
@@ -382,7 +520,7 @@ class TestExecutionVerdicts:
         assert verdict is RehearsalVerdict.REJECTED
 
     def test_duplicate_bar_dates_reject(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[
                 _ok(_bar_payload(sessions=SESSIONS + [SESSIONS[0]])),
                 _ok(_bar_payload()),
@@ -412,7 +550,7 @@ class TestExecutionVerdicts:
         body = json.dumps(
             {"bars": {symbol: bars for symbol in SYMBOLS}, "next_page_token": None}
         ).encode("utf-8")
-        transport = FakeTransport(script=[_ok(body), _ok(_bar_payload())])
+        transport = ScriptedTransport(script=[_ok(body), _ok(_bar_payload())])
         _, verdict = run_rehearsal(
             authority=_authority(),
             transport=transport,
@@ -430,7 +568,7 @@ class TestBudgetExhaustion:
         doc = json.loads(first.decode("utf-8"))
         doc["next_page_token"] = "page2"
         first = json.dumps(doc).encode("utf-8")
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(first), _ok(_bar_payload(SESSIONS[3:]))]
         )
         manifest, verdict = run_rehearsal(
@@ -444,7 +582,7 @@ class TestBudgetExhaustion:
         assert len(transport.calls) == 2
 
     def test_byte_budget_partial_with_overrun_receipt(self) -> None:
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         manifest, verdict = run_rehearsal(
@@ -462,7 +600,7 @@ class TestBudgetExhaustion:
             max_http_operations=12,
             max_total_payload_bytes=10_000_000,
         )
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         with pytest.raises(DataContractError):
@@ -482,7 +620,7 @@ class TestDurabilityBoundary:
             max_http_operations=12,
             max_total_payload_bytes=LANE_A_MAX_TOTAL_PAYLOAD_BYTES,
         )
-        transport = FakeTransport(
+        transport = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         first, verdict = run_rehearsal(
@@ -494,7 +632,7 @@ class TestDurabilityBoundary:
         )
         assert verdict is RehearsalVerdict.PASS
         assert first.dispatched_operations == 2
-        transport2 = FakeTransport(
+        transport2 = ScriptedTransport(
             script=[_ok(_bar_payload()), _ok(_bar_payload())]
         )
         second, _ = run_rehearsal(

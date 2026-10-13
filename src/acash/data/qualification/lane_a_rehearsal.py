@@ -36,7 +36,8 @@ import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, final
+from zoneinfo import ZoneInfo
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
@@ -47,9 +48,14 @@ from acash.data.qualification.lane_a_authority import (
     LaneARequestLedger,
     canonical_query_parameters,
     plan_lane_a_requests,
+    redact_secrets,
     validate_authority,
     validate_planned_request,
 )
+
+# Trading-day convention for daily-bar date attribution (Alpaca daily bars
+# are New-York-date stamped; a UTC calendar date is NOT the trading date).
+_NY_TZ = ZoneInfo("America/New_York")
 
 
 class RehearsalVerdict(str, Enum):
@@ -75,14 +81,37 @@ class RehearsalHttpResponse:
     headers: Mapping[str, str]
 
 
-class RehearsalTransport(Protocol):
-    """Minimal transport surface the rehearsal runner may call (injected)."""
+@final
+class ScriptedTransport:
+    """Sealed offline transport: canned script, call recording, zero I/O.
+
+    This is the ONLY transport ``run_rehearsal`` accepts (enforced by an
+    isinstance gate): arbitrary callers cannot inject a live HTTP adapter
+    because any non-ScriptedTransport object fails closed with zero
+    dispatches. There is deliberately no URL, credential, socket, or retry
+    surface anywhere on this class. A future real transport, if ever
+    authorized, lives in a separate audited API — never here.
+    """
+
+    def __init__(
+        self, script: Sequence[Union[RehearsalHttpResponse, Exception]]
+    ) -> None:
+        self._script = list(script)
+        self.calls: List[Tuple[str, Tuple[Tuple[str, str], ...]]] = []
 
     def get(
         self, path: str, params: Sequence[Tuple[str, str]]
     ) -> RehearsalHttpResponse:
-        """Fetch one page. May raise RehearsalTransportError on failure."""
-        ...  # pragma: no cover - protocol surface
+        """Serve the next canned page (or raise the canned failure)."""
+        self.calls.append((path, tuple(params)))
+        if not self._script:
+            raise RehearsalTransportError(
+                "ScriptedTransport script exhausted: unexpected request."
+            )
+        action = self._script.pop(0)
+        if isinstance(action, Exception):
+            raise action
+        return action
 
 
 @dataclass(frozen=True)
@@ -99,7 +128,15 @@ class PageReceipt:
 
 @dataclass(frozen=True)
 class RehearsalManifest:
-    """Deterministic synthetic acquisition manifest (no wall-clock fields)."""
+    """Deterministic synthetic acquisition manifest (no wall-clock fields).
+
+    ``synthetic_dispatch_attempts`` counts budgeted offline dispatches;
+    ``actual_network_requests_issued`` is ALWAYS zero here — fake-transport
+    calls must never be reported as real provider HTTP, or a downstream
+    research ledger could mistake rehearsal for acquisition.
+    ``evidence_persistence`` states the storage truth: in-memory synthetic
+    receipts only, never durable immutable persistence.
+    """
 
     authority_reference: str
     scope_digest: str
@@ -110,7 +147,9 @@ class RehearsalManifest:
     receipts: Tuple[PageReceipt, ...]
     verdict: RehearsalVerdict
     verdict_reason: str
-    network_requests_issued: int
+    synthetic_dispatch_attempts: int
+    actual_network_requests_issued: int
+    evidence_persistence: str
 
 
 def _scope_digest(plan: Sequence[LaneAPlannedRequest]) -> str:
@@ -176,6 +215,14 @@ def _parse_bars_page(
         raise DataContractError(
             f"REHEARSAL_MALFORMED_PAGE: {context} has no 'bars' mapping."
         )
+    # Unexpected symbols are rejected/quarantined, never silently discarded:
+    # side data outside the authorized universe must surface, not vanish.
+    for key in bars:
+        if key not in symbols:
+            raise DataContractError(
+                f"REHEARSAL_UNEXPECTED_SYMBOL: {context} contains out-of-scope "
+                f"symbol {key!r}; expected only {sorted(symbols)}."
+            )
     parsed: Dict[str, List[Dict[str, Any]]] = {}
     for symbol in symbols:
         entries = bars.get(symbol, [])
@@ -206,6 +253,14 @@ def _parse_bars_page(
 
 
 def _bar_date(entry: Mapping[str, Any], context: str) -> date:
+    """Attribute a bar timestamp to its New York trading date.
+
+    Daily bars are New-York-date stamped (Alpaca convention): the instant is
+    normalized to America/New_York BEFORE taking the calendar date, across
+    EST/EDT via ZoneInfo. A bare UTC calendar date is NOT the trading date
+    (e.g. 00:30 UTC is still the prior New York day). Naive timestamps are
+    rejected, never assumed UTC.
+    """
     raw = entry.get("t")
     try:
         moment = datetime.fromisoformat(str(raw))
@@ -217,23 +272,31 @@ def _bar_date(entry: Mapping[str, Any], context: str) -> date:
         raise DataContractError(
             f"REHEARSAL_NAIVE_BAR_TIME: {context}: {raw!r}."
         )
-    return moment.date()
+    return moment.astimezone(_NY_TZ).date()
 
 
 def run_rehearsal(
     *,
     authority: Optional[LaneAAuthority],
-    transport: RehearsalTransport,
+    transport: ScriptedTransport,
     runtime_sha: str,
     now_utc: datetime,
     ledger: Optional[LaneARequestLedger] = None,
 ) -> Tuple[RehearsalManifest, RehearsalVerdict]:
-    """Execute a bounded offline acquisition rehearsal (injected transport only).
+    """Execute a bounded offline acquisition rehearsal (sealed transport only).
 
-    Authority/scope/plan problems raise (fail-closed, M1.7 conventions).
-    Execution outcomes return (manifest, verdict); the manifest is fully
-    deterministic (no timestamps, no wall-clock).
+    Only ``ScriptedTransport`` is accepted: the offline seal is structural,
+    not a matter of caller discipline — any other object (including a live
+    HTTP adapter implementing a similar surface) fails closed with zero
+    dispatches. Authority/scope/plan problems raise (fail-closed, M1.7
+    conventions). Execution outcomes return (manifest, verdict); the manifest
+    is fully deterministic (no timestamps, no wall-clock).
     """
+    if not isinstance(transport, ScriptedTransport):
+        raise DataContractError(
+            "Rehearsal transport must be a ScriptedTransport (sealed offline "
+            "script); arbitrary transports are rejected with zero dispatches."
+        )
     clean_sha = _require_runtime_sha(runtime_sha)
     valid = validate_authority(authority, now_utc)
     if ledger is not None and (
@@ -306,7 +369,8 @@ def run_rehearsal(
                 return _manifest(
                     valid, plan, active_ledger, clean_sha, receipts,
                     RehearsalVerdict.BLOCKED,
-                    f"Transport failure with uncertain consumption: {exc}. "
+                    "Transport failure with uncertain consumption: "
+                    f"{redact_secrets(str(exc))}. "
                     "No resume without a fresh authority and ledger.",
                 )
             if response.status_code in (401, 403):
@@ -411,6 +475,16 @@ def run_rehearsal(
                                 f"Off-calendar bar {bar_date.isoformat()} for {symbol}; "
                                 "weekend/holiday bars are omissions, never observations."
                             )
+                        if not (
+                            valid.scope.start_date <= bar_date <= valid.scope.end_date
+                        ):
+                            raise DataContractError(
+                                f"Off-scope bar {bar_date.isoformat()} for {symbol}; "
+                                "observations outside the authorized "
+                                f"{valid.scope.start_date.isoformat()}.."
+                                f"{valid.scope.end_date.isoformat()} window are "
+                                "rejected even when complete and ordered."
+                            )
                         page_dates.append((symbol, bar_date))
             except DataContractError as exc:
                 receipts[-1] = PageReceipt(
@@ -469,10 +543,12 @@ def run_rehearsal(
             if missing:
                 return _manifest(
                     valid, plan, active_ledger, clean_sha, receipts,
-                    RehearsalVerdict.REJECTED,
-                    f"Missing sessions for {symbol} ({request.adjustment}): "
+                    RehearsalVerdict.PARTIAL,
+                    f"Incomplete coverage for {symbol} ({request.adjustment}), "
+                    "missing: "
                     + ",".join(day.isoformat() for day in missing)
-                    + ". Absence is DATA_UNAVAILABLE, never imputed.",
+                    + ". Absence is DATA_UNAVAILABLE, never imputed; "
+                    "qualification is BLOCKED on complete coverage.",
                 )
     return _manifest(
         valid, plan, active_ledger, clean_sha, receipts,
@@ -501,6 +577,8 @@ def _manifest(
         receipts=tuple(receipts),
         verdict=verdict,
         verdict_reason=verdict_reason,
-        network_requests_issued=active_ledger.dispatched_attempts,
+        synthetic_dispatch_attempts=active_ledger.dispatched_attempts,
+        actual_network_requests_issued=0,
+        evidence_persistence="IN_MEMORY_SYNTHETIC_ONLY",
     )
     return manifest, verdict
