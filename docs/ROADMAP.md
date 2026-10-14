@@ -1,8 +1,8 @@
-# ACASH — System Development Roadmap (Phases 0–16)
+# ACASH — System Development Roadmap (Current Delivery + Historical Phases 0–23)
 
 **Document:** `docs/ROADMAP.md`  
-**Version:** 3.6.0  
-**Date:** 2026-09-11  
+**Version:** 3.7.0  
+**Date:** 2026-10-14  
 **Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
 
 > **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
@@ -10,6 +10,85 @@
 > executed in this repository is **Live Execution & Broker Mapping** (Admission →
 > Step 8 Contracts → Broker Semantic Mapping → Alpaca Paper exercise). The
 > Regime-Engine content is deferred; Phase 7 below reflects the real scope.
+
+---
+
+## CURRENT DELIVERY TRACK — ETF Evidence-to-Economics (2026-10-14)
+
+**Proposed update for:** `docs/ROADMAP.md` (insert as the first operative section; preserve the historical phase records below)  
+**Snapshot date:** 2026-10-14  
+**Verified baseline:** `main` = `ffd3ac958923fa1f5ea7213a3314259a257c64d9`  
+**Classification:** Delivery roadmap and evidence inventory — **NOT** a research, data-acquisition, trading, or capital authorization.
+
+> This checkpoint supersedes the *operational-status descriptions* in the September 2026 sections of the existing roadmap; it does not erase or amend their historical decisions. In particular, the September assertion that HYP_003 was not created is historical and no longer the current research disposition. Reverify GitHub state and human decision records before any transition.
+
+## 1. North Star
+
+Obtain **independently qualified ETF market data** with immutable provenance and use existing ACASH accounting/reporting machinery to evaluate a **hypothetical USD 1,000 portfolio after realistic costs**. The valid governed investment decision remains **cash/no trade**.
+
+The bottleneck is **data admission and entitlement**, not the absence of optimizers, strategy ideas, dashboards, or additional research infrastructure.
+
+**Hard boundaries:** real capital authority USD 0.00; `NO_REAL_ORDERS=true`; no unauthorized provider HTTP, provider credentials, subscriptions, sealed-data access, broker authentication, paper/live orders, or Homelab deployment. Software-readiness, acquisition authority, data qualification, strategy qualification, paper, and live status are different gates.
+
+## 2. Verified Implementation and Delivery Register
+
+| Workstream | Current state (at snapshot) | Evidence and limitation |
+| --- | --- | --- |
+| M1.5–M1.6 benchmark lifecycle, holdings, dividends/splits, fee arithmetic | **MERGED, synthetic-tested** | PR #24/#25; not newly qualified Invest ETF data |
+| M1.7 canonical Lane A authority planner + Lane B specification | **MERGED, offline-only** | PR #26/#27; exact request shape and capped scope; packet remains UNISSUED |
+| PPDS / Invest V0 | **MERGED, synthetic-only** | PR #28; read-only portfolio reports, no real capital |
+| M1.8 offline acquisition rehearsal | **MERGED** | PR #29; mock transport, pagination, symbol/session checks; no network requests in that work |
+| M1.8.1 disabled transport, file-backed journal, evidence integrity | **MERGED** | PR #30; create-once and hash/receipt checks; **crash durability unverified** |
+| Research handoff / utilization inventory | **MERGED** | PR #31 and PR #33; dated, source-linked inventory, not data/admission authority |
+| First bounded ETF Offline Canary | **DRAFT PR #32; NOT MERGED** | HEAD `d47577521abf8047f1c1aabae2fb1aac562ad1bb`; two-file change; 36 targeted tests reported; push+PR CI green at that SHA, but branch is **behind main** after PR #33 merge |
+| Current Lane A real provider acquisition | **NOT AUTHORIZED / NOT RUN** | Entitlement not verified; IEX or SIP not selected; no production independent approval verifier or audited live HTTP executor |
+| New qualified multi-year ETF dataset and after-cost performance | **NOT ESTABLISHED** | Five-session canary does not prove historical coverage, PIT correctness, distributions, return series, or Alpha |
+
+**Historical exception:** HYP_010 previously made 8 narrowly authorized Alpaca SIP provider requests (SPY/VEU/AGG/BIL, 2017-01-03–06); the probe passed within that *different* scope, but VEU sponsor dividend authority blocked progression. This is NOT current Lane A entitlement or a qualified Invest dataset. See [R2 probe record](phase14/HYP_010_R2_PROVIDER_QUALIFICATION.md) and [parked decision](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md).
+
+## 3. Actual Roadmap: D0 to D6
+
+| Gate | Objective / acceptance criteria | State |
+| --- | --- | --- |
+| **D0 — Integrate Offline Canary** | Close only reproducible PR #32 acceptance gaps; sync latest main via normal merge, verify complete PR diff, rerun targeted/T1/MyPy and fresh exact-HEAD CI; undraft and obtain separate human merge approval | **ACTIVE: Review / sync pending** |
+| **D1 — Prepare Real Acquisition Safety** | One minimal offline-tested boundary: independent approval verification, runtime identity and canonical request binding, explicit entitlement/feed, allowlisted TLS origin, redirect policy, reserved attempts before dispatch, failure conservation, streaming response-byte cap, immutable external raw/receipt integrity | **SOFTWARE NOT COMPLETE; REAL HTTP BLOCKED** |
+| **D2 — Bounded Five-Session Data Canary** | Issue *separate human market-data authorization* after D1 and entitlement proof; Alpaca `GET /v2/stocks/bars`, VOO/BND/GLD/BIL, 1Day, 2026-09-28–2026-10-02 inclusive, raw+all, exactly one IEX or SIP feed, ≤12 HTTP operations, ≤524288 observed bytes across all outcomes, USD 0 paid, no retries/fallback | **UNISSUED: NO-GO** |
+| **D3 — Admission / Data Quality** | Match every authorized symbol/session/adjustment; validate NYSE CA-1, timestamps, duplicates, OHLCV, raw/adjusted semantics, pagination completion, bytes and immutable hashes. Separate sponsor/issuer dividends and splits (Lane B); incomplete evidence remains PARTIAL/UNQUALIFIED | **BLOCKED ON AUTHORIZED EVIDENCE** |
+| **D4 — Multi-year ETF Historical Dataset** | Separate scope/authority and evidence for prices, sponsor corporate actions, fund inception, dataset vintages and point-in-time limits. Alpaca's published plan tables currently list historical US equities from 2016; do not infer 2010–2015 availability | **NOT QUALIFIED / NOT AUTHORIZED** |
+| **D5 — Portfolio Economics** | Use existing PPDS/Invest V0/M1.6 to compare cash, equity buy-and-hold, equity/bond, and low-turnover diversified ETF baselines for *synthetic USD 1,000* on matched periods after commissions, spreads, dividends, cash yield, USD/THB FX, funding and explicit tax scenarios | **WAITING FOR D4** |
+| **D6 — Governed Strategy Research** | Only after qualified data and separate scientific authorization, evaluate eligible hypotheses with existing allocator/DSR/PBO/CPCV tools. Phase 13 Step 8/9, paper/live and real capital remain locked absent their own decisions | **LATER / LOCKED** |
+
+**First operator action:** review and integrate PR #32 on the *new final SHA after syncing main*; it is an offline-only software merge and **does not** authorize Alpaca HTTP.
+
+## 4. Existing Research: Reuse vs Defer
+
+| Asset | Reuse / disposition | Further evidence required |
+| --- | --- | --- |
+| M1.7 request planner + M1.8 rehearsal + M1.8.1 evidence | Reuse immediately; **single** canonical request authority | Safe authenticated network boundary, durable dispatch policy, real payload accounting |
+| NYSE CA-1 + HYP_010 provider-probe lessons | Reuse method for inclusive end-date and session coverage | Do not transfer historical authority |
+| HYP_003 | **TERMINALLY FALSIFIED**; preserve [sealed decision](phase14/hyp_003_terminal_falsification_dossier.md) | Do not resurrect or present as Alpha |
+| HYP_010 | **PARKED/NON-FALSIFIED**, VEU dividend authority blocker | New human authorization before any resumed research; no substitution |
+| RI-01 | Chronology/lineage discrepancy unresolved, preserve [audit](audit/RI01_CHRONOLOGY_DISCREPANCY_REPORT_20261013.md) | Do not silently reclassify |
+| PPDS, Invest V0, benchmark, Cash/EW/InverseVol | Reuse for transparent baseline comparisons | Qualified multi-year prices and corporate actions |
+| DSR/PBO/CPCV | Existing validation tooling; no newly qualified candidate | Independently authorized hypothesis/test design |
+| VIX/VIX1D, FRED/BOT | Research notes / future risk, PIT macro and FX | Separate data rights and clear empirical use case |
+| IBKR-inspired synthetic friction | Cost scenario model, not verified account fees | Actual commission, spread, FX, funding and tax evidence |
+
+[Research utilization matrix](audit/RESEARCH_UTILIZATION_MATRIX_20261013.md) is the detailed inventory. [ETF admission handoff](research/ETF_DATA_ADMISSION_HANDOFF_20261014.md) records provider docs and limitations. [Unissued Lane A packet](research/LANE_A_UNISSUED_AUTHORITY_PACKET_20261013.md) is a proposal, not permission.
+
+## 5. Progress Measurement
+
+**Do not measure project progress primarily by numbers of PRs, tests, or theoretical strategies.** Measure independently verified progression through:
+
+1. **Software integrity:** exact reviewed SHAs, bounded canonical requests and failure-mode tests.
+2. **Acquisition evidence:** authorized HTTP operations and bytes, credential-safe immutable raw artifacts.
+3. **Data qualification:** complete or explicitly partial symbol/session coverage plus sponsor-backed corporate actions.
+4. **Economic utility:** reproducible matched-horizon after-cost baseline comparisons under disclosed assumptions.
+5. **Governance:** authenticated authority for every transition, and real capital remaining USD 0 absent human ratification.
+
+## 6. Relationship to Historical Phase Roadmap
+
+Retain the existing Phase 0–23 historical sections (including Phase 17 admission framework and proposed Phase 18–23/24–28 research architectures) below this current delivery track. These are **historical technical capability and future-architecture records**, not a claim that a qualified current strategy, data source, or capital allocation exists. Preserve human ratification, evidence lineage, and historical content; mark older “CURRENT”, “NOW” and “NEXT” passages as dated snapshots rather than silently rewriting them.
 
 ---
 
