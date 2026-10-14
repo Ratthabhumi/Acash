@@ -5,6 +5,8 @@
 **Classification**: Single Canonical ACASH Session Handoff (Current Working Checkpoint)<br>
 **Parent Canonical Main**: `becec27f5eacf283dcb191cf72d0858682d8e055`
 
+> **HISTORICAL CHECKPOINT (2026-10-03).** This handoff describes the HYP_011 post-observation state at its parent commit only. It is not current repository, runtime, or governance truth: verify `origin/main`, the active [`docs/ROADMAP.md`](./ROADMAP.md), and applicable decision records before acting. Section numbering, facts, references, and audit lineage below are preserved unchanged.
+
 > [!CAUTION]
 > **VERIFY CURRENT REPOSITORY, RUNTIME, JOURNAL, AND GOVERNANCE STATE BEFORE ACTING.**
 > This document is an operational navigation and continuation checkpoint; it is **NOT** self-authenticating operational truth.
