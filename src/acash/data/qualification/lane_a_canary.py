@@ -7,24 +7,31 @@ provider HTTP exists anywhere in this module.
 Design (hard authority boundary between planning and dispatch):
 
 - ``CanaryApproval``: the claimed operator approval. ``verify_approval()``
-  ALWAYS fails closed ("no independent verifier configured"): a
-  valid-looking reference string is NEVER genuine approval. Real dispatch
-  requires a separately reviewed authentication plug-in, never a flag flip.
-- ``CanaryPlan``: binds approval + canonical scope. The plan is admissible
-  only when the recomputed scope digest equals the approval's
-  ``scope_digest`` and every budget (operations, bytes, paid) matches the
-  packet. Feed must be exactly one of ``iex`` / ``sip`` (no default, no
-  fallback).
+  fails closed unless an explicitly configured verifier plug approves; no
+  verifier exists in production code (test doubles live in tests only). A
+  claimed reference string is NEVER genuine approval by itself.
+- ``CanaryPlan``: binds approval + canonical scope + the ACTUAL executing
+  runtime SHA. The plan is admissible only when the recomputed scope
+  digest equals the approval's ``scope_digest``, the runtime SHA matches
+  exactly, and every budget matches the packet. Feed must be exactly one
+  of ``iex`` / ``sip`` (no default, no fallback). Approval-window checks
+  compare true instants (UTC-normalized), never raw strings.
 - ``ReservationJournal``: durable-before-dispatch attempt reservation.
-  Each reservation is appended and flushed with ``os.fsync`` (file and
-  parent directory, best-effort per platform) BEFORE the corresponding
-  fake dispatch. Ambiguous failures conserve the attempt: budget consumed,
-  no silent retry. Storage contract is documented per record; crash
-  survival beyond a clean process exit is NOT claimed beyond what the
-  fsync evidence in tests demonstrates on the test filesystem.
+  File fsync is REQUIRED: any flush/sync failure raises and blocks the
+  reservation (never silently passed). Directory sync is probed and its
+  support level exposed via ``dir_sync_supported``; where unsupported the
+  journal still functions but the runtime is classified file-sync-only.
+  Reservation file creation is atomic exclusive-create (O_CREAT|O_EXCL).
+  Ambiguous failures conserve the attempt: budget consumed, no retry.
 - ``CanaryBudget``: hard operation-count and streaming-byte caps; any
   breach fails closed and halts the run.
-- ``FakeCanaryTransport`` lives in TESTS only, never here.
+- ``run_canary_offline``: the single reusable offline orchestration
+  (planning → reserve → fake dispatch → settle/halt). Transports are
+  duck-typed (any object with ``.get(request_digest, page_token)``);
+  ``FakeCanaryTransport`` test doubles live in TESTS only, never here.
+- ``canary_sessions``: NYSE CA-1 attribution of the canonical window as
+  inclusive calendar dates (end-of-day semantics; regression guard
+  against midnight-truncation dropping the final session).
 
 Canonical canary scope (proposal, NOT authority): Alpaca
 GET /v2/stocks/bars; VOO/BND/GLD/BIL; 1Day; 2026-09-28..2026-10-02;
@@ -36,12 +43,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass
-from datetime import datetime
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 
 CANARY_SYMBOLS: Tuple[str, ...] = ("VOO", "BND", "GLD", "BIL")
 CANARY_TIMEFRAME: str = "1Day"
@@ -54,9 +63,13 @@ CANARY_MAX_BYTES: int = 524288
 CANARY_PAID_BUDGET_USD: str = "0.00"
 
 STOP_OUTCOMES: Tuple[str, ...] = ("HTTP_401", "HTTP_403", "HTTP_429", "TIMEOUT_AMBIGUOUS")
+PAGE_OUTCOMES: Tuple[str, ...] = ("OK",) + STOP_OUTCOMES
+
+_HEX40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
-def _require_aware_timestamp(value: str, context: str) -> str:
+def _parse_instant(value: str, context: str) -> datetime:
+    """Parse an ISO-8601 timestamp into an aware datetime (fail-closed)."""
     try:
         moment = datetime.fromisoformat(str(value))
     except (ValueError, TypeError) as exc:
@@ -67,7 +80,20 @@ def _require_aware_timestamp(value: str, context: str) -> str:
         raise DataContractError(
             f"CANARY_NAIVE_TIME: {context} must be timezone-aware."
         )
-    return moment.isoformat()
+    return moment
+
+
+def _require_aware_timestamp(value: str, context: str) -> str:
+    return _parse_instant(value, context).isoformat()
+
+
+def _require_runtime_sha(runtime_sha: str) -> str:
+    if not isinstance(runtime_sha, str) or not _HEX40_PATTERN.match(runtime_sha):
+        raise DataContractError(
+            f"CANARY_BAD_RUNTIME_SHA: runtime_sha must be 40-char hex "
+            f"git commit SHA, got {runtime_sha!r}."
+        )
+    return runtime_sha
 
 
 def canonical_scope_digest(
@@ -98,13 +124,38 @@ def canonical_scope_digest(
     ).hexdigest()
 
 
+def canary_sessions() -> List[date]:
+    """NYSE CA-1 trading sessions of the canonical window (inclusive dates).
+
+    Regression guard: the end bound ``2026-10-02`` is a full session date,
+    never a midnight timestamp that would truncate the final session.
+    """
+    calendar = NyseCa1Calendar()
+    start = date.fromisoformat(CANARY_START)
+    end = date.fromisoformat(CANARY_END)
+    sessions: List[date] = []
+    current = start
+    while current <= end:
+        session = calendar.get_session_or_none(current)
+        if session is not None:
+            sessions.append(session.session_date)
+        current += timedelta(days=1)
+    if not sessions or sessions[-1] != end:
+        raise DataContractError(
+            "CANARY_SESSION_WINDOW_TRUNCATED: final session date missing; "
+            "end bound must be end-of-day inclusive."
+        )
+    return sessions
+
+
 @dataclass(frozen=True)
 class CanaryApproval:
     """Claimed operator approval (reference only — NOT verified approval).
 
-    ``verify_approval()`` always fails closed: no independent verifier is
-    configured in this module. A separately reviewed authentication
-    mechanism must replace this seam before any real dispatch.
+    ``verify_approval()`` fails closed unless an explicitly configured
+    verifier plug approves. No verifier exists in production code: test
+    doubles live in tests only, and passing one is an explicit, auditable
+    test act — never implicit trust.
     """
 
     approval_ref: str
@@ -121,9 +172,10 @@ class CanaryApproval:
             raise DataContractError("CANARY_APPROVAL_EMPTY_REF.")
         if not isinstance(self.scope_digest, str) or len(self.scope_digest) != 64:
             raise DataContractError("CANARY_APPROVAL_BAD_SCOPE_DIGEST.")
-        _require_aware_timestamp(self.valid_from_utc, "valid_from_utc")
-        _require_aware_timestamp(self.valid_until_utc, "valid_until_utc")
-        if self.valid_from_utc >= self.valid_until_utc:
+        _require_runtime_sha(self.runtime_sha)
+        start = _parse_instant(self.valid_from_utc, "valid_from_utc")
+        end = _parse_instant(self.valid_until_utc, "valid_until_utc")
+        if start >= end:
             raise DataContractError("CANARY_APPROVAL_EMPTY_WINDOW.")
         if self.max_operations <= 0 or self.max_bytes <= 0:
             raise DataContractError("CANARY_APPROVAL_NONPOSITIVE_BUDGET.")
@@ -131,17 +183,16 @@ class CanaryApproval:
             raise DataContractError("CANARY_APPROVAL_NONZERO_PAID_BUDGET.")
 
     def is_within_window(self, now_utc: str) -> bool:
-        moment = _require_aware_timestamp(now_utc, "now_utc")
-        return self.valid_from_utc <= moment <= self.valid_until_utc
+        """True instant comparison (UTC-normalized), never string comparison."""
+        moment = _parse_instant(now_utc, "now_utc")
+        return (
+            _parse_instant(self.valid_from_utc, "valid_from_utc")
+            <= moment
+            <= _parse_instant(self.valid_until_utc, "valid_until_utc")
+        )
 
     def verify_approval(self, verifier: object = None) -> None:
-        """Independent authentication seam.
-
-        Fails closed unless an explicitly configured verifier object with a
-        ``check(approval) -> bool`` method approves. No verifier exists in
-        production code: test doubles live in tests only, and passing one
-        is an explicit, auditable test act — never implicit trust.
-        """
+        """Independent authentication seam (fails closed without a verifier)."""
         check = getattr(verifier, "check", None)
         if not callable(check):
             raise DataContractError(
@@ -157,15 +208,21 @@ class CanaryApproval:
 
 @dataclass(frozen=True)
 class CanaryPlan:
-    """Admissible bounded plan: approval + canonical scope, digest-bound."""
+    """Admissible bounded plan: approval + scope + executing runtime identity."""
 
     approval: CanaryApproval
     feed: str
     scope_digest: str
+    runtime_sha: str
 
     @classmethod
     def build(
-        cls, approval: CanaryApproval, feed: str, now_utc: str, verifier: object = None
+        cls,
+        approval: CanaryApproval,
+        feed: str,
+        now_utc: str,
+        actual_runtime_sha: str,
+        verifier: object = None,
     ) -> "CanaryPlan":
         """Build and admit a plan; fails closed on any scope/approval gap."""
         approval.verify_approval(verifier)
@@ -175,6 +232,12 @@ class CanaryPlan:
             )
         if not approval.is_within_window(now_utc):
             raise DataContractError("CANARY_PLAN_APPROVAL_EXPIRED.")
+        _require_runtime_sha(actual_runtime_sha)
+        if actual_runtime_sha != approval.runtime_sha:
+            raise DataContractError(
+                "CANARY_PLAN_RUNTIME_SHA_MISMATCH: executing runtime does not "
+                "match the authorized runtime SHA."
+            )
         if approval.max_operations > CANARY_MAX_OPERATIONS:
             raise DataContractError("CANARY_PLAN_OPERATION_BUDGET_EXCEEDED.")
         if approval.max_bytes > CANARY_MAX_BYTES:
@@ -186,7 +249,10 @@ class CanaryPlan:
         )
         if digest != approval.scope_digest:
             raise DataContractError("CANARY_PLAN_SCOPE_DIGEST_MISMATCH.")
-        return cls(approval=approval, feed=feed, scope_digest=digest)
+        return cls(
+            approval=approval, feed=feed, scope_digest=digest,
+            runtime_sha=actual_runtime_sha,
+        )
 
     def request_digests(self) -> List[str]:
         """Canonical per-adjustment request digests (2 initial requests)."""
@@ -205,6 +271,27 @@ class CanaryPlan:
                 ).hexdigest()
             )
         return digests
+
+
+@dataclass(frozen=True)
+class CanaryPage:
+    """One fake-transport page outcome (test doubles produce these)."""
+
+    outcome: str
+    nbytes: int
+    next_token: str = ""
+
+    def __post_init__(self) -> None:
+        if self.outcome not in PAGE_OUTCOMES:
+            raise DataContractError(
+                f"CANARY_PAGE_UNKNOWN_OUTCOME: {self.outcome!r}."
+            )
+        if (
+            not isinstance(self.nbytes, int)
+            or isinstance(self.nbytes, bool)
+            or self.nbytes < 0
+        ):
+            raise DataContractError("CANARY_PAGE_BAD_BYTES.")
 
 
 class CanaryBudget:
@@ -244,14 +331,34 @@ class CanaryBudget:
             raise DataContractError(f"CANARY_HALT_UNKNOWN_REASON: {reason!r}.")
 
 
-def _fsync_file_and_dir(path: Path) -> None:
-    """Flush file and parent directory (best-effort per platform)."""
-    with open(path, "a+b") as handle:
-        handle.flush()
-        try:
-            os.fsync(handle.fileno())
-        except OSError:
-            pass
+def _sync_file(handle: Any) -> None:
+    """Flush + fsync a file handle; ANY failure raises (blocks dispatch)."""
+    handle.flush()
+    try:
+        os.fsync(handle.fileno())
+    except OSError as exc:
+        raise DataContractError(
+            f"CANARY_SYNC_FAILED: required file sync failed: {exc}."
+        ) from exc
+
+
+def _probe_dir_sync(path: Path) -> bool:
+    """Probe parent-directory sync support (informational, never fatal)."""
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        os.fsync(dir_fd)
+    except OSError:
+        return False
+    finally:
+        os.close(dir_fd)
+    return True
+
+
+def _sync_dir_best_effort(path: Path) -> None:
+    """Attempt directory sync; failures are tolerated (see dir_sync_supported)."""
     try:
         dir_fd = os.open(str(path.parent), os.O_RDONLY)
     except OSError:
@@ -267,32 +374,62 @@ def _fsync_file_and_dir(path: Path) -> None:
 class ReservationJournal:
     """Durable-before-dispatch attempt reservation (offline-tested).
 
-    Each reservation is appended as one JSONL line and fsync'd (file +
-    parent directory) BEFORE the corresponding dispatch. Ambiguous failures
-    conserve the attempt: budget stays consumed, no silent retry, and the
-    run must halt or continue only under a fresh authority.
+    Each reservation is appended as one JSONL line and file-synced BEFORE
+    the corresponding dispatch; any sync failure raises and blocks the
+    reservation. Directory sync is probed (``dir_sync_supported``) but,
+    where the platform lacks it, does not block file-synced operation —
+    the limitation is explicit, not silent. Reservation file creation is
+    atomic exclusive-create (O_CREAT|O_EXCL). Ambiguous failures conserve
+    the attempt: budget stays consumed, no silent retry.
     """
 
-    def __init__(self, journal_file: Path) -> None:
+    def __init__(self, journal_file: Path, dir_sync_supported: bool) -> None:
         if journal_file.suffix != ".jsonl":
             raise DataContractError("CANARY_RESERVATION_BAD_FILE.")
         self._file = journal_file
+        self._dir_sync_supported = dir_sync_supported
         self._reserved = 0
         self._completed: Dict[int, str] = {}
 
     @classmethod
     def create(cls, run_dir: Path) -> "ReservationJournal":
-        """Create the reservation file exactly once (fail-closed on repeat)."""
+        """Atomically create the reservation file (fail-closed on repeat)."""
         journal_file = run_dir / "reservations.jsonl"
-        if journal_file.exists():
-            raise DataContractError("CANARY_RESERVATION_EXISTS.")
         run_dir.mkdir(parents=True, exist_ok=True)
-        journal_file.write_bytes(b"")
-        _fsync_file_and_dir(journal_file)
-        return cls(journal_file)
+        try:
+            fd = os.open(str(journal_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise DataContractError(
+                "CANARY_RESERVATION_EXISTS: duplicate journal creation forbidden."
+            ) from exc
+        except OSError as exc:
+            raise DataContractError(
+                f"CANARY_RESERVATION_CREATE_FAILED: {exc}."
+            ) from exc
+        try:
+            os.fsync(fd)
+        except OSError as exc:
+            try:
+                os.close(fd)
+            finally:
+                try:
+                    journal_file.unlink()
+                except OSError:
+                    pass
+            raise DataContractError(
+                f"CANARY_SYNC_FAILED: required file sync failed: {exc}."
+            ) from exc
+        os.close(fd)
+        _sync_dir_best_effort(journal_file)
+        return cls(journal_file, _probe_dir_sync(journal_file))
+
+    @property
+    def dir_sync_supported(self) -> bool:
+        """Whether parent-directory sync is supported on this filesystem."""
+        return self._dir_sync_supported
 
     def reserve(self, seq: int, request_digest: str) -> None:
-        """Reserve attempt ``seq`` for ``request_digest`` (fsync before return)."""
+        """Reserve attempt ``seq`` for ``request_digest`` (sync before return)."""
         if not isinstance(seq, int) or isinstance(seq, bool) or seq <= self._reserved:
             raise DataContractError(
                 f"CANARY_RESERVATION_BAD_SEQ: {seq!r}."
@@ -305,12 +442,8 @@ class ReservationJournal:
         )
         with open(self._file, "a", encoding="utf-8") as handle:
             handle.write(line + "\n")
-            handle.flush()
-            try:
-                os.fsync(handle.fileno())
-            except OSError:
-                pass
-        _fsync_file_and_dir(self._file)
+            _sync_file(handle)
+        _sync_dir_best_effort(self._file)
         self._reserved = seq
 
     def settle(self, seq: int, outcome: str) -> None:
@@ -322,12 +455,8 @@ class ReservationJournal:
         line = json.dumps({"event": "settled", "seq": seq, "outcome": outcome}, sort_keys=True)
         with open(self._file, "a", encoding="utf-8") as handle:
             handle.write(line + "\n")
-            handle.flush()
-            try:
-                os.fsync(handle.fileno())
-            except OSError:
-                pass
-        _fsync_file_and_dir(self._file)
+            _sync_file(handle)
+        _sync_dir_best_effort(self._file)
         self._completed[seq] = outcome
 
     def read_reservations(self) -> List[Mapping[str, Any]]:
@@ -354,3 +483,65 @@ class ReservationJournal:
     def completed(self) -> Mapping[int, str]:
         """Settled outcomes by sequence (informational only)."""
         return dict(self._completed)
+
+
+@dataclass
+class CanaryResult:
+    """Offline run outcome (synthetic verdict, never market evidence)."""
+
+    verdict: str
+    operations_used: int
+    bytes_observed: int
+    dispatches: List[str] = field(default_factory=list)
+
+
+def run_canary_offline(plan: CanaryPlan, transport: Any, run_dir: Path) -> CanaryResult:
+    """Run one bounded offline canary against a duck-typed fake transport.
+
+    The transport must expose ``.get(request_digest, page_token)`` returning
+    a ``CanaryPage``. Behavior: two initial adjustment requests, durable
+    reservation before each fake dispatch, hard budget caps, page-token
+    cycle protection, no retry/feed fallback, halt on 401/403/429/timeout.
+    Verdicts: COMPLETE (queue drained) or HALTED_<outcome> (stopped early).
+    """
+    budget = CanaryBudget(plan.approval.max_operations, plan.approval.max_bytes)
+    journal = ReservationJournal.create(run_dir)
+    seq = 0
+    seen_tokens: set[str] = set()
+    dispatches: List[str] = []
+    pending: List[Tuple[str, str]] = [(digest, "") for digest in plan.request_digests()]
+    while pending:
+        request_digest, token = pending.pop(0)
+        seq += 1
+        budget.reserve_operation()
+        journal.reserve(seq, request_digest)
+        page = transport.get(request_digest, token)
+        if not isinstance(page, CanaryPage):
+            raise DataContractError(
+                f"CANARY_TRANSPORT_BAD_PAGE: {type(page).__name__}."
+            )
+        dispatches.append(f"{request_digest}:{token}")
+        budget.observe_bytes(page.nbytes)
+        if page.outcome in STOP_OUTCOMES:
+            journal.settle(seq, page.outcome)
+            budget.halt(page.outcome)
+            return CanaryResult(
+                verdict="HALTED_" + page.outcome,
+                operations_used=seq,
+                bytes_observed=budget.bytes_observed,
+                dispatches=dispatches,
+            )
+        journal.settle(seq, page.outcome)
+        if page.next_token:
+            if page.next_token in seen_tokens:
+                raise DataContractError(
+                    f"CANARY_PAGE_TOKEN_CYCLE: {page.next_token!r} already produced."
+                )
+            seen_tokens.add(page.next_token)
+            pending.append((request_digest, page.next_token))
+    return CanaryResult(
+        verdict="COMPLETE",
+        operations_used=seq,
+        bytes_observed=budget.bytes_observed,
+        dispatches=dispatches,
+    )
