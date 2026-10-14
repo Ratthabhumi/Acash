@@ -39,6 +39,13 @@ Design (hard authority boundary between planning and dispatch):
   session coverage, OHLCV validity, corporate actions, and
   point-in-time correctness are separate gates (see M1.8 rehearsal
   contracts for the eventual validation stage).
+- Terminology contract (never collapsed):
+  OFFLINE_TESTED != PROVIDER_VERIFIED;
+  FILE_SYNCED != CRASH_DURABLE;
+  RUNTIME_SHA_EQUALS_CLAIM != INDEPENDENT_ATTESTATION;
+  APPROVAL_REFERENCE != AUTHENTICATED_APPROVAL;
+  SYNTHETIC_BYTE_COUNT != STREAMING_HTTP_BYTE_ENFORCEMENT;
+  TRANSPORT_PAGINATION_COMPLETE != DATA_QUALIFIED.
 - ``canary_sessions``: NYSE CA-1 attribution of the canonical window as
   inclusive calendar dates (end-of-day semantics; regression guard
   against midnight-truncation dropping the final session).
@@ -94,6 +101,7 @@ STOP_OUTCOMES: Tuple[str, ...] = ("HTTP_401", "HTTP_403", "HTTP_429", "TIMEOUT_A
 PAGE_OUTCOMES: Tuple[str, ...] = ("OK",) + STOP_OUTCOMES
 
 _HEX40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_HEX64_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _parse_instant(value: str, context: str) -> datetime:
@@ -646,6 +654,84 @@ class ReservationJournal:
     def completed(self) -> Mapping[int, str]:
         """Settled outcomes by sequence (informational only)."""
         return dict(self._completed)
+
+
+def audit_reservation_history(records: Sequence[Mapping[str, Any]]) -> Dict[int, str]:
+    """Enforce the complete legal event state machine (fail-closed).
+
+    Rules: reserved seqs are positive ints (bool rejected), strictly
+    increasing, never duplicated, with 64-hex digests; settled seqs must
+    reference a preceding reservation exactly once with a known outcome;
+    torn/corrupt/contradictory histories raise. Returns settled outcomes.
+    No invalid history is admitted as a trustworthy consumed-attempt ledger.
+    """
+    reserved: set[int] = set()
+    settled: Dict[int, str] = {}
+    last_reserved_seq = 0
+    for record in records:
+        event = record.get("event")
+        seq = record.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq <= 0:
+            raise DataContractError(
+                f"CANARY_HISTORY_BAD_SEQ: {seq!r}."
+            )
+        if event == "reserved":
+            digest = record.get("request_digest")
+            if not isinstance(digest, str) or not _HEX64_PATTERN.match(digest):
+                raise DataContractError(
+                    "CANARY_HISTORY_BAD_DIGEST: request_digest must be 64-char hex."
+                )
+            if seq in reserved:
+                raise DataContractError(
+                    f"CANARY_HISTORY_DUP_RESERVED: seq {seq}."
+                )
+            if seq <= last_reserved_seq:
+                raise DataContractError(
+                    f"CANARY_HISTORY_NONMONOTONIC: seq {seq} after {last_reserved_seq}."
+                )
+            reserved.add(seq)
+            last_reserved_seq = seq
+        elif event == "settled":
+            outcome = record.get("outcome")
+            if not isinstance(outcome, str) or outcome not in PAGE_OUTCOMES:
+                raise DataContractError(
+                    f"CANARY_HISTORY_BAD_OUTCOME: {outcome!r}."
+                )
+            if seq not in reserved:
+                raise DataContractError(
+                    f"CANARY_HISTORY_SETTLE_WITHOUT_RESERVE: seq {seq}."
+                )
+            if seq in settled:
+                raise DataContractError(
+                    f"CANARY_HISTORY_DUP_SETTLE: seq {seq}."
+                )
+            settled[seq] = outcome
+        else:
+            raise DataContractError(
+                f"CANARY_HISTORY_UNKNOWN_EVENT: {event!r}."
+            )
+    return settled
+
+
+def verify_request_window_against_sessions() -> List[date]:
+    """Cross-check the canonical request window against CA-1 sessions.
+
+    Asserts the M1.7-planned request window exactly spans the attributed
+    sessions with the end date included end-of-day. This verifies CALENDAR
+    coverage only: the provider's timestamp interpretation of the ``end``
+    parameter remains a PRE-EXECUTION verification gate (unresolved without
+    a network probe; HYP_010 midnight-end lesson). Never call this proof of
+    provider response bounds.
+    """
+    requests = canary_planned_requests("iex")
+    sessions = canary_sessions()
+    for request in requests:
+        if request.start_date != sessions[0] or request.end_date != sessions[-1]:
+            raise DataContractError(
+                "CANARY_WINDOW_SESSION_MISMATCH: request window does not "
+                "exactly span the attributed sessions."
+            )
+    return sessions
 
 
 @dataclass

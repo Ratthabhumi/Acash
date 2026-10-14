@@ -545,6 +545,65 @@ def test_budget_state_after_halt() -> None:
         pass
 
 
+def test_audit_reservation_history_accepts_legal_ledger() -> None:
+    from acash.data.qualification.lane_a_canary import audit_reservation_history
+
+    settled = audit_reservation_history([
+        {"event": "reserved", "seq": 1, "request_digest": "a" * 64},
+        {"event": "reserved", "seq": 2, "request_digest": "b" * 64},
+        {"event": "settled", "seq": 1, "outcome": "OK"},
+        {"event": "settled", "seq": 2, "outcome": "HTTP_429"},
+    ])
+    assert settled == {1: "OK", 2: "HTTP_429"}
+
+
+def test_audit_reservation_history_rejects() -> None:
+    from acash.data.qualification.lane_a_canary import audit_reservation_history
+
+    bad_ledgers = [
+        [{"event": "reserved", "seq": 0, "request_digest": "a" * 64}],
+        [{"event": "reserved", "seq": -1, "request_digest": "a" * 64}],
+        [{"event": "reserved", "seq": True, "request_digest": "a" * 64}],
+        [{"event": "reserved", "seq": 1, "request_digest": "not-hex"}],
+        [
+            {"event": "reserved", "seq": 1, "request_digest": "a" * 64},
+            {"event": "reserved", "seq": 1, "request_digest": "b" * 64},
+        ],
+        [
+            {"event": "reserved", "seq": 2, "request_digest": "a" * 64},
+            {"event": "reserved", "seq": 1, "request_digest": "b" * 64},
+        ],
+        [{"event": "settled", "seq": 1, "outcome": "OK"}],
+        [
+            {"event": "reserved", "seq": 1, "request_digest": "a" * 64},
+            {"event": "settled", "seq": 1, "outcome": "HTTP_418"},
+        ],
+        [
+            {"event": "reserved", "seq": 1, "request_digest": "a" * 64},
+            {"event": "settled", "seq": 1, "outcome": "OK"},
+            {"event": "settled", "seq": 1, "outcome": "OK"},
+        ],
+        [{"event": "teleport", "seq": 1}],
+    ]
+    for ledger in bad_ledgers:
+        try:
+            audit_reservation_history(ledger)
+            assert False, f"invalid ledger admitted: {ledger!r}"
+        except DataContractError:
+            pass
+
+
+def test_verify_request_window_against_sessions() -> None:
+    from acash.data.qualification.lane_a_canary import (
+        verify_request_window_against_sessions,
+    )
+
+    sessions = verify_request_window_against_sessions()
+    assert [s.isoformat() for s in sessions] == [
+        "2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02",
+    ]
+
+
 def test_canary_constants_match_packet() -> None:
     from acash.data.qualification.lane_a_canary import (
         CANARY_ADJUSTMENTS,
