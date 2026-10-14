@@ -8,6 +8,17 @@
 
 ---
 
+## Current Direction (2026-10-14)
+
+**Start here:** the single active delivery plan is [`docs/ROADMAP.md`](docs/ROADMAP.md) (v3.7.0, Current Delivery Track D0–D6: offline canary → acquisition safety → authorized data → qualification → economics).
+
+- **North Star:** independently qualified ETF market data feeding a hypothetical USD 1,000 after-cost comparison. The valid governed investment decision remains **cash/no trade**.
+- **Hard boundaries:** real capital USD 0.00; `NO_REAL_ORDERS=true`; Lane A acquisition UNISSUED; no provider HTTP, credentials, subscriptions, broker authentication, paper/live orders, or Homelab deployment without separate human authority.
+- **Subsystem map:** `src/acash/` (production domain modules) · `tests/` (verification) · `docs/README.md` (documentation hub) · `AGENTS.md` (engineering and authority rules).
+- **Historical records** (Phase 0–23, E3.6, session handoffs) are preserved evidence below and in `docs/` — they describe past decisions, not current authorization.
+
+---
+
 ## 1. Executive Summary & North Star
 
 **ACASH (Automated Capital Allocation System)** is a serious, research-first, evidence-driven capital allocation and portfolio management platform.
