@@ -25,8 +25,8 @@ Stages: IMPLEMENTED / SYNTHETIC_TESTED / REAL_DATA_QUALIFIED / ECONOMICALLY_EVAL
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | M1.8 offline rehearsal | `src/acash/data/qualification/lane_a_rehearsal.py` | Yes (PR #29 merged) | Yes (33) | No | No | Merged | Integrated; Lane A still UNISSUED |
 | M1.8.1 storage/evidence | `src/acash/data/qualification/lane_a_transport.py` | Yes (PR #30 merged) | Yes (25) | No | No | Merged | Integrated; crash durability NOT verified |
-| Canary readiness (draft) | `src/acash/data/qualification/lane_a_canary.py` | Yes (PR #32, stacked draft) | Yes (16, fake transports) | No | No | No (preparation only) | Approval verifier + Lane A issuance |
-| ETF admission handoff | `docs/research/ETF_DATA_ADMISSION_HANDOFF_20261014.md` | Yes (PR #31) | N/A (docs) | No | No | No | Operator decision packet |
+| Canary readiness (draft) | `src/acash/data/qualification/lane_a_canary.py` | Yes (PR #32, retargeted to main, production offline runner) | Yes (26, fake transports) | No | No | No (preparation only) | Approval verifier + network executor + Lane A issuance |
+| ETF admission handoff | `docs/research/ETF_DATA_ADMISSION_HANDOFF_20261014.md` | Yes (PR #31 merged) | N/A (docs) | No | No | Merged | Operator decision packet |
 | Lane B corporate actions | Lane B spec/contracts | Spec only | Partial | No (issuer evidence absent) | No | No | Sponsor-verified dividends/splits |
 | HYP_010 | `docs/phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md` | Parked, NOT falsified (FALSIFIED=false, REJECTED=false) | Provider probe only (8 SIP attempts, SPY/VEU/AGG/BIL 2017-01-03..06, PASS) | Provider probe PASS in its own scope; NO qualified Invest dataset | No | Blocked by VEU dividend authority | Methodology reference only; historical authority NOT transferred to Lane A; full backtest never executed |
 | Allocators (Cash/EW/InverseVol) | portfolio modules | Yes | Synthetic | No | No | No | Parked until qualified data |
