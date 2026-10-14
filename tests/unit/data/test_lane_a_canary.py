@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.qualification.lane_a_authority import canonical_query_parameters
 from acash.data.qualification.lane_a_canary import (
     CANARY_MAX_BYTES,
     CANARY_MAX_OPERATIONS,
@@ -22,6 +23,7 @@ from acash.data.qualification.lane_a_canary import (
     CanaryPlan,
     ReservationJournal,
     canonical_scope_digest,
+    canary_planned_requests,
     canary_sessions,
     run_canary_offline,
 )
@@ -41,8 +43,7 @@ _VERIFIER = _TestVerifier()
 
 def _approval(feed: str = "iex", **overrides: Any) -> CanaryApproval:
     digest = canonical_scope_digest(
-        ("VOO", "BND", "GLD", "BIL"), "1Day", "2026-09-28", "2026-10-02",
-        ("raw", "all"), feed, CANARY_MAX_OPERATIONS, CANARY_MAX_BYTES, "0.00",
+        canary_planned_requests(feed), CANARY_MAX_OPERATIONS, CANARY_MAX_BYTES
     )
     params: Dict[str, Any] = {
         "approval_ref": "OP-2026-10-14-001",
@@ -272,21 +273,46 @@ def test_canary_second_run_same_dir_rejected() -> None:
             pass
 
 
-def test_canary_request_params_keep_end_of_day() -> None:
-    from acash.data.qualification.lane_a_canary import canonical_request_params
+def test_canary_requests_match_m1_7_canonical() -> None:
+    from acash.data.qualification.lane_a_authority import (
+        LANE_A_CURRENCY,
+        LANE_A_ENDPOINT_PATH,
+        LANE_A_PAGE_LIMIT,
+        LANE_A_SORT,
+    )
 
-    for adjustment in ("raw", "all"):
-        params = canonical_request_params("iex", adjustment)
+    requests = canary_planned_requests("iex")
+    assert len(requests) == 2
+    assert [r.adjustment for r in requests] == ["all", "raw"]
+    for request in requests:
+        # Canonical symbol ordering per M1.7 (sorted).
+        assert request.symbols == ("BIL", "BND", "GLD", "VOO")
+        params = dict(canonical_query_parameters(request))
+        assert params["symbols"] == "BIL,BND,GLD,VOO"
+        assert params["timeframe"] == "1Day"
         assert params["start"] == "2026-09-28"
         assert params["end"] == "2026-10-02"
         assert date.fromisoformat(params["end"]) == date(2026, 10, 2)
-        assert params["symbols"] == "VOO,BND,GLD,BIL"
-        assert params["timeframe"] == "1Day"
+        assert params["feed"] == "iex"
+        assert params["sort"] == LANE_A_SORT == "asc"
+        assert params["limit"] == str(LANE_A_PAGE_LIMIT) == "1000"
+        assert params["currency"] == LANE_A_CURRENCY == "USD"
+        assert request.endpoint_path == LANE_A_ENDPOINT_PATH
+        assert request.provider == "ALPACA"
     try:
-        canonical_request_params("sip2", "raw")
-        assert False, "unknown feed must fail"
+        canary_planned_requests("sip2")
+        assert False, "unknown feed must fail via M1.7 scope validation"
     except DataContractError:
         pass
+
+
+def test_canary_scope_window_is_end_of_day_inclusive() -> None:
+    from acash.data.qualification.lane_a_canary import canary_scope
+
+    scope = canary_scope("sip")
+    assert scope.start_date == date(2026, 9, 28)
+    assert scope.end_date == date(2026, 10, 2)
+    assert scope.start_date <= scope.end_date
 
 
 def test_reservation_failed_sync_consumes_no_sequence(monkeypatch: Any) -> None:
@@ -314,6 +340,65 @@ def test_reservation_failed_sync_consumes_no_sequence(monkeypatch: Any) -> None:
         records = journal.read_reservations()
         assert len(records) == 1
         assert records[0]["event"] == "reserved"
+
+
+def test_reservation_open_failure_poisons(monkeypatch: Any) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+
+        def _boom(*args: Any, **kwargs: Any) -> Any:
+            raise OSError("injected open failure")
+
+        monkeypatch.setattr("builtins.open", _boom)
+        try:
+            journal.reserve(1, "d" * 64)
+            assert False, "open failure must fail closed and poison"
+        except DataContractError:
+            pass
+        try:
+            journal.reserve(2, "d" * 64)
+            assert False, "poisoned journal must refuse further writes"
+        except DataContractError:
+            pass
+
+
+def test_reservation_create_sync_failure_blocks_reuse(monkeypatch: Any) -> None:
+    import os as _os
+
+    def _boom(fd: int) -> None:
+        raise OSError("injected sync failure")
+
+    monkeypatch.setattr(_os, "fsync", _boom)
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "run"
+        try:
+            ReservationJournal.create(run_dir)
+            assert False, "failed initial sync must block creation"
+        except DataContractError:
+            pass
+        # The ambiguous file is left in place: recreating the same
+        # namespace is forbidden, never silently allowed.
+        assert (run_dir / "reservations.jsonl").is_file()
+        monkeypatch.undo()
+        try:
+            ReservationJournal.create(run_dir)
+            assert False, "ambiguous namespace must not be recreated"
+        except DataContractError:
+            pass
+
+
+def test_reservation_structurally_invalid_record_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+        journal.reserve(1, "e" * 64)
+        with open(journal._file, "a", encoding="utf-8") as handle:
+            handle.write('{"event": "reserved", "seq": "not-an-int"}\n')
+            handle.write('{"event": "teleport", "seq": 2}\n')
+        try:
+            journal.read_reservations()
+            assert False, "structurally invalid events must fail closed"
+        except DataContractError:
+            pass
 
 
 def test_reservation_corrupt_record_detected() -> None:

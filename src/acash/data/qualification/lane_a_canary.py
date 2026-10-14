@@ -61,7 +61,25 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
+from acash.data.qualification.lane_a_authority import (
+    LANE_A_ALLOWED_FEEDS,
+    LANE_A_CURRENCY,
+    LANE_A_ENDPOINT_PATH,
+    LANE_A_HISTORICAL_END,
+    LANE_A_HISTORICAL_START,
+    LANE_A_PAGE_LIMIT,
+    LANE_A_PROVIDER,
+    LANE_A_SORT,
+    LaneAPlannedRequest,
+    LaneAScope,
+    canonical_query_parameters,
+)
 
+# Single canonical HTTP authority: M1.7. This module defines NO competing
+# request specification. The constants below are display/budget mirrors only;
+# every request is built as a LaneAPlannedRequest and serialized exclusively
+# through M1.7's canonical_query_parameters(). No ISSUED LaneAAuthority is
+# ever fabricated here: scope/request objects carry no authority status.
 CANARY_SYMBOLS: Tuple[str, ...] = ("VOO", "BND", "GLD", "BIL")
 CANARY_TIMEFRAME: str = "1Day"
 CANARY_START: str = "2026-09-28"
@@ -106,31 +124,106 @@ def _require_runtime_sha(runtime_sha: str) -> str:
     return runtime_sha
 
 
+def canary_scope(feed: str) -> LaneAScope:
+    """Build the canary scope as an M1.7 LaneAScope (validated by M1.7).
+
+    LaneAScope.__post_init__ enforces the canonical universe, timeframe,
+    exact historical window, provider, feed allowlist, and paid budget, so
+    any divergence from M1.7 fails here, not downstream.
+    """
+    return LaneAScope(
+        symbols=frozenset(CANARY_SYMBOLS),
+        timeframe=CANARY_TIMEFRAME,
+        start_date=date.fromisoformat(CANARY_START),
+        end_date=date.fromisoformat(CANARY_END),
+        adjustments=frozenset(CANARY_ADJUSTMENTS),
+        provider=LANE_A_PROVIDER,
+        feed=feed,
+        paid_budget_usd=0,
+    )
+
+
+def canary_planned_requests(feed: str) -> Tuple[LaneAPlannedRequest, ...]:
+    """Build the canary requests exactly as M1.7 plans them.
+
+    Same construction as plan_lane_a_requests (sorted symbols, one entry
+    per sorted adjustment, M1.7 sort/limit/currency/endpoint) but WITHOUT
+    requiring an ISSUED authority object: no authority status is fabricated.
+    """
+    scope = canary_scope(feed)
+    symbols = tuple(sorted(scope.symbols))
+    planned: List[LaneAPlannedRequest] = []
+    for adjustment in sorted(scope.adjustments):
+        planned.append(
+            LaneAPlannedRequest(
+                symbols=symbols,
+                adjustment=adjustment,
+                timeframe=scope.timeframe,
+                start_date=scope.start_date,
+                end_date=scope.end_date,
+                provider=scope.provider,
+                endpoint_path=LANE_A_ENDPOINT_PATH,
+                feed=scope.feed,
+                sort=LANE_A_SORT,
+                limit=LANE_A_PAGE_LIMIT,
+                currency=LANE_A_CURRENCY,
+            )
+        )
+    if len(planned) > CANARY_MAX_OPERATIONS:
+        raise DataContractError(
+            f"CANARY_PLAN_TOO_LARGE: {len(planned)} base requests exceed "
+            f"the canary operation cap {CANARY_MAX_OPERATIONS}."
+        )
+    return tuple(planned)
+
+
 def canonical_scope_digest(
-    symbols: Sequence[str],
-    timeframe: str,
-    start: str,
-    end: str,
-    adjustments: Sequence[str],
-    feed: str,
-    max_operations: int,
-    max_bytes: int,
-    paid_budget_usd: str,
+    requests: Sequence[LaneAPlannedRequest], max_operations: int, max_bytes: int
 ) -> str:
-    """Deterministic SHA-256 over the canonical scope document."""
+    """Deterministic SHA-256 binding the ACTUAL canonical 9-tuples + budgets.
+
+    The digest covers M1.7's canonical_query_parameters() output per
+    request (symbols, timeframe, start, end, adjustment, feed, sort, limit,
+    currency) — never a simplified offline summary. Continuation identity
+    additionally binds the verbatim page token (see continuation_digest).
+    """
     document = {
-        "adjustments": list(adjustments),
-        "end": end,
-        "feed": feed,
         "max_bytes": max_bytes,
         "max_operations": max_operations,
-        "paid_budget_usd": paid_budget_usd,
-        "start": start,
-        "symbols": list(symbols),
-        "timeframe": timeframe,
+        "requests": [list(canonical_query_parameters(request)) for request in requests],
     }
     return hashlib.sha256(
         json.dumps(document, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _first_page_digest(request: LaneAPlannedRequest) -> str:
+    """Identity of a first-page dispatch: canonical params, empty token."""
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "params": list(canonical_query_parameters(request)),
+                "page_token": "",
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def continuation_digest(
+    request: LaneAPlannedRequest, page_token: str
+) -> str:
+    """Identity of a continuation dispatch: canonical params + verbatim token."""
+    if not page_token:
+        raise DataContractError("CANARY_CONTINUATION_EMPTY_TOKEN.")
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "params": list(canonical_query_parameters(request)),
+                "page_token": page_token,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
     ).hexdigest()
 
 
@@ -218,12 +311,13 @@ class CanaryApproval:
 
 @dataclass(frozen=True)
 class CanaryPlan:
-    """Admissible bounded plan: approval + scope + executing runtime identity."""
+    """Admissible bounded plan: approval + M1.7 requests + runtime identity."""
 
     approval: CanaryApproval
     feed: str
     scope_digest: str
     runtime_sha: str
+    requests: Tuple[LaneAPlannedRequest, ...] = ()
 
     @classmethod
     def build(
@@ -236,7 +330,7 @@ class CanaryPlan:
     ) -> "CanaryPlan":
         """Build and admit a plan; fails closed on any scope/approval gap."""
         approval.verify_approval(verifier)
-        if feed not in CANARY_FEEDS:
+        if feed not in CANARY_FEEDS or feed not in LANE_A_ALLOWED_FEEDS:
             raise DataContractError(
                 f"CANARY_PLAN_BAD_FEED: {feed!r} must be exactly one of {list(CANARY_FEEDS)}."
             )
@@ -252,35 +346,25 @@ class CanaryPlan:
             raise DataContractError("CANARY_PLAN_OPERATION_BUDGET_EXCEEDED.")
         if approval.max_bytes > CANARY_MAX_BYTES:
             raise DataContractError("CANARY_PLAN_BYTE_BUDGET_EXCEEDED.")
+        if approval.paid_budget_usd != CANARY_PAID_BUDGET_USD:
+            raise DataContractError("CANARY_PLAN_NONZERO_PAID_BUDGET.")
+        requests = canary_planned_requests(feed)
         digest = canonical_scope_digest(
-            CANARY_SYMBOLS, CANARY_TIMEFRAME, CANARY_START, CANARY_END,
-            CANARY_ADJUSTMENTS, feed, approval.max_operations,
-            approval.max_bytes, approval.paid_budget_usd,
+            requests, approval.max_operations, approval.max_bytes
         )
         if digest != approval.scope_digest:
             raise DataContractError("CANARY_PLAN_SCOPE_DIGEST_MISMATCH.")
         return cls(
             approval=approval, feed=feed, scope_digest=digest,
-            runtime_sha=actual_runtime_sha,
+            runtime_sha=actual_runtime_sha, requests=requests,
         )
 
-    def request_digests(self) -> List[str]:
-        """Canonical per-adjustment request digests (2 initial requests)."""
-        digests: List[str] = []
-        for adjustment in CANARY_ADJUSTMENTS:
-            digests.append(
-                hashlib.sha256(
-                    json.dumps(
-                        {
-                            "adjustment": adjustment,
-                            "feed": self.feed,
-                            "scope": self.scope_digest,
-                        },
-                        sort_keys=True,
-                    ).encode("utf-8")
-                ).hexdigest()
-            )
-        return digests
+    def request_digests(self) -> List[Tuple[int, str]]:
+        """Canonical per-request identities: (index, first-page digest)."""
+        return [
+            (index, _first_page_digest(request))
+            for index, request in enumerate(self.requests)
+        ]
 
 
 @dataclass(frozen=True)
@@ -404,9 +488,20 @@ class ReservationJournal:
 
     @classmethod
     def create(cls, run_dir: Path) -> "ReservationJournal":
-        """Atomically create the reservation file (fail-closed on repeat)."""
+        """Atomically create the reservation file (fail-closed on repeat).
+
+        If the initial required sync fails, the file is LEFT IN PLACE (never
+        silently unlinked): a later create attempt for the same run fails
+        with EXISTS, so an ambiguous namespace can never be silently
+        recreated and reused.
+        """
         journal_file = run_dir / "reservations.jsonl"
-        run_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            run_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise DataContractError(
+                f"CANARY_RESERVATION_CREATE_FAILED: {exc}."
+            ) from exc
         try:
             fd = os.open(str(journal_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError as exc:
@@ -422,15 +517,18 @@ class ReservationJournal:
         except OSError as exc:
             try:
                 os.close(fd)
-            finally:
-                try:
-                    journal_file.unlink()
-                except OSError:
-                    pass
+            except OSError:
+                pass
             raise DataContractError(
-                f"CANARY_SYNC_FAILED: required file sync failed: {exc}."
+                f"CANARY_SYNC_FAILED: required file sync failed: {exc}. "
+                "The run namespace is ambiguous and must not be reused."
             ) from exc
-        os.close(fd)
+        try:
+            os.close(fd)
+        except OSError as exc:
+            raise DataContractError(
+                f"CANARY_SYNC_FAILED: failed closing reservation file: {exc}."
+            ) from exc
         _sync_dir_best_effort(journal_file)
         return cls(journal_file, _probe_dir_sync(journal_file))
 
@@ -464,9 +562,14 @@ class ReservationJournal:
             with open(self._file, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
                 _sync_file(handle)
-        except DataContractError:
+        except (DataContractError, OSError) as exc:
             self._poisoned = True
-            raise
+            if isinstance(exc, DataContractError):
+                raise
+            raise DataContractError(
+                f"CANARY_JOURNAL_IO_FAILED: reserve write failed: {exc}. "
+                "Journal poisoned; classify on-disk state by reading."
+            ) from exc
         _sync_dir_best_effort(self._file)
         self._reserved = seq
 
@@ -482,16 +585,32 @@ class ReservationJournal:
             with open(self._file, "a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
                 _sync_file(handle)
-        except DataContractError:
+        except (DataContractError, OSError) as exc:
             self._poisoned = True
-            raise
+            if isinstance(exc, DataContractError):
+                raise
+            raise DataContractError(
+                f"CANARY_JOURNAL_IO_FAILED: settle write failed: {exc}. "
+                "Journal poisoned; classify on-disk state by reading."
+            ) from exc
         _sync_dir_best_effort(self._file)
         self._completed[seq] = outcome
 
     def read_reservations(self) -> List[Mapping[str, Any]]:
-        """Read back all reservation records (deterministic inspection)."""
+        """Read back all reservation records (deterministic inspection).
+
+        Structurally invalid events (unknown event names, missing keys,
+        wrong types) are NEVER promoted into trusted evidence: they fail
+        closed as CORRUPT.
+        """
         records: List[Mapping[str, Any]] = []
-        for raw in self._file.read_text(encoding="utf-8").splitlines():
+        try:
+            content = self._file.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise DataContractError(
+                f"CANARY_JOURNAL_UNREADABLE: {exc}."
+            ) from exc
+        for raw in content.splitlines():
             if not raw.strip():
                 continue
             try:
@@ -499,6 +618,21 @@ class ReservationJournal:
             except ValueError as exc:
                 raise DataContractError("CANARY_RESERVATION_CORRUPT.") from exc
             if not isinstance(record, dict):
+                raise DataContractError("CANARY_RESERVATION_CORRUPT.")
+            event = record.get("event")
+            if event == "reserved":
+                if (
+                    not isinstance(record.get("seq"), int)
+                    or not isinstance(record.get("request_digest"), str)
+                ):
+                    raise DataContractError("CANARY_RESERVATION_CORRUPT.")
+            elif event == "settled":
+                if (
+                    not isinstance(record.get("seq"), int)
+                    or not isinstance(record.get("outcome"), str)
+                ):
+                    raise DataContractError("CANARY_RESERVATION_CORRUPT.")
+            else:
                 raise DataContractError("CANARY_RESERVATION_CORRUPT.")
             records.append(record)
         return records
@@ -524,47 +658,33 @@ class CanaryResult:
     dispatches: List[str] = field(default_factory=list)
 
 
-def canonical_request_params(feed: str, adjustment: str) -> Mapping[str, str]:
-    """Exact canonical query parameters for one canary request.
-
-    Dates are calendar DATE strings (end-of-day inclusive); the end bound
-    is never serialized as a midnight timestamp that would truncate the
-    final session (HYP_010 midnight-end lesson).
-    """
-    if feed not in CANARY_FEEDS:
-        raise DataContractError(f"CANARY_REQUEST_BAD_FEED: {feed!r}.")
-    if adjustment not in CANARY_ADJUSTMENTS:
-        raise DataContractError(f"CANARY_REQUEST_BAD_ADJUSTMENT: {adjustment!r}.")
-    if date.fromisoformat(CANARY_END) < date.fromisoformat(CANARY_START):
-        raise DataContractError("CANARY_REQUEST_EMPTY_WINDOW.")
-    return {
-        "adjustment": adjustment,
-        "end": CANARY_END,
-        "feed": feed,
-        "start": CANARY_START,
-        "symbols": ",".join(CANARY_SYMBOLS),
-        "timeframe": CANARY_TIMEFRAME,
-    }
-
-
 def run_canary_offline(plan: CanaryPlan, transport: Any, run_dir: Path) -> CanaryResult:
     """Run one bounded offline canary against a duck-typed fake transport.
 
     The transport must expose ``.get(request_digest, page_token)`` returning
-    a ``CanaryPage``. Behavior: two initial adjustment requests, durable
-    reservation before each fake dispatch, hard budget caps, per-chain
-    page-token cycle protection, no retry/feed fallback, halt on
-    401/403/429/timeout. Verdicts: TRANSPORT_PAGINATION_COMPLETE (queue
-    drained; NOT data qualification) or HALTED_<outcome> (stopped early).
+    a ``CanaryPage``. Behavior: two initial adjustment requests (M1.7
+    canonical 9-tuples), durable reservation before each fake dispatch,
+    hard budget caps, per-chain page-token cycle protection keyed by
+    (request index, token), continuation digests binding canonical params +
+    verbatim token, no retry/feed fallback, halt on 401/403/429/timeout.
+    Verdicts: TRANSPORT_PAGINATION_COMPLETE (queue drained; NOT data
+    qualification) or HALTED_<outcome> (stopped early).
     """
     budget = CanaryBudget(plan.approval.max_operations, plan.approval.max_bytes)
     journal = ReservationJournal.create(run_dir)
     seq = 0
-    seen_chain_tokens: set[Tuple[str, str]] = set()
+    seen_chain_tokens: set[Tuple[int, str]] = set()
     dispatches: List[str] = []
-    pending: List[Tuple[str, str]] = [(digest, "") for digest in plan.request_digests()]
+    pending: List[Tuple[int, str]] = [
+        (index, "") for index, _ in plan.request_digests()
+    ]
     while pending:
-        request_digest, token = pending.pop(0)
+        index, token = pending.pop(0)
+        request = plan.requests[index]
+        if token == "":
+            request_digest = _first_page_digest(request)
+        else:
+            request_digest = continuation_digest(request, token)
         seq += 1
         budget.reserve_operation()
         journal.reserve(seq, request_digest)
@@ -586,14 +706,14 @@ def run_canary_offline(plan: CanaryPlan, transport: Any, run_dir: Path) -> Canar
             )
         journal.settle(seq, page.outcome)
         if page.next_token:
-            chain_key = (request_digest, page.next_token)
+            chain_key = (index, page.next_token)
             if chain_key in seen_chain_tokens:
                 raise DataContractError(
                     f"CANARY_PAGE_TOKEN_CYCLE: {page.next_token!r} already "
                     "produced in this request chain."
                 )
             seen_chain_tokens.add(chain_key)
-            pending.append((request_digest, page.next_token))
+            pending.append((index, page.next_token))
     return CanaryResult(
         verdict="TRANSPORT_PAGINATION_COMPLETE",
         operations_used=seq,
