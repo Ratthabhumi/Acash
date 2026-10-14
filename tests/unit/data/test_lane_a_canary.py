@@ -204,7 +204,7 @@ def test_canary_pagination_completes_within_budget() -> None:
     ])
     with tempfile.TemporaryDirectory() as tmp:
         result = run_canary_offline(plan, transport, Path(tmp) / "run")
-        assert result.verdict == "COMPLETE"
+        assert result.verdict == "TRANSPORT_PAGINATION_COMPLETE"
         assert result.operations_used == 3
         assert result.bytes_observed == 2500
         assert len(result.dispatches) == 3
@@ -242,6 +242,106 @@ def test_canary_rejects_page_token_cycle() -> None:
         try:
             run_canary_offline(plan, transport, Path(tmp) / "run")
             assert False, "page token cycle must fail"
+        except DataContractError:
+            pass
+
+
+def test_canary_same_token_across_chains_allowed() -> None:
+    plan = _build()
+    transport = FakeCanaryTransport(script=[
+        CanaryPage("OK", 10, "shared"), CanaryPage("OK", 10, "shared"),
+        CanaryPage("OK", 10, ""), CanaryPage("OK", 10, ""),
+    ])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_canary_offline(plan, transport, Path(tmp) / "run")
+        assert result.verdict == "TRANSPORT_PAGINATION_COMPLETE"
+        assert result.operations_used == 4
+
+
+def test_canary_second_run_same_dir_rejected() -> None:
+    plan = _build()
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = Path(tmp) / "run"
+        first = FakeCanaryTransport(script=[CanaryPage("OK", 1, ""), CanaryPage("OK", 1, "")])
+        assert run_canary_offline(plan, first, run_dir).verdict == "TRANSPORT_PAGINATION_COMPLETE"
+        second = FakeCanaryTransport(script=[CanaryPage("OK", 1, ""), CanaryPage("OK", 1, "")])
+        try:
+            run_canary_offline(plan, second, run_dir)
+            assert False, "no resume under the same run directory"
+        except DataContractError:
+            pass
+
+
+def test_canary_request_params_keep_end_of_day() -> None:
+    from acash.data.qualification.lane_a_canary import canonical_request_params
+
+    for adjustment in ("raw", "all"):
+        params = canonical_request_params("iex", adjustment)
+        assert params["start"] == "2026-09-28"
+        assert params["end"] == "2026-10-02"
+        assert date.fromisoformat(params["end"]) == date(2026, 10, 2)
+        assert params["symbols"] == "VOO,BND,GLD,BIL"
+        assert params["timeframe"] == "1Day"
+    try:
+        canonical_request_params("sip2", "raw")
+        assert False, "unknown feed must fail"
+    except DataContractError:
+        pass
+
+
+def test_reservation_failed_sync_consumes_no_sequence(monkeypatch: Any) -> None:
+    import os as _os
+
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+
+        def _boom(fd: int) -> None:
+            raise OSError("injected sync failure")
+
+        monkeypatch.setattr(_os, "fsync", _boom)
+        try:
+            journal.reserve(1, "d" * 64)
+            assert False, "failed sync must block the reservation"
+        except DataContractError:
+            pass
+        # The journal is poisoned: no further operations allowed, the
+        # on-disk bytes are ambiguous (the write landed, the sync did not).
+        try:
+            journal.reserve(1, "d" * 64)
+            assert False, "poisoned journal must refuse all further writes"
+        except DataContractError:
+            pass
+        records = journal.read_reservations()
+        assert len(records) == 1
+        assert records[0]["event"] == "reserved"
+
+
+def test_reservation_corrupt_record_detected() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+        journal.reserve(1, "e" * 64)
+        with open(journal._file, "a", encoding="utf-8") as handle:
+            handle.write("{torn json\n")
+        try:
+            journal.read_reservations()
+            assert False, "torn record must fail closed"
+        except DataContractError:
+            pass
+
+
+def test_reservation_settle_unknown_seq_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+        journal.reserve(1, "f" * 64)
+        try:
+            journal.settle(2, "OK")
+            assert False, "settle of unreserved seq must fail"
+        except DataContractError:
+            pass
+        journal.settle(1, "OK")
+        try:
+            journal.settle(1, "OK")
+            assert False, "duplicate settle must fail"
         except DataContractError:
             pass
 

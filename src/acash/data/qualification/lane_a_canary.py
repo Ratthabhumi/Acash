@@ -27,8 +27,18 @@ Design (hard authority boundary between planning and dispatch):
   breach fails closed and halts the run.
 - ``run_canary_offline``: the single reusable offline orchestration
   (planning → reserve → fake dispatch → settle/halt). Transports are
-  duck-typed (any object with ``.get(request_digest, page_token)``);
-  ``FakeCanaryTransport`` test doubles live in TESTS only, never here.
+  duck-typed (any object with ``.get(request_digest, page_token)``) under
+  an explicit TRUSTED-INJECTION boundary: the runner executes inside a
+  trusted offline test process and trusts the injected object to be a
+  scripted fake. This is NOT a sandbox against hostile Python objects; a
+  deliberately network-capable injected object would violate the caller's
+  offline assumption. Observed bytes are SYNTHETIC accounting from
+  ``CanaryPage.nbytes``, never proof of streaming-HTTP enforcement.
+- Verdict ``TRANSPORT_PAGINATION_COMPLETE`` means the pagination queue
+  drained inside budget. It is NOT data qualification: symbol coverage,
+  session coverage, OHLCV validity, corporate actions, and
+  point-in-time correctness are separate gates (see M1.8 rehearsal
+  contracts for the eventual validation stage).
 - ``canary_sessions``: NYSE CA-1 attribution of the canonical window as
   inclusive calendar dates (end-of-day semantics; regression guard
   against midnight-truncation dropping the final session).
@@ -390,6 +400,7 @@ class ReservationJournal:
         self._dir_sync_supported = dir_sync_supported
         self._reserved = 0
         self._completed: Dict[int, str] = {}
+        self._poisoned = False
 
     @classmethod
     def create(cls, run_dir: Path) -> "ReservationJournal":
@@ -428,8 +439,17 @@ class ReservationJournal:
         """Whether parent-directory sync is supported on this filesystem."""
         return self._dir_sync_supported
 
+    def _ensure_usable(self) -> None:
+        if self._poisoned:
+            raise DataContractError(
+                "CANARY_JOURNAL_POISONED: a required sync failed; this journal "
+                "is unusable. On-disk state is ambiguous — classify it by "
+                "reading, then continue only under a fresh run."
+            )
+
     def reserve(self, seq: int, request_digest: str) -> None:
         """Reserve attempt ``seq`` for ``request_digest`` (sync before return)."""
+        self._ensure_usable()
         if not isinstance(seq, int) or isinstance(seq, bool) or seq <= self._reserved:
             raise DataContractError(
                 f"CANARY_RESERVATION_BAD_SEQ: {seq!r}."
@@ -440,22 +460,31 @@ class ReservationJournal:
             {"event": "reserved", "seq": seq, "request_digest": request_digest},
             sort_keys=True,
         )
-        with open(self._file, "a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
-            _sync_file(handle)
+        try:
+            with open(self._file, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+                _sync_file(handle)
+        except DataContractError:
+            self._poisoned = True
+            raise
         _sync_dir_best_effort(self._file)
         self._reserved = seq
 
     def settle(self, seq: int, outcome: str) -> None:
         """Record the outcome of a reserved attempt (no budget refund)."""
+        self._ensure_usable()
         if seq <= 0 or seq > self._reserved or seq in self._completed:
             raise DataContractError(
                 f"CANARY_SETTLE_UNKNOWN_SEQ: {seq!r}."
             )
         line = json.dumps({"event": "settled", "seq": seq, "outcome": outcome}, sort_keys=True)
-        with open(self._file, "a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
-            _sync_file(handle)
+        try:
+            with open(self._file, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+                _sync_file(handle)
+        except DataContractError:
+            self._poisoned = True
+            raise
         _sync_dir_best_effort(self._file)
         self._completed[seq] = outcome
 
@@ -495,19 +524,43 @@ class CanaryResult:
     dispatches: List[str] = field(default_factory=list)
 
 
+def canonical_request_params(feed: str, adjustment: str) -> Mapping[str, str]:
+    """Exact canonical query parameters for one canary request.
+
+    Dates are calendar DATE strings (end-of-day inclusive); the end bound
+    is never serialized as a midnight timestamp that would truncate the
+    final session (HYP_010 midnight-end lesson).
+    """
+    if feed not in CANARY_FEEDS:
+        raise DataContractError(f"CANARY_REQUEST_BAD_FEED: {feed!r}.")
+    if adjustment not in CANARY_ADJUSTMENTS:
+        raise DataContractError(f"CANARY_REQUEST_BAD_ADJUSTMENT: {adjustment!r}.")
+    if date.fromisoformat(CANARY_END) < date.fromisoformat(CANARY_START):
+        raise DataContractError("CANARY_REQUEST_EMPTY_WINDOW.")
+    return {
+        "adjustment": adjustment,
+        "end": CANARY_END,
+        "feed": feed,
+        "start": CANARY_START,
+        "symbols": ",".join(CANARY_SYMBOLS),
+        "timeframe": CANARY_TIMEFRAME,
+    }
+
+
 def run_canary_offline(plan: CanaryPlan, transport: Any, run_dir: Path) -> CanaryResult:
     """Run one bounded offline canary against a duck-typed fake transport.
 
     The transport must expose ``.get(request_digest, page_token)`` returning
     a ``CanaryPage``. Behavior: two initial adjustment requests, durable
-    reservation before each fake dispatch, hard budget caps, page-token
-    cycle protection, no retry/feed fallback, halt on 401/403/429/timeout.
-    Verdicts: COMPLETE (queue drained) or HALTED_<outcome> (stopped early).
+    reservation before each fake dispatch, hard budget caps, per-chain
+    page-token cycle protection, no retry/feed fallback, halt on
+    401/403/429/timeout. Verdicts: TRANSPORT_PAGINATION_COMPLETE (queue
+    drained; NOT data qualification) or HALTED_<outcome> (stopped early).
     """
     budget = CanaryBudget(plan.approval.max_operations, plan.approval.max_bytes)
     journal = ReservationJournal.create(run_dir)
     seq = 0
-    seen_tokens: set[str] = set()
+    seen_chain_tokens: set[Tuple[str, str]] = set()
     dispatches: List[str] = []
     pending: List[Tuple[str, str]] = [(digest, "") for digest in plan.request_digests()]
     while pending:
@@ -533,14 +586,16 @@ def run_canary_offline(plan: CanaryPlan, transport: Any, run_dir: Path) -> Canar
             )
         journal.settle(seq, page.outcome)
         if page.next_token:
-            if page.next_token in seen_tokens:
+            chain_key = (request_digest, page.next_token)
+            if chain_key in seen_chain_tokens:
                 raise DataContractError(
-                    f"CANARY_PAGE_TOKEN_CYCLE: {page.next_token!r} already produced."
+                    f"CANARY_PAGE_TOKEN_CYCLE: {page.next_token!r} already "
+                    "produced in this request chain."
                 )
-            seen_tokens.add(page.next_token)
+            seen_chain_tokens.add(chain_key)
             pending.append((request_digest, page.next_token))
     return CanaryResult(
-        verdict="COMPLETE",
+        verdict="TRANSPORT_PAGINATION_COMPLETE",
         operations_used=seq,
         bytes_observed=budget.bytes_observed,
         dispatches=dispatches,
