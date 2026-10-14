@@ -1,5 +1,7 @@
 # ACASH — Project Status & Implementation Progress
 
+> **HISTORICAL SNAPSHOT (2026-09-04).** This document is frozen history, not today's state. For current delivery see [`docs/ROADMAP.md`](./ROADMAP.md) (v3.7.0). Test counts and phase milestones below describe September 2026 evidence only.
+
 > **Document:** `docs/PROJECT_STATUS.md`  
 > **Project Name:** ACASH (Automated Capital Allocation System)  
 > **Status:** Phases 0–12 Complete & Frozen (`1e1d154`); Phase 13 Slice 1 (Gate A Pre-Live Certification) In Progress (`2f01841`)  

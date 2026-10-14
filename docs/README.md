@@ -34,7 +34,10 @@ Welcome to the canonical documentation center for the **ACASH Quantitative Resea
 
 ---
 
-## 🏛️ Current Governance & Runtime State (2026-09-07)
+## 🏛️ Historical Governance Snapshot (2026-09-07 — NOT current status)
+
+> **Historical snapshot.** For current delivery state see [`docs/ROADMAP.md`](./ROADMAP.md) (v3.7.0). Corrections vs the original 2026-09-07 text: `HYP_003` was subsequently **TERMINALLY FALSIFIED** (see sealed dossier `phase14/hyp_003_terminal_falsification_dossier.md`); `HYP_010` is **PARKED / NON-FALSIFIED** under a VEU dividend-authority blocker. The rows below are preserved verbatim as history.
+
 - **Phase 8.5 Track B (Research Lineage):** RESEARCH STANDING BY / ALL HYPOTHESES TERMINALLY FALSIFIED
   - `HYP_TSMOM_EURUSD_001` (M5 Intraday): TERMINALLY FALSIFIED in-sample (0/9 trials passed; R4–R7 early-terminated; 2026 M5 holdout QUARANTINED / PRISTINE).
   - `HYP_TSMOM_EURUSD_HTF_002` (H4 Session): TERMINALLY FALSIFIED in-sample (0/12 trials passed; R4–R7 early-terminated; H4 validation & OOS partitions QUARANTINED / PRISTINE / NOT REUSABLE FOR HYP_003 BY DEFAULT).
