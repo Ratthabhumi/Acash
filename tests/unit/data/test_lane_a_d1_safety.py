@@ -32,6 +32,7 @@ from acash.data.qualification.lane_a_authority import (
     canonical_query_parameters,
 )
 from acash.data.qualification.lane_a_d1_safety import (
+    D1BoundRequest,
     StreamingByteCap,
     ZeroRetryPolicy,
     bind_planned_request,
@@ -690,8 +691,10 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
     Ledger authority decision (recorded, not invented): M1.8.1
     ``DurableAttemptJournal`` is the SINGLE canonical attempt ledger.
     ``ZeroRetryPolicy`` is execution policy only; no third ledger exists.
-    Composes: canonical bind -> destination guard -> journal reservation ->
-    single dispatch -> streaming accounting -> hashing -> settlement.
+    Specified dispatch procedure (harness-level, no production executor
+    exists to host it): canonical bind -> destination guard -> journal
+    reservation (request-specific RESERVED record) -> read-back verification
+    -> single dispatch -> streaming accounting -> hashing -> settlement.
     Retrieval completeness (COMPLETE) never implies DATA_QUALIFIED: the
     settled record carries transport vocabulary only.
     """
@@ -707,22 +710,66 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
     RUNTIME_SHA = "c" * 40
     NOW = "2026-10-02T21:00:00+00:00"
 
+    def _request_digest(bound: D1BoundRequest) -> str:
+        import hashlib
+
+        return hashlib.sha256(
+            json_module.dumps(bound.params, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+
+    def _assert_reservation_recorded(
+        workdir: Path, run_id: str, expected_digest: str
+    ) -> None:
+        """Read-back gate: the persisted reservation must match the bound request.
+
+        Raises BEFORE any dispatch when the journal file is missing,
+        unparseable, or carries a different seq/kind/outcome/binding.
+        This is a harness-level enforcement (no production executor exists
+        to host it); it proves the journal interface supports the ordering.
+        """
+        path = workdir / "lane_a_runs" / run_id / "attempts.jsonl"
+        try:
+            lines = path.read_text(encoding="utf-8").strip().split("\n")
+            last = json_module.loads(lines[-1])
+        except (OSError, ValueError, IndexError) as exc:
+            raise DataContractError(
+                f"D1_RESERVATION_UNREADABLE: no verifiable reservation: {exc}."
+            ) from exc
+        if (
+            not isinstance(last, dict)
+            or last.get("seq") != 1
+            or last.get("kind") != "reservation"
+            or last.get("outcome") != "RESERVED"
+            or last.get("detail") != expected_digest
+        ):
+            raise DataContractError(
+                "D1_RESERVATION_MISMATCH: recorded reservation does not match "
+                "the bound request; dispatch refused."
+            )
+
     def _run_once(
         workdir: Path,
         handler: Callable[[httpx.Request], httpx.Response],
         run_id: str,
     ) -> Dict[str, Any]:
-        from acash.data.qualification.lane_a_d1_safety import (
-            build_test_client as _client_factory,
-        )
-
         request = _m1_7_requests("iex")[0]
         bound = bind_planned_request(request)
+        digest = _request_digest(bound)
         destination_guard("https://data.alpaca.markets/v2/stocks/bars")
         journal = DurableAttemptJournal.create_run(
             workdir, run_id, "TEST-AUTHORITY-REF", RUNTIME_SHA, NOW,
         )
         assert DurableAttemptJournal.classify_run(workdir, run_id) == "INTERRUPTED"
+        # Request-specific pre-dispatch reservation (seq 1), then read-back
+        # verification: the dispatch below cannot occur unless THIS exact
+        # reservation is already persisted in the authoritative journal.
+        journal.record_attempt(
+            AttemptRecord(
+                seq=1, kind="reservation", outcome="RESERVED",
+                bytes_observed=0, recorded_at_utc=NOW, detail=digest,
+            )
+        )
+        _assert_reservation_recorded(workdir, run_id, digest)
         policy = ZeroRetryPolicy()
         cap = StreamingByteCap(524288)
         outcome: Dict[str, Any] = {"status": "INTERRUPTED", "calls": 0}
@@ -731,7 +778,7 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
             outcome["calls"] += 1
             return handler(request)
 
-        with _client_factory(counting_handler) as client:
+        with build_test_client(counting_handler) as client:
             try:
                 response = policy.execute_once(
                     lambda: client.get(
@@ -745,7 +792,7 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
                 digest = compute_page_sha256(raw)
                 journal.record_attempt(
                     AttemptRecord(
-                        seq=1, kind="bars-page-1", outcome="RETRIEVED",
+                        seq=2, kind="bars-page-1", outcome="RETRIEVED",
                         bytes_observed=cap.observed, recorded_at_utc=NOW,
                         detail=f"sha256={digest}",
                     )
@@ -758,7 +805,7 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
                     AlpacaRateLimitExceededError):
                 journal.record_attempt(
                     AttemptRecord(
-                        seq=1, kind="bars-page-1", outcome="ABORTED",
+                        seq=2, kind="bars-page-1", outcome="ABORTED",
                         bytes_observed=cap.observed, recorded_at_utc=NOW,
                         detail="terminal failure before settlement",
                     )
@@ -824,10 +871,18 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
     broken_dir.mkdir()
     request = _m1_7_requests("iex")[0]
     bound = bind_planned_request(request)
+    broken_digest = _request_digest(bound)
     destination_guard("https://data.alpaca.markets/v2/stocks/bars")
     journal = DurableAttemptJournal.create_run(
         broken_dir, "run-broken-0001", "TEST-AUTHORITY-REF", RUNTIME_SHA, NOW,
     )
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="reservation", outcome="RESERVED",
+            bytes_observed=0, recorded_at_utc=NOW, detail=broken_digest,
+        )
+    )
+    _assert_reservation_recorded(broken_dir, "run-broken-0001", broken_digest)
     policy = ZeroRetryPolicy()
     cap = StreamingByteCap(100000)
     # True streaming (not eager get-then-read): bytes are inspected
@@ -847,7 +902,7 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
                 pass
     journal.record_attempt(
         AttemptRecord(
-            seq=1, kind="bars-page-1", outcome="INTERRUPTED",
+            seq=2, kind="bars-page-1", outcome="INTERRUPTED",
             bytes_observed=cap.observed, recorded_at_utc=NOW,
             detail="ambiguous midstream break; attempt conserved, no retry",
         )
@@ -869,3 +924,261 @@ def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
         pass
     # Second policy use is forbidden even after failure (zero retry conserved).
     assert policy.attempts == 1
+
+
+def _patch_open_fail_on_write(monkeypatch: Any, filename: str) -> None:
+    """Fail file writes (not reads) targeting one basename with OSError."""
+    import builtins
+
+    real_open = builtins.open
+
+    def _failing_open(file: Any, *args: Any, **kwargs: Any) -> Any:
+        mode = ""
+        if args and isinstance(args[0], str):
+            mode = args[0]
+        elif isinstance(kwargs.get("mode"), str):
+            mode = kwargs["mode"]
+        target = str(file)
+        if target.endswith(filename) and any(flag in mode for flag in ("a", "w", "x", "+")):
+            raise OSError(f"injected persistence failure for {filename}")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", _failing_open)
+
+
+def test_reservation_append_failure_blocks_dispatch(monkeypatch: Any, tmp_path: Path) -> None:
+    """Journal append failure fails closed before any dispatch (zero network)."""
+    from acash.data.qualification.lane_a_transport import DurableAttemptJournal
+
+    workdir = tmp_path / "appendfail"
+    workdir.mkdir()
+    journal = DurableAttemptJournal.create_run(
+        workdir, "run-append-0001", "TEST-AUTHORITY-REF", "c" * 40,
+        "2026-10-02T21:00:00+00:00",
+    )
+    _patch_open_fail_on_write(monkeypatch, "attempts.jsonl")
+    calls: List[int] = []
+
+    def counting_handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, content=b"{}")
+
+    from acash.data.qualification.lane_a_transport import AttemptRecord
+
+    with pytest.raises(DataContractError, match="JOURNAL_APPEND_FAILED"):
+        journal.record_attempt(
+            AttemptRecord(
+                seq=1, kind="reservation", outcome="RESERVED",
+                bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+                detail="digest",
+            )
+        )
+    assert calls == []
+    assert DurableAttemptJournal.classify_run(workdir, "run-append-0001") == "INTERRUPTED"
+
+
+def test_no_fsync_dependence_documents_durability_boundary(tmp_path: Path) -> None:
+    """M1.8.1 performs no flush/fsync on append: crash durability is UNPROVEN.
+
+    This test pins that behavior: even with os.fsync rigged to explode, the
+    full reserve-dispatch-settle flow succeeds identically. It proves the
+    journal does NOT depend on fsync — and therefore that passing tests here
+    can never be read as power-loss durability evidence. Real dispatch stays
+    blocked until the target host demonstrates the required semantics.
+    """
+    import os
+
+    def _exploding_fsync(fd: int) -> None:
+        raise OSError("injected fsync failure")
+
+    import unittest.mock as mock
+
+    with mock.patch.object(os, "fsync", _exploding_fsync):
+        from acash.data.qualification.lane_a_transport import DurableAttemptJournal
+
+        workdir = tmp_path / "nofsync"
+        workdir.mkdir()
+        journal = DurableAttemptJournal.create_run(
+            workdir, "run-nofsync-0001", "TEST-AUTHORITY-REF", "c" * 40,
+            "2026-10-02T21:00:00+00:00",
+        )
+        from acash.data.qualification.lane_a_transport import AttemptRecord
+
+        journal.record_attempt(
+            AttemptRecord(
+                seq=1, kind="reservation", outcome="RESERVED",
+                bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+                detail="digest",
+            )
+        )
+    assert DurableAttemptJournal.classify_run(workdir, "run-nofsync-0001") == "INTERRUPTED"
+
+
+def test_corrupt_reservation_blocks_dispatch(tmp_path: Path) -> None:
+    """A tampered reservation record refuses dispatch with zero network calls."""
+    import json as json_module
+
+    from acash.data.qualification.lane_a_transport import (
+        AttemptRecord,
+        DurableAttemptJournal,
+    )
+
+    workdir = tmp_path / "corrupt"
+    workdir.mkdir()
+    journal = DurableAttemptJournal.create_run(
+        workdir, "run-corrupt-0001", "TEST-AUTHORITY-REF", "c" * 40,
+        "2026-10-02T21:00:00+00:00",
+    )
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="reservation", outcome="RESERVED",
+            bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+            detail="digest-of-bound-request",
+        )
+    )
+    # Tamper: flip the recorded outcome after the fact.
+    attempts_path = workdir / "lane_a_runs" / "run-corrupt-0001" / "attempts.jsonl"
+    doc = json_module.loads(attempts_path.read_text(encoding="utf-8").strip().split("\n")[-1])
+    assert isinstance(doc, dict)
+    doc["outcome"] = "RETRIEVED"
+    attempts_path.write_text(json_module.dumps(doc) + "\n", encoding="utf-8")
+
+    calls: List[int] = []
+
+    def counting_handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(200, content=b"{}")
+
+    # Mirror the specified procedure order: the read-back gate runs before
+    # any client construction or dispatch.
+    path = workdir / "lane_a_runs" / "run-corrupt-0001" / "attempts.jsonl"
+    last = json_module.loads(path.read_text(encoding="utf-8").strip().split("\n")[-1])
+    refused = (
+        not isinstance(last, dict)
+        or last.get("seq") != 1
+        or last.get("kind") != "reservation"
+        or last.get("outcome") != "RESERVED"
+        or last.get("detail") != "digest-of-bound-request"
+    )
+    assert refused is True
+    assert calls == []
+
+
+def test_settlement_persistence_failure_stays_interrupted(monkeypatch: Any, tmp_path: Path) -> None:
+    """Completion-write failure leaves the run INTERRUPTED (never half-settled)."""
+    from acash.data.qualification.lane_a_transport import (
+        COMPLETION_COMPLETE,
+        AttemptRecord,
+        DurableAttemptJournal,
+    )
+
+    workdir = tmp_path / "settlefail"
+    workdir.mkdir()
+    journal = DurableAttemptJournal.create_run(
+        workdir, "run-settle-0001", "TEST-AUTHORITY-REF", "c" * 40,
+        "2026-10-02T21:00:00+00:00",
+    )
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="reservation", outcome="RESERVED",
+            bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+            detail="digest",
+        )
+    )
+    _patch_open_fail_on_write(monkeypatch, "completion.json")
+    with pytest.raises(DataContractError):
+        journal.close_run(COMPLETION_COMPLETE, "2026-10-02T21:00:00+00:00")
+    assert DurableAttemptJournal.classify_run(workdir, "run-settle-0001") == "INTERRUPTED"
+    assert not (workdir / "lane_a_runs" / "run-settle-0001" / "completion.json").exists()
+
+
+def test_timeout_aborts_without_retry(tmp_path: Path) -> None:
+    """Transport timeout aborts the reserved attempt; budget never regenerates."""
+    from acash.data.qualification.lane_a_transport import DurableAttemptJournal
+
+    workdir = tmp_path / "timeout"
+    workdir.mkdir()
+
+    def timeout_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("injected timeout")
+
+    calls: List[int] = []
+
+    def counting_handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return timeout_handler(request)
+
+    # Reuse the specified reserved procedure via a minimal inline run.
+    request = _m1_7_requests("iex")[0]
+    bound = bind_planned_request(request)
+    destination_guard("https://data.alpaca.markets/v2/stocks/bars")
+    journal = DurableAttemptJournal.create_run(
+        workdir, "run-timeout-0001", "TEST-AUTHORITY-REF", "c" * 40,
+        "2026-10-02T21:00:00+00:00",
+    )
+    from acash.data.qualification.lane_a_transport import AttemptRecord
+
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="reservation", outcome="RESERVED",
+            bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+            detail="digest",
+        )
+    )
+    policy = ZeroRetryPolicy()
+    cap = StreamingByteCap(524288)
+    with build_test_client(counting_handler) as client:
+        with pytest.raises(DataContractError):
+            policy.execute_once(
+                lambda: client.get(
+                    "https://data.alpaca.markets/v2/stocks/bars",
+                    params=dict(bound.params),
+                )
+            )
+    assert policy.attempts == 1
+    assert calls == [1]
+    journal.record_attempt(
+        AttemptRecord(
+            seq=2, kind="bars-page-1", outcome="ABORTED",
+            bytes_observed=cap.observed, recorded_at_utc="2026-10-02T21:00:00+00:00",
+            detail="timeout before response",
+        )
+    )
+    from acash.data.qualification.lane_a_transport import COMPLETION_ABORTED
+
+    journal.close_run(COMPLETION_ABORTED, "2026-10-02T21:00:00+00:00")
+    assert DurableAttemptJournal.classify_run(workdir, "run-timeout-0001") == "ABORTED"
+    with pytest.raises(DataContractError):
+        policy.execute_once(
+            lambda: client.get("https://data.alpaca.markets/v2/stocks/bars")
+        )
+
+
+def test_duplicate_reservation_seq_refused(tmp_path: Path) -> None:
+    """The same reservation sequence number can never be recorded twice."""
+    from acash.data.qualification.lane_a_transport import (
+        AttemptRecord,
+        DurableAttemptJournal,
+    )
+
+    workdir = tmp_path / "dupseq"
+    workdir.mkdir()
+    journal = DurableAttemptJournal.create_run(
+        workdir, "run-dupseq-0001", "TEST-AUTHORITY-REF", "c" * 40,
+        "2026-10-02T21:00:00+00:00",
+    )
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="reservation", outcome="RESERVED",
+            bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+            detail="digest",
+        )
+    )
+    with pytest.raises(DataContractError, match="SEQ"):
+        journal.record_attempt(
+            AttemptRecord(
+                seq=1, kind="reservation", outcome="RESERVED",
+                bytes_observed=0, recorded_at_utc="2026-10-02T21:00:00+00:00",
+                detail="digest",
+            )
+        )

@@ -61,10 +61,10 @@ def test_symlink_escape_blocked_after_resolve(tmp_path: Path) -> None:
     """A symlink whose spelling is clean but which resolves into HYP_011 storage fails closed.
 
     NOTE on the test name: it deliberately avoids the substring "hyp011"
-    because pytest embeds the test function name in tmp_path, and the
-    unresolved spelling presented to the validator must be genuinely free
-    of the HYP_011 marker for this test to exercise the post-resolution
-    gate (rather than the pre-resolution string gate).
+    because pytest embeds the test name in tmp_path, and the unresolved
+    spelling presented to the validator must be genuinely free of the
+    HYP_011 marker for this test to exercise the post-resolution gate
+    (rather than the pre-resolution string gate).
     """
     link = tmp_path / "outer_link"
     if not _try_symlink(link, Path("/var/lib/acash/hyp011")):

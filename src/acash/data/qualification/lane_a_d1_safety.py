@@ -45,6 +45,14 @@ ledger will be invented. Durable file-sync is ordering/an-observation of
 best effort only — it is NOT proof of crash/power-loss durability, and any
 future real dispatch stays blocked until the target filesystem demonstrates
 the required durability semantics.
+Reservation ordering (specified dispatch procedure, proven by the offline
+end-to-end test, not by production code — no executor exists here):
+create_run binds authority; a request-specific RESERVED attempt (seq 1,
+carrying the bound-request digest) is recorded and read back verified
+BEFORE any dispatch; terminal failures settle ABORTED; ambiguous failures
+settle nothing (INTERRUPTED, conserved). M1.8.1 performs no flush/fsync on
+append — verified by source inspection — so crash durability is unproven
+and is recorded as blocking, never inferred.
 
 OPEN CONTRACT QUESTIONS (unresolved authority decisions, recorded — never
 silently defaulted):
