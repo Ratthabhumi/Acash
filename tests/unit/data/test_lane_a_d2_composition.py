@@ -22,9 +22,14 @@ from acash.data.qualification.lane_a_canary import (
     canonical_scope_digest,
     canary_planned_requests,
 )
-from acash.data.qualification.lane_a_d2_composition import run_d2_composition
+from acash.data.qualification.lane_a_d2_composition import (
+    run_d2_composition,
+    validate_plan_binding,
+    verify_evidence_lineage,
+)
 from acash.data.qualification.lane_a_transport import (
     DurableAttemptJournal,
+    store_raw_evidence,
     verify_evidence_pair,
 )
 
@@ -218,3 +223,194 @@ def test_no_network_imports_in_composition_module() -> None:
                    "import requests", "import aiohttp", "APCA-API",
                    "api_secret", "credential_provider", "os.environ"):
         assert banned not in source, f"banned surface {banned!r} present"
+
+
+def _run_kwargs(tmp: str, run_id: str, plan: CanaryPlan, transport: Any) -> Any:
+    return {
+        "plan": plan,
+        "transport": transport,
+        "evidence_root": Path(tmp) / "ev",
+        "run_id": run_id,
+        "authority_ref": "OP-2026-10-15-001",
+        "runtime_sha": RUNTIME_SHA,
+        "created_at_utc": _now(),
+        "payload_fn": _payload,
+    }
+
+
+def test_binding_rejects_authority_runtime_mismatch() -> None:
+    plan = _plan()
+    for kwargs_change in (
+        {"authority_ref": "OP-OTHER"},
+        {"runtime_sha": "c" * 40},
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            kwargs = _run_kwargs(tmp, "run_bind_001", plan,
+                                 FakeD2Transport(script=[]))
+            kwargs.update(kwargs_change)
+            try:
+                run_d2_composition(**kwargs)
+                assert False, f"mismatch admitted: {kwargs_change!r}"
+            except DataContractError:
+                pass
+            root = Path(tmp) / "ev"
+            assert DurableAttemptJournal.classify_run(root=root, run_id="run_bind_001") == "MISSING"
+
+
+def test_binding_rejects_tampered_plan() -> None:
+    import dataclasses
+
+    plan = _plan()
+    tampered = dataclasses.replace(plan, scope_digest="0" * 64)
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            validate_plan_binding(
+                tampered, "OP-2026-10-15-001", RUNTIME_SHA, _now())
+            assert False, "tampered digest must fail"
+        except DataContractError:
+            pass
+    empty = dataclasses.replace(plan, requests=())
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            validate_plan_binding(
+                empty, "OP-2026-10-15-001", RUNTIME_SHA, _now())
+            assert False, "empty plan must fail"
+        except DataContractError:
+            pass
+
+
+def test_binding_rejects_wrong_feed_requests() -> None:
+    other = _plan("sip")
+    import dataclasses
+
+    mixed = dataclasses.replace(other, feed="iex")
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            validate_plan_binding(
+                mixed, "OP-2026-10-15-001", RUNTIME_SHA, _now())
+            assert False, "feed/request mismatch must fail"
+        except DataContractError:
+            pass
+
+
+def test_exception_leaves_interrupted_never_complete() -> None:
+    plan = _plan()
+
+    class _ExplodingTransport:
+        def get(self, request_digest: str, page_token: str) -> Any:
+            raise RuntimeError("injected mid-run transport failure")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            run_d2_composition(
+                **_run_kwargs(tmp, "run_exc_001", plan, _ExplodingTransport()))
+            assert False, "transport explosion must propagate"
+        except RuntimeError:
+            pass
+        root = Path(tmp) / "ev"
+        assert DurableAttemptJournal.classify_run(root=root, run_id="run_exc_001") == "INTERRUPTED"
+        assert not (root / "lane_a_runs" / "run_exc_001" / "completion.json").is_file()
+
+
+def test_evidence_payload_readback_matches() -> None:
+    import hashlib
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 32, ""), CanaryPage("OK", 32, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_rb_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_rb_001"
+        for receipt in result.receipts:
+            raw = (run_dir / f"{receipt.evidence_name}.bin").read_bytes()
+            assert hashlib.sha256(raw).hexdigest() == receipt.content_sha256
+            assert len(raw) == receipt.byte_count == 32
+
+
+def test_lineage_rejects_swapped_receipt() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_sw_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_sw_001"
+        journal = ReservationJournal(run_dir / "attempts.jsonl", True)
+        assert len(result.receipts) == 2
+        first, second = result.receipts
+        swapped = [(first.seq, second.content_sha256, first.evidence_name)]
+        try:
+            verify_evidence_lineage(root, journal, swapped)
+            assert False, "swapped digest binding must fail"
+        except DataContractError:
+            pass
+
+
+def test_lineage_rejects_missing_and_tampered_artifacts() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_tm_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_tm_001"
+        victim = result.receipts[0]
+        (run_dir / f"{victim.evidence_name}.bin").write_bytes(b"tampered-bytes-00")
+        journal = ReservationJournal(run_dir / "attempts.jsonl", True)
+        expected = [(r.seq, "0" * 64, r.evidence_name) for r in result.receipts]
+        try:
+            verify_evidence_lineage(root, journal, expected)
+            assert False, "tampered pair must fail lineage"
+        except DataContractError:
+            pass
+
+
+def test_metadata_request_digest_schema() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_meta_001"
+        run_dir.mkdir(parents=True)
+        (run_dir / "run.json").write_text("{}")
+        good = store_raw_evidence(
+            root=root, run_id="run_meta_001", name="ok",
+            payload=b"payload-bytes",
+            metadata={"feed": "iex", "request_index": 0,
+                      "request_digest": "a" * 64},
+        )
+        assert good["byte_count"] == len(b"payload-bytes")
+        for bad_meta in (
+            {"feed": "iex", "request_digest": "not-hex"},
+            {"feed": "iex", "request_digest": "A" * 64},
+            {"feed": "iex", "api_key": "K" * 8},
+        ):
+            try:
+                store_raw_evidence(
+                    root=root, run_id="run_meta_001", name="bad",
+                    payload=b"payload-bytes", metadata=bad_meta)
+                assert False, f"bad metadata admitted: {bad_meta!r}"
+            except DataContractError:
+                pass
+
+
+def test_no_socket_use_on_exercised_path(monkeypatch: Any) -> None:
+    import socket
+
+    def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("socket must never be created on the offline path")
+
+    monkeypatch.setattr(socket, "socket", _boom)
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 24, ""), CanaryPage("OK", 24, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_nsock_001", plan, transport))
+        assert result.verdict == "TRANSPORT_PAGINATION_COMPLETE"

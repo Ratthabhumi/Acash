@@ -32,12 +32,16 @@ from typing import Any, Callable, List, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.data.qualification.lane_a_canary import (
+    CANARY_FEEDS,
     CanaryBudget,
     CanaryPage,
     CanaryPlan,
     ReservationJournal,
     STOP_OUTCOMES,
     _first_page_digest,
+    audit_reservation_history,
+    canonical_scope_digest,
+    canary_planned_requests,
     continuation_digest,
 )
 from acash.data.qualification.lane_a_transport import (
@@ -72,6 +76,93 @@ class D2ComposedResult:
     dispatches: List[str] = field(default_factory=list)
 
 
+def validate_plan_binding(
+    plan: CanaryPlan, authority_ref: str, runtime_sha: str, now_utc: str
+) -> None:
+    """Validate plan/authority/runtime consistency BEFORE any run artifacts.
+
+    Rejects: empty or non-canonical requests, feed mismatch, digest
+    mismatch (recomputed over the actual requests), authority/runtime
+    identity mismatch, and out-of-window approval. Direct-constructed
+    plans that bypass CanaryPlan.build() fail here, never at dispatch.
+    Structural equality never proves genuine human approval.
+    """
+    if not isinstance(plan.requests, tuple) or not plan.requests:
+        raise DataContractError("D2_EMPTY_PLAN: no canonical requests bound.")
+    if plan.feed not in CANARY_FEEDS:
+        raise DataContractError(f"D2_PLAN_BAD_FEED: {plan.feed!r}.")
+    expected_requests = canary_planned_requests(plan.feed)
+    if tuple(plan.requests) != expected_requests:
+        raise DataContractError(
+            "D2_PLAN_REQUESTS_NOT_CANONICAL: requests differ from the "
+            "M1.7-planned canonical set for this feed."
+        )
+    expected_digest = canonical_scope_digest(
+        list(plan.requests),
+        plan.approval.max_operations,
+        plan.approval.max_bytes,
+    )
+    if expected_digest != plan.scope_digest or plan.scope_digest != plan.approval.scope_digest:
+        raise DataContractError("D2_PLAN_SCOPE_DIGEST_MISMATCH.")
+    if authority_ref != plan.approval.approval_ref:
+        raise DataContractError("D2_AUTHORITY_REF_MISMATCH.")
+    if runtime_sha != plan.approval.runtime_sha or runtime_sha != plan.runtime_sha:
+        raise DataContractError("D2_RUNTIME_SHA_MISMATCH.")
+    if not plan.approval.is_within_window(now_utc):
+        raise DataContractError("D2_APPROVAL_WINDOW_INVALID.")
+
+
+def verify_evidence_lineage(
+    evidence_root: Path,
+    journal: ReservationJournal,
+    expected: List[Tuple[int, str, str]],
+) -> None:
+    """Verify the full request -> reservation -> evidence lineage.
+
+    Each expected (seq, request_digest, evidence_name) must satisfy: a
+    matching reserved record in the audited journal history, a settled
+    outcome for that seq, an ADMISSIBLE raw/receipt pair, and receipt
+    metadata binding the same request digest. Anything else fails closed.
+    """
+    import json
+
+    records = journal.read_reservations()
+    settled = audit_reservation_history(records)
+    reserved = {
+        int(r["seq"]): str(r["request_digest"])
+        for r in records
+        if r.get("event") == "reserved"
+    }
+    run_dir = journal._file.parent  # noqa: SLF001 — same-package composition
+    run_id = run_dir.name
+    for seq, digest, name in expected:
+        if reserved.get(seq) != digest:
+            raise DataContractError(
+                f"D2_LINEAGE_RESERVATION_MISMATCH: seq {seq}."
+            )
+        if seq not in settled:
+            raise DataContractError(
+                f"D2_LINEAGE_UNSETTLED: seq {seq}."
+            )
+        if verify_evidence_pair(root=evidence_root, run_id=run_id, name=name) != "ADMISSIBLE":
+            raise DataContractError(
+                f"D2_LINEAGE_NOT_ADMISSIBLE: {name}."
+            )
+        try:
+            receipt = json.loads(
+                (run_dir / f"{name}.receipt.json").read_bytes().decode("utf-8")
+            )
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
+            raise DataContractError(
+                f"D2_LINEAGE_RECEIPT_CORRUPT: {name}."
+            ) from exc
+        metadata = receipt.get("metadata") if isinstance(receipt, dict) else None
+        if not isinstance(metadata, dict) or metadata.get("request_digest") != digest:
+            raise DataContractError(
+                f"D2_LINEAGE_RECEIPT_BINDING_MISMATCH: {name}."
+            )
+
+
 def run_d2_composition(
     plan: CanaryPlan,
     transport: Any,
@@ -85,11 +176,13 @@ def run_d2_composition(
     """Compose reserve -> fake dispatch -> settle -> evidence, fail-closed.
 
     Every dispatch is reserved first; every settled attempt persists one
-    immutable evidence pair; the run verifies ADMISSIBLE for all pairs and
-    closes the lifecycle journal COMPLETE only then, ABORTED otherwise.
-    Any breach (budget, digest, receipt, halt outcome) stops the run with
-    no retry, no resume, and no silent recovery.
+    immutable evidence pair; the run verifies full lineage for all pairs
+    and closes the lifecycle journal COMPLETE only then, ABORTED for
+    handled halt outcomes. Any other exception escapes WITHOUT closing:
+    the run stays INTERRUPTED (never COMPLETE), non-resumable under the
+    same run id. Any breach stops the run with no retry and no recovery.
     """
+    validate_plan_binding(plan, authority_ref, runtime_sha, created_at_utc)
     lifecycle = DurableAttemptJournal.create_run(
         root=evidence_root,
         run_id=run_id,
@@ -106,6 +199,7 @@ def run_d2_composition(
     seen_chain_tokens: set[Tuple[int, str]] = set()
     receipts: List[D2EvidenceReceipt] = []
     dispatches: List[str] = []
+    seq_to_digest: dict[int, str] = {}
     pending: List[Tuple[int, str]] = [
         (index, "") for index, _ in plan.request_digests()
     ]
@@ -120,6 +214,7 @@ def run_d2_composition(
         seq += 1
         budget.reserve_operation()
         journal.reserve(seq, request_digest)
+        seq_to_digest[seq] = request_digest
         page = transport.get(request_digest, token)
         if not isinstance(page, CanaryPage):
             raise DataContractError(
@@ -145,7 +240,11 @@ def run_d2_composition(
             run_id=run_dir.name,
             name=evidence_name,
             payload=bytes(payload),
-            metadata={"feed": plan.feed, "request_index": index},
+            metadata={
+                "feed": plan.feed,
+                "request_index": index,
+                "request_digest": request_digest,
+            },
         )
         receipts.append(
             D2EvidenceReceipt(
@@ -165,15 +264,11 @@ def run_d2_composition(
                 )
             seen_chain_tokens.add(chain_key)
             pending.append((index, page.next_token))
-    for receipt_entry in receipts:
-        state = verify_evidence_pair(
-            root=evidence_root, run_id=run_dir.name, name=receipt_entry.evidence_name
-        )
-        if state != "ADMISSIBLE":
-            raise DataContractError(
-                f"D2_EVIDENCE_NOT_ADMISSIBLE: {receipt_entry.evidence_name} "
-                f"classified {state}."
-            )
+    expected = [
+        (receipt_entry.seq, seq_to_digest[receipt_entry.seq], receipt_entry.evidence_name)
+        for receipt_entry in receipts
+    ]
+    verify_evidence_lineage(evidence_root, journal, expected)
     if halted_outcome is not None:
         lifecycle.close_run(status="ABORTED", completed_at_utc=created_at_utc)
         return D2ComposedResult(
