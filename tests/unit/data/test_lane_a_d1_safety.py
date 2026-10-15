@@ -309,7 +309,9 @@ def test_oversized_success_payload_halts() -> None:
         except DataContractError:
             pass
     assert cap.halted is True
-    assert cap.observed == 0
+    # Honest overflow accounting: the breaching 100-byte chunk was consumed
+    # into the process, so observed counts it even though nothing returns.
+    assert cap.observed == 100
 
 
 def test_stream_interruption_preserves_exact_count() -> None:
@@ -498,7 +500,8 @@ def test_consume_chunk_boundaries_exact() -> None:
         assert False, "one byte past cap must halt"
     except DataContractError:
         pass
-    assert cap.observed == 10
+    # The breaching byte was consumed into the process before the halt.
+    assert cap.observed == 11
     assert cap.halted is True
     try:
         cap.consume(b"")
@@ -533,7 +536,8 @@ def test_overflow_after_partial_accumulation_halts_without_return() -> None:
             assert False, "second body must overflow the shared cap"
         except DataContractError:
             pass
-    assert cap.observed == len(first)
+    # Both bodies were consumed: observed accounts every delivered byte.
+    assert cap.observed == len(first) + len(second)
     assert cap.halted is True
 
 

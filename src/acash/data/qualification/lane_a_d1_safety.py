@@ -22,9 +22,10 @@ Contracts:
 - ``StreamingByteCap``: chunk-wise accumulation with a hard cap covering
   success AND error bodies; overflow raises before further reads; the
   observed total is exact.
-- ``DestinationGuard``: https + data.alpaca.markets + /v2/stocks/bars
-  prefix only; redirects denied (httpx follow_redirects forced False;
-  3xx raises instead of following).
+- ``DestinationGuard``: https + data.alpaca.markets + exact /v2/stocks/bars
+  path only (no prefix/suffix variations, query strings, or fragments);
+  redirects denied (httpx follow_redirects forced False; 3xx raises
+  instead of following).
 - ``CredentialIsolation``: no ambient credential loading. A client
   without an explicitly injected provider fails closed before any
   transport use; synthetic test credentials are never persisted.
@@ -35,36 +36,31 @@ Contracts:
   posture (no redirects, no ambient proxy inheritance, TLS always verified,
   explicit timeout).
 
-Ledger authority decision (C4 audit outcome): the single canonical source
-of truth for the future acquisition attempt ledger is M1.8.1
-``DurableAttemptJournal`` (create-once runs, append-only lines, completion
-markers, no-resume classification). ``ZeroRetryPolicy`` remains the
-execution policy (attempt counting without sleep/retry), and the canary
-``ReservationJournal`` (unmerged PR #32) is NOT a second ledger: no third
-ledger will be invented. Durable file-sync is ordering/an-observation of
-best effort only — it is NOT proof of crash/power-loss durability, and any
-future real dispatch stays blocked until the target filesystem demonstrates
-the required durability semantics.
-Reservation ordering (specified dispatch procedure, proven by the offline
-end-to-end test, not by production code — no executor exists here):
-create_run binds authority; a request-specific RESERVED attempt (seq 1,
-carrying the bound-request digest) is recorded and read back verified
-BEFORE any dispatch; terminal failures settle ABORTED; ambiguous failures
-settle nothing (INTERRUPTED, conserved). M1.8.1 performs no flush/fsync on
-append — verified by source inspection — so crash durability is unproven
-and is recorded as blocking, never inferred.
+Ledger authority decision (Option A architecture):
+- Sovereign Pre-Dispatch Reservation Gate: PR #32 ``ReservationJournal``
+  (atomic O_EXCL creation, per-attempt fsync, request-digest binding, budget
+  consumption, fail-closed poisoning on I/O failure). Network sockets cannot
+  open without a prior synced reservation in ``reservations.jsonl``.
+- Run Lifecycle & Evidence Receipt Ledger: M1.8.1 ``DurableAttemptJournal``
+  (immutable run metadata, observed byte metrics, page hashes, and run
+  classification in ``attempts.jsonl``, ``marker.json``, ``completion.json``).
+- Durability Boundary: Neither journal alone proves power-loss crash durability
+  across arbitrary host filesystems (Linux fsync(2) file sync does not
+  guarantee parent directory entry persistence without filesystem-level directory
+  fsync). Crash durability is UNPROVEN and is recorded as a blocking production
+  prerequisite for real acquisition, never inferred from unit tests.
 
 OPEN CONTRACT QUESTIONS (unresolved authority decisions, recorded — never
 silently defaulted):
 - ``asof``: the governed M1.7 nine-field canonical request has no ``asof``
-  field (locked by regression test). Official Alpaca semantics give ``asof``
-  a current-day default for symbol mapping. Assessment: immaterial for the
-  frozen canary scope (VOO/BND/GLD/BIL exhibit no mapping change across
-  2026-09-28..2026-10-02), but MATERIAL in general — a default that varies
-  with request time breaks point-in-time reproducibility. Appending ``asof``
-  as a tenth field (or any scope/digest change) requires a separately
-  reviewed contract migration; until then the future dispatch gate fails
-  closed on any request outside the frozen nine-field shape.
+  field (locked by regression test). Official Alpaca documentation establishes
+  that ``asof`` defaults to current day and governs historical symbol mapping.
+  While primary ETFs (VOO/BND/GLD/BIL) are believed to have had no symbol
+  remapping during the frozen five-session canary window (2026-09-28..2026-10-02),
+  this is an inference for transport feasibility only, NOT provider-verified PIT
+  qualification. Queries lacking explicit ``asof`` cannot be qualified as PIT
+  investment history. Multi-year data qualification requires a separately ratified
+  contract migration for PIT symbol mapping.
 - Daily end semantics: ``end`` is the inclusive calendar date exactly as
   bound (2026-10-02 means the full session; never silently expanded).
 - Production trust root: no hardcoded approval keys, no fabricated signed
@@ -96,7 +92,8 @@ from acash.data.qualification.lane_a_authority import (
 )
 
 CANARY_ORIGIN: str = "https://data.alpaca.markets"
-CANARY_PATH_PREFIX: str = "/v2/stocks/bars"
+CANARY_EXACT_PATH: str = "/v2/stocks/bars"
+CANARY_PATH_PREFIX: str = CANARY_EXACT_PATH  # Backward-compatible alias
 CANONICAL_PARAM_KEYS: Tuple[str, ...] = (
     "symbols",
     "timeframe",
@@ -168,7 +165,7 @@ def destination_guard(url: str) -> None:
         raise DataContractError(f"D1_DESTINATION_ORIGIN_DENIED: {url!r}.")
     if "%" in parsed.path:
         raise DataContractError(f"D1_DESTINATION_ENCODED_PATH: {url!r}.")
-    if parsed.path != CANARY_PATH_PREFIX:
+    if parsed.path != CANARY_EXACT_PATH:
         raise DataContractError(f"D1_DESTINATION_PATH_DENIED: {url!r}.")
     if parsed.query or parsed.fragment:
         raise DataContractError(f"D1_DESTINATION_QUERY_FRAGMENT_DENIED: {url!r}.")
@@ -211,29 +208,40 @@ class StreamingByteCap:
         self.halted = False
 
     def consume(self, chunk: bytes) -> None:
-        """Account one chunk; overflow halts and raises before further reads."""
+        """Account one chunk; overflow halts and raises before further reads.
+
+        All chunks delivered to this method are accounted in ``observed``,
+        including any excess chunk that triggers the cap breach, ensuring
+        that observed-byte accounting honestly reflects all content bytes
+        consumed into the process.
+        """
         if self.halted:
             raise DataContractError("D1_STREAM_HALTED.")
         if not isinstance(chunk, (bytes, bytearray)):
             raise DataContractError("D1_STREAM_BAD_CHUNK.")
-        if self.observed + len(chunk) > self._max_bytes:
+        self.observed += len(chunk)
+        if self.observed > self._max_bytes:
             self.halted = True
             raise DataContractError(
-                f"D1_STREAM_BYTES_EXCEEDED: cap {self._max_bytes} breached."
+                f"D1_STREAM_BYTES_EXCEEDED: cap {self._max_bytes} breached: "
+                f"observed {self.observed} bytes."
             )
-        self.observed += len(chunk)
 
 
 def read_capped(response: httpx.Response, cap: StreamingByteCap) -> bytes:
     """Read a response body chunk-wise under the cap (exact accounting).
 
     Accounting unit (definition): DECODED content bytes yielded by the
-    transport iterator. This is exactly the byte population that lands in
-    memory and in evidence. It excludes HTTP headers, chunked-transfer
-    framing, and TLS framing, which are never counted and never claimed.
-    When the provider applies a content coding, the decoded (inflated)
-    bytes are what the cap constrains: the stricter bound is preserved and
-    wire-byte counts are never reported.
+    transport iterator (httpx.Response.iter_bytes()). This accounts the
+    decompressed byte population that lands in process memory and in
+    evidence. It does NOT equal original raw wire bytes when content
+    encoding (gzip/deflate/brotli/zstd) is active. Official HTTPX semantics
+    distinguish iter_bytes() from iter_raw(). Hashing decoded bytes proves
+    memory-content integrity, NOT identical wire response reproduction.
+    For D3 real dispatch, either: (1) Accept-Encoding: identity must be
+    enforced to guarantee wire == decoded bytes, or (2) a dual-evidence
+    contract must be ratified to bound and store both wire iter_raw() and
+    decoded iter_bytes().
 
     Post-conditions: on success the returned body length equals the
     cap-observed delta for this call; on overflow or midstream transport
@@ -302,7 +310,12 @@ def build_test_client(
 
 
 def build_executor_client(timeout_seconds: float = 30.0) -> httpx.Client:
-    """Construct the future executor transport with pinned safety posture.
+    """Construct future executor transport with pinned safety posture (OFFLINE).
+
+    Note: This factory establishes transport configuration boundaries for
+    future executor implementation. No automated runtime consumer invokes it
+    in D1/D2, no credentials exist or are loaded, and live network dispatch is
+    disabled by construction.
 
     - Redirects NEVER followed (3xx is classified fail-closed instead).
     - Ambient proxy environment NEVER inherited (``trust_env=False``): proxy
