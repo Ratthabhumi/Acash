@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import httpx
 import pytest
@@ -128,12 +128,14 @@ def test_bind_request_rejects_shape_violations() -> None:
 
 
 def test_destination_guard() -> None:
-    destination_guard("https://data.alpaca.markets/v2/stocks/bars?symbols=VOO")
+    destination_guard("https://data.alpaca.markets/v2/stocks/bars")
     for bad in (
         "http://data.alpaca.markets/v2/stocks/bars",
         "https://evil.example.com/v2/stocks/bars",
         "https://data.alpaca.markets/v2/orders",
         "https://data.alpaca.markets.evil.example.com/v2/stocks/bars",
+        "https://data.alpaca.markets/v2/stocks/bars?symbols=VOO",
+        "https://data.alpaca.markets/v2/stocks/bars#frag",
         "",
     ):
         try:
@@ -355,3 +357,515 @@ def test_credential_isolation_by_construction() -> None:
         assert banned not in source, f"credential surface {banned!r} present"
     text = source.lower()
     assert "bearer " not in text
+
+
+def test_destination_guard_adversarial_identities() -> None:
+    destination_guard("https://data.alpaca.markets/v2/stocks/bars")
+    for bad in (
+        # Extra path suffixes change endpoint identity.
+        "https://data.alpaca.markets/v2/stocks/bars/extra",
+        "https://data.alpaca.markets/v2/stocks/barsextra",
+        "https://data.alpaca.markets/v2/stocks/bars/",
+        # Explicit ports (including the default) are not the canonical origin.
+        "https://data.alpaca.markets:8443/v2/stocks/bars",
+        "https://data.alpaca.markets:443/v2/stocks/bars",
+        # Userinfo injection.
+        "https://user:pass@data.alpaca.markets/v2/stocks/bars",
+        "https://user@data.alpaca.markets/v2/stocks/bars",
+        # Hostname lookalikes.
+        "https://data-alpaca-markets.com/v2/stocks/bars",
+        "https://data.alpaca.markets.evil.example.com/v2/stocks/bars",
+        "https://evildata.alpaca.markets/v2/stocks/bars",
+        # Query and fragment never belong in the destination identity.
+        "https://data.alpaca.markets/v2/stocks/bars?symbols=VOO&x=1",
+        "https://data.alpaca.markets/v2/stocks/bars#section",
+        # Percent-encoded path variants.
+        "https://data.alpaca.markets/v2/stocks/%62ars",
+        "https://data.alpaca.markets/v2/stocks/bars%2F..",
+        "https://data.alpaca.markets/v2/stocks/bars%00",
+        # Case and malformed inputs.
+        "https://data.alpaca.markets/V2/Stocks/Bars",
+        "https://data.alpaca.markets",
+        "",
+        "not-a-url::::",
+    ):
+        try:
+            destination_guard(bad)
+            assert False, f"bad destination admitted: {bad!r}"
+        except DataContractError:
+            pass
+    try:
+        destination_guard(None)  # type: ignore[arg-type]
+        assert False, "None destination admitted"
+    except DataContractError:
+        pass
+
+
+def test_executor_client_pinned_posture(monkeypatch: Any) -> None:
+    import httpx as httpx_module
+
+    from acash.data.qualification.lane_a_d1_safety import build_executor_client
+
+    client = build_executor_client()
+    assert client.follow_redirects is False
+    assert client.trust_env is False
+    assert client.timeout.read == 30.0
+    # TLS verification is consumed into the transport at construction; pin it
+    # by intercepting the constructor kwargs (no network involved).
+    captured: Dict[str, Any] = {}
+    real_client = httpx_module.Client
+
+    def spy(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return real_client(follow_redirects=False, trust_env=False)
+
+    monkeypatch.setattr(httpx_module, "Client", spy)
+    build_executor_client(timeout_seconds=7.5)
+    assert captured.get("verify") is True
+    assert captured.get("follow_redirects") is False
+    assert captured.get("trust_env") is False
+    assert captured.get("timeout") == 7.5
+    custom = build_executor_client(timeout_seconds=5)
+    assert custom.timeout.read == 5.0
+    for bad_timeout in (0, -1, "30", True, None):
+        try:
+            build_executor_client(timeout_seconds=bad_timeout)  # type: ignore[arg-type]
+            assert False, f"bad timeout admitted: {bad_timeout!r}"
+        except DataContractError:
+            pass
+    # Hostile ambient environment changes nothing: no proxy inheritance,
+    # no credential pickup (the factory takes no provider at all).
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:8080")
+    monkeypatch.setenv("ACASH_ALPACA_API_KEY_ID", "junk")
+    monkeypatch.setenv("ACASH_ALPACA_API_SECRET", "junk")
+    hostile = build_executor_client()
+    assert hostile.trust_env is False
+    assert hostile.follow_redirects is False
+    destination_guard("https://data.alpaca.markets/v2/stocks/bars")
+
+
+def test_redirect_all_3xx_denied() -> None:
+    for status in (300, 301, 302, 303, 304, 305, 307, 308):
+        def handler(request: httpx.Request, _s: int = status) -> httpx.Response:
+            return httpx.Response(_s, headers={"location": "https://evil.example.com/"})
+
+        with build_test_client(handler) as client:
+            response = client.get("https://data.alpaca.markets/v2/stocks/bars")
+            assert response.status_code == status
+            try:
+                classify_response(response)
+                assert False, f"3xx {status} must be refused"
+            except DataContractError as exc:
+                assert "D1_REDIRECT_DENIED" in str(exc)
+
+
+def test_canonical_contract_is_exactly_nine_fields_no_asof() -> None:
+    """Regression lock: M1.7 stays nine fields; asof needs contract migration."""
+    for request in _m1_7_requests("iex") + _m1_7_requests("sip"):
+        params = canonical_query_parameters(request)
+        assert [k for k, _ in params] == [
+            "symbols", "timeframe", "start", "end", "adjustment",
+            "feed", "sort", "limit", "currency",
+        ]
+        assert "asof" not in [k for k, _ in params]
+        assert "asof" not in [v for _, v in params]
+
+
+def test_daily_end_semantics_exact_no_expansion() -> None:
+    """end=2026-10-02 binds the full session date verbatim (inclusive, unexpanded)."""
+    request = _m1_7_requests("iex")[0]
+    assert request.end_date.isoformat() == "2026-10-02"
+    values = dict(canonical_query_parameters(request))
+    assert values["end"] == "2026-10-02"
+    assert "T" not in values["end"]
+
+
+def test_consume_chunk_boundaries_exact() -> None:
+    cap = StreamingByteCap(10)
+    cap.consume(b"")
+    assert cap.observed == 0
+    assert cap.halted is False
+    for _ in range(7):
+        cap.consume(b"x")
+    assert cap.observed == 7
+    cap.consume(b"yz1")  # exact fit: 7 + 3 == 10 passes
+    assert cap.observed == 10
+    assert cap.halted is False
+    try:
+        cap.consume(b"!")
+        assert False, "one byte past cap must halt"
+    except DataContractError:
+        pass
+    assert cap.observed == 10
+    assert cap.halted is True
+    try:
+        cap.consume(b"")
+        assert False, "halted cap must stay halted"
+    except DataContractError:
+        pass
+
+
+def test_overflow_after_partial_accumulation_halts_without_return() -> None:
+    import json
+
+    first = json.dumps({"bars": [1, 2, 3]}).encode()
+    second = json.dumps({"bars": [4, 5, 6]}).encode()
+    assert len(first) + len(second) > 30
+    cap = StreamingByteCap(30)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=first)
+
+    with build_test_client(handler) as client:
+        raw = read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap)
+    assert raw == first
+    assert cap.observed == len(first)
+    assert cap.halted is False
+
+    def handler2(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=second)
+
+    with build_test_client(handler2) as client:
+        try:
+            read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap)
+            assert False, "second body must overflow the shared cap"
+        except DataContractError:
+            pass
+    assert cap.observed == len(first)
+    assert cap.halted is True
+
+
+def test_gzip_body_counts_decoded_bytes() -> None:
+    import gzip
+    import json
+
+    payload = json.dumps({"bars": [{"t": "2026-09-28T13:30:00Z"}]}).encode()
+    wire = gzip.compress(payload)
+    assert len(wire) != len(payload)
+    cap = StreamingByteCap(524288)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=wire, headers={"content-encoding": "gzip"}
+        )
+
+    with build_test_client(handler) as client:
+        response = client.get("https://data.alpaca.markets/v2/stocks/bars")
+        assert classify_response(response) == "OK"
+        raw = read_capped(response, cap)
+    # Accounting unit is decoded bytes (what lands in memory/evidence),
+    # never wire bytes: the cap constrains the inflated body.
+    assert raw == payload
+    assert cap.observed == len(payload)
+
+
+def test_content_length_exact_match_ok() -> None:
+    body = b'{"bars": []}'
+    cap = StreamingByteCap(100)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=body, headers={"content-length": str(len(body))}
+        )
+
+    with build_test_client(handler) as client:
+        assert read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap) == body
+    assert cap.observed == len(body)
+    assert cap.halted is False
+
+
+def test_content_length_mismatch_fails_closed() -> None:
+    for declared in ("5", "999999"):
+        body = b'{"bars": []}'
+        cap = StreamingByteCap(100)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200, content=body, headers={"content-length": declared}
+            )
+
+        with build_test_client(handler) as client:
+            try:
+                read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap)
+                assert False, f"length {declared} must fail"
+            except DataContractError as exc:
+                assert "D1_BODY_LENGTH_MISMATCH" in str(exc)
+        assert cap.observed == len(body)
+        assert cap.halted is True
+
+
+def test_content_length_skipped_when_encoded_or_unparseable() -> None:
+    import gzip
+
+    payload = b'{"bars": []}'
+    wire = gzip.compress(payload)
+    cap = StreamingByteCap(100)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Wrong encoded length is undecidable against decoded bytes: skip.
+        return httpx.Response(
+            200, content=wire,
+            headers={"content-encoding": "gzip", "content-length": "7"},
+        )
+
+    with build_test_client(handler) as client:
+        assert read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap) == payload
+    assert cap.observed == len(payload)
+    assert cap.halted is False
+
+    cap2 = StreamingByteCap(100)
+
+    def handler2(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=payload, headers={"content-length": "nope"})
+
+    with build_test_client(handler2) as client:
+        assert read_capped(client.get("https://data.alpaca.markets/v2/stocks/bars"), cap2) == payload
+    assert cap2.observed == len(payload)
+    assert cap2.halted is False
+
+
+def test_midstream_transport_failure_poisons_cap() -> None:
+    class _BreakingStream(httpx.SyncByteStream):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            # First pull yields a full 4096 window; the second pull breaks.
+            yield b"x" * 5000
+            raise httpx.DecodingError("injected mid-stream break")
+
+        def close(self) -> None:
+            return None
+
+    response = httpx.Response(200, stream=_BreakingStream())
+    cap = StreamingByteCap(100000)
+    try:
+        read_capped(response, cap)
+        assert False, "midstream break must raise"
+    except DataContractError as exc:
+        assert "D1_STREAM_INTERRUPTED" in str(exc)
+    # Exactly the bytes actually consumed are accounted; the cap is poisoned.
+    assert cap.observed == 4096
+    assert cap.halted is True
+    try:
+        cap.consume(b"")
+        assert False, "poisoned cap must stay halted"
+    except DataContractError:
+        pass
+
+
+def test_streaming_api_inspects_incrementally(monkeypatch: Any) -> None:
+    """read_capped never touches eager full-body accessors (.content/.read).
+
+    Any eager buffering path is booby-trapped at the Response class level;
+    success proves bytes flow exclusively through incremental iteration.
+    """
+
+    def _forbidden_read(self: Any) -> bytes:
+        raise AssertionError("eager full-body read is forbidden here")
+
+    monkeypatch.setattr(httpx.Response, "read", _forbidden_read)
+
+    pulls: List[str] = []
+
+    class _LazyStream(httpx.SyncByteStream):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            pulls.append("pull-1")
+            yield b"ab"
+            pulls.append("pull-2")
+            yield b"cd"
+
+        def close(self) -> None:
+            pulls.append("close")
+            return None
+
+    response = httpx.Response(200, stream=_LazyStream())
+    cap = StreamingByteCap(100)
+    assert read_capped(response, cap) == b"abcd"
+    assert cap.observed == 4
+    assert pulls == ["pull-1", "pull-2", "close"]
+
+
+def test_end_to_end_fake_acquisition_settles_or_halts(tmp_path: Path) -> None:
+    """C4: full offline acquisition pipeline with the canonical attempt ledger.
+
+    Ledger authority decision (recorded, not invented): M1.8.1
+    ``DurableAttemptJournal`` is the SINGLE canonical attempt ledger.
+    ``ZeroRetryPolicy`` is execution policy only; no third ledger exists.
+    Composes: canonical bind -> destination guard -> journal reservation ->
+    single dispatch -> streaming accounting -> hashing -> settlement.
+    Retrieval completeness (COMPLETE) never implies DATA_QUALIFIED: the
+    settled record carries transport vocabulary only.
+    """
+    import json as json_module
+
+    from acash.data.qualification.lane_a_transport import (
+        COMPLETION_ABORTED,
+        COMPLETION_COMPLETE,
+        AttemptRecord,
+        DurableAttemptJournal,
+    )
+
+    RUNTIME_SHA = "c" * 40
+    NOW = "2026-10-02T21:00:00+00:00"
+
+    def _run_once(
+        workdir: Path,
+        handler: Callable[[httpx.Request], httpx.Response],
+        run_id: str,
+    ) -> Dict[str, Any]:
+        from acash.data.qualification.lane_a_d1_safety import (
+            build_test_client as _client_factory,
+        )
+
+        request = _m1_7_requests("iex")[0]
+        bound = bind_planned_request(request)
+        destination_guard("https://data.alpaca.markets/v2/stocks/bars")
+        journal = DurableAttemptJournal.create_run(
+            workdir, run_id, "TEST-AUTHORITY-REF", RUNTIME_SHA, NOW,
+        )
+        assert DurableAttemptJournal.classify_run(workdir, run_id) == "INTERRUPTED"
+        policy = ZeroRetryPolicy()
+        cap = StreamingByteCap(524288)
+        outcome: Dict[str, Any] = {"status": "INTERRUPTED", "calls": 0}
+
+        def counting_handler(request: httpx.Request) -> httpx.Response:
+            outcome["calls"] += 1
+            return handler(request)
+
+        with _client_factory(counting_handler) as client:
+            try:
+                response = policy.execute_once(
+                    lambda: client.get(
+                        "https://data.alpaca.markets/v2/stocks/bars",
+                        params=dict(bound.params),
+                    )
+                )
+                verdict = classify_response(response)
+                assert verdict == "OK"
+                raw = read_capped(response, cap)
+                digest = compute_page_sha256(raw)
+                journal.record_attempt(
+                    AttemptRecord(
+                        seq=1, kind="bars-page-1", outcome="RETRIEVED",
+                        bytes_observed=cap.observed, recorded_at_utc=NOW,
+                        detail=f"sha256={digest}",
+                    )
+                )
+                journal.close_run(COMPLETION_COMPLETE, NOW)
+                outcome["status"] = "COMPLETE"
+                outcome["digest"] = digest
+                outcome["observed"] = cap.observed
+            except (DataContractError, AlpacaAuthenticationError, AlpacaAccessDeniedError,
+                    AlpacaRateLimitExceededError):
+                journal.record_attempt(
+                    AttemptRecord(
+                        seq=1, kind="bars-page-1", outcome="ABORTED",
+                        bytes_observed=cap.observed, recorded_at_utc=NOW,
+                        detail="terminal failure before settlement",
+                    )
+                )
+                journal.close_run(COMPLETION_ABORTED, NOW)
+                outcome["status"] = "ABORTED"
+                raise
+        outcome["journal_status"] = DurableAttemptJournal.classify_run(workdir, run_id)
+        return outcome
+
+    # 1. Happy path settles COMPLETE with exact accounting.
+    page = json_module.dumps(_page("VOO", "")).encode()
+    ok_dir = tmp_path / "ok"
+    ok_dir.mkdir()
+    result = _run_once(
+        ok_dir,
+        lambda req: httpx.Response(200, content=page),
+        "run-ok-0001",
+    )
+    assert result["status"] == "COMPLETE"
+    assert result["journal_status"] == "COMPLETE"
+    assert result["calls"] == 1
+    assert result["observed"] == len(page)
+    assert result["digest"] == compute_page_sha256(page)
+    completion = json_module.loads(
+        (ok_dir / "lane_a_runs" / "run-ok-0001" / "completion.json").read_text(encoding="utf-8")
+    )
+    assert set(completion.keys()) == {"run_id", "status", "completed_at_utc"}
+    assert completion["status"] == "COMPLETE"
+    assert "QUALIFIED" not in json_module.dumps(completion)
+    assert "QUALIFIED" not in json_module.dumps(
+        (ok_dir / "lane_a_runs" / "run-ok-0001" / "attempts.jsonl").read_text(encoding="utf-8")
+    )
+
+    # 2. Provider 403 aborts: one attempt recorded, run ABORTED, no retry.
+    denied_dir = tmp_path / "denied"
+    denied_dir.mkdir()
+    try:
+        _run_once(
+            denied_dir,
+            lambda req: httpx.Response(403, content=b"denied"),
+            "run-denied-0001",
+        )
+        assert False, "403 must abort"
+    except AlpacaAccessDeniedError:
+        pass
+    assert DurableAttemptJournal.classify_run(denied_dir, "run-denied-0001") == "ABORTED"
+
+    # 3. Ambiguous midstream break stays consumed: INTERRUPTED, no resume,
+    #    no reopen, duplicate run id refused.
+    class _BreakingStream(httpx.SyncByteStream):
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            yield b"x" * 5000
+            raise httpx.DecodingError("injected ambiguous break")
+
+        def close(self) -> None:
+            return None
+
+    def breaking_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=_BreakingStream())
+
+    broken_dir = tmp_path / "broken"
+    broken_dir.mkdir()
+    request = _m1_7_requests("iex")[0]
+    bound = bind_planned_request(request)
+    destination_guard("https://data.alpaca.markets/v2/stocks/bars")
+    journal = DurableAttemptJournal.create_run(
+        broken_dir, "run-broken-0001", "TEST-AUTHORITY-REF", RUNTIME_SHA, NOW,
+    )
+    policy = ZeroRetryPolicy()
+    cap = StreamingByteCap(100000)
+    # True streaming (not eager get-then-read): bytes are inspected
+    # incrementally via client.stream(); nothing is buffered first.
+    with build_test_client(breaking_handler) as client:
+        with client.stream(
+            "GET",
+            "https://data.alpaca.markets/v2/stocks/bars",
+            params=dict(bound.params),
+        ) as response:
+            policy.execute_once(lambda: response)
+            assert classify_response(response) == "OK"
+            try:
+                read_capped(response, cap)
+                assert False, "ambiguous break must raise"
+            except DataContractError:
+                pass
+    journal.record_attempt(
+        AttemptRecord(
+            seq=1, kind="bars-page-1", outcome="INTERRUPTED",
+            bytes_observed=cap.observed, recorded_at_utc=NOW,
+            detail="ambiguous midstream break; attempt conserved, no retry",
+        )
+    )
+    # No settlement on ambiguity: classification stays INTERRUPTED.
+    assert DurableAttemptJournal.classify_run(broken_dir, "run-broken-0001") == "INTERRUPTED"
+    # Same run id can never be reused or reopened.
+    try:
+        DurableAttemptJournal.create_run(
+            broken_dir, "run-broken-0001", "TEST-AUTHORITY-REF", RUNTIME_SHA, NOW,
+        )
+        assert False, "duplicate run id must be refused"
+    except DataContractError:
+        pass
+    try:
+        DurableAttemptJournal.open_existing(broken_dir, "run-broken-0001")
+        assert False, "reopen must be refused"
+    except DataContractError:
+        pass
+    # Second policy use is forbidden even after failure (zero retry conserved).
+    assert policy.attempts == 1
