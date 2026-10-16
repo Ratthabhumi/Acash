@@ -78,6 +78,7 @@ ALLOWED_METADATA_SCHEMA: Dict[str, type] = {
     "request_index": int,
     "byte_count": int,
     "note": str,
+    "request_digest": str,
 }
 
 _SENSITIVE_KEY_PATTERN = re.compile(
@@ -85,6 +86,7 @@ _SENSITIVE_KEY_PATTERN = re.compile(
     r"authorization|bearer|session)"
 )
 _HEX40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_HEX64_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def check_request_allowlist(host: str, method: str, path: str) -> None:
@@ -397,6 +399,11 @@ def _validate_evidence_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
             if redact_secrets(value) != value:
                 raise DataContractError(
                     f"TRANSPORT_EVIDENCE_METADATA_SECRET_VALUE: {key!r}."
+                )
+            if key == "request_digest" and not _HEX64_PATTERN.match(value):
+                raise DataContractError(
+                    "TRANSPORT_EVIDENCE_METADATA_BAD_DIGEST: request_digest "
+                    "must be 64-char hex."
                 )
         else:
             raise DataContractError(
