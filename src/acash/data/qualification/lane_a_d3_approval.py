@@ -9,17 +9,21 @@ Design:
 - ``ApprovalEnvelope``: frozen dataclass binding approval_ref,
   scope_digest, runtime_sha, validity window, budgets, and key_id, with
   ``canonical_message_bytes()`` under an explicit domain separator
-  (``ACASH-LANE-A-APPROVAL/v1``) over sorted-JSON canonical form.
+  (``ACASH-LANE-A-APPROVAL/v2``; v1 was never merged) over sorted-JSON
+  canonical form.
 - ``InMemoryTrustRoot``: TEST-ONLY trust material (key_id -> public key
   plus a revocation set; no persistence, no production keys, never
-  loaded from environment). ``verify_envelope`` fails closed on: unknown
-  key, revoked key, expired/not-yet-valid window, malformed envelope,
-  altered bytes, and invalid signatures.
+  loaded from environment). Key identity is established on DECODED key
+  bytes (Base64 text aliasing rejected). ``verify_envelope`` fails
+  closed on: unknown key, revoked key, expired/not-yet-valid window,
+  malformed envelope, altered bytes, and invalid signatures.
 - ``EnvelopeApprovalCheck``: adapter implementing the ``check(approval)``
   seam consumed by ``CanaryApproval.verify_approval``: it verifies the
-  envelope signature AND binds envelope.approval_ref/scope/runtime to
-  the presented approval. A reference string alone still proves nothing;
-  only a verifying envelope under a configured trust root admits a plan.
+  envelope signature AND binds all eight signed claims
+  (approval_ref, scope_digest, runtime_sha, validity window, both
+  budgets, paid budget) to the presented approval. A reference string
+  alone still proves nothing; only a verifying envelope under a
+  configured trust root admits a plan.
 
 What this does NOT establish: production trust-root custody, key
 rotation ceremony, revocation distribution, clock authority, or any
@@ -140,7 +144,13 @@ class InMemoryTrustRoot:
         self._revoked: set[str] = set()
 
     def register(self, key_id: str, public_key_b64: str) -> None:
-        """Register a test public key (explicit test act, never implicit)."""
+        """Register a test public key (explicit test act, never implicit).
+
+        Identity is established on DECODED key bytes, never on Base64
+        text: distinct Base64 strings can decode to identical bytes when
+        pad bits are noncanonical, so string comparison alone would admit
+        the same key under two identities and make revocation ambiguous.
+        """
         if not key_id or not key_id.strip():
             raise DataContractError("D3_TRUST_EMPTY_KEY_ID.")
         try:
@@ -157,11 +167,15 @@ class InMemoryTrustRoot:
             raise DataContractError(
                 f"D3_TRUST_DUP_KEY: {key_id!r} already registered."
             )
-        if public_key_b64 in self._keys.values():
+        registered_bytes = {
+            base64.b64decode(known, validate=True)
+            for known in self._keys.values()
+        }
+        if raw in registered_bytes:
             raise DataContractError(
-                "D3_TRUST_KEY_ALIAS: this public key is already registered "
-                "under a different identity; aliasing would make revocation "
-                "ambiguous."
+                "D3_TRUST_KEY_ALIAS: these public-key bytes are already "
+                "registered under a different identity; aliasing would make "
+                "revocation ambiguous."
             )
         self._keys[key_id] = public_key_b64
 

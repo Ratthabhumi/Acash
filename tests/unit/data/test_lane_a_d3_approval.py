@@ -270,6 +270,32 @@ def test_key_alias_rejected_at_registration() -> None:
         pass
 
 
+def test_key_alias_by_nocanonical_base64_rejected() -> None:
+    import base64
+
+    _, public_b64 = Ed25519Signer.generate_key_pair()
+    raw = base64.b64decode(public_b64, validate=True)
+    # Flip low pad bits of the final quantum: distinct Base64 text,
+    # identical decoded key bytes (validator accepts noncanonical pads).
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    prefix, last, pad = public_b64[:-2], public_b64[-2], public_b64[-1:]
+    assert pad == "="
+    aliases = [
+        prefix + ch + "="
+        for ch in alphabet
+        if ch != last
+        and base64.b64decode(prefix + ch + "=", validate=True) == raw
+    ]
+    assert aliases, "test requires a noncanonical Base64 alias on this platform"
+    trust = InMemoryTrustRoot()
+    trust.register("key-A", public_b64)
+    try:
+        trust.register("key-B", aliases[0])
+        assert False, "same decoded key bytes under alias text must fail"
+    except DataContractError:
+        pass
+
+
 def test_revoked_identity_transplant_rejected() -> None:
     import dataclasses
 
@@ -295,6 +321,25 @@ def test_key_id_bound_in_signed_bytes() -> None:
         assert False, "transplanted key identity must fail"
     except DataContractError:
         pass
+
+
+def test_key_transplant_fails_at_signature_with_same_trust() -> None:
+    import dataclasses
+
+    trust, private_b64 = _trusted_pair()
+    other_private, other_public = Ed25519Signer.generate_key_pair()
+    trust.register("key-B", other_public)
+    signed = sign_envelope(_envelope(), private_b64)
+    # key_id B is trusted and unrevoked: failure must come from the
+    # SIGNATURE over altered (B-identified) bytes, not from lookup.
+    moved = dataclasses.replace(signed, key_id="key-B")
+    assert moved.canonical_message_bytes() != signed.canonical_message_bytes()
+    assert moved.message_sha256() != signed.message_sha256()
+    try:
+        trust.verify_envelope(moved, _NOW)
+        assert False, "transplanted identity must fail signature verification"
+    except DataContractError as exc:
+        assert "D3_VERIFY_BAD_SIGNATURE" in str(exc)
 
 
 def test_adapter_clock_boundaries() -> None:
