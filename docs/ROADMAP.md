@@ -15,7 +15,7 @@
 
 ## CURRENT DELIVERY TRACK — ETF Evidence-to-Economics (2026-10-14)
 
-**Proposed update for:** `docs/ROADMAP.md` (insert as the first operative section; preserve the historical phase records below)  
+**Scope:** `docs/ROADMAP.md` — first operative section; historical phase records preserved below.  
 **Snapshot date:** 2026-10-14  
 **Verified baseline:** `main` = `ffd3ac958923fa1f5ea7213a3314259a257c64d9`  
 **Classification:** Delivery roadmap and evidence inventory — **NOT** a research, data-acquisition, trading, or capital authorization.

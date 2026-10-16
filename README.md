@@ -261,9 +261,9 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ### 🧭 System Governance & Roadmap
 - **[`docs/README.md`](docs/README.md)**: Master Documentation Hub and Progressive Disclosure Index.
-- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Sequential 16-phase development roadmap with explicit quality gates.
-- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: Current system discovery, runtime state, and infrastructure boundaries.
-- **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Canonical Architectural Decision Records (**ADR-001 through ADR-019**).
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Active delivery roadmap (Current Delivery Track D0–D6) plus historical Phases 0–23.
+- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: September 4 implementation snapshot (historical; current state lives in `docs/ROADMAP.md`).
+- **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Canonical Architectural Decision Records (**ADR-001 through ADR-025**).
 - **[`docs/RISKS.md`](docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
 
 ### 🏛️ Core Architecture Specifications (`docs/architecture/`)
@@ -313,9 +313,9 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ---
 
-## 5.5 CURRENT STATUS / OPERATING POSTURE — Post-Gate G7 / Stage S11 Forensic Closure
+## 5.5 Historical Status Snapshot — Post-Gate G7 / Stage S11 (2026-09-13)
 
-> **Current Authoritative Governance State (2026-09-13).** Synchronized with [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`Cheatsheet.md`](Cheatsheet.md).
+> **Historical snapshot preserved verbatim except noted corrections.** For current state see [`docs/ROADMAP.md`](docs/ROADMAP.md) (v3.7.0). Originally synchronized 2026-09-13 with [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`Cheatsheet.md`](Cheatsheet.md).
 
 ### Project Maturity & Current State
 - **Phases 0–12:** Complete, hardened, and frozen (Gates 1–12 certified).
@@ -339,8 +339,8 @@ $$\boxed{\mathbf{Research\ (14)} \neq \mathbf{Qualification\ (8.5)} \neq \mathbf
 - **Paper Trading:** **NOT AUTHORIZED**.
 - **Live Trading:** **LOCKED**.
 - **Backtesting:** **LOCKED**.
-- **HYP_003:** **NOT CREATED**.
-- **R1:** **NOT STARTED**.
+- **HYP_003:** **TERMINALLY FALSIFIED** (correction 2026-10-14; the 2026-09-13 snapshot said NOT CREATED; see sealed dossier `docs/phase14/hyp_003_terminal_falsification_dossier.md`).
+- **R1:** **NOT STARTED** (2026-09-13 snapshot claim; verify current research records before acting).
 
 ### Next Governance Transition
 - **NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION**
