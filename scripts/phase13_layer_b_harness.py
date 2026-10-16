@@ -27,7 +27,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Final, List, Optional, Sequence, Tuple
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5  # noqa: F401 — optional native package
+except ImportError:  # pragma: no cover
+    mt5 = None  # sentinel; real use raises at runtime
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.domain.portfolio import PortfolioState
