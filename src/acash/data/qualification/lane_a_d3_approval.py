@@ -31,6 +31,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict
@@ -41,7 +42,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from acash.core.domain.exceptions import DataContractError
 from acash.execution.signing import Ed25519Signer
 
-ENVELOPE_DOMAIN: bytes = b"ACASH-LANE-A-APPROVAL/v1"
+ENVELOPE_DOMAIN: bytes = b"ACASH-LANE-A-APPROVAL/v2"
+
+_HEX64_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_HEX40_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _require_aware_instant(value: str, context: str) -> datetime:
@@ -88,11 +92,16 @@ class ApprovalEnvelope:
             raise DataContractError("D3_ENVELOPE_NONPOSITIVE_BUDGET.")
 
     def canonical_message_bytes(self) -> bytes:
-        """Domain-separated canonical bytes covered by the signature."""
+        """Domain-separated canonical bytes covered by the signature.
+
+        Schema v2 (v1 was never merged or ratified): binds key_id so a
+        signature cannot be transplanted across signer identities.
+        """
         document = {
             "adjustment": None,
             "approval_ref": self.approval_ref,
             "domain": ENVELOPE_DOMAIN.decode("ascii"),
+            "key_id": self.key_id,
             "max_bytes": self.max_bytes,
             "max_operations": self.max_operations,
             "paid_budget_usd": self.paid_budget_usd,
@@ -148,6 +157,12 @@ class InMemoryTrustRoot:
             raise DataContractError(
                 f"D3_TRUST_DUP_KEY: {key_id!r} already registered."
             )
+        if public_key_b64 in self._keys.values():
+            raise DataContractError(
+                "D3_TRUST_KEY_ALIAS: this public key is already registered "
+                "under a different identity; aliasing would make revocation "
+                "ambiguous."
+            )
         self._keys[key_id] = public_key_b64
 
     def revoke(self, key_id: str) -> None:
@@ -195,11 +210,28 @@ class InMemoryTrustRoot:
 class EnvelopeApprovalCheck:
     """Adapter for the ``check(approval)`` verifier seam.
 
-    Binds a verified envelope to a presented canary approval: envelope
-    signature valid AND approval_ref/scope_digest/runtime_sha identical.
-    Anything less fails closed. This adapter plus an explicitly configured
-    trust root is what future offline tests pass as the verifier plug.
+    Binds a verified envelope to a presented canary approval across EVERY
+    signed claim: approval_ref, scope_digest (64-hex), runtime_sha,
+    valid_from_utc, valid_until_utc, max_operations, max_bytes (positive
+    ints, bools rejected), and paid_budget_usd. Anything less fails
+    closed. The constructor ``now_utc`` is the check instant the caller
+    supplies per invocation (normally the dispatch instant); a stale
+    instant is a caller fault, and expiry is evaluated against it — never
+    against a wall clock read here. This adapter plus an explicitly
+    configured trust root is what future offline tests pass as the
+    verifier plug.
     """
+
+    CLAIM_FIELDS: tuple[str, ...] = (
+        "approval_ref",
+        "scope_digest",
+        "runtime_sha",
+        "valid_from_utc",
+        "valid_until_utc",
+        "max_operations",
+        "max_bytes",
+        "paid_budget_usd",
+    )
 
     def __init__(
         self, envelope: ApprovalEnvelope, trust_root: InMemoryTrustRoot, now_utc: str
@@ -211,14 +243,20 @@ class EnvelopeApprovalCheck:
     def check(self, approval: Any) -> bool:
         """Return True only for a fully bound, verified approval."""
         self._trust_root.verify_envelope(self._envelope, self._now_utc)
-        approval_ref = getattr(approval, "approval_ref", None)
+        for field_name in self.CLAIM_FIELDS:
+            if getattr(approval, field_name, None) != getattr(self._envelope, field_name):
+                return False
         scope_digest = getattr(approval, "scope_digest", None)
+        if not isinstance(scope_digest, str) or not _HEX64_PATTERN.match(scope_digest):
+            return False
         runtime_sha = getattr(approval, "runtime_sha", None)
-        return (
-            approval_ref == self._envelope.approval_ref
-            and scope_digest == self._envelope.scope_digest
-            and runtime_sha == self._envelope.runtime_sha
-        )
+        if not isinstance(runtime_sha, str) or not _HEX40_PATTERN.match(runtime_sha):
+            return False
+        for budget_field in ("max_operations", "max_bytes"):
+            budget = getattr(approval, budget_field, None)
+            if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+                return False
+        return True
 
 
 def admit_byte_population(

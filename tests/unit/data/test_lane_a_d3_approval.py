@@ -191,6 +191,11 @@ def test_adapter_binds_envelope_to_approval() -> None:
         approval_ref = "OP-2026-10-16-001"
         scope_digest = "a" * 64
         runtime_sha = "b" * 40
+        valid_from_utc = "2026-10-16T00:00:00+00:00"
+        valid_until_utc = "2026-10-17T00:00:00+00:00"
+        max_operations = 12
+        max_bytes = 524288
+        paid_budget_usd = "0.00"
 
     assert check.check(_Approval()) is True
 
@@ -198,8 +203,141 @@ def test_adapter_binds_envelope_to_approval() -> None:
         approval_ref = "OP-OTHER"
         scope_digest = "a" * 64
         runtime_sha = "b" * 40
+        valid_from_utc = "2026-10-16T00:00:00+00:00"
+        valid_until_utc = "2026-10-17T00:00:00+00:00"
+        max_operations = 12
+        max_bytes = 524288
+        paid_budget_usd = "0.00"
 
     assert check.check(_WrongApproval()) is False
+
+
+def _bound_check(**approval_overrides: object) -> bool:
+
+    trust, private_b64 = _trusted_pair()
+    signed = sign_envelope(_envelope(), private_b64)
+    check = EnvelopeApprovalCheck(signed, trust, _NOW)
+
+    class _Approval:
+        approval_ref = "OP-2026-10-16-001"
+        scope_digest = "a" * 64
+        runtime_sha = "b" * 40
+        valid_from_utc = "2026-10-16T00:00:00+00:00"
+        valid_until_utc = "2026-10-17T00:00:00+00:00"
+        max_operations = 12
+        max_bytes = 524288
+        paid_budget_usd = "0.00"
+
+    presented = _Approval()
+    for key, value in approval_overrides.items():
+        setattr(presented, key, value)
+    return check.check(presented)
+
+
+def test_adapter_rejects_each_altered_claim() -> None:
+    assert _bound_check() is True
+    alterations: list[dict[str, Any]] = [
+        {"approval_ref": "OP-OTHER"},
+        {"scope_digest": "c" * 64},
+        {"runtime_sha": "c" * 40},
+        {"valid_from_utc": "2026-10-16T01:00:00+00:00"},
+        {"valid_until_utc": "2026-10-18T00:00:00+00:00"},
+        {"max_operations": 11},
+        {"max_bytes": 524287},
+        {"paid_budget_usd": "0.01"},
+        {"scope_digest": "not-hex"},
+        {"max_operations": True},
+        {"max_bytes": 0},
+    ]
+    for altered in alterations:
+        assert _bound_check(**altered) is False, f"altered claim admitted: {altered!r}"
+    combined = {
+        "valid_from_utc": "2026-10-16T01:00:00+00:00",
+        "max_operations": 6,
+        "paid_budget_usd": "1.00",
+    }
+    assert _bound_check(**combined) is False
+
+
+def test_key_alias_rejected_at_registration() -> None:
+    _, public_b64 = Ed25519Signer.generate_key_pair()
+    trust = InMemoryTrustRoot()
+    trust.register("key-A", public_b64)
+    try:
+        trust.register("key-B", public_b64)
+        assert False, "same public key under two identities must fail"
+    except DataContractError:
+        pass
+
+
+def test_revoked_identity_transplant_rejected() -> None:
+    import dataclasses
+
+    trust, private_b64 = _trusted_pair()
+    signed = sign_envelope(_envelope(), private_b64)
+    trust.revoke("test-key-001")
+    transplanted = dataclasses.replace(signed, key_id="test-key-001")
+    try:
+        trust.verify_envelope(transplanted, _NOW)
+        assert False, "revoked identity must fail even with valid signature"
+    except DataContractError:
+        pass
+
+
+def test_key_id_bound_in_signed_bytes() -> None:
+    import dataclasses
+
+    trust, private_b64 = _trusted_pair()
+    signed = sign_envelope(_envelope(), private_b64)
+    moved = dataclasses.replace(signed, key_id="other-key")
+    try:
+        trust.verify_envelope(moved, _NOW)
+        assert False, "transplanted key identity must fail"
+    except DataContractError:
+        pass
+
+
+def test_adapter_clock_boundaries() -> None:
+    trust, private_b64 = _trusted_pair()
+    signed = sign_envelope(_envelope(), private_b64)
+
+    class _Approval:
+        approval_ref = "OP-2026-10-16-001"
+        scope_digest = "a" * 64
+        runtime_sha = "b" * 40
+        valid_from_utc = "2026-10-16T00:00:00+00:00"
+        valid_until_utc = "2026-10-17T00:00:00+00:00"
+        max_operations = 12
+        max_bytes = 524288
+        paid_budget_usd = "0.00"
+
+    assert EnvelopeApprovalCheck(
+        signed, trust, "2026-10-16T00:00:00+00:00").check(_Approval()) is True
+    assert EnvelopeApprovalCheck(
+        signed, trust, "2026-10-17T00:00:00+00:00").check(_Approval()) is True
+    # Out-of-window check instants raise (fail-closed), never return False.
+    for stale in ("2026-10-15T23:59:59+00:00", "2026-10-17T00:00:01+00:00"):
+        try:
+            EnvelopeApprovalCheck(signed, trust, stale).check(_Approval())
+            assert False, f"stale check instant admitted: {stale}"
+        except DataContractError:
+            pass
+    # Same instant in another offset must agree.
+    assert EnvelopeApprovalCheck(
+        signed, trust, "2026-10-16T07:00:00+07:00").check(_Approval()) is True
+
+
+def test_duplicate_ref_governance_documented() -> None:
+    trust, private_b64 = _trusted_pair()
+    first = sign_envelope(_envelope(), private_b64)
+    second = sign_envelope(_envelope(), private_b64)
+    # Same content re-signed verifies independently: envelopes are not
+    # global-single-use; reservation/budget accounting constrains reuse
+    # operationally, and contradictory same-ref content needs human
+    # adjudication (no silent rule invented here).
+    trust.verify_envelope(first, _NOW)
+    trust.verify_envelope(second, _NOW)
+    assert first.signature_b64 == second.signature_b64
 
 
 def test_byte_population_contract() -> None:
