@@ -1,96 +1,274 @@
-# ACASH — System Development Roadmap (Current Delivery + Historical Phases 0–23)
+# 🚀 ACASH — Unified Development Roadmap
 
-**Document:** `docs/ROADMAP.md`  
-**Version:** 3.7.0  
-**Date:** 2026-10-14  
-**Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
+*From Market Data to Evidence-Based Capital Allocation*
 
-> **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
-> was "Regime Engine (Trend/Vol Classifiers)". The **actual** Phase 7 work being
-> executed in this repository is **Live Execution & Broker Mapping** (Admission →
-> Step 8 Contracts → Broker Semantic Mapping → Alpaca Paper exercise). The
-> Regime-Engine content is deferred; Phase 7 below reflects the real scope.
+**Version:** 4.0.0 · **AS OF:** 2026-10-15 (Asia/Bangkok) · **Scope:** delivery taxonomy and capability reuse; no new scientific gate or operating authority.
+
+## 🎯 1. Vision & North Star
+
+ACASH is a governed quantitative research, portfolio evaluation and capital-allocation system. Its purpose is to support evidence-based allocation decisions, including **CASH / NO TRADE**. The first hypothetical **USD 1,000** after-cost study is a practical milestone, not a permanent portfolio size or the final objective.
+
+Scientific evidence, software readiness, data qualification, strategy qualification, operational readiness, human authorization and real-capital authority are separate requirements. Historical achievements retain their original scope; none grants admission to a new investment program.
+
+## 🗺️ Unified Delivery D1–D10 — at a glance
+
+| Stage | Capability already available | Current Invest / Lane A admission | Next delivery |
+| --- | --- | --- | --- |
+| **D1 🧱 Offline Data Foundation** | IMPLEMENTED · SYNTHETIC_TESTED | INTEGRATED (PR #32 merged); no executor/authority implied | D3 admission prerequisites next |
+| **D2 🛡️ Real Data Acquisition Safety** | PARTIAL · SYNTHETIC_TESTED | INTEGRATED offline slice (PR #37/#39 merged); EVIDENCE_INCOMPLETE for dispatch | Close verifier, entitlement, byte and durability contracts |
+| **D3 📡 Authorized Market Data Acquisition** | HISTORICALLY_EXECUTED in HYP_009/010/011 | AUTHORITY_UNISSUED · ENTITLEMENT_UNVERIFIED | Exact-scope operator decision after D2 acceptance |
+| **D4 🔬 Data & Corporate-Action Qualification** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Qualify new prices and issuer/sponsor evidence |
+| **D5 🗃️ Qualified Historical Dataset** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Separately authorize and seal new historical scope |
+| **D6 💰 Investment Economics** | IMPLEMENTED · HISTORICALLY_EXECUTED | EVIDENCE_INCOMPLETE for USD 1,000 | Matched-period, after-cost baseline study after D5 |
+| **D7 🧠 Governed Strategy Research** | IMPLEMENTED tooling; historical research exists | SCIENTIFICALLY_BLOCKED for new candidates | Use qualified baseline or separately admitted hypothesis |
+| **D8 👁️ Prospective Shadow Validation** | IMPLEMENTED · HISTORICALLY_EXECUTED | AUTHORITY_UNISSUED for new program | PROPOSED stage; resolve segment/continuation authority |
+| **D9 🧪 Paper Trading & Operational Validation** | IMPLEMENTED · HISTORICALLY_EXECUTED | AUTHORITY_UNISSUED for ongoing program | PROPOSED stage; separate Human GO and paper gates |
+| **D10 🔐 Human-Gated Live Capital Admission** | IMPLEMENTED risk/execution/recovery | CAPITAL_LOCKED | PROPOSED stage; explicit human decision, including NO-GO |
+
+**One active sequence:** Unified Delivery D1–D10. Phase 0–23 labels describe historical architecture/capabilities. D8–D10 are proposed delivery extensions, not ratified operating transitions. Capability labels and admission labels are separate dimensions; combinations in a row are scope-specific, not a global PASS.
+
+### Navigation
+
+- [Verified current position](#verified-position)
+- [Stage details D1–D10](#stage-details)
+- [Legacy numbering and phase mapping](#legacy-mapping)
+- [Research reuse](#research-reuse)
+- [Dependencies and human authority](#dependencies)
+- [Next actions and Research handoff](#next-actions)
+- [Historical evidence and reference compatibility](#historical-evidence)
+
+<a id="verified-position"></a>
+## 📍 2. Verified Current Position
+
+> **Status update 2026-10-16 (additive; the 2026-10-15 checkpoint below is preserved as history):** PR #32 (D1 canary), PR #37 (D2 safety), PR #39 (D2 composition), and PR #36 (docs consistency) are MERGED into canonical `main`. D1 offline foundation and D2 offline safety/composition are therefore **integrated offline software** — still with **no real executor, no entitlement, and no acquisition authority**. Verify live GitHub state before acting.
+
+GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated checkpoint, not a live status feed. Canonical `main` *then*: `250bf0304d763cb86f961ca26b5c5771421a23ab` (PR #35). Roadmap preparation is stacked on PR #36, `87e1176adb2f9541773b4b3d87c479691f5e11d2`; its documentation corrections are not yet on main.
+
+| Work status at 2026-10-15 checkpoint (historical) | Exact HEAD then | GitHub state then / PR-triggered CI |
+| --- | --- | --- |
+| [PR #32: offline canary](https://github.com/Ratthabhumi/Acash/pull/32) | `49b86236796f859e2918cf4b9c228a8eff0b9fd1` | was OPEN/READY; **MERGED** (`bfffdb3`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570998061) |
+| [PR #36: documentation consistency](https://github.com/Ratthabhumi/Acash/pull/36) | `87e1176adb2f9541773b4b3d87c479691f5e11d2` | was OPEN/READY; **MERGED** (`16901bf`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570849800) |
+| [PR #37: legacy D1 safety slice, now Unified Delivery D2](https://github.com/Ratthabhumi/Acash/pull/37) | `3bc252d26fbefac6b7085a82cd46c2e00f6d037c` | was OPEN/DRAFT; **MERGED** (`3255da9`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38635592493) |
+
+**Integrated:** M1.6 benchmark contracts, M1.7 planner, M1.8 rehearsal, M1.8.1 storage/evidence, PPDS and Invest V0. **Update 2026-10-16:** D1 canary (PR #32), D2 safety (PR #37), D2 composition (PR #39), and docs consistency (PR #36) are MERGED; only the roadmap PR #38 remains open. The PR #32 description reports 39 focused canary tests; PR #37 reports 14 MockTransport tests. These are historical reports, not local reruns in this documentation task; green CI does not prove live-dispatch safety or entitlement.
+
+**Hard boundaries:** `REAL_CAPITAL_AUTHORITY = USD 0.00`; `NO_REAL_ORDERS=true`; Lane A **UNISSUED**. No provider HTTP, credential use, subscription purchase, protected dataset access, broker authentication, paper/live order, Homelab deployment or PR merge is authorized by this roadmap. Historical authorizations below remain bounded to their own decisions.
+
+<a id="stage-details"></a>
+## 🗺️ 3. Stage Details
+
+Every stage records objective, source/tests, historical evidence and reuse, missing work, current admission, authority, acceptance and next action. Test links identify existing verification entry points, not freshly executed results.
+
+### D1 — 🧱 Offline Data Foundation
+
+**Objective / standing:** reuse a single canonical request planner and bounded offline evidence pipeline. IMPLEMENTED / SYNTHETIC_TESTED; integrated foundations, canary INTEGRATED (PR #32 merged `bfffdb3`). Historical mapping: Phase 2/3/14 and M1.7–M1.8.1.
+
+**Source / tests:** [authority planner](../src/acash/data/qualification/lane_a_authority.py), [rehearsal](../src/acash/data/qualification/lane_a_rehearsal.py), [transport/evidence](../src/acash/data/qualification/lane_a_transport.py); [authority tests](../tests/unit/data/test_lane_a_authority.py), [rehearsal tests](../tests/unit/data/test_lane_a_rehearsal.py), [transport tests](../tests/unit/data/test_lane_a_transport.py). PR #32 added [canary source at reviewed HEAD](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/src/acash/data/qualification/lane_a_canary.py) and [tests](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/tests/unit/data/test_lane_a_canary.py), now integrated on `main`.
+
+**Reuse / evidence:** nine-field request serialization, request budgets, reservation journals, fake transport, receipt/page hashing and offline runner. Offline pagination completion is not data qualification; file-sync evidence is not proven crash durability.
+
+**Missing / authority / acceptance / next:** Preserve canonical request identity and fail-closed journals; no HTTP activation. **Do not rebuild** planner, journals, rehearsal or offline runner.
+
+### D2 — 🛡️ Real Data Acquisition Safety
+
+**Objective / standing:** prepare an auditable bounded executor without activation. PARTIAL / SYNTHETIC_TESTED; offline slice INTEGRATED (PR #37 merged `3255da9`, composition PR #39 merged `e61dd24`), production EVIDENCE_INCOMPLETE. Historical mapping: Phase 2/3/14 acquisition controls.
+
+**Source / tests:** existing [SIP client and error taxonomy](../src/acash/data/qualification/client.py), M1.7 planner and M1.8.1 journal above. PR #37 contains [safety source](https://github.com/Ratthabhumi/Acash/blob/3bc252d26fbefac6b7085a82cd46c2e00f6d037c/src/acash/data/qualification/lane_a_d1_safety.py) and [MockTransport tests](https://github.com/Ratthabhumi/Acash/blob/3bc252d26fbefac6b7085a82cd46c2e00f6d037c/tests/unit/data/test_lane_a_d1_safety.py). Its legacy D1 identifier is retained in filenames.
+
+**Reuse / evidence:** canonical requests, HTTPX exception classes, page SHA helpers, zero-retry and credential-isolation preparation. The draft demonstrates offline behavior, not production approval.
+
+**Missing:** `destination_guard()` now enforces exact HTTPS origin/path with userinfo, port, encoding, query, and fragment rejection (merged PR #37; adversarial tests cover suffix, userinfo, and port variants). `iter_bytes()` counts decoded bytes: raw-versus-decoded budget semantics still need a decision. Durable reserve-before-real-dispatch linkage, independent production approval verifier/trust root, actual account/feed entitlement and audited activated production executor are not proven. The current disabled boundary always refuses real transport.
+
+**Authority / acceptance / next:** independent software review must close these contracts and define evidence durability before any separately authorized acquisition. Keep HTTP blocked; review the draft in its own PR. **Do not rebuild** the existing SIP client core, planner, error taxonomy or hashing; legacy retry behavior must not silently enter Lane A's zero-retry scope.
+
+### D3 — 📡 Authorized Market Data Acquisition
+
+**Objective / standing:** obtain only exact-authorized provider evidence. HISTORICALLY_EXECUTED; new Lane A AUTHORITY_UNISSUED / ENTITLEMENT_UNVERIFIED. Historical mapping: Phase 14 provider qualification with Phase 2/3 adapters.
+
+**Source / tests:** [HYP_009 client](../src/acash/data/qualification/hyp_009_daily_client.py), [HYP_010 client](../src/acash/data/qualification/hyp_010_qual_client.py), [HYP_011 client](../src/acash/data/qualification/hyp_011_qual_client.py); [HYP_011 qualification tests](../tests/unit/data/qualification/test_hyp_011_qualification.py) and D1/D2 suites.
+
+**Historical evidence / reuse:** [HYP_009](phase14/HYP_009_R2_M2_DATA_QUALIFICATION.md): 2 Alpaca attempts, SPY 2021–2024; [HYP_010](phase14/HYP_010_R2_PROVIDER_QUALIFICATION.md): 8 SIP attempts, SPY/VEU/AGG/BIL January 2017; [HYP_011](phase14/HYP_011_R3_HISTORICAL_DATA_QUALIFICATION.md): 6 attempts, ACWI/AGG/SPY 2016–2024. [Observation #1](audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md) separately records 6 prospective requests under its own authority. Reuse pagination, session census and 15-minute guard methodology without transferring authority.
+
+**Missing / authority:** [Lane A candidate packet](research/LANE_A_UNISSUED_AUTHORITY_PACKET_20261013.md) remains UNISSUED: Alpaca `GET /v2/stocks/bars`, VOO/BND/GLD/BIL, `1Day`, 2026-09-28 through 2026-10-02 inclusive, `raw` and `all`, one operator-selected IEX or SIP feed, at most 12 HTTP attempts and 524288 observed response bytes, USD 0 paid, no retry/fallback.
+
+**Acceptance / next:** after D2 acceptance and exact-scope human issuance, preserve every attempt/outcome and payload lineage within bound budgets. Five-session retrieval proves feasibility only. No request is initiated by this documentation task.
+
+### D4 — 🔬 Data & Corporate-Action Qualification
+
+**Objective / standing:** qualify each symbol/session and corporate-action authority. SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE; new VOO/BND/GLD/BIL SCOPE_NOT_ADMITTED. Historical mapping: Phase 2/3/14.
+
+**Source / tests:** [qualification validator](../src/acash/data/qualification/validator.py), [HYP_011 qualification client](../src/acash/data/qualification/hyp_011_qual_client.py), [benchmark contracts](../src/acash/data/contracts/etf_fx_benchmark.py); [qualification tests](../tests/unit/data/qualification/test_hyp_011_qualification.py), [benchmark tests](../tests/unit/data/test_etf_fx_benchmark_contracts.py).
+
+**Historical evidence / reuse:** [HYP_011 R3 seal](phase14/HYP_011_R3_HISTORICAL_DATA_QUALIFICATION.md) records ACWI/AGG/SPY, 2016–2024, **2264 NYSE sessions**, zero missing/extra/duplicates, raw/split alignment, 164 in-scope dividend events, no split events in the authorized window and historical fee authority. HYP_009 has its own [qualification and dividend-coverage limitations](phase14/HYP_009_R2_M2_DATA_QUALIFICATION.md). Reuse validators, session census, raw/adjusted semantics and sponsor methodology.
+
+**Missing / authority / acceptance / next:** new ETF price evidence and issuer/sponsor dividends/splits require their own authorized qualification. Lane B is [specified](research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md), not admitted evidence. Reject incomplete coverage, ambiguous share basis, unverified corporate actions and PIT claims. Do not infer new issuer evidence from HYP_011 or promote old data to the new program.
+
+### D5 — 🗃️ Qualified Historical Dataset
+
+**Objective / standing:** reproducible, scope-sealed historical inputs. **HISTORICAL_QUALIFICATION_EXISTS / NEW_INVEST_SCOPE_NOT_ADMITTED**; capability SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE, new-scope admission SCOPE_NOT_ADMITTED. Historical mapping: Phase 2/3/14.
+
+**Source / tests:** qualification and manifest pipeline above; [HYP_011 dataset manifest](phase14/manifests/HYP_011_R3_HISTORICAL_DATASET.json), [HYP_009 dataset manifest](phase14/manifests/HYP_009_R2_M2_DATASET.json); existing qualification and benchmark tests.
+
+| Original-scope dataset | Recorded SHA-256 |
+| --- | --- |
+| `DS_CORE001_HYP011_ACWI_AGG_SPY_ALPACA_1DAY_SIP_2016_2024_001` | `4cf20b51c2e2be2bb629ba10be7c25b34e8259bd5549575156afe433fb16c3d5` |
+| HYP_009 `DS_SPY_CORE001_HYP009_M2_ALPACA_1DAY_SIP` | `7961f19b6fa4cc752c1dae328001ea396f7b492b53f42d3898ae6b743f37c4d1` |
+
+These identities are read from committed qualification records/manifests; protected dataset bytes were not opened or rehashed here. Raw dataset files are gitignored and are not guaranteed in a fresh checkout.
+
+**Reuse / missing / authority / acceptance / next:** reuse dataset builders, provenance validation and sealing methodology. A new historical universe/window requires explicit authority, D4 evidence, inception/vintage/PIT limitations and its own immutable manifest. Do not gratuitously rebuild historical datasets or assume this five-session candidate qualifies a multi-year study.
+
+### D6 — 💰 Investment Economics
+
+**Objective / standing:** evaluate after-cost allocation choices on matched evidence. IMPLEMENTED / HISTORICALLY_EXECUTED; USD 1,000 study EVIDENCE_INCOMPLETE. Historical mapping: Phase 5/8/8.5/9, PPDS, Invest V0 and M1.6.
+
+**Source / tests:** [backtest](../src/acash/backtest/), [portfolio](../src/acash/portfolio/), [PPDS](../src/acash/ppds/), [Invest V0](../src/acash/invest/v0_report.py), M1.6 benchmark contracts; [synthetic benchmark workflow](../tests/unit/data/test_synthetic_m1_5_workflow.py), [Invest V0 tests](../tests/unit/invest/test_v0_report.py).
+
+**Historical evidence:** [HYP_011 execution](phase14/HYP_011_R3_HISTORICAL_EXECUTION_REPORT.md) records simulated USD **100000 → 218852.857740**, Sharpe approximately **0.7082**, MDD **0.27068**, dividends **28501.574104**, friction stress and SPY/ACWI comparisons. G1–G6 PASS applies only to the original frozen contract. [Corrected reproducibility](phase14/HYP_011_R3_CORRECTED_REPRODUCIBILITY_COMPARISON.md) preserves all seven ledger SHAs and economics with contract-correct MDD.
+
+**Benchmark limitation:** SPY buy-and-hold ended at **USD 317645.2207582**, higher than HYP_011's **USD 218852.857740** on that historical comparison. PASS does not establish universal outperformance, Alpha or future profitability.
+
+**Reuse / missing / authority / acceptance / next:** reuse accounting, valuation, holdings, dividends/splits, benchmarks and friction. The new USD 1,000 study has not been executed or qualified. After D5 and separate empirical authority, compare cash/no-trade, broad equity buy-and-hold, equity/bond and low-turnover diversification over matched periods. Disclose commissions, spreads, USD/THB FX, cash yield, funding, tax scenarios, drawdowns and evidence limits. No new empirical run here.
+
+### D7 — 🧠 Governed Strategy Research
+
+**Objective / standing:** evaluate an eligible baseline or hypothesis with existing scientific controls. IMPLEMENTED tools; new candidates SCIENTIFICALLY_BLOCKED pending scope-specific data/design/admission. Historical mapping: Phase 4/6/8.5/14; Phase 17 is a specified admission framework.
+
+**Source / tests:** [research](../src/acash/research/), [validation](../src/acash/validation/), [portfolio tournament](../src/acash/portfolio/tournament.py); [DSR tests](../tests/unit/validation/test_deflated_sharpe.py), [PBO tests](../tests/unit/validation/test_multiple_testing_and_pbo.py), [CPCV tests](../tests/unit/validation/test_cpcv_purging.py), [tournament tests](../tests/unit/portfolio/test_model_selection_tournament.py).
+
+**Historical dispositions:** [HYP_003](phase14/hyp_003_terminal_falsification_dossier.md) **TERMINALLY FALSIFIED**; [HYP_009](phase14/HYP_009_TERMINAL_M2_DECISION.md) **TERMINAL_NOT_SUPPORTED_AT_LOCKED_M2**; [HYP_010](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md) **PARKED / NON-FALSIFIED**; HYP_011 **HISTORICAL_REPLICATION_SUPPORTED_FOR_PROSPECTIVE_SHADOW** in its original scope; [RI-01](audit/RI01_CHRONOLOGY_DISCREPANCY_REPORT_20261013.md) lineage decision unresolved.
+
+**Reuse / missing / authority / acceptance / next:** reuse DSR/PBO/CPCV, backtest orchestration, OOS/provenance, governance and baselines. Require qualified data, eligible identity, sealed trial authority and independently authorized design before evaluation. Shared-data controls are statistically dependent. Phase 18–23 proposals are not proof of implemented runtime. **D7 does not require inventing Alpha:** an independently qualified simple baseline may answer the investment question, subject to unchanged admission and operating gates.
+
+### D8 — 👁️ Prospective Shadow Validation
+
+**Objective / standing:** measure forward behavior under exact prospective authority. IMPLEMENTED / HISTORICALLY_EXECUTED; new program AUTHORITY_UNISSUED. This roadmap stage is PROPOSED. Historical mapping: Phase 10/11, HYP_011 prospective modules and paper shadow tournament infrastructure.
+
+**Source / tests:** [HYP_011 shadow/state/authority](../src/acash/research/hyp_011/), [runtime](../src/acash/runtime/), [monitoring](../src/acash/monitoring/); [prospective tests](../tests/unit/research/test_phase14_hyp_011_prospective_shadow.py), [operational tests](../tests/unit/research/test_phase14_hyp_011_shadow_ops.py).
+
+**Historical evidence / reuse:** [Observation #1](audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md), target 2026-09-30, **COMMITTED_AND_RECONCILED**, records 29/29 checks and original S1 progress 1/20. Preserve this as **V1 platform-validation evidence**, not a current global counter. [Segment policy](phase14/HYP_011_PROSPECTIVE_SEGMENT_POLICY_V1_V2.md) and [ratification](audit/FINAL_RATIFICATION_RECORD.md) classify V1 **CLOSED_INCOMPLETE_GOVERNANCE_HARDENING**. V2 continuation/recovery and [V3 preparation](operations/HYP011_V3_PREPARATION_20261008.md) retain their separate scope and authority.
+
+**Missing / authority / acceptance / next:** resolve the exact segment's continuation and reconciliation gates with explicit human authorization. Observation #2 is not automatically authorized; no fabricated sample, backfill or timer. One observation is not long-run forward qualification. Reuse engine, corporate-action adapters, accounting, persistent state, hash chain and reconciliation; do not rebuild them.
+
+### D9 — 🧪 Paper Trading & Operational Validation
+
+**Objective / standing:** validate operational broker behavior in an independently authorized paper program. IMPLEMENTED / HISTORICALLY_EXECUTED; ongoing program AUTHORITY_UNISSUED. This stage is PROPOSED. Historical mapping: Phase 7/12/13.
+
+**Source / tests:** [execution coordinator/adapters](../src/acash/execution/), [MT5 reconciliation](../src/acash/execution/mt5/reconciliation.py), [paper runtime](../src/acash/paper/); [execution tests](../tests/unit/execution/), [paper tests](../tests/unit/paper/). Native MT5 tests require their optional environment.
+
+**Historical evidence / reuse:** [Alpaca BMAP P-001](phase7/alpaca_bmap.md) records Paper Order 003 accepted, **FILLED**, reconciled and broker mapping verified. [Phase 13 readiness review](phase13/phase13_step7_paper_readiness_review.md) records Gate A certification, accepted 24-hour soak evidence and conditional infrastructure readiness, with Gate B / B23.2 host conditions unresolved. These are recorded historical exercises, not a fresh runtime audit.
+
+**Missing / authority / acceptance / next:** Phase 13 Step 8 Human GO and Step 9 90-day paper remain locked under applicable decisions. Strategy qualification, human operating permission and paper authorization must each be independently established, including all conjunctive Step 9 prerequisites in the readiness review. Reuse broker event normalization/state machine, bridge, ledgers, rehydration and order reconciliation; do not start a paper clock from historical P-001.
+
+### D10 — 🔐 Human-Gated Live Capital Admission
+
+**Objective / standing:** present a human capital decision supported by accepted scientific and operational evidence. IMPLEMENTED infrastructure; **CAPITAL_LOCKED**. This stage is PROPOSED. Historical mapping: Phase 9/12/13 and explicit human authority.
+
+**Source / tests:** [risk engine](../src/acash/risk/risk_engine.py), [kill switch](../src/acash/risk/kill_switch.py), execution/runtime/monitoring above; [risk tests](../tests/unit/risk/test_risk_engine.py), [kill-switch tests](../tests/unit/risk/test_kill_switch.py), [Gate B tests](../tests/unit/gate_b/test_gate_b_readiness.py).
+
+**Historical evidence / reuse:** deterministic veto, persistent control records, admission gates, broker adapters, reconciliation, crash/restart recovery and telemetry exist. Phase 13 records identify unresolved host-enforcement conditions including B23.2; their current satisfaction is not proven by this task.
+
+**Missing / authority / acceptance / next:** independently accepted scope-specific strategy/operational evidence and explicit human capital ratification; no automatic activation. `REAL_CAPITAL_AUTHORITY = USD 0.00`, `NO_REAL_ORDERS=true`. CASH / NO-GO is valid. Reuse risk, execution, kill switch and recovery unless a reproducible deficiency warrants a separately scoped fix.
+
+<a id="legacy-mapping"></a>
+## 🏗️ 4. Legacy Numbering & Phase Mapping
+
+**Migration rule:** legacy Delivery D0–D9 → Unified Delivery D1–D10, adding one. The former active D0–D6 definitions remain in the exact archived source; legacy D7–D9 are shadow/paper/live extensions, not ratified gates. Historical decision IDs named D1/D2/etc. in Phase records retain their own namespace and meaning. No Phase 0–23 renumbering or acceptance-criteria amendment occurs.
+
+| Unified delivery | Previous delivery | Historical capability / verified standing | New-scope gap |
+| --- | --- | --- | --- |
+| D1 | D0 | Phase 2/3/14, M1.7–M1.8.1: implemented and synthetic-tested; canary review pending | Exact-reviewed integration |
+| D2 | D1 | Phase 2/3/14 controls; PR #37 partial mocked safety | Audited verifier/executor/entitlement chain |
+| D3 | D2 | Phase 14: HYP_009/010/011 provider exercises | New exact-scope authority |
+| D4 | D3 | Phase 2/3/14: original-scope qualifications and session census | New ETF and sponsor evidence |
+| D5 | D4 | Phase 14 sealed HYP_009/011 datasets | Separate Invest dataset admission |
+| D6 | D5 | Phase 5/8/8.5/9, PPDS/Invest V0/M1.6; original HYP_011 economics | New USD 1,000 study |
+| D7 | D6 | Phase 4/6/8.5/14 tools/tests; Phase 17 SPECIFIED_ONLY | Eligible scientific admission |
+| D8 (PROPOSED) | D7 extension | Phase 10/11 and HYP_011 shadow code/tests; V1 observation exists | Segment-specific prospective permission |
+| D9 (PROPOSED) | D8 extension | Phase 7/12/13 code/tests; P-001/soak historical evidence | Human GO, strategy and paper authority |
+| D10 (PROPOSED) | D9 extension | Phase 9/12/13 risk/recovery code/tests | Explicit capital authority; host conditions |
+
+Phase 0/1 foundation, all original phase titles/statuses, Phase 18–23 architecture proposals, and historical references to later architecture remain in the preserved historical section. Specification-only proposals do not become runtime capability through this mapping.
+
+<a id="research-reuse"></a>
+## ♻️ 5. Research Utilization
+
+This is a delivery-use index into the existing [Research Utilization Matrix](audit/RESEARCH_UTILIZATION_MATRIX_20261013.md), not a replacement research inventory. Older counts/statuses in that dated matrix remain historical; the checkpoint above resolves the current PR metadata.
+
+| Existing asset / authority record | Actual standing and original scope | Reuse → delivery | Missing new-scope qualification / authority |
+| --- | --- | --- | --- |
+| M1.6 [benchmark contracts](../src/acash/data/contracts/etf_fx_benchmark.py) | Integrated, synthetic lifecycle/accounting tests | Holdings/benchmark math → D4–D6 | Qualified prices, actions and empirical permission |
+| [PPDS](../src/acash/ppds/) / [Invest V0](../src/acash/invest/v0_report.py) | Integrated read-only/synthetic reporting | Valuation/reporting → D6 | Admitted input dataset, cost scenarios |
+| M1.7–M1.8.1 [authority](../src/acash/data/qualification/lane_a_authority.py) | Integrated offline planner/rehearsal/storage | Request/evidence integrity → D1–D3 | Production verifier and executor |
+| PR #32 / PR #37 | Merged offline canary + safety (`bfffdb3` / `3255da9`) | Reuse integrated slices → D1/D2 | Independent acceptance; no new authority implied |
+| [HYP_003 dossier](phase14/hyp_003_terminal_falsification_dossier.md) | TERMINALLY FALSIFIED | Negative evidence/governance → D7 | No resurrection or automatic promotion |
+| [HYP_009 decision](phase14/HYP_009_TERMINAL_M2_DECISION.md) | TERMINAL_NOT_SUPPORTED_AT_LOCKED_M2; qualified SPY dataset in original scope | Qualification/accounting lessons → D3–D7 | No new strategy or dataset rights |
+| [HYP_010 blocker](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md) | PARKED / NON-FALSIFIED; 8-attempt probe, VEU dividend-authority blocker | Probe/sponsor methodology → D3/D4 | Human resumption and sponsor authority |
+| HYP_011 [data](phase14/HYP_011_R3_HISTORICAL_DATA_QUALIFICATION.md), [economics](phase14/HYP_011_R3_HISTORICAL_EXECUTION_REPORT.md), [shadow](audit/OBSERVATION_0001_COMMITTED_RECONCILED_20260930.md) | Original-scope qualification, G1–G6 PASS, V1 observation; no universal Alpha | Pipelines, ledgers, gates → D3–D8 | No transfer into Invest; continuation separately gated |
+| [RI-01 chronology](audit/RI01_CHRONOLOGY_DISCREPANCY_REPORT_20261013.md) | Lineage decision unresolved | Evidence-review lessons → D3/D7 | Human lineage adjudication |
+| [Lane A](research/LANE_A_UNISSUED_AUTHORITY_PACKET_20261013.md) / [Lane B](research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md) | Unissued candidate / specification | Bounded prices / corporate actions → D3–D5 | Entitlement, issuance, issuer evidence |
+| Cash / Equal Weight / Inverse Volatility; [tournament](../src/acash/portfolio/tournament.py) | Implemented transparent baselines and selection tooling | Qualified baseline comparisons → D6/D7 | Admitted matched inputs and test design |
+| [DSR](../src/acash/validation/deflated_sharpe.py) / [PBO](../src/acash/validation/multiple_testing.py) / [CPCV](../src/acash/validation/cpcv.py) | Implemented validation tools, no new admitted candidate | Existing controls → D7 | Scientific/trial authority; dependence disclosure |
+| [VIX / VIX1D note](research/volatility/VIX_DAILY_VOLATILITY_CONTEXT_RESEARCH_NOTE_20261013.md) | Research context only | Potential risk context → D7 | Separate empirical design and qualified inputs |
+| FRED / BOT in [matrix](audit/RESEARCH_UTILIZATION_MATRIX_20261013.md) | Available/researched future inputs; outside Lane A | Potential PIT macro/FX → D6/D7 | Rights, vintage and scope-specific admission |
+| IBKR-inspired friction in M1.6 | Synthetic modeled fees, **not account-verified**; no IBKR execution integration | Cost scenarios → D6 | Actual tariff/account/FX/tax evidence |
+| [Execution](../src/acash/execution/) / [paper](../src/acash/paper/) infrastructure | Implemented, historical P-001 and soak evidence | Adapters, reconciliation/recovery → D8–D10 | Current operating and capital authority |
+
+<a id="dependencies"></a>
+## 🔗 6. Dependencies & Human Authority
+
+| Readiness or authority | Required evidence / decision | Does not imply |
+| --- | --- | --- |
+| SOFTWARE_READY | Reviewed implementation and relevant executed checks | ACQUISITION_AUTHORIZED |
+| ACQUISITION_AUTHORIZED | Exact scope/feed/budgets/time/runtime, trusted verifier and entitlement | DATA_QUALIFIED |
+| DATA_QUALIFIED | Complete scope-specific price/actions/provenance qualification | ECONOMICS_EVALUATED |
+| ECONOMICS_EVALUATED | Reproducible matched-period after-cost study | STRATEGY_QUALIFIED |
+| STRATEGY_QUALIFIED | Applicable scientific contract and admission decision | PROSPECTIVE_AUTHORIZED |
+| PROSPECTIVE_AUTHORIZED | Exact prospective segment, observations and operating decision | PAPER_AUTHORIZED |
+| PAPER_AUTHORIZED | Phase 13/14 scientific, operational and Human GO prerequisites | LIVE_CAPITAL_AUTHORIZED |
+| LIVE_CAPITAL_AUTHORIZED | Separate explicit human capital decision and all applicable gates | Autonomous capital expansion |
+
+These are separate prerequisites, not automatic state transitions. A qualified simple baseline can be considered for separately authorized prospective testing without inventing a new Alpha hypothesis, only where applicable scientific and operating gates permit it. Phase 13/14 decisions continue to control.
+
+<a id="next-actions"></a>
+## 📍 7. Current Next Actions
+
+1. **D1:** PR #32 merged (`bfffdb3`); D2 safety (PR #37, `3255da9`) and composition (PR #39, `e61dd24`) merged. No further offline-canary integration work is pending.
+2. **Documentation:** PR #36 merged (`16901bf`); this roadmap PR #38 is the last open item — merge at its exact reviewed SHA under separate approval.
+3. **D2:** offline safety/composition integrated; exact destination/port closed in merged code. Remaining: byte-unit ratification, durable dispatch/journal linkage proof, independent verifier/trust root, audited executor. Preserve the single planner and existing clients.
+4. **D3:** operator binds entitlement/feed and issues Lane A only after the software gates are accepted. Until then: UNISSUED, no provider HTTP.
+5. **D4–D6:** separately qualify the new ETF universe and corporate actions, admit the historical dataset, then authorize the USD 1,000 after-cost study. No dataset admission or economics claim follows from the offline canary.
+
+### Research to hand off
+
+Use the [ChatGPT Research brief](research/UNIFIED_ROADMAP_V4_RESEARCH_HANDOFF_20261015.md) for official-source questions on dataset rights/coverage, sponsor actions and small-portfolio economics. It requests research only, not downloads, credentials, paid services, empirical execution or trading. Engineering review above can proceed independently; no new comprehensive external research is required to write this roadmap.
+
+Measure progression by accepted evidence and authority, not PR counts: software integrity → authorized acquisition evidence → qualified data → reproducible economic utility → separately governed prospective/paper/capital decisions.
+
+<a id="historical-evidence"></a>
+## 📚 8. Historical Evidence & Reference Compatibility
+
+The [exact v3.7.0 archive](ROADMAP_v3.7.0_87e1176_ARCHIVE.md) preserves the chosen PR #36 base **byte-for-byte**, including its superseded delivery snapshot. It is historical, not a second active roadmap. The [preservation and citation map](audit/ROADMAP_V4_PRESERVATION_20261015.md) records commit, blob, byte count, SHA-256, fixed-line references and reference limitations. It also identifies checkpoint-main's original blob.
+
+Historical Phase sections remain below with their exact source bytes, original titles, statuses, acceptance criteria, runbooks, evidence references and license. Their dated “CURRENT”, “NOW”, “NEXT” and proposal language is **historical evidence only**; the v4 delivery sequence above is the sole active presentation. No sealed scientific or ratified record is rewritten.
+
+**Legacy line citations:** an unversioned `docs/ROADMAP.md:line` is not a stable current-file address. Resolve historical citations using their authoring commit/blob in the compatibility map; do not reinterpret them against new line numbers. The scanned fixed-line citations resolve at their authoring commit; the map records those frozen targets rather than assigning their line numbers to this file.
 
 ---
 
-## CURRENT DELIVERY TRACK — ETF Evidence-to-Economics (2026-10-14)
+<a id="acash--system-development-roadmap-current-delivery--historical-phases-023"></a>
+<a id="current-delivery-track--etf-evidence-to-economics-2026-10-14"></a>
+<a id="1-north-star"></a>
+<a id="2-verified-implementation-and-delivery-register"></a>
+<a id="3-actual-roadmap-d0-to-d6"></a>
+<a id="4-existing-research-reuse-vs-defer"></a>
+<a id="5-progress-measurement"></a>
+<a id="6-relationship-to-historical-phase-roadmap"></a>
 
-**Scope:** `docs/ROADMAP.md` — first operative section; historical phase records preserved below.  
-**Snapshot date:** 2026-10-14  
-**Verified baseline:** `main` = `ffd3ac958923fa1f5ea7213a3314259a257c64d9`  
-**Classification:** Delivery roadmap and evidence inventory — **NOT** a research, data-acquisition, trading, or capital authorization.
+## 📚 Preserved Historical Phase & Architecture Records
 
-> This checkpoint supersedes the *operational-status descriptions* in the September 2026 sections of the existing roadmap; it does not erase or amend their historical decisions. In particular, the September assertion that HYP_003 was not created is historical and no longer the current research disposition. Reverify GitHub state and human decision records before any transition.
+**Historical section begins here.** All source bytes from the original `ACASH CURRENT NORTH-STAR (2026-09-11)` heading to EOF are retained. Archived assertions are not current admission or new human authorization.
 
-## 1. North Star
-
-Obtain **independently qualified ETF market data** with immutable provenance and use existing ACASH accounting/reporting machinery to evaluate a **hypothetical USD 1,000 portfolio after realistic costs**. The valid governed investment decision remains **cash/no trade**.
-
-The bottleneck is **data admission and entitlement**, not the absence of optimizers, strategy ideas, dashboards, or additional research infrastructure.
-
-**Hard boundaries:** real capital authority USD 0.00; `NO_REAL_ORDERS=true`; no unauthorized provider HTTP, provider credentials, subscriptions, sealed-data access, broker authentication, paper/live orders, or Homelab deployment. Software-readiness, acquisition authority, data qualification, strategy qualification, paper, and live status are different gates.
-
-## 2. Verified Implementation and Delivery Register
-
-| Workstream | Current state (at snapshot) | Evidence and limitation |
-| --- | --- | --- |
-| M1.5–M1.6 benchmark lifecycle, holdings, dividends/splits, fee arithmetic | **MERGED, synthetic-tested** | PR #24/#25; not newly qualified Invest ETF data |
-| M1.7 canonical Lane A authority planner + Lane B specification | **MERGED, offline-only** | PR #26/#27; exact request shape and capped scope; packet remains UNISSUED |
-| PPDS / Invest V0 | **MERGED, synthetic-only** | PR #28; read-only portfolio reports, no real capital |
-| M1.8 offline acquisition rehearsal | **MERGED** | PR #29; mock transport, pagination, symbol/session checks; no network requests in that work |
-| M1.8.1 disabled transport, file-backed journal, evidence integrity | **MERGED** | PR #30; create-once and hash/receipt checks; **crash durability unverified** |
-| Research handoff / utilization inventory | **MERGED** | PR #31 and PR #33; dated, source-linked inventory, not data/admission authority |
-| First bounded ETF Offline Canary | **DRAFT PR #32; NOT MERGED** | HEAD `d47577521abf8047f1c1aabae2fb1aac562ad1bb`; two-file change; 36 targeted tests reported; push+PR CI green at that SHA, but branch is **behind main** after PR #33 merge |
-| Current Lane A real provider acquisition | **NOT AUTHORIZED / NOT RUN** | Entitlement not verified; IEX or SIP not selected; no production independent approval verifier or audited live HTTP executor |
-| New qualified multi-year ETF dataset and after-cost performance | **NOT ESTABLISHED** | Five-session canary does not prove historical coverage, PIT correctness, distributions, return series, or Alpha |
-
-**Historical exception:** HYP_010 previously made 8 narrowly authorized Alpaca SIP provider requests (SPY/VEU/AGG/BIL, 2017-01-03–06); the probe passed within that *different* scope, but VEU sponsor dividend authority blocked progression. This is NOT current Lane A entitlement or a qualified Invest dataset. See [R2 probe record](phase14/HYP_010_R2_PROVIDER_QUALIFICATION.md) and [parked decision](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md).
-
-## 3. Actual Roadmap: D0 to D6
-
-| Gate | Objective / acceptance criteria | State |
-| --- | --- | --- |
-| **D0 — Integrate Offline Canary** | Close only reproducible PR #32 acceptance gaps; sync latest main via normal merge, verify complete PR diff, rerun targeted/T1/MyPy and fresh exact-HEAD CI; undraft and obtain separate human merge approval | **ACTIVE: Review / sync pending** |
-| **D1 — Prepare Real Acquisition Safety** | One minimal offline-tested boundary: independent approval verification, runtime identity and canonical request binding, explicit entitlement/feed, allowlisted TLS origin, redirect policy, reserved attempts before dispatch, failure conservation, streaming response-byte cap, immutable external raw/receipt integrity | **SOFTWARE NOT COMPLETE; REAL HTTP BLOCKED** |
-| **D2 — Bounded Five-Session Data Canary** | Issue *separate human market-data authorization* after D1 and entitlement proof; Alpaca `GET /v2/stocks/bars`, VOO/BND/GLD/BIL, 1Day, 2026-09-28–2026-10-02 inclusive, raw+all, exactly one IEX or SIP feed, ≤12 HTTP operations, ≤524288 observed bytes across all outcomes, USD 0 paid, no retries/fallback | **UNISSUED: NO-GO** |
-| **D3 — Admission / Data Quality** | Match every authorized symbol/session/adjustment; validate NYSE CA-1, timestamps, duplicates, OHLCV, raw/adjusted semantics, pagination completion, bytes and immutable hashes. Separate sponsor/issuer dividends and splits (Lane B); incomplete evidence remains PARTIAL/UNQUALIFIED | **BLOCKED ON AUTHORIZED EVIDENCE** |
-| **D4 — Multi-year ETF Historical Dataset** | Separate scope/authority and evidence for prices, sponsor corporate actions, fund inception, dataset vintages and point-in-time limits. Alpaca's published plan tables currently list historical US equities from 2016; do not infer 2010–2015 availability | **NOT QUALIFIED / NOT AUTHORIZED** |
-| **D5 — Portfolio Economics** | Use existing PPDS/Invest V0/M1.6 to compare cash, equity buy-and-hold, equity/bond, and low-turnover diversified ETF baselines for *synthetic USD 1,000* on matched periods after commissions, spreads, dividends, cash yield, USD/THB FX, funding and explicit tax scenarios | **WAITING FOR D4** |
-| **D6 — Governed Strategy Research** | Only after qualified data and separate scientific authorization, evaluate eligible hypotheses with existing allocator/DSR/PBO/CPCV tools. Phase 13 Step 8/9, paper/live and real capital remain locked absent their own decisions | **LATER / LOCKED** |
-
-**First operator action:** review and integrate PR #32 on the *new final SHA after syncing main*; it is an offline-only software merge and **does not** authorize Alpaca HTTP.
-
-## 4. Existing Research: Reuse vs Defer
-
-| Asset | Reuse / disposition | Further evidence required |
-| --- | --- | --- |
-| M1.7 request planner + M1.8 rehearsal + M1.8.1 evidence | Reuse immediately; **single** canonical request authority | Safe authenticated network boundary, durable dispatch policy, real payload accounting |
-| NYSE CA-1 + HYP_010 provider-probe lessons | Reuse method for inclusive end-date and session coverage | Do not transfer historical authority |
-| HYP_003 | **TERMINALLY FALSIFIED**; preserve [sealed decision](phase14/hyp_003_terminal_falsification_dossier.md) | Do not resurrect or present as Alpha |
-| HYP_010 | **PARKED/NON-FALSIFIED**, VEU dividend authority blocker | New human authorization before any resumed research; no substitution |
-| RI-01 | Chronology/lineage discrepancy unresolved, preserve [audit](audit/RI01_CHRONOLOGY_DISCREPANCY_REPORT_20261013.md) | Do not silently reclassify |
-| PPDS, Invest V0, benchmark, Cash/EW/InverseVol | Reuse for transparent baseline comparisons | Qualified multi-year prices and corporate actions |
-| DSR/PBO/CPCV | Existing validation tooling; no newly qualified candidate | Independently authorized hypothesis/test design |
-| VIX/VIX1D, FRED/BOT | Research notes / future risk, PIT macro and FX | Separate data rights and clear empirical use case |
-| IBKR-inspired synthetic friction | Cost scenario model, not verified account fees | Actual commission, spread, FX, funding and tax evidence |
-
-[Research utilization matrix](audit/RESEARCH_UTILIZATION_MATRIX_20261013.md) is the detailed inventory. [ETF admission handoff](research/ETF_DATA_ADMISSION_HANDOFF_20261014.md) records provider docs and limitations. [Unissued Lane A packet](research/LANE_A_UNISSUED_AUTHORITY_PACKET_20261013.md) is a proposal, not permission.
-
-## 5. Progress Measurement
-
-**Do not measure project progress primarily by numbers of PRs, tests, or theoretical strategies.** Measure independently verified progression through:
-
-1. **Software integrity:** exact reviewed SHAs, bounded canonical requests and failure-mode tests.
-2. **Acquisition evidence:** authorized HTTP operations and bytes, credential-safe immutable raw artifacts.
-3. **Data qualification:** complete or explicitly partial symbol/session coverage plus sponsor-backed corporate actions.
-4. **Economic utility:** reproducible matched-horizon after-cost baseline comparisons under disclosed assumptions.
-5. **Governance:** authenticated authority for every transition, and real capital remaining USD 0 absent human ratification.
-
-## 6. Relationship to Historical Phase Roadmap
-
-Retain the existing Phase 0–23 historical sections (including Phase 17 admission framework and proposed Phase 18–23/24–28 research architectures) below this current delivery track. These are **historical technical capability and future-architecture records**, not a claim that a qualified current strategy, data source, or capital allocation exists. Preserve human ratification, evidence lineage, and historical content; mark older “CURRENT”, “NOW” and “NEXT” passages as dated snapshots rather than silently rewriting them.
-
----
 
 ## ACASH CURRENT NORTH-STAR (2026-09-11)
 

@@ -1,0 +1,723 @@
+# ACASH — System Development Roadmap (Current Delivery + Historical Phases 0–23)
+
+**Document:** `docs/ROADMAP.md`  
+**Version:** 3.7.0  
+**Date:** 2026-10-14  
+**Governance Principle:** Sequential Phase Progression. No phase skipping. Every phase has explicit gates, acceptance criteria, and human approval checkpoints.
+
+> **Note on Phase 7 scope:** This roadmap's original nominal title for Phase 7
+> was "Regime Engine (Trend/Vol Classifiers)". The **actual** Phase 7 work being
+> executed in this repository is **Live Execution & Broker Mapping** (Admission →
+> Step 8 Contracts → Broker Semantic Mapping → Alpaca Paper exercise). The
+> Regime-Engine content is deferred; Phase 7 below reflects the real scope.
+
+---
+
+## CURRENT DELIVERY TRACK — ETF Evidence-to-Economics (2026-10-14)
+
+**Scope:** `docs/ROADMAP.md` — first operative section; historical phase records preserved below.  
+**Snapshot date:** 2026-10-14  
+**Verified baseline:** `main` = `ffd3ac958923fa1f5ea7213a3314259a257c64d9`  
+**Classification:** Delivery roadmap and evidence inventory — **NOT** a research, data-acquisition, trading, or capital authorization.
+
+> This checkpoint supersedes the *operational-status descriptions* in the September 2026 sections of the existing roadmap; it does not erase or amend their historical decisions. In particular, the September assertion that HYP_003 was not created is historical and no longer the current research disposition. Reverify GitHub state and human decision records before any transition.
+
+## 1. North Star
+
+Obtain **independently qualified ETF market data** with immutable provenance and use existing ACASH accounting/reporting machinery to evaluate a **hypothetical USD 1,000 portfolio after realistic costs**. The valid governed investment decision remains **cash/no trade**.
+
+The bottleneck is **data admission and entitlement**, not the absence of optimizers, strategy ideas, dashboards, or additional research infrastructure.
+
+**Hard boundaries:** real capital authority USD 0.00; `NO_REAL_ORDERS=true`; no unauthorized provider HTTP, provider credentials, subscriptions, sealed-data access, broker authentication, paper/live orders, or Homelab deployment. Software-readiness, acquisition authority, data qualification, strategy qualification, paper, and live status are different gates.
+
+## 2. Verified Implementation and Delivery Register
+
+| Workstream | Current state (at snapshot) | Evidence and limitation |
+| --- | --- | --- |
+| M1.5–M1.6 benchmark lifecycle, holdings, dividends/splits, fee arithmetic | **MERGED, synthetic-tested** | PR #24/#25; not newly qualified Invest ETF data |
+| M1.7 canonical Lane A authority planner + Lane B specification | **MERGED, offline-only** | PR #26/#27; exact request shape and capped scope; packet remains UNISSUED |
+| PPDS / Invest V0 | **MERGED, synthetic-only** | PR #28; read-only portfolio reports, no real capital |
+| M1.8 offline acquisition rehearsal | **MERGED** | PR #29; mock transport, pagination, symbol/session checks; no network requests in that work |
+| M1.8.1 disabled transport, file-backed journal, evidence integrity | **MERGED** | PR #30; create-once and hash/receipt checks; **crash durability unverified** |
+| Research handoff / utilization inventory | **MERGED** | PR #31 and PR #33; dated, source-linked inventory, not data/admission authority |
+| First bounded ETF Offline Canary | **DRAFT PR #32; NOT MERGED** | HEAD `d47577521abf8047f1c1aabae2fb1aac562ad1bb`; two-file change; 36 targeted tests reported; push+PR CI green at that SHA, but branch is **behind main** after PR #33 merge |
+| Current Lane A real provider acquisition | **NOT AUTHORIZED / NOT RUN** | Entitlement not verified; IEX or SIP not selected; no production independent approval verifier or audited live HTTP executor |
+| New qualified multi-year ETF dataset and after-cost performance | **NOT ESTABLISHED** | Five-session canary does not prove historical coverage, PIT correctness, distributions, return series, or Alpha |
+
+**Historical exception:** HYP_010 previously made 8 narrowly authorized Alpaca SIP provider requests (SPY/VEU/AGG/BIL, 2017-01-03–06); the probe passed within that *different* scope, but VEU sponsor dividend authority blocked progression. This is NOT current Lane A entitlement or a qualified Invest dataset. See [R2 probe record](phase14/HYP_010_R2_PROVIDER_QUALIFICATION.md) and [parked decision](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md).
+
+## 3. Actual Roadmap: D0 to D6
+
+| Gate | Objective / acceptance criteria | State |
+| --- | --- | --- |
+| **D0 — Integrate Offline Canary** | Close only reproducible PR #32 acceptance gaps; sync latest main via normal merge, verify complete PR diff, rerun targeted/T1/MyPy and fresh exact-HEAD CI; undraft and obtain separate human merge approval | **ACTIVE: Review / sync pending** |
+| **D1 — Prepare Real Acquisition Safety** | One minimal offline-tested boundary: independent approval verification, runtime identity and canonical request binding, explicit entitlement/feed, allowlisted TLS origin, redirect policy, reserved attempts before dispatch, failure conservation, streaming response-byte cap, immutable external raw/receipt integrity | **SOFTWARE NOT COMPLETE; REAL HTTP BLOCKED** |
+| **D2 — Bounded Five-Session Data Canary** | Issue *separate human market-data authorization* after D1 and entitlement proof; Alpaca `GET /v2/stocks/bars`, VOO/BND/GLD/BIL, 1Day, 2026-09-28–2026-10-02 inclusive, raw+all, exactly one IEX or SIP feed, ≤12 HTTP operations, ≤524288 observed bytes across all outcomes, USD 0 paid, no retries/fallback | **UNISSUED: NO-GO** |
+| **D3 — Admission / Data Quality** | Match every authorized symbol/session/adjustment; validate NYSE CA-1, timestamps, duplicates, OHLCV, raw/adjusted semantics, pagination completion, bytes and immutable hashes. Separate sponsor/issuer dividends and splits (Lane B); incomplete evidence remains PARTIAL/UNQUALIFIED | **BLOCKED ON AUTHORIZED EVIDENCE** |
+| **D4 — Multi-year ETF Historical Dataset** | Separate scope/authority and evidence for prices, sponsor corporate actions, fund inception, dataset vintages and point-in-time limits. Alpaca's published plan tables currently list historical US equities from 2016; do not infer 2010–2015 availability | **NOT QUALIFIED / NOT AUTHORIZED** |
+| **D5 — Portfolio Economics** | Use existing PPDS/Invest V0/M1.6 to compare cash, equity buy-and-hold, equity/bond, and low-turnover diversified ETF baselines for *synthetic USD 1,000* on matched periods after commissions, spreads, dividends, cash yield, USD/THB FX, funding and explicit tax scenarios | **WAITING FOR D4** |
+| **D6 — Governed Strategy Research** | Only after qualified data and separate scientific authorization, evaluate eligible hypotheses with existing allocator/DSR/PBO/CPCV tools. Phase 13 Step 8/9, paper/live and real capital remain locked absent their own decisions | **LATER / LOCKED** |
+
+**First operator action:** review and integrate PR #32 on the *new final SHA after syncing main*; it is an offline-only software merge and **does not** authorize Alpaca HTTP.
+
+## 4. Existing Research: Reuse vs Defer
+
+| Asset | Reuse / disposition | Further evidence required |
+| --- | --- | --- |
+| M1.7 request planner + M1.8 rehearsal + M1.8.1 evidence | Reuse immediately; **single** canonical request authority | Safe authenticated network boundary, durable dispatch policy, real payload accounting |
+| NYSE CA-1 + HYP_010 provider-probe lessons | Reuse method for inclusive end-date and session coverage | Do not transfer historical authority |
+| HYP_003 | **TERMINALLY FALSIFIED**; preserve [sealed decision](phase14/hyp_003_terminal_falsification_dossier.md) | Do not resurrect or present as Alpha |
+| HYP_010 | **PARKED/NON-FALSIFIED**, VEU dividend authority blocker | New human authorization before any resumed research; no substitution |
+| RI-01 | Chronology/lineage discrepancy unresolved, preserve [audit](audit/RI01_CHRONOLOGY_DISCREPANCY_REPORT_20261013.md) | Do not silently reclassify |
+| PPDS, Invest V0, benchmark, Cash/EW/InverseVol | Reuse for transparent baseline comparisons | Qualified multi-year prices and corporate actions |
+| DSR/PBO/CPCV | Existing validation tooling; no newly qualified candidate | Independently authorized hypothesis/test design |
+| VIX/VIX1D, FRED/BOT | Research notes / future risk, PIT macro and FX | Separate data rights and clear empirical use case |
+| IBKR-inspired synthetic friction | Cost scenario model, not verified account fees | Actual commission, spread, FX, funding and tax evidence |
+
+[Research utilization matrix](audit/RESEARCH_UTILIZATION_MATRIX_20261013.md) is the detailed inventory. [ETF admission handoff](research/ETF_DATA_ADMISSION_HANDOFF_20261014.md) records provider docs and limitations. [Unissued Lane A packet](research/LANE_A_UNISSUED_AUTHORITY_PACKET_20261013.md) is a proposal, not permission.
+
+## 5. Progress Measurement
+
+**Do not measure project progress primarily by numbers of PRs, tests, or theoretical strategies.** Measure independently verified progression through:
+
+1. **Software integrity:** exact reviewed SHAs, bounded canonical requests and failure-mode tests.
+2. **Acquisition evidence:** authorized HTTP operations and bytes, credential-safe immutable raw artifacts.
+3. **Data qualification:** complete or explicitly partial symbol/session coverage plus sponsor-backed corporate actions.
+4. **Economic utility:** reproducible matched-horizon after-cost baseline comparisons under disclosed assumptions.
+5. **Governance:** authenticated authority for every transition, and real capital remaining USD 0 absent human ratification.
+
+## 6. Relationship to Historical Phase Roadmap
+
+Retain the existing Phase 0–23 historical sections (including Phase 17 admission framework and proposed Phase 18–23/24–28 research architectures) below this current delivery track. These are **historical technical capability and future-architecture records**, not a claim that a qualified current strategy, data source, or capital allocation exists. Preserve human ratification, evidence lineage, and historical content; mark older “CURRENT”, “NOW” and “NEXT” passages as dated snapshots rather than silently rewriting them.
+
+---
+
+## ACASH CURRENT NORTH-STAR (2026-09-11)
+
+**North Star.** Under strict scientific governance, answer *"where should capital be allocated?"* — including the valid governed answer **NOWHERE** — by progressing the Phase 14 research lanes (mainline `CAND-FREE-MACRO-001`, parallel `MEC-0011`, parallel `MEC-0013`) to a single canonical frozen pre-registration, then explicit Human authorization, then empirical validation and qualification. All trading / capital / broker authority remains **STRICTLY LOCKED** throughout.
+
+```
+CURRENT WORKING MILESTONE (replaces the older "Phase 13 Step 5 soak ACTIVE" framing;
+Phase 13 Steps 1-7 are certified; Step 8 LOCKED; Step 9 NOT AUTHORIZED):
+
+  MAINLINE .... CAND-FREE-MACRO-001    FREEDATA research lane; CONDITIONALLY READY;
+                                       Rounds 0-3B (K=3), Round 3B remainder (S-2/S-7 F2/S-9),
+                                       Round 4 (D14/D15/D16/EX/CO/CA-1), Round 5 (D19/D20) RATIFIED;
+                                       D17 (SPX close authority) & D18 (manifest) OPEN / D17-E BLOCKED;
+                                       PRE-REGISTRATION NOT FULLY FROZEN (24/26 checklist; D18 & Human Auth pending);
+                                       EMPIRICAL VALIDATION NOT AUTHORIZED
+  PARALLEL .... MEC-0011                Gold/DXY relative-movement; RESEARCH INTAKE ONLY;
+                                       D1=A / D2=C / D3=B human-ratified 2026-09-10;
+                                       DXY source layer BLOCKED (paths P1-P5 await Human);
+                                       NOT AUTHORIZED FOR EMPIRICAL VALIDATION
+  ARCHIVED .... MEC-0013                Opening Range Breakout (ORB); AUDITED RESEARCH ASSET ONLY;
+                                       MEC-0013-D01 = OPTION C (Archived at $0; No commercial data;
+                                       No 30-day sample; NOT a candidate; NOT HYP_003; Backtest LOCKED)
+  PARKED ...... F-1 CAND-FLOW-CALENDAR-REBALANCE-001   NOT READY / CONDITIONAL at $0;
+                                       PENDING HUMAN RATIFICATION
+  INFRASTRUCTURE .. Gate G7 / Stage S11   HOMELAB 6-HOUR OPERATIONAL SOAK; CLOSED / PASS;
+                                       Session E3.5-20260913-025117-de2762;
+                                       Human Forensic Adjudication;
+                                       Pi tooling remediation MERGED @ 68142ae;
+                                       ZERO REAL ORDER SUBMISSIONS;
+                                       NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION
+  LOCKED ...... HYP_003 (NOT CREATED) / R1 (NOT AUTHORIZED) / empirical validation /
+               backtest / trading (LOCKED) / capital ($0.00) / broker (DISCONNECTED) /
+               quarantined HYP_001/HYP_002 data spans (PRISTINE / NOT REUSABLE BY DEFAULT)
+```
+
+### State Register (authoritative boundaries, verified 2026-09-11)
+
+| Class | Lane / Item | State |
+|---|---|---|
+| CURRENT | `CAND-FREE-MACRO-001` (mainline) | `CONDITIONALLY READY`; Human binding Rounds 0-5 ratified (K = 3; S-2 S2-B, S-7 T2/F2, S-9 Q-1..Q-4, D14-D16, EX, CO, CA-1, D19, D20 bound); **D17 (SPX close authority) & D18 (reproducibility manifest) = OPEN / DATA-AUTHORITY BLOCKED**; PRE-REGISTRATION **NOT FULLY FROZEN** (24/26 checked; D18 & Human Auth pending); EMPIRICAL VALIDATION **NOT AUTHORIZED** |
+| PARALLEL | `MEC-0011` Gold/DXY relative movement | RESEARCH INTAKE ONLY; D1=A / D2=C / D3=B human-ratified 2026-09-10; **source layer BLOCKED** (B1 CONDITIONAL; B2/B3 BLOCKED; B4-B10 open); DXY resolution path P1-P5 awaiting Human selection; no Gold/DXY source ACCEPTED in the registry; no GLD/UUP variant may be created without explicit Human selection |
+| ARCHIVED | `MEC-0013` Opening Range Breakout (ORB) | AUDITED RESEARCH ASSET ONLY (`docs/phase14/mec_0013_orb_research_intake.md`, `mec_0013_orb_research_audit.md`); Human Ratification MEC-0013-D01 = OPTION C (Archived at $0; No commercial data; No 30-day sample; NOT promoted to candidate; NOT HYP_003; Backtest LOCKED; Zero ACASH empirical evidence) |
+| COMPLETED | `Gate G7` / `Stage S11` (Homelab 6h Soak) | **CLOSED / PASS** (Session `E3.5-20260913-025117-de2762`; Human Forensic Adjudication; historical harness printed FAIL via `SESSION_ID=unknown` binding defect; verified evidence satisfies all G7 criteria: canonical manifest duration 21,639.30s, 361 M1 bars spanning 360 intervals, 0 restarts, 0 failure-shaped disconnects; Pi verifier remediation merged @ `68142ae`; ZERO REAL ORDER SUBMISSIONS) |
+| PARKED / BLOCKED | `F-1` CAND-FLOW-CALENDAR-REBALANCE-001 | D1 final verdict **NOT READY / CONDITIONAL** (free-data feasibility not certifiable at $0); PENDING HUMAN RATIFICATION; NOT mainline; NOT HYP_003 |
+| PARKED / BLOCKED | Other research directions/candidates (NY-open, prediction-market AI, session momentum, ...) | `UNVALIDATED PROPOSAL`; NOT REGISTERED; NOT SEALED; NOT HYP_003 |
+| LOCKED | `HYP_003` | **NOT CREATED** (absent repo-wide) |
+| LOCKED | `R1` / `ResearchReInceptionGate` | **NOT AUTHORIZED / NOT INVOKED** |
+| LOCKED | Empirical validation / backtest | **NOT AUTHORIZED** for all candidates |
+| LOCKED | Trading / Capital / Broker | **LOCKED / $0.00 / DISCONNECTED** (0 live orders; no live credential path) |
+| LOCKED | Quarantined data | HYP_001 2026 M5 Holdout; HYP_002 H4 Validation + Blind OOS — PRISTINE / NOT REUSABLE BY DEFAULT |
+| LOCKED | Phase 13 Step 8 (Human GO) / Step 9 (90-day paper) | **LOCKED / NOT AUTHORIZED** (no qualified strategy) |
+| FUTURE | Phases 18-22 | UPCOMING (tournament / regime detection / selection / allocation solvers / orchestration) |
+
+**Authorization ladder — never conflate:** `INFRASTRUCTURE READY != STRATEGY QUALIFIED != PAPER AUTHORIZED != LIVE AUTHORIZED`. Research capability != strategy qualification != execution authorization. The research lanes above are research configurations / candidates — **NOT** registered hypotheses, strategies, or tradeable configurations.
+
+---
+
+## ACASH NOW / NEXT / LATER (2026-09-13)
+
+- **NOW** (governance & data-authority resolution; no empirical work):
+  1. Gate G7 / Stage S11 — [COMPLETED / CLOSED] Infrastructure 6h continuous soak validated under session `E3.5-20260913-025117-de2762` via Human Forensic Adjudication; Pi tooling remediation merged @ `68142ae`; ZERO REAL ORDER SUBMISSIONS.
+  2. MACRO-001 D17 — Human Decision on SPX close data authority (`docs/phase14/macro_001_data_authority_gap_register.md`). D17-E ($0 blocker) maintained.
+  3. MACRO-001 D18 — Downstream reproducibility manifest schema specified (`docs/phase14/macro_001_d18_manifest_specification.md`); unsealed, dependency-blocked on D17.
+  4. MEC-0013 — [COMPLETED / ARCHIVED] Claim-provenance audited, Option C ratified, archived as non-promoted research asset (`docs/phase14/mec_0013_orb_research_audit.md`).
+  5. Data-plane test seam — [COMPLETED / VERIFIED] Offline integration validation of `DuckDBStorage` -> `ParquetMarketDataProvider` -> `ForwardMarketDataFeeder` verified (`tests/integration/test_parquet_feeder_seam.py`, 4/4 passing, zero alpha logic).
+  6. MACRO-001 Pre-Registration Checklist — [RECONCILED] 24/26 items checked (`docs/phase14/cand_free_macro_001_human_specification_decision_surface.md` §28); Anti-HARKing template prepared (`docs/phase14/macro_001_anti_harking_audit_template.md`).
+- **NEXT** (NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION; strict sequence; only after D17 / D18 are resolved):
+  1. Complete pre-registration freeze checklist (26/26 items) -> Draft Freeze Candidate.
+  2. Anti-HARKing review.
+  3. Pre-registration Freeze.
+  4. Data Archive / Reproducibility Manifest sealing.
+  5. **Explicit Human Authorization** -> then empirical validation / backtest via Phase 5 Production Orchestrator.
+- **LATER** (gated on a HUMAN-AUTHORIZED qualified strategy; nothing before):
+  1. Phase 13 Step 8 Human GO -> Step 9 (90-day continuous paper run).
+  2. Phases 18-22 upstream milestones (tournament, regime detection, selection, allocation solvers, orchestration). All currently LOCKED / NOT AUTHORIZED.
+
+---
+
+## Roadmap Overview
+
+```
+✅ Phase 0: Discovery & Architecture ──► [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 1: Foundation & Domain Core ──► Gate 1 [COMPLETED - PASSED — 27/27 Tests]
+   │
+   ▼
+✅ Phase 2: Data Ingestion & Integrity Engine ──► Gate 2 [COMPLETED - PASSED — 57/57 Tests]
+   │
+   ▼
+✅ Phase 3: Point-in-Time Microstructure & Feature Engine (3A/3B/3C) ──► Gate 3 [COMPLETED - PASSED — 122/122 Tests]
+   ├─ ✅ Phase 3A: Canonical Trades Domain
+   ├─ ✅ Phase 3B: Canonical Order Book Domain
+   └─ ✅ Phase 3C: Microstructure Feature Engine
+   │
+   ▼
+✅ Phase 4: Alpha Research Engine & Hypotheses ──► Gate 4 [COMPLETED - PASSED — 139/139 Tests]
+   │
+   ▼
+✅ Phase 5: Backtesting Substrate & Simulation Engine ──► Gate 5 [COMPLETED - PASSED — 200/200 Tests]
+   │
+   ▼
+✅ Phase 6: Statistical Validation & Overfitting Controls ──► Gate 6 [COMPLETED - PASSED — 252/252 Tests]
+   │
+   ▼
+
+✅ Phase 7: Live Execution & Broker Mapping (Admission → Coordinator → BMAP → Alpaca Paper) ──► Gate 7 [COMPLETED - PASSED — 610/610 Tests, P = 1 (P-001)]
+   │
+✅ Phase 8: Portfolio Engine (skfolio & Baselines) ──► Gate 8 [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 8.5: Alpha Research & Economic Evidence Engine ──► Gate 8.5 [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 9: Deterministic Risk Engine & Kill Switch ──► Gate 9 [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 10: Runtime Orchestration & Continuous Paper Operations ──► Gate 10 [COMPLETED - PASSED]
+   │
+   ▼
+✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution ──► Gate 11 [COMPLETED - PASSED — 107 Tests, 26 Red Team, 9 Integration]
+   │
+   ▼
+✅ Phase 12: MT5 & Venue Execution Adapters ──► Gate 12 [COMPLETED & FROZEN — 1240/1240 Tests, 1e1d154]
+   │
+   ▼
+✅ Phase 13: Live Small Capital & Infrastructure ──► Gate 13 Steps 1–7 Certified; Gate G7 / Stage S11 CLOSED [PASS — Session E3.5-20260913-025117-de2762]
+   ├─ ✅ Step 1: Implementation & Safety Envelopes [PASSED]
+   ├─ ✅ Step 2: Code & Unit Audit [PASSED]
+   ├─ ✅ Step 3: Integration Testing & Local Simulator [PASSED]
+   ├─ ✅ Step 4: Restart, Recovery & Rehydration [PASSED]
+   ├─ ✅ Step 5: 24-Hour Unattended Soak Test [VERIFIED COMPLETED]
+   ├─ ✅ Step 6: Telemetry, Reconciliation & Forensic Audit [PASSED]
+   ├─ ✅ Step 7: Continuous Paper Readiness Certification [CONDITIONALLY SATISFIED]
+   ├─ ✅ Gate G7 / Stage S11: Homelab 6h Continuous Soak [CLOSED / PASS — Human Forensic Adjudication]
+   ├─ 🔒 Step 8: Explicit Human GO Checkpoint [LOCKED]
+   └─ 🔒 Step 9: 90-Day Continuous Paper Forward Run [LOCKED]
+   │
+   ▼
+📐 Phase 14: AI Quantitative Research Layer ──► Gate 14 [PLAN APPROVED AT PLAN LEVEL — IMPLEMENTATION LOCKED]
+   │
+   ▼
+⏳ Phase 15: Strategy Lifecycle Management [HARMONIZED INTO PHASE 17]
+   │
+   ▼
+⏳ Phase 16: Performance Degradation & Data Flywheel [HARMONIZED INTO PHASE 17–22]
+   │
+   ▼
+✅ Phase 17: Strategy Admission Standard & Regime-Aware Capital Allocation Framework [SPECIFIED — ADR-023]
+   │
+   ▼
+⏳ Phase 18: Strategy Research & Tournament Pipeline [UPCOMING]
+   │
+   ▼
+⏳ Phase 19: Empirical Regime Detection Engine [UPCOMING]
+   │
+   ▼
+⏳ Phase 20: Regime × Strategy Selection & Decision Engine [UPCOMING]
+   │
+   ▼
+⏳ Phase 21: Risk-Based Capital Allocation Solvers [UPCOMING]
+   │
+   ▼
+⏳ Phase 22: Portfolio / Multi-Strategy Orchestration & Memory Flywheel [UPCOMING]
+   │
+   ▼
+🏛️ Phase 23: Adaptive Multi-Horizon Strategy & Microstructure Architecture [ARCHITECTURAL RECORD — ADR-024/025]
+```
+
+---
+
+## CURRENT STATE / NEXT STEP (Reconciliated 2026-09-10)
+
+> **Current Repository Milestone:** Phase 14 Governance + Research Lanes (CAND-FREE-MACRO-001 mainline / MEC-0011 parallel). System: **RESEARCH STANDING BY**.  
+> **Historical note:** the prior framing "Phase 13 Step 5 (24-Hour Soak) ACTIVE / IN PROGRESS under PID 41844, launched 2026-09-05T10:20:43Z" is a completed historical/snapshot event — Phase 13 Step 5 is VERIFIED COMPLETED (see Phase 13 detail below). Potentially obsolete section found — preserved intentionally.  
+> **Live Capital Authority:** Strictly **$0.00 (Hard-Locked)**. Live Orders: **0**. Broker: **DISCONNECTED**.  
+
+### Current Canonical Execution State:
+- ✅ **Phases 0–12:** COMPLETED & FROZEN (Gates 1–12 certified, frozen contract baseline sealed).
+- ✅ **Phase 13 (Live Small Capital / Forward Paper Validation): INFRASTRUCTURE READY / STRATEGY BLOCKED**
+  - ✅ **Step 1 (Implementation & Safety Envelopes):** PASSED.
+  - ✅ **Step 2 (Code & Unit Audit):** PASSED.
+  - ✅ **Step 3 (Integration Testing & Local Simulator):** PASSED.
+  - ✅ **Step 4 (Restart, Recovery & Rehydration):** PASSED.
+  - ✅ **Step 5 (24-Hour Unattended Soak Test):** **VERIFIED COMPLETED** (86,400.21s runtime, 86,085 ledger events, 8,608 telemetry records, 0 errors, graceful exit; snapshot launched 2026-09-05T10:20:43Z under PID 41844).
+  - ✅ **Step 6 (Telemetry, Reconciliation & Forensic Audit):** PASS (SHA-256 chained integrity, zero gaps >15s, RSS peak 175.29 MB, pulse reconciliation 100%).
+  - ✅ **Step 7 (Continuous Paper Readiness Certification):** CONDITIONALLY SATISFIED (runtime infrastructure verified ready; blocked on strategy qualification; B23.2 VM deferred).
+  - 🔒 **Step 8 (Explicit Human GO Checkpoint):** STRICTLY LOCKED (no qualified strategy).
+  - 🔒 **Step 9 (90-Day Continuous Paper Forward Run):** STRICTLY NOT AUTHORIZED (clock has not started; $0.00 capital authority).
+- 📐 **Phase 14 (AI Quantitative Research Layer): GATE 14 ACCEPTED — RESEARCH CAPABILITY — ZERO TRADING AUTHORITY**
+  - Master Research Architecture Revision 1.2 approved at plan level by Human Auditor.
+  - **Gate 14 = ACCEPTED** (2026-09-08) — technical acceptance of the Phase 14 research capability (G-2 CUSTOM-2 scope). **NOT** trading, runtime, or strategy authorization.
+  - Implementation slices exist in the repository as **UNVALIDATED PROPOSALS** (research-AI assistant/converter/prompts/provider; slices 1-4; D6 Option A census sealing; Phase 5 production orchestrator; D8-B release gate, Seam A identity; D5 OOS provenance with PIT lineage). Phase 13 Steps 8-9 remain independently and strictly LOCKED (Human Ratification D1-D4, 2026-09-08).
+  - Zero authority to register hypotheses (HYP_003 NOT CREATED), qualify alpha, certify validation, or trade. Capital and broker execution remain completely decoupled ($0.00 / DISCONNECTED).
+
+### Repository Synchronization State:
+- **Current Branch:** `main` (HEAD == origin/main == `c78d09c`)
+- **Documentation Synchronization Date:** 2026-09-11
+- **State Source:** Canonical repository contracts (`src/acash/`), Phase 13 audit records (`docs/phase13/`), and Phase 14 governance / research records (`docs/phase14/`). Older checkpoint snapshots (`docs/PROJECT_STATUS.md` dated 2026-09-04; `docs/README.md` dated 2026-09-07) are historical / checkpoint-only and may lag this file.
+
+### Immediate Next Action:
+- Resolve MACRO-001 D17 (SPX close data authority) and D18 (reproducibility manifest).
+- Once D17/D18 are resolved, complete the 26-item pre-registration freeze checklist -> Draft Freeze -> Anti-HARKing review -> Pre-registration Freeze -> Data Archive / Manifest -> Explicit Human Authorization.
+- ParquetMarketDataProvider implemented and verified on main (`b7e4d5e`); data-plane ready for offline replay when authorization occurs.
+- MEC-0013 ORB remains isolated research intake (tracked research intake; non-authorizing; zero empirical authority).
+- No empirical work of any kind until an explicit Human authorization follows a frozen pre-registration.
+
+---
+
+## Detailed Phase Breakdown
+
+### ✅ Phase 0: Discovery & Architecture [COMPLETED - PASSED]
+- **Objective:** Evaluate technologies, define domain architecture, produce ADRs, risk register, and establish project boundaries.
+- **Deliverables:** Complete documentation suite in `docs/`.
+- **Gate 0 Criteria:** Technology candidate matrix approved; architecture review signed off; Phase 1 implementation plan approved.
+
+---
+
+### ✅ Phase 1: Foundation & Domain Core [COMPLETED - PASSED]
+- **Objective:** Establish the modular monolith structure, domain types, abstract interfaces, configuration management, structured logging, in-memory mock adapters, and correctness test harness.
+- **Deliverables:**
+  - Python project environment (`pyproject.toml`, virtual environment).
+  - Core domain models (`Instrument`, `Bar`, `MarketDataSnapshot`, `Signal`, `TargetAllocation`, `RiskAssessment`, `Order`, `Fill`).
+  - Core interface definitions (`IMarketDataProvider`, `IFeatureEngine`, `IStrategy`, `IPortfolioOptimizer`, `IRiskEngine`, `IBacktestEngine`, `IExecutionEngine`, `IDecisionLedger`).
+  - Mock in-memory execution engine and market data provider for unit testing.
+  - Structured JSON logger and typed configuration loader (`Pydantic` + `YAML`).
+  - Unit and contract test suite verifying domain invariants, invalid states, interface contracts, serialization, and deterministic equivalent outcomes.
+- **Gate 1 Criteria:** All unit tests pass (27/27); domain invariants verified; typing strictly enforced (`mypy` clean); zero live broker or Nautilus dependencies in core.
+
+---
+
+### ✅ Phase 2: Data Ingestion & Integrity Engine [COMPLETED - PASSED]
+- **Objective:** Implement reliable ingestion for **one market** and **one primary data source** with strict point-in-time validation.
+- **Deliverables:**
+  - Ingestion adapter (`yfinance` research adapter / local Parquet for single liquid symbol).
+  - Normalization pipeline with timestamp timezone enforcement (UTC only) and sequencing verification.
+  - Automated data integrity checker (detects missing timestamps, impossible negative prices, duplicates, unit errors).
+  - Provenance tracker recording dataset hash and retrieval metadata.
+  - Recoverable Batch Commit Protocol (`PREPARED` $\to$ `PART_PUBLISHED` $\to$ `COMMITTED`).
+  - DuckDB Point-in-Time qualification layer with multi-source isolation and lookahead prevention.
+- **Gate 2 Criteria:** Data validation suite catches 100% of synthetic data corruption test cases (57/57 tests pass, `mypy` clean).
+
+---
+
+### ✅ Phase 3: Point-in-Time Feature Engine (3A/3B/3C) [COMPLETED - PASSED]
+- **Objective:** Build modular, deterministic feature calculations with zero look-ahead bias across Trades, Order Book, and Microstructure.
+- **Deliverables:**
+  - **Phase 3A:** Canonical Trades Domain (Time & Sales, Aggressor Side flags, length-prefixed hashing).
+  - **Phase 3B:** Canonical Order Book (L2 Depth Multi-Row Frames & Deltas, L3 MBO, deterministic 5-tuple order).
+  - **Phase 3C:** Microstructure Feature Engine (Session VWAP, Volume Profile with POC lower-price tie-breakers, Value Area 70% bounds, Footprint Analytics, Depth-Weighted Micro-Price).
+  - Dual-temporal point-in-time filtering ($T_{\text{event}} \le T_{\text{decision}} \land T_{\text{knowledge}} \le T_{\text{as\_of}}$).
+- **Gate 3 Criteria:** Automated leakage unit tests verify zero future bar indexing; 122/122 tests pass, `mypy` clean.
+
+---
+
+### ✅ Phase 4: Alpha Research Engine & Baseline Hypotheses [COMPLETED - PASSED]
+- **Objective:** Implement formal hypothesis registration, econometric OLS slope Beta HAC inference under Bartlett kernel, discrete forward returns, interval-based purging/embargo, and durable Blind OOS governance.
+- **Deliverables:**
+  - Hypothesis specification schema (`HypothesisSpecification`, `InvalidationCriteria`, parameter spaces).
+  - Discrete bar-indexed forward returns ($R(t,H)$) with next-bar open entry alignment.
+  - Econometric OLS slope $\hat{\beta}_H$ inference with Newey-West HAC covariance under Bartlett kernel.
+  - Descriptive non-parametric association metrics: Pearson IC, Spearman Rank IC (fractional ties), autocorrelation.
+  - 3-tier friction waterfall (Raw Edge $\to$ Net Edge $\to$ Economic Edge).
+  - Interval-based boundary purging and unallocated embargo gaps ($\ge \max(H)$ bars).
+  - Durable Blind OOS Governance Ledger (`data/manifests/research/governance_ledger.json`) with strict re-tuning locks (`UNEXPOSED` $\to$ `EVALUATED_LOCKED` $\to$ `EXHAUSTED`).
+  - Baseline research models: Microstructure Imbalance Skew, VWAP Mean Reversion, Multi-Horizon Momentum.
+- **Gate 4 Criteria:** Strategies generate reproducible signals on historical data without look-ahead errors; 139/139 unit tests pass, `mypy` clean.
+
+---
+
+### ✅ Phase 5: Backtesting Substrate & Simulation Engine [COMPLETED - PASSED]
+- **Objective:** Establish the deterministic event-driven simulation backtest substrate preserving ACASH as the single source of truth for canonical data, features, accounting, and manifests.
+- **Deliverables:**
+  - Event-driven backtesting execution substrate with full simulated order lifecycle state machine.
+  - Canonical Data Adapter with Phase 3B total ordering 5-tuple contract: $(T_{\text{event\_utc}}, \text{source\_order\_key}, \text{message\_rank}, \text{stream\_id}, \text{row\_sub\_index})$.
+  - Realistic friction simulation (maker/taker fee tiers, bid/ask spread, fixed & dynamic slippage, causal dual-sided latency).
+  - Independent double-entry shadow ledger decoupling Balance-Sheet View from Performance Attribution View ($|\text{AccountingResidual}| \le 10^{-10}$).
+  - Deterministic content-derived `BacktestManifest` identity: $\text{manifest\_id} = \text{SHA256}(\text{canonical}(\text{hypothesis\_hash} + \text{data\_hashes} + \text{engine\_hash} + \text{strategy\_hash} + \text{seed}))[:32]$.
+  - Reality Gap Telemetry Engine implementing disjoint non-overlapping reference-price decomposition: Spread Drag, Slippage Drag, Latency Drag, Fee Drag, Maker Adverse Selection Drag, and Unmodelled Residual.
+  - Baseline strategy actors: Microstructure Imbalance (OBI) & Session VWAP Mean Reversion.
+- **Gate 5 Criteria:** Bitwise-identical replay across identical inputs/configs, exact double-entry cash conservation, unmocked NautilusTrader integration, and zero phantom liquidity; 200/200 tests pass, `mypy` clean.
+
+
+
+---
+
+### ✅ Phase 6: Statistical Validation & Overfitting Controls [COMPLETED - PASSED]
+
+- **Objective:** Enforce quantitative validation gates to eliminate data-snooping, selection bias, and backtest overfitting.
+- **Deliverables:**
+  - Combinatorial Purged Cross-Validation (CPCV) engine with contiguous $N$-group partitioning, exhaustive $\binom{N}{k}$ combinations, strict $[t+1, t+H]$ interval purging, post-test embargo buffers, and continuous pseudo-OOS path reconstruction ($\phi = \frac{k}{N}\binom{N}{k}$).
+  - Deflated Sharpe Ratio (DSR) & Minimum Track Record Length (MinTRL) engine implementing Bailey & López de Prado (2014) non-normal asymptotic inference with Euler-Mascheroni constant $\gamma_E$, empirical trial variance $V$, Fisher-Pearson skewness $g_1$, and Pearson kurtosis $g_2$.
+  - Multiple-testing accounting: Holm-Bonferroni step-down (FWER), Benjamini-Hochberg (FDR), and Harvey-Liu-Zhu (2016) Haircut Sharpe Ratio.
+  - Probability of Backtest Overfitting (PBO) log-odds evaluation and parameter surface curvature / fragility testing across mandatory $\pm 25\%$ parameter grids.
+  - Sovereign `StatisticalValidationGate` orchestrating multi-gate sequential evaluation, authoritative $K_{\text{ledger}} \equiv K_{\text{DSR}} \equiv K_{\text{Holm}} \equiv K_{\text{BH}}$ trial coupling, fail-closed missing data defense, and emitting immutable `ValidationReport` certificates with dual cryptographic lineage digests.
+- **Gate 6 Criteria:** Strategies must satisfy DSR $\ge 0.95$, MinTRL, Holm-Bonferroni FWER significance, PBO $< 0.25$, flat parameter curvature, analytical friction monotonicity, and sealed OOS performance retention ($\text{SR}_{\text{OOS}} \ge 0.50 \cdot \text{SR}_{\text{IS}}$); 252/252 tests pass, `mypy` clean.
+
+---
+
+### 🟡 Phase 7: Live Execution & Broker Mapping [IN PROGRESS]
+- **Specification & Evolution Proposal:** [`docs/phase7/phase_7_proposal.md`](phase7/phase_7_proposal.md)
+- **Objective:** Build the sovereign execution stack from authorization/admission
+  through broker-neutral semantic mapping to a concrete Alpaca Paper integration,
+  and exercise a real (Paper) order lifecycle.
+- **Explicit Paper-before-Live Execution Sequence:**
+  $$\text{Phase 7 Implementation} \to \text{R0 (Read-Only)} \to \text{R1 (Lifecycle Harness)} \to \text{Security Preflight} \to \text{Paper Exercise} \to \text{P Evidence} \to \text{Readiness Review} \to \text{Live Authorization Hard-Lock}$$
+- **Completed (LOCKED / E-reviewed — 588 tests passing):**
+  - Admission/Authorization gate, Step 8 Execution Contract, Step 8B State
+    Machine, Step 8C Broker Event Normalizer, Step 8D Mock Broker, Step 8E
+    Execution Coordinator & Reconciliation Boundary, Operational Restriction,
+    Real Broker Contract.
+  - Vendor-Agnostic Broker Semantic Mapping Framework + Alpaca Concrete BMAP:
+    `BMAP 01–10 = E`, `BMAP 11 = E*`, `BMAP 12 = D`.
+  - Concrete Alpaca Paper Transport (`PaperHttpAlpacaTransport`), Paper
+    Credential Boundary (venue-pinned `ALPACA_PAPER`), `AlpacaPaperAdapter`.
+  - Local Windows User Vault & Launcher: `scripts/setup_paper_credentials.ps1` (DPAPI/SecretStore) and `scripts/run_paper.ps1` (Paper-only child process injection).
+  - R0 read-only Paper Exercise harness; R1 order-lifecycle exercise harness
+    (`run_order_exercise_verification`); R1 contract frozen.
+  - R1 entry-point fixes: `4a92348` connect-before-submit; `8e92188` paper-only
+    transport injection guard.
+- **Evidence Model ($\text{Unit Tests} \neq E \neq P$):**
+  - **Local Unit Tests:** 588/588 unit tests passing (automated regression & invariant protection).
+  - **`D` (Design-Conformant):** Specification and schema match the canonical domain contracts.
+  - **`E` (Broker Semantic Review):** Broker semantic mapping verified against official vendor documentation (`01–10 E`, `11 E*`, `12 D`).
+  - **`E*` (Partially Bounded):** Bounded behavior with known vendor API caveats (e.g. BMAP-11 SSE replay gaps).
+  - **`P` (Empirically Proven):** Real execution observed against live Paper venue satisfying full cryptographic lineage ($P = 0$).
+  - $$\boxed{\text{588 Unit Tests} \neq E \text{ (Broker Semantic Review)} \neq P \text{ (Empirical Paper Execution)}}$$
+- **Current milestone (in progress):** final Paper preflight via `run_paper.ps1 -PreflightOnly` → authorized single Paper run → first **P** evidence.
+- **Blockers & Resolution Workflow:**
+  1. Interactive local credential entry via `.\scripts\setup_paper_credentials.ps1` into Windows User Vault (DPAPI / SecretStore) outside Git.
+  2. Safe preflight check via `.\scripts\run_paper.ps1 -PreflightOnly` (`ALPACA_PAPER` provider, `CREDENTIALS_LOADED=True`, `paper-api.alpaca.markets/v2` endpoint).
+  3. Real Paper run is **NO-GO** until operator green-lights after a passing final preflight.
+- **Approved run parameters (single order):** `SPY` / `quantity=1` /
+  `client_order_id=acash-r1-paper-20260831-001`.
+- **P acceptance (conjunctive — ALL must hold):**
+  $$\text{P} = \text{TerminalVerified} \land \text{EvidenceLineageComplete} \land \text{ReconciliationVerified} \land \text{NoDispute}$$
+  $E \neq P$; HTTP-success $\neq P$; FILLED alone $\neq P$; unit tests $\neq P$.
+- **Gate 7 Criteria (design intent):** verified real Paper order-lifecycle
+  evidence (P) through the canonical authority pipeline (`AlpacaPaperAdapter` →
+  `normalize_broker_event()` → `to_coordinator_event()` →
+  `ExecutionCoordinator.apply()/reconcile()` → `transition_order()`).
+  (Original Regime-Engine content deferred to a later phase.)
+
+---
+
+### ✅ Phase 8: Portfolio Engine (Native Optimizers, Baselines & Governance) [COMPLETED & FROZEN]
+- **Objective:** Allocate capital across candidate assets/signals and cash ("NOWHERE").
+- **Deliverables:**
+  - Transparent Baseline Allocators: Equal Weight (1/N), Inverse Volatility (1/$\sigma$), 100% Cash (`CashAllocator`, `EqualWeightAllocator`, `InverseVolatilityAllocator`).
+  - Native Portfolio Optimizers: Hierarchical Risk Parity (HRP) and Equal Risk Contribution (ERC) with zero-leakage out-of-sample tournament (`AllocationTournamentRunner`).
+  - Optional Adapters: `skfolio` and `cvxpy` adapters with graceful degradation when optional packages are not installed in clean core.
+  - Sovereign Governance Gate: If net expected return fails risk-free rate + hurdle margin, sovereignly allocate 100% Cash via `GOVERNANCE_FALLBACK`.
+- **Gate 8 Criteria:** Fully audited out-of-sample tournament (`Gate 8 Native Allocation Tournament`); Candidate $\neq$ Evaluation $\neq$ Decision; Ranking $\neq$ Approval; Policy-estimated friction (12 bps); Max Drawdown evaluated on net equity path. Commit: `e6f1d04`.
+
+---
+
+### ✅ Phase 8.5: Alpha Research & Economic Evidence Engine [COMPLETED & FROZEN]
+- **Objective:** Establish formal alpha qualification, research lineage DTOs, and multi-horizon falsification hurdles with zero trading authority.
+- **Deliverables:**
+  - `AlphaQualificationDossier` and `AlphaEconomicDecomposition` DTOs enforcing $Net = Gross - Friction$.
+  - Formal multi-hurdle qualification gate (`AlphaQualificationGate`) requiring positive net edge, Holm-Bonferroni FWER significance, and zero rebate-inflated edge.
+  - Explicit forward lifecycle state machine (`HYPOTHESIS` $\to$ `CANDIDATE` $\to$ `RESEARCH_QUALIFIED` $\to$ `RETIRED_STRUCTURAL_BREAK`).
+  - Strict boundary: $CapitalAuthorityUSD \equiv 0.00$.
+- **Gate 8.5 Criteria:** 100% passing tests across 6 slices; cryptographic SHA-256 DAG binding hypothesis, trial ledger, and validation reports. Commit: `9ce1365`.
+- **Track B (Strategy Qualification Pipeline — `STRAT-MOM-MULTI-HORIZON-V1` / `HYP_TSMOM_EURUSD_001`):**
+  - **Status:** `CLOSED / TERMINALLY FALSIFIED` (Option B: Early Termination executed).
+  - **Lineage Audit:**
+    - Step R1 (Hypothesis Pre-Registration): `✅ PASS / SEALED` (SHA-256: `5afb92d...`).
+    - Step R2 (Historical Data Preparation): `✅ PASS / SEALED` (10,000 bars EURUSD M5 canonical parquet; 16/16 gates passed).
+    - Step R3 (In-Sample Search Census): `✅ PASS / SEALED` (Census of 9 trials, bars 0..5,999 complete).
+    - Hypothesis `HYP_TSMOM_EURUSD_001`: `❌ TERMINALLY FALSIFIED` (9/9 negative Rank IC, negative net edge after friction, HAC $t < 2.0$, autocorrelation violations).
+    - Steps R4–R7: `⛔ EARLY TERMINATED` (Discontinued to preserve OOS integrity and prevent multi-testing noise).
+    - OOS Holdout: `UNEXPOSED_PRISTINE` (bars 6,060..9,999 100% untouched).
+  - **Strategy Authority:** `STRAT-MOM-MULTI-HORIZON-V1` permanently `NOT QUALIFIED / NOT LIVE-ELIGIBLE`. Capital authority remains `$0.00`.
+  - **Governing Dossier:** [`docs/phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md`](phase8.5/phase8_5_hyp_tsmom_eurusd_001_terminal_falsification_dossier.md).
+
+---
+
+### ✅ Phase 9: Deterministic Risk Engine & Sovereign Kill Switch [COMPLETED & FROZEN]
+- **Objective:** Implement non-negotiable sovereign risk boundaries that overrule all upstream models.
+- **Deliverables:**
+  - `DeterministicRiskEngine` realizing `IRiskEngine` with multi-tier boundary evaluation (gross leverage, asset concentration, mandatory cash floor, drawdown, daily loss).
+  - `DeriskEngine` implementing proven monotonic `EXACT_SCALE_DOWN` derisking and `BINARY_REJECT`.
+  - `SovereignKillSwitchController` with append-only disk persistence, crash/restart recovery in `PERSISTENTLY_BLOCKED`, and multi-sig `Ed25519TrustStore` quorum reset verification.
+  - `EmergencyFlattenGenerator` emitting zero-target liquidation intents ($q_{\text{target}} \equiv 0.0, \Delta q_i = -q_i$) and `EmergencyFlattenTracker` evaluating completion strictly against Phase 7 broker reconciliation.
+  - `RiskStateBridge` ensuring type-safe, loss-bounded conversions across `PortfolioState`, `RiskSnapshot`, `CandidateRiskAllocation`, and `RiskState`.
+- **Gate 9 Criteria:** 100% passing rate on 70 unit and integration tests; strict fail-closed contract; zero direct broker execution authority in Phase 9. Commit: `6bd40d8`.
+
+---
+
+### ✅ Phase 10: Runtime Orchestration & Continuous Paper Operations [COMPLETED & FROZEN]
+- **Objective:** Establish the 5-stage authoritative runtime supervisor, operational scheduler, and append-only event ledger for continuous paper operations.
+- **Deliverables:**
+  - `RuntimeSupervisor`: 5-stage fail-closed pipeline orchestrator ($\text{Data} \to \text{Census} \to \text{Tournament} \to \text{Risk} \to \text{Admission}$).
+  - `OperationalScheduler`: Dual-clock discipline ($as\_of\_utc \neq wall\_clock\_utc$), cadence evaluation, and concurrency lockout.
+  - `OperationalLedger`: Append-only SHA-256 chained disk ledger (`OperationalCycleEvent`) with replay and tampering verification.
+  - `ContinuousPaperDaemon`: Long-running paper harness loop with pre-flight fail-closed ledger checks and zero live capital authority.
+- **Gate 10 Criteria:** 904 repository tests passing; full cross-phase integration suite; zero direct broker sockets in runtime layer. Commit: `3955bf6`.
+
+---
+
+### ✅ Phase 11: Forward Tracking, Online Drift Detection & Execution Reality Attribution [APPROVED & FROZEN]
+- **Objective:** Provide an independent observational and evidence plane to monitor forward strategy decay and attribute realized execution drag from Phase 7 fills without mutating historical research or overwriting allocation policies.
+- **Pre-Phase-11 Architecture Hygiene:** Source-of-truth documentation synchronized (`docs/architecture/system_architecture.md`), dual-clock determinism verified (`Supervisor cycle => explicit as_of_utc`), one-way Decimal precision boundary established, and 3-tier hashing authority classified.
+- **Deliverables (Contract v1.1):**
+  - **Track A (Strategy Drift):** `ForwardObservation`, `ForwardWindowMetrics`, `ForwardHealthPolicy` (with anti-whipsaw hysteresis $N_{\text{degrade}}, M_{\text{recover}}, T_{\text{cooldown}}$), `ForwardHealthState`, `ForwardGovernanceRecommendation`, `StrategyForwardDriftEvidence`.
+  - **Track B (Execution Reality):** `ExecutionObservation`, `RealizedExecutionDrag` (explicit signed conventions: gross drag $\ge 0$, net realized drag = gross - rebate), `ExecutionAttributionPolicy`, `ExecutionCostEvidence` (with sample count, coverage ratio, and confidence interval metadata).
+  - **Track C (Ingestion & Forensic Persistence):** `ForwardTelemetryIngestor` with decoupled Stream Integrity Plane (`VALID` $\leftrightarrow$ `BLOCKED`) vs Strategy Health Plane, explicit `reinitialize_stream()` epoch recovery without backfilling gaps, and `MonitoringEvidenceLedger` adapting Phase 10 `OperationalLedger`.
+  - **Core Invariants:**
+    - $\text{Historical Research Qualification } (\text{Phase 8.5}) \neq \text{Current Forward Health } (\text{Phase 11})$.
+    - $\text{Detection } \neq \text{Governance } \neq \text{Eligibility}$ (Phase 11 recommends; Phase 10 Stage 2 Census decides).
+    - $\text{No Evidence } \neq \text{Negative Evidence}$ (telemetry disruption $\implies \text{MONITORING\_BLOCKED}$, not strategy decay).
+    - $\text{Zero Decimal } \to \text{float } \to \text{Decimal in Evidence Generation}$.
+    - $\text{Tier 1 CanonicalConfigSerializer Authority for all Evidence Digests}$.
+    - $\text{Taker-Only Execution Scope Guard in v1 (Maker execution strictly rejected fail-closed)}$.
+- **Gate 11 Criteria:** 1,020 collected tests (1,017 passed, 3 skipped, 0 failed); 26/26 Red-Team Adversarial Vectors PASSED; 9/9 Cross-Phase Integration Tests PASSED; 107/107 Monitoring Unit Tests PASSED; MyPy 0 errors across 40 files; Git clean with zero modifications to Phases 1–10. Commit: `092a2b1`.
+- **Release Caveats:**
+  1. Authority decoupling ("no authority creep") is verified against current implementation behaviors and structural interfaces rather than an eternal mathematical impossibility against future arbitrary modification.
+  2. Remote CI was not independently available/executed in this environment; all release guarantees are fully verified on local canonical execution.
+
+---
+
+### ✅ Phase 12: MT5 & Venue Execution Adapters [COMPLETED & FROZEN — `1e1d154`]
+- **Objective:** Build thin, secure broker connectivity adapters with authoritative 6-D reconciliation.
+- **Deliverables:**
+  - **Slice 1:** MT5 Domain Schemas, Enums & Broker Mapping (BMAP-MT5)
+  - **Slice 2:** `BrokerSymbolSpec` — Immutable instrument spec, Decimal volume quantization, tick-grid price alignment
+  - **Slice 3:** MT5 Terminal Driver & IPC Transport Bridge (Windows Local `NativeMT5Transport`)
+  - **Slice 4:** `MT5BrokerAdapter` & Authoritative 6-Dimensional Reconciliation Engine
+  - **RECON-6D Rev1–7:** Reconciliation remediation (R4-FIX through R7-FIX, all fail-closed). Commit: `44202fe`
+  - **Slice 5:** Execution Lifecycle Integration — `intent_id` as exclusive Gate 6 routing key; Two-Phase preflight atomicity routing (Phase A: duplicate/lineage/coordinator validation; Phase B: evidence delivery). Commit: `1e1d154`
+  - **Slice 6 (Freeze):** Architecture conformance audit, safety gate verification, frozen contract inventory, TradingView deferred backlog. See: `docs/phase12/closeout_report.md`
+- **Frozen Contracts:** `transition_order()` sole authority; `intent_id` sole routing key; `can_dispatch()` gate; UNKNOWN semantics; ACK≠FILLED; BLOCKED absorbing; $0.00 live capital
+- **Deferred:** TradingView Ingress Gateway (signal ingress — separate independent backlog item; does NOT gate Phase 13)
+- **Gate 12 Criteria Met:** 1240/1240 tests passed (1158 unit + 82 integration); MyPy 0 errors in 263 files; Architecture conformance audit passed; Full frozen contract inventory documented. Commit: `1e1d154`.
+
+---
+
+### 🟡 Phase 13: Live Small Capital Deployment [INFRASTRUCTURE READY / STRATEGY BLOCKED]
+- **Objective:** Real-world execution validation with micro-capital and strict fail-closed telemetry.
+- **Current Step Progress:**
+  - **Slice 1 (Gate A Pre-Live Certification):** `✅ CERTIFIED` (Formal Human Sign-Off on 2026-09-04; A-1 through A-11 PASS; B-1/B-2 CLOSED; 0 Active Blockers; Demo `112040157` 100% Flat; Live Capital $0.00). See [`docs/phase13/consolidated_gate_a_audit.md`](phase13/consolidated_gate_a_audit.md).
+  - **Step 1 (Implementation & Safety Envelopes):** `✅ PASS` (Bounded position limits, fail-closed kill switch).
+  - **Step 2 (Code & Unit Audit):** `✅ PASS` (Full unit audit clean).
+  - **Step 3 (Integration Testing):** `✅ PASS` (Integration pipeline verified).
+  - **Step 4 (Restart & Recovery):** `✅ PASS` (Rehydration semantics and state reconstruction verified).
+  - **Step 5 (24-Hour Unattended Soak):** `✅ VERIFIED COMPLETED` (86,400.21s runtime, 86,085 ledger events, 8,608 telemetry records, 0 errors, graceful exit).
+  - **Step 6 (Telemetry Audit):** `✅ PASS` (Full forensic audit verified: SHA-256 chained integrity, zero gaps >15s, RSS peak 175.29 MB, pulse reconciliation 100%). See [`docs/phase13/phase13_step6_full_audit_report.md`](phase13/phase13_step6_full_audit_report.md).
+  - **Step 7 (Continuous Paper Readiness):** `✅ CONDITIONALLY SATISFIED` (Runtime infrastructure verified ready; blocked on strategy qualification; B23.2 dedicated VM deferred). See [`docs/phase13/phase13_step7_paper_readiness_review.md`](phase13/phase13_step7_paper_readiness_review.md).
+  - **Gate G7 / Stage S11 (Homelab 6-Hour Operational Soak):** `✅ CLOSED / PASS`
+    - **Session ID:** `E3.5-20260913-025117-de2762`
+    - **Adjudication Basis:** Explicit **Human Forensic Adjudication**
+    - **Historical Harness Result:** `FAIL` (due to `SESSION_ID=unknown` evidence/session-binding defect in the runner script; post-run harness looked for `unknown.*` evidence files).
+    - **Canonical Accepted Result:** `PASS` (actual sealed session artifacts independently recovered and verified; satisfies all ratified G7 criteria).
+    - **Verified Evidence:**
+      - *Duration:* $\ge 6.00$ hours continuous runtime (canonical manifest: 21,639.299524s [start `2026-09-13T02:51:17.970702Z`, end `2026-09-13T08:51:57.270226Z`]; host harness-loop: 21,624s).
+      - *M1 Continuity:* 361 `MARKET_BAR_RECEIVED` events with unique timestamps (first `02:51:59.999000Z`, last `08:51:59.999000Z`) spanning 360 exact one-minute intervals (0 missing M1 slots, 0 duplicate timestamps, 0 non-60-second intervals).
+      - *Process Stability:* Zero restarts (`RestartCount == 0`), zero OOM kills.
+      - *Journal & Reconciliation:* Journal integrity PASS (chained SHA-256 event hashes), reconciliation PASS (100% pulse parity), sealed manifest.
+      - *Feed Lifecycle:* Zero failure-shaped or unplanned feed interruptions; one final graceful shutdown disconnect (`FEED_CONNECTED=1`, `FEED_DISCONNECTED=1`, failure disconnects `0`). No recovery was used (`RECOVERY_ATTEMPTED=0`). Governance policy remained strictly Explicit Operator Resume Only / no automatic reconnect.
+      - *Container Memory:* Observed container-memory samples were accepted as sufficient by explicit Human Forensic Adjudication (24 periodic docker stats samples: min 34.60 MiB, max 50.08 MiB vs 512 MiB limit, within expected operating envelope <150 MiB).
+      - *VictoriaMetrics Scrape:* Continuous active-window telemetry (1,443 samples at 15s cadence, `up=1` and `acash_paper_up=1` throughout active window; zero active-window dropouts; teardown `up=0` belongs to post-session shutdown).
+    - **Pi Tooling Remediation:** Verifier remediation merged into `Ratthabhumi/Pi_Personal-Infrastructure/main` at commit `68142aecdccf636912902bbfc4061895c877d195`. Verifier enforces canonical invariant: **ZERO REAL ORDER SUBMISSIONS** (`ORDER_SUBMITTED == 0`, `manifest.no_real_orders == true`, `manifest.simulated_fills_only == true`). Distinguishes allowed internal simulated paper order accounting (`ORDER_INTENT_CREATED`, `FILL_SIMULATED`, non-zero `total_order_count`) from prohibited real broker dispatches. Requirement `total_order_count == 0` eliminated.
+    - **Known Non-Blocking Follow-Up Debt:**
+      1. *Pi diagnostic formatting:* `jq -r ".${field} // empty"` may display boolean `false` as empty/missing in diagnostic logs; enforcement remains strict fail-closed.
+      2. *ACASH manifest docstring:* `manifest.py` docstring states `total_order_count: Total orders submitted` while runtime behavior counts internal simulated order intents (documentation debt; does not represent real broker dispatches).
+  - **Step 8 (Human GO Checkpoint):** `🔒 LOCKED` (Awaiting qualified strategy & explicit operator authorization).
+  - **Step 9 (90-Day Continuous Paper Run):** `🔒 NOT AUTHORIZED` (Clock has not started; $0.00 capital authority).
+- **Core Invariants:**
+  - Live Capital Authority: **$0.00 (Hard-Locked)**.
+  - Live Real Orders: **0 Orders** (`NO_REAL_ORDERS=true`, `simulated_fills_only=true`).
+  - Strategy STRAT-MOM-MULTI-HORIZON-V1: **NOT QUALIFIED / TERMINALLY FALSIFIED**.
+  - Broker Wire: **DISCONNECTED**.
+  - Paper Trading: **NOT AUTHORIZED**.
+  - Live Trading: **LOCKED**.
+  - Backtesting: **LOCKED**.
+  - HYP_003: **NOT CREATED**.
+  - R1: **NOT STARTED**.
+  - **NEXT GOVERNANCE TRANSITION: AWAITING HUMAN DECISION**.
+- **Gate 13 Criteria:** **EXPLICIT HUMAN APPROVAL REQUIRED**; all safety gates, kill switches, and alerts verified operational; full completion of 24h soak evidence audit and subsequent steps.
+- **Multi-Broker / Multi-Asset Roadmap (ADR-021):** While Phase 13 currently executes against the active MetaQuotes MT5 Demo baseline under Gate A, the long-term architecture is established as Asset-Agnostic and Multi-Venue (Pepperstone MT5 candidate, Alpaca US Equities/ETF candidate, OANDA API candidate, IBKR multi-asset candidate). See [`docs/architecture/multi_broker_multi_asset_decision.md`](architecture/multi_broker_multi_asset_decision.md).
+
+---
+
+### 📐 Phase 14: AI Quantitative Research Layer [GATE 14 ACCEPTED — RESEARCH CAPABILITY — UNVALIDATED PROPOSALS — ZERO TRADING AUTHORITY]
+- **Objective:** Augment quant research with AI-driven hypothesis formulation, feature discovery, and automated research reporting conforming to Section 33.
+- **Current Status:**
+  - Master Research Architecture Revision 1.2: **APPROVED AT PLAN LEVEL** by Human Auditor (2026-09-08).
+  - Gate 14: **ACCEPTED** (2026-09-08) — technical acceptance of the Phase 14 research capability under the G-2 CUSTOM-2 scope. **NOT** trading, runtime, or strategy authorization.
+  - Governance records on file in `docs/phase14/`: Human Ratification D1–D4 (2026-09-08), D5/D6 ratification, D8-B acceptance, E1–E9 ratification, Gate 14 acceptance, S5 test-only and Seam B acceptance, evidence-bridge governance freeze.
+  - Implementation slices exist in the repository as **UNVALIDATED PROPOSALS** (research-AI hypothesis assistant / converter / prompts / provider; slices 1–4; D6 Option A failed/invalid-trial census sealing; Phase 5 production orchestrator; D8-B release gate; Seam A identity; D5 OOS provenance with PIT lineage; committed 2026-09-07 / 2026-09-09). Zero authority to register hypotheses, qualify alpha, certify validation, connect brokers, or trade.
+  - Runtime authorization remains bounded by ratified Human gate discipline (G-gates). Phase 13 Steps 8–9 remain independently and strictly LOCKED. HYP_003 NOT CREATED; R1 NOT INVOKED; capital $0.00; trading LOCKED; broker DISCONNECTED.
+  - Governing Specification: [`docs/phase14/phase14_master_research_architecture_plan.md`](phase14/phase14_master_research_architecture_plan.md).
+- **Deliverables:**
+  - LLM hypothesis formulation assistant (`acash.research.ai.hypothesis`).
+  - Automated research report generator conforming to Section 33 (`acash.research.ai.reporting`).
+  - Exploratory feature discovery tools with causal AST validation (`acash.research.ai.features`).
+  - Research corpus ingestion with tri-axial source epistemic metadata (`acash.research.ai.corpus`).
+- **Gate 14 Criteria:** AI outputs are strictly unvalidated proposals; must pass full backtesting, statistical validation, and alpha qualification gates. Zero capital or broker authority.
+
+---
+
+### ⏳ Phase 15: Strategy Lifecycle Management [HARMONIZED INTO PHASE 17]
+- **Harmonization Notice:** The original conceptual Phase 15 scope has been preserved and incorporated into the institutional Phase 17 Strategy Admission Standard and Lifecycle Architecture (ADR-023).
+- **Preserved Scope:**
+  - Strategy Lifecycle State Machine
+  - Strategy admission status transitions (`StrategyAdmissionStatus`, `StrategyLifecycleState`)
+  - Lifecycle gates and transition authority
+  - Rolling strategy health / lifecycle monitoring
+- **Canonical Home:** Phase 17 (`StrategyAdmissionStatus`, `StrategyLifecycleState`, ADR-023).
+- **No Requirements Deleted:** All original Phase 15 requirements remain traceable in [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md).
+- **Implementation Status:** `HARMONIZED / NOT A SEPARATE IMPLEMENTATION STEP`
+
+---
+
+### ⏳ Phase 16: Performance Degradation & Data Flywheel [HARMONIZED INTO PHASE 17–22]
+- **Harmonization Notice:** The original conceptual Phase 16 scope has been redistributed across the institutional Phase 17–22 architecture sequence.
+- **Preserved Scope:**
+  - Statistical performance degradation detection → Phase 17 + Phase 11
+  - Strategy selection and decision outcomes → Phase 20
+  - Organizational memory / learning ledger → Phase 22
+- **Canonical Traceability:** [`docs/architecture/strategy_admission_standard.md`](architecture/strategy_admission_standard.md) and ADR-023.
+- **No Requirements Deleted:** Original Phase 16 concepts remain preserved and traceable.
+- **Implementation Status:** `HARMONIZED / NOT A SEPARATE IMPLEMENTATION STEP`
+
+---
+
+### ✅ Phase 17: Strategy Admission Standard & Regime-Aware Capital Allocation Framework [SPECIFIED — ADR-023]
+- **Objective:** Institutional governance foundation establishing the mandatory gateway before any strategy may enter the catalog or receive capital.
+- **Deliverables:**
+  - 11-Gate Admission Standard (Gate 0–10) incorporating the 20 Mandatory Admission Questions.
+  - Epistemic Identity: $\text{Observed Profit} \neq \text{Proven Skill} \neq \text{Structural Edge} \neq \text{Luck-Free Performance}$.
+  - Performance Attribution across 5 sources (Skill, Structural Edge, Beta/Factor, Regime Tailwind, Luck).
+  - Multi-dimensional `SkillEvidence` vector DTO using `EvidenceSupportLevel` (scalar composite scores strictly forbidden).
+  - `AlternativeExplanationRegister` tracking counter-hypotheses (Market Beta, Short Vol, Regime Tailwind, Selection Bias, Execution Fantasy).
+  - `EffectiveEvidenceSample` ($N_{\text{eff}}$) with declared dependency assumptions (rejection of raw trade count & calendar duration as sole evidence).
+  - Quant Candlestick Architecture: `PriceStructureMeasurements` (returns, range/ATR, body/range, wick asymmetry, close location, gap) feeding continuous `MarketStateVector`.
+  - Decoupled `VolumeType` (`TICK_VOLUME`, `REAL_VOLUME`, `EXCHANGE_VOLUME`, `UNKNOWN`).
+  - Decoupled `StrategyMechanism` (market interaction) vs `StrategyStyle` (behavioral style).
+  - Bounded Capital Allocation contracts enforcing the core invariant: **`allocation = $0.00` is always valid and default**.
+- **Governance:** Live capital remains hard-locked at $0.00; zero broker mutations; optimization solvers deferred to Phase 21; live regime engine deferred to Phase 19.
+
+---
+
+### ⏳ Phase 18: Strategy Research & Tournament Pipeline [UPCOMING]
+- **Objective:** Automated, reproducible research execution, hypothesis evaluation, and fair tournament ranking with frozen prior criteria and winner's curse discounting.
+
+---
+
+### ⏳ Phase 19: Empirical Regime Detection Engine [UPCOMING]
+- **Objective:** Empirical estimation and online classification of market states (orthogonal trend, volatility, liquidity, spread, and microstructure dimensions) with probabilistic confidence.
+
+---
+
+### ⏳ Phase 20: Regime × Strategy Selection & Decision Engine [UPCOMING]
+- **Objective:** Dynamic strategy eligibility gating, state compatibility matching, and multi-horizon decision memory recording.
+
+---
+
+### ⏳ Phase 21: Risk-Based Capital Allocation Solvers [UPCOMING]
+- **Objective:** Production mathematical solvers (Equal Risk Contribution, Volatility Targeting, Haircut Optimization) adhering to Phase 17 `IAllocationPolicy` and safety bounds.
+
+---
+
+### ⏳ Phase 22: Portfolio / Multi-Strategy Orchestration & Memory Flywheel [UPCOMING]
+- **Objective:** Enterprise multi-strategy execution orchestration, aggregate exposure netting, cross-strategy margin monitoring, and long-term organizational decision memory ledger.
+
+---
+
+### 🏛️ Phase 23: Adaptive Multi-Horizon Strategy & Market-Regime Architecture [ARCHITECTURAL RECORD]
+- **Objective:** Establish the foundational architectural principle that ACASH is a strategy-agnostic, risk-controlled trading infrastructure rather than a fixed-style bot (scalping, intraday, swing, long-term).
+- **Core Governance & Decoupling:**
+  - Decouple ACASH Core (Risk, Execution, Reconciliation, Governance) from Strategy Layer (Alpha models, horizons, styles).
+  - Strategy $\neq$ Authority; Signal $\neq$ Order; Target Position $\neq$ Execution.
+  - Rejection of global fixed slice allocations (e.g. 30/30/40) in favor of Target Position, Risk Budget, Entry Schedule, and Dynamic Recalculation.
+  - Confirmation-driven pyramiding default; strict rejection of blind averaging down as core default.
+  - Dynamic risk recalculation per entry tranche; position size strictly bounded by stop distance.
+  - Formally specified in ADR-024 and [`docs/architecture/adaptive_multi_horizon_strategy_architecture.md`](architecture/adaptive_multi_horizon_strategy_architecture.md).
+- **Phase 23 Amendment (Market Microstructure, Order-Book Intelligence & Shadow Decision Learning):**
+  - Formally extends Phase 23 to incorporate Level 3 order-book event streams, temporal microstructure analysis, liquidity anomaly research, and shadow decision evaluation (ADR-025).
+  - Documented in [`docs/architecture/phase23_amendment_microstructure_and_shadow_decisions.md`](architecture/phase23_amendment_microstructure_and_shadow_decisions.md).
+  - Proposed future implementation phases (pending audit and roadmap approval):
+    - *Phase 24 [Proposed]:* Market Microstructure Data Layer & L3 Event Normalization
+    - *Phase 25 [Proposed]:* Deterministic Microstructure Replay Engine
+    - *Phase 26 [Proposed]:* Temporal Microstructure Feature & Anomaly Research Engine
+    - *Phase 27 [Proposed]:* Shadow Decision Evaluation & Counterfactual Learning System
+    - *Phase 28 [Proposed]:* Adaptive Strategy Tournament & Multi-Horizon Integration
+
+---
+
+## Reality Gap Analysis & Execution Deviation
+
+The core empirical objective of ACASH is measuring:
+> *"How much does what we expected in simulation diverge from what actually happened in the live market?"*
+
+```
+                 BACKTEST SIMULATION
+                          │
+                          ▼
+                 PAPER / SHADOW TRADING
+                          │
+                          ▼
+                    LIVE EXECUTION
+                          │
+                          ▼
+               REALITY GAP ATTRIBUTION
+```
+
+### Multi-Phase Reality Pipeline:
+- **Phase 2+ (Data Quality):** Data fidelity matching strategy horizon, timestamp integrity, provenance, spread capture.
+- **Phase 5+ (Backtest):** Tick-aware simulation, data-supported spread fidelity, graduated slippage models (simple $\to$ calibrated $\to$ liquidity-aware).
+- **Phase 6+ (Validation):** OOS, walk-forward matrix, forward testing, stress testing, regime analysis.
+- **Phase 12+ (Live):** Actual fills, realized spreads, actual slippage, latency, broker reconciliation.
+- **Phase 13+ (Reality Gap Attribution):** Systematic deviation tracking attributed to: Data error, Model/alpha error, Execution error, or Venue conditions.
+
+### Deviation Metrics & Example:
+| Metric | Expected (Simulation) | Actual (Live) | Reality Gap Deviation |
+| :--- | :--- | :--- | :--- |
+| **Entry Price** | 100.00 | 100.07 | **+7 bps** |
+| **Prevailing Spread** | 2 bps | 9 bps | **+7 bps** |
+| **Execution Slippage** | 1 bp | 6 bps | **+5 bps** |
+| **Trade PnL** | +$240 | +$181 | **-24.6%** |
+| **Roundtrip Latency** | 15 ms | 120 ms | **+105 ms** |
+
+---
+
+## License Notice
+
+**Copyright © 2026 Ratthabhumi & ACASH Contributors. All Rights Reserved.**  
+Proprietary and Confidential. Unauthorized copying, distribution, modification, or extraction is strictly prohibited.
