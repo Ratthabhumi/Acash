@@ -144,6 +144,10 @@ def verify_evidence_lineage(
             raise DataContractError(
                 f"D2_LINEAGE_UNSETTLED: seq {seq}."
             )
+        if settled.get(seq) != "OK":
+            raise DataContractError(
+                f"D2_LINEAGE_SETTLEMENT_NOT_OK: seq {seq} settled as {settled.get(seq)!r}."
+            )
         if verify_evidence_pair(root=evidence_root, run_id=run_id, name=name) != "ADMISSIBLE":
             raise DataContractError(
                 f"D2_LINEAGE_NOT_ADMISSIBLE: {name}."
@@ -160,6 +164,16 @@ def verify_evidence_lineage(
         if not isinstance(metadata, dict) or metadata.get("request_digest") != digest:
             raise DataContractError(
                 f"D2_LINEAGE_RECEIPT_BINDING_MISMATCH: {name}."
+            )
+        feed = metadata.get("feed")
+        if not isinstance(feed, str) or feed not in CANARY_FEEDS:
+            raise DataContractError(
+                f"D2_LINEAGE_RECEIPT_BAD_FEED: {name}."
+            )
+        req_idx = metadata.get("request_index")
+        if not isinstance(req_idx, int) or isinstance(req_idx, bool) or req_idx < 0:
+            raise DataContractError(
+                f"D2_LINEAGE_RECEIPT_BAD_REQUEST_INDEX: {name}."
             )
 
 

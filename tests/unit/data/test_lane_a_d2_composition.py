@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
 
+import pytest
+
 from acash.core.domain.exceptions import DataContractError
 from acash.data.qualification.lane_a_canary import (
     CANARY_MAX_BYTES,
@@ -34,6 +36,9 @@ from acash.data.qualification.lane_a_transport import (
 )
 
 RUNTIME_SHA = "b" * 40
+FIXED_VALID_FROM = "2026-10-15T00:00:00+00:00"
+FIXED_VALID_UNTIL = "2026-10-16T00:00:00+00:00"
+FIXED_TEST_NOW = "2026-10-15T12:00:00+00:00"
 
 
 class _TestVerifier:
@@ -48,19 +53,20 @@ def _plan(feed: str = "iex") -> CanaryPlan:
         approval_ref="OP-2026-10-15-001",
         scope_digest=digest,
         runtime_sha=RUNTIME_SHA,
-        valid_from_utc="2026-10-15T00:00:00+00:00",
-        valid_until_utc="2026-10-16T00:00:00+00:00",
+        valid_from_utc=FIXED_VALID_FROM,
+        valid_until_utc=FIXED_VALID_UNTIL,
         max_operations=CANARY_MAX_OPERATIONS,
         max_bytes=CANARY_MAX_BYTES,
         paid_budget_usd="0.00",
     )
     return CanaryPlan.build(
-        approval, feed, "2026-10-15T12:00:00+00:00", RUNTIME_SHA, _TestVerifier()
+        approval, feed, FIXED_TEST_NOW, RUNTIME_SHA, _TestVerifier()
     )
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    """Deterministic synthetic test clock strictly within synthetic approval window."""
+    return FIXED_TEST_NOW
 
 
 @dataclass
@@ -329,6 +335,60 @@ def test_evidence_payload_readback_matches() -> None:
             assert len(raw) == receipt.byte_count == 32
 
 
+def test_approval_window_boundary_before_valid() -> None:
+    plan = _plan()
+    with pytest.raises(DataContractError, match="D2_APPROVAL_WINDOW_INVALID"):
+        validate_plan_binding(
+            plan, "OP-2026-10-15-001", RUNTIME_SHA, "2026-10-14T23:59:59+00:00"
+        )
+
+
+def test_approval_window_boundary_exact_start() -> None:
+    plan = _plan()
+    validate_plan_binding(
+        plan, "OP-2026-10-15-001", RUNTIME_SHA, "2026-10-15T00:00:00+00:00"
+    )
+
+
+def test_approval_window_boundary_within_valid() -> None:
+    plan = _plan()
+    validate_plan_binding(
+        plan, "OP-2026-10-15-001", RUNTIME_SHA, "2026-10-15T12:00:00+00:00"
+    )
+
+
+def test_approval_window_boundary_exact_expiry() -> None:
+    plan = _plan()
+    validate_plan_binding(
+        plan, "OP-2026-10-15-001", RUNTIME_SHA, "2026-10-16T00:00:00+00:00"
+    )
+
+
+def test_approval_window_boundary_after_expiry() -> None:
+    plan = _plan()
+    with pytest.raises(DataContractError, match="D2_APPROVAL_WINDOW_INVALID"):
+        validate_plan_binding(
+            plan, "OP-2026-10-15-001", RUNTIME_SHA, "2026-10-16T00:00:01+00:00"
+        )
+
+
+def test_approval_window_clock_jump_across_expiry_without_sleep() -> None:
+    plan = _plan()
+    # Sequence represents synthetic clock advancing deterministically across expiry
+    clock_sequence = [
+        "2026-10-15T23:59:59+00:00",  # before expiry: VALID
+        "2026-10-16T00:00:00+00:00",  # exact boundary: VALID
+        "2026-10-16T00:00:01+00:00",  # after expiry: REJECTED
+        "2026-10-16T02:42:00+00:00",  # next day: REJECTED
+    ]
+    validate_plan_binding(plan, "OP-2026-10-15-001", RUNTIME_SHA, clock_sequence[0])
+    validate_plan_binding(plan, "OP-2026-10-15-001", RUNTIME_SHA, clock_sequence[1])
+    with pytest.raises(DataContractError, match="D2_APPROVAL_WINDOW_INVALID"):
+        validate_plan_binding(plan, "OP-2026-10-15-001", RUNTIME_SHA, clock_sequence[2])
+    with pytest.raises(DataContractError, match="D2_APPROVAL_WINDOW_INVALID"):
+        validate_plan_binding(plan, "OP-2026-10-15-001", RUNTIME_SHA, clock_sequence[3])
+
+
 def test_lineage_rejects_swapped_receipt() -> None:
     from acash.data.qualification.lane_a_canary import ReservationJournal
 
@@ -340,18 +400,36 @@ def test_lineage_rejects_swapped_receipt() -> None:
             **_run_kwargs(tmp, "run_sw_001", plan, transport))
         root = Path(tmp) / "ev"
         run_dir = root / "lane_a_runs" / "run_sw_001"
-        journal = ReservationJournal(run_dir / "attempts.jsonl", True)
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
         assert len(result.receipts) == 2
         first, second = result.receipts
-        swapped = [(first.seq, second.content_sha256, first.evidence_name)]
-        try:
+
+        # 1. Establish valid control case first: unmodified lineage accepted
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [
+            (first.seq, reserved[first.seq], first.evidence_name),
+            (second.seq, reserved[second.seq], second.evidence_name),
+        ]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # 2. Introduce exactly one fault: swap evidence name between requests
+        swapped = [
+            (first.seq, reserved[first.seq], second.evidence_name),
+            (second.seq, reserved[second.seq], second.evidence_name),
+        ]
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_RECEIPT_BINDING_MISMATCH: {second.evidence_name}."
+        ):
             verify_evidence_lineage(root, journal, swapped)
-            assert False, "swapped digest binding must fail"
-        except DataContractError:
-            pass
 
 
-def test_lineage_rejects_missing_and_tampered_artifacts() -> None:
+def test_lineage_rejects_wrong_canonical_request_digest() -> None:
     from acash.data.qualification.lane_a_canary import ReservationJournal
 
     plan = _plan()
@@ -359,18 +437,270 @@ def test_lineage_rejects_missing_and_tampered_artifacts() -> None:
         CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
     with tempfile.TemporaryDirectory() as tmp:
         result = run_d2_composition(
-            **_run_kwargs(tmp, "run_tm_001", plan, transport))
+            **_run_kwargs(tmp, "run_wrd_001", plan, transport))
         root = Path(tmp) / "ev"
-        run_dir = root / "lane_a_runs" / "run_tm_001"
+        run_dir = root / "lane_a_runs" / "run_wrd_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        first = result.receipts[0]
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: wrong request digest supplied for reservation seq
+        wrong_expected = [(first.seq, "f" * 64, first.evidence_name)]
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_RESERVATION_MISMATCH: seq {first.seq}."
+        ):
+            verify_evidence_lineage(root, journal, wrong_expected)
+
+
+def test_lineage_rejects_tampered_raw_payload() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_traw_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_traw_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: tamper raw binary bytes
         victim = result.receipts[0]
         (run_dir / f"{victim.evidence_name}.bin").write_bytes(b"tampered-bytes-00")
-        journal = ReservationJournal(run_dir / "attempts.jsonl", True)
-        expected = [(r.seq, "0" * 64, r.evidence_name) for r in result.receipts]
-        try:
-            verify_evidence_lineage(root, journal, expected)
-            assert False, "tampered pair must fail lineage"
-        except DataContractError:
-            pass
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_NOT_ADMISSIBLE: {victim.evidence_name}."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+
+def test_lineage_rejects_missing_raw_payload() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_mraw_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_mraw_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: delete raw binary payload
+        victim = result.receipts[0]
+        (run_dir / f"{victim.evidence_name}.bin").unlink()
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_NOT_ADMISSIBLE: {victim.evidence_name}."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+
+def test_lineage_rejects_missing_receipt() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_mrcp_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_mrcp_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: delete receipt json
+        victim = result.receipts[0]
+        (run_dir / f"{victim.evidence_name}.receipt.json").unlink()
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_NOT_ADMISSIBLE: {victim.evidence_name}."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+
+def test_lineage_rejects_corrupt_reservation_history() -> None:
+    import json
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_crh_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_crh_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: append a duplicate reserved seq line
+        with open(run_dir / "reservations.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"event": "reserved", "seq": 1, "request_digest": "a" * 64}) + "\n")
+        with pytest.raises(
+            DataContractError,
+            match="CANARY_HISTORY_DUP_RESERVED: seq 1."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+
+def test_lineage_rejects_unsettled_attempt() -> None:
+    import json
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_unst_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_unst_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: append a valid monotonic reservation (seq 3) that was never settled
+        dummy_digest = "c" * 64
+        with open(run_dir / "reservations.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps({"event": "reserved", "seq": 3, "request_digest": dummy_digest}) + "\n")
+        unsettled_expected = valid_expected + [(3, dummy_digest, "seq_0003")]
+        with pytest.raises(
+            DataContractError,
+            match="D2_LINEAGE_UNSETTLED: seq 3."
+        ):
+            verify_evidence_lineage(root, journal, unsettled_expected)
+
+
+def test_lineage_rejects_failed_settlement() -> None:
+    import json
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_fset_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_fset_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault: rewrite reservations.jsonl so seq 2 settled as HTTP_429 instead of OK
+        lines = (run_dir / "reservations.jsonl").read_text(encoding="utf-8").strip().splitlines()
+        new_lines = []
+        for line in lines:
+            rec = json.loads(line)
+            if rec.get("event") == "settled" and rec.get("seq") == 2:
+                rec["outcome"] = "HTTP_429"
+            new_lines.append(json.dumps(rec))
+        (run_dir / "reservations.jsonl").write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+        with pytest.raises(
+            DataContractError,
+            match="D2_LINEAGE_SETTLEMENT_NOT_OK: seq 2 settled as 'HTTP_429'."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+
+def test_lineage_rejects_corrupt_receipt_metadata() -> None:
+    import json
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+
+    plan = _plan()
+    transport = FakeD2Transport(script=[
+        CanaryPage("OK", 16, ""), CanaryPage("OK", 16, "")])
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run_d2_composition(
+            **_run_kwargs(tmp, "run_crm_001", plan, transport))
+        root = Path(tmp) / "ev"
+        run_dir = root / "lane_a_runs" / "run_crm_001"
+        journal = ReservationJournal(run_dir / "reservations.jsonl", True)
+        records = journal.read_reservations()
+        reserved = {
+            int(r["seq"]): str(r["request_digest"])
+            for r in records
+            if r.get("event") == "reserved"
+        }
+        valid_expected = [(r.seq, reserved[r.seq], r.evidence_name) for r in result.receipts]
+        verify_evidence_lineage(root, journal, valid_expected)
+
+        # Fault A: bad feed in metadata
+        receipt_path = run_dir / f"{result.receipts[0].evidence_name}.receipt.json"
+        orig_raw = receipt_path.read_text(encoding="utf-8")
+        data = json.loads(orig_raw)
+        data["metadata"]["feed"] = "unauthorized_feed"
+        receipt_path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_RECEIPT_BAD_FEED: {result.receipts[0].evidence_name}."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
+
+        # Restore and test Fault B: bad request_index in metadata
+        data = json.loads(orig_raw)
+        data["metadata"]["request_index"] = -1
+        receipt_path.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(
+            DataContractError,
+            match=f"D2_LINEAGE_RECEIPT_BAD_REQUEST_INDEX: {result.receipts[0].evidence_name}."
+        ):
+            verify_evidence_lineage(root, journal, valid_expected)
 
 
 def test_metadata_request_digest_schema() -> None:
