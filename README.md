@@ -8,11 +8,11 @@
 
 ---
 
-## Current Direction (2026-10-14)
+## Current Direction (2026-10-15)
 
-**Start here:** the single active delivery plan is [`docs/ROADMAP.md`](docs/ROADMAP.md) (v3.7.0, Current Delivery Track D0–D6: offline canary → acquisition safety → authorized data → qualification → economics).
+**Start here:** the single active delivery plan is [`docs/ROADMAP.md`](docs/ROADMAP.md) (v4.0.0, Unified Delivery D1–D10: reuse existing capabilities from data foundation through human-gated capital admission).
 
-- **North Star:** independently qualified ETF market data feeding a hypothetical USD 1,000 after-cost comparison. The valid governed investment decision remains **cash/no trade**.
+- **North Star:** evidence-based capital allocation, including **cash/no trade**. A hypothetical USD 1,000 after-cost ETF comparison is the first practical study milestone, not the final objective.
 - **Hard boundaries:** real capital USD 0.00; `NO_REAL_ORDERS=true`; Lane A acquisition UNISSUED; no provider HTTP, credentials, subscriptions, broker authentication, paper/live orders, or Homelab deployment without separate human authority.
 - **Subsystem map:** `src/acash/` (production domain modules) · `tests/` (verification) · `docs/README.md` (documentation hub) · `AGENTS.md` (engineering and authority rules).
 - **Historical records** (Phase 0–23, E3.6, session handoffs) are preserved evidence below and in `docs/` — they describe past decisions, not current authorization.
@@ -261,7 +261,7 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ### 🧭 System Governance & Roadmap
 - **[`docs/README.md`](docs/README.md)**: Master Documentation Hub and Progressive Disclosure Index.
-- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Active delivery roadmap (Current Delivery Track D0–D6) plus historical Phases 0–23.
+- **[`docs/ROADMAP.md`](docs/ROADMAP.md)**: Unified Delivery D1–D10 (v4.0.0), existing capability reuse and preserved historical Phases 0–23.
 - **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)**: September 4 implementation snapshot (historical; current state lives in `docs/ROADMAP.md`).
 - **[`docs/DECISIONS.md`](docs/DECISIONS.md)**: Canonical Architectural Decision Records (**ADR-001 through ADR-025**).
 - **[`docs/RISKS.md`](docs/RISKS.md)**: Comprehensive Risk Register across quantitative, financial, operational, and technical dimensions.
@@ -315,7 +315,7 @@ The complete canonical documentation suite is organized systematically in [`docs
 
 ## 5.5 Historical Status Snapshot — Post-Gate G7 / Stage S11 (2026-09-13)
 
-> **Historical snapshot preserved verbatim except noted corrections.** For current state see [`docs/ROADMAP.md`](docs/ROADMAP.md) (v3.7.0). Originally synchronized 2026-09-13 with [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`Cheatsheet.md`](Cheatsheet.md).
+> **Historical snapshot preserved verbatim except noted corrections.** For current state see [`docs/ROADMAP.md`](docs/ROADMAP.md) (v4.0.0). Originally synchronized 2026-09-13 with [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`Cheatsheet.md`](Cheatsheet.md).
 
 ### Project Maturity & Current State
 - **Phases 0–12:** Complete, hardened, and frozen (Gates 1–12 certified).

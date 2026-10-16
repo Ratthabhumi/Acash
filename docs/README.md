@@ -2,6 +2,8 @@
 
 Welcome to the canonical documentation center for the **ACASH Quantitative Research & Execution Engine** and **Project Atlas**.
 
+**Current delivery:** [Unified Roadmap v4.0](ROADMAP.md), D1–D10. Capability reuse and current-scope admission are distinct; historical Phase records remain evidence, not new authority. [Preservation map](audit/ROADMAP_V4_PRESERVATION_20261015.md) · [Research handoff](research/UNIFIED_ROADMAP_V4_RESEARCH_HANDOFF_20261015.md).
+
 ---
 
 ## 🗺️ Progressive Subsystem Navigation
