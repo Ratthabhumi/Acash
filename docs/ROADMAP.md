@@ -77,7 +77,7 @@ Every stage records objective, source/tests, historical evidence and reuse, miss
 
 **Reuse / evidence:** canonical requests, HTTPX exception classes, page SHA helpers, zero-retry and credential-isolation preparation. The draft demonstrates offline behavior, not production approval.
 
-**Missing:** `destination_guard()` uses path-prefix matching and does not constrain the port; exact path/port restrictions need acceptance tests. `iter_bytes()` counts decoded bytes: raw-versus-decoded budget semantics need a decision. Durable reserve-before-real-dispatch linkage, independent production approval verifier/trust root, actual account/feed entitlement and audited activated production executor are not proven. The current disabled boundary always refuses real transport.
+**Missing:** `destination_guard()` now enforces exact HTTPS origin/path with userinfo, port, encoding, query, and fragment rejection (merged PR #37; adversarial tests cover suffix, userinfo, and port variants). `iter_bytes()` counts decoded bytes: raw-versus-decoded budget semantics still need a decision. Durable reserve-before-real-dispatch linkage, independent production approval verifier/trust root, actual account/feed entitlement and audited activated production executor are not proven. The current disabled boundary always refuses real transport.
 
 **Authority / acceptance / next:** independent software review must close these contracts and define evidence durability before any separately authorized acquisition. Keep HTTP blocked; review the draft in its own PR. **Do not rebuild** the existing SIP client core, planner, error taxonomy or hashing; legacy retry behavior must not silently enter Lane A's zero-retry scope.
 
@@ -200,7 +200,7 @@ This is a delivery-use index into the existing [Research Utilization Matrix](aud
 | M1.6 [benchmark contracts](../src/acash/data/contracts/etf_fx_benchmark.py) | Integrated, synthetic lifecycle/accounting tests | Holdings/benchmark math → D4–D6 | Qualified prices, actions and empirical permission |
 | [PPDS](../src/acash/ppds/) / [Invest V0](../src/acash/invest/v0_report.py) | Integrated read-only/synthetic reporting | Valuation/reporting → D6 | Admitted input dataset, cost scenarios |
 | M1.7–M1.8.1 [authority](../src/acash/data/qualification/lane_a_authority.py) | Integrated offline planner/rehearsal/storage | Request/evidence integrity → D1–D3 | Production verifier and executor |
-| PR #32 / PR #37 | Ready offline canary / draft mocked safety, not merged | Reuse reviewed slices → D1/D2 | Independent acceptance; separate merge authority |
+| PR #32 / PR #37 | Merged offline canary + safety (`bfffdb3` / `3255da9`) | Reuse integrated slices → D1/D2 | Independent acceptance; no new authority implied |
 | [HYP_003 dossier](phase14/hyp_003_terminal_falsification_dossier.md) | TERMINALLY FALSIFIED | Negative evidence/governance → D7 | No resurrection or automatic promotion |
 | [HYP_009 decision](phase14/HYP_009_TERMINAL_M2_DECISION.md) | TERMINAL_NOT_SUPPORTED_AT_LOCKED_M2; qualified SPY dataset in original scope | Qualification/accounting lessons → D3–D7 | No new strategy or dataset rights |
 | [HYP_010 blocker](phase14/HYP_010_PARKED_NON_FALSIFIED_BLOCKER.md) | PARKED / NON-FALSIFIED; 8-attempt probe, VEU dividend-authority blocker | Probe/sponsor methodology → D3/D4 | Human resumption and sponsor authority |
@@ -233,9 +233,9 @@ These are separate prerequisites, not automatic state transitions. A qualified s
 <a id="next-actions"></a>
 ## 📍 7. Current Next Actions
 
-1. **D1:** review PR #32 at `49b8623…` and seek a separate merge decision. The branch is already synced to checkpoint main; do not repeat a stale sync requirement without checking ancestry.
-2. **Documentation:** review PR #36 separately. This roadmap PR stacks on its exact HEAD and targets `docs/consistency-closure-20261014`; no existing PR is merged or altered here. After #36 merges, verify ancestry/diff/CI, perform a normal sync if needed and retarget this PR to main.
-3. **D2:** assess PR #37 draft; close exact destination/port and byte semantics, durable dispatch/journal linkage, independent verifier/trust root and audit the future executor. Preserve the single planner and existing clients.
+1. **D1:** PR #32 merged (`bfffdb3`); D2 safety (PR #37, `3255da9`) and composition (PR #39, `e61dd24`) merged. No further offline-canary integration work is pending.
+2. **Documentation:** PR #36 merged (`16901bf`); this roadmap PR #38 is the last open item — merge at its exact reviewed SHA under separate approval.
+3. **D2:** offline safety/composition integrated; exact destination/port closed in merged code. Remaining: byte-unit ratification, durable dispatch/journal linkage proof, independent verifier/trust root, audited executor. Preserve the single planner and existing clients.
 4. **D3:** operator binds entitlement/feed and issues Lane A only after the software gates are accepted. Until then: UNISSUED, no provider HTTP.
 5. **D4–D6:** separately qualify the new ETF universe and corporate actions, admit the historical dataset, then authorize the USD 1,000 after-cost study. No dataset admission or economics claim follows from the offline canary.
 
