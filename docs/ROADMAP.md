@@ -14,8 +14,8 @@ Scientific evidence, software readiness, data qualification, strategy qualificat
 
 | Stage | Capability already available | Current Invest / Lane A admission | Next delivery |
 | --- | --- | --- | --- |
-| **D1 🧱 Offline Data Foundation** | IMPLEMENTED · SYNTHETIC_TESTED | INTEGRATED foundations; REVIEW_PENDING canary | Review exact PR #32 HEAD; separate merge decision |
-| **D2 🛡️ Real Data Acquisition Safety** | PARTIAL · SYNTHETIC_TESTED | REVIEW_PENDING draft; EVIDENCE_INCOMPLETE | Close executor, verifier, byte and dispatch contracts |
+| **D1 🧱 Offline Data Foundation** | IMPLEMENTED · SYNTHETIC_TESTED | INTEGRATED (PR #32 merged); no executor/authority implied | D3 admission prerequisites next |
+| **D2 🛡️ Real Data Acquisition Safety** | PARTIAL · SYNTHETIC_TESTED | INTEGRATED offline slice (PR #37/#39 merged); EVIDENCE_INCOMPLETE for dispatch | Close verifier, entitlement, byte and durability contracts |
 | **D3 📡 Authorized Market Data Acquisition** | HISTORICALLY_EXECUTED in HYP_009/010/011 | AUTHORITY_UNISSUED · ENTITLEMENT_UNVERIFIED | Exact-scope operator decision after D2 acceptance |
 | **D4 🔬 Data & Corporate-Action Qualification** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Qualify new prices and issuer/sponsor evidence |
 | **D5 🗃️ Qualified Historical Dataset** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Separately authorize and seal new historical scope |
@@ -40,15 +40,17 @@ Scientific evidence, software readiness, data qualification, strategy qualificat
 <a id="verified-position"></a>
 ## 📍 2. Verified Current Position
 
-GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated checkpoint, not a live status feed. Canonical `main`: `250bf0304d763cb86f961ca26b5c5771421a23ab` (PR #35). Roadmap preparation is stacked on PR #36, `87e1176adb2f9541773b4b3d87c479691f5e11d2`; its documentation corrections are not yet on main.
+> **Status update 2026-10-16 (additive; the 2026-10-15 checkpoint below is preserved as history):** PR #32 (D1 canary), PR #37 (D2 safety), PR #39 (D2 composition), and PR #36 (docs consistency) are MERGED into canonical `main`. D1 offline foundation and D2 offline safety/composition are therefore **integrated offline software** — still with **no real executor, no entitlement, and no acquisition authority**. Verify live GitHub state before acting.
 
-| Work pending review | Exact HEAD | GitHub state / PR-triggered CI |
+GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated checkpoint, not a live status feed. Canonical `main` *then*: `250bf0304d763cb86f961ca26b5c5771421a23ab` (PR #35). Roadmap preparation is stacked on PR #36, `87e1176adb2f9541773b4b3d87c479691f5e11d2`; its documentation corrections are not yet on main.
+
+| Work status at 2026-10-15 checkpoint (historical) | Exact HEAD then | GitHub state then / PR-triggered CI |
 | --- | --- | --- |
-| [PR #32: offline canary](https://github.com/Ratthabhumi/Acash/pull/32) | `49b86236796f859e2918cf4b9c228a8eff0b9fd1` | OPEN, READY, not merged; [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570998061) |
-| [PR #36: documentation consistency](https://github.com/Ratthabhumi/Acash/pull/36) | `87e1176adb2f9541773b4b3d87c479691f5e11d2` | OPEN, READY, not merged; [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570849800) |
-| [PR #37: legacy D1 safety slice, now Unified Delivery D2](https://github.com/Ratthabhumi/Acash/pull/37) | `3bc252d26fbefac6b7085a82cd46c2e00f6d037c` | OPEN, DRAFT, not merged; [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38635592493) |
+| [PR #32: offline canary](https://github.com/Ratthabhumi/Acash/pull/32) | `49b86236796f859e2918cf4b9c228a8eff0b9fd1` | was OPEN/READY; **MERGED** (`bfffdb3`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570998061) |
+| [PR #36: documentation consistency](https://github.com/Ratthabhumi/Acash/pull/36) | `87e1176adb2f9541773b4b3d87c479691f5e11d2` | was OPEN/READY; **MERGED** (`16901bf`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38570849800) |
+| [PR #37: legacy D1 safety slice, now Unified Delivery D2](https://github.com/Ratthabhumi/Acash/pull/37) | `3bc252d26fbefac6b7085a82cd46c2e00f6d037c` | was OPEN/DRAFT; **MERGED** (`3255da9`); [CI success](https://github.com/Ratthabhumi/Acash/actions/runs/38635592493) |
 
-**Integrated:** M1.6 benchmark contracts, M1.7 planner, M1.8 rehearsal, M1.8.1 storage/evidence, PPDS and Invest V0. **Active delivery:** D1 integration review, with D2 offline safety preparation in parallel. The PR #32 description reports 39 focused canary tests; PR #37 reports 14 MockTransport tests. These are historical reports, not local reruns in this documentation task; green CI does not prove live-dispatch safety or entitlement.
+**Integrated:** M1.6 benchmark contracts, M1.7 planner, M1.8 rehearsal, M1.8.1 storage/evidence, PPDS and Invest V0. **Update 2026-10-16:** D1 canary (PR #32), D2 safety (PR #37), D2 composition (PR #39), and docs consistency (PR #36) are MERGED; only the roadmap PR #38 remains open. The PR #32 description reports 39 focused canary tests; PR #37 reports 14 MockTransport tests. These are historical reports, not local reruns in this documentation task; green CI does not prove live-dispatch safety or entitlement.
 
 **Hard boundaries:** `REAL_CAPITAL_AUTHORITY = USD 0.00`; `NO_REAL_ORDERS=true`; Lane A **UNISSUED**. No provider HTTP, credential use, subscription purchase, protected dataset access, broker authentication, paper/live order, Homelab deployment or PR merge is authorized by this roadmap. Historical authorizations below remain bounded to their own decisions.
 
@@ -59,17 +61,17 @@ Every stage records objective, source/tests, historical evidence and reuse, miss
 
 ### D1 — 🧱 Offline Data Foundation
 
-**Objective / standing:** reuse a single canonical request planner and bounded offline evidence pipeline. IMPLEMENTED / SYNTHETIC_TESTED; integrated foundations, canary REVIEW_PENDING. Historical mapping: Phase 2/3/14 and M1.7–M1.8.1.
+**Objective / standing:** reuse a single canonical request planner and bounded offline evidence pipeline. IMPLEMENTED / SYNTHETIC_TESTED; integrated foundations, canary INTEGRATED (PR #32 merged `bfffdb3`). Historical mapping: Phase 2/3/14 and M1.7–M1.8.1.
 
-**Source / tests:** [authority planner](../src/acash/data/qualification/lane_a_authority.py), [rehearsal](../src/acash/data/qualification/lane_a_rehearsal.py), [transport/evidence](../src/acash/data/qualification/lane_a_transport.py); [authority tests](../tests/unit/data/test_lane_a_authority.py), [rehearsal tests](../tests/unit/data/test_lane_a_rehearsal.py), [transport tests](../tests/unit/data/test_lane_a_transport.py). PR #32 adds [canary source at reviewed HEAD](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/src/acash/data/qualification/lane_a_canary.py) and [tests](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/tests/unit/data/test_lane_a_canary.py), absent from main.
+**Source / tests:** [authority planner](../src/acash/data/qualification/lane_a_authority.py), [rehearsal](../src/acash/data/qualification/lane_a_rehearsal.py), [transport/evidence](../src/acash/data/qualification/lane_a_transport.py); [authority tests](../tests/unit/data/test_lane_a_authority.py), [rehearsal tests](../tests/unit/data/test_lane_a_rehearsal.py), [transport tests](../tests/unit/data/test_lane_a_transport.py). PR #32 added [canary source at reviewed HEAD](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/src/acash/data/qualification/lane_a_canary.py) and [tests](https://github.com/Ratthabhumi/Acash/blob/49b86236796f859e2918cf4b9c228a8eff0b9fd1/tests/unit/data/test_lane_a_canary.py), now integrated on `main`.
 
 **Reuse / evidence:** nine-field request serialization, request budgets, reservation journals, fake transport, receipt/page hashing and offline runner. Offline pagination completion is not data qualification; file-sync evidence is not proven crash durability.
 
-**Missing / authority / acceptance / next:** exact-reviewed canary integration and accepted test evidence require a separate human merge decision. Preserve canonical request identity and fail-closed journals; no HTTP activation. Review PR #32 at its actual HEAD. **Do not rebuild** planner, journals, rehearsal or offline runner.
+**Missing / authority / acceptance / next:** Preserve canonical request identity and fail-closed journals; no HTTP activation. **Do not rebuild** planner, journals, rehearsal or offline runner.
 
 ### D2 — 🛡️ Real Data Acquisition Safety
 
-**Objective / standing:** prepare an auditable bounded executor without activation. PARTIAL / SYNTHETIC_TESTED; draft REVIEW_PENDING, production EVIDENCE_INCOMPLETE. Historical mapping: Phase 2/3/14 acquisition controls.
+**Objective / standing:** prepare an auditable bounded executor without activation. PARTIAL / SYNTHETIC_TESTED; offline slice INTEGRATED (PR #37 merged `3255da9`, composition PR #39 merged `e61dd24`), production EVIDENCE_INCOMPLETE. Historical mapping: Phase 2/3/14 acquisition controls.
 
 **Source / tests:** existing [SIP client and error taxonomy](../src/acash/data/qualification/client.py), M1.7 planner and M1.8.1 journal above. PR #37 contains [safety source](https://github.com/Ratthabhumi/Acash/blob/3bc252d26fbefac6b7085a82cd46c2e00f6d037c/src/acash/data/qualification/lane_a_d1_safety.py) and [MockTransport tests](https://github.com/Ratthabhumi/Acash/blob/3bc252d26fbefac6b7085a82cd46c2e00f6d037c/tests/unit/data/test_lane_a_d1_safety.py). Its legacy D1 identifier is retained in filenames.
 
