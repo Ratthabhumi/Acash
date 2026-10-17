@@ -148,6 +148,37 @@ def test_malformed_content_length_treated_absent() -> None:
     assert cap.observed == 2
 
 
+def test_absent_content_length_accepted() -> None:
+    cap = StreamingByteCap(100)
+    with build_test_client(_streaming_handler(b"abc")) as client:
+        with client.stream("GET", _URL) as response:
+            body, digest = read_identity_capped(response, cap)
+    assert body == b"abc"
+    assert digest == compute_page_sha256(b"abc")
+    assert cap.observed == 3
+
+
+def test_negative_content_length_fails_closed() -> None:
+    # A negative declared length can never equal any observed total, so the
+    # existing exact-equality cross-check fails closed without new policy.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=(c for c in [b"ok"]),
+            headers={"content-length": "-5"},
+        )
+
+    cap = StreamingByteCap(100)
+    with build_test_client(handler) as client:
+        with client.stream("GET", _URL) as response:
+            try:
+                read_identity_capped(response, cap)
+                assert False, "negative content-length must fail closed"
+            except DataContractError:
+                pass
+    assert cap.halted is True
+
+
 def test_interrupted_stream() -> None:
     def gen() -> Iterator[bytes]:
         yield b"ab"
@@ -166,6 +197,75 @@ def test_interrupted_stream() -> None:
                 pass
     assert cap.halted is True
     assert cap.observed == 2
+
+
+def test_unexpected_iterator_error_poisons_cap_and_propagates_unchanged() -> None:
+    # A non-HTTPX iterator failure must NOT be disguised as a transport
+    # contract error; it propagates unchanged, but the cap is poisoned so an
+    # ambiguous read can never be reused as successful evidence.
+    def gen() -> Iterator[bytes]:
+        yield b"ab"
+        raise RuntimeError("unexpected-iterator-fault")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=gen())
+
+    cap = StreamingByteCap(100)
+    with build_test_client(handler) as client:
+        with client.stream("GET", _URL) as response:
+            try:
+                read_identity_capped(response, cap)
+                assert False, "unexpected iterator error must propagate"
+            except DataContractError:
+                assert False, "unknown error must not become a contract error"
+            except RuntimeError:
+                pass
+    assert cap.observed == 2
+    assert cap.halted is True
+
+
+def test_interrupted_stream_conserves_reservation() -> None:
+    from acash.data.qualification.lane_a_canary import ReservationJournal
+    import tempfile
+
+    def gen() -> Iterator[bytes]:
+        yield b"ab"
+        raise httpx.StreamClosed()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=gen())
+
+    cap = StreamingByteCap(100)
+    with tempfile.TemporaryDirectory() as tmp:
+        journal = ReservationJournal.create(Path(tmp) / "run")
+        journal.reserve(1, "d" * 64)
+        with build_test_client(handler) as client:
+            with client.stream("GET", _URL) as response:
+                try:
+                    read_identity_capped(response, cap)
+                    assert False, "interrupted stream must fail"
+                except DataContractError:
+                    pass
+        # No refund, no settle, no silent retry: the attempt stays consumed.
+        assert journal.reserved_count == 1
+        assert journal.completed == {}
+    assert cap.halted is True
+    assert cap.observed == 2
+
+
+def test_oversized_single_upstream_chunk_counted_then_halted() -> None:
+    # The whole upstream chunk enters memory (unbounded by this layer) and is
+    # HONESTLY counted, then the cap halts. No hard memory bound is claimed.
+    cap = StreamingByteCap(64)
+    with build_test_client(_streaming_handler(b"x" * 100_000)) as client:
+        with client.stream("GET", _URL) as response:
+            try:
+                read_identity_capped(response, cap)
+                assert False, "oversized single chunk must fail"
+            except DataContractError:
+                pass
+    assert cap.observed == 100_000
+    assert cap.halted is True
 
 
 def test_eagerly_read_response_rejected() -> None:

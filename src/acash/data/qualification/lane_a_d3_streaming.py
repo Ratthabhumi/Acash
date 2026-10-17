@@ -13,15 +13,35 @@ Contract (PROPOSAL status until ratified — see admit_byte_population):
   cap/hash cannot honestly cover two different byte populations.
 - Raw wire bytes are streamed via ``iter_raw()`` and hashed incrementally,
   so the recorded digest is the digest of exactly what was counted and
-  stored — no second pass, no re-read, bounded memory (never more than
-  the cap plus one chunk).
+  stored — no second pass, no re-read.
 - ``Content-Length``, when present and parseable under identity coding,
   must equal the observed total exactly; mismatch (either direction)
-  halts and fails closed. Unparseable values are treated as absent.
-- Midstream transport failures halt the cap and raise without returning
-  partial bodies: partial evidence is never presentable as complete.
+  halts and fails closed. Unparseable values are treated as absent (this
+  mirrors the established ``lane_a_d1_safety.read_capped`` policy; it is
+  NOT a new network policy and is recorded, not silently ratified).
+- ``Content-Length`` malformed-absent policy (RECORDED, two options):
+  (a) treat unparseable as absent [current, matches D1]; or (b) reject
+  fail-closed. Neither is ratified for real dispatch here.
+- Any iterator failure — declared HTTPX transport/stream errors AND
+  unexpected non-HTTPX exceptions — halts (poisons) the cap before
+  propagating, so no partial or ambiguous read can later be reused as
+  successful evidence. Declared transport errors are reclassified as
+  ``DataContractError``; unknown errors propagate UNCHANGED after
+  poisoning, so programming faults are never disguised as contract
+  outcomes.
 - Attempt budgets are conserved: failed/interrupted reads consume their
   reservation; no retry, no refund, no resume.
+
+BOUNDED-MEMORY BOUNDARY (explicit, not overclaimed):
+- Counted bytes: ``cap.observed`` <= cap + (size of one upstream chunk).
+- Retained body: <= cap. The breaching chunk raises in ``consume`` BEFORE
+  ``body.extend``, so it is never retained.
+- Upstream transport / decoder allocations: NOT bounded by this layer.
+  httpx 0.28.1 ``Response.iter_raw`` re-chunks via ``ByteChunker``, whose
+  ``decode`` materializes the entire ``raw_stream_bytes`` chunk as a list
+  of slices; passing a ``chunk_size`` therefore bounds neither the upstream
+  chunk nor peak memory. No hard resident-memory bound is claimed, and no
+  ``chunk_size`` is set (it would only add a slice list).
 
 What this does NOT establish: production streaming enforcement, target-
 host crash durability, entitlement, or acquisition authority. Those remain
@@ -92,6 +112,15 @@ def read_identity_capped(
         raise DataContractError(
             f"D3_STREAM_INTERRUPTED: midstream transport failure: {exc}."
         ) from exc
+    except Exception:
+        # Any OTHER iterator failure (e.g. a raising generator) must still
+        # poison the cap: an un-poisoned cap would let an ambiguous read be
+        # reused as successful evidence. Re-raise UNCHANGED (no wrapping) so
+        # programming errors are diagnosed, not disguised as transport
+        # contract outcomes. BaseException (KeyboardInterrupt/SystemExit)
+        # is intentionally not caught.
+        cap.halted = True
+        raise
     if declared is not None and declared != cap.observed - observed_before:
         cap.halted = True
         raise DataContractError(
