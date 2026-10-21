@@ -1,8 +1,9 @@
-"""Unit and adversarial tests for Lane B Candidate Evaluator.
+"""Unit, boundary, and adversarial regression tests for Lane B Candidate Evaluator.
 
 Verifies strict compliance with:
 - docs/research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md
 - AGENTS.md Section 1 (Strict Fail-Closed Contract, Literature & Unit Discipline)
+- V13 Primary-Source Integrity Recovery Invariants
 """
 
 from datetime import date
@@ -27,43 +28,234 @@ def _sample_valid_event(
     record_date: Optional[date] = None,
     payable_date: Optional[date] = None,
     authority_class: str = "ISSUER_OFFICIAL_TABLE",
+    source_url: Optional[str] = None,
+    source_document: str = "Official Distribution Table",
+    confirmation_status: str = "SOURCE_CONFIRMED_CANDIDATE",
+    event_type: str = "INCOME_DISTRIBUTION",
+    fund_legal_identity: Optional[str] = None,
 ) -> LaneBCandidateEvent:
     rec_d = record_date if record_date is not None else ex_date
     pay_d = payable_date if payable_date is not None else rec_d
+    fund_map = {
+        "VOO": "Vanguard Index Funds",
+        "BND": "Vanguard Bond Index Funds",
+        "BIL": "SPDR Series Trust",
+        "GLD": "SPDR Gold Trust",
+    }
+    url_map = {
+        "VOO": "https://www.vanguardoffshore.com/en/product/etf/equity/0968/vanguard-sp-500-etf",
+        "BND": "https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf",
+        "BIL": "https://www.ssga.com/us/en/institutional/resources/documents/etf-dividend-distributions",
+    }
+    legal_id = fund_legal_identity or fund_map.get(symbol, "Vanguard Index Funds")
+    src_url = source_url or url_map.get(symbol, "https://www.vanguard.com")
+
     return LaneBCandidateEvent(
         symbol=symbol,
-        fund_legal_identity="Vanguard Index Funds",
-        event_type="INCOME_DISTRIBUTION",
+        fund_legal_identity=legal_id,
+        event_type=event_type,
         amount=Decimal(amount),
         currency="USD",
         ex_date=ex_date,
         record_date=rec_d,
         payable_date=pay_d,
-        source_url="https://www.vanguardoffshore.com/en/product/etf/equity/0968/vanguard-sp-500-etf",
-        source_document="Vanguard Official S&P 500 ETF Distributions",
-        retrieval_status="UNVERIFIED_CAPTURE_TIME",
+        source_url=src_url,
+        source_document=source_document,
+        retrieval_status="VERIFIED_PRIMARY_SOURCE",
         authority_class=authority_class,
+        confirmation_status=confirmation_status,
     )
 
 
 def test_happy_path_candidate_panel_json_evaluates() -> None:
-    """Verify that the committed 2025-2026 JSON candidate panel parses and verifies cleanly."""
-    json_path = Path(__file__).resolve().parents[3] / "docs" / "research" / "lane_b_candidate_events_2025_2026.json"
+    """Verify that committed 2025-2026 JSON candidate panel parses and verifies cleanly."""
+    json_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "research"
+        / "lane_b_candidate_events_2025_2026.json"
+    )
     assert json_path.exists(), f"Candidate JSON file not found at {json_path}"
 
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    events = [LaneBCandidateEvent.from_dict(ev) for ev in data["cash_distribution_events"]]
-    assert len(events) >= 20
+    events = [
+        LaneBCandidateEvent.from_dict(ev)
+        for ev in data["cash_distribution_events"]
+    ]
+    assert len(events) == 30, f"Expected exactly 30 cash events, got {len(events)}"
 
     evaluator = LaneBCandidateEvaluator()
     result = evaluator.evaluate_panel(events)
 
-    assert result.status == "CANDIDATE_PANEL_VERIFIED"
-    assert result.total_events == len(events)
+    # Truthful status: contains partial records, so status must be CANDIDATE_STRUCTURE_VALIDATED
+    assert result.status == "CANDIDATE_STRUCTURE_VALIDATED"
+    assert result.total_events == 30
+    assert result.confirmed_events == 11
+    assert result.partial_events == 19
     assert set(result.symbols_evaluated) == {"VOO", "BND", "BIL"}
-    assert len(result.composite_digest) == 64  # Valid SHA-256 hex string
+    assert len(result.economic_composite_digest) == 64
+    assert len(result.evidence_manifest_digest) == 64
+    assert len(result.composite_digest) == 64
+
+
+def test_verified_discrepancy_anchors_present_in_json() -> None:
+    """Verify the specific primary-source anchors reconciled against Vanguard and SSGA records."""
+    json_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "research"
+        / "lane_b_candidate_events_2025_2026.json"
+    )
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    events_by_key = {
+        (ev["symbol"], ev["ex_date"]): ev
+        for ev in data["cash_distribution_events"]
+    }
+
+    # VOO Q4 2025
+    voo_q4_25 = events_by_key.get(("VOO", "2025-12-22"))
+    assert voo_q4_25 is not None
+    assert voo_q4_25["amount"] == "1.771000"
+    assert voo_q4_25["payable_date"] == "2025-12-24"
+    assert voo_q4_25["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # VOO Q1 2026
+    voo_q1_26 = events_by_key.get(("VOO", "2026-03-27"))
+    assert voo_q1_26 is not None
+    assert voo_q1_26["amount"] == "1.872400"
+    assert voo_q1_26["payable_date"] == "2026-03-31"
+    assert voo_q1_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # VOO Q2 2026
+    voo_q2_26 = events_by_key.get(("VOO", "2026-06-26"))
+    assert voo_q2_26 is not None
+    assert voo_q2_26["amount"] == "1.962200"
+    assert voo_q2_26["payable_date"] == "2026-06-30"
+    assert voo_q2_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # BND 2025-12-18
+    bnd_dec_25 = events_by_key.get(("BND", "2025-12-18"))
+    assert bnd_dec_25 is not None
+    assert bnd_dec_25["amount"] == "0.246638"
+    assert bnd_dec_25["payable_date"] == "2025-12-22"
+    assert bnd_dec_25["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # BND 2026-07-01
+    bnd_jul_26 = events_by_key.get(("BND", "2026-07-01"))
+    assert bnd_jul_26 is not None
+    assert bnd_jul_26["amount"] == "0.244470"
+    assert bnd_jul_26["payable_date"] == "2026-07-06"
+    assert bnd_jul_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # BND 2026-08-03
+    bnd_aug_26 = events_by_key.get(("BND", "2026-08-03"))
+    assert bnd_aug_26 is not None
+    assert bnd_aug_26["amount"] == "0.251550"
+    assert bnd_aug_26["payable_date"] == "2026-08-05"
+    assert bnd_aug_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+    # BIL 2026-09-01
+    bil_sep_26 = events_by_key.get(("BIL", "2026-09-01"))
+    assert bil_sep_26 is not None
+    assert bil_sep_26["amount"] == "0.279771"
+    assert bil_sep_26["payable_date"] == "2026-09-04"
+    assert bil_sep_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+
+def test_source_partial_cannot_become_source_verified() -> None:
+    """SOURCE_PARTIAL status must result in CANDIDATE_STRUCTURE_VALIDATED, never SOURCE_VERIFIED."""
+    evaluator = LaneBCandidateEvaluator()
+
+    ev_confirmed = _sample_valid_event(
+        symbol="VOO", confirmation_status="SOURCE_CONFIRMED_CANDIDATE"
+    )
+    res_confirmed = evaluator.evaluate_panel([ev_confirmed])
+    assert res_confirmed.status == "SOURCE_VERIFIED_CANDIDATE"
+    assert res_confirmed.confirmed_events == 1
+    assert res_confirmed.partial_events == 0
+
+    ev_partial = _sample_valid_event(
+        symbol="VOO", confirmation_status="SOURCE_PARTIAL"
+    )
+    res_partial = evaluator.evaluate_panel([ev_partial])
+    assert res_partial.status == "CANDIDATE_STRUCTURE_VALIDATED"
+    assert res_partial.confirmed_events == 0
+    assert res_partial.partial_events == 1
+
+
+def test_unauthorized_source_domain_rejected() -> None:
+    """Source URL must originate from an authorized issuer domain."""
+    evaluator = LaneBCandidateEvaluator()
+    unauthorized_event = _sample_valid_event(
+        source_url="https://random-aggregator.com/dividends/voo"
+    )
+    with pytest.raises(DataContractError, match="authorized issuer domain"):
+        evaluator.evaluate_panel([unauthorized_event])
+
+
+def test_identical_duplicate_rejected() -> None:
+    """Identical duplicate rows must be rejected to prevent silent count/digest inflation."""
+    evaluator = LaneBCandidateEvaluator()
+    ev1 = _sample_valid_event(symbol="VOO", ex_date=date(2026, 9, 28))
+    ev2 = _sample_valid_event(symbol="VOO", ex_date=date(2026, 9, 28))
+
+    with pytest.raises(DataContractError, match="Duplicate identical event"):
+        evaluator.evaluate_panel([ev1, ev2])
+
+
+def test_contradictory_duplicate_rejected() -> None:
+    """Duplicate ex_dates with conflicting dollar amounts must be quarantined and rejected."""
+    evaluator = LaneBCandidateEvaluator()
+    ev1 = _sample_valid_event(symbol="VOO", amount="1.822600")
+    ev2 = _sample_valid_event(symbol="VOO", amount="1.950000")
+
+    with pytest.raises(DataContractError, match="Contradictory duplicate event"):
+        evaluator.evaluate_panel([ev1, ev2])
+
+
+def test_disallowed_event_type_rejected() -> None:
+    """Non-income distribution events (e.g. Return of Capital) are disallowed."""
+    evaluator = LaneBCandidateEvaluator()
+    ev = _sample_valid_event(event_type="RETURN_OF_CAPITAL")
+
+    with pytest.raises(DataContractError, match="Disallowed event type"):
+        evaluator.evaluate_panel([ev])
+
+
+def test_mismatched_fund_legal_identity_rejected() -> None:
+    """Mismatch between symbol and expected fund legal identity is rejected."""
+    evaluator = LaneBCandidateEvaluator()
+    ev = _sample_valid_event(symbol="VOO", fund_legal_identity="SPDR Series Trust")
+
+    with pytest.raises(DataContractError, match="Fund legal identity mismatch"):
+        evaluator.evaluate_panel([ev])
+
+
+def test_dual_digest_divergence_on_provenance_tampering() -> None:
+    """Economic digest remains unchanged while evidence digest updates on provenance alteration."""
+    evaluator = LaneBCandidateEvaluator()
+    ev1 = _sample_valid_event(
+        symbol="VOO",
+        source_document="Vanguard Official S&P 500 ETF Distributions",
+        confirmation_status="SOURCE_CONFIRMED_CANDIDATE",
+    )
+    ev2 = _sample_valid_event(
+        symbol="VOO",
+        source_document="Vanguard Revised 2026 Distribution Release",
+        confirmation_status="SOURCE_CONFIRMED_CANDIDATE",
+    )
+
+    res1 = evaluator.evaluate_panel([ev1])
+    res2 = evaluator.evaluate_panel([ev2])
+
+    # Economic digest depends solely on economic attributes: must match
+    assert res1.economic_composite_digest == res2.economic_composite_digest
+    # Evidence manifest digest includes provenance/source documents: must diverge
+    assert res1.evidence_manifest_digest != res2.evidence_manifest_digest
 
 
 def test_gld_cash_dividend_strictly_rejected() -> None:
@@ -87,7 +279,7 @@ def test_unknown_basis_authority_rejected() -> None:
 def test_negative_or_zero_amount_rejected() -> None:
     """Zero or negative dividend amounts are invalid for declared distribution events."""
     evaluator = LaneBCandidateEvaluator()
-    
+
     with pytest.raises(DataContractError, match="must be positive"):
         event_neg = _sample_valid_event(amount="-1.50")
         evaluator.evaluate_panel([event_neg])
@@ -100,6 +292,8 @@ def test_negative_or_zero_amount_rejected() -> None:
 def test_non_usd_currency_rejected() -> None:
     """Only USD distributions are supported in Lane A/B universe."""
     evaluator = LaneBCandidateEvaluator()
+    event_eur = _sample_valid_event(symbol="VOO")
+    # Manually bypass _sample_valid_event default
     event_eur = LaneBCandidateEvent(
         symbol="VOO",
         fund_legal_identity="Vanguard Index Funds",
@@ -109,9 +303,11 @@ def test_non_usd_currency_rejected() -> None:
         ex_date=date(2026, 9, 28),
         record_date=date(2026, 9, 28),
         payable_date=date(2026, 9, 30),
-        source_url="https://vanguard.com",
+        source_url="https://www.vanguard.com",
         source_document="Vanguard Distributions",
-        retrieval_status="UNVERIFIED_CAPTURE_TIME",
+        retrieval_status="VERIFIED_PRIMARY_SOURCE",
+        authority_class="ISSUER_OFFICIAL_TABLE",
+        confirmation_status="SOURCE_CONFIRMED_CANDIDATE",
     )
     with pytest.raises(DataContractError, match="Unsupported distribution currency 'EUR'"):
         evaluator.evaluate_panel([event_eur])
@@ -140,25 +336,22 @@ def test_date_inversion_rejected() -> None:
         evaluator.evaluate_panel([event_pay_before_rec])
 
 
-def test_contradictory_duplicate_rejected() -> None:
-    """Duplicate ex_dates with conflicting dollar amounts must be quarantined and rejected."""
-    evaluator = LaneBCandidateEvaluator()
-    ev1 = _sample_valid_event(amount="1.822600")
-    ev2 = _sample_valid_event(amount="1.950000")  # Same symbol & ex_date, different amount
-
-    with pytest.raises(DataContractError, match="Contradictory duplicate event"):
-        evaluator.evaluate_panel([ev1, ev2])
-
-
 def test_deterministic_digest_permutation_invariance() -> None:
     """Panel ordering must not alter the resulting framed composite digest."""
     evaluator = LaneBCandidateEvaluator()
     ev1 = _sample_valid_event(symbol="VOO", ex_date=date(2026, 9, 28))
-    ev2 = _sample_valid_event(symbol="BND", ex_date=date(2026, 9, 1), payable_date=date(2026, 9, 3))
+    ev2 = _sample_valid_event(
+        symbol="BND",
+        ex_date=date(2026, 9, 1),
+        payable_date=date(2026, 9, 3),
+        source_url="https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf",
+    )
 
     res_1 = evaluator.evaluate_panel([ev1, ev2])
     res_2 = evaluator.evaluate_panel([ev2, ev1])
 
+    assert res_1.economic_composite_digest == res_2.economic_composite_digest
+    assert res_1.evidence_manifest_digest == res_2.evidence_manifest_digest
     assert res_1.composite_digest == res_2.composite_digest
 
 
@@ -167,3 +360,4 @@ def test_empty_panel_raises() -> None:
     evaluator = LaneBCandidateEvaluator()
     with pytest.raises(DataContractError, match="must not be empty"):
         evaluator.evaluate_panel([])
+

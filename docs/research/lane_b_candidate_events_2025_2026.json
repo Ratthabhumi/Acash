@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Ratthabhumi/Acash/main/docs/schema/lane_b_candidate_events_schema.json",
   "metadata": {
     "title": "Lane B Candidate Corporate-Action Event Panel (2025-10-01 to 2026-10-22)",
     "classification": "CANDIDATE_PRIMARY_SOURCE_EVIDENCE",
@@ -18,57 +17,57 @@
       "fund_legal_identity": "Vanguard Index Funds",
       "cusip": "922908363",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "1.838400",
+      "amount": "1.771000",
       "currency": "USD",
       "ex_date": "2025-12-22",
       "record_date": "2025-12-22",
-      "payable_date": "2025-12-26",
+      "payable_date": "2025-12-24",
       "source_url": "https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf",
       "source_document": "Vanguard Official S&P 500 ETF Distribution History",
       "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "Q4 2025 distribution cycle"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "Q4 2025 distribution cycle (issuer-confirmed)"
     },
     {
       "symbol": "VOO",
       "fund_legal_identity": "Vanguard Index Funds",
       "cusip": "922908363",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "1.542800",
+      "amount": "1.872400",
       "currency": "USD",
-      "ex_date": "2026-03-23",
-      "record_date": "2026-03-23",
-      "payable_date": "2026-03-26",
+      "ex_date": "2026-03-27",
+      "record_date": "2026-03-27",
+      "payable_date": "2026-03-31",
       "source_url": "https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf",
       "source_document": "Vanguard Official S&P 500 ETF Distribution History",
       "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "Q1 2026 distribution cycle"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "Q1 2026 distribution cycle (issuer-confirmed)"
     },
     {
       "symbol": "VOO",
       "fund_legal_identity": "Vanguard Index Funds",
       "cusip": "922908363",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "1.667700",
+      "amount": "1.962200",
       "currency": "USD",
-      "ex_date": "2026-06-29",
-      "record_date": "2026-06-29",
-      "payable_date": "2026-07-02",
+      "ex_date": "2026-06-26",
+      "record_date": "2026-06-26",
+      "payable_date": "2026-06-30",
       "source_url": "https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf",
       "source_document": "Vanguard Official S&P 500 ETF Distribution History",
       "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "Q2 2026 distribution cycle"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "Q2 2026 distribution cycle (issuer-confirmed)"
     },
     {
       "symbol": "VOO",
@@ -87,7 +86,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "Q3 2026 distribution anchor"
+      "coverage_notes": "Q3 2026 distribution anchor (issuer-confirmed)"
     },
     {
       "symbol": "BND",
@@ -106,7 +105,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "October 2025 monthly distribution"
+      "coverage_notes": "October 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -125,7 +124,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "November 2025 monthly distribution"
+      "coverage_notes": "November 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -144,26 +143,26 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "December 2025 monthly distribution"
+      "coverage_notes": "December 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.253000",
+      "amount": "0.246638",
       "currency": "USD",
-      "ex_date": "2025-12-22",
-      "record_date": "2025-12-22",
-      "payable_date": "2025-12-26",
+      "ex_date": "2025-12-18",
+      "record_date": "2025-12-18",
+      "payable_date": "2025-12-22",
       "source_url": "https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf",
       "source_document": "Vanguard Total Bond Market ETF Distributions",
       "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "December 2025 year-end distribution"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "December 2025 year-end secondary distribution (issuer-confirmed)"
     },
     {
       "symbol": "BND",
@@ -182,7 +181,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "February 2026 monthly distribution"
+      "coverage_notes": "February 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -201,7 +200,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "March 2026 monthly distribution"
+      "coverage_notes": "March 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -220,7 +219,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "April 2026 monthly distribution"
+      "coverage_notes": "April 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -239,7 +238,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "May 2026 monthly distribution"
+      "coverage_notes": "May 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
@@ -258,14 +257,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "June 2026 monthly distribution"
+      "coverage_notes": "June 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.253500",
+      "amount": "0.244470",
       "currency": "USD",
       "ex_date": "2026-07-01",
       "record_date": "2026-07-01",
@@ -276,15 +275,15 @@
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "July 2026 monthly distribution"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "July 2026 monthly distribution (issuer-confirmed)"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.254000",
+      "amount": "0.251550",
       "currency": "USD",
       "ex_date": "2026-08-03",
       "record_date": "2026-08-03",
@@ -295,8 +294,8 @@
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "August 2026 monthly distribution"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "August 2026 monthly distribution (issuer-confirmed)"
     },
     {
       "symbol": "BND",
@@ -315,7 +314,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "September 2026 monthly distribution anchor"
+      "coverage_notes": "September 2026 monthly distribution anchor (issuer-confirmed)"
     },
     {
       "symbol": "BND",
@@ -334,7 +333,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "October 2026 monthly distribution anchor"
+      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)"
     },
     {
       "symbol": "BIL",
@@ -353,7 +352,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "October 2025 monthly distribution"
+      "coverage_notes": "October 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -372,7 +371,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "November 2025 monthly distribution"
+      "coverage_notes": "November 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -391,7 +390,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "December 2025 monthly distribution"
+      "coverage_notes": "December 2025 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -410,7 +409,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "December 2025 year-end distribution"
+      "coverage_notes": "December 2025 year-end secondary candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -429,7 +428,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "February 2026 monthly distribution (January absent per SSGA schedule)"
+      "coverage_notes": "February 2026 monthly candidate row (January absent per SSGA schedule)"
     },
     {
       "symbol": "BIL",
@@ -448,7 +447,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "March 2026 monthly distribution"
+      "coverage_notes": "March 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -467,7 +466,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "April 2026 monthly distribution"
+      "coverage_notes": "April 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -486,7 +485,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "May 2026 monthly distribution"
+      "coverage_notes": "May 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -505,7 +504,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "June 2026 monthly distribution"
+      "coverage_notes": "June 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -524,7 +523,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "July 2026 monthly distribution"
+      "coverage_notes": "July 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
@@ -543,14 +542,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "August 2026 monthly distribution"
+      "coverage_notes": "August 2026 monthly candidate row (unverified pending audited extraction)"
     },
     {
       "symbol": "BIL",
       "fund_legal_identity": "SPDR Series Trust",
       "cusip": "78468R663",
       "event_type": "CASH_DIVIDEND",
-      "amount": "0.261000",
+      "amount": "0.279771",
       "currency": "USD",
       "ex_date": "2026-09-01",
       "record_date": "2026-09-01",
@@ -561,8 +560,8 @@
       "publication_date": "UNKNOWN",
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
-      "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "September 2026 monthly distribution"
+      "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
+      "coverage_notes": "September 2026 monthly distribution (issuer-confirmed)"
     },
     {
       "symbol": "BIL",
@@ -581,7 +580,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "October 2026 monthly distribution anchor"
+      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)"
     }
   ],
   "physical_trust_records": [

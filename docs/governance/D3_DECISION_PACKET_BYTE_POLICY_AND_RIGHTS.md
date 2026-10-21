@@ -25,22 +25,26 @@ This packet consolidates the three external gating prerequisites required before
 ## 2. Decision 1 — Byte Contract: `IDENTITY_ONLY_RAW_RESPONSE_BODY_V1`
 
 ### 2.1 Specification Rules
-| Component | Specification Rule | Fail-Closed Enforcement |
+| Component | Specification Rule | Implemented Source Boundary & Enforcement |
 | :--- | :--- | :--- |
-| **Request Header** | `Accept-Encoding: identity` | Enforced in request planner; no compression requested |
-| **Encoding Guard** | Reject compressed or non-identity encodings | Raises `DataContractError` if `Content-Encoding` != `identity` |
-| **Byte Accounting** | Count raw HTTP response-body bytes | Incremental chunk-by-chunk iteration before any decoding |
-| **Cumulative Budget** | Max 524,288 raw bytes (512 KiB) per session | Immediate cap halt on overflow across all pagination calls |
-| **Digest Lineage** | Retain bytes matching manifest SHA-256 | Recomputed incremental SHA-256 must match receipt record |
-| **Zero Retry Policy** | 0 retries, 0 fallbacks, 0 attempt refunds | Failed or interrupted connections poison cap permanently |
-| **Malformed Header** | Malformed / non-numeric `Content-Length` | Treated as absent; relies strictly on chunk byte counter |
-| **Negative Header** | `Content-Length < 0` | Raises `DataContractError` immediately |
-| **Header Disagreement** | Actual bytes streamed != declared length | Raises `DataContractError` upon stream completion |
+| **Request Header** | `Accept-Encoding: identity` | PROPOSED contract for future live planner; offline mock tests verify incoming response headers (`read_identity_capped`) |
+| **Encoding Guard** | Reject compressed or non-identity encodings | Raises `DataContractError` if `Content-Encoding` != `identity` prior to chunk iteration |
+| **Byte Accounting** | Count raw HTTP response-body bytes | Incremental chunk-by-chunk iteration via `iter_raw()` before any decoding |
+| **Cumulative Budget** | Max 524,288 raw bytes (512 KiB) per session | Immediate cap halt on overflow across all calls via `StreamingByteCap` |
+| **Digest Lineage** | Retain bytes matching manifest SHA-256 | Recomputed incremental SHA-256 must match receipt record (`compute_page_sha256`) |
+| **Zero Retry Policy** | 0 retries, 0 fallbacks, 0 attempt refunds | Failed or interrupted connections poison cap permanently (`cap.halted = True`) |
+| **Malformed Header** | Malformed / non-numeric `Content-Length` | Treated as absent; relies strictly on chunk byte counter (matches D1; unratified for live) |
+| **Negative Header** | `Content-Length < 0` | Parsed as negative integer; raises `DataContractError` upon stream completion (`declared != observed`) |
+| **Header Disagreement** | Actual bytes streamed != declared length | Raises `DataContractError` upon stream completion; halts cap permanently |
 
 ### 2.2 Material Caveats & Runtime Disclosures
-* **Post-Read Chunk Detection:** The streaming cap inspects chunks as they are yielded by the transport iterator. If an upstream network chunk of 100,000 bytes arrives when only 64 bytes remain in the budget, the counter observes the 100,000 bytes and immediately halts execution.
-* **Memory Bound Disclosure:** This mechanism provides **post-read detection**, NOT a hardware or socket-level memory cap.
+* **Live Planner vs. Proposed Contract:** A live HTTP request planner does **NOT** yet exist in the codebase. Sending `Accept-Encoding: identity` is a strict specification invariant for when live dispatch is implemented; current enforcement is verified offline via `httpx.MockTransport`.
+* **Negative Content-Length Evaluation Point:** In the current implementation (`read_identity_capped`), a negative `Content-Length` header is parsed into `declared = int(...)` and fails closed at stream completion when compared against non-negative observed bytes (`declared != observed`). It is not rejected prior to chunk consumption.
+* **Malformed Header Policy:** Non-numeric headers fallback to absent status (`declared = None`), relying entirely on the chunk-level byte cap. Whether malformed headers should fail closed immediately is an open policy choice documented in source.
+* **Post-Read Chunk Detection:** The streaming cap inspects chunks as they are yielded by the transport iterator. If an upstream network chunk of 100,000 bytes arrives when only 64 bytes remain in the budget, the counter observes the chunk in `consume()` and raises `DataContractError` before appending to `body`.
+* **Memory Bound Disclosure:** This mechanism provides **post-read detection**, NOT a hardware or socket-level memory cap. Upstream transport allocations in `httpx.Response.iter_raw()` are not bounded by this layer.
 * **MockTransport vs. Real Transport:** Offline tests verify Python iterator accounting; they do **NOT** prove provider behavior under real socket stalls, TCP packet fragmentation, or TLS record boundaries.
+* **Attempt Conservation & Poisoning:** Any stream interruption or transport exception permanently marks `cap.halted = True`, preventing subsequent reads from reusing the budget.
 
 ---
 

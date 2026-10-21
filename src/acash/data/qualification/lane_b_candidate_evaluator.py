@@ -1,14 +1,16 @@
 """Lane B Corporate-Action Candidate Qualification Evaluator (Offline Rehearsal).
 
 Evaluates candidate ETF corporate-action panels against the fail-closed invariants
-specified in docs/research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md:
+specified in docs/research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md and AGENTS.md:
 1. UNKNOWN-basis rejection: Records lacking authorized source binding are rejected.
-2. Finite positive amounts: Decimal precision within Decimal128 bounds; no negative values.
-3. Date ordering: ex_date <= record_date <= payable_date.
-4. GLD Grantor Trust rule: GLD carries NO_CASH_DISTRIBUTION_ENTITLEMENT. Recording cash
-   dividend events for GLD raises DataContractError.
-5. Deterministic hashing: Page and composite digests via length-prefixed framing.
-6. Strict separation of candidate research from qualified/authorized execution data.
+2. Issuer domain binding: Source URLs must belong to authorized primary issuer domains.
+3. Finite positive amounts: Decimal precision within Decimal128 bounds; no negative or zero values.
+4. Date ordering: ex_date <= record_date <= payable_date.
+5. Canonical duplicate handling: Identical duplicates and contradictory duplicates are rejected.
+6. Dual cryptographic digests: Economic event digest vs full evidence manifest digest.
+7. Truthful status: Panels containing SOURCE_PARTIAL events yield CANDIDATE_STRUCTURE_VALIDATED,
+   never SOURCE_VERIFIED_CANDIDATE.
+8. GLD Grantor Trust rule: GLD carries NO_CASH_DISTRIBUTION_ENTITLEMENT; cash events fail closed.
 """
 
 from __future__ import annotations
@@ -16,21 +18,36 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
-import json
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from urllib.parse import urlparse
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.domain.types import ensure_finite_decimal
-from acash.data.qualification.manifest import compute_framed_composite_sha256, compute_page_sha256
+from acash.data.qualification.manifest import compute_framed_composite_sha256
 from acash.data.schema import validate_decimal128_bounds
 
 LANE_B_CANDIDATE_UNIVERSE: frozenset[str] = frozenset({"VOO", "BND", "BIL", "GLD"})
 ALLOWED_CURRENCIES: frozenset[str] = frozenset({"USD"})
+ALLOWED_EVENT_TYPES: frozenset[str] = frozenset({"INCOME_DISTRIBUTION", "CASH_DIVIDEND"})
+
 VALID_AUTHORITY_CLASSES: frozenset[str] = frozenset({
     "ISSUER_OFFICIAL_TABLE",
     "SPONSOR_DECLARATION",
     "REGULATORY_FILING",
 })
+
+EXPECTED_FUND_IDENTITIES: Mapping[str, str] = {
+    "VOO": "Vanguard Index Funds",
+    "BND": "Vanguard Bond Index Funds",
+    "BIL": "SPDR Series Trust",
+}
+
+AUTHORIZED_ISSUER_DOMAINS: Mapping[str, Tuple[str, ...]] = {
+    "VOO": ("vanguard.com", "vanguardoffshore.com"),
+    "BND": ("vanguard.com", "vanguardoffshore.com"),
+    "BIL": ("ssga.com", "statestreet.com"),
+    "GLD": ("spdrgoldshares.com",),
+}
 
 
 @dataclass(frozen=True)
@@ -95,10 +112,18 @@ class LaneBCandidateEvent:
 class LaneBCandidateEvaluationResult:
     """Authoritative outcome of an offline candidate panel qualification evaluation."""
     total_events: int
+    confirmed_events: int
+    partial_events: int
     symbols_evaluated: Tuple[str, ...]
-    composite_digest: str
+    economic_composite_digest: str
+    evidence_manifest_digest: str
     manifest_summary: Dict[str, Any]
-    status: str  # CANDIDATE_PANEL_VERIFIED / REJECTED
+    status: str  # CANDIDATE_STRUCTURE_VALIDATED / SOURCE_VERIFIED_CANDIDATE
+
+    @property
+    def composite_digest(self) -> str:
+        """Single canonical authority alias for backward-compatible economic composite digest."""
+        return self.economic_composite_digest
 
 
 class LaneBCandidateEvaluator:
@@ -108,13 +133,17 @@ class LaneBCandidateEvaluator:
         self.allowed_symbols = frozenset(allowed_symbols) if allowed_symbols else LANE_B_CANDIDATE_UNIVERSE
 
     def evaluate_panel(self, events: Sequence[LaneBCandidateEvent]) -> LaneBCandidateEvaluationResult:
-        """Validate an entire candidate panel and compute its deterministic framed digest."""
+        """Validate an entire candidate panel and compute dual deterministic framed digests."""
         if not events:
             raise DataContractError("Candidate panel must not be empty.")
 
-        seen_event_keys: Dict[Tuple[str, date], LaneBCandidateEvent] = {}
-        serialized_records: List[bytes] = []
+        seen_economic_keys: Dict[Tuple[str, date, str], LaneBCandidateEvent] = {}
+        economic_records: List[bytes] = []
+        evidence_records: List[bytes] = []
         symbols_present: Set[str] = set()
+
+        confirmed_count = 0
+        partial_count = 0
 
         for ev in events:
             # 1. Universe bounds
@@ -131,7 +160,22 @@ class LaneBCandidateEvaluator:
                     "recording cash dividend events for GLD is strictly prohibited."
                 )
 
-            # 3. Source authority check
+            # 3. Fund legal identity check
+            expected_fund_id = EXPECTED_FUND_IDENTITIES.get(ev.symbol)
+            if expected_fund_id and ev.fund_legal_identity != expected_fund_id:
+                raise DataContractError(
+                    f"Fund legal identity mismatch for '{ev.symbol}': expected '{expected_fund_id}', "
+                    f"got '{ev.fund_legal_identity}'."
+                )
+
+            # 4. Event type check
+            if ev.event_type not in ALLOWED_EVENT_TYPES:
+                raise DataContractError(
+                    f"Disallowed event type '{ev.event_type}' for '{ev.symbol}'; "
+                    f"allowed types are {sorted(ALLOWED_EVENT_TYPES)}."
+                )
+
+            # 5. Source authority check & Issuer domain binding
             if ev.authority_class not in VALID_AUTHORITY_CLASSES:
                 raise DataContractError(
                     f"Event for '{ev.symbol}' on {ev.ex_date} has invalid authority class '{ev.authority_class}'; "
@@ -142,13 +186,22 @@ class LaneBCandidateEvaluator:
                     f"Event for '{ev.symbol}' on {ev.ex_date} lacks verifiable source URL or document identity."
                 )
 
-            # 4. Currency check
+            parsed_url = urlparse(ev.source_url)
+            hostname = (parsed_url.hostname or "").lower()
+            authorized_domains = AUTHORIZED_ISSUER_DOMAINS.get(ev.symbol, ())
+            if not any(hostname == d or hostname.endswith(f".{d}") for d in authorized_domains):
+                raise DataContractError(
+                    f"Source URL '{ev.source_url}' for '{ev.symbol}' does not resolve to an authorized issuer domain: "
+                    f"{authorized_domains}."
+                )
+
+            # 6. Currency check
             if ev.currency not in ALLOWED_CURRENCIES:
                 raise DataContractError(
                     f"Unsupported distribution currency '{ev.currency}'; strictly USD is allowed."
                 )
 
-            # 5. Amount bounds
+            # 7. Amount bounds
             ensure_finite_decimal(ev.amount, field_name=f"{ev.symbol}_amount")
             validate_decimal128_bounds(ev.amount, field_name=f"{ev.symbol}_amount")
             if ev.amount <= Decimal("0"):
@@ -156,7 +209,7 @@ class LaneBCandidateEvaluator:
                     f"Event amount for '{ev.symbol}' on {ev.ex_date} must be positive; got {ev.amount}."
                 )
 
-            # 6. Date ordering invariant: ex_date <= record_date <= payable_date
+            # 8. Date ordering invariant: ex_date <= record_date <= payable_date
             if ev.record_date < ev.ex_date:
                 raise DataContractError(
                     f"Date ordering contradiction for '{ev.symbol}': record_date {ev.record_date} "
@@ -168,44 +221,79 @@ class LaneBCandidateEvaluator:
                     f"precedes record_date {ev.record_date}."
                 )
 
-            # 7. Duplicate / Contradiction check
-            event_key = (ev.symbol, ev.ex_date)
-            if event_key in seen_event_keys:
-                prior = seen_event_keys[event_key]
+            # 9. Canonical duplicate detection
+            economic_key = (ev.symbol, ev.ex_date, ev.event_type)
+            if economic_key in seen_economic_keys:
+                prior = seen_economic_keys[economic_key]
                 if (
-                    prior.amount != ev.amount
-                    or prior.payable_date != ev.payable_date
-                    or prior.record_date != ev.record_date
+                    prior.amount == ev.amount
+                    and prior.payable_date == ev.payable_date
+                    and prior.record_date == ev.record_date
                 ):
                     raise DataContractError(
-                        f"Contradictory duplicate event for '{ev.symbol}' on ex_date {ev.ex_date}: "
-                        f"amount {prior.amount} vs {ev.amount}."
+                        f"Duplicate identical event for '{ev.symbol}' on ex_date {ev.ex_date}; "
+                        "redundant rows are prohibited to prevent digest inflation."
                     )
-            seen_event_keys[event_key] = ev
+                raise DataContractError(
+                    f"Contradictory duplicate event for '{ev.symbol}' on ex_date {ev.ex_date}: "
+                    f"conflicting values {prior.amount} vs {ev.amount}."
+                )
+            seen_economic_keys[economic_key] = ev
 
-            # 8. Deterministic record serialization for length-prefixed framing
-            norm_str = (
+            # 10. Confirmation status tracking
+            if ev.confirmation_status == "SOURCE_CONFIRMED_CANDIDATE":
+                confirmed_count += 1
+            else:
+                partial_count += 1
+
+            # 11. Deterministic serialization for dual digests
+            # A) Economic event digest serialization
+            economic_norm_str = (
                 f"{ev.symbol}|{ev.ex_date.isoformat()}|{ev.record_date.isoformat()}|"
-                f"{ev.payable_date.isoformat()}|{ev.amount}|{ev.currency}|{ev.source_url}"
+                f"{ev.payable_date.isoformat()}|{ev.amount}|{ev.currency}|{ev.event_type}"
             )
-            serialized_records.append(norm_str.encode("utf-8"))
+            economic_records.append(economic_norm_str.encode("utf-8"))
+
+            # B) Complete evidence manifest digest serialization
+            evidence_norm_str = (
+                f"{ev.symbol}|{ev.ex_date.isoformat()}|{ev.record_date.isoformat()}|"
+                f"{ev.payable_date.isoformat()}|{ev.amount}|{ev.currency}|{ev.event_type}|"
+                f"{ev.fund_legal_identity}|{ev.source_url}|{ev.source_document}|"
+                f"{ev.confirmation_status}|{ev.authority_class}"
+            )
+            evidence_records.append(evidence_norm_str.encode("utf-8"))
 
         # Sort serialized records deterministically by content before hashing
-        serialized_records.sort()
-        composite_digest = compute_framed_composite_sha256(serialized_records)
+        economic_records.sort()
+        evidence_records.sort()
+
+        economic_digest = compute_framed_composite_sha256(economic_records)
+        evidence_digest = compute_framed_composite_sha256(evidence_records)
+
+        # Status classification: Truthful separation of partial structure vs verified candidate
+        if partial_count > 0:
+            status = "CANDIDATE_STRUCTURE_VALIDATED"
+        else:
+            status = "SOURCE_VERIFIED_CANDIDATE"
 
         summary = {
             "total_events": len(events),
-            "unique_events": len(seen_event_keys),
+            "unique_events": len(seen_economic_keys),
+            "confirmed_events": confirmed_count,
+            "partial_events": partial_count,
             "symbols": sorted(symbols_present),
-            "composite_sha256": composite_digest,
-            "status": "CANDIDATE_PANEL_VERIFIED",
+            "economic_composite_sha256": economic_digest,
+            "evidence_manifest_sha256": evidence_digest,
+            "status": status,
         }
 
         return LaneBCandidateEvaluationResult(
             total_events=len(events),
+            confirmed_events=confirmed_count,
+            partial_events=partial_count,
             symbols_evaluated=tuple(sorted(symbols_present)),
-            composite_digest=composite_digest,
+            economic_composite_digest=economic_digest,
+            evidence_manifest_digest=evidence_digest,
             manifest_summary=summary,
-            status="CANDIDATE_PANEL_VERIFIED",
+            status=status,
         )
