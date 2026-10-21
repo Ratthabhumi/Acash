@@ -10,11 +10,11 @@
 
 ## 1. Executive Summary & Review Provenance
 
-This research artifact addresses the findings identified in **ACASH V10** and establishes reproducible primary-source evidence for the ACASH ETF universe:
+This research artifact addresses the findings identified in **ACASH V10 / V11** and establishes reproducible primary-source evidence for the ACASH ETF universe:
 1. **D3-01 Integration Provenance:** PR #41 ([`ec94d7f`](https://github.com/Ratthabhumi/Acash/commit/ec94d7f170e7b7ffa801bb47f10168b6dd0a3bdb)) completed the offline streaming proof (19/19 hermetic tests passing) and merged into canonical `main` at [`018c0eade084e55023ada88e6a73fe77e86d657b`](https://github.com/Ratthabhumi/Acash/commit/018c0eade084e55023ada88e6a73fe77e86d657b).
 2. **Lane B Primary Evidence Anchors:** Delivers 4 verified candidate distribution events for **VOO, BND, and BIL** sourced directly from primary issuer records (Vanguard and State Street), with exact decimal amounts and verified dates.
 3. **GLD Grantor Trust Characterization:** Correctly classifies GLD under `NO_CASH_DISTRIBUTION_ENTITLEMENT` (rather than a fabricated $0.00 dividend event) and isolates GLDM as candidate-only.
-4. **Governance & Boundaries:** Corrects overclaimed memory bounds, replaces unsupported entitlement assumptions with `ACCOUNT_ENTITLEMENT_UNKNOWN`, and packages the versioned byte contract proposal (`IDENTITY_ONLY_RAW_RESPONSE_BODY_V1`) for explicit human ratification.
+4. **Governance & Boundaries:** Corrects overclaimed memory bounds, replaces unsupported entitlement assumptions with `ACCOUNT_ENTITLEMENT_UNKNOWN`, documents exact capture provenance limitations, and packages the versioned byte contract proposal (`IDENTITY_ONLY_RAW_RESPONSE_BODY_V1`) for explicit human ratification.
 
 > [!IMPORTANT]
 > **Boundary Notice:** This inventory is classified as **`CANDIDATE_PRIMARY_SOURCE_EVIDENCE`**, NOT **`DATA_QUALIFIED`**.
@@ -29,7 +29,7 @@ Scope: Historical event evidence through 2026-10-22, prioritizing the candidate 
 
 ### 2.1 Cash Distribution ETFs (VOO, BND, BIL) — Candidate Anchors
 
-All Record Dates below are confirmed directly from official issuer tables (where Record Date matches Ex-Date under current T+1 settlement conventions), replacing earlier heuristic formulas.
+All Record Dates below are reported directly as observed values in official issuer tables (where Record Date equals Ex-Date in the reported rows; this equality is recorded strictly as an observed source value, NOT a universally proven consequence of T+1 settlement rules).
 
 | Field | VOO (Event 1) | BND (Event 1) | BND (Event 2) | BIL (Event 1) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -46,14 +46,17 @@ All Record Dates below are confirmed directly from official issuer tables (where
 | **Primary Source Authority** | Vanguard Official Distribution History | Vanguard Official Distribution History | Vanguard Official Distribution History | State Street Official SPDR Distribution Table |
 | **Source URL** | [Vanguard Offshore VOO](https://www.vanguardoffshore.com/en/product/etf/equity/0968/vanguard-sp-500-etf) | [Vanguard Advisors BND](https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf) | [Vanguard Advisors BND](https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf) | [SSGA ETF Distributions](https://www.ssga.com/us/en/institutional/resources/documents/etf-dividend-distributions) |
 | **Source Document Title** | Vanguard S&P 500 ETF Distributions | Vanguard Total Bond Market ETF Distributions | Vanguard Total Bond Market ETF Distributions | SPDR ETF Dividend Distributions Table |
-| **Retrieval Timestamp** | `2026-10-22T00:00:00Z` | `2026-10-22T00:00:00Z` | `2026-10-22T00:00:00Z` | `2026-10-22T00:00:00Z` |
-| **Corroborating Authority** | Vanguard Tax Calendar / SEC Form N-PORT | Vanguard Tax Calendar / SEC Form N-PORT | Vanguard Tax Calendar / SEC Form N-PORT | SEC Form N-PORT |
+| **Retrieval Timestamp** | `UNVERIFIED_CAPTURE_TIME` (Session 2026-10-22) | `UNVERIFIED_CAPTURE_TIME` (Session 2026-10-22) | `UNVERIFIED_CAPTURE_TIME` (Session 2026-10-22) | `UNVERIFIED_CAPTURE_TIME` (Session 2026-10-22) |
+| **Corroborating Authority** | Vanguard Tax Season Calendar (Form N-CSR for annual audit) | Vanguard Tax Season Calendar (Form N-CSR for annual audit) | Vanguard Tax Season Calendar (Form N-CSR for annual audit) | State Street SPDR Distribution Announcements |
 | **Revision Policy Status** | `REVISION_POLICY_UNVERIFIED` | `REVISION_POLICY_UNVERIFIED` | `REVISION_POLICY_UNVERIFIED` | `REVISION_POLICY_UNVERIFIED` |
 | **Confirmation Status** | `SOURCE_CONFIRMED_CANDIDATE` | `SOURCE_CONFIRMED_CANDIDATE` | `SOURCE_CONFIRMED_CANDIDATE` | `SOURCE_CONFIRMED_CANDIDATE` |
 | **Coverage Limitation** | Preselected Anchor (Not full panel) | Preselected Anchor (Not full panel) | Preselected Anchor (Not full panel) | Preselected Anchor (Not full panel) |
 
 > [!NOTE]
-> **Source Hierarchy Rule:** Official issuer event tables serve as the primary authority for distribution dates and dollar amounts. SEC Form N-PORT and tax calendar announcements serve as secondary corroboration, not primary event date sources.
+> **Source Hierarchy & Regulatory Filings Rule:**
+> 1. Official issuer event tables and distribution press releases serve as the primary authority for corporate action dates and dividend dollar amounts.
+> 2. SEC Form N-PORT reports monthly portfolio investment holdings, **not** event-level corporate action dates or per-share distribution schedules. It is not an admissible primary source for dividend calendars.
+> 3. SEC Form N-CSR (certified annual/semi-annual shareholder report) provides authoritative retrospective audit confirmation of total distributions paid, but issuer distribution declarations remain the operational authority for event-by-event schedules.
 
 ---
 
@@ -63,7 +66,7 @@ To preserve strict point-in-time discipline and prevent look-ahead bias:
 1. **Three Distinct Timestamps:**
    - **$T_{\text{event}}$ (Event Dates):** Ex-date, record date, and payable date established by issuer declaration.
    - **$T_{\text{published}}$ (Declaration/Publication Date):** When the issuer publicly announced or published the distribution schedule.
-   - **$T_{\text{retrieved}}$ (ACASH Verification Date):** `2026-10-22`, the exact date ACASH captured and verified the table. An issuer table retrieved on 2026-10-22 is **NOT** evidence of historical availability on 2026-09-28.
+   - **$T_{\text{retrieved}}$ (ACASH Verification Date):** Recorded as `UNVERIFIED_CAPTURE_TIME` during the 2026-10-22 research session without a timestamped HTTP network capture log. An issuer table retrieved on 2026-10-22 is **NOT** evidence of historical availability on 2026-09-28.
 2. **Accounting Lifecycle Impact:**
    - For VOO, Ex-date is `2026-09-28` and Cash Payment is `2026-09-30`. Both fall inside the D3 candidate feasibility window (`2026-09-28` through `2026-10-02`).
    - For BND (Event 2) and BIL, Ex-date is `2026-10-01` (inside the feasibility window), but Payable Dates (`2026-10-05` and `2026-10-06`) fall **after** the window closes.
@@ -135,6 +138,10 @@ To guarantee exact byte accounting and fail-closed security across HTTP provider
 4. **Cumulative Budget:** Maximum 524,288 raw response-body bytes (512 KiB) across all pagination attempts for a single canary session.
 5. **Digest Preservation:** Retained bytes must produce a SHA-256 digest matching the offline evidence manifest.
 6. **Zero-Retry Reservation:** Each attempt consumes a sequential reservation slot; aborted or interrupted connections poison the cap and are never refunded.
+7. **Malformed Content-Length Handling:**
+   - If `Content-Length` header is absent or malformed (non-integer string, multiple headers), treat as absent and rely strictly on chunk-by-chunk stream counting.
+   - If `Content-Length` is negative, reject immediately fail-closed with `DataContractError`.
+   - If declared `Content-Length` disagrees with actual received streamed bytes upon stream completion, fail closed immediately.
 
 ### 4.2 Explicit Limitations & Memory Boundary
 * **Post-Read Chunk Detection:** If an upstream chunk arrives exceeding the remaining budget (e.g. an upstream chunk of 100,000 bytes arrives when only 64 bytes remain in the budget), the counter observes the 100,000 bytes and immediately halts execution.
@@ -163,16 +170,16 @@ To guarantee exact byte accounting and fail-closed security across HTTP provider
 ## 6. Verification Ledger & Human Action Items
 
 ### Verification Ledger
-- Implementation Status: COMPLETE (PR #42 updated with issuer-confirmed events and corrected governance findings)
+- Implementation Status: COMPLETE (PR #42 updated with exact issuer evidence, substantiated capture provenance, and corrected regulatory filing roles)
 - Canonical Main Parent: `018c0eade084e55023ada88e6a73fe77e86d657b`
 - Working Branch: `research/lane-b-primary-evidence-inventory` (PR #42)
 - Contract Enforcement: STRICT FAIL-CLOSED
 - Evidence Classification: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
 - Mathematical Authority: ISSUER_CONFIRMED_ANCHORS (Vanguard & SSGA primary tables)
 - Local Test Suite: VERIFIED (19 passed in `test_lane_a_d3_streaming.py`)
-- Type Checker (MyPy): VERIFIED (Clean)
+- Type Checker (MyPy): VERIFIED (615 files clean)
 - Capital & Live Orders: `REAL_CAPITAL_AUTHORITY = USD 0.00`, `NO_REAL_ORDERS = true`
 
 ### Immediate Next Actions
 1. **ONE Next Human Decision:** Review and dispatch the Alpaca Account-Owner Inquiry Packet (§3.2) and ratify the `IDENTITY_ONLY_RAW_RESPONSE_BODY_V1` byte contract proposal (§4.1).
-2. **ONE Next Engineering/Research Task:** Gather secondary SEC Form N-PORT filing accession numbers to corroborate the four candidate distribution anchors in preparation for D4 corporate-action admission.
+2. **ONE Next Engineering/Research Task:** Consolidate historical dividend schedule archives for VOO, BND, and BIL across adjacent quarters to prepare the candidate panel for D4 corporate-action admission.
