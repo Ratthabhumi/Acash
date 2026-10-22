@@ -14,9 +14,9 @@ This artifact fulfills Phase B, Phase C, and Phase F of the **ACASH V12 / V13** 
 1. **Accurate Event Census:** Evaluates exactly **30 cash distribution events** across the 1-year window (`2025-10-01` to `2026-10-22`):
    - **VOO (Vanguard S&P 500 ETF):** 4 quarterly distributions (4 confirmed).
    - **BND (Vanguard Total Bond Market ETF):** 13 monthly distributions (5 confirmed, 8 partial).
-   - **BIL (SPDR Bloomberg 1-3M T-Bill ETF):** 13 monthly distributions (2 confirmed, 11 partial).
+   - **BIL (SPDR Bloomberg 1-3M T-Bill ETF):** 13 monthly distributions (13 confirmed, 0 partial).
    - **GLD (SPDR Gold Trust):** 1 physical grantor trust record (`NO_CASH_DISTRIBUTION_ENTITLEMENT`).
-2. **Evaluation Status:** The candidate panel achieves **`CANDIDATE_STRUCTURE_VALIDATED`**. It is **NOT** classified as `SOURCE_VERIFIED_CANDIDATE` because 19 historical monthly rows remain pending audited table extraction.
+2. **Evaluation Status:** The candidate panel achieves **`CANDIDATE_STRUCTURE_VALIDATED`**. It is **NOT** classified as `SOURCE_VERIFIED_CANDIDATE` because 8 BND monthly rows remain pending audited artefact capture.
 3. **GLD Grantor Trust Characterization:** Formulates physical gold accounting mechanics, fees deducted via physical gold sales, and confirms `NO_CASH_DISTRIBUTION_ENTITLEMENT`.
 
 ---
@@ -50,7 +50,7 @@ The following `SOURCE_PARTIAL` BND rows were corrected to the official Vanguard 
 | 2026-05-01 | $0.252000 | **$0.241713** | amount | `SOURCE_PARTIAL` |
 | 2026-06-01 | $0.251500 | **$0.247259** | amount | `SOURCE_PARTIAL` |
 
-Rows not covered by an accessible issuer row (BIL partials, BND 2025-10-01) remain **unresolved** and are **not** inferred.
+BND rows remain `SOURCE_PARTIAL`: their amounts were reconciled to the Vanguard table but no automated artefact capture was performed. They are amount-reconciled, not admitted.
 
 ### 2.2 V14 Evidence-Integrity Corrections (code)
 
@@ -62,6 +62,34 @@ Three P1 integrity defects were fixed in `lane_b_candidate_evaluator.py`:
 
 **Limitation:** `source_row_ref` and the digest are metadata-level provenance bindings. They do **not** cryptographically seal the issuer artefact and do **not** constitute automated primary-source verification.
 
+### 2.3 V17 BIL Official-Workbook Reconciliation (2026-10-22)
+
+All 11 BIL `SOURCE_PARTIAL` rows were bound to the official
+`spdr-etf-historical-distributions.xlsx` workbook (sheet `dividend`, row identity =
+ticker `BIL` + ex-date). One candidate date was wrong: `2025-12-19` is officially
+`2025-12-18`. Amounts and payable dates were replaced with the issuer row values.
+
+| Ex-Date | Prior Candidate | Issuer Value | Payable | Status After |
+| :--- | :--- | :--- | :--- | :--- |
+| 2025-10-01 | $0.228000 | **$0.310508** | 2025-10-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2025-11-03 | $0.231000 | **$0.303301** | 2025-11-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2025-12-01 | $0.235000 | **$0.281225** | 2025-12-04 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2025-12-19 (wrong date) | $0.237000 | **$0.365425** (ex 2025-12-18) | 2025-12-23 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-02-02 | $0.239500 | **$0.273931** | 2026-02-05 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-03-02 | $0.241000 | **$0.243106** | 2026-03-05 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-04-01 | $0.245000 | **$0.263657** | 2026-04-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-05-01 | $0.249000 | **$0.269910** | 2026-05-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-06-01 | $0.252000 | **$0.269202** | 2026-06-04 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-07-01 | $0.256000 | **$0.267622** | 2026-07-07 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-08-03 | $0.259000 | **$0.272951** | 2026-08-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+
+The two previously-confirmed BIL rows (2026-09-01 `0.279771`, 2026-10-01 `0.263176`)
+agree with the same workbook. December 2025 does contain two distinct issuer-declared
+events (2025-12-01 and 2025-12-18); January 2026 contains none in the workbook.
+
+**Boundary:** this is event-level source binding, not a cryptographic seal. The
+workbook revision/vintage policy and the extraction capture time remain unverified.
+
 ---
 
 ## 3. Phase B — Candidate Event Coverage Matrix
@@ -72,26 +100,26 @@ Target Window: **2025-10-01 through 2026-10-22**
 
 | Month | VOO (Quarterly) | BND (Monthly) | BIL (Monthly) | GLD (Grantor Trust) |
 | :--- | :--- | :--- | :--- | :--- |
-| **2025-10** | *No Distribution* | Ex: 2025-10-01 ($0.237328) [PARTIAL] | Ex: 2025-10-01 ($0.228000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2025-11** | *No Distribution* | Ex: 2025-11-03 ($0.243631) [PARTIAL] | Ex: 2025-11-03 ($0.231000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2025-12** | **Ex: 2025-12-22 ($1.771000) [CONFIRMED]** | Ex: 2025-12-01 ($0.238572) [PARTIAL]<br>**Ex: 2025-12-18 ($0.246638) [CONFIRMED]** | Ex: 2025-12-01 ($0.235000) [PARTIAL]<br>Ex: 2025-12-19 ($0.237000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2025-10** | *No Distribution* | Ex: 2025-10-01 ($0.237328) [PARTIAL] | **Ex: 2025-10-01 ($0.310508) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2025-11** | *No Distribution* | Ex: 2025-11-03 ($0.243631) [PARTIAL] | **Ex: 2025-11-03 ($0.303301) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2025-12** | **Ex: 2025-12-22 ($1.771000) [CONFIRMED]** | Ex: 2025-12-01 ($0.238572) [PARTIAL]<br>**Ex: 2025-12-18 ($0.246638) [CONFIRMED]** | **Ex: 2025-12-01 ($0.281225) [CONFIRMED]**<br>**Ex: 2025-12-18 ($0.365425) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 | **2026-01** | *No Distribution* | *No Distribution (Holiday Cadence)* | *No Distribution (SSGA Cadence)* | `NO_CASH_DISTRIBUTION` |
-| **2026-02** | *No Distribution* | Ex: 2026-02-02 ($0.245470) [PARTIAL] | Ex: 2026-02-02 ($0.239500) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-03** | **Ex: 2026-03-27 ($1.872400) [CONFIRMED]** | Ex: 2026-03-02 ($0.227824) [PARTIAL] | Ex: 2026-03-02 ($0.241000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-04** | *No Distribution* | Ex: 2026-04-01 ($0.250016) [PARTIAL] | Ex: 2026-04-01 ($0.245000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-05** | *No Distribution* | Ex: 2026-05-01 ($0.241713) [PARTIAL] | Ex: 2026-05-01 ($0.249000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-06** | **Ex: 2026-06-26 ($1.962200) [CONFIRMED]** | Ex: 2026-06-01 ($0.247259) [PARTIAL] | Ex: 2026-06-01 ($0.252000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-07** | *No Distribution* | **Ex: 2026-07-01 ($0.244470) [CONFIRMED]** | Ex: 2026-07-01 ($0.256000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-08** | *No Distribution* | **Ex: 2026-08-03 ($0.251550) [CONFIRMED]** | Ex: 2026-08-03 ($0.259000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-02** | *No Distribution* | Ex: 2026-02-02 ($0.245470) [PARTIAL] | **Ex: 2026-02-02 ($0.273931) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-03** | **Ex: 2026-03-27 ($1.872400) [CONFIRMED]** | Ex: 2026-03-02 ($0.227824) [PARTIAL] | **Ex: 2026-03-02 ($0.243106) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-04** | *No Distribution* | Ex: 2026-04-01 ($0.250016) [PARTIAL] | **Ex: 2026-04-01 ($0.263657) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-05** | *No Distribution* | Ex: 2026-05-01 ($0.241713) [PARTIAL] | **Ex: 2026-05-01 ($0.269910) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-06** | **Ex: 2026-06-26 ($1.962200) [CONFIRMED]** | Ex: 2026-06-01 ($0.247259) [PARTIAL] | **Ex: 2026-06-01 ($0.269202) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-07** | *No Distribution* | **Ex: 2026-07-01 ($0.244470) [CONFIRMED]** | **Ex: 2026-07-01 ($0.267622) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
+| **2026-08** | *No Distribution* | **Ex: 2026-08-03 ($0.251550) [CONFIRMED]** | **Ex: 2026-08-03 ($0.272951) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 | **2026-09** | **Ex: 2026-09-28 ($1.822600) [CONFIRMED]** | **Ex: 2026-09-01 ($0.252886) [CONFIRMED]** | **Ex: 2026-09-01 ($0.279771) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 | **2026-10** | *In-Flight Cycle* | **Ex: 2026-10-01 ($0.248502) [CONFIRMED]** | **Ex: 2026-10-01 ($0.263176) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 
 ### 3.2 Confirmation Status Breakdown
-- **SOURCE_CONFIRMED_CANDIDATE:** 11 events (VOO 4, BND 5, BIL 2) — each carries a `source_row_ref`.
-- **SOURCE_PARTIAL:** 19 events (BND 8, BIL 11).
-- **Overall Result:** `CANDIDATE_STRUCTURE_VALIDATED` (Preserves scientific truth; cannot be promoted to `SOURCE_VERIFIED_CANDIDATE` until the remaining 19 rows are extracted from audited archives).
+- **SOURCE_CONFIRMED_CANDIDATE:** 22 events (VOO 4, BND 5, BIL 13) — each carries a `source_row_ref`.
+- **SOURCE_PARTIAL:** 8 events (BND 8, BIL 0).
+- **Overall Result:** `CANDIDATE_STRUCTURE_VALIDATED` (Preserves scientific truth; cannot be promoted to `SOURCE_VERIFIED_CANDIDATE` until the remaining 8 BND rows are captured from audited archives).
 
-> **Counting rule:** the total candidate panel (30) is distinct from the number of issuer-confirmed records (11). A row not present in an accessible issuer table is **not** evidence of a zero distribution.
+> **Counting rule:** the total candidate panel (30) is distinct from the number of issuer-confirmed records (22). A row not present in an accessible issuer table is **not** evidence of a zero distribution.
 
 ---
 
@@ -138,16 +166,16 @@ Target Window: **2025-10-01 through 2026-10-22**
 ## 6. Verification Ledger
 - Implementation Status: COMPLETE (30 candidate cash events + 1 physical trust record documented)
 - Target Window: `2025-10-01` to `2026-10-22`
-- Evaluator Status: `CANDIDATE_STRUCTURE_VALIDATED` (11 confirmed, 19 partial)
+- Evaluator Status: `CANDIDATE_STRUCTURE_VALIDATED` (22 confirmed, 8 partial)
 - Confirmation Authority: missing/unknown status never confirms; confirmed requires `source_row_ref`
 - Evidence Digest: binds retrieval/publication/revision/cusip/row-ref via canonical JSON (economic digest unchanged)
-- Targeted Tests: 32 passed (`tests/unit/data/test_lane_b_candidate_qualification.py`)
+- Targeted Tests: 33 passed (`tests/unit/data/test_lane_b_candidate_qualification.py`)
 - Type Checker: MyPy clean on evaluator + test module
 - Scientific Boundary: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
 
 ### 6.1 Remaining Unverified Gaps
-- BIL partials (11): not reconciled to an accessible issuer row.
-- `retrieval_status` is `UNVERIFIED_CAPTURE_TIME` for all rows: no automated artefact capture exists.
+- BND partials (8): amount-reconciled but not artefact-captured; no automated Vanguard table capture exists.
+- BIL rows were extracted from the official SPDR historical-distributions workbook (2026-10-22); the workbook revision policy and capture timestamp are still unverified.
 - `publication_date` / `revision_status`: issuer correction/vintage policy not disclosed/recorded.
 - GLD: `NO_CASH_DISTRIBUTION_ENTITLEMENT`; gold-per-share decay is not a dividend.
 - GLDM: excluded from the authorized universe (`CANDIDATE_ONLY`).
