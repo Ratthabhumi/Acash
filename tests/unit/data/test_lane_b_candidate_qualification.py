@@ -95,8 +95,8 @@ def test_happy_path_candidate_panel_json_evaluates() -> None:
     # Truthful status: contains partial records, so status must be CANDIDATE_STRUCTURE_VALIDATED
     assert result.status == "CANDIDATE_STRUCTURE_VALIDATED"
     assert result.total_events == 30
-    assert result.confirmed_events == 11
-    assert result.partial_events == 19
+    assert result.confirmed_events == 22
+    assert result.partial_events == 8
     assert set(result.symbols_evaluated) == {"VOO", "BND", "BIL"}
     assert len(result.economic_composite_digest) == 64
     assert len(result.evidence_manifest_digest) == 64
@@ -167,6 +167,48 @@ def test_verified_discrepancy_anchors_present_in_json() -> None:
     assert bil_sep_26["amount"] == "0.279771"
     assert bil_sep_26["payable_date"] == "2026-09-04"
     assert bil_sep_26["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+
+
+def test_bil_rows_bound_to_official_spdr_workbook() -> None:
+    json_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "research"
+        / "lane_b_candidate_events_2025_2026.json"
+    )
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    by_key = {
+        (ev["symbol"], ev["ex_date"]): ev for ev in data["cash_distribution_events"]
+    }
+    expected = {
+        "2025-10-01": ("0.310508", "2025-10-06"),
+        "2025-11-03": ("0.303301", "2025-11-06"),
+        "2025-12-01": ("0.281225", "2025-12-04"),
+        "2025-12-18": ("0.365425", "2025-12-23"),
+        "2026-02-02": ("0.273931", "2026-02-05"),
+        "2026-03-02": ("0.243106", "2026-03-05"),
+        "2026-04-01": ("0.263657", "2026-04-06"),
+        "2026-05-01": ("0.269910", "2026-05-06"),
+        "2026-06-01": ("0.269202", "2026-06-04"),
+        "2026-07-01": ("0.267622", "2026-07-07"),
+        "2026-08-03": ("0.272951", "2026-08-06"),
+    }
+    for ex_date, (amount, payable) in expected.items():
+        row = by_key[("BIL", ex_date)]
+        assert row["amount"] == amount, ex_date
+        assert row["payable_date"] == payable, ex_date
+        assert row["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE", ex_date
+        assert row["source_row_ref"].startswith(
+            "spdr_historical_distributions_xlsx:"
+        ), ex_date
+    assert ("BIL", "2025-12-19") not in by_key
+    bil_partial = [
+        e
+        for e in data["cash_distribution_events"]
+        if e["symbol"] == "BIL" and e["confirmation_status"] == "SOURCE_PARTIAL"
+    ]
+    assert bil_partial == []
 
 
 def test_source_partial_cannot_become_source_verified() -> None:
