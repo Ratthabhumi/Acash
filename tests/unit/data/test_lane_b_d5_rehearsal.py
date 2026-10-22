@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Sequence, Tuple
@@ -241,10 +243,89 @@ def test_date_order_violation_rejected() -> None:
 
 def test_missing_event_coverage_partial() -> None:
     result = evaluate_d5_offline_rehearsal(
-        _spec(expected_ex_dates={"BND": (date(2026, 9, 1), date(2026, 10, 1))})
+        _spec(
+            expected_ex_dates={
+                "BND": (date(2026, 9, 1), date(2026, 10, 1)),
+                "BIL": (date(2026, 10, 1),),
+                "VOO": (date(2026, 9, 30),),
+            }
+        )
     )
     assert result.verdict is D5OfflineVerdict.PARTIAL
     assert any("MISSING_EVENT_COVERAGE" in b for b in result.blockers)
+
+
+def test_cross_symbol_dividend_swap_changes_digest() -> None:
+    """Moving an amount from one symbol to another must change the seal."""
+    base = _dividends()
+    bil_amount = next(r for r in base if r.symbol == "BIL").amount_per_share
+    bnd_amount = next(r for r in base if r.symbol == "BND").amount_per_share
+    other = {"BIL": bnd_amount, "BND": bil_amount}
+    swapped = [
+        replace(record, amount_per_share=other[record.symbol])
+        if record.symbol in other
+        else record
+        for record in base
+    ]
+    original = evaluate_d5_offline_rehearsal(_spec())
+    moved = evaluate_d5_offline_rehearsal(_spec(dividends=swapped))
+    assert original.verdict is D5OfflineVerdict.READY
+    assert moved.verdict is D5OfflineVerdict.READY, moved.blockers
+    assert original.dataset_sha256 != moved.dataset_sha256
+
+
+def test_ohlc_fields_bound_in_digest() -> None:
+    """Open/high/low are economically material and must move the seal."""
+    raw = {s: _bars() for s in ("BIL", "BND", "GLD", "VOO")}
+    altered = list(raw["BND"])
+    altered[0] = DailyBar(
+        timestamp_utc=altered[0].timestamp_utc,
+        open=Decimal("99"),
+        high=Decimal("101"),
+        low=Decimal("98"),
+        close=Decimal("100"),
+        volume=Decimal("1000"),
+    )
+    raw["BND"] = altered
+    original = evaluate_d5_offline_rehearsal(_spec())
+    changed = evaluate_d5_offline_rehearsal(_spec(raw_bars=raw))
+    assert changed.verdict is D5OfflineVerdict.READY
+    assert original.dataset_sha256 != changed.dataset_sha256
+
+
+def test_undeclared_event_coverage_rejected() -> None:
+    result = evaluate_d5_offline_rehearsal(
+        _spec(expected_ex_dates={"BND": (date(2026, 10, 1),)})
+    )
+    assert result.verdict is D5OfflineVerdict.BLOCKED
+    assert "UNDECLARED_EVENT_COVERAGE" in result.blockers[0]
+
+
+def test_payload_binds_semantic_fields() -> None:
+    result = evaluate_d5_offline_rehearsal(_spec())
+    assert result.dataset_bytes is not None
+    payload = json.loads(result.dataset_bytes)
+    assert payload["share_basis"] == "PER_SHARE"
+    assert payload["price_semantics"] == "RAW_UNADJUSTED_OHLCV"
+    assert payload["time_basis"] == "UTC_DAILY_BAR"
+    assert payload["sessions_authority"] == "CALLER_SUPPLIED_SYNTHETIC"
+    assert {
+        "symbol",
+        "ex_date",
+        "record_date",
+        "payable_date",
+        "cash_distribution",
+    } <= set(payload["dividends"][0])
+    row = payload["series"]["BND"]["raw"][0]
+    assert {"session", "open", "high", "low", "close", "volume"} <= set(row)
+
+
+def test_real_candidate_cannot_seal_without_admission() -> None:
+    result = evaluate_d5_offline_rehearsal(_spec(origin=DatasetOrigin.REAL_CANDIDATE))
+    assert result.verdict is D5OfflineVerdict.PARTIAL
+    assert result.dataset_bytes is None
+    assert result.dataset_sha256 is None
+    assert "REAL_CANDIDATE_SEALING_REQUIRES_AUTHORIZED_ADMISSION" in result.blockers
 
 
 def test_unapproved_and_excluded_universe_rejected() -> None:

@@ -200,12 +200,25 @@ def _validate_dividends(spec: D5RehearsalSpec) -> tuple[list[dict[str, Any]], li
             payable_outside.append(f"{record.symbol}:{record.ex_date.isoformat()}")
         events.append(
             {
+                "symbol": record.symbol,
                 "ex_date": record.ex_date.isoformat(),
+                "record_date": record.record_date.isoformat(),
                 "payable_date": record.payable_date.isoformat(),
                 "cash_distribution": format(record.amount_per_share, "f"),
             }
         )
-    events.sort(key=lambda item: (str(item["ex_date"]), str(item["cash_distribution"])))
+    for symbol in sorted({record.symbol for record in spec.dividends}):
+        _require(
+            symbol in spec.expected_ex_dates,
+            f"D5_UNDECLARED_EVENT_COVERAGE: {symbol}.",
+        )
+    events.sort(
+        key=lambda item: (
+            str(item["symbol"]),
+            str(item["ex_date"]),
+            str(item["cash_distribution"]),
+        )
+    )
     return events, sorted(payable_outside)
 
 
@@ -266,6 +279,9 @@ def _dataset_payload(
             "split": [
                 {
                     "session": bar.timestamp_utc.date().isoformat(),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
                     "close": bar.close,
                     "volume": bar.volume,
                 }
@@ -274,6 +290,9 @@ def _dataset_payload(
             "raw": [
                 {
                     "session": bar.timestamp_utc.date().isoformat(),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
                     "close": bar.close,
                     "volume": bar.volume,
                 }
@@ -285,6 +304,14 @@ def _dataset_payload(
         "label": SYNTHETIC_LABEL if spec.origin is DatasetOrigin.SYNTHETIC_FIXTURE else "CANDIDATE",
         "origin": spec.origin.value,
         "identity": _identity(spec),
+        "price_semantics": "RAW_UNADJUSTED_OHLCV",
+        "time_basis": "UTC_DAILY_BAR",
+        "share_basis": "PER_SHARE",
+        "sessions_authority": (
+            "CALLER_SUPPLIED_SYNTHETIC"
+            if spec.origin is DatasetOrigin.SYNTHETIC_FIXTURE
+            else "CALLER_SUPPLIED_UNVERIFIED"
+        ),
         "authority_ref": spec.authority_ref,
         "sessions": [day.isoformat() for day in spec.expected_sessions],
         "series": series,
@@ -316,7 +343,17 @@ def evaluate_d5_offline_rehearsal(spec: D5RehearsalSpec) -> D5RehearsalResult:
             manifest={"schema": DATASET_SCHEMA, "blocked": True},
         )
 
-    if checks["source_authority"] and not blockers:
+    if spec.origin is DatasetOrigin.REAL_CANDIDATE:
+        blockers = list(blockers) + [
+            "REAL_CANDIDATE_SEALING_REQUIRES_AUTHORIZED_ADMISSION"
+        ]
+        checks["real_admission_authorized"] = False
+
+    if (
+        checks["source_authority"]
+        and not blockers
+        and spec.origin is not DatasetOrigin.REAL_CANDIDATE
+    ):
         payload = _dataset_payload(spec, events, payable_outside)
         dataset_bytes = CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")
         dataset_sha = CanonicalConfigSerializer.compute_sha256(payload)

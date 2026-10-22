@@ -19,6 +19,11 @@ deterministic, fail-closed dataset seal:
 5. Any byte-level or framing tamper fails verification.
 6. Synthetic payloads are labelled `SYNTHETIC_FIXTURE_NOT_MARKET_HISTORY` and carry
    `real_data_admitted: false`.
+7. Every dividend event binds its `symbol`; cross-symbol reassignment changes the seal.
+8. Full OHLCV (open/high/low/close/volume) is included in the sealed bytes, together
+   with `price_semantics`, `time_basis`, `share_basis` and `sessions_authority`.
+9. `DatasetOrigin.REAL_CANDIDATE` can never return READY or release sealed bytes: real
+   sealing requires a separate authorized admission path (not implemented here).
 
 This does **not** qualify real data and does **not** issue Lane B authority.
 
@@ -38,7 +43,7 @@ New code is limited to the rehearsal composer:
 
 ## 3. Adversarial Coverage
 
-Tests: `tests/unit/data/test_lane_b_d5_rehearsal.py` (20 cases).
+Tests: `tests/unit/data/test_lane_b_d5_rehearsal.py` (25 cases).
 
 | Case | Expected | Result |
 | :--- | :--- | :--- |
@@ -62,6 +67,19 @@ Tests: `tests/unit/data/test_lane_b_d5_rehearsal.py` (20 cases).
 | Ex-date outside scope | BLOCKED | PASS |
 | Missing series for a symbol | BLOCKED | PASS |
 | Synthetic label present in bytes | PASS | PASS |
+| Cross-symbol dividend reassignment | digest changes | PASS |
+| Changed open/high/low (same close/volume) | digest changes | PASS |
+| Dividend-paying symbol without declared coverage | BLOCKED | PASS |
+| `REAL_CANDIDATE` with declared confirmed rows | PARTIAL, no bytes | PASS |
+| Semantic fields present in payload | symbol/OHLC/basis bound | PASS |
+
+## 3.1 Known limits
+
+- `sessions_authority` is `CALLER_SUPPLIED_SYNTHETIC`; it is not an independently
+  verified exchange calendar.
+- `source_row_ref` is metadata, not artefact authenticity, and not a cryptographic seal.
+- Real-data sealing requires a separate, versioned authorized admission entrypoint; the
+  synthetic composer deliberately cannot produce one.
 
 ## 4. D4 Offline Qualification Rehearsal
 
@@ -88,3 +106,7 @@ real acquisition preparation.
 
 Capture the 8 remaining BND rows from the Vanguard issuer table with a documented,
 row-level extraction artefact; until then they stay `SOURCE_PARTIAL`.
+
+The 2026-10-22 attempt retrieved the official advisors product page (HTTP 200, 161,898
+bytes) but it exposes no distribution dataset or export endpoint (no JSON/CSV/XLSX). No
+amount, row ID or timestamp was invented; all 8 rows remain unverified.

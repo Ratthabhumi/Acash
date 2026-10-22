@@ -174,7 +174,7 @@ Target Window: **2025-10-01 through 2026-10-22**
 - Scientific Boundary: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
 
 ### 6.1 Remaining Unverified Gaps
-- BND partials (8): amount-reconciled but not artefact-captured; no automated Vanguard table capture exists.
+- BND partials (8): amount-reconciled but not artefact-captured. The 2026-10-22 retrieval of the official Vanguard advisors product page returned HTTP 200 (161,898 bytes) but exposed no distribution dataset or export endpoint; no row was promoted.
 - BIL rows were extracted from the official SPDR historical-distributions workbook (2026-10-22); the workbook revision policy and capture timestamp are still unverified.
 - `publication_date` / `revision_status`: issuer correction/vintage policy not disclosed/recorded.
 - GLD: `NO_CASH_DISTRIBUTION_ENTITLEMENT`; gold-per-share decay is not a dividend.
