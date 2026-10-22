@@ -92,11 +92,12 @@ def test_happy_path_candidate_panel_json_evaluates() -> None:
     evaluator = LaneBCandidateEvaluator()
     result = evaluator.evaluate_panel(events)
 
-    # Truthful status: contains partial records, so status must be CANDIDATE_STRUCTURE_VALIDATED
-    assert result.status == "CANDIDATE_STRUCTURE_VALIDATED"
+    # Every row is now bound to a captured issuer source; this is source verification
+    # of event facts, not dataset admission or PIT-vintage qualification.
+    assert result.status == "SOURCE_VERIFIED_CANDIDATE"
     assert result.total_events == 30
-    assert result.confirmed_events == 22
-    assert result.partial_events == 8
+    assert result.confirmed_events == 30
+    assert result.partial_events == 0
     assert set(result.symbols_evaluated) == {"VOO", "BND", "BIL"}
     assert len(result.economic_composite_digest) == 64
     assert len(result.evidence_manifest_digest) == 64
@@ -509,8 +510,8 @@ def test_evidence_digest_delimiter_collision_impossible() -> None:
     assert res_a.evidence_manifest_digest != res_b.evidence_manifest_digest
 
 
-def test_bnd_partial_amounts_reconciled_to_issuer() -> None:
-    """The seven disputed BND candidates carry issuer amounts and stay partial."""
+def test_bnd_rows_bound_to_issuer_distribution_table() -> None:
+    """All BND candidates bind to the captured issuer table by record-date row."""
     json_path = (
         Path(__file__).resolve().parents[3]
         / "docs"
@@ -521,20 +522,36 @@ def test_bnd_partial_amounts_reconciled_to_issuer() -> None:
         data = json.load(f)
     by_key = {(e["symbol"], e["ex_date"]): e for e in data["cash_distribution_events"]}
     expected = {
-        "2025-10-01": "0.237328",
-        "2025-11-03": "0.243631",
-        "2025-12-01": "0.238572",
-        "2026-02-02": "0.245470",
-        "2026-03-02": "0.227824",
-        "2026-04-01": "0.250016",
-        "2026-05-01": "0.241713",
-        "2026-06-01": "0.247259",
+        "2025-10-01": ("0.237328", "2025-10-03"),
+        "2025-11-03": ("0.243631", "2025-11-05"),
+        "2025-12-01": ("0.238572", "2025-12-03"),
+        "2026-02-02": ("0.245470", "2026-02-04"),
+        "2026-03-02": ("0.227824", "2026-03-04"),
+        "2026-04-01": ("0.250016", "2026-04-06"),
+        "2026-05-01": ("0.241713", "2026-05-05"),
+        "2026-06-01": ("0.247259", "2026-06-03"),
     }
-    for ex_date, amount in expected.items():
+    for ex_date, (amount, payable) in expected.items():
         row = by_key[("BND", ex_date)]
         assert row["amount"] == amount
-        assert row["confirmation_status"] == "SOURCE_PARTIAL"
-    assert by_key[("BND", "2026-04-01")]["payable_date"] == "2026-04-06"
+        assert row["payable_date"] == payable
+        assert row["record_date"] == ex_date
+        assert row["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+        assert row["retrieval_status"] == "CAPTURED_LIVE_ISSUER_TABLE_2026-10-22"
+        assert row["source_row_ref"].startswith(
+            "vanguard_bnd_distribution_history:recordDate="
+        )
+        assert row["source_url"] == (
+            "https://investor.vanguard.com/investment-products/etfs/profile/bnd"
+        )
+
+    artifact = data["metadata"]["bnd_source_artifact"]
+    assert artifact["sha256"] == (
+        "d09560f58834be2b1297f782969410aba07adab08f1a537a366f3dcd916d3abd"
+    )
+    assert artifact["bytes"] == 226062
+    assert artifact["publication_vintage"] == "UNKNOWN"
+    assert artifact["revision_status"] == "REVISION_POLICY_UNVERIFIED"
 
 
 def test_confirmed_rows_carry_source_row_binding() -> None:

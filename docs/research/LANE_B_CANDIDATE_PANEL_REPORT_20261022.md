@@ -1,7 +1,7 @@
 # Lane B: Candidate Corporate-Action Panel & Evidence Analysis (2025-10 to 2026-10)
 
 **Classification:** CANDIDATE_PRIMARY_SOURCE_EVIDENCE (Pre-Admission / Candidate Only)  
-**Parent Canonical Main:** `9bc861dbbe2b3109e910cf5cce060dcac034718c`  
+**Parent Canonical Main:** `0f949ad03d9c862bc19f55c69b15cb8dabb97fb3`  
 **Date Context:** 2026-10-22  
 **Governing Documents:** [`AGENTS.md`](../../AGENTS.md), [`LANE_B_SPEC_OFFLINE_QUALIFICATION.md`](./LANE_B_SPEC_OFFLINE_QUALIFICATION.md)  
 **Hard Boundaries:** `REAL_CAPITAL_AUTHORITY = USD 0.00` · `NO_REAL_ORDERS = true` · `LANE_A = UNISSUED` · `LANE_B = UNISSUED`
@@ -13,10 +13,10 @@
 This artifact fulfills Phase B, Phase C, and Phase F of the **ACASH V12 / V13** sprint:
 1. **Accurate Event Census:** Evaluates exactly **30 cash distribution events** across the 1-year window (`2025-10-01` to `2026-10-22`):
    - **VOO (Vanguard S&P 500 ETF):** 4 quarterly distributions (4 confirmed).
-   - **BND (Vanguard Total Bond Market ETF):** 13 monthly distributions (5 confirmed, 8 partial).
+   - **BND (Vanguard Total Bond Market ETF):** 13 monthly distributions (13 confirmed, 0 partial).
    - **BIL (SPDR Bloomberg 1-3M T-Bill ETF):** 13 monthly distributions (13 confirmed, 0 partial).
    - **GLD (SPDR Gold Trust):** 1 physical grantor trust record (`NO_CASH_DISTRIBUTION_ENTITLEMENT`).
-2. **Evaluation Status:** The candidate panel achieves **`CANDIDATE_STRUCTURE_VALIDATED`**. It is **NOT** classified as `SOURCE_VERIFIED_CANDIDATE` because 8 BND monthly rows remain pending audited artefact capture.
+2. **Evaluation Status:** The candidate panel achieves **`SOURCE_VERIFIED_CANDIDATE`** because every cash row is now bound to a captured issuer source. This is source verification of event facts, **not** dataset admission and **not** PIT-vintage qualification.
 3. **GLD Grantor Trust Characterization:** Formulates physical gold accounting mechanics, fees deducted via physical gold sales, and confirms `NO_CASH_DISTRIBUTION_ENTITLEMENT`.
 
 ---
@@ -35,22 +35,37 @@ Independent verification against primary issuer tables (Vanguard and State Stree
 | **BND** | Aug 2026 | $0.254000 | **$0.251550, ex 2026-08-03, pay 08-05** | Vanguard BND Distribution History | `AMENDED_TO_OFFICIAL` |
 | **BIL** | Sep 2026 | $0.261000 | **$0.279771, ex 2026-09-01, pay 09-04** | State Street SPDR Historical Table | `AMENDED_TO_OFFICIAL` |
 
-### 2.1 V14 BND Partial-Row Reconciliation (issuer table, owner-supplied research 2026-10-22)
+### 2.1 V20 BND Issuer-Table Capture (2026-10-22)
 
-The following `SOURCE_PARTIAL` BND rows were corrected to the official Vanguard distribution table. They **remain `SOURCE_PARTIAL`** because no automated artefact capture was performed — this is a metadata reconciliation, not an admission.
+The eight previously `SOURCE_PARTIAL` BND rows are now bound to the issuer
+distribution table embedded in the Vanguard BND product page. Capture artifact:
 
-| Ex-Date | Prior Candidate | Issuer Value | Note | Status After |
+- URL: `https://investor.vanguard.com/investment-products/etfs/profile/bnd`
+- Retrieved: 2026-10-22 (HTTP 200, 226,062 raw bytes)
+- SHA-256: `d09560f58834be2b1297f782969410aba07adab08f1a537a366f3dcd916d3abd`
+- Row identity: `vanguard_bnd_distribution_history:recordDate=MM/DD/YYYY`
+- Extraction: HTML-unescaped embedded JSON array; `recordDate`, `reInvestDate`,
+  `payableDate`, `share`.
+
+| Ex-Date | Prior Candidate | Issuer Value | Payable | Status After |
 | :--- | :--- | :--- | :--- | :--- |
-| 2025-10-01 | $0.245000 | **$0.237328** | amount (ex/record 2025-10-01, payable 2025-10-03) | `SOURCE_PARTIAL` |
-| 2025-11-03 | $0.248000 | **$0.243631** | amount | `SOURCE_PARTIAL` |
-| 2025-12-01 | $0.251000 | **$0.238572** | amount | `SOURCE_PARTIAL` |
-| 2026-02-02 | $0.249000 | **$0.245470** | amount | `SOURCE_PARTIAL` |
-| 2026-03-02 | $0.247000 | **$0.227824** | amount | `SOURCE_PARTIAL` |
-| 2026-04-01 | $0.250500 | **$0.250016** | amount + payable corrected to **2026-04-06** | `SOURCE_PARTIAL` |
-| 2026-05-01 | $0.252000 | **$0.241713** | amount | `SOURCE_PARTIAL` |
-| 2026-06-01 | $0.251500 | **$0.247259** | amount | `SOURCE_PARTIAL` |
+| 2025-10-01 | $0.245000 | **$0.237328** | 2025-10-03 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2025-11-03 | $0.248000 | **$0.243631** | 2025-11-05 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2025-12-01 | $0.251000 | **$0.238572** | 2025-12-03 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-02-02 | $0.249000 | **$0.245470** | 2026-02-04 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-03-02 | $0.247000 | **$0.227824** | 2026-03-04 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-04-01 | $0.250500 | **$0.250016** | 2026-04-06 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-05-01 | $0.252000 | **$0.241713** | 2026-05-05 | `SOURCE_CONFIRMED_CANDIDATE` |
+| 2026-06-01 | $0.251500 | **$0.247259** | 2026-06-03 | `SOURCE_CONFIRMED_CANDIDATE` |
 
-BND rows remain `SOURCE_PARTIAL`: their amounts were reconciled to the Vanguard table but no automated artefact capture was performed. They are amount-reconciled, not admitted.
+The issuer table also confirms the previously bound rows (2025-12-18, 2026-07-01,
+2026-08-03, 2026-09-01, 2026-10-01) without amount or payable changes. All 13 BND
+rows now carry `retrieval_status = CAPTURED_LIVE_ISSUER_TABLE_2026-10-22`.
+
+**Boundary:** the captured page is a live historical table, not the original
+2025/2026 publication vintage. `publication_date = UNKNOWN` and
+`revision_status = REVISION_POLICY_UNVERIFIED` are retained. The capture is
+metadata-level binding, not a cryptographic seal, and is not dataset admission.
 
 ### 2.2 V14 Evidence-Integrity Corrections (code)
 
@@ -115,11 +130,13 @@ Target Window: **2025-10-01 through 2026-10-22**
 | **2026-10** | *In-Flight Cycle* | **Ex: 2026-10-01 ($0.248502) [CONFIRMED]** | **Ex: 2026-10-01 ($0.263176) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 
 ### 3.2 Confirmation Status Breakdown
-- **SOURCE_CONFIRMED_CANDIDATE:** 22 events (VOO 4, BND 5, BIL 13) — each carries a `source_row_ref`.
-- **SOURCE_PARTIAL:** 8 events (BND 8, BIL 0).
-- **Overall Result:** `CANDIDATE_STRUCTURE_VALIDATED` (Preserves scientific truth; cannot be promoted to `SOURCE_VERIFIED_CANDIDATE` until the remaining 8 BND rows are captured from audited archives).
+- **SOURCE_CONFIRMED_CANDIDATE:** 30 events (VOO 4, BND 13, BIL 13) — each carries a `source_row_ref`.
+- **SOURCE_PARTIAL:** 0 events.
+- **Overall Result:** `SOURCE_VERIFIED_CANDIDATE` (all cash rows are issuer-source-bound; this is not dataset admission or PIT-vintage qualification).
 
-> **Counting rule:** the total candidate panel (30) is distinct from the number of issuer-confirmed records (22). A row not present in an accessible issuer table is **not** evidence of a zero distribution.
+> **Counting rule:** the total candidate panel (30) equals the number of source-bound
+> records. `admission_status` remains `NOT_ADMITTED`. A row not present in an
+> accessible issuer table would not be evidence of a zero distribution.
 
 ---
 
@@ -166,7 +183,8 @@ Target Window: **2025-10-01 through 2026-10-22**
 ## 6. Verification Ledger
 - Implementation Status: COMPLETE (30 candidate cash events + 1 physical trust record documented)
 - Target Window: `2025-10-01` to `2026-10-22`
-- Evaluator Status: `CANDIDATE_STRUCTURE_VALIDATED` (22 confirmed, 8 partial)
+- Evaluator Status: `SOURCE_VERIFIED_CANDIDATE` (30 confirmed, 0 partial)
+- BND Artifact: 226,062 bytes, SHA-256 `d09560f58834be2b1297f782969410aba07adab08f1a537a366f3dcd916d3abd`
 - Confirmation Authority: missing/unknown status never confirms; confirmed requires `source_row_ref`
 - Evidence Digest: binds retrieval/publication/revision/cusip/row-ref via canonical JSON (economic digest unchanged)
 - Targeted Tests: 33 passed (`tests/unit/data/test_lane_b_candidate_qualification.py`)
@@ -174,8 +192,16 @@ Target Window: **2025-10-01 through 2026-10-22**
 - Scientific Boundary: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
 
 ### 6.1 Remaining Unverified Gaps
-- BND partials (8): amount-reconciled but not artefact-captured. The 2026-10-22 retrieval of the official Vanguard advisors product page returned HTTP 200 (161,898 bytes) but exposed no distribution dataset or export endpoint; no row was promoted.
-- BIL rows were extracted from the official SPDR historical-distributions workbook (2026-10-22); the workbook revision policy and capture timestamp are still unverified.
+- BND rows are bound to a live issuer table captured 2026-10-22, not to the original
+  2025/2026 publication vintage. `publication_date` and `revision_status` remain
+  `UNKNOWN` / `REVISION_POLICY_UNVERIFIED`.
+- The 2026-10-22 advisors-page retrieval (161,898 bytes) exposed no dataset/export;
+  the successful capture came from the investor product page embedded table.
+- BIL rows were extracted from the official SPDR historical-distributions workbook
+  (2026-10-22); the workbook revision policy and exact capture timestamp are still
+  unverified.
+- Artifact captures are metadata-level provenance bindings, not cryptographic seals,
+  and do not constitute D4 admission.
 - `publication_date` / `revision_status`: issuer correction/vintage policy not disclosed/recorded.
 - GLD: `NO_CASH_DISTRIBUTION_ENTITLEMENT`; gold-per-share decay is not a dividend.
 - GLDM: excluded from the authorized universe (`CANDIDATE_ONLY`).

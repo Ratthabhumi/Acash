@@ -85,14 +85,15 @@ Tests: `tests/unit/data/test_lane_b_d5_rehearsal.py` (25 cases).
 
 No new D4 code was required: the existing `lane_b_candidate_evaluator.py` contracts
 already fail closed on the adversarial cases above, and no failing test exposed a gap.
-The evaluator remains `CANDIDATE_STRUCTURE_VALIDATED`; it is not wired into D5 admission.
+The evaluator now completes at `SOURCE_VERIFIED_CANDIDATE` after the V20 BND capture
+(all 30 cash rows are issuer-source-bound); it is still not wired into D5 admission.
 
 ## 5. Gate Matrix
 
 | Gate | Required contract | Evidence | Outcome | Blocker |
 | :--- | :--- | :--- | :--- | :--- |
 | D3 | Provider/feed access authorized | `docs/governance/D3_DECISION_PACKET_BYTE_POLICY_AND_RIGHTS.md` | **UNKNOWN** | No account entitlement; byte contract PROPOSED |
-| D4 | Issuer actions independently source-qualified for scope | `lane_b_candidate_events_2025_2026.json`, report §2.3 | **PARTIAL** | 8 BND rows not artefact-captured |
+| D4 | Issuer actions independently source-qualified for scope | `lane_b_candidate_events_2025_2026.json`, report §2.1/§2.3 | **SOURCE_VERIFIED_CANDIDATE** | PIT vintage/revision policy unknown; no D4 admission |
 | D5 | Reproducible dataset from qualified inputs | this rehearsal (synthetic) | **READY (synthetic)** | No authorized real inputs |
 | D5 real | Empirical admission | — | **NOT ADMITTED** | D3/D4 gates open |
 
@@ -104,9 +105,11 @@ real acquisition preparation.
 
 ## 7. Next Evidence-Producing Task
 
-Capture the 8 remaining BND rows from the Vanguard issuer table with a documented,
-row-level extraction artefact; until then they stay `SOURCE_PARTIAL`.
+The 8 remaining BND rows were captured on 2026-10-22 from the Vanguard BND investor
+product page embedded distribution table (226,062 bytes, SHA-256
+`d09560f58834be2b1297f782969410aba07adab08f1a537a366f3dcd916d3abd`), bound by
+`recordDate`. They are now `SOURCE_CONFIRMED_CANDIDATE`. The advisors page (HTTP 200,
+161,898 bytes) still exposes no dataset or export endpoint.
 
-The 2026-10-22 attempt retrieved the official advisors product page (HTTP 200, 161,898
-bytes) but it exposes no distribution dataset or export endpoint (no JSON/CSV/XLSX). No
-amount, row ID or timestamp was invented; all 8 rows remain unverified.
+The next evidence task is the D3 rights/byte-policy decision; BND vintage and revision
+policy remain unverified.
