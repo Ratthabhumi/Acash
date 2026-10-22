@@ -41,6 +41,7 @@ The following `SOURCE_PARTIAL` BND rows were corrected to the official Vanguard 
 
 | Ex-Date | Prior Candidate | Issuer Value | Note | Status After |
 | :--- | :--- | :--- | :--- | :--- |
+| 2025-10-01 | $0.245000 | **$0.237328** | amount (ex/record 2025-10-01, payable 2025-10-03) | `SOURCE_PARTIAL` |
 | 2025-11-03 | $0.248000 | **$0.243631** | amount | `SOURCE_PARTIAL` |
 | 2025-12-01 | $0.251000 | **$0.238572** | amount | `SOURCE_PARTIAL` |
 | 2026-02-02 | $0.249000 | **$0.245470** | amount | `SOURCE_PARTIAL` |
@@ -71,7 +72,7 @@ Target Window: **2025-10-01 through 2026-10-22**
 
 | Month | VOO (Quarterly) | BND (Monthly) | BIL (Monthly) | GLD (Grantor Trust) |
 | :--- | :--- | :--- | :--- | :--- |
-| **2025-10** | *No Distribution* | Ex: 2025-10-01 ($0.245000) [PARTIAL] | Ex: 2025-10-01 ($0.228000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2025-10** | *No Distribution* | Ex: 2025-10-01 ($0.237328) [PARTIAL] | Ex: 2025-10-01 ($0.228000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2025-11** | *No Distribution* | Ex: 2025-11-03 ($0.243631) [PARTIAL] | Ex: 2025-11-03 ($0.231000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2025-12** | **Ex: 2025-12-22 ($1.771000) [CONFIRMED]** | Ex: 2025-12-01 ($0.238572) [PARTIAL]<br>**Ex: 2025-12-18 ($0.246638) [CONFIRMED]** | Ex: 2025-12-01 ($0.235000) [PARTIAL]<br>Ex: 2025-12-19 ($0.237000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2026-01** | *No Distribution* | *No Distribution (Holiday Cadence)* | *No Distribution (SSGA Cadence)* | `NO_CASH_DISTRIBUTION` |
@@ -145,7 +146,7 @@ Target Window: **2025-10-01 through 2026-10-22**
 - Scientific Boundary: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
 
 ### 6.1 Remaining Unverified Gaps
-- BIL partials (11) and BND 2025-10-01: not reconciled to an accessible issuer row.
+- BIL partials (11): not reconciled to an accessible issuer row.
 - `retrieval_status` is `UNVERIFIED_CAPTURE_TIME` for all rows: no automated artefact capture exists.
 - `publication_date` / `revision_status`: issuer correction/vintage policy not disclosed/recorded.
 - GLD: `NO_CASH_DISTRIBUTION_ENTITLEMENT`; gold-per-share decay is not a dividend.

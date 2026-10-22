@@ -103,7 +103,7 @@
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.245000",
+      "amount": "0.237328",
       "currency": "USD",
       "ex_date": "2025-10-01",
       "record_date": "2025-10-01",
@@ -115,7 +115,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "October 2025 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "October 2025 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.237328 was candidate=0.245000]"
     },
     {
       "symbol": "BND",

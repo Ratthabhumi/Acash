@@ -479,6 +479,7 @@ def test_bnd_partial_amounts_reconciled_to_issuer() -> None:
         data = json.load(f)
     by_key = {(e["symbol"], e["ex_date"]): e for e in data["cash_distribution_events"]}
     expected = {
+        "2025-10-01": "0.237328",
         "2025-11-03": "0.243631",
         "2025-12-01": "0.238572",
         "2026-02-02": "0.245470",
