@@ -8,9 +8,10 @@ Verifies strict compliance with:
 
 from datetime import date
 from decimal import Decimal
+import dataclasses
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
@@ -33,6 +34,7 @@ def _sample_valid_event(
     confirmation_status: str = "SOURCE_CONFIRMED_CANDIDATE",
     event_type: str = "INCOME_DISTRIBUTION",
     fund_legal_identity: Optional[str] = None,
+    source_row_ref: str = "issuer_row:test-fixture",
 ) -> LaneBCandidateEvent:
     rec_d = record_date if record_date is not None else ex_date
     pay_d = payable_date if payable_date is not None else rec_d
@@ -64,6 +66,7 @@ def _sample_valid_event(
         retrieval_status="VERIFIED_PRIMARY_SOURCE",
         authority_class=authority_class,
         confirmation_status=confirmation_status,
+        source_row_ref=source_row_ref,
     )
 
 
@@ -360,4 +363,154 @@ def test_empty_panel_raises() -> None:
     evaluator = LaneBCandidateEvaluator()
     with pytest.raises(DataContractError, match="must not be empty"):
         evaluator.evaluate_panel([])
+
+
+def _event_dict(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "symbol": "VOO",
+        "fund_legal_identity": "Vanguard Index Funds",
+        "cusip": "922908363",
+        "event_type": "INCOME_DISTRIBUTION",
+        "amount": "1.822600",
+        "currency": "USD",
+        "ex_date": "2026-09-28",
+        "record_date": "2026-09-28",
+        "payable_date": "2026-09-30",
+        "source_url": (
+            "https://advisors.vanguard.com/investments/products/voo/"
+            "vanguard-sp-500-etf"
+        ),
+        "source_document": "Vanguard Official Distribution History",
+        "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
+        "authority_class": "ISSUER_OFFICIAL_TABLE",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_from_dict_missing_confirmation_is_partial_not_confirmed() -> None:
+    """Omitting confirmation_status must NEVER yield a confirmed outcome."""
+    ev = LaneBCandidateEvent.from_dict(_event_dict())
+    assert ev.confirmation_status == "SOURCE_PARTIAL"
+    res = LaneBCandidateEvaluator().evaluate_panel([ev])
+    assert res.confirmed_events == 0
+    assert res.partial_events == 1
+    assert res.status == "CANDIDATE_STRUCTURE_VALIDATED"
+
+
+def test_from_dict_unknown_confirmation_rejected() -> None:
+    """An undefined confirmation value is malformed and fails closed."""
+    with pytest.raises(DataContractError, match="Malformed confirmation_status"):
+        LaneBCandidateEvent.from_dict(
+            _event_dict(confirmation_status="TRUST_ME_BRO")
+        )
+
+
+def test_confirmed_without_row_binding_downgraded_to_partial() -> None:
+    """A valid issuer domain is not evidence; confirmed needs a row reference."""
+    evaluator = LaneBCandidateEvaluator()
+    ev = _sample_valid_event(source_row_ref="")
+    res = evaluator.evaluate_panel([ev])
+    assert res.confirmed_events == 0
+    assert res.partial_events == 1
+    assert res.status == "CANDIDATE_STRUCTURE_VALIDATED"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://advisors.vanguard.com/investments/products/voo",
+        "https://user:pass@advisors.vanguard.com/investments/products/voo",
+        "https://advisors.vanguard.com:8443/investments/products/voo",
+        "https://vanguard.com.evil.example/voo",
+        "https://notvanguard.com/voo",
+    ],
+)
+def test_invalid_source_url_forms_rejected(url: str) -> None:
+    """Scheme, userinfo, explicit port and lookalike hosts all fail closed."""
+    evaluator = LaneBCandidateEvaluator()
+    ev = _sample_valid_event(source_url=url)
+    with pytest.raises(DataContractError):
+        evaluator.evaluate_panel([ev])
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("publication_date", "2026-09-29"),
+        ("revision_status", "REVISED_2026_10_01"),
+        ("retrieval_status", "UNVERIFIED_CAPTURE_TIME"),
+        ("cusip", "000000000"),
+        ("source_row_ref", "issuer_row:other"),
+    ],
+)
+def test_evidence_digest_binds_provenance_fields(field: str, value: str) -> None:
+    """Material provenance changes the evidence digest, never the economic one."""
+    evaluator = LaneBCandidateEvaluator()
+    base = _sample_valid_event()
+    replace_kwargs: dict[str, Any] = {field: value}
+    variant = dataclasses.replace(base, **replace_kwargs)
+    res_base = evaluator.evaluate_panel([base])
+    res_variant = evaluator.evaluate_panel([variant])
+    assert res_base.economic_composite_digest == res_variant.economic_composite_digest
+    assert res_base.evidence_manifest_digest != res_variant.evidence_manifest_digest
+
+
+def test_evidence_digest_delimiter_collision_impossible() -> None:
+    """Naive '|' joins collide; canonical JSON keeps distinct rows distinct."""
+    evaluator = LaneBCandidateEvaluator()
+    ev_a = _sample_valid_event(source_document="A|B", source_row_ref="C")
+    ev_b = _sample_valid_event(source_document="A", source_row_ref="B|C")
+    res_a = evaluator.evaluate_panel([ev_a])
+    res_b = evaluator.evaluate_panel([ev_b])
+    assert res_a.economic_composite_digest == res_b.economic_composite_digest
+    assert res_a.evidence_manifest_digest != res_b.evidence_manifest_digest
+
+
+def test_bnd_partial_amounts_reconciled_to_issuer() -> None:
+    """The seven disputed BND candidates carry issuer amounts and stay partial."""
+    json_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "research"
+        / "lane_b_candidate_events_2025_2026.json"
+    )
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    by_key = {(e["symbol"], e["ex_date"]): e for e in data["cash_distribution_events"]}
+    expected = {
+        "2025-11-03": "0.243631",
+        "2025-12-01": "0.238572",
+        "2026-02-02": "0.245470",
+        "2026-03-02": "0.227824",
+        "2026-04-01": "0.250016",
+        "2026-05-01": "0.241713",
+        "2026-06-01": "0.247259",
+    }
+    for ex_date, amount in expected.items():
+        row = by_key[("BND", ex_date)]
+        assert row["amount"] == amount
+        assert row["confirmation_status"] == "SOURCE_PARTIAL"
+    assert by_key[("BND", "2026-04-01")]["payable_date"] == "2026-04-06"
+
+
+def test_confirmed_rows_carry_source_row_binding() -> None:
+    """Every SOURCE_CONFIRMED_CANDIDATE row in the panel has a row reference."""
+    json_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "research"
+        / "lane_b_candidate_events_2025_2026.json"
+    )
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    confirmed = [
+        e
+        for e in data["cash_distribution_events"]
+        if e["confirmation_status"] == "SOURCE_CONFIRMED_CANDIDATE"
+    ]
+    assert confirmed, "expected at least one confirmed candidate"
+    for row in confirmed:
+        assert row.get("source_row_ref", "").strip(), row
+
 

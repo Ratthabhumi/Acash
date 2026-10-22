@@ -35,6 +35,32 @@ Independent verification against primary issuer tables (Vanguard and State Stree
 | **BND** | Aug 2026 | $0.254000 | **$0.251550, ex 2026-08-03, pay 08-05** | Vanguard BND Distribution History | `AMENDED_TO_OFFICIAL` |
 | **BIL** | Sep 2026 | $0.261000 | **$0.279771, ex 2026-09-01, pay 09-04** | State Street SPDR Historical Table | `AMENDED_TO_OFFICIAL` |
 
+### 2.1 V14 BND Partial-Row Reconciliation (issuer table, owner-supplied research 2026-10-22)
+
+The following `SOURCE_PARTIAL` BND rows were corrected to the official Vanguard distribution table. They **remain `SOURCE_PARTIAL`** because no automated artefact capture was performed — this is a metadata reconciliation, not an admission.
+
+| Ex-Date | Prior Candidate | Issuer Value | Note | Status After |
+| :--- | :--- | :--- | :--- | :--- |
+| 2025-11-03 | $0.248000 | **$0.243631** | amount | `SOURCE_PARTIAL` |
+| 2025-12-01 | $0.251000 | **$0.238572** | amount | `SOURCE_PARTIAL` |
+| 2026-02-02 | $0.249000 | **$0.245470** | amount | `SOURCE_PARTIAL` |
+| 2026-03-02 | $0.247000 | **$0.227824** | amount | `SOURCE_PARTIAL` |
+| 2026-04-01 | $0.250500 | **$0.250016** | amount + payable corrected to **2026-04-06** | `SOURCE_PARTIAL` |
+| 2026-05-01 | $0.252000 | **$0.241713** | amount | `SOURCE_PARTIAL` |
+| 2026-06-01 | $0.251500 | **$0.247259** | amount | `SOURCE_PARTIAL` |
+
+Rows not covered by an accessible issuer row (BIL partials, BND 2025-10-01) remain **unresolved** and are **not** inferred.
+
+### 2.2 V14 Evidence-Integrity Corrections (code)
+
+Three P1 integrity defects were fixed in `lane_b_candidate_evaluator.py`:
+
+1. **Unsafe confirmation default** — `from_dict()` no longer defaults missing `confirmation_status` to confirmed; it resolves to `SOURCE_PARTIAL`, and unknown statuses are rejected as malformed.
+2. **Domain-is-not-evidence** — confirmation now requires a non-empty `source_row_ref`; an authorized issuer domain without a row/document binding is **downgraded to `SOURCE_PARTIAL`**. URL checks now also enforce `https`, reject userinfo and explicit ports, and reject lookalike hosts.
+3. **Incomplete evidence digest** — the evidence manifest digest now binds `source_row_ref`, `retrieval_status`, `publication_date`, `revision_status`, `cusip`, source document and fund identity, using canonical JSON (no `|` delimiter collisions). The economic digest remains unchanged, preserving the economic-vs-evidence separation.
+
+**Limitation:** `source_row_ref` and the digest are metadata-level provenance bindings. They do **not** cryptographically seal the issuer artefact and do **not** constitute automated primary-source verification.
+
 ---
 
 ## 3. Phase B — Candidate Event Coverage Matrix
@@ -46,23 +72,25 @@ Target Window: **2025-10-01 through 2026-10-22**
 | Month | VOO (Quarterly) | BND (Monthly) | BIL (Monthly) | GLD (Grantor Trust) |
 | :--- | :--- | :--- | :--- | :--- |
 | **2025-10** | *No Distribution* | Ex: 2025-10-01 ($0.245000) [PARTIAL] | Ex: 2025-10-01 ($0.228000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2025-11** | *No Distribution* | Ex: 2025-11-03 ($0.248000) [PARTIAL] | Ex: 2025-11-03 ($0.231000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2025-12** | **Ex: 2025-12-22 ($1.771000) [CONFIRMED]** | Ex: 2025-12-01 ($0.251000) [PARTIAL]<br>**Ex: 2025-12-18 ($0.246638) [CONFIRMED]** | Ex: 2025-12-01 ($0.235000) [PARTIAL]<br>Ex: 2025-12-19 ($0.237000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2025-11** | *No Distribution* | Ex: 2025-11-03 ($0.243631) [PARTIAL] | Ex: 2025-11-03 ($0.231000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2025-12** | **Ex: 2025-12-22 ($1.771000) [CONFIRMED]** | Ex: 2025-12-01 ($0.238572) [PARTIAL]<br>**Ex: 2025-12-18 ($0.246638) [CONFIRMED]** | Ex: 2025-12-01 ($0.235000) [PARTIAL]<br>Ex: 2025-12-19 ($0.237000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2026-01** | *No Distribution* | *No Distribution (Holiday Cadence)* | *No Distribution (SSGA Cadence)* | `NO_CASH_DISTRIBUTION` |
-| **2026-02** | *No Distribution* | Ex: 2026-02-02 ($0.249000) [PARTIAL] | Ex: 2026-02-02 ($0.239500) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-03** | **Ex: 2026-03-27 ($1.872400) [CONFIRMED]** | Ex: 2026-03-02 ($0.247000) [PARTIAL] | Ex: 2026-03-02 ($0.241000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-04** | *No Distribution* | Ex: 2026-04-01 ($0.250500) [PARTIAL] | Ex: 2026-04-01 ($0.245000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-05** | *No Distribution* | Ex: 2026-05-01 ($0.252000) [PARTIAL] | Ex: 2026-05-01 ($0.249000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
-| **2026-06** | **Ex: 2026-06-26 ($1.962200) [CONFIRMED]** | Ex: 2026-06-01 ($0.251500) [PARTIAL] | Ex: 2026-06-01 ($0.252000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-02** | *No Distribution* | Ex: 2026-02-02 ($0.245470) [PARTIAL] | Ex: 2026-02-02 ($0.239500) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-03** | **Ex: 2026-03-27 ($1.872400) [CONFIRMED]** | Ex: 2026-03-02 ($0.227824) [PARTIAL] | Ex: 2026-03-02 ($0.241000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-04** | *No Distribution* | Ex: 2026-04-01 ($0.250016) [PARTIAL] | Ex: 2026-04-01 ($0.245000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-05** | *No Distribution* | Ex: 2026-05-01 ($0.241713) [PARTIAL] | Ex: 2026-05-01 ($0.249000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
+| **2026-06** | **Ex: 2026-06-26 ($1.962200) [CONFIRMED]** | Ex: 2026-06-01 ($0.247259) [PARTIAL] | Ex: 2026-06-01 ($0.252000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2026-07** | *No Distribution* | **Ex: 2026-07-01 ($0.244470) [CONFIRMED]** | Ex: 2026-07-01 ($0.256000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2026-08** | *No Distribution* | **Ex: 2026-08-03 ($0.251550) [CONFIRMED]** | Ex: 2026-08-03 ($0.259000) [PARTIAL] | `NO_CASH_DISTRIBUTION` |
 | **2026-09** | **Ex: 2026-09-28 ($1.822600) [CONFIRMED]** | **Ex: 2026-09-01 ($0.252886) [CONFIRMED]** | **Ex: 2026-09-01 ($0.279771) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 | **2026-10** | *In-Flight Cycle* | **Ex: 2026-10-01 ($0.248502) [CONFIRMED]** | **Ex: 2026-10-01 ($0.263176) [CONFIRMED]** | `NO_CASH_DISTRIBUTION` |
 
 ### 3.2 Confirmation Status Breakdown
-- **SOURCE_CONFIRMED_CANDIDATE:** 11 events (VOO 4, BND 5, BIL 2).
+- **SOURCE_CONFIRMED_CANDIDATE:** 11 events (VOO 4, BND 5, BIL 2) — each carries a `source_row_ref`.
 - **SOURCE_PARTIAL:** 19 events (BND 8, BIL 11).
 - **Overall Result:** `CANDIDATE_STRUCTURE_VALIDATED` (Preserves scientific truth; cannot be promoted to `SOURCE_VERIFIED_CANDIDATE` until the remaining 19 rows are extracted from audited archives).
+
+> **Counting rule:** the total candidate panel (30) is distinct from the number of issuer-confirmed records (11). A row not present in an accessible issuer table is **not** evidence of a zero distribution.
 
 ---
 
@@ -110,4 +138,15 @@ Target Window: **2025-10-01 through 2026-10-22**
 - Implementation Status: COMPLETE (30 candidate cash events + 1 physical trust record documented)
 - Target Window: `2025-10-01` to `2026-10-22`
 - Evaluator Status: `CANDIDATE_STRUCTURE_VALIDATED` (11 confirmed, 19 partial)
+- Confirmation Authority: missing/unknown status never confirms; confirmed requires `source_row_ref`
+- Evidence Digest: binds retrieval/publication/revision/cusip/row-ref via canonical JSON (economic digest unchanged)
+- Targeted Tests: 32 passed (`tests/unit/data/test_lane_b_candidate_qualification.py`)
+- Type Checker: MyPy clean on evaluator + test module
 - Scientific Boundary: `CANDIDATE_PRIMARY_SOURCE_EVIDENCE` (Pre-Admission)
+
+### 6.1 Remaining Unverified Gaps
+- BIL partials (11) and BND 2025-10-01: not reconciled to an accessible issuer row.
+- `retrieval_status` is `UNVERIFIED_CAPTURE_TIME` for all rows: no automated artefact capture exists.
+- `publication_date` / `revision_status`: issuer correction/vintage policy not disclosed/recorded.
+- GLD: `NO_CASH_DISTRIBUTION_ENTITLEMENT`; gold-per-share decay is not a dividend.
+- GLDM: excluded from the authorized universe (`CANDIDATE_ONLY`).

@@ -4,12 +4,18 @@
     "classification": "CANDIDATE_PRIMARY_SOURCE_EVIDENCE",
     "admission_status": "NOT_ADMITTED",
     "governing_document": "docs/research/LANE_B_SPEC_OFFLINE_QUALIFICATION.md",
-    "target_universe": ["VOO", "BND", "BIL", "GLD"],
+    "target_universe": [
+      "VOO",
+      "BND",
+      "BIL",
+      "GLD"
+    ],
     "target_window": {
       "start": "2025-10-01",
       "end": "2026-10-22"
     },
-    "provenance_note": "Factual event data from official issuer records (Vanguard, SSGA, World Gold Trust Services). Explicitly unissued and pre-admission."
+    "provenance_note": "Factual event data from official issuer records (Vanguard, SSGA, World Gold Trust Services). Explicitly unissued and pre-admission.",
+    "reconciliation_note": "BND 2025-11..2026-06 candidate amounts reconciled to the Vanguard official distribution table (owner-supplied research 2026-10-22). Confirmed rows carry a metadata-level source_row_ref (row/document pointer), NOT a cryptographic seal of the issuer artifact."
   },
   "cash_distribution_events": [
     {
@@ -29,7 +35,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "Q4 2025 distribution cycle (issuer-confirmed)"
+      "coverage_notes": "Q4 2025 distribution cycle (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2025-12-22"
     },
     {
       "symbol": "VOO",
@@ -48,7 +55,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "Q1 2026 distribution cycle (issuer-confirmed)"
+      "coverage_notes": "Q1 2026 distribution cycle (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-03-27"
     },
     {
       "symbol": "VOO",
@@ -67,7 +75,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "Q2 2026 distribution cycle (issuer-confirmed)"
+      "coverage_notes": "Q2 2026 distribution cycle (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-06-26"
     },
     {
       "symbol": "VOO",
@@ -86,7 +95,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "Q3 2026 distribution anchor (issuer-confirmed)"
+      "coverage_notes": "Q3 2026 distribution anchor (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-09-28"
     },
     {
       "symbol": "BND",
@@ -112,7 +122,7 @@
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.248000",
+      "amount": "0.243631",
       "currency": "USD",
       "ex_date": "2025-11-03",
       "record_date": "2025-11-03",
@@ -124,14 +134,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "November 2025 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "November 2025 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.243631 was candidate=0.248000]"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.251000",
+      "amount": "0.238572",
       "currency": "USD",
       "ex_date": "2025-12-01",
       "record_date": "2025-12-01",
@@ -143,7 +153,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "December 2025 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "December 2025 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.238572 was candidate=0.251000]"
     },
     {
       "symbol": "BND",
@@ -162,14 +172,15 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "December 2025 year-end secondary distribution (issuer-confirmed)"
+      "coverage_notes": "December 2025 year-end secondary distribution (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2025-12-18"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.249000",
+      "amount": "0.245470",
       "currency": "USD",
       "ex_date": "2026-02-02",
       "record_date": "2026-02-02",
@@ -181,14 +192,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "February 2026 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "February 2026 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.245470 was candidate=0.249000]"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.247000",
+      "amount": "0.227824",
       "currency": "USD",
       "ex_date": "2026-03-02",
       "record_date": "2026-03-02",
@@ -200,18 +211,18 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "March 2026 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "March 2026 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.227824 was candidate=0.247000]"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.250500",
+      "amount": "0.250016",
       "currency": "USD",
       "ex_date": "2026-04-01",
       "record_date": "2026-04-01",
-      "payable_date": "2026-04-03",
+      "payable_date": "2026-04-06",
       "source_url": "https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf",
       "source_document": "Vanguard Total Bond Market ETF Distributions",
       "retrieval_status": "UNVERIFIED_CAPTURE_TIME",
@@ -219,14 +230,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "April 2026 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "April 2026 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.250016 was candidate=0.250500] [payable corrected to issuer 2026-04-06 was 2026-04-03]"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.252000",
+      "amount": "0.241713",
       "currency": "USD",
       "ex_date": "2026-05-01",
       "record_date": "2026-05-01",
@@ -238,14 +249,14 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "May 2026 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "May 2026 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.241713 was candidate=0.252000]"
     },
     {
       "symbol": "BND",
       "fund_legal_identity": "Vanguard Bond Index Funds",
       "cusip": "921937835",
       "event_type": "INCOME_DISTRIBUTION",
-      "amount": "0.251500",
+      "amount": "0.247259",
       "currency": "USD",
       "ex_date": "2026-06-01",
       "record_date": "2026-06-01",
@@ -257,7 +268,7 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_PARTIAL",
-      "coverage_notes": "June 2026 monthly candidate row (unverified pending audited extraction)"
+      "coverage_notes": "June 2026 monthly candidate row (unverified pending audited extraction) [reconciled 2026-10-22: issuer=0.247259 was candidate=0.251500]"
     },
     {
       "symbol": "BND",
@@ -276,7 +287,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "July 2026 monthly distribution (issuer-confirmed)"
+      "coverage_notes": "July 2026 monthly distribution (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-07-01"
     },
     {
       "symbol": "BND",
@@ -295,7 +307,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "August 2026 monthly distribution (issuer-confirmed)"
+      "coverage_notes": "August 2026 monthly distribution (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-08-03"
     },
     {
       "symbol": "BND",
@@ -314,7 +327,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "September 2026 monthly distribution anchor (issuer-confirmed)"
+      "coverage_notes": "September 2026 monthly distribution anchor (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-09-01"
     },
     {
       "symbol": "BND",
@@ -333,7 +347,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)"
+      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-10-01"
     },
     {
       "symbol": "BIL",
@@ -561,7 +576,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "September 2026 monthly distribution (issuer-confirmed)"
+      "coverage_notes": "September 2026 monthly distribution (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-09-01"
     },
     {
       "symbol": "BIL",
@@ -580,7 +596,8 @@
       "revision_status": "REVISION_POLICY_UNVERIFIED",
       "authority_class": "ISSUER_OFFICIAL_TABLE",
       "confirmation_status": "SOURCE_CONFIRMED_CANDIDATE",
-      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)"
+      "coverage_notes": "October 2026 monthly distribution anchor (issuer-confirmed)",
+      "source_row_ref": "issuer_distribution_table:ex_date=2026-10-01"
     }
   ],
   "physical_trust_records": [
@@ -590,7 +607,10 @@
       "legal_sponsor": "World Gold Trust Services, LLC",
       "marketing_agent": "State Street Global Advisors Funds Distributors, LLC",
       "trustee": "BNY Mellon",
-      "custodians": ["HSBC Bank plc", "JPMorgan Chase Bank, N.A."],
+      "custodians": [
+        "HSBC Bank plc",
+        "JPMorgan Chase Bank, N.A."
+      ],
       "structure": "GRANTOR_TRUST",
       "distribution_entitlement": "NO_CASH_DISTRIBUTION_ENTITLEMENT",
       "gross_expense_ratio": "0.0040",

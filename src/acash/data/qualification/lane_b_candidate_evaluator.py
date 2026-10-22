@@ -23,12 +23,21 @@ from urllib.parse import urlparse
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.domain.types import ensure_finite_decimal
+from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.qualification.manifest import compute_framed_composite_sha256
 from acash.data.schema import validate_decimal128_bounds
 
 LANE_B_CANDIDATE_UNIVERSE: frozenset[str] = frozenset({"VOO", "BND", "BIL", "GLD"})
 ALLOWED_CURRENCIES: frozenset[str] = frozenset({"USD"})
 ALLOWED_EVENT_TYPES: frozenset[str] = frozenset({"INCOME_DISTRIBUTION", "CASH_DIVIDEND"})
+
+# Explicit confirmation vocabulary. Missing/unknown values NEVER imply confirmation.
+ALLOWED_CONFIRMATION_STATUSES: frozenset[str] = frozenset({
+    "SOURCE_CONFIRMED_CANDIDATE",
+    "SOURCE_PARTIAL",
+    "QUARANTINED",
+})
+DEFAULT_CONFIRMATION_STATUS: str = "SOURCE_PARTIAL"
 
 VALID_AUTHORITY_CLASSES: frozenset[str] = frozenset({
     "ISSUER_OFFICIAL_TABLE",
@@ -64,16 +73,22 @@ class LaneBCandidateEvent:
     source_url: str
     source_document: str
     retrieval_status: str
+    source_row_ref: str = ""
     publication_date: str = "UNKNOWN"
     revision_status: str = "REVISION_POLICY_UNVERIFIED"
     authority_class: str = "ISSUER_OFFICIAL_TABLE"
-    confirmation_status: str = "SOURCE_CONFIRMED_CANDIDATE"
+    confirmation_status: str = DEFAULT_CONFIRMATION_STATUS
     cusip: Optional[str] = None
     coverage_notes: str = ""
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> LaneBCandidateEvent:
-        """Parse from dictionary with fail-closed Decimal conversion."""
+        """Parse from dictionary with fail-closed Decimal conversion.
+
+        Confirmation is never inferred: a missing ``confirmation_status``
+        resolves to ``SOURCE_PARTIAL`` (never confirmed), and an explicitly
+        supplied but unknown status is rejected as malformed.
+        """
         try:
             amt_str = str(data["amount"])
             amt = Decimal(amt_str)
@@ -87,6 +102,18 @@ class LaneBCandidateEvent:
         except (KeyError, ValueError) as exc:
             raise DataContractError(f"Invalid date format in event: {data}") from exc
 
+        raw_confirmation = data.get("confirmation_status")
+        if raw_confirmation is None:
+            confirmation_status = DEFAULT_CONFIRMATION_STATUS
+        else:
+            confirmation_status = str(raw_confirmation).strip()
+            if confirmation_status not in ALLOWED_CONFIRMATION_STATUSES:
+                raise DataContractError(
+                    f"Malformed confirmation_status {raw_confirmation!r} for "
+                    f"'{data.get('symbol')}'; allowed values are "
+                    f"{sorted(ALLOWED_CONFIRMATION_STATUSES)}."
+                )
+
         return cls(
             symbol=str(data["symbol"]).strip().upper(),
             fund_legal_identity=str(data["fund_legal_identity"]).strip(),
@@ -99,10 +126,11 @@ class LaneBCandidateEvent:
             source_url=str(data["source_url"]).strip(),
             source_document=str(data["source_document"]).strip(),
             retrieval_status=str(data.get("retrieval_status", "UNVERIFIED_CAPTURE_TIME")),
+            source_row_ref=str(data.get("source_row_ref", "")),
             publication_date=str(data.get("publication_date", "UNKNOWN")),
             revision_status=str(data.get("revision_status", "REVISION_POLICY_UNVERIFIED")),
             authority_class=str(data.get("authority_class", "ISSUER_OFFICIAL_TABLE")),
-            confirmation_status=str(data.get("confirmation_status", "SOURCE_CONFIRMED_CANDIDATE")),
+            confirmation_status=confirmation_status,
             cusip=data.get("cusip"),
             coverage_notes=str(data.get("coverage_notes", "")),
         )
@@ -186,7 +214,31 @@ class LaneBCandidateEvaluator:
                     f"Event for '{ev.symbol}' on {ev.ex_date} lacks verifiable source URL or document identity."
                 )
 
-            parsed_url = urlparse(ev.source_url)
+            if ev.confirmation_status not in ALLOWED_CONFIRMATION_STATUSES:
+                raise DataContractError(
+                    f"Malformed confirmation_status '{ev.confirmation_status}' for '{ev.symbol}' "
+                    f"on {ev.ex_date}; allowed values are {sorted(ALLOWED_CONFIRMATION_STATUSES)}."
+                )
+
+            try:
+                parsed_url = urlparse(ev.source_url)
+                parsed_port = parsed_url.port
+            except ValueError as exc:
+                raise DataContractError(
+                    f"Malformed source URL '{ev.source_url}' for '{ev.symbol}'."
+                ) from exc
+            if parsed_url.scheme != "https":
+                raise DataContractError(
+                    f"Source URL '{ev.source_url}' for '{ev.symbol}' must use https."
+                )
+            if parsed_url.username is not None or parsed_url.password is not None:
+                raise DataContractError(
+                    f"Source URL '{ev.source_url}' for '{ev.symbol}' must not embed credentials/userinfo."
+                )
+            if parsed_port is not None:
+                raise DataContractError(
+                    f"Source URL '{ev.source_url}' for '{ev.symbol}' must not specify an explicit port."
+                )
             hostname = (parsed_url.hostname or "").lower()
             authorized_domains = AUTHORIZED_ISSUER_DOMAINS.get(ev.symbol, ())
             if not any(hostname == d or hostname.endswith(f".{d}") for d in authorized_domains):
@@ -194,6 +246,16 @@ class LaneBCandidateEvaluator:
                     f"Source URL '{ev.source_url}' for '{ev.symbol}' does not resolve to an authorized issuer domain: "
                     f"{authorized_domains}."
                 )
+
+            # 5b. Evidence binding: an authorized domain is a structural check,
+            # NOT proof of event existence. Confirmation requires an identified
+            # issuer source row/document; without it the event is partial.
+            effective_confirmation = ev.confirmation_status
+            if (
+                effective_confirmation == "SOURCE_CONFIRMED_CANDIDATE"
+                and not ev.source_row_ref.strip()
+            ):
+                effective_confirmation = "SOURCE_PARTIAL"
 
             # 6. Currency check
             if ev.currency not in ALLOWED_CURRENCIES:
@@ -240,28 +302,46 @@ class LaneBCandidateEvaluator:
                 )
             seen_economic_keys[economic_key] = ev
 
-            # 10. Confirmation status tracking
-            if ev.confirmation_status == "SOURCE_CONFIRMED_CANDIDATE":
+            # 10. Confirmation status tracking (effective, post-binding)
+            if effective_confirmation == "SOURCE_CONFIRMED_CANDIDATE":
                 confirmed_count += 1
             else:
                 partial_count += 1
 
-            # 11. Deterministic serialization for dual digests
-            # A) Economic event digest serialization
-            economic_norm_str = (
-                f"{ev.symbol}|{ev.ex_date.isoformat()}|{ev.record_date.isoformat()}|"
-                f"{ev.payable_date.isoformat()}|{ev.amount}|{ev.currency}|{ev.event_type}"
+            # 11. Deterministic serialization for dual digests.
+            # Canonical, collision-free JSON (no unescaped delimiter joins).
+            economic_payload = {
+                "symbol": ev.symbol,
+                "ex_date": ev.ex_date.isoformat(),
+                "record_date": ev.record_date.isoformat(),
+                "payable_date": ev.payable_date.isoformat(),
+                "amount": str(ev.amount),
+                "currency": ev.currency,
+                "event_type": ev.event_type,
+            }
+            evidence_payload = {
+                **economic_payload,
+                "fund_legal_identity": ev.fund_legal_identity,
+                "source_url": ev.source_url,
+                "source_document": ev.source_document,
+                "source_row_ref": ev.source_row_ref,
+                "retrieval_status": ev.retrieval_status,
+                "publication_date": ev.publication_date,
+                "revision_status": ev.revision_status,
+                "authority_class": ev.authority_class,
+                "confirmation_status": effective_confirmation,
+                "cusip": ev.cusip or "",
+            }
+            economic_records.append(
+                CanonicalConfigSerializer.to_canonical_json(
+                    economic_payload
+                ).encode("utf-8")
             )
-            economic_records.append(economic_norm_str.encode("utf-8"))
-
-            # B) Complete evidence manifest digest serialization
-            evidence_norm_str = (
-                f"{ev.symbol}|{ev.ex_date.isoformat()}|{ev.record_date.isoformat()}|"
-                f"{ev.payable_date.isoformat()}|{ev.amount}|{ev.currency}|{ev.event_type}|"
-                f"{ev.fund_legal_identity}|{ev.source_url}|{ev.source_document}|"
-                f"{ev.confirmation_status}|{ev.authority_class}"
+            evidence_records.append(
+                CanonicalConfigSerializer.to_canonical_json(
+                    evidence_payload
+                ).encode("utf-8")
             )
-            evidence_records.append(evidence_norm_str.encode("utf-8"))
 
         # Sort serialized records deterministically by content before hashing
         economic_records.sort()
