@@ -1,7 +1,7 @@
 # Owner Decision Packet — 2026-10-23
 
 **Status:** `AWAITING_OWNER_DECISIONS`
-**Software baseline:** `ef89fd49b1f092bacd0847d6d56dfc4d8c132bfd` plus the V23 branch under review
+**Software baseline:** `2cd9a02104d30b3a6dddf90ce39f1d70b0731ba6` (PR #48 merged; main CI `39889802190` 5/5 success)
 **Real-data admission:** `NOT_ADMITTED`
 **Lane A/B:** `UNISSUED`
 **Capital authority:** USD 0.00; `NO_REAL_ORDERS=true`
@@ -12,6 +12,8 @@ admission or trading.
 
 ## 1. Current Truth
 
+- PR #48 is merged into `main`; exact-head CI passed 5/5 and post-merge main CI
+  `39889802190` passed 5/5.
 - The D3 V2 byte contract is implemented and offline-tested, but formally
   `PENDING_FORMAL_RATIFICATION`.
 - The D5 real-input admission bridge is implemented offline. It can seal retrospective
