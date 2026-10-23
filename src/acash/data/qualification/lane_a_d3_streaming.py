@@ -117,8 +117,16 @@ def _read_identity_capped(
     cap: StreamingByteCap,
     *,
     strict_length: bool,
+    reject_poisons_cap: bool,
 ) -> Tuple[bytes, str]:
+    if reject_poisons_cap and cap.halted:
+        raise DataContractError(
+            "D1_STREAM_HALTED: the byte cap was already poisoned by a failed "
+            "or interrupted read; no reuse is permitted."
+        )
     if response.is_stream_consumed:
+        if reject_poisons_cap:
+            cap.halted = True
         raise DataContractError(
             "D3_RESPONSE_ALREADY_CONSUMED: streaming reads require an "
             "unconsumed streaming response; eagerly read bodies bypass "
@@ -126,6 +134,8 @@ def _read_identity_capped(
         )
     coding = response.headers.get("content-encoding", "")
     if coding.strip().lower() not in IDENTITY_ENCODINGS:
+        if reject_poisons_cap:
+            cap.halted = True
         raise DataContractError(
             f"D3_IDENTITY_ENCODING_REJECTED: content-encoding {coding!r} "
             "is not identity; refusing to conflate coded and raw bytes."
@@ -181,7 +191,9 @@ def read_identity_capped(
     Preserved unchanged for reproducibility of previously reviewed
     evidence. New work should use :func:`read_identity_capped_v2`.
     """
-    return _read_identity_capped(response, cap, strict_length=False)
+    return _read_identity_capped(
+        response, cap, strict_length=False, reject_poisons_cap=False
+    )
 
 
 def read_identity_capped_v2(
@@ -196,6 +208,8 @@ def read_identity_capped_v2(
     - Present Content-Length must be exactly one field of 1*DIGIT.
     - Multiple fields, whitespace, signs, commas or non-digits halt the
       cap and raise ``DataContractError`` with zero body bytes consumed.
+    - A rejected non-identity encoding or an already-consumed response
+      poisons the cap; a halted cap is rejected before any read.
     - A missing header remains allowed; chunk accounting is authoritative.
 
     Unchanged: identity-only encoding, raw-byte counting, 524,288 observed
@@ -203,4 +217,6 @@ def read_identity_capped_v2(
     alternate-feed substitution, post-read oversized-chunk disclosure, no
     hard memory bound.
     """
-    return _read_identity_capped(response, cap, strict_length=True)
+    return _read_identity_capped(
+        response, cap, strict_length=True, reject_poisons_cap=True
+    )

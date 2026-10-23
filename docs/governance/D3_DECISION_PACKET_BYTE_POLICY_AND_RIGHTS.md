@@ -57,16 +57,18 @@ This packet consolidates the three external gating prerequisites required before
 | Malformed (`not-a-number`, ` 5`, `+5`, `5.0`, empty) | Treated as absent | **Rejected before body iteration** |
 | Negative (`-5`) | Fails at completion via equality | **Rejected before body iteration** |
 | Ambiguous (multiple fields, `5, 5`) | Treated as absent | **Rejected before body iteration** |
+| Non-identity `Content-Encoding` | Rejected; cap not poisoned | **Rejected and cap poisoned** |
+| Already-consumed response | Rejected; cap not poisoned | **Rejected and cap poisoned** |
 
 Implementation:
 - `read_identity_capped_v2()` in `src/acash/data/qualification/lane_a_d3_streaming.py`.
 - V1 `read_identity_capped()` is retained unchanged for reproducibility of reviewed evidence.
-- Rejection halts the cap and consumes **zero** body bytes.
+- Rejection halts the cap and consumes **zero** body bytes. A halted V2 cap is rejected before any subsequent read, so an ambiguous or failed response cannot be retried with an empty body.
 - Budget remains **524,288 observed raw body bytes per approved invocation**; no reset on interruption or failure; zero retry; zero alternate-feed substitution.
 - Post-read oversized-chunk and no-hard-memory-bound disclosures remain in force.
 - Frozen request identity and approval lineage are unchanged; this packet remains pre-ratification.
 
-Offline evidence: `tests/unit/data/test_lane_a_d3_streaming_v2.py` (18 cases, `httpx.MockTransport` only). V1 tests remain green (19 cases).
+Offline evidence: `tests/unit/data/test_lane_a_d3_streaming_v2.py` (20 cases, `httpx.MockTransport` only). V1 tests remain green (19 cases).
 
 ---
 
