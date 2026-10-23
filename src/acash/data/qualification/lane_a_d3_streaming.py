@@ -20,8 +20,11 @@ Contract (PROPOSAL status until ratified — see admit_byte_population):
   mirrors the established ``lane_a_d1_safety.read_capped`` policy; it is
   NOT a new network policy and is recorded, not silently ratified).
 - ``Content-Length`` malformed-absent policy (RECORDED, two options):
-  (a) treat unparseable as absent [current, matches D1]; or (b) reject
-  fail-closed. Neither is ratified for real dispatch here.
+  (a) treat unparseable as absent [V1, matches D1]; or (b) reject
+  fail-closed [V2 amendment, owner-directed 2026-10-23]. Neither is
+  ratified for real dispatch here. V2 rejects ambiguous, malformed or
+  negative lengths BEFORE body iteration; V1 is retained unchanged for
+  reproducibility of reviewed evidence.
 - Any iterator failure — declared HTTPX transport/stream errors AND
   unexpected non-HTTPX exceptions — halts (poisons) the cap before
   propagating, so no partial or ambiguous read can later be reused as
@@ -51,6 +54,7 @@ external prerequisites with LANE_A = UNISSUED.
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Tuple
 
 import httpx
@@ -61,20 +65,59 @@ from acash.data.qualification.manifest import compute_page_sha256
 
 IDENTITY_ENCODINGS = ("", "identity")
 
+BYTE_CONTRACT_V1 = "IDENTITY_ONLY_RAW_RESPONSE_BODY_V1"
+BYTE_CONTRACT_V2 = "IDENTITY_ONLY_RAW_RESPONSE_BODY_V2"
+D3_OBSERVED_BYTE_BUDGET = 524_288
 
-def read_identity_capped(
+_CONTENT_LENGTH_DIGITS = re.compile(r"[0-9]+")
+
+
+def _lenient_declared_length(response: httpx.Response) -> int | None:
+    """V1 behavior: unparseable Content-Length is treated as absent."""
+    raw_length = response.headers.get("content-length")
+    if raw_length is None:
+        return None
+    try:
+        return int(str(raw_length).strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _strict_declared_length(
     response: httpx.Response, cap: StreamingByteCap
-) -> Tuple[bytes, str]:
-    """Stream identity-encoded body under the cap; return (body, sha256).
+) -> int | None:
+    """V2 amendment: reject ambiguous, malformed or negative lengths early.
 
-    The response MUST come from a streaming request (``client.stream``):
-    an eagerly read response (``client.get``) has already consumed its
-    stream, and re-reading it would silently bypass byte accounting —
-    such responses fail closed here. Fails closed on: non-identity
-    content coding, cap overflow, midstream transport failure, and
-    Content-Length disagreement. The returned digest is computed
-    incrementally over the exact counted bytes.
+    A missing header is allowed (chunk accounting remains authoritative).
+    Present headers must be exactly one field whose value is 1*DIGIT per
+    RFC 9110; whitespace, signs, commas, multiple fields and any other
+    syntax fail closed BEFORE the response body iterator is touched.
     """
+    values = response.headers.get_list("content-length")
+    if not values:
+        return None
+    if len(values) != 1:
+        cap.halted = True
+        raise DataContractError(
+            "D3_CONTENT_LENGTH_AMBIGUOUS: multiple Content-Length headers "
+            f"({values!r}); refusing to choose a declared length."
+        )
+    raw = values[0]
+    if not _CONTENT_LENGTH_DIGITS.fullmatch(raw):
+        cap.halted = True
+        raise DataContractError(
+            f"D3_CONTENT_LENGTH_MALFORMED: {raw!r} is not a 1*DIGIT "
+            "Content-Length; rejecting before body iteration."
+        )
+    return int(raw)
+
+
+def _read_identity_capped(
+    response: httpx.Response,
+    cap: StreamingByteCap,
+    *,
+    strict_length: bool,
+) -> Tuple[bytes, str]:
     if response.is_stream_consumed:
         raise DataContractError(
             "D3_RESPONSE_ALREADY_CONSUMED: streaming reads require an "
@@ -87,13 +130,10 @@ def read_identity_capped(
             f"D3_IDENTITY_ENCODING_REJECTED: content-encoding {coding!r} "
             "is not identity; refusing to conflate coded and raw bytes."
         )
-    declared: int | None = None
-    raw_length = response.headers.get("content-length")
-    if raw_length is not None:
-        try:
-            declared = int(str(raw_length).strip())
-        except (ValueError, TypeError):
-            declared = None
+    if strict_length:
+        declared = _strict_declared_length(response, cap)
+    else:
+        declared = _lenient_declared_length(response)
     digest = hashlib.sha256()
     body = bytearray()
     observed_before = cap.observed
@@ -131,3 +171,36 @@ def read_identity_capped(
     if compute_page_sha256(raw_body) != digest.hexdigest():
         raise DataContractError("D3_DIGEST_INTERNAL_MISMATCH.")
     return raw_body, digest.hexdigest()
+
+
+def read_identity_capped(
+    response: httpx.Response, cap: StreamingByteCap
+) -> Tuple[bytes, str]:
+    """V1: stream identity body; unparseable Content-Length is absent.
+
+    Preserved unchanged for reproducibility of previously reviewed
+    evidence. New work should use :func:`read_identity_capped_v2`.
+    """
+    return _read_identity_capped(response, cap, strict_length=False)
+
+
+def read_identity_capped_v2(
+    response: httpx.Response, cap: StreamingByteCap
+) -> Tuple[bytes, str]:
+    """V2 amendment: fail closed on ambiguous/malformed/negative length.
+
+    Status: PROPOSED_AMENDMENT (owner-directed 2026-10-23), NOT ratified.
+    No live dispatch or acquisition authority is implied.
+
+    Differences from V1, all applied BEFORE ``iter_raw()``:
+    - Present Content-Length must be exactly one field of 1*DIGIT.
+    - Multiple fields, whitespace, signs, commas or non-digits halt the
+      cap and raise ``DataContractError`` with zero body bytes consumed.
+    - A missing header remains allowed; chunk accounting is authoritative.
+
+    Unchanged: identity-only encoding, raw-byte counting, 524,288 observed
+    bytes per approved invocation (no reset on failure), zero retry, no
+    alternate-feed substitution, post-read oversized-chunk disclosure, no
+    hard memory bound.
+    """
+    return _read_identity_capped(response, cap, strict_length=True)
