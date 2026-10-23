@@ -35,6 +35,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union, final
 from zoneinfo import ZoneInfo
@@ -185,7 +186,7 @@ def _require_runtime_sha(runtime_sha: str) -> str:
     return clean
 
 
-def _expected_session_dates(
+def expected_session_dates(
     start_date: date, end_date: date, calendar: NyseCa1Calendar
 ) -> List[date]:
     """Every trading session in the inclusive window (fail-closed range)."""
@@ -202,12 +203,12 @@ def _expected_session_dates(
     return sessions
 
 
-def _parse_bars_page(
+def parse_bars_page(
     content: bytes, symbols: Sequence[str], context: str
 ) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[str]]:
     """Parse one bars page; fail-closed on malformed provider payloads."""
     try:
-        doc = json.loads(content.decode("utf-8"))
+        doc = json.loads(content.decode("utf-8"), parse_float=Decimal)
     except (ValueError, UnicodeDecodeError) as exc:
         raise DataContractError(f"REHEARSAL_MALFORMED_PAGE: {context}: {exc}.") from exc
     if not isinstance(doc, dict):
@@ -254,7 +255,7 @@ def _parse_bars_page(
     return parsed, (token or None)
 
 
-def _bar_date(entry: Mapping[str, Any], context: str) -> date:
+def bar_date(entry: Mapping[str, Any], context: str) -> date:
     """Attribute a bar timestamp to its New York trading date.
 
     Daily bars are New-York-date stamped (Alpaca convention): the instant is
@@ -318,7 +319,7 @@ def run_rehearsal(
         )
     plan = plan_lane_a_requests(valid)
     calendar = NyseCa1Calendar()
-    expected_sessions = _expected_session_dates(
+    expected_sessions = expected_session_dates(
         valid.scope.start_date, valid.scope.end_date, calendar
     )
     active_ledger = (
@@ -470,7 +471,7 @@ def run_rehearsal(
                 )
             )
             try:
-                parsed, next_token = _parse_bars_page(
+                parsed, next_token = parse_bars_page(
                     response.content,
                     list(valid.scope.symbols),
                     f"{request.adjustment}/page{page_index}",
@@ -478,23 +479,23 @@ def run_rehearsal(
                 page_dates: List[Tuple[str, date]] = []
                 for symbol, entries in parsed.items():
                     for entry in entries:
-                        bar_date = _bar_date(entry, f"{symbol}/{request.adjustment}")
-                        if not calendar.is_trading_session(bar_date):
+                        session_date = bar_date(entry, f"{symbol}/{request.adjustment}")
+                        if not calendar.is_trading_session(session_date):
                             raise DataContractError(
-                                f"Off-calendar bar {bar_date.isoformat()} for {symbol}; "
+                                f"Off-calendar bar {session_date.isoformat()} for {symbol}; "
                                 "weekend/holiday bars are omissions, never observations."
                             )
                         if not (
-                            valid.scope.start_date <= bar_date <= valid.scope.end_date
+                            valid.scope.start_date <= session_date <= valid.scope.end_date
                         ):
                             raise DataContractError(
-                                f"Off-scope bar {bar_date.isoformat()} for {symbol}; "
+                                f"Off-scope bar {session_date.isoformat()} for {symbol}; "
                                 "observations outside the authorized "
                                 f"{valid.scope.start_date.isoformat()}.."
                                 f"{valid.scope.end_date.isoformat()} window are "
                                 "rejected even when complete and ordered."
                             )
-                        page_dates.append((symbol, bar_date))
+                        page_dates.append((symbol, session_date))
             except DataContractError as exc:
                 receipts[-1] = PageReceipt(
                     adjustment=receipts[-1].adjustment,
@@ -517,8 +518,8 @@ def run_rehearsal(
                 outcome=receipts[-1].outcome,
                 next_token_seen=next_token,
             )
-            for symbol, bar_date in page_dates:
-                seen_dates[(request.adjustment, symbol)].append(bar_date)
+            for symbol, session_date in page_dates:
+                seen_dates[(request.adjustment, symbol)].append(session_date)
             if next_token is not None:
                 if next_token in seen_tokens:
                     return _manifest(

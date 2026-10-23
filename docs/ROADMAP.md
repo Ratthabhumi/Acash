@@ -4,6 +4,14 @@
 
 **Version:** 4.0.0 · **AS OF:** 2026-10-15 (Asia/Bangkok) · **Scope:** delivery taxonomy and capability reuse; no new scientific gate or operating authority.
 
+> **V23 addendum - 2026-10-23 (additive; historical sections preserved):** D3 V2 is
+> implemented but `PENDING_FORMAL_RATIFICATION`. The offline D5 real-input admission
+> bridge is implemented in `src/acash/data/qualification/lane_b_d5_rehearsal.py` with
+> `RETROSPECTIVE_QUALITY_QUALIFIED` and `PIT_EVIDENCE_QUALIFIED` gates; no real bundle is
+> admitted. The consolidated owner decisions are in
+> `docs/governance/OWNER_DECISION_PACKET_20261023.md`. Lane A/B remain `UNISSUED`,
+> `REAL_CAPITAL_AUTHORITY = USD 0.00` and `NO_REAL_ORDERS=true`.
+
 ## 🎯 1. Vision & North Star
 
 ACASH is a governed quantitative research, portfolio evaluation and capital-allocation system. Its purpose is to support evidence-based allocation decisions, including **CASH / NO TRADE**. The first hypothetical **USD 1,000** after-cost study is a practical milestone, not a permanent portfolio size or the final objective.

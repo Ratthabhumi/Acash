@@ -140,6 +140,33 @@ def test_non_identity_encoding_rejected_before_length_and_body() -> None:
     assert cap.observed == 0
 
 
+def test_non_identity_encoding_poisons_cap_against_reuse() -> None:
+    """A rejected coded response must not leave the same cap reusable."""
+    cap = StreamingByteCap(10_000)
+    with build_test_client(
+        _handler(b"coded", {"content-encoding": "gzip"})
+    ) as client:
+        with client.stream("GET", _URL) as response:
+            with pytest.raises(DataContractError):
+                read_identity_capped_v2(response, cap)
+    assert cap.halted is True
+    with build_test_client(_handler(b"identity")) as client:
+        with client.stream("GET", _URL) as response:
+            with pytest.raises(DataContractError, match="D1_STREAM_HALTED"):
+                read_identity_capped_v2(response, cap)
+
+
+def test_halted_cap_rejects_even_empty_body() -> None:
+    """Zero-byte bodies must not bypass the poisoned-cap gate."""
+    cap = StreamingByteCap(16)
+    cap.halted = True
+    with build_test_client(_handler(b"")) as client:
+        with client.stream("GET", _URL) as response:
+            with pytest.raises(DataContractError, match="D1_STREAM_HALTED"):
+                read_identity_capped_v2(response, cap)
+    assert cap.observed == 0
+
+
 def test_cap_overflow_is_counted_then_halted() -> None:
     cap = StreamingByteCap(64)
     with build_test_client(_handler(b"x" * 100_000)) as client:
@@ -174,6 +201,7 @@ def test_eagerly_read_response_rejected() -> None:
         with pytest.raises(DataContractError):
             read_identity_capped_v2(response, cap)
     assert cap.observed == 0
+    assert cap.halted is True
 
 
 def test_contract_versions_are_distinct() -> None:

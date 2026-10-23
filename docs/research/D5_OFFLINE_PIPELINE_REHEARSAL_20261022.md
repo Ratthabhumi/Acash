@@ -22,10 +22,14 @@ deterministic, fail-closed dataset seal:
 7. Every dividend event binds its `symbol`; cross-symbol reassignment changes the seal.
 8. Full OHLCV (open/high/low/close/volume) is included in the sealed bytes, together
    with `price_semantics`, `time_basis`, `share_basis` and `sessions_authority`.
-9. `DatasetOrigin.REAL_CANDIDATE` can never return READY or release sealed bytes: real
-   sealing requires a separate authorized admission path (not implemented here).
+9. `DatasetOrigin.REAL_CANDIDATE` can never return READY or release sealed bytes.
+   Real input must pass the separate admission bridge; direct
+   `DatasetOrigin.REAL_ADMITTED` sealing through the offline rehearsal is blocked.
 
-This does **not** qualify real data and does **not** issue Lane B authority.
+This does **not** qualify real data and does **not** issue Lane B authority. The
+real-input bridge is documented separately in
+[D5_REAL_INPUT_ADMISSION_BRIDGE_20261023.md](D5_REAL_INPUT_ADMISSION_BRIDGE_20261023.md)
+and remains gated by operator-issued authority.
 
 ## 2. Reused Canonical Components (no second framework)
 
