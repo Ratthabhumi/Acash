@@ -32,12 +32,12 @@ V2 preserves V1 except for the following, all evaluated before body iteration:
 
 | Artifact | SHA-256 |
 | :--- | :--- |
-| `src/acash/data/qualification/lane_a_d3_streaming.py` | `d556a438d72df701e9f2b4c9f4b7406bedf39e8f3cb5f76d8026967244834ecb` |
-| `tests/unit/data/test_lane_a_d3_streaming_v2.py` | `d1506e113cded65f1669e70dbb9204136c3bf7a962c99a1d80db4bb1c2d5a588` |
-| `tests/unit/data/test_lane_a_d3_streaming.py` | `86b921586931cf2b24e6bcdb0c6d5a9a427c1ace6f61ca509be7954a82024c7d` |
+| `src/acash/data/qualification/lane_a_d3_streaming.py` | `8d34c92ec554f32938a8fd9e164112d626d97323013846f11b2ed7646e8a6ec4` |
+| `tests/unit/data/test_lane_a_d3_streaming_v2.py` | `35185fbdea0bfd49ca2148a8a163f798c48edadddcb7df355877c4316087e9dc` |
+| `tests/unit/data/test_lane_a_d3_streaming.py` | `6021465140db3c0f0c83bd4e09b0cea9e2f5943e12e730cc52c292d4d714c133` |
 
-These digests bind the reviewed working-tree implementation. A later commit must
-recompute and record the committed blob hashes before signing.
+These digests bind the committed LF blob content of the reviewed implementation. A
+later commit that changes any bound file must recompute them before signing.
 
 ## 3. Evidence
 
