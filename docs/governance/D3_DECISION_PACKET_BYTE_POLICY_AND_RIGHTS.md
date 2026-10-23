@@ -46,6 +46,28 @@ This packet consolidates the three external gating prerequisites required before
 * **MockTransport vs. Real Transport:** Offline tests verify Python iterator accounting; they do **NOT** prove provider behavior under real socket stalls, TCP packet fragmentation, or TLS record boundaries.
 * **Attempt Conservation & Poisoning:** Any stream interruption or transport exception permanently marks `cap.halted = True`, preventing subsequent reads from reusing the budget.
 
+### 2.3 Proposed Amendment V2 — Early Content-Length Rejection (owner-directed 2026-10-23)
+
+**Status:** `PROPOSED_AMENDMENT` — **NOT ratified**. This amendment does not authorize HTTP, credentials, or acquisition.
+
+| Header condition | V1 behavior | V2 amendment |
+| :--- | :--- | :--- |
+| Header absent | Allowed; chunk accounting authoritative | Unchanged |
+| Exactly one `1*DIGIT` field | Exact-equality check at completion | Unchanged |
+| Malformed (`not-a-number`, ` 5`, `+5`, `5.0`, empty) | Treated as absent | **Rejected before body iteration** |
+| Negative (`-5`) | Fails at completion via equality | **Rejected before body iteration** |
+| Ambiguous (multiple fields, `5, 5`) | Treated as absent | **Rejected before body iteration** |
+
+Implementation:
+- `read_identity_capped_v2()` in `src/acash/data/qualification/lane_a_d3_streaming.py`.
+- V1 `read_identity_capped()` is retained unchanged for reproducibility of reviewed evidence.
+- Rejection halts the cap and consumes **zero** body bytes.
+- Budget remains **524,288 observed raw body bytes per approved invocation**; no reset on interruption or failure; zero retry; zero alternate-feed substitution.
+- Post-read oversized-chunk and no-hard-memory-bound disclosures remain in force.
+- Frozen request identity and approval lineage are unchanged; this packet remains pre-ratification.
+
+Offline evidence: `tests/unit/data/test_lane_a_d3_streaming_v2.py` (18 cases, `httpx.MockTransport` only). V1 tests remain green (19 cases).
+
 ---
 
 ## 3. Decision 2 — Alpaca Account Rights & Data Entitlement
@@ -97,6 +119,23 @@ Prior to issuing production acquisition authority, the following technical contr
 [ ] REJECTED: Reject proposal and return with revision guidance.
 
 [ ] DEFERRED: Await Alpaca written confirmation before ratifying byte contract.
+
+Operator Signature: _______________________
+Date (UTC):         _______________________
+```
+
+### 5.1 V2 Amendment Ratification (Separate Decision)
+
+```markdown
+[ ] RATIFIED: I approve IDENTITY_ONLY_RAW_RESPONSE_BODY_V2 as the amended
+    specification: ambiguous, malformed or negative Content-Length is rejected
+    BEFORE body iteration; budget = 524,288 observed body bytes per approved
+    invocation with no reset on failure; zero retry; no alternate-feed
+    substitution. V1 remains a historical specification, not the current one.
+    This ratification does NOT authorize HTTP dispatch, credentials, Lane A/B,
+    live market data, dataset admission, or trading.
+
+[ ] REJECTED   [ ] DEFERRED
 
 Operator Signature: _______________________
 Date (UTC):         _______________________
