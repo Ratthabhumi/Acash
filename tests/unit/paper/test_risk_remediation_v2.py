@@ -22,6 +22,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -62,6 +63,15 @@ def _make_config(
         journal_path=tmp_path / f"{session_id}.journal.jsonl",
         snapshot_path=tmp_path / f"{session_id}.snapshots.jsonl",
     )
+
+
+def _advancing_clock() -> Callable[[], datetime]:
+    """Strictly increasing clock; start/stop can share one wall-clock tick."""
+    ticks = iter(
+        datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=n)
+        for n in range(1_000_000)
+    )
+    return lambda: next(ticks)
 
 
 def _make_bar(price: str, seq: int, base: datetime) -> SyntheticBar:
@@ -228,7 +238,7 @@ class TestMaxNotionalGate:
 class TestTerminalReason:
     def test_stop_preserves_operator_stop_reason(self, tmp_path: Path) -> None:
         config = _make_config(tmp_path, "TEST-REASON-OPERATOR")
-        runner = PaperSessionRunner(config)
+        runner = PaperSessionRunner(config, clock=_advancing_clock())
         runner.start()
         runner.stop(terminal_reason=TerminalReason.OPERATOR_STOP)
 
@@ -242,7 +252,7 @@ class TestTerminalReason:
 
     def test_stop_preserves_feed_disconnected_reason(self, tmp_path: Path) -> None:
         config = _make_config(tmp_path, "TEST-REASON-FEED")
-        runner = PaperSessionRunner(config)
+        runner = PaperSessionRunner(config, clock=_advancing_clock())
         runner.start()
         # Simulate connection loss before stop (no reconnection, fail-closed).
         runner.stop(terminal_reason=TerminalReason.FEED_DISCONNECTED)
@@ -254,10 +264,19 @@ class TestTerminalReason:
         ]
         assert stopped[0].payload["reason"] == "FEED_DISCONNECTED"
 
+    def test_same_tick_start_and_stop_fails_closed(self, tmp_path: Path) -> None:
+        """A coarse clock returning one instant for start and stop is rejected."""
+        frozen = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        config = _make_config(tmp_path, "TEST-REASON-SAME-TICK")
+        runner = PaperSessionRunner(config, clock=lambda: frozen)
+        runner.start()
+        with pytest.raises(DataContractError, match="end_time_utc must be after"):
+            runner.stop()
+
     def test_default_stop_is_normal_completion(self, tmp_path: Path) -> None:
         """Call sites without an explicit reason mean a normal completion."""
         config = _make_config(tmp_path, "TEST-REASON-DEFAULT")
-        runner = PaperSessionRunner(config)
+        runner = PaperSessionRunner(config, clock=_advancing_clock())
         runner.start()
         runner.stop()
 
