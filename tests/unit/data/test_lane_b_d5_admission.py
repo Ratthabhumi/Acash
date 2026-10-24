@@ -23,6 +23,7 @@ from acash.data.qualification.lane_b_d5_rehearsal import (
     D5AuthorityProvenance,
     D5AuthorityStatus,
     D5DividendRecord,
+    D5EvidenceAuthenticity,
     D5EvidenceEnvelope,
     D5EvidenceLevel,
     D5IndependentAdmissionRecord,
@@ -96,6 +97,7 @@ def _admitted(
     private_key_b64: str = ADMIT_PRIVATE_B64,
     admitter_key_id: str = ADMIT_KEY_ID,
     acquisition_key_id: str = KEY_ID,
+    acquisition_public_key_b64: str = PUBLIC_KEY_B64,
     admitted_at_utc: str = "2026-10-22T00:00:00+00:00",
 ) -> D5RealInputBundle:
     if kind is None:
@@ -109,6 +111,7 @@ def _admitted(
         kind=kind,
         evidence_scope_sha256=bundle.evidence_scope_sha256(),
         acquisition_key_id=acquisition_key_id,
+        acquisition_public_key_b64=acquisition_public_key_b64,
         admitter_key_id=admitter_key_id,
         admitted_at_utc=admitted_at_utc,
     )
@@ -301,7 +304,11 @@ def test_signed_retrospective_bundle_seals_but_is_not_admitted() -> None:
     assert result.admitted_level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
     admission = result.manifest["admission"]
     assert admission["real_data_admitted"] is False
-    assert admission["external_evidence_verified"] is True
+    assert admission["caller_verifier_accepted"] is True
+    assert (
+        admission["evidence_authenticity"]
+        == D5EvidenceAuthenticity.CALLER_VERIFIER_ACCEPTED.value
+    )
     assert admission["admission_kind"] is None
     assert "INDEPENDENT_ADMISSION_REQUIRED" in admission["limitations"]
     assert "NO_ANCHORED_ADMISSION_RECORD" in admission["limitations"]
@@ -378,6 +385,56 @@ def test_caller_trust_root_objects_never_confer_admission() -> None:
         assert result.manifest["admission"]["admission_kind"] is None
 
 
+def test_no_op_verifier_is_never_classified_independent() -> None:
+    """V26-S02: caller acceptance is reported as caller acceptance only."""
+    attacker_private, _ = Ed25519Signer.generate_key_pair()
+    result = _admit(
+        _signed(_bundle(), private_key_b64=attacker_private), _NoOpRoot()
+    )
+    admission = result.manifest["admission"]
+    assert admission["caller_verifier_accepted"] is True
+    assert (
+        admission["evidence_authenticity"]
+        == D5EvidenceAuthenticity.CALLER_VERIFIER_ACCEPTED.value
+    )
+    assert "independent_envelope_signature" not in result.checks
+    synthetic = evaluate_d5_real_admission(
+        _bundle(
+            claimed=D5EvidenceLevel.SYNTHETIC_PIPELINE_PROOF,
+            origin=D5InputOrigin.SYNTHETIC_FIXTURE,
+            authority=_authority(provenance=D5AuthorityProvenance.TEST_FIXTURE),
+            dividends=_dividends(pit=True),
+            pit_vintage_known=True,
+        ),
+        now_utc=NOW,
+    )
+    assert (
+        synthetic.manifest["admission"]["evidence_authenticity"]
+        == D5EvidenceAuthenticity.NOT_APPLICABLE.value
+    )
+
+
+@pytest.mark.usefixtures("anchored")
+def test_forged_envelope_under_no_op_verifier_cannot_use_anchored_record() -> None:
+    """V26-S02 fail-first: V25 admitted a forged envelope when the caller verifier was a no-op."""
+    attacker_private, _ = Ed25519Signer.generate_key_pair()
+    forged = _admitted(_signed(_pit_bundle(), private_key_b64=attacker_private))
+    result = _admit(forged, _NoOpRoot())
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D3_VERIFY_BAD_SIGNATURE" in result.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_no_op_verifier_cannot_bypass_envelope_expiry() -> None:
+    expired = _admitted(
+        _signed(_pit_bundle(), valid_until_utc="2026-10-21T00:00:00+00:00"),
+        admitted_at_utc="2026-10-20T12:00:00+00:00",
+    )
+    result = _admit(expired, _NoOpRoot())
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_ENVELOPE_OUTSIDE_VALIDITY_AT_REVIEW" in result.blockers[0]
+
+
 def test_trust_anchors_are_empty_by_default() -> None:
     """No production admission root is fabricated in the repository."""
     assert dict(D5_ADMISSION_TRUST_ANCHORS) == {}
@@ -394,6 +451,10 @@ def test_anchored_pit_record_is_the_only_pit_admission_path() -> None:
     admission = result.manifest["admission"]
     assert admission["real_data_admitted"] is True
     assert admission["admission_kind"] == D5AdmissionKind.PIT_RESEARCH.value
+    assert (
+        admission["evidence_authenticity"]
+        == D5EvidenceAuthenticity.INDEPENDENTLY_VERIFIED.value
+    )
     assert result.manifest["origin"] == DatasetOrigin.REAL_ADMITTED.value
     assert result.dataset_bytes is not None
     verify_sealed_dataset(

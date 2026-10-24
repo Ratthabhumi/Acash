@@ -1,5 +1,40 @@
 # D5 Real-Input Admission Bridge (Implemented, Offline)
 
+> **V26 amendment (2026-10-25) — evidence authenticity semantics (V26-S02).**
+> V25 recorded `external_evidence_verified=True` whenever the caller-supplied verifier
+> returned, and the anchored admission path never re-verified the envelope bytes. A no-op
+> caller verifier plus a forged envelope plus an anchored record would therefore have been
+> admitted. Changes:
+>
+> - Manifest field `external_evidence_verified` is replaced by `caller_verifier_accepted`
+>   and `evidence_authenticity` (`D5EvidenceAuthenticity`): `NOT_APPLICABLE_SYNTHETIC`,
+>   `CALLER_VERIFIER_ACCEPTED_UNTRUSTED`, `INDEPENDENTLY_VERIFIED_ANCHORED`.
+> - Admission record schema bumped to `ACASH-D5-INDEPENDENT-ADMISSION/v2` and adds
+>   `acquisition_public_key_b64`, vouched for by the anchored admitter. The envelope
+>   signature is re-verified with that key, and the envelope window is re-checked at review
+>   time, independently of the caller verifier. No v1 record was ever anchored (anchors empty).
+> - Layers are now distinct: structural scope (checks), caller verification
+>   (`caller_envelope_verification`), cryptographic envelope validity and trusted signer
+>   identity (`independent_envelope_signature`), admission decision (`independent_admission`).
+>
+> **Temporal lifecycle (policy design; enforcement status per item).**
+>
+> | Event | Field / source | Enforced now |
+> |---|---|---|
+> | Acquisition authorization window | `D5AdmissionAuthority.issued_at/expires_at` | Yes, at review time |
+> | Evidence envelope window | `D5EvidenceEnvelope.valid_from/valid_until` | Yes, at review time (caller and independent paths) |
+> | Independent admission time | `admitted_at_utc`, `valid_from <= admitted_at <= now` | Yes |
+> | Signer revocation | removal from `D5_ADMISSION_TRUST_ANCHORS` | Yes, effective immediately and retroactively |
+> | Actual acquisition time / receipt time | not represented | No; trusted timestamping absent, local clock is not proof |
+> | Rights expiry / continuing-use permission | not represented | No; fail-closed (no admission path depends on it) |
+> | Revocation effective time (non-retroactive) | not represented | No; revocation is currently retroactive (conservative) |
+>
+> Policy position: expiry of permission to *acquire* does not by itself make legitimately
+> acquired evidence inauthentic, but continuing *use and retention* requires a separate,
+> rights-backed permission. Until a versioned policy with trusted timestamps exists, review
+> requires the envelope to be valid at review time, which is stricter than necessary and
+> never permissive.
+
 > **V25 amendment (2026-10-25) — independent anchored admission (closes V25-S01).**
 > The V24 decision below trusted `trust_root.production_trusted`, a property of a
 > caller-supplied object; a subclass, fake, or no-op verifier could therefore produce
