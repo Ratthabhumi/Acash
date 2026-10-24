@@ -14,12 +14,14 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 import hashlib
+from types import MappingProxyType
 from typing import Any, Mapping, Protocol, Sequence
 
 from acash.core.domain.exceptions import DataContractError, DomainValidationError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.data.qualification.daily_models import DailyBar
+from acash.data.qualification.lane_a_d3_approval import verify_ed25519_signature
 from acash.execution.signing import Ed25519Signer
 from acash.data.qualification.lane_a_rehearsal import (
     bar_date,
@@ -47,6 +49,7 @@ DATASET_SCHEMA: str = "ACASH_D5_SEALED_DATASET_V1"
 SYNTHETIC_LABEL: str = "SYNTHETIC_FIXTURE_NOT_MARKET_HISTORY"
 D5_EVIDENCE_ENVELOPE_DOMAIN: bytes = b"ACASH-D5-REAL-INPUT-ADMISSION/v1"
 D5_EVIDENCE_SCOPE_SCHEMA: str = "ACASH_D5_EVIDENCE_SCOPE_V1"
+D5_ADMISSION_RECORD_DOMAIN: bytes = b"ACASH-D5-INDEPENDENT-ADMISSION/v1"
 
 
 class D5OfflineVerdict(str, Enum):
@@ -132,6 +135,7 @@ class D5AdmissionVerdict(str, Enum):
     INDEPENDENT_ADMISSION_REQUIRED = (
         "D5_EVIDENCE_VERIFIED_INDEPENDENT_ADMISSION_REQUIRED"
     )
+    RETROSPECTIVE_ADMITTED = "D5_RETROSPECTIVE_RESEARCH_ADMITTED"
     RETROSPECTIVE_ONLY = "D5_RETROSPECTIVE_QUALITY_QUALIFIED"
     SYNTHETIC_ONLY = "D5_SYNTHETIC_PIPELINE_PROOF_ONLY"
     BLOCKED = "D5_REAL_INPUT_ADMISSION_BLOCKED"
@@ -241,15 +245,14 @@ class D5AdmissionAuthority:
 
 
 class D5EvidenceTrustRoot(Protocol):
-    """Verifier seam for D5 evidence envelopes.
+    """Verifier seam for the acquisition evidence envelope.
 
-    ``production_trusted`` must be true only for a trust root whose key
-    custody has been ratified out of band. Only such a root can turn verified
-    evidence into ``real_data_admitted``.
+    A caller supplies this object, so it is never an admission authority:
+    passing it proves only that the envelope verified under the caller's
+    chosen keys. Real admission additionally requires a
+    ``D5IndependentAdmissionRecord`` verified against
+    ``D5_ADMISSION_TRUST_ANCHORS``.
     """
-
-    @property
-    def production_trusted(self) -> bool: ...
 
     def verify_signature(
         self,
@@ -295,9 +298,8 @@ class D5EvidenceEnvelope:
     only when this envelope verifies against an explicitly supplied trust
     root and its scope digest equals the recomputed bundle scope.
 
-    Test keys are ephemeral. ``InMemoryTrustRoot.production_trusted`` is
-    always false, so a verified test envelope can exercise the verification
-    path but can never set ``real_data_admitted`` to true.
+    A verified envelope never sets ``real_data_admitted`` by itself; that
+    requires a separately signed, anchored ``D5IndependentAdmissionRecord``.
     """
 
     key_id: str
@@ -357,6 +359,76 @@ def sign_d5_evidence_envelope(
     return replace(envelope, signature_b64=signature)
 
 
+# Public keys of ratified dataset-admission authorities (key_id -> raw Ed25519
+# public key, base64). Empty until a production trust root is provisioned out of
+# band and added by a reviewed change; real admission is unreachable until then.
+# Revocation is removal from this mapping.
+D5_ADMISSION_TRUST_ANCHORS: Mapping[str, str] = MappingProxyType({})
+
+
+class D5AdmissionKind(str, Enum):
+    RETROSPECTIVE_RESEARCH = "RETROSPECTIVE_RESEARCH_ADMITTED"
+    PIT_RESEARCH = "PIT_RESEARCH_ADMITTED"
+
+
+@dataclass(frozen=True)
+class D5IndependentAdmissionRecord:
+    """Dataset-admission decision signed by an authority independent of acquisition.
+
+    The record binds one evidence scope digest and one admission kind. The
+    scope digest covers the claimed level and PIT fields, so a retrospective
+    record cannot be reused for a PIT claim by editing metadata.
+    """
+
+    admission_ref: str
+    kind: D5AdmissionKind
+    evidence_scope_sha256: str
+    acquisition_key_id: str
+    admitter_key_id: str
+    admitted_at_utc: str
+    signature_b64: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, D5AdmissionKind):
+            raise DataContractError("D5_ADMISSION_RECORD_BAD_KIND.")
+        for label, value in (
+            ("admission_ref", self.admission_ref),
+            ("acquisition_key_id", self.acquisition_key_id),
+            ("admitter_key_id", self.admitter_key_id),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise DataContractError(f"D5_ADMISSION_RECORD_EMPTY_{label.upper()}.")
+        if not _is_sha256_hex(self.evidence_scope_sha256):
+            raise DataContractError("D5_ADMISSION_RECORD_BAD_SCOPE_SHA256.")
+        if self.admitter_key_id == self.acquisition_key_id:
+            raise DataContractError(
+                "D5_ADMISSION_NOT_INDEPENDENT: admitter key equals acquisition key."
+            )
+        _parse_aware_utc(self.admitted_at_utc, "admitted_at_utc")
+
+    def canonical_message_bytes(self) -> bytes:
+        document = {
+            "domain": D5_ADMISSION_RECORD_DOMAIN.decode("ascii"),
+            "admission_ref": self.admission_ref,
+            "kind": self.kind.value,
+            "evidence_scope_sha256": self.evidence_scope_sha256,
+            "acquisition_key_id": self.acquisition_key_id,
+            "admitter_key_id": self.admitter_key_id,
+            "admitted_at_utc": self.admitted_at_utc,
+        }
+        return D5_ADMISSION_RECORD_DOMAIN + b"." + (
+            CanonicalConfigSerializer.to_canonical_json(document).encode("utf-8")
+        )
+
+
+def sign_d5_admission_record(
+    record: D5IndependentAdmissionRecord, private_key_b64: str
+) -> D5IndependentAdmissionRecord:
+    """Attach an Ed25519 signature using ephemeral test material (offline)."""
+    signature = Ed25519Signer.sign(private_key_b64, record.canonical_message_bytes())
+    return replace(record, signature_b64=signature)
+
+
 @dataclass(frozen=True)
 class D5RawPage:
     """One immutable raw response page bound to a frozen request identity."""
@@ -414,6 +486,7 @@ class D5RealInputBundle:
     pit_evidence_sha256: str = ""
     expected_dividends: tuple[D5DividendRecord, ...] | None = None
     evidence_envelope: D5EvidenceEnvelope | None = None
+    admission_record: D5IndependentAdmissionRecord | None = None
 
     def evidence_scope_sha256(self) -> str:
         """Canonical digest of every offered evidence field.
@@ -1082,8 +1155,8 @@ def _verify_evidence_envelope(
     bundle: D5RealInputBundle,
     trust_root: D5EvidenceTrustRoot | None,
     now_utc: datetime,
-) -> bool:
-    """Verify the signed evidence envelope; return whether the root is production."""
+) -> None:
+    """Verify the signed acquisition evidence envelope (never confers admission)."""
     envelope = bundle.evidence_envelope
     if envelope is None:
         raise DataContractError(
@@ -1113,7 +1186,49 @@ def _verify_evidence_envelope(
         raise DataContractError("D5_EVIDENCE_ENVELOPE_BUDGET_MISMATCH.")
     if envelope.evidence_scope_sha256 != bundle.evidence_scope_sha256():
         raise DataContractError("D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH.")
-    return bool(trust_root.production_trusted)
+
+
+def _verify_independent_admission(
+    bundle: D5RealInputBundle, now_utc: datetime
+) -> D5AdmissionKind:
+    """Verify the admission record against the pinned anchors, never the caller's root."""
+    record = bundle.admission_record
+    envelope = bundle.evidence_envelope
+    if record is None or envelope is None:
+        raise DataContractError("D5_ADMISSION_RECORD_MISSING.")
+    expected_kind = (
+        D5AdmissionKind.PIT_RESEARCH
+        if bundle.claimed_level is D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED
+        else D5AdmissionKind.RETROSPECTIVE_RESEARCH
+    )
+    if record.kind is not expected_kind:
+        raise DataContractError(
+            f"D5_ADMISSION_KIND_MISMATCH: {record.kind.value} for "
+            f"{bundle.claimed_level.value}."
+        )
+    if record.evidence_scope_sha256 != bundle.evidence_scope_sha256():
+        raise DataContractError("D5_ADMISSION_RECORD_SCOPE_MISMATCH.")
+    if record.acquisition_key_id != envelope.key_id:
+        raise DataContractError("D5_ADMISSION_RECORD_ACQUISITION_KEY_MISMATCH.")
+    if record.admitter_key_id == envelope.key_id:
+        raise DataContractError(
+            "D5_ADMISSION_NOT_INDEPENDENT: admitter key equals acquisition key."
+        )
+    admitted_at = _parse_aware_utc(record.admitted_at_utc, "admitted_at_utc")
+    if admitted_at > now_utc.astimezone(timezone.utc):
+        raise DataContractError("D5_ADMISSION_RECORD_FUTURE_DATED.")
+    if admitted_at < _parse_aware_utc(envelope.valid_from_utc, "valid_from_utc"):
+        raise DataContractError("D5_ADMISSION_RECORD_PREDATES_EVIDENCE.")
+    public_key_b64 = D5_ADMISSION_TRUST_ANCHORS.get(record.admitter_key_id)
+    if public_key_b64 is None:
+        raise DataContractError(
+            f"D5_ADMISSION_UNANCHORED_KEY: {record.admitter_key_id!r} is not a "
+            "ratified admission authority."
+        )
+    verify_ed25519_signature(
+        public_key_b64, record.canonical_message_bytes(), record.signature_b64
+    )
+    return record.kind
 
 
 def evaluate_d5_real_admission(
@@ -1131,11 +1246,13 @@ def evaluate_d5_real_admission(
     B. External evidence: an operator bundle must carry a D5 evidence
        envelope whose Ed25519 signature verifies against ``trust_root`` and
        whose signed scope digest equals the recomputed bundle scope.
-    C. Admission decision: ``real_data_admitted`` is true only for a PIT
-       claim whose envelope verified against a production-trusted root.
-       A verified envelope under a non-production root yields
-       ``INDEPENDENT_ADMISSION_REQUIRED``. Caller-supplied flags, enums, or
-       self-consistent hashes alone never produce a real admission.
+    C. Admission decision: ``real_data_admitted`` is true only when a
+       ``D5IndependentAdmissionRecord`` of the matching kind (retrospective
+       or PIT) binds the same scope, names the envelope's acquisition key,
+       is signed by a different key, and verifies against
+       ``D5_ADMISSION_TRUST_ANCHORS``. ``trust_root`` is caller-supplied and
+       is never consulted for this decision. Without such a record a PIT
+       claim yields ``INDEPENDENT_ADMISSION_REQUIRED``.
     """
     authority = bundle.authority
     claimed = bundle.claimed_level
@@ -1209,14 +1326,18 @@ def evaluate_d5_real_admission(
         checks["evidence_level"] = True
 
         external_evidence_verified = False
-        production_trust_root = False
+        admission_kind: D5AdmissionKind | None = None
         if bundle.origin is D5InputOrigin.OPERATOR_ACQUISITION:
-            production_trust_root = _verify_evidence_envelope(
-                bundle, trust_root, now_utc
-            )
+            _verify_evidence_envelope(bundle, trust_root, now_utc)
             external_evidence_verified = True
             checks["external_evidence_signature"] = True
-            if real_data_admitted and not production_trust_root:
+            if bundle.admission_record is not None:
+                admission_kind = _verify_independent_admission(bundle, now_utc)
+                checks["independent_admission"] = True
+            if admission_kind is D5AdmissionKind.RETROSPECTIVE_RESEARCH:
+                real_data_admitted = True
+                verdict = D5AdmissionVerdict.RETROSPECTIVE_ADMITTED
+            elif admission_kind is None and real_data_admitted:
                 level = D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
                 label = "PIT_CLAIM_SIGNED_INDEPENDENT_ADMISSION_REQUIRED"
                 real_data_admitted = False
@@ -1299,7 +1420,7 @@ def evaluate_d5_real_admission(
             "pit_evidence_ref": bundle.pit_evidence_ref,
             "pit_evidence_sha256": bundle.pit_evidence_sha256,
             "external_evidence_verified": external_evidence_verified,
-            "production_trust_root": production_trust_root,
+            "admission_kind": None if admission_kind is None else admission_kind.value,
             "limitations": (
                 (
                     ["NOT_POINT_IN_TIME", "CORPORATE_ACTION_VINTAGE_UNPROVEN"]
@@ -1307,7 +1428,7 @@ def evaluate_d5_real_admission(
                     else []
                 )
                 + (
-                    ["INDEPENDENT_ADMISSION_REQUIRED", "TRUST_ROOT_NOT_PRODUCTION"]
+                    ["INDEPENDENT_ADMISSION_REQUIRED", "NO_ANCHORED_ADMISSION_RECORD"]
                     if not real_data_admitted
                     and bundle.origin is D5InputOrigin.OPERATOR_ACQUISITION
                     else []
@@ -1347,7 +1468,9 @@ def verify_sealed_dataset(
 __all__ = [
     "ALLOWED_D5_SYMBOLS",
     "EXCLUDED_D5_SYMBOLS",
+    "D5_ADMISSION_TRUST_ANCHORS",
     "D5AdmissionAuthority",
+    "D5AdmissionKind",
     "D5AdmissionResult",
     "D5AdmissionVerdict",
     "D5AuthorityProvenance",
@@ -1356,6 +1479,7 @@ __all__ = [
     "D5EvidenceEnvelope",
     "D5EvidenceLevel",
     "D5EvidenceTrustRoot",
+    "D5IndependentAdmissionRecord",
     "D5InputOrigin",
     "D5OfflineVerdict",
     "D5RawPage",
@@ -1366,6 +1490,7 @@ __all__ = [
     "evaluate_d5_offline_rehearsal",
     "evaluate_d5_real_admission",
     "expected_d5_request_sha256",
+    "sign_d5_admission_record",
     "sign_d5_evidence_envelope",
     "verify_sealed_dataset",
 ]

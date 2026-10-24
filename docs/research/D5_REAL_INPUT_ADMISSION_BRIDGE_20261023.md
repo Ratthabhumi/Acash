@@ -1,5 +1,45 @@
 # D5 Real-Input Admission Bridge (Implemented, Offline)
 
+> **V25 amendment (2026-10-25) — independent anchored admission (closes V25-S01).**
+> The V24 decision below trusted `trust_root.production_trusted`, a property of a
+> caller-supplied object; a subclass, fake, or no-op verifier could therefore produce
+> real admission. That property is removed. The caller trust root now only verifies the
+> acquisition envelope and never decides admission.
+>
+> - **Admission authority.** `real_data_admitted=True` requires a
+>   `D5IndependentAdmissionRecord` (domain `ACASH-D5-INDEPENDENT-ADMISSION/v1`) that binds
+>   the bundle `evidence_scope_sha256`, names the envelope's acquisition key, is signed by
+>   a *different* admitter key, and verifies (shared Ed25519 primitive
+>   `verify_ed25519_signature`) against the module-pinned `D5_ADMISSION_TRUST_ANCHORS`.
+>   The anchors are **empty**: no production root is fabricated, so real admission is
+>   unreachable until a production admitter public key is provisioned out of band and
+>   added by a reviewed change. Private keys never enter the repository. Revocation is
+>   removal from the anchors.
+> - **Retrospective vs PIT (P1).** `D5AdmissionKind.RETROSPECTIVE_RESEARCH` yields
+>   `D5_RETROSPECTIVE_RESEARCH_ADMITTED` at `RETROSPECTIVE_QUALITY_QUALIFIED` with
+>   `NOT_POINT_IN_TIME` retained; `PIT_RESEARCH` yields `D5_REAL_INPUT_ADMITTED` at
+>   `PIT_EVIDENCE_QUALIFIED`. The kind must match the claimed level, and the scope digest
+>   covers claimed level and PIT fields, so metadata edits cannot upgrade a retrospective
+>   record to PIT (`D5_ADMISSION_KIND_MISMATCH` / `D5_ADMISSION_RECORD_SCOPE_MISMATCH`).
+> - **Temporal policy.** The acquisition envelope must be valid at review time
+>   (`now_utc`). The admission record must satisfy
+>   `envelope.valid_from_utc <= admitted_at_utc <= now_utc`
+>   (`D5_ADMISSION_RECORD_PREDATES_EVIDENCE` / `D5_ADMISSION_RECORD_FUTURE_DATED`).
+>   An expired envelope blocks even with a valid record; re-review requires a new envelope.
+> - **Manifest.** `production_trust_root` is replaced by `admission_kind`;
+>   `TRUST_ROOT_NOT_PRODUCTION` is replaced by `NO_ANCHORED_ADMISSION_RECORD`.
+> - **Residual limits.** In-process code can still monkeypatch module state; anchors
+>   defend against caller-supplied objects, not against code modification (which is
+>   covered by review). The admission record attests a human/authority decision; it does
+>   not itself prove census completeness or PIT archive genuineness. Distinct key IDs are
+>   enforced; distinct key *custody* is an operational control outside this code.
+>
+> Tests (`tests/unit/data/test_lane_b_d5_admission.py`): fake/subclass/no-op roots,
+> empty-anchor default, attacker and self-signed admitter keys, re-signed envelopes over
+> fabricated pages / modified PIT digest / census omission / budget change, replayed
+> record, revoked anchor, acquisition-operator self-admission, kind upgrade, temporal
+> bounds. Positive paths use a test-only monkeypatched anchor (verifies logic only).
+
 > **V24 amendment (2026-10-25) — evidence trust boundary.** The V23 bridge below could
 > return `D5_REAL_INPUT_ADMITTED` with `real_data_admitted=True` from caller-constructed
 > fields alone (`ISSUED`, `OPERATOR_ISSUED`, `pit_vintage_known=True`, a non-empty
