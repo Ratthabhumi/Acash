@@ -131,6 +131,26 @@ def sign_envelope(envelope: ApprovalEnvelope, private_key_b64: str) -> ApprovalE
     return dataclasses.replace(envelope, signature_b64=signature)
 
 
+def verify_ed25519_signature(
+    public_key_b64: str, message: bytes, signature_b64: str
+) -> None:
+    """Verify one Ed25519 signature over ``message``; fail closed on any gap."""
+    if not signature_b64:
+        raise DataContractError("D3_VERIFY_MISSING_SIGNATURE.")
+    try:
+        public_bytes = base64.b64decode(public_key_b64, validate=True)
+        signature = base64.b64decode(signature_b64, validate=True)
+        public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
+    except Exception as exc:
+        raise DataContractError("D3_VERIFY_MALFORMED_MATERIAL.") from exc
+    try:
+        public_key.verify(signature, message)
+    except InvalidSignature as exc:
+        raise DataContractError(
+            "D3_VERIFY_BAD_SIGNATURE: envelope bytes differ from signed content."
+        ) from exc
+
+
 class InMemoryTrustRoot:
     """TEST-ONLY trust material: key registry + revocation set.
 
@@ -142,11 +162,6 @@ class InMemoryTrustRoot:
     def __init__(self) -> None:
         self._keys: Dict[str, str] = {}
         self._revoked: set[str] = set()
-
-    @property
-    def production_trusted(self) -> bool:
-        """False: this class only proves verification logic, not authority."""
-        return False
 
     def register(self, key_id: str, public_key_b64: str) -> None:
         """Register a test public key (explicit test act, never implicit).
@@ -218,21 +233,7 @@ class InMemoryTrustRoot:
         end = _require_aware_instant(valid_until_utc, "valid_until_utc")
         if not (start <= moment <= end):
             raise DataContractError("D3_VERIFY_EXPIRED.")
-        if not signature_b64:
-            raise DataContractError("D3_VERIFY_MISSING_SIGNATURE.")
-        try:
-            public_bytes = base64.b64decode(self._keys[key_id], validate=True)
-            signature = base64.b64decode(signature_b64, validate=True)
-        except Exception as exc:
-            raise DataContractError("D3_VERIFY_MALFORMED_MATERIAL.") from exc
-        try:
-            Ed25519PublicKey.from_public_bytes(public_bytes).verify(
-                signature, message
-            )
-        except InvalidSignature as exc:
-            raise DataContractError(
-                "D3_VERIFY_BAD_SIGNATURE: envelope bytes differ from signed content."
-            ) from exc
+        verify_ed25519_signature(self._keys[key_id], message, signature_b64)
 
     def verify_envelope(self, envelope: ApprovalEnvelope, now_utc: str) -> None:
         """Verify envelope against this trust root; fail closed on any gap."""

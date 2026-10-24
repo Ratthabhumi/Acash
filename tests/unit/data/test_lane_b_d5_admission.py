@@ -6,11 +6,18 @@ import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Sequence
+from types import MappingProxyType
+from typing import Iterator, Sequence
 
+import pytest
+
+from acash.core.domain.exceptions import DataContractError
+from acash.data.qualification import lane_b_d5_rehearsal
 from acash.data.qualification.lane_a_d3_approval import InMemoryTrustRoot
 from acash.data.qualification.lane_b_d5_rehearsal import (
+    D5_ADMISSION_TRUST_ANCHORS,
     D5AdmissionAuthority,
+    D5AdmissionKind,
     D5AdmissionResult,
     D5AdmissionVerdict,
     D5AuthorityProvenance,
@@ -18,6 +25,7 @@ from acash.data.qualification.lane_b_d5_rehearsal import (
     D5DividendRecord,
     D5EvidenceEnvelope,
     D5EvidenceLevel,
+    D5IndependentAdmissionRecord,
     D5InputOrigin,
     D5RawPage,
     D5RealInputBundle,
@@ -26,6 +34,7 @@ from acash.data.qualification.lane_b_d5_rehearsal import (
     evaluate_d5_offline_rehearsal,
     evaluate_d5_real_admission,
     expected_d5_request_sha256,
+    sign_d5_admission_record,
     sign_d5_evidence_envelope,
     verify_sealed_dataset,
 )
@@ -40,6 +49,8 @@ NOW = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
 KEY_ID = "TEST_D5_EVIDENCE_KEY"
 PRIVATE_KEY_B64, PUBLIC_KEY_B64 = Ed25519Signer.generate_key_pair()
 PIT_SHA = "a" * 64
+ADMIT_KEY_ID = "TEST_D5_ADMISSION_KEY"
+ADMIT_PRIVATE_B64, ADMIT_PUBLIC_B64 = Ed25519Signer.generate_key_pair()
 
 
 def _trust_root(*, revoked: bool = False) -> InMemoryTrustRoot:
@@ -51,11 +62,59 @@ def _trust_root(*, revoked: bool = False) -> InMemoryTrustRoot:
 
 
 class _ProductionFlaggedRoot(InMemoryTrustRoot):
-    """Simulates a ratified root; exercises the only path to real admission."""
+    """Attacker subclass advertising production trust (V24 admission oracle)."""
 
     @property
     def production_trusted(self) -> bool:
         return True
+
+
+class _NoOpRoot:
+    """Attacker root that accepts every signature and claims production trust."""
+
+    production_trusted = True
+
+    def verify_signature(self, **_: object) -> None:
+        return None
+
+
+@pytest.fixture
+def anchored(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Pin the test admitter key, simulating a reviewed anchor provisioning change."""
+    monkeypatch.setattr(
+        lane_b_d5_rehearsal,
+        "D5_ADMISSION_TRUST_ANCHORS",
+        MappingProxyType({ADMIT_KEY_ID: ADMIT_PUBLIC_B64}),
+    )
+    yield
+
+
+def _admitted(
+    bundle: D5RealInputBundle,
+    kind: D5AdmissionKind | None = None,
+    *,
+    private_key_b64: str = ADMIT_PRIVATE_B64,
+    admitter_key_id: str = ADMIT_KEY_ID,
+    acquisition_key_id: str = KEY_ID,
+    admitted_at_utc: str = "2026-10-22T00:00:00+00:00",
+) -> D5RealInputBundle:
+    if kind is None:
+        kind = (
+            D5AdmissionKind.PIT_RESEARCH
+            if bundle.claimed_level is D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED
+            else D5AdmissionKind.RETROSPECTIVE_RESEARCH
+        )
+    record = D5IndependentAdmissionRecord(
+        admission_ref="TEST_D5_ADMISSION_RECORD",
+        kind=kind,
+        evidence_scope_sha256=bundle.evidence_scope_sha256(),
+        acquisition_key_id=acquisition_key_id,
+        admitter_key_id=admitter_key_id,
+        admitted_at_utc=admitted_at_utc,
+    )
+    return replace(
+        bundle, admission_record=sign_d5_admission_record(record, private_key_b64)
+    )
 
 
 def _signed(
@@ -82,11 +141,11 @@ def _signed(
     )
 
 
-def _admit(
-    bundle: D5RealInputBundle, root: InMemoryTrustRoot | None = None
-) -> D5AdmissionResult:
+def _admit(bundle: D5RealInputBundle, root: object | None = None) -> D5AdmissionResult:
     return evaluate_d5_real_admission(
-        bundle, now_utc=NOW, trust_root=root if root is not None else _trust_root()
+        bundle,
+        now_utc=NOW,
+        trust_root=root if root is not None else _trust_root(),  # type: ignore[arg-type]
     )
 
 
@@ -243,8 +302,9 @@ def test_signed_retrospective_bundle_seals_but_is_not_admitted() -> None:
     admission = result.manifest["admission"]
     assert admission["real_data_admitted"] is False
     assert admission["external_evidence_verified"] is True
-    assert admission["production_trust_root"] is False
+    assert admission["admission_kind"] is None
     assert "INDEPENDENT_ADMISSION_REQUIRED" in admission["limitations"]
+    assert "NO_ANCHORED_ADMISSION_RECORD" in admission["limitations"]
     assert result.manifest["origin"] == DatasetOrigin.REAL_CANDIDATE.value
     assert result.dataset_bytes is not None
     verify_sealed_dataset(
@@ -295,18 +355,206 @@ def test_pit_claim_requires_bound_evidence_digest() -> None:
     assert "D5_PIT_EVIDENCE_QUALIFIED_REQUIRES_EVIDENCE_SHA256" in result.blockers[0]
 
 
-def test_only_production_trusted_root_reaches_real_admission() -> None:
-    root = _ProductionFlaggedRoot()
-    root.register(KEY_ID, PUBLIC_KEY_B64)
-    result = _admit(_signed(_pit_bundle()), root)
+def _assert_not_admitted(result: D5AdmissionResult) -> None:
+    assert result.verdict is not D5AdmissionVerdict.ADMITTED
+    assert result.verdict is not D5AdmissionVerdict.RETROSPECTIVE_ADMITTED
+    assert result.manifest.get("real_data_admitted") is not True
+    assert result.manifest.get("origin") != DatasetOrigin.REAL_ADMITTED.value
+
+
+def test_caller_trust_root_objects_never_confer_admission() -> None:
+    """V25-S01: fake, subclassed, or no-op roots cannot produce real admission."""
+    subclassed = _ProductionFlaggedRoot()
+    subclassed.register(KEY_ID, PUBLIC_KEY_B64)
+    attacker_private, _ = Ed25519Signer.generate_key_pair()
+    cases = (
+        _admit(_signed(_pit_bundle()), subclassed),
+        _admit(_signed(_pit_bundle()), _NoOpRoot()),
+        _admit(_signed(_pit_bundle(), private_key_b64=attacker_private), _NoOpRoot()),
+        _admit(_signed(_bundle()), _NoOpRoot()),
+    )
+    for result in cases:
+        _assert_not_admitted(result)
+        assert result.manifest["admission"]["admission_kind"] is None
+
+
+def test_trust_anchors_are_empty_by_default() -> None:
+    """No production admission root is fabricated in the repository."""
+    assert dict(D5_ADMISSION_TRUST_ANCHORS) == {}
+    result = _admit(_admitted(_signed(_pit_bundle())), _NoOpRoot())
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_UNANCHORED_KEY" in result.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_anchored_pit_record_is_the_only_pit_admission_path() -> None:
+    result = _admit(_admitted(_signed(_pit_bundle())))
     assert result.verdict is D5AdmissionVerdict.ADMITTED
     assert result.admitted_level is D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED
-    assert result.manifest["admission"]["real_data_admitted"] is True
+    admission = result.manifest["admission"]
+    assert admission["real_data_admitted"] is True
+    assert admission["admission_kind"] == D5AdmissionKind.PIT_RESEARCH.value
     assert result.manifest["origin"] == DatasetOrigin.REAL_ADMITTED.value
+    assert result.dataset_bytes is not None
+    verify_sealed_dataset(
+        result.dataset_bytes,
+        result.dataset_sha256 or "",
+        result.composite_sha256 or "",
+    )
 
 
-def test_in_memory_trust_root_is_never_production() -> None:
-    assert _trust_root().production_trusted is False
+@pytest.mark.usefixtures("anchored")
+def test_anchored_retrospective_record_stays_non_pit() -> None:
+    """P1: retrospective admission is real but never PIT-labelled."""
+    result = _admit(_admitted(_signed(_bundle())))
+    assert result.verdict is D5AdmissionVerdict.RETROSPECTIVE_ADMITTED
+    assert result.admitted_level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
+    admission = result.manifest["admission"]
+    assert admission["real_data_admitted"] is True
+    assert admission["admission_kind"] == D5AdmissionKind.RETROSPECTIVE_RESEARCH.value
+    assert "NOT_POINT_IN_TIME" in admission["limitations"]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_admission_kind_cannot_be_upgraded() -> None:
+    cases = (
+        _admit(_admitted(_signed(_pit_bundle()), D5AdmissionKind.RETROSPECTIVE_RESEARCH)),
+        _admit(_admitted(_signed(_bundle()), D5AdmissionKind.PIT_RESEARCH)),
+    )
+    for result in cases:
+        assert result.verdict is D5AdmissionVerdict.BLOCKED
+        assert "D5_ADMISSION_KIND_MISMATCH" in result.blockers[0]
+    retro = _admitted(_signed(_bundle()))
+    upgraded = _signed(
+        replace(
+            retro,
+            claimed_level=D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED,
+            dividends=_dividends(pit=True),
+            pit_vintage_known=True,
+            pit_evidence_ref="PIT_VINTAGE_ARCHIVE:test",
+            pit_evidence_sha256=PIT_SHA,
+        )
+    )
+    result = _admit(upgraded)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_KIND_MISMATCH" in result.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_attacker_keys_cannot_issue_admission() -> None:
+    attacker_private, _ = Ed25519Signer.generate_key_pair()
+    forged = _admit(_admitted(_signed(_pit_bundle()), private_key_b64=attacker_private))
+    assert forged.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D3_VERIFY_BAD_SIGNATURE" in forged.blockers[0]
+    self_signed = _admit(
+        _admitted(
+            _signed(_pit_bundle()),
+            private_key_b64=attacker_private,
+            admitter_key_id="ATTACKER_KEY",
+        )
+    )
+    assert self_signed.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_UNANCHORED_KEY" in self_signed.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_resigned_envelope_cannot_reuse_admission_record() -> None:
+    """Colluding acquisition re-signs a changed bundle; the record scope still binds."""
+    admitted = _admitted(_signed(_pit_bundle()))
+    authority = admitted.authority
+    budget_authority = _authority(max_http_requests=8)
+    variants: tuple[D5RealInputBundle, ...] = (
+        replace(admitted, authority=budget_authority, pages=_pages(budget_authority)),
+        replace(
+            admitted,
+            pages=(
+                _page(authority, "raw", close="250"),
+                _page(authority, "split", close="250"),
+            ),
+        ),
+        replace(admitted, pit_evidence_sha256="c" * 64),
+        replace(
+            admitted,
+            dividends=tuple(r for r in admitted.dividends if r.symbol != "VOO"),
+            expected_ex_dates={
+                k: v for k, v in admitted.expected_ex_dates.items() if k != "VOO"
+            },
+        ),
+    )
+    for variant in variants:
+        result = _admit(_signed(variant))
+        assert result.verdict is D5AdmissionVerdict.BLOCKED, result.blockers
+        assert "D5_ADMISSION_RECORD_SCOPE_MISMATCH" in result.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_replayed_admission_record_from_other_bundle_blocks() -> None:
+    other_bundle = _bundle(
+        claimed=D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED,
+        authority=_authority(authority_ref="OTHER_RUN_AUTHORITY"),
+        dividends=_dividends(pit=True),
+        pit_vintage_known=True,
+        pit_evidence_ref="PIT_VINTAGE_ARCHIVE:test",
+    )
+    other = _admitted(_signed(replace(other_bundle, pit_evidence_sha256=PIT_SHA)))
+    assert _admit(other).verdict is D5AdmissionVerdict.ADMITTED
+    target = replace(_signed(_pit_bundle()), admission_record=other.admission_record)
+    result = _admit(target)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_RECORD_SCOPE_MISMATCH" in result.blockers[0]
+
+
+def test_revoked_admitter_key_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Revocation is removal from the anchors; previously valid records stop admitting."""
+    bundle = _admitted(_signed(_pit_bundle()))
+    monkeypatch.setattr(
+        lane_b_d5_rehearsal,
+        "D5_ADMISSION_TRUST_ANCHORS",
+        MappingProxyType({ADMIT_KEY_ID: ADMIT_PUBLIC_B64}),
+    )
+    assert _admit(bundle).verdict is D5AdmissionVerdict.ADMITTED
+    monkeypatch.setattr(
+        lane_b_d5_rehearsal, "D5_ADMISSION_TRUST_ANCHORS", MappingProxyType({})
+    )
+    result = _admit(bundle)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_UNANCHORED_KEY" in result.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_acquisition_operator_cannot_admit_own_evidence() -> None:
+    with pytest.raises(DataContractError, match="D5_ADMISSION_NOT_INDEPENDENT"):
+        _admitted(_signed(_pit_bundle()), admitter_key_id=KEY_ID)
+    bundle = _admitted(_signed(_pit_bundle()))
+    assert bundle.admission_record is not None
+    object.__setattr__(bundle.admission_record, "admitter_key_id", KEY_ID)
+    result = _admit(bundle)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_NOT_INDEPENDENT" in result.blockers[0]
+    mismatched = _admit(
+        _admitted(_signed(_pit_bundle()), acquisition_key_id="OTHER_ACQUISITION_KEY")
+    )
+    assert mismatched.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_ADMISSION_RECORD_ACQUISITION_KEY_MISMATCH" in mismatched.blockers[0]
+
+
+@pytest.mark.usefixtures("anchored")
+def test_admission_record_temporal_policy() -> None:
+    cases = (
+        ("2026-10-24T00:00:00+00:00", "D5_ADMISSION_RECORD_FUTURE_DATED"),
+        ("2026-10-19T00:00:00+00:00", "D5_ADMISSION_RECORD_PREDATES_EVIDENCE"),
+    )
+    for admitted_at, code in cases:
+        result = _admit(_admitted(_signed(_pit_bundle()), admitted_at_utc=admitted_at))
+        assert result.verdict is D5AdmissionVerdict.BLOCKED
+        assert code in result.blockers[0]
+    expired = _admitted(
+        _signed(_pit_bundle(), valid_until_utc="2026-10-21T00:00:00+00:00"),
+        admitted_at_utc="2026-10-20T12:00:00+00:00",
+    )
+    result = _admit(expired)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D3_VERIFY_EXPIRED" in result.blockers[0]
 
 
 def test_synthetic_pages_relabeled_as_operator_data_block() -> None:
@@ -407,12 +655,13 @@ def test_dataset_from_other_acquisition_run_blocks() -> None:
     assert "D5_EVIDENCE_ENVELOPE_AUTHORITY_MISMATCH" in result.blockers[0]
 
 
+@pytest.mark.usefixtures("anchored")
 def test_no_path_upgrades_to_full_dataset_admitted() -> None:
-    """Fail-first 10: even a production root cannot self-issue FULL_DATASET_ADMITTED."""
-    root = _ProductionFlaggedRoot()
-    root.register(KEY_ID, PUBLIC_KEY_B64)
-    bundle = _signed(replace(_pit_bundle(), claimed_level=D5EvidenceLevel.FULL_DATASET_ADMITTED))
-    result = _admit(bundle, root)
+    """Fail-first 10: even an anchored record cannot self-issue FULL_DATASET_ADMITTED."""
+    bundle = _admitted(
+        _signed(replace(_pit_bundle(), claimed_level=D5EvidenceLevel.FULL_DATASET_ADMITTED))
+    )
+    result = _admit(bundle, _NoOpRoot())
     assert result.verdict is D5AdmissionVerdict.BLOCKED
     assert "D5_FULL_DATASET_ADMITTED_REQUIRES_SEPARATE_ADMISSION_RECORD" in result.blockers[0]
     for verdict_bundle in (_signed(_bundle()), _signed(_pit_bundle())):
