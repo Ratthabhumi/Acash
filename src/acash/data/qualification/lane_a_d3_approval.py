@@ -143,6 +143,11 @@ class InMemoryTrustRoot:
         self._keys: Dict[str, str] = {}
         self._revoked: set[str] = set()
 
+    @property
+    def production_trusted(self) -> bool:
+        """False: this class only proves verification logic, not authority."""
+        return False
+
     def register(self, key_id: str, public_key_b64: str) -> None:
         """Register a test public key (explicit test act, never implicit).
 
@@ -187,38 +192,58 @@ class InMemoryTrustRoot:
             )
         self._revoked.add(key_id)
 
-    def verify_envelope(self, envelope: ApprovalEnvelope, now_utc: str) -> None:
-        """Verify envelope against this trust root; fail closed on any gap."""
-        if envelope.key_id not in self._keys:
-            raise DataContractError(
-                f"D3_VERIFY_UNTRUSTED_KEY: {envelope.key_id!r}."
-            )
-        if envelope.key_id in self._revoked:
-            raise DataContractError(
-                f"D3_VERIFY_REVOKED_KEY: {envelope.key_id!r}."
-            )
+    def verify_signature(
+        self,
+        *,
+        key_id: str,
+        message: bytes,
+        signature_b64: str,
+        now_utc: str,
+        valid_from_utc: str,
+        valid_until_utc: str,
+    ) -> None:
+        """Verify a domain-separated signed message against this trust root.
+
+        This is the shared primitive used by both the Lane A approval
+        envelope and the D5 evidence envelope. It checks key trust,
+        revocation, the signed validity window, signature presence, and the
+        Ed25519 signature itself. It does not interpret the message.
+        """
+        if key_id not in self._keys:
+            raise DataContractError(f"D3_VERIFY_UNTRUSTED_KEY: {key_id!r}.")
+        if key_id in self._revoked:
+            raise DataContractError(f"D3_VERIFY_REVOKED_KEY: {key_id!r}.")
         moment = _require_aware_instant(now_utc, "now_utc")
-        start = _require_aware_instant(envelope.valid_from_utc, "valid_from_utc")
-        end = _require_aware_instant(envelope.valid_until_utc, "valid_until_utc")
+        start = _require_aware_instant(valid_from_utc, "valid_from_utc")
+        end = _require_aware_instant(valid_until_utc, "valid_until_utc")
         if not (start <= moment <= end):
             raise DataContractError("D3_VERIFY_EXPIRED.")
-        if not envelope.signature_b64:
+        if not signature_b64:
             raise DataContractError("D3_VERIFY_MISSING_SIGNATURE.")
         try:
-            public_bytes = base64.b64decode(self._keys[envelope.key_id], validate=True)
-            signature = base64.b64decode(envelope.signature_b64, validate=True)
+            public_bytes = base64.b64decode(self._keys[key_id], validate=True)
+            signature = base64.b64decode(signature_b64, validate=True)
         except Exception as exc:
-            raise DataContractError(
-                "D3_VERIFY_MALFORMED_MATERIAL."
-            ) from exc
+            raise DataContractError("D3_VERIFY_MALFORMED_MATERIAL.") from exc
         try:
             Ed25519PublicKey.from_public_bytes(public_bytes).verify(
-                signature, envelope.canonical_message_bytes()
+                signature, message
             )
         except InvalidSignature as exc:
             raise DataContractError(
                 "D3_VERIFY_BAD_SIGNATURE: envelope bytes differ from signed content."
             ) from exc
+
+    def verify_envelope(self, envelope: ApprovalEnvelope, now_utc: str) -> None:
+        """Verify envelope against this trust root; fail closed on any gap."""
+        self.verify_signature(
+            key_id=envelope.key_id,
+            message=envelope.canonical_message_bytes(),
+            signature_b64=envelope.signature_b64,
+            now_utc=now_utc,
+            valid_from_utc=envelope.valid_from_utc,
+            valid_until_utc=envelope.valid_until_utc,
+        )
 
 
 class EnvelopeApprovalCheck:

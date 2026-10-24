@@ -8,12 +8,15 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Sequence
 
+from acash.data.qualification.lane_a_d3_approval import InMemoryTrustRoot
 from acash.data.qualification.lane_b_d5_rehearsal import (
     D5AdmissionAuthority,
+    D5AdmissionResult,
     D5AdmissionVerdict,
     D5AuthorityProvenance,
     D5AuthorityStatus,
     D5DividendRecord,
+    D5EvidenceEnvelope,
     D5EvidenceLevel,
     D5InputOrigin,
     D5RawPage,
@@ -23,15 +26,68 @@ from acash.data.qualification.lane_b_d5_rehearsal import (
     evaluate_d5_offline_rehearsal,
     evaluate_d5_real_admission,
     expected_d5_request_sha256,
+    sign_d5_evidence_envelope,
     verify_sealed_dataset,
 )
 from acash.data.qualification.manifest import compute_page_sha256
+from acash.execution.signing import Ed25519Signer
 
 SESSIONS = tuple(
     date(2026, 9, 28) + timedelta(days=index) for index in range(5)
 )
 SYMBOLS = ("BIL", "BND", "GLD", "VOO")
 NOW = datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+KEY_ID = "TEST_D5_EVIDENCE_KEY"
+PRIVATE_KEY_B64, PUBLIC_KEY_B64 = Ed25519Signer.generate_key_pair()
+PIT_SHA = "a" * 64
+
+
+def _trust_root(*, revoked: bool = False) -> InMemoryTrustRoot:
+    root = InMemoryTrustRoot()
+    root.register(KEY_ID, PUBLIC_KEY_B64)
+    if revoked:
+        root.revoke(KEY_ID)
+    return root
+
+
+class _ProductionFlaggedRoot(InMemoryTrustRoot):
+    """Simulates a ratified root; exercises the only path to real admission."""
+
+    @property
+    def production_trusted(self) -> bool:
+        return True
+
+
+def _signed(
+    bundle: D5RealInputBundle,
+    *,
+    private_key_b64: str = PRIVATE_KEY_B64,
+    valid_until_utc: str = "2026-12-31T00:00:00+00:00",
+    scope_sha256: str | None = None,
+) -> D5RealInputBundle:
+    authority = bundle.authority
+    envelope = D5EvidenceEnvelope(
+        key_id=KEY_ID,
+        approval_ref=authority.approval_reference,
+        authority_sha256=authority.digest(),
+        evidence_scope_sha256=scope_sha256 or bundle.evidence_scope_sha256(),
+        valid_from_utc="2026-10-20T00:00:00+00:00",
+        valid_until_utc=valid_until_utc,
+        max_http_requests=authority.max_http_requests,
+        max_observed_bytes=authority.max_observed_bytes,
+    )
+    return replace(
+        bundle,
+        evidence_envelope=sign_d5_evidence_envelope(envelope, private_key_b64),
+    )
+
+
+def _admit(
+    bundle: D5RealInputBundle, root: InMemoryTrustRoot | None = None
+) -> D5AdmissionResult:
+    return evaluate_d5_real_admission(
+        bundle, now_utc=NOW, trust_root=root if root is not None else _trust_root()
+    )
 
 
 def _authority(**overrides: object) -> D5AdmissionAuthority:
@@ -170,11 +226,26 @@ def _bundle(
     )
 
 
-def test_retrospective_real_bundle_seals_but_is_not_admitted() -> None:
-    result = evaluate_d5_real_admission(_bundle(), now_utc=NOW)
+def _pit_bundle(**overrides: object) -> D5RealInputBundle:
+    bundle = _bundle(
+        claimed=D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED,
+        dividends=_dividends(pit=True),
+        pit_vintage_known=True,
+        pit_evidence_ref="PIT_VINTAGE_ARCHIVE:test",
+    )
+    return replace(bundle, pit_evidence_sha256=PIT_SHA, **overrides)  # type: ignore[arg-type]
+
+
+def test_signed_retrospective_bundle_seals_but_is_not_admitted() -> None:
+    result = _admit(_signed(_bundle()))
     assert result.verdict is D5AdmissionVerdict.RETROSPECTIVE_ONLY
     assert result.admitted_level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
-    assert result.manifest["admission"]["real_data_admitted"] is False
+    admission = result.manifest["admission"]
+    assert admission["real_data_admitted"] is False
+    assert admission["external_evidence_verified"] is True
+    assert admission["production_trust_root"] is False
+    assert "INDEPENDENT_ADMISSION_REQUIRED" in admission["limitations"]
+    assert result.manifest["origin"] == DatasetOrigin.REAL_CANDIDATE.value
     assert result.dataset_bytes is not None
     verify_sealed_dataset(
         result.dataset_bytes,
@@ -192,20 +263,160 @@ def test_pit_claim_without_pit_evidence_blocks() -> None:
     assert "D5_PIT_EVIDENCE_QUALIFIED_REQUIRES_PIT_VINTAGE" in result.blockers[0]
 
 
-def test_pit_bundle_with_evidence_is_admitted() -> None:
-    records = _dividends(pit=True)
-    result = evaluate_d5_real_admission(
-        _bundle(
-            claimed=D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED,
-            dividends=records,
-            pit_vintage_known=True,
-            pit_evidence_ref="PIT_VINTAGE_ARCHIVE:test",
-        ),
-        now_utc=NOW,
-    )
+def test_unsigned_issued_authority_cannot_seal_operator_data() -> None:
+    """Fail-first 1/2: ISSUED + OPERATOR_ISSUED structural fields are not authority."""
+    for bundle in (_bundle(), _pit_bundle()):
+        result = evaluate_d5_real_admission(bundle, now_utc=NOW)
+        assert result.verdict is D5AdmissionVerdict.BLOCKED
+        assert "D5_EXTERNAL_EVIDENCE_PENDING" in result.blockers[0]
+        assert result.dataset_bytes is None
+
+
+def test_signed_envelope_without_trust_root_blocks() -> None:
+    result = evaluate_d5_real_admission(_signed(_bundle()), now_utc=NOW)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "no trust root supplied" in result.blockers[0]
+
+
+def test_caller_pit_flags_do_not_produce_real_admission() -> None:
+    """Fail-first 5/6: verified test-key PIT evidence is still not admission."""
+    result = _admit(_signed(_pit_bundle()))
+    assert result.verdict is D5AdmissionVerdict.INDEPENDENT_ADMISSION_REQUIRED
+    assert result.admitted_level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
+    assert result.manifest["admission"]["real_data_admitted"] is False
+    assert result.manifest["real_data_admitted"] is False
+    assert result.manifest["origin"] == DatasetOrigin.REAL_CANDIDATE.value
+
+
+def test_pit_claim_requires_bound_evidence_digest() -> None:
+    bundle = replace(_pit_bundle(), pit_evidence_sha256="")
+    result = _admit(_signed(bundle))
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_PIT_EVIDENCE_QUALIFIED_REQUIRES_EVIDENCE_SHA256" in result.blockers[0]
+
+
+def test_only_production_trusted_root_reaches_real_admission() -> None:
+    root = _ProductionFlaggedRoot()
+    root.register(KEY_ID, PUBLIC_KEY_B64)
+    result = _admit(_signed(_pit_bundle()), root)
     assert result.verdict is D5AdmissionVerdict.ADMITTED
     assert result.admitted_level is D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED
     assert result.manifest["admission"]["real_data_admitted"] is True
+    assert result.manifest["origin"] == DatasetOrigin.REAL_ADMITTED.value
+
+
+def test_in_memory_trust_root_is_never_production() -> None:
+    assert _trust_root().production_trusted is False
+
+
+def test_synthetic_pages_relabeled_as_operator_data_block() -> None:
+    """Fail-first 3: relabeling origin after signing invalidates the scope."""
+    synthetic = _bundle(
+        origin=D5InputOrigin.SYNTHETIC_FIXTURE,
+        claimed=D5EvidenceLevel.SYNTHETIC_PIPELINE_PROOF,
+        authority=_authority(provenance=D5AuthorityProvenance.TEST_FIXTURE),
+    )
+    signed = _signed(synthetic)
+    relabeled = replace(
+        signed,
+        origin=D5InputOrigin.OPERATOR_ACQUISITION,
+        claimed_level=D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED,
+        authority=_authority(),
+    )
+    result = _admit(relabeled)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert result.dataset_bytes is None
+    unsigned_relabel = replace(relabeled, evidence_envelope=None)
+    unsigned_relabel = replace(
+        unsigned_relabel, pages=_pages(unsigned_relabel.authority)
+    )
+    result = _admit(unsigned_relabel)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_EXTERNAL_EVIDENCE_PENDING" in result.blockers[0]
+
+
+def test_self_consistent_rehashed_fabricated_pages_block() -> None:
+    """Fail-first 4: recomputed page hashes still change the signed scope."""
+    authority = _authority()
+    signed = _signed(_bundle(authority=authority))
+    fabricated = (
+        _page(authority, "raw", close="250"),
+        _page(authority, "split", close="250"),
+    )
+    result = _admit(replace(signed, pages=fabricated))
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH" in result.blockers[0]
+
+
+def test_post_signing_pit_upgrade_blocks() -> None:
+    """Fail-first 6: flipping PIT flags after signing invalidates the scope."""
+    signed = _signed(replace(_pit_bundle(), pit_vintage_known=False,
+                             claimed_level=D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED))
+    upgraded = replace(
+        signed,
+        pit_vintage_known=True,
+        claimed_level=D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED,
+    )
+    result = _admit(upgraded)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH" in result.blockers[0]
+
+
+def test_post_signing_dividend_census_omission_blocks() -> None:
+    """Fail-first 7: dropping an event from both lists after signing is detected."""
+    signed = _signed(_bundle())
+    omitted = replace(
+        signed,
+        dividends=tuple(r for r in signed.dividends if r.symbol != "VOO"),
+        expected_ex_dates={
+            key: value
+            for key, value in signed.expected_ex_dates.items()
+            if key != "VOO"
+        },
+    )
+    result = _admit(omitted)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH" in result.blockers[0]
+
+
+def test_invalid_revoked_expired_or_mismatched_envelope_blocks() -> None:
+    """Fail-first 8: bad signer, revoked key, expired window, wrong scope."""
+    other_private, _ = Ed25519Signer.generate_key_pair()
+    cases: list[tuple[D5AdmissionResult, str]] = [
+        (_admit(_signed(_bundle(), private_key_b64=other_private)), "D3_VERIFY_BAD_SIGNATURE"),
+        (_admit(_signed(_bundle()), _trust_root(revoked=True)), "D3_VERIFY_REVOKED_KEY"),
+        (
+            _admit(_signed(_bundle(), valid_until_utc="2026-10-21T00:00:00+00:00")),
+            "D3_VERIFY_EXPIRED",
+        ),
+        (_admit(_signed(_bundle(), scope_sha256="b" * 64)), "D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH"),
+    ]
+    for result, code in cases:
+        assert result.verdict is D5AdmissionVerdict.BLOCKED
+        assert code in result.blockers[0]
+
+
+def test_dataset_from_other_acquisition_run_blocks() -> None:
+    """Fail-first 9: a valid envelope for another run cannot cover this bundle."""
+    other = _authority(authority_ref="OTHER_RUN_AUTHORITY")
+    other_signed = _signed(_bundle(authority=other))
+    assert other_signed.evidence_envelope is not None
+    target = replace(_bundle(), evidence_envelope=other_signed.evidence_envelope)
+    result = _admit(target)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_EVIDENCE_ENVELOPE_AUTHORITY_MISMATCH" in result.blockers[0]
+
+
+def test_no_path_upgrades_to_full_dataset_admitted() -> None:
+    """Fail-first 10: even a production root cannot self-issue FULL_DATASET_ADMITTED."""
+    root = _ProductionFlaggedRoot()
+    root.register(KEY_ID, PUBLIC_KEY_B64)
+    bundle = _signed(replace(_pit_bundle(), claimed_level=D5EvidenceLevel.FULL_DATASET_ADMITTED))
+    result = _admit(bundle, root)
+    assert result.verdict is D5AdmissionVerdict.BLOCKED
+    assert "D5_FULL_DATASET_ADMITTED_REQUIRES_SEPARATE_ADMISSION_RECORD" in result.blockers[0]
+    for verdict_bundle in (_signed(_bundle()), _signed(_pit_bundle())):
+        assert _admit(verdict_bundle).admitted_level is not D5EvidenceLevel.FULL_DATASET_ADMITTED
 
 
 def test_synthetic_bundle_cannot_claim_real_evidence() -> None:

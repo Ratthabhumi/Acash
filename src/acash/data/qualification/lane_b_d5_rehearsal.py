@@ -9,17 +9,18 @@ the canonical manifest hashing helpers and fails closed on unproven input.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 import hashlib
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 from acash.core.domain.exceptions import DataContractError, DomainValidationError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.data.qualification.daily_models import DailyBar
+from acash.execution.signing import Ed25519Signer
 from acash.data.qualification.lane_a_rehearsal import (
     bar_date,
     expected_session_dates,
@@ -44,6 +45,8 @@ ALLOWED_D5_CURRENCIES: frozenset[str] = frozenset({"USD"})
 CONFIRMED_CANDIDATE: str = "SOURCE_CONFIRMED_CANDIDATE"
 DATASET_SCHEMA: str = "ACASH_D5_SEALED_DATASET_V1"
 SYNTHETIC_LABEL: str = "SYNTHETIC_FIXTURE_NOT_MARKET_HISTORY"
+D5_EVIDENCE_ENVELOPE_DOMAIN: bytes = b"ACASH-D5-REAL-INPUT-ADMISSION/v1"
+D5_EVIDENCE_SCOPE_SCHEMA: str = "ACASH_D5_EVIDENCE_SCOPE_V1"
 
 
 class D5OfflineVerdict(str, Enum):
@@ -126,6 +129,9 @@ class D5InputOrigin(str, Enum):
 
 class D5AdmissionVerdict(str, Enum):
     ADMITTED = "D5_REAL_INPUT_ADMITTED"
+    INDEPENDENT_ADMISSION_REQUIRED = (
+        "D5_EVIDENCE_VERIFIED_INDEPENDENT_ADMISSION_REQUIRED"
+    )
     RETROSPECTIVE_ONLY = "D5_RETROSPECTIVE_QUALITY_QUALIFIED"
     SYNTHETIC_ONLY = "D5_SYNTHETIC_PIPELINE_PROOF_ONLY"
     BLOCKED = "D5_REAL_INPUT_ADMISSION_BLOCKED"
@@ -234,6 +240,123 @@ class D5AdmissionAuthority:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class D5EvidenceTrustRoot(Protocol):
+    """Verifier seam for D5 evidence envelopes.
+
+    ``production_trusted`` must be true only for a trust root whose key
+    custody has been ratified out of band. Only such a root can turn verified
+    evidence into ``real_data_admitted``.
+    """
+
+    @property
+    def production_trusted(self) -> bool: ...
+
+    def verify_signature(
+        self,
+        *,
+        key_id: str,
+        message: bytes,
+        signature_b64: str,
+        now_utc: str,
+        valid_from_utc: str,
+        valid_until_utc: str,
+    ) -> None: ...
+
+
+def _is_sha256_hex(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _parse_aware_utc(value: str, context: str) -> datetime:
+    try:
+        moment = datetime.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise DataContractError(
+            f"D5_EVIDENCE_ENVELOPE_MALFORMED_TIME: {context}: {value!r}."
+        ) from exc
+    if moment.tzinfo is None:
+        raise DataContractError(
+            f"D5_EVIDENCE_ENVELOPE_NAIVE_TIME: {context} must be timezone-aware."
+        )
+    return moment.astimezone(timezone.utc)
+
+
+@dataclass(frozen=True)
+class D5EvidenceEnvelope:
+    """Signed authority and bundle-scope attestation for D5 admission.
+
+    This is a distinct message schema verified by the existing Lane A
+    Ed25519 trust-root primitive. A D5 authority field named ``ISSUED`` or
+    ``OPERATOR_ISSUED`` is structural only; it becomes authenticated evidence
+    only when this envelope verifies against an explicitly supplied trust
+    root and its scope digest equals the recomputed bundle scope.
+
+    Test keys are ephemeral. ``InMemoryTrustRoot.production_trusted`` is
+    always false, so a verified test envelope can exercise the verification
+    path but can never set ``real_data_admitted`` to true.
+    """
+
+    key_id: str
+    approval_ref: str
+    authority_sha256: str
+    evidence_scope_sha256: str
+    valid_from_utc: str
+    valid_until_utc: str
+    max_http_requests: int
+    max_observed_bytes: int
+    signature_b64: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.key_id, str) or not self.key_id.strip():
+            raise DataContractError("D5_EVIDENCE_ENVELOPE_EMPTY_KEY_ID.")
+        if not isinstance(self.approval_ref, str) or not self.approval_ref.strip():
+            raise DataContractError("D5_EVIDENCE_ENVELOPE_EMPTY_APPROVAL_REF.")
+        if not _is_sha256_hex(self.authority_sha256):
+            raise DataContractError("D5_EVIDENCE_ENVELOPE_BAD_AUTHORITY_SHA256.")
+        if not _is_sha256_hex(self.evidence_scope_sha256):
+            raise DataContractError("D5_EVIDENCE_ENVELOPE_BAD_SCOPE_SHA256.")
+        start = _parse_aware_utc(self.valid_from_utc, "valid_from_utc")
+        end = _parse_aware_utc(self.valid_until_utc, "valid_until_utc")
+        if start >= end:
+            raise DataContractError("D5_EVIDENCE_ENVELOPE_EMPTY_WINDOW.")
+        for label, value in (
+            ("max_http_requests", self.max_http_requests),
+            ("max_observed_bytes", self.max_observed_bytes),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise DataContractError(
+                    f"D5_EVIDENCE_ENVELOPE_BAD_{label.upper()}."
+                )
+
+    def canonical_message_bytes(self) -> bytes:
+        document = {
+            "domain": D5_EVIDENCE_ENVELOPE_DOMAIN.decode("ascii"),
+            "key_id": self.key_id,
+            "approval_ref": self.approval_ref,
+            "authority_sha256": self.authority_sha256,
+            "evidence_scope_sha256": self.evidence_scope_sha256,
+            "valid_from_utc": self.valid_from_utc,
+            "valid_until_utc": self.valid_until_utc,
+            "max_http_requests": self.max_http_requests,
+            "max_observed_bytes": self.max_observed_bytes,
+        }
+        return D5_EVIDENCE_ENVELOPE_DOMAIN + b"." + (
+            CanonicalConfigSerializer.to_canonical_json(document).encode("utf-8")
+        )
+
+
+def sign_d5_evidence_envelope(
+    envelope: D5EvidenceEnvelope, private_key_b64: str
+) -> D5EvidenceEnvelope:
+    """Attach an Ed25519 signature using ephemeral test material (offline)."""
+    signature = Ed25519Signer.sign(private_key_b64, envelope.canonical_message_bytes())
+    return replace(envelope, signature_b64=signature)
+
+
 @dataclass(frozen=True)
 class D5RawPage:
     """One immutable raw response page bound to a frozen request identity."""
@@ -288,7 +411,55 @@ class D5RealInputBundle:
     claimed_level: D5EvidenceLevel
     pit_vintage_known: bool = False
     pit_evidence_ref: str = ""
+    pit_evidence_sha256: str = ""
     expected_dividends: tuple[D5DividendRecord, ...] | None = None
+    evidence_envelope: D5EvidenceEnvelope | None = None
+
+    def evidence_scope_sha256(self) -> str:
+        """Canonical digest of every offered evidence field.
+
+        The envelope signs this value. Any change to the authority, pages,
+        dividends, PIT reference, expected events, origin, or claimed level
+        changes the digest and invalidates a previously signed envelope.
+        """
+        ordered_pages = tuple(
+            sorted(self.pages, key=lambda page: (page.adjustment, page.page_index))
+        )
+        expected_ex_dates = {
+            symbol: [day.isoformat() for day in days]
+            for symbol, days in sorted(self.expected_ex_dates.items())
+        }
+        expected_dividends = (
+            None
+            if self.expected_dividends is None
+            else [list(row) for row in _dividend_fingerprint(self.expected_dividends)]
+        )
+        return _sha256_json(
+            {
+                "schema": D5_EVIDENCE_SCOPE_SCHEMA,
+                "authority_sha256": self.authority.digest(),
+                "origin": self.origin.value,
+                "claimed_level": self.claimed_level.value,
+                "pit_vintage_known": self.pit_vintage_known,
+                "pit_evidence_ref": self.pit_evidence_ref,
+                "pit_evidence_sha256": self.pit_evidence_sha256,
+                "pages": [
+                    {
+                        "adjustment": page.adjustment,
+                        "page_index": page.page_index,
+                        "page_token": page.page_token,
+                        "next_page_token": page.next_page_token,
+                        "request_sha256": page.request_sha256,
+                        "content_sha256": page.content_sha256,
+                        "status": page.status,
+                    }
+                    for page in ordered_pages
+                ],
+                "dividends": [list(row) for row in _dividend_fingerprint(self.dividends)],
+                "expected_ex_dates": expected_ex_dates,
+                "expected_dividends": expected_dividends,
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -552,6 +723,7 @@ def _seal_dataset(
     label: str,
     real_data_admitted: bool,
     require_pit: bool,
+    admission_bridge: bool = False,
 ) -> D5RehearsalResult:
     checks: dict[str, bool] = {}
     try:
@@ -573,7 +745,7 @@ def _seal_dataset(
             manifest={"schema": DATASET_SCHEMA, "blocked": True},
         )
 
-    if spec.origin is DatasetOrigin.REAL_CANDIDATE:
+    if spec.origin is DatasetOrigin.REAL_CANDIDATE and not admission_bridge:
         blockers = list(blockers) + [
             "REAL_CANDIDATE_SEALING_REQUIRES_AUTHORIZED_ADMISSION"
         ]
@@ -906,15 +1078,64 @@ def _validate_admission_authority(
             raise DataContractError("D5_DIVIDEND_INPUT_DOES_NOT_MATCH_EXPECTED.")
 
 
+def _verify_evidence_envelope(
+    bundle: D5RealInputBundle,
+    trust_root: D5EvidenceTrustRoot | None,
+    now_utc: datetime,
+) -> bool:
+    """Verify the signed evidence envelope; return whether the root is production."""
+    envelope = bundle.evidence_envelope
+    if envelope is None:
+        raise DataContractError(
+            "D5_EXTERNAL_EVIDENCE_PENDING: operator bundle has no signed evidence envelope."
+        )
+    if trust_root is None:
+        raise DataContractError(
+            "D5_EXTERNAL_EVIDENCE_PENDING: no trust root supplied for envelope verification."
+        )
+    trust_root.verify_signature(
+        key_id=envelope.key_id,
+        message=envelope.canonical_message_bytes(),
+        signature_b64=envelope.signature_b64,
+        now_utc=now_utc.astimezone(timezone.utc).isoformat(),
+        valid_from_utc=envelope.valid_from_utc,
+        valid_until_utc=envelope.valid_until_utc,
+    )
+    authority = bundle.authority
+    if envelope.authority_sha256 != authority.digest():
+        raise DataContractError("D5_EVIDENCE_ENVELOPE_AUTHORITY_MISMATCH.")
+    if envelope.approval_ref != authority.approval_reference:
+        raise DataContractError("D5_EVIDENCE_ENVELOPE_APPROVAL_REF_MISMATCH.")
+    if (envelope.max_http_requests, envelope.max_observed_bytes) != (
+        authority.max_http_requests,
+        authority.max_observed_bytes,
+    ):
+        raise DataContractError("D5_EVIDENCE_ENVELOPE_BUDGET_MISMATCH.")
+    if envelope.evidence_scope_sha256 != bundle.evidence_scope_sha256():
+        raise DataContractError("D5_EVIDENCE_ENVELOPE_SCOPE_MISMATCH.")
+    return bool(trust_root.production_trusted)
+
+
 def evaluate_d5_real_admission(
-    bundle: D5RealInputBundle, *, now_utc: datetime
+    bundle: D5RealInputBundle,
+    *,
+    now_utc: datetime,
+    trust_root: D5EvidenceTrustRoot | None = None,
 ) -> D5AdmissionResult:
     """Independently admit or refuse a real-input bundle into D5 sealing.
 
-    This function does not trust a caller-supplied ``approved`` flag. It
-    re-derives bars from retained raw pages, verifies the page/request/token
-    chain and coverage, and seals only an evidence level whose prerequisites
-    are actually present. Synthetic input can only produce a synthetic proof.
+    Three boundaries are evaluated in order:
+
+    A. Structural qualification: authority fields, raw pages, request
+       identity, pagination, budgets, calendar, and claimed level.
+    B. External evidence: an operator bundle must carry a D5 evidence
+       envelope whose Ed25519 signature verifies against ``trust_root`` and
+       whose signed scope digest equals the recomputed bundle scope.
+    C. Admission decision: ``real_data_admitted`` is true only for a PIT
+       claim whose envelope verified against a production-trusted root.
+       A verified envelope under a non-production root yields
+       ``INDEPENDENT_ADMISSION_REQUIRED``. Caller-supplied flags, enums, or
+       self-consistent hashes alone never produce a real admission.
     """
     authority = bundle.authority
     claimed = bundle.claimed_level
@@ -966,6 +1187,10 @@ def evaluate_d5_real_admission(
                 raise DataContractError(
                     "D5_PIT_EVIDENCE_QUALIFIED_REQUIRES_EVIDENCE_REF."
                 )
+            if not _is_sha256_hex(bundle.pit_evidence_sha256):
+                raise DataContractError(
+                    "D5_PIT_EVIDENCE_QUALIFIED_REQUIRES_EVIDENCE_SHA256."
+                )
             level = D5EvidenceLevel.PIT_EVIDENCE_QUALIFIED
             label = "PIT_EVIDENCE_QUALIFIED"
             real_data_admitted = True
@@ -983,12 +1208,29 @@ def evaluate_d5_real_admission(
             )
         checks["evidence_level"] = True
 
+        external_evidence_verified = False
+        production_trust_root = False
+        if bundle.origin is D5InputOrigin.OPERATOR_ACQUISITION:
+            production_trust_root = _verify_evidence_envelope(
+                bundle, trust_root, now_utc
+            )
+            external_evidence_verified = True
+            checks["external_evidence_signature"] = True
+            if real_data_admitted and not production_trust_root:
+                level = D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
+                label = "PIT_CLAIM_SIGNED_INDEPENDENT_ADMISSION_REQUIRED"
+                real_data_admitted = False
+                verdict = D5AdmissionVerdict.INDEPENDENT_ADMISSION_REQUIRED
+
+        if bundle.origin is D5InputOrigin.SYNTHETIC_FIXTURE:
+            dataset_origin = DatasetOrigin.SYNTHETIC_FIXTURE
+        elif real_data_admitted:
+            dataset_origin = DatasetOrigin.REAL_ADMITTED
+        else:
+            dataset_origin = DatasetOrigin.REAL_CANDIDATE
+
         spec = D5RehearsalSpec(
-            origin=(
-                DatasetOrigin.SYNTHETIC_FIXTURE
-                if bundle.origin is D5InputOrigin.SYNTHETIC_FIXTURE
-                else DatasetOrigin.REAL_ADMITTED
-            ),
+            origin=dataset_origin,
             universe=authority.symbols,
             scope_start=authority.start_date,
             scope_end=authority.end_date,
@@ -1010,6 +1252,7 @@ def evaluate_d5_real_admission(
             label=label,
             real_data_admitted=real_data_admitted,
             require_pit=require_pit,
+            admission_bridge=external_evidence_verified,
         )
     except (
         DataContractError,
@@ -1054,10 +1297,21 @@ def evaluate_d5_real_admission(
                 record.pit_vintage_known for record in bundle.dividends
             ),
             "pit_evidence_ref": bundle.pit_evidence_ref,
+            "pit_evidence_sha256": bundle.pit_evidence_sha256,
+            "external_evidence_verified": external_evidence_verified,
+            "production_trust_root": production_trust_root,
             "limitations": (
-                ["NOT_POINT_IN_TIME", "CORPORATE_ACTION_VINTAGE_UNPROVEN"]
-                if level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
-                else []
+                (
+                    ["NOT_POINT_IN_TIME", "CORPORATE_ACTION_VINTAGE_UNPROVEN"]
+                    if level is D5EvidenceLevel.RETROSPECTIVE_QUALITY_QUALIFIED
+                    else []
+                )
+                + (
+                    ["INDEPENDENT_ADMISSION_REQUIRED", "TRUST_ROOT_NOT_PRODUCTION"]
+                    if not real_data_admitted
+                    and bundle.origin is D5InputOrigin.OPERATOR_ACQUISITION
+                    else []
+                )
             ),
         },
     }
@@ -1099,7 +1353,9 @@ __all__ = [
     "D5AuthorityProvenance",
     "D5AuthorityStatus",
     "D5DividendRecord",
+    "D5EvidenceEnvelope",
     "D5EvidenceLevel",
+    "D5EvidenceTrustRoot",
     "D5InputOrigin",
     "D5OfflineVerdict",
     "D5RawPage",
@@ -1110,5 +1366,6 @@ __all__ = [
     "evaluate_d5_offline_rehearsal",
     "evaluate_d5_real_admission",
     "expected_d5_request_sha256",
+    "sign_d5_evidence_envelope",
     "verify_sealed_dataset",
 ]
