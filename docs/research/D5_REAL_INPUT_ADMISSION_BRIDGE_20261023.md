@@ -1,5 +1,35 @@
 # D5 Real-Input Admission Bridge (Implemented, Offline)
 
+> **V24 amendment (2026-10-25) — evidence trust boundary.** The V23 bridge below could
+> return `D5_REAL_INPUT_ADMITTED` with `real_data_admitted=True` from caller-constructed
+> fields alone (`ISSUED`, `OPERATOR_ISSUED`, `pit_vintage_known=True`, a non-empty
+> `pit_evidence_ref`). That path is closed. Admission now evaluates three boundaries:
+>
+> 1. **Structural qualification** — unchanged checks (authority fields, raw pages,
+>    request identity, pagination, budgets, calendar, claimed level).
+> 2. **External evidence** — an `OPERATOR_ACQUISITION` bundle must carry a
+>    `D5EvidenceEnvelope` (domain `ACASH-D5-REAL-INPUT-ADMISSION/v1`) whose Ed25519
+>    signature verifies through the shared D3 primitive `InMemoryTrustRoot.verify_signature`
+>    and whose signed `evidence_scope_sha256` equals the recomputed digest of authority,
+>    origin, claimed level, PIT flags/ref/digest, every page identity, dividends,
+>    expected ex-dates and expected dividends. Missing envelope or trust root:
+>    `D5_EXTERNAL_EVIDENCE_PENDING`.
+> 3. **Admission decision** — `real_data_admitted=True` only for a PIT claim whose
+>    envelope verified under a trust root with `production_trusted=True`. The repository
+>    contains no such root (`InMemoryTrustRoot.production_trusted` is always `False`), so
+>    a verified test-key PIT claim yields `D5_EVIDENCE_VERIFIED_INDEPENDENT_ADMISSION_REQUIRED`
+>    and is sealed as `REAL_CANDIDATE` / `RETROSPECTIVE_QUALITY_QUALIFIED` with limitations
+>    `INDEPENDENT_ADMISSION_REQUIRED` and `TRUST_ROOT_NOT_PRODUCTION`.
+>    `FULL_DATASET_ADMITTED` remains unreachable from this function.
+>
+> **Remaining limits.** The envelope authenticates the signer's attestation of the scope;
+> it does not prove the dividend census is complete against independent issuer data or
+> that the PIT archive referenced by `pit_evidence_sha256` is a genuine vintage. Those
+> require external evidence and a production trust root with ratified key custody.
+> The envelope window is checked at `now_utc`; separating acquisition-time validity from
+> later review is an open design item. Tests: `tests/unit/data/test_lane_b_d5_admission.py`
+> (fail-first cases 1–10).
+
 **Date:** 2026-10-23
 **Scope:** Offline contract and adversarial tests only. No provider request, no credential use, no broker call.
 **Status:** `IMPLEMENTED_OFFLINE`

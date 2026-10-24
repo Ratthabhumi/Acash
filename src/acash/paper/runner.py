@@ -43,7 +43,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
@@ -402,6 +402,7 @@ class PaperSessionRunner:
         self,
         config: PaperSessionConfig,
         strategy: Optional[PaperStrategyProtocol] = None,
+        clock: Optional[Callable[[], datetime]] = None,
     ) -> None:
         if config.mode != PaperMode.PAPER_ONLY:
             raise DataContractError(
@@ -410,6 +411,11 @@ class PaperSessionRunner:
 
         self._config = config
         self._config_hash = config.compute_config_hash()
+        # Session start/end source; the manifest requires end > start, which a
+        # coarse wall clock (15.6 ms on some Windows hosts) can violate.
+        self._clock: Callable[[], datetime] = clock or (
+            lambda: datetime.now(timezone.utc)
+        )
 
         # Core infrastructure
         self._journal = PaperEventJournal(
@@ -482,7 +488,7 @@ class PaperSessionRunner:
             raise DataContractError(
                 "PaperSessionRunner: session already started."
             )
-        self._start_time_utc = datetime.now(timezone.utc)
+        self._start_time_utc = self._clock()
         self._started = True
 
         session_cid = self._journal.new_correlation_id()
@@ -546,7 +552,7 @@ class PaperSessionRunner:
                 "PaperSessionRunner: session marked stopped but manifest is missing."
             )
 
-        self._end_time_utc = datetime.now(timezone.utc)
+        self._end_time_utc = self._clock()
 
         # Final reconciliation
         recon_result = self._reconciler.run_full_reconciliation()
