@@ -64,8 +64,15 @@ What the script does:
   both legs becomes two rows, `<id>#long_term` and `<id>#short_term`.
 - **Duplicates.** An exact duplicate inside a page is rejected. The same id seen
   twice across fetches must be identical, otherwise it is rejected as a revision.
-- **Sensitivity.** `scripts/run_d6_local_sensitivity.py` compares payable policies,
-  the same-day-pair reading and a few cost scenarios on the same bars.
+- **Reconcile (offline).** `scripts/reconcile_d6_local_distributions.py` writes a new
+  directory. It splits the cited BND capital gains using
+  `docs/research/evidence/bnd_capital_gain_reclassification_v34.csv`, with the cash
+  total unchanged. With `--ssga-xlsx`, it matches every BIL event against State
+  Street's historical-distributions workbook, a single file you saved yourself under
+  `data/`. Issuer payable dates replace imputed ones; any disagreement fails closed.
+- **Sensitivity.** `scripts/run_d6_local_sensitivity.py scenarios` compares payable
+  policies, the counterfactual "gains were corrections" reading and single cost
+  changes. `... grid` runs the fixed V34 cost grid, including whole shares.
 
 ## 4. Run
 

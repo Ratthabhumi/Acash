@@ -140,6 +140,8 @@ def corporate_action_rows(
     splits: List[Dict[str, str]] = []
     excluded: List[Dict[str, str]] = []
     unique, repeats = _unique_actions(pages)
+    cash_amounts: Dict[Tuple[str, str], List[Decimal]] = {}
+    gain_totals: Dict[Tuple[str, str], List[Decimal]] = {}
     for kind, item in unique:
         event_id = str(item["id"])
         sym = str(_require(item, "symbol", kind))
@@ -179,6 +181,8 @@ def corporate_action_rows(
                     legs.append((label, rate, f"{event_id}#{key.removesuffix('_rate')}"))
             if not legs:
                 raise DataContractError(f"ALPACA_CAPITAL_GAIN_WITHOUT_RATE: {sym} {ex_date}.")
+        totals = cash_amounts if kind == "cash_dividends" else gain_totals
+        totals.setdefault((sym, ex_date), []).append(sum((leg[1] for leg in legs), Decimal(0)))
         for label, rate, leg_id in legs:
             if rate <= 0:
                 raise DataContractError(f"ALPACA_NONPOSITIVE_DISTRIBUTION: {sym} {ex_date}.")
@@ -195,6 +199,11 @@ def corporate_action_rows(
             }
             (distributions if inside else excluded).append(row)
 
+    # A capital gain may be reported as a cash dividend (as for BND 2020-12-23); one
+    # also reported under the capital-gains type would otherwise be counted twice.
+    for pair, gains in gain_totals.items():
+        if set(gains) & set(cash_amounts.get(pair, [])):
+            raise DataContractError(f"ALPACA_POSSIBLE_CROSS_TYPE_DUPLICATE: {pair[0]} {pair[1]}.")
     lags: Dict[str, List[int]] = {}
     for row in distributions:
         if row["payable_date_source"] == "PROVIDER":

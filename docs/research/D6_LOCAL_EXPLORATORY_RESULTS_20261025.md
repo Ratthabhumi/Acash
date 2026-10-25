@@ -29,8 +29,9 @@ summary statistics are recorded here.
   imputation only changes when cash becomes spendable.
 - **Same-ex-date pairs:** BND has 4 pairs (8 events) with distinct provider ids
   (2020-12-23, 2021-04-01, 2021-12-23, 2022-04-01). The primary run keeps both
-  events of each pair. Whether each pair is two distributions or a provider correction
-  is **unverified**; see the sensitivity table.
+  events of each pair. **V34 update:** the second event of each pair is a capital-gain
+  distribution. 2020-12-23 is corroborated by OCC Memo #48045; the other three rest
+  on secondary evidence only. The "corrections" reading is now a counterfactual only.
 - **SHA-256 of the V32 local CSVs** (V32 format, provider id appended to the type):
   - `bars_raw.csv` `b86f73a69eff2cb9a81131dfa8b4b6d4cf32979be0a2ffcb8cd5e02058b0ff91`
   - `distributions.csv` `3741f8e0bf89282d8837e68a46fef9faa92890fcda4ffb783201844b459510a3`
@@ -55,9 +56,11 @@ summary statistics are recorded here.
   - `start=2016-01-01`, `end=2026-01-31`. This window filters on `process_date`, so
     the extra month catches late-December ex-dates processed in January.
   - The result was 1 page, 52,401 bytes, **byte-identical** to the V32 page.
-  - Alpaca returned **0 capital-gains events** and no event beyond the original 250.
-    That is what the provider returned, not a completeness proof: historical
-    backfill of this type is UNKNOWN, and the 250 events are not an issuer census.
+  - Alpaca returned **0 events under `capital_gains_distribution`** and no event beyond
+    the original 250. **This does not mean no capital gains were paid.** In V34, OCC
+    Memo #48045 showed that Alpaca reports BND's 2020-12-23 capital gain (0.1064
+    long-term + 0.0372 short-term = 0.1436) as a `cash_dividend`. See
+    `docs/research/D6_V34_RECONCILIATION_AND_COST_REALISM_20261025.md`.
 - **BIL reverse split.** The State Street IRS Form 8937 (BIL, CUSIP 78468R663,
   2017-11-30, 1 new for 2 old) matches the provider's ratio 0.5.
   - Raw bars: close 45.74 on 2017-11-29, open 91.50 on 2017-11-30 (ratio about 2.000).
@@ -94,7 +97,7 @@ changes one assumption.
 - Full table with turnover, mean cash share and rank:
   `scripts/run_d6_local_sensitivity.py` (output stays local under `data/`).
 
-## Open research brief (for ChatGPT Research; public documents only, no bulk scraping)
+## Open research brief (V33; items 1 and 2 partly answered in V34, see the V34 report)
 
 1. **BND same-ex-date pairs.** For 2020-12-23, 2021-04-01, 2021-12-23 and 2022-04-01,
    Alpaca rates are 0.1471819 + 0.1436, 0.0534 + 0.139053, 0.140851 + 0.13, and
