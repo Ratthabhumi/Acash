@@ -11,6 +11,10 @@ portfolios without modifying HYP_011:
 4. scheduled orders executed at the session OPEN with adverse costs;
 5. EOD valuation: cash + holdings x close + outstanding receivables.
 
+Cash may never be negative. A run is a pure function of its inputs: any contract
+violation raises and no partial result is returned. Final cash must equal cash
+rebuilt independently from the trade and entitlement ledgers.
+
 Execution timing (``execution_timing``):
 
 - ``PRIOR_CLOSE_DECISION_NEXT_OPEN`` (PRIMARY): target share quantities are
@@ -119,6 +123,15 @@ class D6Trade:
 
 
 @dataclass(frozen=True)
+class D6SkippedOrder:
+    session: date
+    symbol: str
+    side: str
+    ordered_quantity: Decimal
+    reason: str
+
+
+@dataclass(frozen=True)
 class D6NavRecord:
     session: date
     cash: Decimal
@@ -146,6 +159,7 @@ class D6Result:
     label: str = D6_LABEL
     nav_curve: List[D6NavRecord] = field(default_factory=list)
     trades: List[D6Trade] = field(default_factory=list)
+    skipped_orders: List[D6SkippedOrder] = field(default_factory=list)
     entitlements: List[D6Entitlement] = field(default_factory=list)
     holdings: Dict[str, Decimal] = field(default_factory=dict)
     ending_cash: Decimal = ZERO
@@ -319,6 +333,8 @@ def run_d6_portfolio(
             cash, flows = _execute(session, frozen, cash, flows, holdings, session_opens, cost, whole_shares, result)
         frozen = None
 
+        if cash < ZERO:
+            raise DataContractError(f"D6_NEGATIVE_CASH: {session} {cash}; borrowing is prohibited.")
         market_value = sum((holdings[s] * session_closes[s] for s in symbols), ZERO)
         receivable = sum((e.gross - e.withheld for e in receivables), ZERO)
         result.nav_curve.append(
@@ -329,7 +345,7 @@ def run_d6_portfolio(
         if execution_timing == D6_TIMING_PRIMARY and nxt in execute_at and symbols:
             frozen = _target_shares(portfolio, cash, holdings, session_closes, whole_shares)
 
-    if initial_nav + flows != cash:
+    if initial_nav + flows != cash or _reconstruct_cash(result, initial_nav, ordered[-1]) != cash:
         raise DataContractError("D6_CASH_CONSERVATION_VIOLATED.")
     result.holdings = dict(holdings)
     result.ending_cash = cash
@@ -362,7 +378,12 @@ def _execute(
     whole_shares: bool,
     result: D6Result,
 ) -> tuple[Decimal, Decimal]:
-    """Sells first, then buys; buys scale down (partial) if open gaps exhaust cash."""
+    """Sells first, then buys; buys scale down (partial) if open gaps exhaust cash.
+
+    A sell whose proceeds do not exceed its commission and fees is skipped
+    (``UNECONOMIC_SELL_SKIPPED``); a buy that cannot be funded after scaling is
+    skipped (``INSUFFICIENT_CASH_SKIPPED``). Both are recorded; nothing borrows.
+    """
     for sym in sorted(targets):
         quantity = min(holdings[sym], holdings[sym] - targets[sym])
         if quantity <= ZERO:
@@ -374,6 +395,11 @@ def _execute(
             fees = compute_sec31_fee(session, notional) + compute_finra_taf(session, quantity)
         commission = cost.commission(quantity)
         delta = notional - fees - commission
+        if delta <= ZERO:
+            result.skipped_orders.append(
+                D6SkippedOrder(session, sym, "SELL", quantity, "UNECONOMIC_SELL_SKIPPED")
+            )
+            continue
         cash += delta
         flows += delta
         holdings[sym] -= quantity
@@ -392,6 +418,9 @@ def _execute(
     for sym in sorted(wanted):
         quantity = _quantize(wanted[sym] * scale, whole_shares)
         if quantity <= ZERO:
+            result.skipped_orders.append(
+                D6SkippedOrder(session, sym, "BUY", wanted[sym], "INSUFFICIENT_CASH_SKIPPED")
+            )
             continue
         notional = fills[sym] * quantity
         commission = cost.commission(quantity)
@@ -405,6 +434,20 @@ def _execute(
             D6Trade(session, sym, "BUY", quantity, opens[sym], fills[sym], notional, commission, ZERO, wanted[sym])
         )
     return cash, flows
+
+
+def _reconstruct_cash(result: D6Result, initial_nav: Decimal, last_session: date) -> Decimal:
+    """Cash rebuilt only from the trade and entitlement ledgers (independent of ``flows``)."""
+    cash = initial_nav
+    for t in result.trades:
+        if t.side == "BUY":
+            cash -= t.notional + t.commission
+        else:
+            cash += t.notional - t.commission - t.regulatory_fees
+    for e in result.entitlements:
+        if e.payable_date <= last_session:
+            cash += e.gross - e.withheld
+    return cash
 
 
 def d6_nav_in_currency(
@@ -432,6 +475,7 @@ __all__ = [
     "D6NavRecord",
     "D6Portfolio",
     "D6Result",
+    "D6SkippedOrder",
     "D6Trade",
     "NO_CASH_DISTRIBUTION_SYMBOLS",
     "d6_nav_in_currency",

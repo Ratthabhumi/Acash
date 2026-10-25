@@ -5,19 +5,30 @@ verified. Extraction and completeness are separate facts:
 
 - ``SOURCE_EXTRACTED_PARTIAL`` / ``SOURCE_EXTRACTED_COVERAGE_UNVERIFIED`` prove
   only that rows were parsed; they are never complete.
-- ``CENSUS_COMPLETE_VERIFIED`` requires ``CensusEvidence`` (export scope, full
-  calendar-year window, reported row count equal to parsed rows, fund identity,
-  reconciled event types, SHA-256 of lawfully captured bytes, reviewer decision,
-  vintage limitation). Expected monthly/quarterly cadence is never proof.
+- ``CENSUS_CLAIM_STRUCTURALLY_VALID`` requires ``CensusEvidence`` (export scope,
+  full calendar-year window, year binding, reported row count equal to parsed
+  rows, fund identity, reconciled event types, SHA-256 values, reviewer distinct
+  from the acquisition operator, retrospective vintage). Expected
+  monthly/quarterly cadence is never proof.
 - ``NO_CASH_DISTRIBUTION_ENTITLEMENT`` (e.g. GLD) settles the cash-distribution
   dimension only. The split census is a separate dimension that always needs its
   own ``CensusEvidence``.
+
+``CensusEvidence`` is caller-supplied metadata and is only a *structural claim*.
+``assess_census_trust`` grades it: ``SOURCE_BYTES_RECONCILED`` needs the actual
+source bytes (hash match plus exact record re-derivation). Identity
+authentication, independent review and admission need an independently
+anchored admission (D5 trust anchors), which this ledger never infers from
+strings; with ``D5_ADMISSION_TRUST_ANCHORS`` empty they are unreachable.
 
 Records reuse the canonical ``EtfDistributionRecord``.
 """
 
 from __future__ import annotations
 
+import csv
+import hashlib
+import io
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -30,9 +41,11 @@ from acash.data.contracts.etf_fx_benchmark import (
     DistributionShareBasis,
     EtfDistributionRecord,
 )
+from acash.data.qualification.lane_b_d5_rehearsal import D5_ADMISSION_TRUST_ANCHORS
 
-LEDGER_SCHEMA = "ACASH_CORPORATE_ACTION_SOURCE_LEDGER_V2"
+LEDGER_SCHEMA = "ACASH_CORPORATE_ACTION_SOURCE_LEDGER_V3"
 REQUIRED_ROW_FIELDS: Tuple[str, ...] = ("ex_date", "payable_date", "gross_amount")
+RETROSPECTIVE_VINTAGE = "RETRIEVED_NOW_PIT_UNKNOWN"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -40,9 +53,17 @@ class SourceStatus(str, Enum):
     SOURCE_IDENTIFIED = "SOURCE_IDENTIFIED"
     SOURCE_EXTRACTED_PARTIAL = "SOURCE_EXTRACTED_PARTIAL"
     SOURCE_EXTRACTED_COVERAGE_UNVERIFIED = "SOURCE_EXTRACTED_COVERAGE_UNVERIFIED"
-    CENSUS_COMPLETE_VERIFIED = "CENSUS_COMPLETE_VERIFIED"
+    CENSUS_CLAIM_STRUCTURALLY_VALID = "CENSUS_CLAIM_STRUCTURALLY_VALID"
     NO_CASH_DISTRIBUTION_ENTITLEMENT = "NO_CASH_DISTRIBUTION_ENTITLEMENT"
     UNKNOWN = "UNKNOWN"
+
+
+class CensusTrustLevel(str, Enum):
+    STRUCTURAL_CENSUS_CHECK_PASSED = "STRUCTURAL_CENSUS_CHECK_PASSED"
+    SOURCE_BYTES_RECONCILED = "SOURCE_BYTES_RECONCILED"
+    SOURCE_IDENTITY_AUTHENTICATED = "SOURCE_IDENTITY_AUTHENTICATED"
+    INDEPENDENT_CENSUS_REVIEWED = "INDEPENDENT_CENSUS_REVIEWED"
+    CENSUS_ADMITTED = "CENSUS_ADMITTED"
 
 
 _EXTRACTED = (SourceStatus.SOURCE_EXTRACTED_PARTIAL, SourceStatus.SOURCE_EXTRACTED_COVERAGE_UNVERIFIED)
@@ -50,10 +71,11 @@ _EXTRACTED = (SourceStatus.SOURCE_EXTRACTED_PARTIAL, SourceStatus.SOURCE_EXTRACT
 
 @dataclass(frozen=True)
 class CensusEvidence:
-    """Reviewer-qualified evidence that one symbol-year census is complete."""
+    """Caller-supplied structural claim that one symbol-year census is complete."""
 
     fund_symbol: str
     fund_identifier: str
+    cell_year: int
     source_scope: str
     covered_start: date
     covered_end: date
@@ -61,6 +83,7 @@ class CensusEvidence:
     export_or_pagination_proof: str
     event_types_reconciled: Tuple[str, ...]
     evidence_sha256: Tuple[str, ...]
+    acquisition_operator: str
     reviewer: str
     vintage_limitation: str
 
@@ -68,6 +91,14 @@ class CensusEvidence:
         where = f"{symbol} {year}"
         if self.fund_symbol != symbol or not self.fund_identifier.strip():
             raise DataContractError(f"CENSUS_FUND_IDENTITY_MISMATCH: {where}.")
+        if self.cell_year != year:
+            raise DataContractError(f"CENSUS_YEAR_BINDING_MISMATCH: {where} bound to {self.cell_year}.")
+        if self.vintage_limitation != RETROSPECTIVE_VINTAGE:
+            raise DataContractError(f"CENSUS_PIT_CLAIM_UNSUPPORTED: {where}; no vintage verifier exists.")
+        if not self.acquisition_operator.strip():
+            raise DataContractError(f"CENSUS_FIELD_MISSING: {where} acquisition_operator.")
+        if self.reviewer.strip().casefold() == self.acquisition_operator.strip().casefold():
+            raise DataContractError(f"CENSUS_SELF_APPROVAL: {where}.")
         if self.covered_start > date(year, 1, 1) or self.covered_end < date(year, 12, 31):
             raise DataContractError(f"CENSUS_WINDOW_DOES_NOT_COVER_YEAR: {where}.")
         if type(self.reported_row_count) is not int or self.reported_row_count != row_count:
@@ -78,7 +109,7 @@ class CensusEvidence:
             raise DataContractError(f"CENSUS_EVENT_TYPES_UNRECONCILED: {where}.")
         if not self.evidence_sha256 or not all(_SHA256.match(h) for h in self.evidence_sha256):
             raise DataContractError(f"CENSUS_EVIDENCE_HASH_INVALID: {where}.")
-        for name in ("source_scope", "export_or_pagination_proof", "reviewer", "vintage_limitation"):
+        for name in ("source_scope", "export_or_pagination_proof", "reviewer"):
             if not str(getattr(self, name)).strip():
                 raise DataContractError(f"CENSUS_FIELD_MISSING: {where} {name}.")
 
@@ -99,7 +130,7 @@ class LedgerCell:
             raise DataContractError(f"LEDGER_SOURCE_REF_MISSING: {where}.")
         if self.status in _EXTRACTED and not self.records:
             raise DataContractError(f"LEDGER_EXTRACTED_WITHOUT_RECORDS: {where}.")
-        if self.records and self.status not in (*_EXTRACTED, SourceStatus.CENSUS_COMPLETE_VERIFIED):
+        if self.records and self.status not in (*_EXTRACTED, SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID):
             raise DataContractError(f"LEDGER_RECORDS_WITHOUT_EXTRACTED_STATUS: {where} {self.status.value}.")
         seen: set[Tuple[date, str]] = set()
         for rec in self.records:
@@ -109,7 +140,7 @@ class LedgerCell:
             if key in seen:
                 raise DataContractError(f"LEDGER_DUPLICATE_EVENT: {where} {key}.")
             seen.add(key)
-        if self.status is SourceStatus.CENSUS_COMPLETE_VERIFIED:
+        if self.status is SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID:
             if self.census is None:
                 raise DataContractError(f"CENSUS_EVIDENCE_REQUIRED: {where}.")
             self.census.validate_for(
@@ -125,7 +156,7 @@ class LedgerCell:
     @property
     def cash_complete(self) -> bool:
         return self.status in (
-            SourceStatus.CENSUS_COMPLETE_VERIFIED,
+            SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID,
             SourceStatus.NO_CASH_DISTRIBUTION_ENTITLEMENT,
         )
 
@@ -207,6 +238,7 @@ def coverage_report(
         "missing": missing,
         "split_missing": split_missing,
         "complete": not missing and not split_missing,
+        "trust_ceiling": CensusTrustLevel.STRUCTURAL_CENSUS_CHECK_PASSED.value,
         "cells_requested": requested,
         "cash_cells_complete": requested - len(missing),
         "split_cells_complete": requested - len(split_missing),
@@ -223,3 +255,66 @@ def require_complete_coverage(
             f"split {report['split_cells_complete']}/{report['cells_requested']}; "
             f"first missing {report['missing'][:3]}."  # type: ignore[index]
         )
+
+
+CENSUS_SOURCE_COLUMNS: Tuple[str, ...] = (
+    "symbol", "fund_identifier", "ex_date", "payable_date", "gross_amount", "distribution_type",
+)
+
+
+def parse_census_source_bytes(
+    payload: bytes, *, symbol: str, fund_identifier: str, source_ref: str
+) -> List[EtfDistributionRecord]:
+    """Re-derive records from captured source bytes (UTF-8 CSV with identity columns)."""
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise DataContractError(f"CENSUS_SOURCE_NOT_UTF8: {source_ref}.") from exc
+    reader = csv.DictReader(io.StringIO(text))
+    if tuple(reader.fieldnames or ()) != CENSUS_SOURCE_COLUMNS:
+        raise DataContractError(f"CENSUS_SOURCE_COLUMNS_MISMATCH: {source_ref}.")
+    rows = list(reader)
+    for row in rows:
+        if row["symbol"] != symbol or row["fund_identifier"] != fund_identifier:
+            raise DataContractError(f"CENSUS_SOURCE_IDENTITY_MISMATCH: {source_ref}.")
+    return parse_distribution_rows(rows, symbol=symbol, source_ref=source_ref)
+
+
+def _economics(records: Sequence[EtfDistributionRecord]) -> List[Tuple[date, date, Decimal, str]]:
+    return sorted((r.ex_date, r.payable_date, r.gross_amount, r.distribution_type) for r in records)
+
+
+def assess_census_trust(
+    cell: LedgerCell, *, source_artifacts: Optional[Mapping[str, bytes]] = None
+) -> Tuple[CensusTrustLevel, Tuple[str, ...]]:
+    """Grade a cash-distribution census claim; never above what evidence proves.
+
+    Returns the highest level reached and the reasons higher levels were not
+    reached. Byte reconciliation failures raise (tampered or unrelated evidence).
+    """
+    if cell.status is not SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID or cell.census is None:
+        raise DataContractError(f"CENSUS_NOT_CLAIMED: {cell.symbol} {cell.year} {cell.status.value}.")
+    census = cell.census
+    level = CensusTrustLevel.STRUCTURAL_CENSUS_CHECK_PASSED
+    gaps: List[str] = []
+    if source_artifacts is None:
+        gaps.append("SOURCE_BYTES_NOT_PROVIDED")
+    else:
+        derived: List[EtfDistributionRecord] = []
+        for digest in census.evidence_sha256:
+            payload = source_artifacts.get(digest)
+            if payload is None or hashlib.sha256(payload).hexdigest() != digest:
+                raise DataContractError(f"CENSUS_SOURCE_BYTES_MISMATCH: {cell.symbol} {cell.year} {digest[:12]}.")
+            derived.extend(
+                parse_census_source_bytes(
+                    payload, symbol=cell.symbol, fund_identifier=census.fund_identifier, source_ref=digest
+                )
+            )
+        in_year = [r for r in derived if r.ex_date.year == cell.year]
+        if _economics(in_year) != _economics(cell.records):
+            raise DataContractError(f"CENSUS_RECORDS_NOT_RECONCILED: {cell.symbol} {cell.year}.")
+        level = CensusTrustLevel.SOURCE_BYTES_RECONCILED
+    if not D5_ADMISSION_TRUST_ANCHORS:
+        gaps.append("D5_ADMISSION_TRUST_ANCHORS_EMPTY")
+    gaps.append("INDEPENDENT_CENSUS_ADMISSION_VERIFIER_NOT_IMPLEMENTED")
+    return level, tuple(gaps)
