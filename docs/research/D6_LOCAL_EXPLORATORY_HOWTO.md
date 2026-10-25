@@ -115,6 +115,19 @@ The `--h10` file is the Federal Reserve H.10 Thailand historical page saved as
 text. The runner prints markdown tables and writes `v35_grid.csv` and a
 contribution ledger to `--out`, which must be empty.
 
+V36 study (cost audit, Thai funding cadence, withholding, attribution and
+subperiods; frozen grid in
+[the V36 spec](D6_V36_FUNDING_COST_AUDIT_SPEC_20261026.md)). Run it from the
+repository root:
+
+```bash
+uv run python -m scripts.run_d6_v36_study \
+    --data data/local_research/v36/reconciled_max \
+    --h10 data/local_research/fx/h10_dat00_th_20261025.txt \
+    --v35-grid data/local_research/v35/v35_grid.csv \
+    --out data/local_research/v36/out
+```
+
 ## 5. What the checks do
 
 - Rejects:
