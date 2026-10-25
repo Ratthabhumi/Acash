@@ -209,19 +209,29 @@ def coverage(inputs: LocalInputs, start: date, end: date) -> Dict[str, Dict[str,
     return report
 
 
-def compute_metrics(result: D6Result, initial_nav: Decimal) -> Dict[str, Decimal]:
-    navs = [record.nav for record in result.nav_curve]
+def curve_metrics(navs: Sequence[Decimal], initial_nav: Decimal) -> Dict[str, Decimal]:
+    """Return, volatility and drawdown of a flow-free value curve (NAV or TWR index)."""
     if len(navs) < 3:
         raise DataContractError("LOCAL_TOO_FEW_SESSIONS_FOR_METRICS: need at least 3.")
     returns = [b / a - 1 for a, b in zip(navs, navs[1:])]
     growth = navs[-1] / initial_nav
     periods = Decimal(len(returns))
     return {
-        "terminal_nav": navs[-1],
         "total_return": growth - 1,
         "annualized_return_252": growth ** (Decimal(252) / periods) - 1,
         "annualized_volatility_252": statistics.stdev(returns) * Decimal(252).sqrt(),
         "max_drawdown": max_drawdown(navs),
+    }
+
+
+def compute_metrics(result: D6Result, initial_nav: Decimal) -> Dict[str, Decimal]:
+    if result.contributions:
+        raise DataContractError("LOCAL_FLOW_CONTAMINATED_NAV: use the contribution TWR metrics.")
+    navs = [record.nav for record in result.nav_curve]
+    curve = curve_metrics(navs, initial_nav)
+    return {
+        "terminal_nav": navs[-1],
+        **curve,
         "commissions": result.commissions,
         "regulatory_fees": result.regulatory_fees,
         "distributions_net": result.dividends_gross - result.withholding,

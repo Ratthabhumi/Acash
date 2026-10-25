@@ -100,6 +100,21 @@ Outputs are `report.md`, which contains the input SHA-256 digests, the coverage
 table, the results table and any missing inputs, plus one `nav_<portfolio>.csv`
 per portfolio that ran.
 
+Monthly-contribution study (V35, frozen grid in
+[the study spec](D6_V35_CONTRIBUTION_STUDY_SPEC_20261025.md)):
+
+```bash
+uv run python scripts/run_d6_contribution_study.py \
+    --data data/local_research/v34/reconciled_max \
+    --boundary-data data/local_research/v34/reconciled_min \
+    --h10 data/local_research/fx/h10_dat00_th_20261025.txt \
+    --out data/local_research/v35
+```
+
+The `--h10` file is the Federal Reserve H.10 Thailand historical page saved as
+text. The runner prints markdown tables and writes `v35_grid.csv` and a
+contribution ledger to `--out`, which must be empty.
+
 ## 5. What the checks do
 
 - Rejects:

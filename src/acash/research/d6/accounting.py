@@ -95,17 +95,46 @@ class D6CostModel:
     commission_minimum: Decimal = ZERO
     regulatory_fees: bool = False
     withholding_rate: Decimal = ZERO
+    commission_max_rate: Decimal | None = None
+    commission_floor: Decimal = ZERO
+    clearing_per_share: Decimal = ZERO
+    clearing_max_rate: Decimal | None = None
+    passthrough_rate: Decimal = ZERO
+    min_order_notional: Decimal = ZERO
 
     def __post_init__(self) -> None:
-        if min(self.slippage_bps, self.commission_per_share, self.commission_minimum) < ZERO:
+        optional = [r for r in (self.commission_max_rate, self.clearing_max_rate) if r is not None]
+        values = [
+            self.slippage_bps,
+            self.commission_per_share,
+            self.commission_minimum,
+            self.commission_floor,
+            self.clearing_per_share,
+            self.passthrough_rate,
+            self.min_order_notional,
+            *optional,
+        ]
+        if min(values) < ZERO:
             raise DataContractError("D6_NEGATIVE_COST_PARAMETER.")
         if not ZERO <= self.withholding_rate < Decimal("1"):
             raise DataContractError("D6_BAD_WITHHOLDING_RATE.")
 
-    def commission(self, quantity: Decimal) -> Decimal:
+    def commission(self, quantity: Decimal, notional: Decimal | None = None) -> Decimal:
+        """Broker charge: per-share with minimum, value cap overriding the minimum,
+        floor, plus per-share clearing (value-capped) and pass-through on the base."""
         if quantity <= ZERO:
             return ZERO
-        return max(self.commission_minimum, self.commission_per_share * quantity)
+        capped = self.commission_max_rate is not None or self.clearing_max_rate is not None
+        if capped and (notional is None or notional <= ZERO):
+            raise DataContractError("D6_COMMISSION_CAP_REQUIRES_NOTIONAL.")
+        base = max(self.commission_minimum, self.commission_per_share * quantity)
+        if self.commission_max_rate is not None and notional is not None:
+            base = min(base, self.commission_max_rate * notional)
+        base = max(self.commission_floor, base)
+        clearing = self.clearing_per_share * quantity
+        if self.clearing_max_rate is not None and notional is not None:
+            clearing = min(clearing, self.clearing_max_rate * notional)
+        return base + clearing + base * self.passthrough_rate
 
 
 @dataclass(frozen=True)
@@ -169,6 +198,8 @@ class D6Result:
     withholding: Decimal = ZERO
     commissions: Decimal = ZERO
     regulatory_fees: Decimal = ZERO
+    contributions: List[Tuple[date, Decimal]] = field(default_factory=list)
+    contributed: Decimal = ZERO
 
 
 @dataclass(frozen=True)
@@ -253,7 +284,11 @@ def run_d6_portfolio(
     whole_shares: bool = False,
     initial_nav: Decimal = D6_INITIAL_NAV,
     execution_timing: str = D6_TIMING_PRIMARY,
+    contributions: Mapping[date, Decimal] | None = None,
 ) -> D6Result:
+    """``contributions`` are external cash flows credited at the start of the
+    given session; spendable cash is deployed buy-only by weight, decided at that
+    session's close and executed at the next open (annual rebalance precedes)."""
     if price_adjustment != "raw":
         raise DataContractError(
             f"D6_ADJUSTED_PRICES_REJECTED: {price_adjustment!r}; explicit distributions "
@@ -278,6 +313,20 @@ def run_d6_portfolio(
             execute_at.add(ordered[1])
     else:
         execute_at = yearly
+
+    contributions = dict(contributions or {})
+    if contributions:
+        if execution_timing != D6_TIMING_PRIMARY:
+            raise DataContractError("D6_CONTRIBUTIONS_REQUIRE_PRIMARY_TIMING.")
+        known = set(ordered)
+        for day, amount in contributions.items():
+            if day not in known:
+                raise DataContractError(f"D6_CONTRIBUTION_NOT_A_SESSION: {day}.")
+            if day == ordered[0]:
+                raise DataContractError(f"D6_CONTRIBUTION_ON_INITIAL_SESSION: {day}.")
+            if amount <= ZERO:
+                raise DataContractError(f"D6_NONPOSITIVE_CONTRIBUTION: {day} {amount}.")
+    deploy_at = {ordered[i + 1] for i, s in enumerate(ordered[:-1]) if s in contributions} - execute_at
 
     result = D6Result(portfolio=portfolio.name, cost_label=cost.label, execution_timing=execution_timing)
     cash = initial_nav
@@ -325,7 +374,13 @@ def run_d6_portfolio(
                 outstanding.append(ent)
         receivables = outstanding
 
-        if session in execute_at and symbols:
+        added = contributions.get(session)
+        if added is not None:
+            cash += added
+            result.contributed += added
+            result.contributions.append((session, added))
+
+        if (session in execute_at or session in deploy_at) and symbols:
             if execution_timing == D6_TIMING_OPEN_SENSITIVITY:
                 frozen = _target_shares(portfolio, cash, holdings, session_opens, whole_shares)
             if frozen is None:
@@ -344,8 +399,11 @@ def run_d6_portfolio(
         nxt = ordered[index + 1] if index + 1 < len(ordered) else None
         if execution_timing == D6_TIMING_PRIMARY and nxt in execute_at and symbols:
             frozen = _target_shares(portfolio, cash, holdings, session_closes, whole_shares)
+        elif nxt in deploy_at and symbols:
+            frozen = _buy_only_targets(portfolio, cash, holdings, session_closes, whole_shares)
 
-    if initial_nav + flows != cash or _reconstruct_cash(result, initial_nav, ordered[-1]) != cash:
+    total_in = initial_nav + result.contributed
+    if total_in + flows != cash or _reconstruct_cash(result, initial_nav, ordered[-1]) != cash:
         raise DataContractError("D6_CASH_CONSERVATION_VIOLATED.")
     result.holdings = dict(holdings)
     result.ending_cash = cash
@@ -365,6 +423,20 @@ def _target_shares(
     symbols = sorted(portfolio.weights)
     value = cash + sum((holdings[s] * prices[s] for s in symbols), ZERO)
     return {s: _quantize(portfolio.weights[s] * value / prices[s], whole_shares) for s in symbols}
+
+
+def _buy_only_targets(
+    portfolio: D6Portfolio,
+    cash: Decimal,
+    holdings: Mapping[str, Decimal],
+    prices: Mapping[str, Decimal],
+    whole_shares: bool,
+) -> Dict[str, Decimal]:
+    """Holdings plus spendable cash split by weight at ``prices``; never sells."""
+    return {
+        s: holdings[s] + _quantize(portfolio.weights[s] * cash / prices[s], whole_shares)
+        for s in sorted(portfolio.weights)
+    }
 
 
 def _execute(
@@ -390,10 +462,15 @@ def _execute(
             continue
         fill = adverse_fill(opens[sym], "SELL", cost.slippage_bps)
         notional = fill * quantity
+        if notional < cost.min_order_notional:
+            result.skipped_orders.append(
+                D6SkippedOrder(session, sym, "SELL", quantity, "BELOW_MIN_NOTIONAL_SKIPPED")
+            )
+            continue
         fees = ZERO
         if cost.regulatory_fees:
             fees = compute_sec31_fee(session, notional) + compute_finra_taf(session, quantity)
-        commission = cost.commission(quantity)
+        commission = cost.commission(quantity, notional)
         delta = notional - fees - commission
         if delta <= ZERO:
             result.skipped_orders.append(
@@ -411,7 +488,7 @@ def _execute(
     wanted = {s: targets[s] - holdings[s] for s in targets if targets[s] > holdings[s]}
     fills = {s: adverse_fill(opens[s], "BUY", cost.slippage_bps) for s in wanted}
     gross = sum((wanted[s] * fills[s] for s in wanted), ZERO)
-    reserved = sum((cost.commission(wanted[s]) for s in wanted), ZERO)
+    reserved = sum((cost.commission(wanted[s], wanted[s] * fills[s]) for s in wanted), ZERO)
     scale = Decimal("1")
     if gross > ZERO and gross + reserved > cash:
         scale = max(ZERO, cash - reserved) / gross
@@ -423,7 +500,12 @@ def _execute(
             )
             continue
         notional = fills[sym] * quantity
-        commission = cost.commission(quantity)
+        if notional < cost.min_order_notional:
+            result.skipped_orders.append(
+                D6SkippedOrder(session, sym, "BUY", wanted[sym], "BELOW_MIN_NOTIONAL_SKIPPED")
+            )
+            continue
+        commission = cost.commission(quantity, notional)
         if notional + commission > cash:
             raise DataContractError(f"D6_NEGATIVE_CASH_GUARD: {session} {sym}.")
         cash -= notional + commission
@@ -437,8 +519,8 @@ def _execute(
 
 
 def _reconstruct_cash(result: D6Result, initial_nav: Decimal, last_session: date) -> Decimal:
-    """Cash rebuilt only from the trade and entitlement ledgers (independent of ``flows``)."""
-    cash = initial_nav
+    """Cash rebuilt only from the trade, entitlement and contribution ledgers."""
+    cash = initial_nav + sum((amount for _, amount in result.contributions), ZERO)
     for t in result.trades:
         if t.side == "BUY":
             cash -= t.notional + t.commission
