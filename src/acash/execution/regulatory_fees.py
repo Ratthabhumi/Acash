@@ -2,7 +2,10 @@
 
 Strict Invariants:
 - Pure deterministic functions using Decimal arithmetic only (no floating-point).
-- Effective-date lookup covering 2007-05-01 through 2024-04-30 (M1 replication period).
+- Effective-date lookup covering 2007-05-01 through 2025-12-31 (MEC-0015 M1
+  replication period through 2024-04-30, extended for the D6 2016-2025 window).
+- Rates are statutory SRO/member assessments; they are not account-verified
+  retail broker pass-through charges.
 - Fail closed (raises DataContractError) outside authorized schedule or on malformed inputs.
 - Sell-side only: returns Decimal("0.00") for buy orders.
 - Zero credential access, zero market data access.
@@ -18,7 +21,10 @@ from typing import Sequence
 from acash.core.domain.exceptions import DataContractError
 
 MEC_0015_REGULATORY_SCHEDULE_START: date = date(2007, 5, 1)
+# MEC-0015 M1 replication window end; historical contract value, not lookup coverage.
 MEC_0015_REGULATORY_SCHEDULE_END: date = date(2024, 4, 30)
+REGULATORY_SCHEDULE_START: date = MEC_0015_REGULATORY_SCHEDULE_START
+REGULATORY_SCHEDULE_END: date = date(2025, 12, 31)
 
 
 @dataclass(frozen=True)
@@ -211,6 +217,25 @@ SEC_SECTION_31_SCHEDULE: Sequence[Sec31ScheduleSegment] = (
         official_source="SEC Fee Rate Advisory #2 for Fiscal Year 2023",
         source_reference="SEC Release No. 34-96791 / Effective February 27, 2023",
     ),
+    Sec31ScheduleSegment(
+        effective_start=date(2024, 5, 22),
+        effective_end=date(2025, 5, 13),
+        rate_per_million=Decimal("27.80"),
+        rate_per_dollar=Decimal("0.00002780"),
+        official_source="SEC Fee Rate Advisory, Fiscal Year 2024 (SEC Press Release 2024-47)",
+        source_reference="Effective May 22, 2024 / docs/research/V26_EXTERNAL_RESEARCH_RESULTS_20261025.md R3.1",
+    ),
+    Sec31ScheduleSegment(
+        effective_start=date(2025, 5, 14),
+        effective_end=date(2025, 12, 31),
+        rate_per_million=Decimal("0.00"),
+        rate_per_dollar=Decimal("0.00000000"),
+        official_source="SEC Fee Rate Advisory, Fiscal Year 2025 (zero rate pending appropriation)",
+        source_reference=(
+            "Effective May 14, 2025; next change effective April 4, 2026 per SEC Release "
+            "No. 34-104909 / docs/research/V26_EXTERNAL_RESEARCH_RESULTS_20261025.md R3.1"
+        ),
+    ),
 )
 
 
@@ -277,6 +302,17 @@ FINRA_TAF_SCHEDULE: Sequence[FinraTafScheduleSegment] = (
         official_source="FINRA SR-FINRA-2020-032 (Phase 3 Full Implementation)",
         source_reference="SEC Release No. 34-90176 / Effective January 1, 2024",
     ),
+    FinraTafScheduleSegment(
+        effective_start=date(2025, 1, 1),
+        effective_end=date(2025, 12, 31),
+        rate_per_share=Decimal("0.000166"),
+        max_fee_per_trade=Decimal("8.30"),
+        official_source="FINRA By-Laws Schedule A Section 1 (no amendment after Jan 1, 2024)",
+        source_reference=(
+            "FINRA fee filing, Federal Register Nov 27, 2024, p. 93714 (2025 unchanged) / "
+            "docs/research/V26_EXTERNAL_RESEARCH_RESULTS_20261025.md R3.2"
+        ),
+    ),
 )
 
 
@@ -285,11 +321,11 @@ def get_sec31_segment(trade_date: date) -> Sec31ScheduleSegment:
 
     Raises DataContractError if trade_date is outside the authorized schedule.
     """
-    if trade_date < MEC_0015_REGULATORY_SCHEDULE_START or trade_date > MEC_0015_REGULATORY_SCHEDULE_END:
+    if trade_date < REGULATORY_SCHEDULE_START or trade_date > REGULATORY_SCHEDULE_END:
         raise DataContractError(
             f"DATE_OUTSIDE_SCHEDULE: Trade date {trade_date} is outside the authoritative "
-            f"MEC-0015 SEC Section 31 schedule ({MEC_0015_REGULATORY_SCHEDULE_START} "
-            f"to {MEC_0015_REGULATORY_SCHEDULE_END})."
+            f"MEC-0015 SEC Section 31 schedule ({REGULATORY_SCHEDULE_START} "
+            f"to {REGULATORY_SCHEDULE_END})."
         )
     for seg in SEC_SECTION_31_SCHEDULE:
         if seg.effective_start <= trade_date <= seg.effective_end:
@@ -304,11 +340,11 @@ def get_finra_taf_segment(trade_date: date) -> FinraTafScheduleSegment:
 
     Raises DataContractError if trade_date is outside the authorized schedule.
     """
-    if trade_date < MEC_0015_REGULATORY_SCHEDULE_START or trade_date > MEC_0015_REGULATORY_SCHEDULE_END:
+    if trade_date < REGULATORY_SCHEDULE_START or trade_date > REGULATORY_SCHEDULE_END:
         raise DataContractError(
             f"DATE_OUTSIDE_SCHEDULE: Trade date {trade_date} is outside the authoritative "
-            f"MEC-0015 FINRA TAF schedule ({MEC_0015_REGULATORY_SCHEDULE_START} "
-            f"to {MEC_0015_REGULATORY_SCHEDULE_END})."
+            f"MEC-0015 FINRA TAF schedule ({REGULATORY_SCHEDULE_START} "
+            f"to {REGULATORY_SCHEDULE_END})."
         )
     for seg in FINRA_TAF_SCHEDULE:
         if seg.effective_start <= trade_date <= seg.effective_end:
@@ -329,7 +365,7 @@ def compute_sec31_fee(
     - Pure function with Decimal arithmetic.
     - Buy side fee is exactly Decimal("0.00").
     - Sell side calculates sale_principal * rate_per_dollar.
-    - Fails closed on negative principal or date outside [2007-05-01, 2024-04-30].
+    - Fails closed on negative principal or date outside [2007-05-01, 2025-12-31].
     - Rounding: ACASH conservative broker pass-through operationalization uses
       ROUND_CEILING to the next full cent (ROUND_CEILING_TO_CENT), consistent with
       standard broker-dealer pass-through practice noted in SEC rulemaking (Release No. 34-49928).
@@ -373,7 +409,7 @@ def compute_finra_taf(
       execution price < per-share TAF rate. This MEC-0015 SPY-scoped function intentionally
       omits execution price because SPY prices ($100-$500+) are orders of magnitude above
       the sub-cent TAF rate, and this function is not a generic statutory penny-stock engine.
-    - Fails closed on negative shares or date outside [2007-05-01, 2024-04-30].
+    - Fails closed on negative shares or date outside [2007-05-01, 2025-12-31].
     """
     if not is_sell:
         return Decimal("0.00")
