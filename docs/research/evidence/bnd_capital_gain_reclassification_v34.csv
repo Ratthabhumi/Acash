@@ -1,0 +1,7 @@
+symbol,ex_date,provider_gross_amount,component_type,amount,payable_date,evidence_class,evidence_ref
+BND,2020-12-23,0.1436,CAPITAL_GAIN_LONG_TERM,0.1064,2020-12-29,OCC_MEMO_CORROBORATED,https://infomemo.theocc.com/infomemos?number=48045
+BND,2020-12-23,0.1436,CAPITAL_GAIN_SHORT_TERM,0.0372,2020-12-29,OCC_MEMO_CORROBORATED,https://infomemo.theocc.com/infomemos?number=48045
+BND,2021-04-01,0.0534,CAPITAL_GAIN_SHORT_TERM,0.0034,,SECONDARY_INDICATION_ONLY,https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/
+BND,2021-04-01,0.0534,CAPITAL_GAIN_LONG_TERM,0.05,,SECONDARY_INDICATION_ONLY,https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/
+BND,2021-12-23,0.13,CAPITAL_GAIN_LONG_TERM,0.13,,SECONDARY_INDICATION_ONLY,https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/
+BND,2022-04-01,0.0593,CAPITAL_GAIN_LONG_TERM,0.0593,,SECONDARY_INDICATION_ONLY,https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/
