@@ -101,10 +101,21 @@ class D6CostModel:
     clearing_max_rate: Decimal | None = None
     passthrough_rate: Decimal = ZERO
     min_order_notional: Decimal = ZERO
+    fractional_rate: Decimal | None = None
+    exchange_per_share: Decimal = ZERO
+    withholding_overrides: Tuple[Tuple[str, str, Decimal], ...] = ()
 
     def __post_init__(self) -> None:
-        optional = [r for r in (self.commission_max_rate, self.clearing_max_rate) if r is not None]
+        keys = [(sym, kind) for sym, kind, _ in self.withholding_overrides]
+        if len(keys) != len(set(keys)):
+            raise DataContractError("D6_DUPLICATE_WITHHOLDING_OVERRIDE.")
+        if any(not ZERO <= rate < Decimal("1") for _, _, rate in self.withholding_overrides):
+            raise DataContractError("D6_BAD_WITHHOLDING_RATE.")
+        optional = [
+            r for r in (self.commission_max_rate, self.clearing_max_rate, self.fractional_rate) if r is not None
+        ]
         values = [
+            self.exchange_per_share,
             self.slippage_bps,
             self.commission_per_share,
             self.commission_minimum,
@@ -121,20 +132,33 @@ class D6CostModel:
 
     def commission(self, quantity: Decimal, notional: Decimal | None = None) -> Decimal:
         """Broker charge: per-share with minimum, value cap overriding the minimum,
-        floor, plus per-share clearing (value-capped) and pass-through on the base."""
+        floor, plus per-share clearing (value-capped), pass-through on the base and
+        an uncapped per-share venue fee. With ``fractional_rate`` a non-integer
+        order is charged ``max(floor, fractional_rate x notional)`` instead."""
         if quantity <= ZERO:
             return ZERO
-        capped = self.commission_max_rate is not None or self.clearing_max_rate is not None
+        capped = any(r is not None for r in (self.commission_max_rate, self.clearing_max_rate, self.fractional_rate))
         if capped and (notional is None or notional <= ZERO):
             raise DataContractError("D6_COMMISSION_CAP_REQUIRES_NOTIONAL.")
-        base = max(self.commission_minimum, self.commission_per_share * quantity)
-        if self.commission_max_rate is not None and notional is not None:
-            base = min(base, self.commission_max_rate * notional)
-        base = max(self.commission_floor, base)
+        if self.fractional_rate is not None and notional is not None and quantity != quantity.to_integral_value():
+            base = max(self.commission_floor, self.fractional_rate * notional)
+        else:
+            base = max(self.commission_minimum, self.commission_per_share * quantity)
+            if self.commission_max_rate is not None and notional is not None:
+                base = min(base, self.commission_max_rate * notional)
+            base = max(self.commission_floor, base)
         clearing = self.clearing_per_share * quantity
         if self.clearing_max_rate is not None and notional is not None:
             clearing = min(clearing, self.clearing_max_rate * notional)
-        return base + clearing + base * self.passthrough_rate
+        return base + clearing + base * self.passthrough_rate + self.exchange_per_share * quantity
+
+    def withholding_for(self, symbol: str, distribution_type: str) -> Decimal:
+        """Override by (symbol, type), then (symbol, "*"), else ``withholding_rate``."""
+        table = {(sym, kind): rate for sym, kind, rate in self.withholding_overrides}
+        for key in ((symbol, distribution_type), (symbol, "*")):
+            if key in table:
+                return table[key]
+        return self.withholding_rate
 
 
 @dataclass(frozen=True)
@@ -356,7 +380,7 @@ def run_d6_portfolio(
                 if holdings[sym] <= ZERO:
                     continue
                 gross = holdings[sym] * item.amount_per_share
-                withheld = gross * cost.withholding_rate
+                withheld = gross * cost.withholding_for(sym, item.distribution_type)
                 entitlement = D6Entitlement(
                     sym, item.ex_date, item.payable_date, item.distribution_type, item.identity, gross, withheld
                 )
