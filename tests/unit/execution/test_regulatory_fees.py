@@ -16,10 +16,10 @@ from acash.execution.regulatory_fees import (
 
 
 def test_sec31_schedule_completeness_and_continuity() -> None:
-    """Verify all 20 segments are contiguous from 2007-05-01 through 2024-04-30 without gaps."""
-    assert len(SEC_SECTION_31_SCHEDULE) == 20
+    """Verify all 22 segments are contiguous from 2007-05-01 through 2025-12-31 without gaps."""
+    assert len(SEC_SECTION_31_SCHEDULE) == 22
     assert SEC_SECTION_31_SCHEDULE[0].effective_start <= date(2007, 5, 1)
-    assert SEC_SECTION_31_SCHEDULE[-1].effective_end >= date(2024, 4, 30)
+    assert SEC_SECTION_31_SCHEDULE[-1].effective_end >= date(2025, 12, 31)
 
     for i in range(len(SEC_SECTION_31_SCHEDULE) - 1):
         seg = SEC_SECTION_31_SCHEDULE[i]
@@ -31,10 +31,10 @@ def test_sec31_schedule_completeness_and_continuity() -> None:
 
 
 def test_finra_taf_schedule_completeness_and_continuity() -> None:
-    """Verify all 7 segments are contiguous from 2007-05-01 through 2024-04-30 without gaps."""
-    assert len(FINRA_TAF_SCHEDULE) == 7
+    """Verify all 8 segments are contiguous from 2007-05-01 through 2025-12-31 without gaps."""
+    assert len(FINRA_TAF_SCHEDULE) == 8
     assert FINRA_TAF_SCHEDULE[0].effective_start <= date(2007, 5, 1)
-    assert FINRA_TAF_SCHEDULE[-1].effective_end >= date(2024, 4, 30)
+    assert FINRA_TAF_SCHEDULE[-1].effective_end >= date(2025, 12, 31)
 
     for i in range(len(FINRA_TAF_SCHEDULE) - 1):
         seg = FINRA_TAF_SCHEDULE[i]
@@ -194,9 +194,9 @@ def test_sec31_calculation_and_rounding() -> None:
 
 
 def test_fail_closed_outside_scope_and_malformed() -> None:
-    """Verify strict fail-closed contract outside [2007-05-01, 2024-04-30] and invalid inputs."""
+    """Verify strict fail-closed contract outside [2007-05-01, 2025-12-31] and invalid inputs."""
     too_early = date(2007, 4, 30)
-    too_late = date(2024, 5, 1)
+    too_late = date(2026, 1, 1)
 
     with pytest.raises(DataContractError, match="DATE_OUTSIDE_SCHEDULE"):
         compute_sec31_fee(too_early, Decimal("1000.00"))
