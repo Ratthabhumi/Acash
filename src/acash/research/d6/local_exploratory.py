@@ -8,7 +8,7 @@ unchanged, so causal timing, the negative-cash guard and cash reconstruction app
 Input files (UTF-8 CSV, header row required):
 
 - bars: ``symbol,session,open,close,adjustment`` with ``adjustment`` = ``raw``.
-- distributions (optional): ``symbol,ex_date,payable_date,gross_amount[,distribution_type]``;
+- distributions (optional): ``symbol,ex_date,payable_date,gross_amount[,distribution_type][,event_id]``;
   ``gross_amount`` is per share as of the ex-date, not restated for later splits.
 - splits (optional): ``symbol,session,ratio`` (new shares per old share).
 
@@ -307,7 +307,8 @@ def render_report(
             ", ".join(
                 f"{s}={n}"
                 for s, n in sorted(
-                    (s, sum(":" in r.distribution_type for r in recs)) for s, recs in inputs.dividends.items()
+                    (s, sum(1 for r in recs if sum(o.ex_date == r.ex_date for o in recs) > 1))
+                    for s, recs in inputs.dividends.items()
                 )
                 if n
             )

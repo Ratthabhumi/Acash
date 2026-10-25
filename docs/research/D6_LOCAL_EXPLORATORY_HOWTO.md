@@ -32,22 +32,40 @@ counts so this is visible.
 ## 3. Fetch from Alpaca (optional; uses your own account credentials)
 
 ```bash
-uv run python scripts/fetch_alpaca_d6_local_data.py --feed sip --impute-missing-payable
+# one request series per NEW raw directory (bars need an explicit asof)
+uv run python scripts/fetch_alpaca_d6_local_data.py fetch --kind bars --feed sip --asof 2026-10-25 --raw-dir data/local_research/raw_bars_v1
+uv run python scripts/fetch_alpaca_d6_local_data.py fetch --kind corporate_actions --end 2026-01-31 --raw-dir data/local_research/raw_actions_v1
+# offline: verify page digests and pagination chain, then write CSVs to a NEW directory
+uv run python scripts/fetch_alpaca_d6_local_data.py convert --bars-raw data/local_research/raw_bars_v1 --actions corporate_actions=data/local_research/raw_actions_v1 --out data/local_research/conv_max --payable-lag-policy max
 ```
 
-What the fetch does:
+What the script does:
 
-- Sends read-only market-data GETs: raw daily bars and corporate actions. No trading
-  endpoint is called. There are no retries and no feed fallback, and credential
-  values are never printed.
-- Saves the raw pages to `data/local_research/raw/` and writes `bars_raw.csv`,
-  `distributions.csv`, `splits.csv` and `fetch_manifest.json`.
-- `--from-raw` re-converts the saved pages without a network call.
-- Alpaca returns no payable dates before 2020. Without `--impute-missing-payable`
-  the conversion fails. With the flag, each missing payable date becomes ex-date
-  plus the symbol's largest observed lag, and the row is labelled `IMPUTED_EX_PLUS_<n>D`.
-- When a symbol has several events on the same ex-date, each one is kept and tagged
-  with its provider id.
+- **Fetch.** Sends read-only market-data GETs only; no trading endpoint is called.
+  - No retries and no feed fallback.
+  - Limits: at most 32 requests and 8,388,608 response bytes per series.
+  - HTTP error bodies and credential values are never printed.
+  - Each raw page is written with `raw_manifest.json` (SHA-256, bytes, page tokens).
+    An existing raw directory is never overwritten.
+- **Corporate-action window.** `start` and `end` filter on `process_date`. Fetch a
+  little past the study end; `convert` windows by `ex_date` and lists every excluded
+  event in `conversion_manifest.json`.
+- **Convert.** Never opens a network connection. It rejects missing, extra or altered
+  pages and broken or looping page chains.
+- **seal-legacy.** Records digests for pages fetched before manifests existed. It
+  keeps their original unpinned-asof status.
+- **Missing payable dates.** Alpaca returns none before 2020. Without
+  `--payable-lag-policy` the conversion fails. With `min`, `median` or `max`, each one
+  becomes ex-date plus that statistic of the symbol's observed provider lags. The row
+  is labelled `IMPUTED_EX_PLUS_<n>D_<POLICY>_OBSERVED_LAG`.
+- **Event identity.** It is the `event_id` column. `distribution_type` is the economic
+  class: `DIVIDEND_CASH`, `SPECIAL_CASH`, `RETURN_OF_CAPITAL_CASH`, `INTEREST_CASH`,
+  `CAPITAL_GAIN_LONG_TERM` or `CAPITAL_GAIN_SHORT_TERM`. A capital-gain event with
+  both legs becomes two rows, `<id>#long_term` and `<id>#short_term`.
+- **Duplicates.** An exact duplicate inside a page is rejected. The same id seen
+  twice across fetches must be identical, otherwise it is rejected as a revision.
+- **Sensitivity.** `scripts/run_d6_local_sensitivity.py` compares payable policies,
+  the same-day-pair reading and a few cost scenarios on the same bars.
 
 ## 4. Run
 
