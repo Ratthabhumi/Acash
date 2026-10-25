@@ -27,7 +27,7 @@ PRICES = {
     "BIL": [("91.5", "91.5"), ("91.5", "91.51"), ("91.51", "91.52"), ("91.52", "91.53"), ("91.53", "91.54")],
 }
 ZERO_COST = D6CostModel(label="ZERO_COST_UPPER_BOUND")
-START, END = date(2024, 1, 1), date(2024, 1, 31)
+START, END = date(2024, 1, 1), date(2024, 1, 8)
 
 
 def _bars(path: Path, skip: tuple[str, str] | None = None, adjustment: str = "raw") -> Path:
@@ -60,6 +60,22 @@ def test_all_five_comparators_run_and_are_labelled_local(tmp_path: Path) -> None
     report = render_report(inputs, outcomes, start=START, end=END, cost=ZERO_COST)
     assert "Not D5-admitted, not PIT-verified" in report
     assert "D5_REAL_DATA_ADMITTED" not in report
+    assert "Imputed payable dates (labelled in the distributions file): none" in report
+
+
+def test_imputed_payable_dates_are_counted_in_report(tmp_path: Path) -> None:
+    dist = _write(
+        tmp_path / "d.csv",
+        "symbol,ex_date,payable_date,gross_amount,distribution_type,payable_date_source\n"
+        "BND,2024-01-03,2024-01-09,0.2,DIVIDEND_CASH,IMPUTED_EX_PLUS_6D\n"
+        "BND,2024-01-04,2024-01-05,0.2,DIVIDEND_CASH,PROVIDER\n",
+    )
+    inputs = load_local_inputs(_bars(tmp_path / "b.csv"), dist)
+    assert inputs.imputed_payable == {"BND": 1}
+    outcomes = run_local_exploratory(inputs, start=START, end=END, cost=ZERO_COST)
+    assert "Imputed payable dates (labelled in the distributions file): BND=1" in render_report(
+        inputs, outcomes, start=START, end=END, cost=ZERO_COST
+    )
 
 
 def test_voo_matches_hand_computed_causal_reference(tmp_path: Path) -> None:
@@ -100,12 +116,24 @@ def test_missing_session_marks_only_affected_portfolio_not_run(tmp_path: Path) -
         ("VOO,2024-01-02,abc,100,raw", "LOCAL_UNPARSEABLE_NUMBER"),
         ("VOO,2024/01/02,100,100,raw", "LOCAL_BAD_DATE"),
         (",2024-01-02,100,100,raw", "LOCAL_EMPTY_SYMBOL"),
+        ("VOO,2024-01-06,100,100,raw", "LOCAL_BAR_ON_NON_SESSION"),
+        ("VOO,2024-01-15,100,100,raw", "LOCAL_BAR_ON_NON_SESSION"),
+        ("VOO,2030-01-02,100,100,raw", "outside ratified CA-1"),
     ],
 )
 def test_malformed_bar_rows_fail_closed(tmp_path: Path, row: str, code: str) -> None:
     path = _write(tmp_path / "b.csv", f"symbol,session,open,close,adjustment\n{row}\n")
     with pytest.raises(DataContractError, match=code):
         load_local_inputs(path)
+
+
+def test_session_missing_for_every_symbol_is_still_detected(tmp_path: Path) -> None:
+    rows = ["symbol,session,open,close,adjustment"]
+    rows += [f"VOO,{s},{o},{c},raw" for s, (o, c) in zip(SESSIONS, PRICES["VOO"]) if s != "2024-01-05"]
+    inputs = load_local_inputs(_write(tmp_path / "b.csv", "\n".join(rows) + "\n"))
+    voo = run_local_exploratory(inputs, start=START, end=END, cost=ZERO_COST)[2]
+    assert voo.status == "NOT_RUN"
+    assert voo.missing == ("VOO: 1 of 5 sessions missing (first 2024-01-05)",)
 
 
 def test_duplicate_bar_and_missing_columns_rejected(tmp_path: Path) -> None:

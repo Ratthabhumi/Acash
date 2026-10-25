@@ -172,11 +172,17 @@ class LedgerCell:
 def parse_distribution_rows(
     rows: Sequence[Mapping[str, str]], *, symbol: str, source_ref: str
 ) -> List[EtfDistributionRecord]:
-    """Parse issuer-style rows (ISO dates, decimal strings) into canonical records."""
+    """Parse issuer-style rows (ISO dates, decimal strings) into canonical records.
+
+    An optional ``event_id`` column carries source event identity; distinct ids may
+    then share an ex-date and type (e.g. two provider events), a repeated id may not.
+    Without it, (ex_date, distribution_type) must be unique.
+    """
     if not source_ref.strip():
         raise DataContractError("LEDGER_SOURCE_REF_MISSING.")
     records: List[EtfDistributionRecord] = []
     seen: set[Tuple[date, str]] = set()
+    seen_ids: set[str] = set()
     for index, row in enumerate(rows):
         missing = [f for f in REQUIRED_ROW_FIELDS if not str(row.get(f, "")).strip()]
         if missing:
@@ -188,7 +194,12 @@ def parse_distribution_rows(
         except (ValueError, InvalidOperation) as exc:
             raise DataContractError(f"LEDGER_ROW_UNPARSEABLE: row {index}: {exc}.") from exc
         kind = row.get("distribution_type", "DIVIDEND_CASH").strip() or "DIVIDEND_CASH"
-        if (ex_date, kind) in seen:
+        source_id = (row.get("event_id") or "").strip()
+        if source_id:
+            if source_id in seen_ids:
+                raise DataContractError(f"LEDGER_DUPLICATE_EVENT_ID: {symbol} {source_id}.")
+            seen_ids.add(source_id)
+        elif (ex_date, kind) in seen:
             raise DataContractError(f"LEDGER_DUPLICATE_EVENT: {symbol} {ex_date} {kind}.")
         seen.add((ex_date, kind))
         try:
@@ -199,7 +210,7 @@ def parse_distribution_rows(
                     payable_date=payable,
                     gross_amount=gross,
                     distribution_type=kind,
-                    event_id=f"{source_ref}#{index}",
+                    event_id=source_id or f"{source_ref}#{index}",
                     share_basis=DistributionShareBasis.POST_SPLIT,
                 )
             )
