@@ -59,6 +59,7 @@ def _census(symbol: str = "VOO", rows: int = 2, **overrides: object) -> CensusEv
     base = CensusEvidence(
         fund_symbol=symbol,
         fund_identifier="SYNTHETIC-CUSIP",
+        cell_year=2024,
         source_scope="SYNTHETIC full-history export",
         covered_start=date(2016, 1, 1),
         covered_end=date(2025, 12, 31),
@@ -66,6 +67,7 @@ def _census(symbol: str = "VOO", rows: int = 2, **overrides: object) -> CensusEv
         export_or_pagination_proof="single export, footer row count",
         event_types_reconciled=("DIVIDEND_CASH",),
         evidence_sha256=("a" * 64,),
+        acquisition_operator="SYNTHETIC_OPERATOR",
         reviewer="SYNTHETIC_REVIEWER",
         vintage_limitation="RETRIEVED_NOW_PIT_UNKNOWN",
     )
@@ -92,7 +94,7 @@ def test_cell_status_contract() -> None:
     with pytest.raises(DataContractError, match="SOURCE_REF_MISSING"):
         LedgerCell("BIL", 2024, SourceStatus.SOURCE_IDENTIFIED, "")
     with pytest.raises(DataContractError, match="CENSUS_EVIDENCE_REQUIRED"):
-        LedgerCell("VOO", 2024, SourceStatus.CENSUS_COMPLETE_VERIFIED, REF, _recs())
+        LedgerCell("VOO", 2024, SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID, REF, _recs())
     with pytest.raises(DataContractError, match="CENSUS_EVIDENCE_WITHOUT_CENSUS_STATUS"):
         LedgerCell("VOO", 2024, SourceStatus.SOURCE_EXTRACTED_PARTIAL, REF, _recs(), census=_census())
 
@@ -110,14 +112,14 @@ def test_cell_status_contract() -> None:
         ({"evidence_sha256": ()}, "CENSUS_EVIDENCE_HASH_INVALID"),
         ({"evidence_sha256": ("ABC",)}, "CENSUS_EVIDENCE_HASH_INVALID"),
         ({"reviewer": ""}, "CENSUS_FIELD_MISSING"),
-        ({"vintage_limitation": " "}, "CENSUS_FIELD_MISSING"),
+        ({"vintage_limitation": " "}, "CENSUS_PIT_CLAIM_UNSUPPORTED"),
     ],
 )
 def test_census_evidence_must_prove_completeness(overrides: dict[str, object], code: str) -> None:
     rows = overrides.pop("rows", 2)
     with pytest.raises(DataContractError, match=code):
         LedgerCell(
-            "VOO", 2024, SourceStatus.CENSUS_COMPLETE_VERIFIED, REF, _recs(),
+            "VOO", 2024, SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID, REF, _recs(),
             census=_census(rows=rows, **overrides),  # type: ignore[arg-type]
         )
 
@@ -132,7 +134,7 @@ def test_gld_policy_does_not_establish_split_census() -> None:
 
 def test_coverage_requires_cash_and_split_census() -> None:
     voo = LedgerCell(
-        "VOO", 2024, SourceStatus.CENSUS_COMPLETE_VERIFIED, REF, _recs(), census=_census(),
+        "VOO", 2024, SourceStatus.CENSUS_CLAIM_STRUCTURALLY_VALID, REF, _recs(), census=_census(),
         split_census=_census(rows=0, event_types_reconciled=("SPLIT",)),
     )
     cells = [
