@@ -28,7 +28,7 @@ seeing data, which would be a post-hoc choice.
 |---|---|
 | Price basis | Raw prices plus explicit distributions and splits; adjusted series rejected (`D6_ADJUSTED_PRICES_REJECTED`) to prevent double counting |
 | Expense ratio | Embedded in observed ETF prices; never deducted again |
-| Execution | Rebalance at the session open with adverse slippage; the same session's close cannot influence trades. Sizing uses the open price — an open-auction idealization; a strict variant sizing on the prior close is a disclosed sensitivity, not implemented |
+| Execution | Superseded in V28 by proposed A2 (`D6_AMENDMENT_A2_CAUSAL_EXECUTION_TIMING_UNRATIFIED_20261025.md`): prior-close decision, next-open execution is primary; same-open sizing is a labelled sensitivity |
 | Distributions | Entitlement on ex-date into a receivable; cash on payable date; receivables are not spendable; unpaid at end reported as `terminal_receivable` |
 | GLD | Any cash distribution input fails closed (`D6_NO_CASH_DISTRIBUTION_ENTITLEMENT`) |
 | Withholding | Scenario parameter only; never a universal default |
