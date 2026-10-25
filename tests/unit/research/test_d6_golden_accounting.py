@@ -1,9 +1,14 @@
-"""D6 golden accounting tests (synthetic prices; hand-derived expected values)."""
+"""D6 golden accounting tests (synthetic prices; hand-derived expected values).
+
+These pin the SAME_OPEN_SIZING_IDEALIZED sensitivity; the causal primary timing
+is covered in ``test_d6_v28_causal_and_identity.py``.
+"""
 
 from __future__ import annotations
 
 from datetime import date
 from decimal import ROUND_CEILING, Decimal
+from functools import partial
 
 import pytest
 
@@ -11,6 +16,7 @@ from acash.core.domain.exceptions import DataContractError
 from acash.research.d6.accounting import (
     D6_LABEL,
     D6_REGISTERED_PORTFOLIOS,
+    D6_TIMING_OPEN_SENSITIVITY,
     D6CostModel,
     D6Portfolio,
     first_sessions_of_year,
@@ -18,6 +24,7 @@ from acash.research.d6.accounting import (
 )
 from acash.research.hyp_009.accounting import DividendEvent
 
+_ideal = partial(run_d6_portfolio, execution_timing=D6_TIMING_OPEN_SENSITIVITY)
 D = Decimal
 S = (date(2024, 12, 30), date(2024, 12, 31), date(2025, 1, 2), date(2025, 1, 3))
 FREE = D6CostModel("ZERO_COST_UPPER_BOUND")
@@ -47,7 +54,7 @@ def test_registered_comparators_are_exactly_the_five() -> None:
 
 
 def test_cash_no_trade_is_constant() -> None:
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["CASH_NO_TRADE"], sessions=S, opens={}, closes={}, dividends={}, cost=FREE
     )
     assert result.label == D6_LABEL
@@ -58,7 +65,7 @@ def test_cash_no_trade_is_constant() -> None:
 def test_bil_dividend_receivable_is_not_spendable_until_payable() -> None:
     closes = _flat("100", {S[0]: "100.5"})
     divs = {"BIL": [DividendEvent(S[1], S[3], D("0.40"))]}
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["BIL_100"], sessions=S, opens={"BIL": _flat("100")},
         closes={"BIL": closes}, dividends=divs, cost=FREE,
     )
@@ -74,7 +81,7 @@ def test_bil_dividend_receivable_is_not_spendable_until_payable() -> None:
 def test_withholding_scenario_and_payment_after_end() -> None:
     divs = {"BIL": [DividendEvent(S[1], date(2025, 1, 10), D("0.40"))]}
     cost = D6CostModel("WITHHOLDING_15PCT_SCENARIO", withholding_rate=D("0.15"))
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["BIL_100"], sessions=S, opens={"BIL": _flat("100")},
         closes={"BIL": _flat("100")}, dividends=divs, cost=cost,
     )
@@ -91,7 +98,7 @@ def test_withholding_scenario_and_payment_after_end() -> None:
 )
 def test_voo_slippage_minimum_commission_and_residual_cash(whole: bool, expected_qty: Decimal) -> None:
     cost = D6CostModel("SLIP10_MIN1", slippage_bps=D("10"), commission_minimum=D("1.00"))
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["VOO_100"], sessions=S, opens={"VOO": _flat("400")},
         closes={"VOO": _flat("400")}, dividends={}, cost=cost, whole_shares=whole,
     )
@@ -107,7 +114,7 @@ def test_sixty_forty_annual_rebalance_with_historical_fees() -> None:
     opens = _prices(VOO=_flat("100", {S[1]: "120", S[2]: "125", S[3]: "125"}), BND=_flat("50"))
     closes = _prices(VOO=_flat("100", {S[1]: "120", S[2]: "125", S[3]: "125"}), BND=_flat("50"))
     cost = D6CostModel("STATUTORY_FEES_ONLY", regulatory_fees=True)
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["VOO_BND_60_40"], sessions=S, opens=opens, closes=closes, dividends={}, cost=cost,
     )
     assert first_sessions_of_year(S) == (S[0], S[2])
@@ -123,7 +130,7 @@ def test_sixty_forty_annual_rebalance_with_historical_fees() -> None:
 
 def test_diversified_buys_fractional_targets_and_conserves_nav() -> None:
     opens = _prices(VOO=_flat("100"), BND=_flat("50"), GLD=_flat("200"), BIL=_flat("100"))
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["VOO_BND_GLD_BIL_50_30_10_10"], sessions=S, opens=opens, closes=opens,
         dividends={}, cost=FREE,
     )
@@ -134,7 +141,7 @@ def test_diversified_buys_fractional_targets_and_conserves_nav() -> None:
 def test_gld_cash_distribution_is_rejected() -> None:
     opens = _prices(VOO=_flat("100"), BND=_flat("50"), GLD=_flat("200"), BIL=_flat("100"))
     with pytest.raises(DataContractError, match="D6_NO_CASH_DISTRIBUTION_ENTITLEMENT"):
-        run_d6_portfolio(
+        _ideal(
             PORTFOLIOS["VOO_BND_GLD_BIL_50_30_10_10"], sessions=S, opens=opens, closes=opens,
             dividends={"GLD": [DividendEvent(S[1], S[2], D("0.10"))]}, cost=FREE,
         )
@@ -142,7 +149,7 @@ def test_gld_cash_distribution_is_rejected() -> None:
 
 def test_split_keeps_nav_continuous_and_whole_share_cash_in_lieu_fails_closed() -> None:
     prices = _flat("100", {S[1]: "50", S[2]: "50", S[3]: "50"})
-    result = run_d6_portfolio(
+    result = _ideal(
         PORTFOLIOS["VOO_100"], sessions=S, opens={"VOO": prices}, closes={"VOO": prices},
         dividends={}, splits={"VOO": {S[1]: D("2")}}, cost=FREE,
     )
@@ -150,7 +157,7 @@ def test_split_keeps_nav_continuous_and_whole_share_cash_in_lieu_fails_closed() 
     assert [r.nav for r in result.nav_curve] == [D("1000")] * 4
     odd = _flat("300", {S[1]: "200", S[2]: "200", S[3]: "200"})
     with pytest.raises(DataContractError, match="D6_SPLIT_CASH_IN_LIEU_UNSUPPORTED"):
-        run_d6_portfolio(
+        _ideal(
             PORTFOLIOS["VOO_100"], sessions=S, opens={"VOO": odd}, closes={"VOO": odd},
             dividends={}, splits={"VOO": {S[1]: D("1.5")}}, cost=FREE, whole_shares=True,
         )
@@ -158,7 +165,7 @@ def test_split_keeps_nav_continuous_and_whole_share_cash_in_lieu_fails_closed() 
 
 def test_adjusted_prices_with_explicit_distributions_are_rejected() -> None:
     with pytest.raises(DataContractError, match="D6_ADJUSTED_PRICES_REJECTED"):
-        run_d6_portfolio(
+        _ideal(
             PORTFOLIOS["BIL_100"], sessions=S, opens={"BIL": _flat("100")},
             closes={"BIL": _flat("100")}, dividends={}, cost=FREE, price_adjustment="all",
         )
@@ -168,7 +175,7 @@ def test_rebalance_uses_open_not_same_session_close() -> None:
     def run(close_on_rebalance: str) -> list[tuple[str, Decimal]]:
         closes = _prices(VOO=_flat("100", {S[2]: close_on_rebalance}), BND=_flat("50"))
         opens = _prices(VOO=_flat("100", {S[2]: "110"}), BND=_flat("50"))
-        result = run_d6_portfolio(
+        result = _ideal(
             PORTFOLIOS["VOO_BND_60_40"], sessions=S, opens=opens, closes=closes, dividends={}, cost=FREE,
         )
         return [(t.symbol, t.quantity) for t in result.trades if t.session == S[2]]
@@ -193,7 +200,7 @@ def test_malformed_inputs_fail_closed(kwargs: dict[str, object]) -> None:
     }
     args.update(kwargs)
     with pytest.raises(DataContractError):
-        run_d6_portfolio(PORTFOLIOS["BIL_100"], **args)  # type: ignore[arg-type]
+        _ideal(PORTFOLIOS["BIL_100"], **args)  # type: ignore[arg-type]
 
 
 def test_bad_portfolio_and_cost_definitions_fail_closed() -> None:

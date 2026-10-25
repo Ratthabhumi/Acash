@@ -3,12 +3,23 @@
 Generalizes the frozen HYP_011 session order to the five registered D6
 portfolios without modifying HYP_011:
 
-1. split application to holdings;
-2. ex-date entitlement from holdings at the prior close (net of a labelled
-   withholding scenario) recorded as a receivable;
-3. payable-date settlement into spendable cash (receivables are never spendable);
-4. scheduled rebalance at the session OPEN (never at a close already observed);
+1. split application to holdings (and to any frozen order targets);
+2. ex-date entitlement per distribution event from holdings before the
+   session's trades (net of a labelled withholding scenario) as a receivable;
+3. payable-date settlement per event into spendable cash (receivables are
+   never spendable);
+4. scheduled orders executed at the session OPEN with adverse costs;
 5. EOD valuation: cash + holdings x close + outstanding receivables.
+
+Execution timing (``execution_timing``):
+
+- ``PRIOR_CLOSE_DECISION_NEXT_OPEN`` (PRIMARY): target share quantities are
+  frozen from information through the previous admitted session close and
+  executed at the next open. The first admitted session has no prior close, so
+  the portfolio stays in cash and initial construction executes at the second
+  admitted session; no prior close is ever synthesized.
+- ``SAME_OPEN_SIZING_IDEALIZED`` (SENSITIVITY): targets sized from the open of
+  the execution session itself, which an investor cannot know before submitting.
 
 Prices must be RAW (unadjusted): explicit cash distributions on adjusted
 total-return prices would double count. ETF expense ratios are already in the
@@ -23,9 +34,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_DOWN, Decimal
-from typing import Dict, List, Mapping, Sequence
+from typing import Dict, List, Mapping, Sequence, Tuple, Union
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.contracts.etf_fx_benchmark import (
+    DistributionTaxClassification,
+    EtfDistributionRecord,
+    FxFixingRecord,
+    HoldingsBasedBenchmark,
+    resolve_fx_fixing_for_date,
+)
 from acash.execution.regulatory_fees import compute_finra_taf, compute_sec31_fee
 from acash.research.hyp_009.accounting import DividendEvent, adverse_fill
 
@@ -34,6 +52,10 @@ D6_INITIAL_NAV = Decimal("1000.00")
 NO_CASH_DISTRIBUTION_SYMBOLS = frozenset({"GLD"})
 FRACTIONAL_SHARE_QUANTUM = Decimal("0.000001")
 ZERO = Decimal("0")
+D6_TIMING_PRIMARY = "PRIOR_CLOSE_DECISION_NEXT_OPEN"
+D6_TIMING_OPEN_SENSITIVITY = "SAME_OPEN_SIZING_IDEALIZED"
+
+D6Distribution = Union[DividendEvent, EtfDistributionRecord]
 
 
 @dataclass(frozen=True)
@@ -93,6 +115,7 @@ class D6Trade:
     notional: Decimal
     commission: Decimal
     regulatory_fees: Decimal
+    ordered_quantity: Decimal = ZERO
 
 
 @dataclass(frozen=True)
@@ -104,13 +127,26 @@ class D6NavRecord:
     nav: Decimal
 
 
+@dataclass(frozen=True)
+class D6Entitlement:
+    symbol: str
+    ex_date: date
+    payable_date: date
+    distribution_type: str
+    identity: Tuple[object, ...]
+    gross: Decimal
+    withheld: Decimal
+
+
 @dataclass
 class D6Result:
     portfolio: str
     cost_label: str
+    execution_timing: str = D6_TIMING_PRIMARY
     label: str = D6_LABEL
     nav_curve: List[D6NavRecord] = field(default_factory=list)
     trades: List[D6Trade] = field(default_factory=list)
+    entitlements: List[D6Entitlement] = field(default_factory=list)
     holdings: Dict[str, Decimal] = field(default_factory=dict)
     ending_cash: Decimal = ZERO
     terminal_receivable: Decimal = ZERO
@@ -119,6 +155,15 @@ class D6Result:
     withholding: Decimal = ZERO
     commissions: Decimal = ZERO
     regulatory_fees: Decimal = ZERO
+
+
+@dataclass(frozen=True)
+class _Event:
+    ex_date: date
+    payable_date: date
+    amount_per_share: Decimal
+    distribution_type: str
+    identity: Tuple[object, ...]
 
 
 def first_sessions_of_year(sessions: Sequence[date]) -> tuple[date, ...]:
@@ -133,24 +178,75 @@ def _quantize(quantity: Decimal, whole_shares: bool) -> Decimal:
     return quantity.quantize(quantum, rounding=ROUND_DOWN)
 
 
+def _price(table: Mapping[str, Mapping[date, Decimal]], kind: str, sym: str, session: date) -> Decimal:
+    try:
+        price = table[sym][session]
+    except KeyError:
+        raise DataContractError(f"D6_MISSING_{kind}_PRICE: {sym} {session}; no fallback.") from None
+    if price <= ZERO:
+        raise DataContractError(f"D6_NONPOSITIVE_PRICE: {sym} {session}.")
+    return price
+
+
+def _normalize_events(
+    sym: str, events: Sequence[D6Distribution], splits: Mapping[date, Decimal]
+) -> Dict[date, List[_Event]]:
+    """Index events by ex-date without merging; reject duplicates and revisions."""
+    by_ex: Dict[date, List[_Event]] = {}
+    seen: set[Tuple[object, ...]] = set()
+    provider_ids: Dict[str, Tuple[object, ...]] = {}
+    for event in events:
+        if isinstance(event, EtfDistributionRecord):
+            if event.symbol != sym:
+                raise DataContractError(f"D6_DISTRIBUTION_SYMBOL_MISMATCH: {event.symbol} != {sym}.")
+            if (
+                event.net_amount is not None
+                or event.tax_classification is not DistributionTaxClassification.GROSS_BEFORE_WITHHOLDING
+            ):
+                raise DataContractError(
+                    f"D6_GROSS_RECORD_REQUIRED: {sym} {event.ex_date}; withholding is a D6 cost scenario."
+                )
+            identity: Tuple[object, ...] = HoldingsBasedBenchmark._entitlement_key(event)
+            if event.event_id is not None:
+                prior = provider_ids.setdefault(event.event_id, identity)
+                if prior != identity:
+                    raise DataContractError(f"D6_REVISED_EVENT: {sym} event_id {event.event_id}.")
+            item = _Event(event.ex_date, event.payable_date, event.gross_amount, event.distribution_type, identity)
+        else:
+            identity = (sym, event.ex_date, event.payable_date, "DIVIDEND_CASH", str(event.amount_per_share))
+            item = _Event(event.ex_date, event.payable_date, event.amount_per_share, "DIVIDEND_CASH", identity)
+        if item.payable_date < item.ex_date or item.amount_per_share <= ZERO:
+            raise DataContractError(f"D6_BAD_DIVIDEND: {sym} {item.ex_date}.")
+        if item.ex_date in splits:
+            raise DataContractError(f"D6_SPLIT_AND_EX_DATE_SAME_SESSION_UNSUPPORTED: {sym}.")
+        if identity in seen:
+            raise DataContractError(f"D6_DUPLICATE_DISTRIBUTION: {sym} {item.ex_date} {item.distribution_type}.")
+        seen.add(identity)
+        by_ex.setdefault(item.ex_date, []).append(item)
+    return by_ex
+
+
 def run_d6_portfolio(
     portfolio: D6Portfolio,
     *,
     sessions: Sequence[date],
     opens: Mapping[str, Mapping[date, Decimal]],
     closes: Mapping[str, Mapping[date, Decimal]],
-    dividends: Mapping[str, Sequence[DividendEvent]],
+    dividends: Mapping[str, Sequence[D6Distribution]],
     splits: Mapping[str, Mapping[date, Decimal]] | None = None,
     cost: D6CostModel,
     price_adjustment: str = "raw",
     whole_shares: bool = False,
     initial_nav: Decimal = D6_INITIAL_NAV,
+    execution_timing: str = D6_TIMING_PRIMARY,
 ) -> D6Result:
     if price_adjustment != "raw":
         raise DataContractError(
             f"D6_ADJUSTED_PRICES_REJECTED: {price_adjustment!r}; explicit distributions "
             "require raw prices."
         )
+    if execution_timing not in (D6_TIMING_PRIMARY, D6_TIMING_OPEN_SENSITIVITY):
+        raise DataContractError(f"D6_UNKNOWN_EXECUTION_TIMING: {execution_timing!r}.")
     ordered = list(sessions)
     if not ordered or ordered != sorted(set(ordered)):
         raise DataContractError("D6_SESSIONS_MUST_BE_UNIQUE_CHRONOLOGICAL.")
@@ -159,25 +255,26 @@ def run_d6_portfolio(
     for sym in sorted(dividends):
         if dividends[sym] and sym in NO_CASH_DISTRIBUTION_SYMBOLS:
             raise DataContractError(f"D6_NO_CASH_DISTRIBUTION_ENTITLEMENT: {sym}.")
-        for event in dividends[sym]:
-            if event.payable_date < event.ex_date or event.amount_per_share < ZERO:
-                raise DataContractError(f"D6_BAD_DIVIDEND: {sym} {event.ex_date}.")
-            if event.ex_date in splits.get(sym, {}):
-                raise DataContractError(f"D6_SPLIT_AND_EX_DATE_SAME_SESSION_UNSUPPORTED: {sym}.")
-    by_ex = {sym: {e.ex_date: e for e in dividends.get(sym, ())} for sym in symbols}
-    rebalance_set = set(first_sessions_of_year(ordered))
+    by_ex = {sym: _normalize_events(sym, dividends.get(sym, ()), splits.get(sym, {})) for sym in symbols}
 
-    result = D6Result(portfolio=portfolio.name, cost_label=cost.label)
+    yearly = set(first_sessions_of_year(ordered))
+    if execution_timing == D6_TIMING_PRIMARY:
+        execute_at = {s for s in ordered[1:] if s in yearly}
+        if len(ordered) > 1:
+            execute_at.add(ordered[1])
+    else:
+        execute_at = yearly
+
+    result = D6Result(portfolio=portfolio.name, cost_label=cost.label, execution_timing=execution_timing)
     cash = initial_nav
     flows = ZERO
     holdings: Dict[str, Decimal] = {sym: ZERO for sym in symbols}
-    receivables: List[tuple[date, Decimal]] = []
+    receivables: List[D6Entitlement] = []
+    frozen: Dict[str, Decimal] | None = None
 
-    for session in ordered:
-        session_opens = {sym: opens[sym][session] for sym in symbols}
-        session_closes = {sym: closes[sym][session] for sym in symbols}
-        if any(p <= ZERO for p in [*session_opens.values(), *session_closes.values()]):
-            raise DataContractError(f"D6_NONPOSITIVE_PRICE: {session}.")
+    for index, session in enumerate(ordered):
+        session_opens = {sym: _price(opens, "OPEN", sym, session) for sym in symbols}
+        session_closes = {sym: _price(closes, "CLOSE", sym, session) for sym in symbols}
 
         for sym in symbols:
             ratio = splits.get(sym, {}).get(session)
@@ -188,35 +285,49 @@ def run_d6_portfolio(
                 if whole_shares and adjusted != adjusted.to_integral_value():
                     raise DataContractError(f"D6_SPLIT_CASH_IN_LIEU_UNSUPPORTED: {sym} {session}.")
                 holdings[sym] = adjusted
+                if frozen is not None:
+                    frozen[sym] = _quantize(frozen[sym] * ratio, whole_shares)
 
         for sym in symbols:
-            ex_event = by_ex[sym].get(session)
-            if ex_event is not None and holdings[sym] > ZERO:
-                gross = holdings[sym] * ex_event.amount_per_share
+            for item in by_ex[sym].get(session, ()):
+                if holdings[sym] <= ZERO:
+                    continue
+                gross = holdings[sym] * item.amount_per_share
                 withheld = gross * cost.withholding_rate
+                entitlement = D6Entitlement(
+                    sym, item.ex_date, item.payable_date, item.distribution_type, item.identity, gross, withheld
+                )
+                result.entitlements.append(entitlement)
                 result.dividends_gross += gross
                 result.withholding += withheld
-                receivables.append((ex_event.payable_date, gross - withheld))
+                receivables.append(entitlement)
 
-        outstanding: List[tuple[date, Decimal]] = []
-        for payable, amount in receivables:
-            if payable <= session:
-                cash += amount
-                flows += amount
+        outstanding: List[D6Entitlement] = []
+        for ent in receivables:
+            if ent.payable_date <= session:
+                cash += ent.gross - ent.withheld
+                flows += ent.gross - ent.withheld
             else:
-                outstanding.append((payable, amount))
+                outstanding.append(ent)
         receivables = outstanding
 
-        if session in rebalance_set and symbols:
-            cash, flows = _rebalance(
-                session, portfolio, cash, flows, holdings, session_opens, cost, whole_shares, result
-            )
+        if session in execute_at and symbols:
+            if execution_timing == D6_TIMING_OPEN_SENSITIVITY:
+                frozen = _target_shares(portfolio, cash, holdings, session_opens, whole_shares)
+            if frozen is None:
+                raise DataContractError(f"D6_NO_CAUSAL_DECISION: {session}.")
+            cash, flows = _execute(session, frozen, cash, flows, holdings, session_opens, cost, whole_shares, result)
+        frozen = None
 
         market_value = sum((holdings[s] * session_closes[s] for s in symbols), ZERO)
-        receivable = sum((a for _, a in receivables), ZERO)
+        receivable = sum((e.gross - e.withheld for e in receivables), ZERO)
         result.nav_curve.append(
             D6NavRecord(session, cash, market_value, receivable, cash + market_value + receivable)
         )
+
+        nxt = ordered[index + 1] if index + 1 < len(ordered) else None
+        if execution_timing == D6_TIMING_PRIMARY and nxt in execute_at and symbols:
+            frozen = _target_shares(portfolio, cash, holdings, session_closes, whole_shares)
 
     if initial_nav + flows != cash:
         raise DataContractError("D6_CASH_CONSERVATION_VIOLATED.")
@@ -227,9 +338,22 @@ def run_d6_portfolio(
     return result
 
 
-def _rebalance(
-    session: date,
+def _target_shares(
     portfolio: D6Portfolio,
+    cash: Decimal,
+    holdings: Mapping[str, Decimal],
+    prices: Mapping[str, Decimal],
+    whole_shares: bool,
+) -> Dict[str, Decimal]:
+    """Target quantities from spendable value (receivables excluded) at ``prices``."""
+    symbols = sorted(portfolio.weights)
+    value = cash + sum((holdings[s] * prices[s] for s in symbols), ZERO)
+    return {s: _quantize(portfolio.weights[s] * value / prices[s], whole_shares) for s in symbols}
+
+
+def _execute(
+    session: date,
+    targets: Mapping[str, Decimal],
     cash: Decimal,
     flows: Decimal,
     holdings: Dict[str, Decimal],
@@ -238,13 +362,9 @@ def _rebalance(
     whole_shares: bool,
     result: D6Result,
 ) -> tuple[Decimal, Decimal]:
-    symbols = sorted(portfolio.weights)
-    value = cash + sum((holdings[s] * opens[s] for s in symbols), ZERO)
-    for sym in symbols:
-        excess = holdings[sym] * opens[sym] - portfolio.weights[sym] * value
-        if excess <= ZERO:
-            continue
-        quantity = min(holdings[sym], _quantize(excess / opens[sym], whole_shares))
+    """Sells first, then buys; buys scale down (partial) if open gaps exhaust cash."""
+    for sym in sorted(targets):
+        quantity = min(holdings[sym], holdings[sym] - targets[sym])
         if quantity <= ZERO:
             continue
         fill = adverse_fill(opens[sym], "SELL", cost.slippage_bps)
@@ -260,20 +380,17 @@ def _rebalance(
         result.commissions += commission
         result.regulatory_fees += fees
         result.trades.append(
-            D6Trade(session, sym, "SELL", quantity, opens[sym], fill, notional, commission, fees)
+            D6Trade(session, sym, "SELL", quantity, opens[sym], fill, notional, commission, fees, quantity)
         )
-    targets = {
-        sym: portfolio.weights[sym] * value - holdings[sym] * opens[sym] for sym in symbols
-    }
-    targets = {sym: t for sym, t in targets.items() if t > ZERO}
-    fills = {sym: adverse_fill(opens[sym], "BUY", cost.slippage_bps) for sym in targets}
-    reserved = sum((cost.commission(targets[s] / fills[s]) for s in targets), ZERO)
-    requested = sum(targets.values(), ZERO)
+    wanted = {s: targets[s] - holdings[s] for s in targets if targets[s] > holdings[s]}
+    fills = {s: adverse_fill(opens[s], "BUY", cost.slippage_bps) for s in wanted}
+    gross = sum((wanted[s] * fills[s] for s in wanted), ZERO)
+    reserved = sum((cost.commission(wanted[s]) for s in wanted), ZERO)
     scale = Decimal("1")
-    if requested > ZERO and requested + reserved > cash:
-        scale = max(ZERO, cash - reserved) / requested
-    for sym in sorted(targets):
-        quantity = _quantize(targets[sym] * scale / fills[sym], whole_shares)
+    if gross > ZERO and gross + reserved > cash:
+        scale = max(ZERO, cash - reserved) / gross
+    for sym in sorted(wanted):
+        quantity = _quantize(wanted[sym] * scale, whole_shares)
         if quantity <= ZERO:
             continue
         notional = fills[sym] * quantity
@@ -285,21 +402,39 @@ def _rebalance(
         holdings[sym] += quantity
         result.commissions += commission
         result.trades.append(
-            D6Trade(session, sym, "BUY", quantity, opens[sym], fills[sym], notional, commission, ZERO)
+            D6Trade(session, sym, "BUY", quantity, opens[sym], fills[sym], notional, commission, ZERO, wanted[sym])
         )
     return cash, flows
+
+
+def d6_nav_in_currency(
+    nav_curve: Sequence[D6NavRecord],
+    fixings: Mapping[date, FxFixingRecord],
+    *,
+    currency: str,
+) -> List[Tuple[date, Decimal]]:
+    """Reporting overlay only: USD NAV converted at exact-date fixings (no fallback)."""
+    return [
+        (r.session, resolve_fx_fixing_for_date(fixings, r.session).convert(r.nav, "USD", currency))
+        for r in nav_curve
+    ]
 
 
 __all__ = [
     "D6_INITIAL_NAV",
     "D6_LABEL",
     "D6_REGISTERED_PORTFOLIOS",
+    "D6_TIMING_OPEN_SENSITIVITY",
+    "D6_TIMING_PRIMARY",
     "D6CostModel",
+    "D6Distribution",
+    "D6Entitlement",
     "D6NavRecord",
     "D6Portfolio",
     "D6Result",
     "D6Trade",
     "NO_CASH_DISTRIBUTION_SYMBOLS",
+    "d6_nav_in_currency",
     "first_sessions_of_year",
     "run_d6_portfolio",
 ]
