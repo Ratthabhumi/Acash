@@ -12,9 +12,10 @@ Input files (UTF-8 CSV, header row required):
   ``gross_amount`` is per share as of the ex-date, not restated for later splits.
 - splits (optional): ``symbol,session,ratio`` (new shares per old share).
 
-Session coverage is checked across symbols only (no exchange calendar is bundled):
-a session present for any supplied symbol is required for every symbol a portfolio
-holds. A portfolio with any gap is NOT_RUN and its missing inputs are listed.
+Sessions come from ``NyseCa1Calendar`` (2013-2026; other years raise). A bar on a
+non-session is rejected; every official session in the window is required for every
+symbol a portfolio holds. A portfolio with any gap is NOT_RUN and its missing inputs
+are listed.
 """
 
 from __future__ import annotations
@@ -23,13 +24,14 @@ import csv
 import hashlib
 import io
 import statistics
-from dataclasses import dataclass, replace
-from datetime import date
+from dataclasses import dataclass, field, replace
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
+from acash.data.calendar.nyse_ca1 import NyseCa1Calendar
 from acash.data.contracts.corporate_action_ledger import parse_distribution_rows
 from acash.data.contracts.etf_fx_benchmark import EtfDistributionRecord
 from acash.research.d6.accounting import (
@@ -49,9 +51,9 @@ LOCAL_LIMITATIONS: Tuple[str, ...] = (
     "RETROSPECTIVE_DATA_NOT_PIT_VERIFIED",
     "NOT_D5_ADMITTED",
     "CORPORATE_ACTIONS_UNVERIFIED",
-    "SESSION_COVERAGE_CROSS_SYMBOL_ONLY",
     "ANNUALIZATION_252_SESSION_CONVENTION",
 )
+_CALENDAR = NyseCa1Calendar()
 BAR_COLUMNS = ("symbol", "session", "open", "close", "adjustment")
 DISTRIBUTION_COLUMNS = ("symbol", "ex_date", "payable_date", "gross_amount")
 SPLIT_COLUMNS = ("symbol", "session", "ratio")
@@ -67,6 +69,7 @@ class LocalInputs:
     dividends: Mapping[str, Sequence[EtfDistributionRecord]]
     splits: Mapping[str, Mapping[date, Decimal]]
     file_sha256: Mapping[str, str]
+    imputed_payable: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,8 @@ def load_local_inputs(
             raise DataContractError(f"LOCAL_ADJUSTED_BARS_REJECTED: {where}; D6 requires raw prices.")
         sym = _symbol(row, where)
         session = _session(row["session"], where)
+        if not _CALENDAR.is_trading_session(session):
+            raise DataContractError(f"LOCAL_BAR_ON_NON_SESSION: {sym} {session}.")
         if session in opens.setdefault(sym, {}):
             raise DataContractError(f"LOCAL_DUPLICATE_BAR: {sym} {session}.")
         opens[sym][session] = _positive(row["open"], where)
@@ -150,11 +155,15 @@ def load_local_inputs(
             splits[sym][session] = _positive(row["ratio"], where)
 
     dividends: Dict[str, List[EtfDistributionRecord]] = {}
+    imputed: Dict[str, int] = {}
     if distributions_csv is not None:
         dist_rows, digests[distributions_csv.name] = _read_csv(distributions_csv, DISTRIBUTION_COLUMNS)
         grouped: Dict[str, List[Dict[str, str]]] = {}
         for index, row in enumerate(dist_rows, start=2):
-            grouped.setdefault(_symbol(row, f"{distributions_csv.name}:{index}"), []).append(row)
+            sym = _symbol(row, f"{distributions_csv.name}:{index}")
+            grouped.setdefault(sym, []).append(row)
+            if (row.get("payable_date_source") or "").startswith("IMPUTED"):
+                imputed[sym] = imputed.get(sym, 0) + 1
         for sym, sym_rows in sorted(grouped.items()):
             records = parse_distribution_rows(sym_rows, symbol=sym, source_ref=distributions_csv.name)
             # An ex-date that is not a bar session would be silently skipped by the engine.
@@ -164,11 +173,16 @@ def load_local_inputs(
                     raise DataContractError(f"LOCAL_EX_DATE_NOT_A_BAR_SESSION: {sym} {record.ex_date}.")
             dividends[sym] = records
 
-    return LocalInputs(sessions, opens, closes, dividends, splits, digests)
+    return LocalInputs(sessions, opens, closes, dividends, splits, digests, imputed)
+
+
+def official_sessions(start: date, end: date) -> Tuple[date, ...]:
+    days = (start + timedelta(days=n) for n in range((end - start).days + 1))
+    return tuple(d for d in days if _CALENDAR.is_trading_session(d))
 
 
 def coverage(inputs: LocalInputs, start: date, end: date) -> Dict[str, Dict[str, object]]:
-    window = [s for s in inputs.sessions if start <= s <= end]
+    window = official_sessions(start, end)
     report: Dict[str, Dict[str, object]] = {}
     for sym in sorted(inputs.opens):
         have = inputs.opens[sym]
@@ -229,9 +243,9 @@ def run_local_exploratory(
 ) -> List[LocalOutcome]:
     if start > end:
         raise DataContractError(f"LOCAL_BAD_WINDOW: {start} > {end}.")
-    window = [s for s in inputs.sessions if start <= s <= end]
-    if not window:
+    if not any(start <= s <= end for s in inputs.sessions):
         raise DataContractError(f"LOCAL_EMPTY_WINDOW: no bar sessions in {start}..{end}.")
+    window = list(official_sessions(start, end))
     outcomes: List[LocalOutcome] = []
     for portfolio in portfolios:
         missing = []
@@ -280,12 +294,25 @@ def render_report(
         "Label: LOCAL_EXPLORATORY. Not D5-admitted, not PIT-verified, retrospective, "
         "not a performance claim and not trading authority.",
         "",
-        f"- Window: {start} .. {end} ({len([s for s in inputs.sessions if start <= s <= end])} sessions)",
+        f"- Window: {start} .. {end} ({len(official_sessions(start, end))} NYSE sessions)",
         f"- Execution timing: {execution_timing}",
         f"- Cost scenario: {cost.label} (slippage {cost.slippage_bps} bps, "
         f"commission/share {cost.commission_per_share}, regulatory fees {cost.regulatory_fees}, "
         f"withholding {cost.withholding_rate})",
         f"- Limitations: {', '.join(LOCAL_LIMITATIONS)}",
+        f"- Imputed payable dates (labelled in the distributions file): "
+        f"{', '.join(f'{s}={n}' for s, n in sorted(inputs.imputed_payable.items())) or 'none'}",
+        "- Same-ex-date multiple distributions kept as separate provider events: "
+        + (
+            ", ".join(
+                f"{s}={n}"
+                for s, n in sorted(
+                    (s, sum(":" in r.distribution_type for r in recs)) for s, recs in inputs.dividends.items()
+                )
+                if n
+            )
+            or "none"
+        ),
         "",
         "## Input files (SHA-256)",
         "",
