@@ -13,10 +13,9 @@ from typing import Dict, Mapping
 
 from acash.core.domain.exceptions import DataContractError
 from acash.research.d6.accounting import D6Result
-from acash.research.d6.funding import FundingPlan
+from acash.research.d6.funding import DECIMAL_DIVISION_TOLERANCE, FundingPlan
 
 ZERO = Decimal("0")
-DECIMAL_DIVISION_TOLERANCE = Decimal("1e-18")
 
 
 def broker_attribution(
