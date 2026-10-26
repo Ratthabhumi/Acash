@@ -1,0 +1,65 @@
+{
+  "base": {
+    "delay_sessions": 0,
+    "fx_spread": "0.005",
+    "intermediary_fee_usd": "0",
+    "sender_fee_thb": "400"
+  },
+  "baseline_sha": "499a3a751e22c46d0a2ac22bf7d8a35247630512",
+  "cadence_events": [
+    1,
+    3,
+    6,
+    12
+  ],
+  "control": "monthly_zero_fees_and_spread_cent_rounding_retained",
+  "end": "2025-12-31",
+  "expected_savings_events": 119,
+  "initial_usd": "1000",
+  "input_sha256": {
+    "data/local_research/fx/h10_dat00_th_20261025.txt": "3dc41fe0255d50cb14272d645b262023278f2705e84379a26696eaf38d0c5ee1",
+    "data/local_research/v35/v35_grid.csv": "f2efde508ac353dafaa4a0817e4f1e5df7a325f25ccd3b7bd356256f92d4249a",
+    "data/local_research/v36/reconciled_max/bars_raw.csv": "b86f73a69eff2cb9a81131dfa8b4b6d4cf32979be0a2ffcb8cd5e02058b0ff91",
+    "data/local_research/v36/reconciled_max/distributions.csv": "9885fcb8258dcd6dc8f944776834d49f3c6f914d260e5bdc7cd29ae1a1726ca0",
+    "data/local_research/v36/reconciled_max/splits.csv": "c9b9d95cedd8479118b2a0489f665d81f035d790739a56dc7f844fca5001588d"
+  },
+  "label": "LOCAL_EXPLORATORY_NOT_D5_ADMITTED",
+  "monthly_thb": [
+    "1000",
+    "3000",
+    "5000",
+    "10000"
+  ],
+  "portfolio": "VOO_BND_60_40",
+  "sensitivities": {
+    "cadence_events": 3,
+    "monthly_thb": "3000",
+    "one_at_a_time": {
+      "cost_row": [
+        "R2F"
+      ],
+      "delay_sessions": [
+        1,
+        3
+      ],
+      "intermediary_fee_usd": [
+        "15"
+      ],
+      "sender_fee_thb": [
+        "250",
+        "550"
+      ],
+      "whole_shares": [
+        true
+      ]
+    }
+  },
+  "start": "2016-01-01",
+  "v36_output_sha256": {
+    "data/local_research/v36/out/v36_attribution.csv": "ac1ee10653973152f19ebc6bbfe301f76da3752615866055ec1cc41f529a8ce8",
+    "data/local_research/v36/out/v36_cost_audit.csv": "da7119cd369e4e50733e02e72e519d0d9b78cad2e102fb1d4928f99ba7a15ff3",
+    "data/local_research/v36/out/v36_funding.csv": "7fe287492348e1fd0b31ed56fd694986aff2593e61ced927764b028d1699131c",
+    "data/local_research/v36/out/v36_subperiods.csv": "3c5c9ecdc4aee23b5b2c4b6b42d700bf38792f183def32c3f90c900334f24b4f",
+    "data/local_research/v36/out/v36_tax.csv": "66ec93d98c26e2dd7daeebbdf510db4cec7d723631ac53125f03b1e1838c6cb8"
+  }
+}
