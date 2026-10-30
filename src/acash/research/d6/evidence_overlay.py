@@ -1,8 +1,9 @@
 """V37B Independent Evidence Overlay for corporate actions and distribution reconciliation.
 
 Deterministic, offline, read-only evidence overlay separate from the canonical D6 dataset.
-Enforces the strict fail-closed contract and records source corroborations, contradictions,
-and unresolved gaps without mutating canonical execution inputs.
+Matching results are computed from provider rows, never taken from evidence labels.
+Annual financial totals, event-level components, event cash entitlements and tax-year
+designations are separate scopes and are never merged into one record.
 """
 
 from __future__ import annotations
@@ -11,20 +12,20 @@ import csv
 import hashlib
 import io
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 
-# 25 Canonical Minimum Fields
 EVIDENCE_OVERLAY_FIELDS: Tuple[str, ...] = (
     "question_id",
     "symbol",
     "cusip",
     "share_class",
     "economic_event_id",
+    "evidence_scope",
     "provider_event_id",
     "source_title",
     "source_url",
@@ -47,7 +48,14 @@ EVIDENCE_OVERLAY_FIELDS: Tuple[str, ...] = (
     "remaining_gap",
 )
 
-# Permitted Evidence Classes
+EVIDENCE_SCOPES: Tuple[str, ...] = (
+    "ANNUAL_FINANCIAL_TOTAL",
+    "EVENT_CASH_ENTITLEMENT",
+    "EVENT_FINANCIAL_COMPONENT",
+    "TAX_YEAR_DESIGNATION",
+)
+EVENT_SCOPES: Tuple[str, ...] = ("EVENT_CASH_ENTITLEMENT", "EVENT_FINANCIAL_COMPONENT")
+
 EVIDENCE_CLASSES: Tuple[str, ...] = (
     "ISSUER_EVENT_MATCHED",
     "ISSUER_ANNUAL_TOTAL_CORROBORATED",
@@ -57,24 +65,49 @@ EVIDENCE_CLASSES: Tuple[str, ...] = (
     "CONFLICTING_EVIDENCE",
     "UNRESOLVED",
 )
+INDEPENDENT_EVENT_CLASSES: Dict[str, str] = {
+    "ISSUER_EVENT_MATCHED": "MATCHED_ISSUER_DATE",
+    "OCC_EVENT_CORROBORATED": "MATCHED_OCC_EVENT",
+}
 
-# Permitted Matching Results
 MATCHING_RESULTS: Tuple[str, ...] = (
     "MATCHED_ISSUER_DATE",
+    "MATCHED_OCC_EVENT",
+    "ANNUAL_TOTAL_CONSISTENT",
+    "ANNUAL_TOTAL_INCONSISTENT",
     "CONFLICTING_DATE",
+    "CONFLICTING_AMOUNT",
+    "CONFLICTING_COMPONENT",
     "AMBIGUOUS_MATCH",
     "SOURCE_NOT_AVAILABLE",
+    "LOCAL_DATA_UNAVAILABLE",
+    "NOT_APPLICABLE",
     "UNRESOLVED",
 )
+# Results that only reconcile_provider_distributions() may assign from provider rows.
+COMPUTED_RESULTS: Tuple[str, ...] = (
+    "MATCHED_ISSUER_DATE",
+    "MATCHED_OCC_EVENT",
+    "ANNUAL_TOTAL_CONSISTENT",
+    "ANNUAL_TOTAL_INCONSISTENT",
+    "CONFLICTING_DATE",
+    "CONFLICTING_AMOUNT",
+    "CONFLICTING_COMPONENT",
+)
+POSITIVE_RESULTS: Tuple[str, ...] = (
+    "MATCHED_ISSUER_DATE",
+    "MATCHED_OCC_EVENT",
+    "ANNUAL_TOTAL_CONSISTENT",
+)
 
-# Permitted Rights Statuses
+# No source has a verified grant for every rights dimension (public access, internal use,
+# raw-byte retention, automated retrieval, derived data, public redistribution), so a
+# blanket RIGHTS_PERMITTED is not representable.
 RIGHTS_STATUSES: Tuple[str, ...] = (
-    "RIGHTS_PERMITTED",
     "RIGHTS_RESTRICTED",
     "RIGHTS_UNVERIFIED",
 )
 
-# Permitted Historical Availability / PIT Statuses
 HISTORICAL_AVAILABILITY_STATUSES: Tuple[str, ...] = (
     "PIT_HISTORICAL_CONTEMPORANEOUS",
     "RETROSPECTIVE_CORROBORATION_ONLY",
@@ -86,6 +119,7 @@ FINANCIAL_COMPONENT_TYPES: Tuple[str, ...] = (
     "CAPITAL_GAIN_SHORT_TERM",
     "CAPITAL_GAIN_LONG_TERM",
     "FINANCIAL_STATEMENT_ANNUAL_TOTAL",
+    "UNKNOWN",
     "NONE",
 )
 
@@ -94,21 +128,39 @@ TAX_CLASSIFICATIONS: Tuple[str, ...] = (
     "QUALIFIED_INTEREST_INCOME",
     "ORDINARY_DIVIDEND",
     "LONG_TERM_CAPITAL_GAIN",
+    "UNKNOWN",
     "NONE",
 )
 
+# Annual financial highlights report per-share distributions to three decimals.
+ANNUAL_ROUNDING_TOLERANCE = Decimal("0.0005")
 
-def _validate_date_str(value: str, field_name: str) -> None:
-    if value in ("", "UNKNOWN", "NONE"):
-        return
+_UNKNOWN = ("", "UNKNOWN", "NONE")
+
+
+def _parse_date(value: str, field_name: str) -> Optional[date]:
+    if value in _UNKNOWN:
+        return None
     try:
-        date.fromisoformat(value)
+        return date.fromisoformat(value)
     except ValueError as exc:
         raise DataContractError(f"OVERLAY_INVALID_DATE: {field_name} {value!r}.") from exc
 
 
-def _validate_decimal_str(value: str, field_name: str) -> Optional[Decimal]:
-    if value in ("", "NONE", "UNKNOWN"):
+def _parse_timestamp(value: str, field_name: str) -> Optional[datetime]:
+    if value == "UNKNOWN":
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise DataContractError(f"OVERLAY_INVALID_TIMESTAMP: {field_name} {value!r}.") from exc
+    if parsed.tzinfo is None:
+        raise DataContractError(f"OVERLAY_TIMESTAMP_WITHOUT_ZONE: {field_name} {value!r}.")
+    return parsed
+
+
+def _parse_amount(value: str, field_name: str) -> Optional[Decimal]:
+    if value in _UNKNOWN:
         return None
     try:
         d = Decimal(value)
@@ -119,6 +171,11 @@ def _validate_decimal_str(value: str, field_name: str) -> Optional[Decimal]:
     return d
 
 
+def _check_enum(value: str, allowed: Tuple[str, ...], code: str) -> None:
+    if value not in allowed:
+        raise DataContractError(f"{code}: {value!r}.")
+
+
 @dataclass(frozen=True)
 class EvidenceOverlayRecord:
     question_id: str
@@ -126,6 +183,7 @@ class EvidenceOverlayRecord:
     cusip: str
     share_class: str
     economic_event_id: str
+    evidence_scope: str
     provider_event_id: str
     source_title: str
     source_url: str
@@ -154,480 +212,545 @@ class EvidenceOverlayRecord:
             raise DataContractError(f"OVERLAY_INVALID_SYMBOL: {self.symbol!r}.")
         if not self.economic_event_id.strip():
             raise DataContractError("OVERLAY_EMPTY_ECONOMIC_EVENT_ID.")
-        if self.evidence_class not in EVIDENCE_CLASSES:
-            raise DataContractError(f"OVERLAY_UNKNOWN_EVIDENCE_CLASS: {self.evidence_class!r}.")
-        if self.matching_result not in MATCHING_RESULTS:
-            raise DataContractError(f"OVERLAY_UNKNOWN_MATCHING_RESULT: {self.matching_result!r}.")
-        if self.rights_status not in RIGHTS_STATUSES:
-            raise DataContractError(f"OVERLAY_UNKNOWN_RIGHTS_STATUS: {self.rights_status!r}.")
-        if self.historical_availability_status not in HISTORICAL_AVAILABILITY_STATUSES:
+        if not self.provider_event_id.strip():
+            raise DataContractError("OVERLAY_EMPTY_PROVIDER_EVENT_ID: use NONE explicitly.")
+        _check_enum(self.evidence_scope, EVIDENCE_SCOPES, "OVERLAY_UNKNOWN_EVIDENCE_SCOPE")
+        _check_enum(self.evidence_class, EVIDENCE_CLASSES, "OVERLAY_UNKNOWN_EVIDENCE_CLASS")
+        _check_enum(self.matching_result, MATCHING_RESULTS, "OVERLAY_UNKNOWN_MATCHING_RESULT")
+        if self.rights_status == "RIGHTS_PERMITTED":
             raise DataContractError(
-                f"OVERLAY_UNKNOWN_HISTORICAL_AVAILABILITY: {self.historical_availability_status!r}."
+                "OVERLAY_RIGHTS_PERMITTED_UNSUPPORTED: no per-dimension rights grant is verified."
             )
-        if self.financial_component_type not in FINANCIAL_COMPONENT_TYPES:
-            raise DataContractError(
-                f"OVERLAY_UNKNOWN_FINANCIAL_COMPONENT: {self.financial_component_type!r}."
-            )
-        if self.tax_classification not in TAX_CLASSIFICATIONS:
-            raise DataContractError(f"OVERLAY_UNKNOWN_TAX_CLASSIFICATION: {self.tax_classification!r}.")
+        _check_enum(self.rights_status, RIGHTS_STATUSES, "OVERLAY_UNKNOWN_RIGHTS_STATUS")
+        _check_enum(
+            self.historical_availability_status,
+            HISTORICAL_AVAILABILITY_STATUSES,
+            "OVERLAY_UNKNOWN_HISTORICAL_AVAILABILITY",
+        )
+        _check_enum(
+            self.financial_component_type,
+            FINANCIAL_COMPONENT_TYPES,
+            "OVERLAY_UNKNOWN_FINANCIAL_COMPONENT",
+        )
+        _check_enum(self.tax_classification, TAX_CLASSIFICATIONS, "OVERLAY_UNKNOWN_TAX_CLASSIFICATION")
 
-        _validate_date_str(self.ex_date, "ex_date")
-        _validate_date_str(self.record_date, "record_date")
-        _validate_date_str(self.payable_date, "payable_date")
-        _validate_decimal_str(self.cash_amount_per_share, "cash_amount_per_share")
+        ex = _parse_date(self.ex_date, "ex_date")
+        _parse_date(self.record_date, "record_date")
+        _parse_date(self.payable_date, "payable_date")
+        amount = _parse_amount(self.cash_amount_per_share, "cash_amount_per_share")
+        published = _parse_timestamp(self.publication_or_acceptance_time, "publication_or_acceptance_time")
+        captured = _parse_timestamp(self.capture_time, "capture_time")
+        if published is not None and captured is not None and captured < published:
+            raise DataContractError(f"OVERLAY_CAPTURE_BEFORE_PUBLICATION: {self.economic_event_id}.")
+
+        if self.tax_classification == "QUALIFIED_SHORT_TERM_GAIN" and self.evidence_scope != "TAX_YEAR_DESIGNATION":
+            raise DataContractError(
+                f"OVERLAY_QSG_WITHOUT_EVENT_PERCENTAGE: {self.economic_event_id} "
+                "carries QSG outside a tax-year designation."
+            )
+        if self.matching_result in ("MATCHED_ISSUER_DATE", "MATCHED_OCC_EVENT"):
+            if self.evidence_scope not in EVENT_SCOPES or ex is None:
+                raise DataContractError(f"OVERLAY_MATCH_WITHOUT_EVENT_DATE: {self.economic_event_id}.")
+            if INDEPENDENT_EVENT_CLASSES.get(self.evidence_class) != self.matching_result:
+                raise DataContractError(
+                    f"OVERLAY_MATCH_CLASS_INCONSISTENT: {self.economic_event_id} "
+                    f"{self.evidence_class} cannot yield {self.matching_result}."
+                )
+
+        if self.evidence_scope in ("ANNUAL_FINANCIAL_TOTAL", "TAX_YEAR_DESIGNATION"):
+            if (self.ex_date, self.record_date, self.payable_date) != ("UNKNOWN",) * 3:
+                raise DataContractError(f"OVERLAY_ANNUAL_TOTAL_AS_EVENT: {self.economic_event_id} has event dates.")
+            if self.provider_event_id != "NONE":
+                raise DataContractError(
+                    f"OVERLAY_ANNUAL_TOTAL_AS_EVENT: {self.economic_event_id} references a provider event."
+                )
+            if not (len(self.tax_year) == 4 and self.tax_year.isdigit()):
+                raise DataContractError(f"OVERLAY_BAD_TAX_YEAR: {self.tax_year!r}.")
+            if published is not None and published.date() <= date(int(self.tax_year), 12, 31):
+                raise DataContractError(
+                    f"OVERLAY_PUBLICATION_BEFORE_PERIOD_END: {self.economic_event_id} published "
+                    f"{self.publication_or_acceptance_time} before period {self.tax_year} ended."
+                )
+
+        if self.evidence_scope == "ANNUAL_FINANCIAL_TOTAL":
+            if self.financial_component_type != "FINANCIAL_STATEMENT_ANNUAL_TOTAL":
+                raise DataContractError(f"OVERLAY_ANNUAL_COMPONENT_MISMATCH: {self.economic_event_id}.")
+            if self.tax_classification not in ("UNKNOWN", "NONE"):
+                raise DataContractError(
+                    f"OVERLAY_ANNUAL_TAX_CLASSIFICATION: {self.economic_event_id} annual totals carry no tax designation."
+                )
+            if self.reporting_period != f"FY{self.tax_year}":
+                raise DataContractError(f"OVERLAY_REPORTING_PERIOD_MISMATCH: {self.economic_event_id}.")
+        elif self.evidence_scope == "TAX_YEAR_DESIGNATION":
+            if self.cash_amount_per_share != "NONE" or self.financial_component_type != "NONE":
+                raise DataContractError(f"OVERLAY_TAX_DESIGNATION_WITH_CASH: {self.economic_event_id}.")
+            if self.matching_result != "NOT_APPLICABLE":
+                raise DataContractError(f"OVERLAY_TAX_DESIGNATION_MATCHED: {self.economic_event_id}.")
+        else:
+            if self.financial_component_type in ("FINANCIAL_STATEMENT_ANNUAL_TOTAL", "NONE"):
+                raise DataContractError(f"OVERLAY_ANNUAL_TOTAL_AS_EVENT: {self.economic_event_id}.")
+            if amount is None:
+                raise DataContractError(f"OVERLAY_EVENT_WITHOUT_AMOUNT: {self.economic_event_id}.")
+            if self.evidence_class in INDEPENDENT_EVENT_CLASSES and ex is None:
+                raise DataContractError(f"OVERLAY_EVENT_DATE_UNKNOWN: {self.economic_event_id}.")
 
     def to_dict(self) -> Dict[str, str]:
         return {k: getattr(self, k) for k in EVIDENCE_OVERLAY_FIELDS}
 
 
-@dataclass(frozen=True)
-class EvidenceReconciliationResult:
-    records: Tuple[EvidenceOverlayRecord, ...]
-    matched_events_count: int
-    conflicted_events_count: int
-    unresolved_events_count: int
-    imputed_payable_start: int
-    bnd_imputed_start: int
-    voo_imputed_start: int
-    payable_matched: int
-    payable_conflicted: int
-    payable_ambiguous: int
-    payable_unresolved: int
-    digest: str
-
-
 def validate_overlay_records(records: Sequence[EvidenceOverlayRecord]) -> None:
     seen_ids: set[str] = set()
+    identities: set[Tuple[str, ...]] = set()
+    cusip_of: Dict[str, str] = {}
+    symbol_of: Dict[str, str] = {}
     for rec in records:
         if rec.economic_event_id in seen_ids:
             raise DataContractError(f"OVERLAY_DUPLICATE_ECONOMIC_EVENT_ID: {rec.economic_event_id}.")
         seen_ids.add(rec.economic_event_id)
-
-
-def reconcile_provider_distributions(
-    provider_rows: Sequence[Mapping[str, str]],
-    overlay_records: Sequence[EvidenceOverlayRecord],
-) -> EvidenceReconciliationResult:
-    """Read-only comparison of provider rows against independent evidence overlay."""
-    validate_overlay_records(overlay_records)
-
-    imputed_bnd = sum(
-        1 for r in provider_rows if r["symbol"] == "BND" and "IMPUTED" in r.get("payable_date_source", "")
-    )
-    imputed_voo = sum(
-        1 for r in provider_rows if r["symbol"] == "VOO" and "IMPUTED" in r.get("payable_date_source", "")
-    )
-    total_imputed = imputed_bnd + imputed_voo
-
-    matched_events = 0
-    conflicted_events = 0
-    unresolved_events = 0
-    payable_matched = 0
-    payable_conflicted = 0
-    payable_ambiguous = 0
-    payable_unresolved = 0
-
-    for rec in overlay_records:
-        if rec.evidence_class in ("ISSUER_EVENT_MATCHED", "OCC_EVENT_CORROBORATED"):
-            matched_events += 1
-        elif rec.evidence_class == "CONFLICTING_EVIDENCE":
-            conflicted_events += 1
+        if rec.evidence_scope in EVENT_SCOPES and rec.provider_event_id != "NONE":
+            identity: Tuple[str, ...] = (rec.evidence_scope, rec.provider_event_id, rec.financial_component_type)
+        elif rec.evidence_scope in EVENT_SCOPES:
+            identity = (rec.evidence_scope, rec.symbol, rec.ex_date, rec.financial_component_type, rec.cash_amount_per_share)
         else:
-            unresolved_events += 1
-
-        if rec.question_id.startswith("Q_IMPUTED_PAYABLE_"):
-            if rec.matching_result == "MATCHED_ISSUER_DATE":
-                payable_matched += 1
-            elif rec.matching_result == "CONFLICTING_DATE":
-                payable_conflicted += 1
-            elif rec.matching_result == "AMBIGUOUS_MATCH":
-                payable_ambiguous += 1
-            else:
-                payable_unresolved += 1
-
-    payload = json.dumps([r.to_dict() for r in overlay_records], sort_keys=True)
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-    return EvidenceReconciliationResult(
-        records=tuple(overlay_records),
-        matched_events_count=matched_events,
-        conflicted_events_count=conflicted_events,
-        unresolved_events_count=unresolved_events,
-        imputed_payable_start=total_imputed,
-        bnd_imputed_start=imputed_bnd,
-        voo_imputed_start=imputed_voo,
-        payable_matched=payable_matched,
-        payable_conflicted=payable_conflicted,
-        payable_ambiguous=payable_ambiguous,
-        payable_unresolved=payable_unresolved,
-        digest=digest,
-    )
+            identity = (rec.evidence_scope, rec.symbol, rec.tax_year)
+        if identity in identities:
+            raise DataContractError(f"OVERLAY_DUPLICATE_ECONOMIC_EVENT: {rec.economic_event_id} {identity}.")
+        identities.add(identity)
+        if cusip_of.setdefault(rec.symbol, rec.cusip) != rec.cusip or symbol_of.setdefault(rec.cusip, rec.symbol) != rec.symbol:
+            raise DataContractError(f"OVERLAY_CUSIP_SYMBOL_CONFLICT: {rec.symbol} {rec.cusip}.")
 
 
-def build_v37b_evidence_overlay(
-    provider_rows: Optional[Sequence[Mapping[str, str]]] = None,
-) -> List[EvidenceOverlayRecord]:
-    """Constructs the canonical V37B Evidence Overlay with zero unverified claims."""
-    records: List[EvidenceOverlayRecord] = []
-    now_iso = "2026-10-30T11:00:00Z"
-
-    # --- Part A: BND 2016-2025 Annual Capital-Gain Evidence from Vanguard / SEC ---
-    sec_2019_url = (
-        "https://www.sec.gov/Archives/edgar/data/794105/000093247119006953/bondindex485bfinal.htm"
-    )
-    sec_2026_url = (
-        "https://www.sec.gov/Archives/edgar/data/794105/000079410526000106/f45031d1.htm"
-    )
-    vanguard_ar_url = "https://fund-docs.vanguard.com/q840.pdf"
-
-    # 2016
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2016",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2016-CG-ANNUAL",
-            provider_event_id="6fa27f80-92c5-4cb5-93c9-bf5c6c8a7982",
-            source_title="Vanguard Bond Index Funds SEC Form 485BPOS Financial Highlights",
-            source_url=sec_2019_url,
-            source_document_id="SEC-0000932471-19-006953",
-            source_page_or_table="Financial Highlights: Total Bond Market ETF Share Class",
-            reporting_period="FY2016",
-            tax_year="2016",
-            ex_date="2016-12-22",
-            record_date="UNKNOWN",
-            payable_date="UNKNOWN",
-            cash_amount_per_share="0.0357",
-            financial_component_type="CAPITAL_GAIN_LONG_TERM",
-            tax_classification="LONG_TERM_CAPITAL_GAIN",
-            publication_or_acceptance_time="2019-04-24",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="UNRESOLVED",
-            remaining_gap="Provider labeled event as DIVIDEND_CASH; SEC financial highlights corroborate $0.0357 capital gain. Exact payable date not separately stated in annual filing.",
-        )
-    )
-
-    # 2017
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2017",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2017-CG-ANNUAL",
-            provider_event_id="2071302f-3e51-44ff-979d-d6fd4b62396c",
-            source_title="Vanguard Bond Index Funds SEC Form 485BPOS Financial Highlights",
-            source_url=sec_2019_url,
-            source_document_id="SEC-0000932471-19-006953",
-            source_page_or_table="Financial Highlights: Total Bond Market ETF Share Class",
-            reporting_period="FY2017",
-            tax_year="2017",
-            ex_date="2017-12-26",
-            record_date="UNKNOWN",
-            payable_date="UNKNOWN",
-            cash_amount_per_share="0.037",
-            financial_component_type="CAPITAL_GAIN_LONG_TERM",
-            tax_classification="LONG_TERM_CAPITAL_GAIN",
-            publication_or_acceptance_time="2019-04-24",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="UNRESOLVED",
-            remaining_gap="Provider labeled event as DIVIDEND_CASH; SEC financial highlights corroborate $0.037 capital gain. Exact payable date not separately stated in annual filing.",
-        )
-    )
-
-    # 2018
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2018",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2018-CG-ANNUAL",
-            provider_event_id="7b6168d6-9a2e-4ea5-8cc7-e2502f4293b0",
-            source_title="Vanguard Bond Index Funds SEC Form 485BPOS Financial Highlights",
-            source_url=sec_2019_url,
-            source_document_id="SEC-0000932471-19-006953",
-            source_page_or_table="Financial Highlights: Total Bond Market ETF Share Class",
-            reporting_period="FY2018",
-            tax_year="2018",
-            ex_date="2018-04-02",
-            record_date="UNKNOWN",
-            payable_date="UNKNOWN",
-            cash_amount_per_share="0.01916",
-            financial_component_type="CAPITAL_GAIN_LONG_TERM",
-            tax_classification="LONG_TERM_CAPITAL_GAIN",
-            publication_or_acceptance_time="2019-04-24",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="UNRESOLVED",
-            remaining_gap="Provider labeled event as DIVIDEND_CASH; SEC financial highlights corroborate $0.01916 capital gain. Exact payable date not separately stated in annual filing.",
-        )
-    )
-
-    # 2019
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2019",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2019-CG-ANNUAL",
-            provider_event_id="NONE",
-            source_title="Vanguard Bond Index Funds SEC Form 485BPOS Financial Highlights",
-            source_url=sec_2019_url,
-            source_document_id="SEC-0000932471-19-006953",
-            source_page_or_table="Financial Highlights: Total Bond Market ETF Share Class",
-            reporting_period="FY2019",
-            tax_year="2019",
-            ex_date="UNKNOWN",
-            record_date="UNKNOWN",
-            payable_date="UNKNOWN",
-            cash_amount_per_share="0",
-            financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
-            tax_classification="NONE",
-            publication_or_acceptance_time="2019-04-24",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="MATCHED_ISSUER_DATE",
-            remaining_gap="No capital gain distribution for 2019 in financial statements, corroborating zero capital gain provider rows.",
-        )
-    )
-
-    # 2020
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2020",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2020-CG-ANNUAL",
-            provider_event_id="eb13dcb4-6894-4184-a1db-29746b8d9435",
-            source_title="Vanguard Annual Report & OCC Information Memo 48045",
-            source_url="https://infomemo.theocc.com/infomemos?number=48045",
-            source_document_id="OCC-48045",
-            source_page_or_table="OCC Notice of Distribution / Vanguard 2020 Annual Report",
-            reporting_period="FY2020",
-            tax_year="2020",
-            ex_date="2020-12-23",
-            record_date="2020-12-24",
-            payable_date="2020-12-29",
-            cash_amount_per_share="0.1436",
-            financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
-            tax_classification="QUALIFIED_SHORT_TERM_GAIN",
-            publication_or_acceptance_time="2020-12-23",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="OCC_EVENT_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="MATCHED_ISSUER_DATE",
-            remaining_gap="Event split into LTCG $0.1064 and STCG $0.0372; payable confirmed 2020-12-29. Corroborated by OCC memo 48045 and Form 1042-S QSG list.",
-        )
-    )
-
-    # 2021
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2021",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2021-CG-ANNUAL",
-            provider_event_id="da4043ec-4eee-44e3-a9f8-5d994f1f635d",
-            source_title="MIAX Alert / OCC Information Memo 49819 & SEC 2026 Filing",
-            source_url="https://www.miaxglobal.com/sites/default/files/alert-files/BND_Distribution_49819.pdf",
-            source_document_id="MIAX-BND-49819",
-            source_page_or_table="MIAX Distribution Notice / SEC Financial Highlights",
-            reporting_period="FY2021",
-            tax_year="2021",
-            ex_date="2021-12-23",
-            record_date="2021-12-27",
-            payable_date="2021-12-29",
-            cash_amount_per_share="0.1834",
-            financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
-            tax_classification="QUALIFIED_SHORT_TERM_GAIN",
-            publication_or_acceptance_time="2021-12-23",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="OCC_EVENT_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="MATCHED_ISSUER_DATE",
-            remaining_gap="Annual capital gain sum $0.1834 matches component sum ($0.0534 on 2021-04-01 + $0.13 on 2021-12-23). Corroborated by OCC memo 49819 and Form 1042-S QSG list.",
-        )
-    )
-
-    # 2022
-    records.append(
-        EvidenceOverlayRecord(
-            question_id="Q_BND_CG_2022",
-            symbol="BND",
-            cusip="921937835",
-            share_class="ETF",
-            economic_event_id="BND-2022-CG-ANNUAL",
-            provider_event_id="6bcd4e25-c31a-49ce-97df-3ee25c524544",
-            source_title="SEC 2026 Filing & Vanguard Total Bond Market ETF Distribution History",
-            source_url=sec_2026_url,
-            source_document_id="SEC-0000794105-26-000106",
-            source_page_or_table="Financial Highlights: BND ETF Share Class",
-            reporting_period="FY2022",
-            tax_year="2022",
-            ex_date="2022-04-01",
-            record_date="UNKNOWN",
-            payable_date="2022-04-06",
-            cash_amount_per_share="0.0593",
-            financial_component_type="CAPITAL_GAIN_LONG_TERM",
-            tax_classification="LONG_TERM_CAPITAL_GAIN",
-            publication_or_acceptance_time="2026-01-01",
-            capture_time=now_iso,
-            historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-            evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-            rights_status="RIGHTS_PERMITTED",
-            matching_result="MATCHED_ISSUER_DATE",
-            remaining_gap="Annual total $0.0593 matches 2022-04-01 event. Long-Term Capital Gain; absence from 2022 Form 1042-S QSG list is consistent (LTCG is exempt from QSG listing).",
-        )
-    )
-
-    # 2023, 2024, 2025
-    for yr in ("2023", "2024", "2025"):
-        records.append(
-            EvidenceOverlayRecord(
-                question_id=f"Q_BND_CG_{yr}",
-                symbol="BND",
-                cusip="921937835",
-                share_class="ETF",
-                economic_event_id=f"BND-{yr}-CG-ANNUAL",
-                provider_event_id="NONE",
-                source_title="SEC 2026 Filing Financial Highlights",
-                source_url=sec_2026_url,
-                source_document_id="SEC-0000794105-26-000106",
-                source_page_or_table="Financial Highlights: BND ETF Share Class",
-                reporting_period=f"FY{yr}",
-                tax_year=yr,
-                ex_date="UNKNOWN",
-                record_date="UNKNOWN",
-                payable_date="UNKNOWN",
-                cash_amount_per_share="0",
-                financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
-                tax_classification="NONE",
-                publication_or_acceptance_time="2026-01-01",
-                capture_time=now_iso,
-                historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-                evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
-                rights_status="RIGHTS_PERMITTED",
-                matching_result="MATCHED_ISSUER_DATE",
-                remaining_gap=f"No capital gain distribution for {yr} in financial statements, corroborating zero capital gain provider rows.",
-            )
-        )
-
-    # --- Part B: Vanguard Form 1042-S QSG Tax-Classification Register ---
-    qsg_data = [
-        ("2020", "1042sb-022021.pdf", True, "BND listed in QSG schedule; confirms qualified short-term capital gain treatment for 2020-12-23 STCG."),
-        ("2021", "1042sb-022022.pdf", True, "BND listed in QSG schedule; confirms qualified short-term capital gain treatment for 2021-04-01 STCG."),
-        ("2022", "1042sb-022023.pdf", False, "BND not listed in QSG schedule; 2022 gain was 100% Long-Term Capital Gain ($0.0593 LTCG), which is not QSG. Absence is consistent."),
-        ("2023", "1042sb-022024.pdf", False, "BND not listed in QSG schedule; no capital gains paid in 2023."),
-        ("2024", "1042sb-022025.pdf", False, "BND not listed in QSG schedule; no capital gains paid in 2024."),
-    ]
-    for tax_year, doc_name, listed, notes in qsg_data:
-        records.append(
-            EvidenceOverlayRecord(
-                question_id=f"Q_QSG_BND_{tax_year}",
-                symbol="BND",
-                cusip="921937835",
-                share_class="ETF",
-                economic_event_id=f"BND-QSG-{tax_year}",
-                provider_event_id="NONE",
-                source_title=f"Vanguard Form 1042-S Foreign Tax Supplement ({tax_year})",
-                source_url=f"https://investor.vanguard.com/content/dam/retail/us/en/pdfs/taxes/{doc_name}",
-                source_document_id=doc_name,
-                source_page_or_table="Qualified Short-Term Gain (QSG) Fund Listing",
-                reporting_period=tax_year,
-                tax_year=tax_year,
-                ex_date="UNKNOWN",
-                record_date="UNKNOWN",
-                payable_date="UNKNOWN",
-                cash_amount_per_share="NONE",
-                financial_component_type="NONE",
-                tax_classification="QUALIFIED_SHORT_TERM_GAIN" if listed else "NONE",
-                publication_or_acceptance_time=f"{int(tax_year)+1}-02-01",
-                capture_time=now_iso,
-                historical_availability_status="RETROSPECTIVE_CORROBORATION_ONLY",
-                evidence_class="ISSUER_TAX_CLASSIFICATION_ONLY",
-                rights_status="RIGHTS_PERMITTED",
-                matching_result="MATCHED_ISSUER_DATE",
-                remaining_gap=notes,
-            )
-        )
-
-    # --- Part C: 63 Imputed Payable Date Backlog (BND 47, VOO 16) ---
-    if provider_rows:
-        imputed_rows = [
-            r for r in provider_rows if "IMPUTED" in r.get("payable_date_source", "")
-        ]
-        for idx, row in enumerate(imputed_rows, start=1):
-            sym = row["symbol"]
-            ex = row["ex_date"]
-            imputed_pay = row["payable_date"]
-            gross = row["gross_amount"]
-            event_id = row.get("event_id", "")
-            records.append(
-                EvidenceOverlayRecord(
-                    question_id=f"Q_IMPUTED_PAYABLE_{sym}_{ex.replace('-', '')}",
-                    symbol=sym,
-                    cusip="921937835" if sym == "BND" else "922908363",
-                    share_class="ETF",
-                    economic_event_id=f"{sym}-PAYABLE-{ex}",
-                    provider_event_id=event_id,
-                    source_title=f"Vanguard {sym} Distribution History (Web Table)",
-                    source_url=(
-                        "https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf"
-                        if sym == "BND"
-                        else "https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf"
-                    ),
-                    source_document_id=f"VANGUARD-{sym}-DIST-TABLE",
-                    source_page_or_table="Historical Distributions Table (Unlicensed Bulk Export Restricted)",
-                    reporting_period=ex[:4],
-                    tax_year=ex[:4],
-                    ex_date=ex,
-                    record_date="UNKNOWN",
-                    payable_date="UNKNOWN",
-                    cash_amount_per_share=gross,
-                    financial_component_type="DIVIDEND_CASH",
-                    tax_classification="ORDINARY_DIVIDEND",
-                    publication_or_acceptance_time="UNKNOWN",
-                    capture_time=now_iso,
-                    historical_availability_status="UNAVAILABLE",
-                    evidence_class="UNRESOLVED",
-                    rights_status="RIGHTS_RESTRICTED",
-                    matching_result="SOURCE_NOT_AVAILABLE",
-                    remaining_gap=(
-                        f"Imputed payable date {imputed_pay} (ex+6d) remains unverified. "
-                        "Vanguard terms prohibit bulk scraping without written license. "
-                        "No authenticated event-level issuer file is present in repository."
-                    ),
-                )
-            )
-
-    return records
+def canonical_overlay_order(records: Sequence[EvidenceOverlayRecord]) -> List[EvidenceOverlayRecord]:
+    """The single canonical order (by unique economic_event_id) for every export and digest."""
+    validate_overlay_records(records)
+    return sorted(records, key=lambda r: r.economic_event_id)
 
 
 def export_overlay_to_csv(records: Sequence[EvidenceOverlayRecord]) -> str:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=list(EVIDENCE_OVERLAY_FIELDS), lineterminator="\n")
     writer.writeheader()
-    for rec in records:
+    for rec in canonical_overlay_order(records):
         writer.writerow(rec.to_dict())
     return output.getvalue()
 
 
 def export_overlay_to_json(records: Sequence[EvidenceOverlayRecord]) -> str:
-    return json.dumps([r.to_dict() for r in records], indent=2, sort_keys=True)
+    return json.dumps([r.to_dict() for r in canonical_overlay_order(records)], indent=2, sort_keys=True) + "\n"
+
+
+def overlay_digest(records: Sequence[EvidenceOverlayRecord]) -> str:
+    """SHA-256 of the canonical JSON export bytes."""
+    return hashlib.sha256(export_overlay_to_json(records).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class EvidenceReconciliationResult:
+    records: Tuple[EvidenceOverlayRecord, ...]
+    local_data_status: str
+    real_event_matches: int
+    event_conflicts: int
+    event_unresolved: int
+    annual_consistent: int
+    annual_inconsistent: int
+    annual_unsourced: int
+    tax_designations: int
+    imputed_payable_start: int
+    bnd_imputed_start: int
+    voo_imputed_start: int
+    payable_matched: int
+    payable_unresolved: int
+    digest: str
+
+
+def _index_provider_rows(provider_rows: Sequence[Mapping[str, str]]) -> Dict[str, Mapping[str, str]]:
+    index: Dict[str, Mapping[str, str]] = {}
+    for row in provider_rows:
+        event_id = row.get("event_id", "")
+        if not event_id:
+            raise DataContractError("OVERLAY_PROVIDER_ROW_WITHOUT_EVENT_ID.")
+        if event_id in index:
+            raise DataContractError(f"OVERLAY_DUPLICATE_PROVIDER_EVENT_ID: {event_id}.")
+        index[event_id] = row
+    return index
+
+
+def _match_event(rec: EvidenceOverlayRecord, row: Mapping[str, str]) -> str:
+    if row["symbol"] != rec.symbol:
+        raise DataContractError(f"OVERLAY_PROVIDER_IDENTITY_MISMATCH: {rec.economic_event_id} symbol.")
+    for key in ("cusip", "share_class"):
+        if row.get(key) and row[key] != getattr(rec, key):
+            raise DataContractError(f"OVERLAY_PROVIDER_IDENTITY_MISMATCH: {rec.economic_event_id} {key}.")
+    if row["ex_date"] != rec.ex_date:
+        return "CONFLICTING_DATE"
+    if rec.payable_date not in _UNKNOWN and row.get("payable_date") != rec.payable_date:
+        return "CONFLICTING_DATE"
+    if row.get("distribution_type") != rec.financial_component_type:
+        return "CONFLICTING_COMPONENT"
+    if Decimal(row["gross_amount"]) != Decimal(rec.cash_amount_per_share):
+        return "CONFLICTING_AMOUNT"
+    return INDEPENDENT_EVENT_CLASSES[rec.evidence_class]
+
+
+def _annual_result(rec: EvidenceOverlayRecord, provider_rows: Sequence[Mapping[str, str]]) -> str:
+    reported = Decimal(rec.cash_amount_per_share)
+    provider_total = sum(
+        (
+            Decimal(r["gross_amount"])
+            for r in provider_rows
+            if r["symbol"] == rec.symbol
+            and r["ex_date"][:4] == rec.tax_year
+            and r.get("distribution_type", "").startswith("CAPITAL_GAIN")
+        ),
+        Decimal(0),
+    )
+    if abs(reported - provider_total) <= ANNUAL_ROUNDING_TOLERANCE:
+        return "ANNUAL_TOTAL_CONSISTENT"
+    return "ANNUAL_TOTAL_INCONSISTENT"
+
+
+def _computed_result(
+    rec: EvidenceOverlayRecord,
+    provider_rows: Optional[Sequence[Mapping[str, str]]],
+    index: Dict[str, Mapping[str, str]],
+) -> Optional[str]:
+    """Data-derived result, or None when the record carries no checkable claim."""
+    if rec.evidence_scope == "ANNUAL_FINANCIAL_TOTAL" and rec.cash_amount_per_share not in _UNKNOWN:
+        return "LOCAL_DATA_UNAVAILABLE" if provider_rows is None else _annual_result(rec, provider_rows)
+    if rec.evidence_scope in EVENT_SCOPES and rec.evidence_class in INDEPENDENT_EVENT_CLASSES:
+        if rec.provider_event_id == "NONE":
+            return "UNRESOLVED"
+        if provider_rows is None:
+            return "LOCAL_DATA_UNAVAILABLE"
+        return _match_event(rec, index[rec.provider_event_id])
+    return None
+
+
+def reconcile_provider_distributions(
+    provider_rows: Optional[Sequence[Mapping[str, str]]],
+    overlay_records: Sequence[EvidenceOverlayRecord],
+) -> EvidenceReconciliationResult:
+    """Read-only comparison of provider rows against the evidence overlay.
+
+    ``provider_rows=None`` means the local dataset is unavailable: no empirical match is
+    asserted and every data-dependent result becomes LOCAL_DATA_UNAVAILABLE.
+    """
+    validate_overlay_records(overlay_records)
+    rows: Sequence[Mapping[str, str]] = provider_rows if provider_rows is not None else ()
+    index = _index_provider_rows(rows)
+    if provider_rows is not None:
+        for rec in overlay_records:
+            if rec.provider_event_id != "NONE" and rec.provider_event_id not in index:
+                raise DataContractError(
+                    f"OVERLAY_UNKNOWN_PROVIDER_EVENT_ID: {rec.economic_event_id} -> {rec.provider_event_id}."
+                )
+
+    resolved: List[EvidenceOverlayRecord] = []
+    for rec in overlay_records:
+        computed = _computed_result(rec, provider_rows, index)
+        if computed is None:
+            if rec.matching_result in COMPUTED_RESULTS:
+                raise DataContractError(
+                    f"OVERLAY_CLAIMED_MATCH_UNSUPPORTED: {rec.economic_event_id} declares "
+                    f"{rec.matching_result} without checkable event-level evidence."
+                )
+            resolved.append(rec)
+            continue
+        if rec.matching_result in POSITIVE_RESULTS and rec.matching_result != computed:
+            raise DataContractError(
+                f"OVERLAY_CLAIMED_MATCH_UNSUPPORTED: {rec.economic_event_id} declares "
+                f"{rec.matching_result}; provider rows give {computed}."
+            )
+        resolved.append(replace(rec, matching_result=computed))
+
+    events = [r for r in resolved if r.evidence_scope == "EVENT_FINANCIAL_COMPONENT"]
+    annual = [r for r in resolved if r.evidence_scope == "ANNUAL_FINANCIAL_TOTAL"]
+    payable = [r for r in resolved if r.question_id.startswith("Q_IMPUTED_PAYABLE_")]
+    imputed = [r for r in rows if "IMPUTED" in r.get("payable_date_source", "")]
+    ordered = canonical_overlay_order(resolved)
+    return EvidenceReconciliationResult(
+        records=tuple(ordered),
+        local_data_status="LOCAL_DATA_UNAVAILABLE" if provider_rows is None else "LOCAL_DATA_CHECKED",
+        real_event_matches=sum(r.matching_result in ("MATCHED_ISSUER_DATE", "MATCHED_OCC_EVENT") for r in events),
+        event_conflicts=sum(r.matching_result.startswith("CONFLICTING_") for r in events),
+        event_unresolved=sum(
+            r.matching_result in ("UNRESOLVED", "SOURCE_NOT_AVAILABLE", "AMBIGUOUS_MATCH", "LOCAL_DATA_UNAVAILABLE")
+            for r in events
+        ),
+        annual_consistent=sum(r.matching_result == "ANNUAL_TOTAL_CONSISTENT" for r in annual),
+        annual_inconsistent=sum(r.matching_result == "ANNUAL_TOTAL_INCONSISTENT" for r in annual),
+        annual_unsourced=sum(r.matching_result == "SOURCE_NOT_AVAILABLE" for r in annual),
+        tax_designations=sum(r.evidence_scope == "TAX_YEAR_DESIGNATION" for r in resolved),
+        imputed_payable_start=len(imputed),
+        bnd_imputed_start=sum(r["symbol"] == "BND" for r in imputed),
+        voo_imputed_start=sum(r["symbol"] == "VOO" for r in imputed),
+        payable_matched=sum(r.matching_result in POSITIVE_RESULTS for r in payable),
+        payable_unresolved=sum(r.matching_result not in POSITIVE_RESULTS for r in payable),
+        digest=overlay_digest(ordered),
+    )
+
+
+_BND_CUSIP = "921937835"
+_CUSIPS = {"BND": _BND_CUSIP, "VOO": "922908363"}
+_VANGUARD_PAGES = {
+    "BND": "https://advisors.vanguard.com/investments/products/bnd/vanguard-total-bond-market-etf",
+    "VOO": "https://advisors.vanguard.com/investments/products/voo/vanguard-sp-500-etf",
+}
+_SEC_2019 = (
+    "https://www.sec.gov/Archives/edgar/data/794105/000093247119006953/bondindex485bfinal.htm",
+    "SEC-0000932471-19-006953",
+    "2019-04-25T17:35:43-04:00",
+)
+_SEC_2026 = (
+    "https://www.sec.gov/Archives/edgar/data/794105/000079410526000106/f45031d1.htm",
+    "SEC-0000794105-26-000106",
+    "2026-04-27T17:36:08-04:00",
+)
+_OCC_48045 = ("https://infomemo.theocc.com/infomemos?number=48045", "OCC-48045")
+_MIAX_49819 = (
+    "https://www.miaxglobal.com/sites/default/files/alert-files/BND_Distribution_49819.pdf",
+    "MIAX-OCC-49819",
+)
+_DIVIDEND_COM = ("https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/", "DIVIDEND-COM-BND")
+_TRANSCRIBED = (
+    "Per-share figure transcribed by the 27-30 Oct research sprint (3 dp); not re-read in the "
+    "V37B integrity closure. Annual total does not establish event dates or ST/LT tax designation."
+)
+
+
+def _bnd(**fields: str) -> EvidenceOverlayRecord:
+    base = {
+        "symbol": "BND",
+        "cusip": _BND_CUSIP,
+        "share_class": "ETF",
+        "record_date": "UNKNOWN",
+        "payable_date": "UNKNOWN",
+        "tax_classification": "UNKNOWN",
+        "publication_or_acceptance_time": "UNKNOWN",
+        "capture_time": "UNKNOWN",
+        "historical_availability_status": "RETROSPECTIVE_CORROBORATION_ONLY",
+        "rights_status": "RIGHTS_UNVERIFIED",
+        "matching_result": "UNRESOLVED",
+    }
+    base.update(fields)
+    return EvidenceOverlayRecord(**base)
+
+
+def _annual(year: str, amount: str, sec: Tuple[str, str, str], gap: str) -> EvidenceOverlayRecord:
+    return _bnd(
+        question_id=f"Q_BND_CG_{year}",
+        economic_event_id=f"BND-FY{year}-CG-ANNUAL",
+        evidence_scope="ANNUAL_FINANCIAL_TOTAL",
+        provider_event_id="NONE",
+        source_title="Vanguard Bond Index Funds Form 485BPOS Financial Highlights",
+        source_url=sec[0],
+        source_document_id=sec[1],
+        source_page_or_table="Financial Highlights: Total Bond Market Index Fund ETF Shares",
+        reporting_period=f"FY{year}",
+        tax_year=year,
+        ex_date="UNKNOWN",
+        cash_amount_per_share=amount,
+        financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
+        publication_or_acceptance_time=sec[2],
+        evidence_class="ISSUER_ANNUAL_TOTAL_CORROBORATED",
+        remaining_gap=f"{_TRANSCRIBED} {gap}",
+    )
+
+
+def _unsourced_annual(year: str, gap: str) -> EvidenceOverlayRecord:
+    return _bnd(
+        question_id=f"Q_BND_CG_{year}",
+        economic_event_id=f"BND-FY{year}-CG-ANNUAL",
+        evidence_scope="ANNUAL_FINANCIAL_TOTAL",
+        provider_event_id="NONE",
+        source_title="No in-scope annual financial statement captured",
+        source_url="NONE",
+        source_document_id="NONE",
+        source_page_or_table="NONE",
+        reporting_period=f"FY{year}",
+        tax_year=year,
+        ex_date="UNKNOWN",
+        cash_amount_per_share="UNKNOWN",
+        financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
+        evidence_class="UNRESOLVED",
+        matching_result="SOURCE_NOT_AVAILABLE",
+        remaining_gap=gap,
+    )
+
+
+def _event(
+    suffix: str,
+    ex: str,
+    provider_event_id: str,
+    amount: str,
+    component: str,
+    evidence_class: str,
+    source: Tuple[str, str],
+    title: str,
+    payable: str,
+    gap: str,
+) -> EvidenceOverlayRecord:
+    return _bnd(
+        question_id=f"Q_BND_EVENT_{ex.replace('-', '')}_{suffix}",
+        economic_event_id=f"BND-{ex}-{suffix}",
+        evidence_scope="EVENT_FINANCIAL_COMPONENT",
+        provider_event_id=provider_event_id,
+        source_title=title,
+        source_url=source[0],
+        source_document_id=source[1],
+        source_page_or_table="Event distribution notice" if source[0] != "NONE" else "NONE",
+        reporting_period=ex,
+        tax_year=ex[:4],
+        ex_date=ex,
+        payable_date=payable,
+        cash_amount_per_share=amount,
+        financial_component_type=component,
+        evidence_class=evidence_class,
+        remaining_gap=gap,
+    )
+
+
+def build_v37b_evidence_overlay(
+    provider_rows: Optional[Sequence[Mapping[str, str]]] = None,
+) -> List[EvidenceOverlayRecord]:
+    """Construct the V37B evidence claims; matching results come from reconcile_provider_distributions()."""
+    no_annual = "Provider labels the candidate row DIVIDEND_CASH; no CAPITAL_GAIN row exists for this year."
+    records: List[EvidenceOverlayRecord] = [
+        _annual("2016", "0.036", _SEC_2019, no_annual),
+        _annual("2017", "0.037", _SEC_2019, no_annual),
+        _annual("2018", "0.019", _SEC_2019, no_annual),
+        _unsourced_annual(
+            "2019",
+            "Cited 485BPOS 0000932471-19-006953 was accepted 2019-04-25, before FY2019 ended (FYE 12-31); "
+            "the FY2019 highlights require a later filing that has not been captured.",
+        ),
+        _unsourced_annual(
+            "2020",
+            "The 2026 filing's five-year highlights cover FY2021-FY2025 (Form N-1A Item 13; not checked against "
+            "document text). OCC 48045 event components are recorded separately and are not an annual total.",
+        ),
+        _annual("2021", "0.183", _SEC_2026, "Provider capital-gain rows: 2021-04-01 0.0534 (0.0034 ST + 0.05 LT) and 2021-12-23 0.13 LT."),
+        _annual("2022", "0.059", _SEC_2026, "Provider capital-gain row: 2022-04-01 0.0593 LT."),
+    ]
+    for yr in ("2023", "2024", "2025"):
+        records.append(_annual(yr, "0", _SEC_2026, "No capital-gain distribution reported."))
+
+    none_src = ("NONE", "NONE")
+    candidate_gap = (
+        "Amount lies within 3-dp rounding of the FY{yr} annual realized-gain distribution, but no event-level "
+        "source establishes its component type or tax character. No additional cash entitlement established."
+    )
+    for ex, pid, amt in (
+        ("2016-12-22", "6fa27f80-92c5-4cb5-93c9-bf5c6c8a7982", "0.0357"),
+        ("2017-12-26", "2071302f-3e51-44ff-979d-d6fd4b62396c", "0.037"),
+        ("2018-04-02", "7b6168d6-9a2e-4ea5-8cc7-e2502f4293b0", "0.01916"),
+    ):
+        records.append(
+            _event("CANDIDATE", ex, pid, amt, "UNKNOWN", "UNRESOLVED", none_src,
+                   "No independent event-level source", "UNKNOWN", candidate_gap.format(yr=ex[:4]))
+        )
+
+    occ_gap_st = (
+        "Event component corroborated by OCC memo 48045 (reused from V34 evidence). TY2020 1042-S lists BND as a "
+        "QSG payer, but no event-level QSG percentage is documented; tax character UNKNOWN."
+    )
+    occ_gap_lt = "Event component corroborated by OCC memo 48045 (reused from V34 evidence). Tax designation not established."
+    secondary_gap = "Secondary indication only; not independently verified at event level."
+    records += [
+        _event("ST", "2020-12-23", "eb13dcb4-6894-4184-a1db-29746b8d9435#short_term", "0.0372",
+               "CAPITAL_GAIN_SHORT_TERM", "OCC_EVENT_CORROBORATED", _OCC_48045,
+               "OCC Information Memo 48045", "2020-12-29", occ_gap_st),
+        _event("LT", "2020-12-23", "eb13dcb4-6894-4184-a1db-29746b8d9435#long_term", "0.1064",
+               "CAPITAL_GAIN_LONG_TERM", "OCC_EVENT_CORROBORATED", _OCC_48045,
+               "OCC Information Memo 48045", "2020-12-29", occ_gap_lt),
+        _event("ST", "2021-04-01", "09df29e0-38dc-4cfe-9d2f-a5ef791cdd1a#short_term", "0.0034",
+               "CAPITAL_GAIN_SHORT_TERM", "SECONDARY_INDICATION_ONLY", _DIVIDEND_COM,
+               "Dividend.com BND distribution history", "UNKNOWN", secondary_gap),
+        _event("LT", "2021-04-01", "09df29e0-38dc-4cfe-9d2f-a5ef791cdd1a#long_term", "0.05",
+               "CAPITAL_GAIN_LONG_TERM", "SECONDARY_INDICATION_ONLY", _DIVIDEND_COM,
+               "Dividend.com BND distribution history", "UNKNOWN", secondary_gap),
+        _event("LT", "2021-12-23", "da4043ec-4eee-44e3-a9f8-5d994f1f635d", "0.13",
+               "CAPITAL_GAIN_LONG_TERM", "OCC_EVENT_CORROBORATED", _MIAX_49819,
+               "MIAX alert relaying OCC Information Memo 49819", "2021-12-29",
+               "Event component corroborated by the MIAX/OCC 49819 notice (reused from V36 evidence); "
+               "not Vanguard issuer data. Tax designation not established."),
+        _event("LT", "2022-04-01", "6bcd4e25-c31a-49ce-97df-3ee25c524544", "0.0593",
+               "CAPITAL_GAIN_LONG_TERM", "SECONDARY_INDICATION_ONLY", _DIVIDEND_COM,
+               "Dividend.com BND distribution history", "UNKNOWN", secondary_gap),
+    ]
+
+    for tax_year, doc_name, listed in (
+        ("2020", "1042sb-022021.pdf", True),
+        ("2021", "1042sb-022022.pdf", True),
+        ("2022", "1042sb-022023.pdf", False),
+        ("2023", "1042sb-022024.pdf", False),
+        ("2024", "1042sb-022025.pdf", False),
+    ):
+        records.append(
+            _bnd(
+                question_id=f"Q_QSG_BND_{tax_year}",
+                economic_event_id=f"BND-QSG-TY{tax_year}",
+                evidence_scope="TAX_YEAR_DESIGNATION",
+                provider_event_id="NONE",
+                source_title=f"Vanguard Form 1042-S supplement (tax year {tax_year})",
+                source_url=f"https://investor.vanguard.com/content/dam/retail/us/en/pdfs/taxes/{doc_name}",
+                source_document_id=doc_name,
+                source_page_or_table="Qualified short-term gain fund listing",
+                reporting_period=tax_year,
+                tax_year=tax_year,
+                ex_date="UNKNOWN",
+                cash_amount_per_share="NONE",
+                financial_component_type="NONE",
+                tax_classification="QUALIFIED_SHORT_TERM_GAIN" if listed else "NONE",
+                evidence_class="ISSUER_TAX_CLASSIFICATION_ONLY",
+                matching_result="NOT_APPLICABLE",
+                remaining_gap=(
+                    "Fund-level QSG listing (as transcribed by the research sprint); no event-level QSG percentage. "
+                    "Does not classify the annual capital-gain total or any LT component as QSG."
+                    if listed
+                    else "BND not listed (as transcribed by the research sprint); fund-level absence does not by "
+                    "itself prove any component's character."
+                ),
+            )
+        )
+
+    for row in provider_rows or ():
+        if "IMPUTED" not in row.get("payable_date_source", ""):
+            continue
+        sym, ex = row["symbol"], row["ex_date"]
+        if sym not in _CUSIPS:
+            raise DataContractError(f"OVERLAY_UNKNOWN_CUSIP_FOR_SYMBOL: {sym}.")
+        records.append(
+            EvidenceOverlayRecord(
+                question_id=f"Q_IMPUTED_PAYABLE_{sym}_{ex.replace('-', '')}",
+                symbol=sym,
+                cusip=_CUSIPS[sym],
+                share_class="ETF",
+                economic_event_id=f"{sym}-PAYABLE-{ex}",
+                evidence_scope="EVENT_CASH_ENTITLEMENT",
+                provider_event_id=row["event_id"],
+                source_title=f"Vanguard {sym} distribution history (web table)",
+                source_url=_VANGUARD_PAGES[sym],
+                source_document_id=f"VANGUARD-{sym}-DIST-TABLE",
+                source_page_or_table="Historical distributions table",
+                reporting_period=ex,
+                tax_year=ex[:4],
+                ex_date=ex,
+                record_date="UNKNOWN",
+                payable_date="UNKNOWN",
+                cash_amount_per_share=row["gross_amount"],
+                financial_component_type=row["distribution_type"],
+                tax_classification="UNKNOWN",
+                publication_or_acceptance_time="UNKNOWN",
+                capture_time="UNKNOWN",
+                historical_availability_status="UNAVAILABLE",
+                evidence_class="UNRESOLVED",
+                rights_status="RIGHTS_RESTRICTED",
+                matching_result="SOURCE_NOT_AVAILABLE",
+                remaining_gap=(
+                    f"Imputed payable date {row['payable_date']} (ex+6d) remains unverified; "
+                    "no lawful event-level issuer file is held."
+                ),
+            )
+        )
+    return records
