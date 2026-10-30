@@ -74,6 +74,7 @@ MATCHING_RESULTS: Tuple[str, ...] = (
     "MATCHED_ISSUER_DATE",
     "MATCHED_OCC_EVENT",
     "ANNUAL_TOTAL_CONSISTENT",
+    "ANNUAL_CLASSIFICATION_DIFFERENCE",
     "ANNUAL_TOTAL_INCONSISTENT",
     "CONFLICTING_DATE",
     "CONFLICTING_AMOUNT",
@@ -89,6 +90,7 @@ COMPUTED_RESULTS: Tuple[str, ...] = (
     "MATCHED_ISSUER_DATE",
     "MATCHED_OCC_EVENT",
     "ANNUAL_TOTAL_CONSISTENT",
+    "ANNUAL_CLASSIFICATION_DIFFERENCE",
     "ANNUAL_TOTAL_INCONSISTENT",
     "CONFLICTING_DATE",
     "CONFLICTING_AMOUNT",
@@ -352,6 +354,7 @@ class EvidenceReconciliationResult:
     event_conflicts: int
     event_unresolved: int
     annual_consistent: int
+    annual_classification_differences: int
     annual_inconsistent: int
     annual_unsourced: int
     tax_designations: int
@@ -392,20 +395,27 @@ def _match_event(rec: EvidenceOverlayRecord, row: Mapping[str, str]) -> str:
     return INDEPENDENT_EVENT_CLASSES[rec.evidence_class]
 
 
-def _annual_result(rec: EvidenceOverlayRecord, provider_rows: Sequence[Mapping[str, str]]) -> str:
+def _annual_result(
+    rec: EvidenceOverlayRecord,
+    provider_rows: Sequence[Mapping[str, str]],
+    candidate_ids: Sequence[str],
+) -> str:
+    """Compare a reported annual total with provider capital-gain rows.
+
+    ANNUAL_CLASSIFICATION_DIFFERENCE: the total is explained only after adding provider rows that
+    the overlay lists as unresolved candidates (provider labels them otherwise); no cash differs.
+    """
     reported = Decimal(rec.cash_amount_per_share)
-    provider_total = sum(
-        (
-            Decimal(r["gross_amount"])
-            for r in provider_rows
-            if r["symbol"] == rec.symbol
-            and r["ex_date"][:4] == rec.tax_year
-            and r.get("distribution_type", "").startswith("CAPITAL_GAIN")
-        ),
+    in_year = [r for r in provider_rows if r["symbol"] == rec.symbol and r["ex_date"][:4] == rec.tax_year]
+    provider_cg = sum(
+        (Decimal(r["gross_amount"]) for r in in_year if r.get("distribution_type", "").startswith("CAPITAL_GAIN")),
         Decimal(0),
     )
-    if abs(reported - provider_total) <= ANNUAL_ROUNDING_TOLERANCE:
+    if abs(reported - provider_cg) <= ANNUAL_ROUNDING_TOLERANCE:
         return "ANNUAL_TOTAL_CONSISTENT"
+    candidates = [r for r in in_year if r["event_id"] in candidate_ids]
+    if candidates and abs(reported - provider_cg - sum((Decimal(r["gross_amount"]) for r in candidates), Decimal(0))) <= ANNUAL_ROUNDING_TOLERANCE:
+        return "ANNUAL_CLASSIFICATION_DIFFERENCE"
     return "ANNUAL_TOTAL_INCONSISTENT"
 
 
@@ -413,10 +423,13 @@ def _computed_result(
     rec: EvidenceOverlayRecord,
     provider_rows: Optional[Sequence[Mapping[str, str]]],
     index: Dict[str, Mapping[str, str]],
+    candidate_ids: Sequence[str],
 ) -> Optional[str]:
     """Data-derived result, or None when the record carries no checkable claim."""
     if rec.evidence_scope == "ANNUAL_FINANCIAL_TOTAL" and rec.cash_amount_per_share not in _UNKNOWN:
-        return "LOCAL_DATA_UNAVAILABLE" if provider_rows is None else _annual_result(rec, provider_rows)
+        if provider_rows is None:
+            return "LOCAL_DATA_UNAVAILABLE"
+        return _annual_result(rec, provider_rows, candidate_ids)
     if rec.evidence_scope in EVENT_SCOPES and rec.evidence_class in INDEPENDENT_EVENT_CLASSES:
         if rec.provider_event_id == "NONE":
             return "UNRESOLVED"
@@ -445,9 +458,16 @@ def reconcile_provider_distributions(
                     f"OVERLAY_UNKNOWN_PROVIDER_EVENT_ID: {rec.economic_event_id} -> {rec.provider_event_id}."
                 )
 
+    candidate_ids = [
+        r.provider_event_id
+        for r in overlay_records
+        if r.evidence_scope == "EVENT_FINANCIAL_COMPONENT"
+        and r.financial_component_type == "UNKNOWN"
+        and r.provider_event_id != "NONE"
+    ]
     resolved: List[EvidenceOverlayRecord] = []
     for rec in overlay_records:
-        computed = _computed_result(rec, provider_rows, index)
+        computed = _computed_result(rec, provider_rows, index, candidate_ids)
         if computed is None:
             if rec.matching_result in COMPUTED_RESULTS:
                 raise DataContractError(
@@ -478,6 +498,9 @@ def reconcile_provider_distributions(
             for r in events
         ),
         annual_consistent=sum(r.matching_result == "ANNUAL_TOTAL_CONSISTENT" for r in annual),
+        annual_classification_differences=sum(
+            r.matching_result == "ANNUAL_CLASSIFICATION_DIFFERENCE" for r in annual
+        ),
         annual_inconsistent=sum(r.matching_result == "ANNUAL_TOTAL_INCONSISTENT" for r in annual),
         annual_unsourced=sum(r.matching_result == "SOURCE_NOT_AVAILABLE" for r in annual),
         tax_designations=sum(r.evidence_scope == "TAX_YEAR_DESIGNATION" for r in resolved),
@@ -501,6 +524,11 @@ _SEC_2019 = (
     "SEC-0000932471-19-006953",
     "2019-04-25T17:35:43-04:00",
 )
+_SEC_2021 = (
+    "https://www.sec.gov/Archives/edgar/data/794105/000168386321002757/bondindex-20210429.htm",
+    "SEC-0001683863-21-002757",
+    "2021-04-28T17:37:00-04:00",
+)
 _SEC_2026 = (
     "https://www.sec.gov/Archives/edgar/data/794105/000079410526000106/f45031d1.htm",
     "SEC-0000794105-26-000106",
@@ -513,8 +541,8 @@ _MIAX_49819 = (
 )
 _DIVIDEND_COM = ("https://www.dividend.com/etfs/bnd-vanguard-total-bond-market-etf/", "DIVIDEND-COM-BND")
 _TRANSCRIBED = (
-    "Per-share figure transcribed by the 27-30 Oct research sprint (3 dp); not re-read in the "
-    "V37B integrity closure. Annual total does not establish event dates or ST/LT tax designation."
+    "ETF Shares column, 'Distributions from Realized Capital Gains', read from the filing on 2026-10-30 "
+    "(3 dp; '—' recorded as 0). Annual total does not establish event dates or ST/LT tax designation."
 )
 
 
@@ -557,27 +585,6 @@ def _annual(year: str, amount: str, sec: Tuple[str, str, str], gap: str) -> Evid
     )
 
 
-def _unsourced_annual(year: str, gap: str) -> EvidenceOverlayRecord:
-    return _bnd(
-        question_id=f"Q_BND_CG_{year}",
-        economic_event_id=f"BND-FY{year}-CG-ANNUAL",
-        evidence_scope="ANNUAL_FINANCIAL_TOTAL",
-        provider_event_id="NONE",
-        source_title="No in-scope annual financial statement captured",
-        source_url="NONE",
-        source_document_id="NONE",
-        source_page_or_table="NONE",
-        reporting_period=f"FY{year}",
-        tax_year=year,
-        ex_date="UNKNOWN",
-        cash_amount_per_share="UNKNOWN",
-        financial_component_type="FINANCIAL_STATEMENT_ANNUAL_TOTAL",
-        evidence_class="UNRESOLVED",
-        matching_result="SOURCE_NOT_AVAILABLE",
-        remaining_gap=gap,
-    )
-
-
 def _event(
     suffix: str,
     ex: str,
@@ -589,6 +596,7 @@ def _event(
     title: str,
     payable: str,
     gap: str,
+    record: str = "UNKNOWN",
 ) -> EvidenceOverlayRecord:
     return _bnd(
         question_id=f"Q_BND_EVENT_{ex.replace('-', '')}_{suffix}",
@@ -602,6 +610,7 @@ def _event(
         reporting_period=ex,
         tax_year=ex[:4],
         ex_date=ex,
+        record_date=record,
         payable_date=payable,
         cash_amount_per_share=amount,
         financial_component_type=component,
@@ -619,15 +628,14 @@ def build_v37b_evidence_overlay(
         _annual("2016", "0.036", _SEC_2019, no_annual),
         _annual("2017", "0.037", _SEC_2019, no_annual),
         _annual("2018", "0.019", _SEC_2019, no_annual),
-        _unsourced_annual(
-            "2019",
-            "Cited 485BPOS 0000932471-19-006953 was accepted 2019-04-25, before FY2019 ended (FYE 12-31); "
-            "the FY2019 highlights require a later filing that has not been captured.",
-        ),
-        _unsourced_annual(
+        _annual("2019", "0", _SEC_2021, "No capital-gain distribution reported ('—')."),
+        _annual(
             "2020",
-            "The 2026 filing's five-year highlights cover FY2021-FY2025 (Form N-1A Item 13; not checked against "
-            "document text). OCC 48045 event components are recorded separately and are not an annual total.",
+            "0.143",
+            _SEC_2021,
+            "OCC 48045 components sum to 0.1436 (0.0006 above the display). FY2016 (0.0357 -> .036) shows "
+            "rounding, while FY2020 total distributions 2.097 vs provider 2.0978 also look truncated; the "
+            "presentation/basis difference is unresolved. No cash ledger change.",
         ),
         _annual("2021", "0.183", _SEC_2026, "Provider capital-gain rows: 2021-04-01 0.0534 (0.0034 ST + 0.05 LT) and 2021-12-23 0.13 LT."),
         _annual("2022", "0.059", _SEC_2026, "Provider capital-gain row: 2022-04-01 0.0593 LT."),
@@ -650,19 +658,24 @@ def build_v37b_evidence_overlay(
                    "No independent event-level source", "UNKNOWN", candidate_gap.format(yr=ex[:4]))
         )
 
-    occ_gap_st = (
-        "Event component corroborated by OCC memo 48045 (reused from V34 evidence). TY2020 1042-S lists BND as a "
-        "QSG payer, but no event-level QSG percentage is documented; tax character UNKNOWN."
+    occ_note = (
+        "OCC memo 48045 dated 2020-12-22 (read 2026-10-30; OCC calls it an unofficial summary): LT 0.1064 + "
+        "ST 0.0372, record 2020-12-24, payable 2020-12-29, CUSIP 921937835. Time of availability to an "
+        "automated strategy UNKNOWN."
     )
-    occ_gap_lt = "Event component corroborated by OCC memo 48045 (reused from V34 evidence). Tax designation not established."
+    occ_gap_st = (
+        f"{occ_note} TY2020 1042-S states 100% of the fund's 2020 short-term capital-gain distributions are QSG; "
+        "the tax statement's ST character for this component is not held, so tax character stays UNKNOWN."
+    )
+    occ_gap_lt = f"{occ_note} Tax designation not established."
     secondary_gap = "Secondary indication only; not independently verified at event level."
     records += [
         _event("ST", "2020-12-23", "eb13dcb4-6894-4184-a1db-29746b8d9435#short_term", "0.0372",
                "CAPITAL_GAIN_SHORT_TERM", "OCC_EVENT_CORROBORATED", _OCC_48045,
-               "OCC Information Memo 48045", "2020-12-29", occ_gap_st),
+               "OCC Information Memo 48045", "2020-12-29", occ_gap_st, record="2020-12-24"),
         _event("LT", "2020-12-23", "eb13dcb4-6894-4184-a1db-29746b8d9435#long_term", "0.1064",
                "CAPITAL_GAIN_LONG_TERM", "OCC_EVENT_CORROBORATED", _OCC_48045,
-               "OCC Information Memo 48045", "2020-12-29", occ_gap_lt),
+               "OCC Information Memo 48045", "2020-12-29", occ_gap_lt, record="2020-12-24"),
         _event("ST", "2021-04-01", "09df29e0-38dc-4cfe-9d2f-a5ef791cdd1a#short_term", "0.0034",
                "CAPITAL_GAIN_SHORT_TERM", "SECONDARY_INDICATION_ONLY", _DIVIDEND_COM,
                "Dividend.com BND distribution history", "UNKNOWN", secondary_gap),
@@ -672,8 +685,9 @@ def build_v37b_evidence_overlay(
         _event("LT", "2021-12-23", "da4043ec-4eee-44e3-a9f8-5d994f1f635d", "0.13",
                "CAPITAL_GAIN_LONG_TERM", "OCC_EVENT_CORROBORATED", _MIAX_49819,
                "MIAX alert relaying OCC Information Memo 49819", "2021-12-29",
-               "Event component corroborated by the MIAX/OCC 49819 notice (reused from V36 evidence); "
-               "not Vanguard issuer data. Tax designation not established."),
+               "MIAX/OCC 49819 dated 2021-12-22 (read 2026-10-30): LT 0.13, record 2021-12-27, payable "
+               "2021-12-29, CUSIP 921937835. Not Vanguard issuer data; availability time UNKNOWN. "
+               "Tax designation not established.", record="2021-12-27"),
         _event("LT", "2022-04-01", "6bcd4e25-c31a-49ce-97df-3ee25c524544", "0.0593",
                "CAPITAL_GAIN_LONG_TERM", "SECONDARY_INDICATION_ONLY", _DIVIDEND_COM,
                "Dividend.com BND distribution history", "UNKNOWN", secondary_gap),
@@ -705,11 +719,13 @@ def build_v37b_evidence_overlay(
                 evidence_class="ISSUER_TAX_CLASSIFICATION_ONLY",
                 matching_result="NOT_APPLICABLE",
                 remaining_gap=(
-                    "Fund-level QSG listing (as transcribed by the research sprint); no event-level QSG percentage. "
-                    "Does not classify the annual capital-gain total or any LT component as QSG."
+                    f"Read 2026-10-30: Vanguard Total Bond Market Index Fund listed; the supplement states 100% of "
+                    f"listed funds' {tax_year} short-term capital-gain distributions are QSG and refers to year-end "
+                    "statements for amounts. Applies to ST components only; not to LT or annual totals. "
+                    "Publication time UNKNOWN (PDF metadata is not publication evidence)."
                     if listed
-                    else "BND not listed (as transcribed by the research sprint); fund-level absence does not by "
-                    "itself prove any component's character."
+                    else f"Read 2026-10-30: fund not found in the text-extracted {tax_year} listing; absence does "
+                    "not prove zero capital gains or any component's character. Publication time UNKNOWN."
                 ),
             )
         )

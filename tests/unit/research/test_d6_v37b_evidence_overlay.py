@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List
 
@@ -16,7 +17,9 @@ import pytest
 
 from acash.core.domain.exceptions import DataContractError
 from acash.research.d6.evidence_overlay import (
+    ANNUAL_ROUNDING_TOLERANCE,
     EvidenceOverlayRecord,
+    EvidenceReconciliationResult,
     build_v37b_evidence_overlay,
     export_overlay_to_csv,
     export_overlay_to_json,
@@ -301,11 +304,64 @@ def test_built_overlay_scopes_and_claims_on_synthetic_ledger() -> None:
         "BND-2021-12-23-LT",
     }
     assert res.event_unresolved == 6 and res.event_conflicts == 0
-    assert (res.annual_consistent, res.annual_inconsistent, res.annual_unsourced) == (5, 3, 2)
+    assert _annual_counts(res) == (6, 3, 1, 0)
     assert res.tax_designations == 5
     assert by_id["BND-FY2021-CG-ANNUAL"].ex_date == "UNKNOWN"
-    assert by_id["BND-FY2020-CG-ANNUAL"].cash_amount_per_share == "UNKNOWN"
+    assert by_id["BND-FY2020-CG-ANNUAL"].matching_result == "ANNUAL_TOTAL_INCONSISTENT"
+    assert by_id["BND-FY2019-CG-ANNUAL"].matching_result == "ANNUAL_TOTAL_CONSISTENT"
     assert by_id["BND-QSG-TY2020"].cash_amount_per_share == "NONE"
+    components_2020 = [r for r in res.records if r.economic_event_id.startswith("BND-2020-12-23-")]
+    assert sum(Decimal(r.cash_amount_per_share) for r in components_2020) == Decimal("0.1436")
+
+
+def _annual_counts(res: EvidenceReconciliationResult) -> tuple[int, int, int, int]:
+    return (
+        res.annual_consistent,
+        res.annual_classification_differences,
+        res.annual_inconsistent,
+        res.annual_unsourced,
+    )
+
+
+def test_provider_label_difference_is_not_a_cash_discrepancy() -> None:
+    candidate = _event(
+        economic_event_id="BND-2016-12-22-CANDIDATE",
+        provider_event_id="P16",
+        ex_date="2016-12-22",
+        payable_date="UNKNOWN",
+        cash_amount_per_share="0.0357",
+        financial_component_type="UNKNOWN",
+        evidence_class="UNRESOLVED",
+    )
+    annual = _annual(
+        economic_event_id="BND-FY2016-CG-ANNUAL",
+        reporting_period="FY2016",
+        tax_year="2016",
+        cash_amount_per_share="0.036",
+        publication_or_acceptance_time="2019-04-25T17:35:43-04:00",
+    )
+    row = _row("P16", ex_date="2016-12-22", gross_amount="0.0357", distribution_type="DIVIDEND_CASH")
+    res = reconcile_provider_distributions([row], [annual, candidate])
+    assert _annual_counts(res) == (0, 1, 0, 0)
+    assert res.real_event_matches == 0
+    assert reconcile_provider_distributions([row], [annual]).annual_inconsistent == 1
+
+
+def test_fy2020_display_gap_is_not_absorbed_by_tolerance() -> None:
+    annual = _annual(
+        economic_event_id="BND-FY2020-CG-ANNUAL",
+        reporting_period="FY2020",
+        tax_year="2020",
+        cash_amount_per_share="0.143",
+        publication_or_acceptance_time="2021-04-28T17:37:00-04:00",
+    )
+    rows = [
+        _row("ST", gross_amount="0.0372"),
+        _row("LT", gross_amount="0.1064", distribution_type="CAPITAL_GAIN_LONG_TERM"),
+    ]
+    res = reconcile_provider_distributions(rows, [annual])
+    assert res.records[0].matching_result == "ANNUAL_TOTAL_INCONSISTENT"
+    assert ANNUAL_ROUNDING_TOLERANCE == Decimal("0.0005")
 
 
 def test_frozen_canonical_d6_input_hashes_unchanged() -> None:
@@ -327,7 +383,7 @@ def test_full_overlay_against_local_dataset_and_committed_artifacts() -> None:
     assert (res.imputed_payable_start, res.bnd_imputed_start, res.voo_imputed_start) == (63, 47, 16)
     assert (res.payable_matched, res.payable_unresolved) == (0, 63)
     assert (res.real_event_matches, res.event_conflicts, res.event_unresolved) == (3, 0, 6)
-    assert (res.annual_consistent, res.annual_inconsistent, res.annual_unsourced) == (5, 3, 2)
+    assert _annual_counts(res) == (6, 3, 1, 0)
     committed_json = (EVIDENCE_DIR / "v37b_evidence_overlay_20261030.json").read_bytes()
     committed_csv = (EVIDENCE_DIR / "v37b_evidence_overlay_20261030.csv").read_bytes()
     assert committed_json == export_overlay_to_json(res.records).encode()
