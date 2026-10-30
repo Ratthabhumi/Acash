@@ -288,6 +288,8 @@ def test_case_16_invalid_dates_negative_amounts_duplicate_ids() -> None:
 def test_case_17_frozen_canonical_d6_input_hashes_unchanged() -> None:
     """17. Acceptance requirements: frozen canonical D6 input hashes unchanged."""
     base_dir = Path("data/local_research/v36/reconciled_max")
+    if not (base_dir / "bars_raw.csv").exists():
+        pytest.skip("Local V36 research data absent in hermetic CI environment (LOCAL_DATA_UNAVAILABLE)")
     for filename, expected_hash in FROZEN_CANONICAL_HASHES.items():
         file_path = base_dir / filename
         assert file_path.exists(), f"File missing: {file_path}"
@@ -295,9 +297,49 @@ def test_case_17_frozen_canonical_d6_input_hashes_unchanged() -> None:
         assert actual_hash == expected_hash, f"Hash mismatch for {filename}: {actual_hash} != {expected_hash}"
 
 
+def test_synthetic_overlay_reconciliation_in_hermetic_environment() -> None:
+    """Verify synthetic evidence overlay and reconciliation in hermetic environment."""
+    synthetic_rows = [
+        {
+            "event_id": "SYNTH-001",
+            "symbol": "BND",
+            "ex_date": "2020-01-02",
+            "record_date": "2020-01-03",
+            "payable_date": "2020-01-06",
+            "gross_amount": "0.190000",
+            "distribution_type": "DIVIDEND_CASH",
+            "payable_date_source": "IMPUTED_T_PLUS_4",
+        },
+        {
+            "event_id": "SYNTH-002",
+            "symbol": "VOO",
+            "ex_date": "2020-03-25",
+            "record_date": "2020-03-26",
+            "payable_date": "2020-03-30",
+            "gross_amount": "1.300000",
+            "distribution_type": "DIVIDEND_CASH",
+            "payable_date_source": "IMPUTED_T_PLUS_5",
+        },
+    ]
+    records = build_v37b_evidence_overlay(synthetic_rows)
+    # 10 annual CG + 5 QSG + 2 imputed rows = 17 records
+    assert len(records) == 17
+    validate_overlay_records(records)
+
+    result = reconcile_provider_distributions(synthetic_rows, records)
+    assert result.imputed_payable_start == 2
+    assert result.bnd_imputed_start == 1
+    assert result.voo_imputed_start == 1
+    assert result.payable_matched == 0
+    assert result.payable_unresolved == 2
+    assert len(result.digest) == 64
+
+
 def test_v37b_full_overlay_reconciliation() -> None:
     """Verify full reconciliation of 78 records covering 63 imputed rows, 10 annual CG, 5 QSG."""
     dist_file = Path("data/local_research/v36/reconciled_max/distributions.csv")
+    if not dist_file.exists():
+        pytest.skip("Local V36 distributions.csv absent in hermetic CI environment (LOCAL_DATA_UNAVAILABLE)")
     rows = list(csv.DictReader(dist_file.open(encoding="utf-8")))
     records = build_v37b_evidence_overlay(rows)
 
@@ -313,3 +355,4 @@ def test_v37b_full_overlay_reconciliation() -> None:
     assert result.payable_ambiguous == 0
     assert result.payable_unresolved == 63
     assert result.digest == "7500046c78c057f896d4d4457c2a129dc50d8eb4bcb83ae95b04697243c7ec8f"
+
