@@ -1,6 +1,10 @@
 {
-  "snapshot_version": "2026-10-30",
-  "generated_at": "2026-10-30T23:55:00Z",
+  "snapshot_version": "2026-10-31",
+  "provenance": {
+    "creation_date": "2026-10-31",
+    "capture_timestamp_status": "CAPTURE_TIME_UNKNOWN",
+    "authoritative_review_date": "2026-10-31"
+  },
   "sources": {
     "DIME_PRODUCT": "https://dime.co.th/invest/stock-us",
     "DIME_FREEBIE": "https://dime.co.th/th/articles/monthly-freebie-2026",
@@ -26,9 +30,9 @@
       "min_fee": "0.00",
       "max_fee": "0.00",
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
-      "notes": "1 qualifying trade per calendar month free across all markets; applies to first chronological trade."
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "1 qualifying trade per calendar month free across all markets; applies strictly to first chronological trade."
     },
     {
       "broker_id": "DIME",
@@ -42,8 +46,8 @@
       "min_fee": null,
       "max_fee": null,
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "0.15% on trade value for share prices >= $6.67."
     },
     {
@@ -58,8 +62,8 @@
       "min_fee": null,
       "max_fee": null,
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "$0.01 per share for share prices < $6.67."
     },
     {
@@ -71,8 +75,8 @@
       "formula": "0.07 * commission",
       "currency": "THB",
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "7% Thai VAT on paid commission (zero when commission is zero)."
     },
     {
@@ -85,9 +89,9 @@
       "currency": "USD",
       "effective_start": "2025-06-01",
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
-      "notes": "US Consolidated Audit Trail fee applied to buy and sell executions."
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "US Consolidated Audit Trail fee applied to buy and sell executions on Dime."
     },
     {
       "broker_id": "DIME",
@@ -98,8 +102,8 @@
       "formula": "0.0000206 * sell_value",
       "currency": "USD",
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "SEC Section 31 fee on sales only; zero on purchases."
     },
     {
@@ -112,9 +116,22 @@
       "currency": "USD",
       "max_fee": "9.75",
       "source_url": "https://dime.co.th/invest/stock-us",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "FINRA Trading Activity Fee on sales only; zero on purchases."
+    },
+    {
+      "broker_id": "DIME",
+      "fee_category": "PROMOTION_SUPPLEMENTAL_FREEBIE",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "BUY",
+      "order_type": "ALL",
+      "formula": "0.00",
+      "currency": "THB",
+      "source_url": "https://dime.co.th/th/articles/monthly-freebie-2026",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
+      "notes": "Monthly Freebie for qualifying supplemental accounts. Older indexed source says end 2026-08-31; newer says 2026-12-31. SOURCE_VERSION_CONFLICT."
     },
     {
       "broker_id": "DIME",
@@ -125,9 +142,9 @@
       "formula": "DYNAMIC_SPREAD",
       "currency": "THB",
       "source_url": "https://dime.co.th/th/articles/how-to-exchange-currency",
-      "verified_date": "2026-10-30",
-      "evidence_status": "UNKNOWN",
-      "notes": "In-app dynamic quote expiring in 90 seconds. No permanent fixed spread published."
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_GUIDE",
+      "notes": "In-app dynamic quote expiring in 90 seconds. Published 0 THB transfer fee != 0 FX spread."
     },
     {
       "broker_id": "WEBULL_MANUAL",
@@ -139,8 +156,8 @@
       "currency": "USD",
       "min_fee": "0.00",
       "source_url": "https://www.webull.co.th/en/pricing",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "0.10% commission on US stocks/ETFs, no minimum."
     },
     {
@@ -152,9 +169,22 @@
       "formula": "0.07 * commission",
       "currency": "THB",
       "source_url": "https://www.webull.co.th/en/pricing",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "7% Thai VAT on commission."
+    },
+    {
+      "broker_id": "WEBULL",
+      "fee_category": "REGULATORY_CAT",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "BOTH",
+      "order_type": "ALL",
+      "formula": "0.000024 * share_count",
+      "currency": "USD",
+      "source_url": "https://www.webull.co.th/en/pricing",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "Webull published CAT fee for US stock/ETF executions: $0.000024 per share."
     },
     {
       "broker_id": "WEBULL_DCA_ZERO",
@@ -165,8 +195,8 @@
       "formula": "0.00",
       "currency": "USD",
       "source_url": "https://www.webull.co.th/en/dollar-cost-averaging",
-      "verified_date": "2026-10-30",
-      "evidence_status": "TERMS_CONFLICTING",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
       "notes": "Advertised as Zero Commission on DCA page; conflicts with 0.10% recurring investment guide."
     },
     {
@@ -178,8 +208,8 @@
       "formula": "0.0010 * trade_value",
       "currency": "USD",
       "source_url": "https://www.webull.co.th/en/news/23",
-      "verified_date": "2026-10-30",
-      "evidence_status": "TERMS_CONFLICTING",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
       "notes": "0.10% commission under Recurring Investment Guide (June 15, 2026)."
     },
     {
@@ -191,8 +221,8 @@
       "formula": "DYNAMIC_SPREAD",
       "currency": "THB",
       "source_url": "https://www.webull.co.th/help/faq/353-",
-      "verified_date": "2026-10-30",
-      "evidence_status": "UNKNOWN",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_GUIDE",
       "notes": "In-app currency exchange menu. No fixed guaranteed spread published."
     },
     {
@@ -206,8 +236,8 @@
       "currency": "USD",
       "min_fee": "0.35",
       "source_url": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "IBKR Pro Tiered: $0.0035 per share, minimum $0.35 per order (plus exchange/clearing pass-through)."
     },
     {
@@ -219,7 +249,7 @@
       "formula": "SWIFT_OUTWARD",
       "currency": "THB",
       "source_url": "https://www.interactivebrokers.com/en/support/fund-my-account.php",
-      "verified_date": "2026-10-30",
+      "verified_date": "2026-10-31",
       "evidence_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
       "notes": "Direct SWIFT wire required. Intermediary fees and beneficiary verification remain account-specific."
     },
@@ -232,8 +262,8 @@
       "formula": "0.00",
       "currency": "THB",
       "source_url": "N/A",
-      "verified_date": "2026-10-30",
-      "evidence_status": "VERIFIED_DOCUMENTED",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
       "notes": "Zero fee baseline control (funds remain in Thai bank)."
     }
   ]

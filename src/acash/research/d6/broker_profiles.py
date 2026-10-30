@@ -21,7 +21,7 @@ from acash.research.d6.investor_decision import (
 from acash.research.d6.route_cost import RouteTerms
 
 ZERO = Decimal("0")
-FEE_SNAPSHOT_SHA256 = "3121459a2fcbf10cf9c840b7caa61d4bb2e4fd428262bea134d07de6b1ffd8b5"
+FEE_SNAPSHOT_SHA256 = "1ddbcf98950b2a10fe47fb47e88f7501f2712df0d0ffd2eb713c17c039c6541c"
 
 
 def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerProfile:
@@ -53,7 +53,8 @@ def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerPro
             per_share_usd=Decimal("0.0035"),
             min_commission_usd=Decimal("0.35"),
             vat_applicable=False,
-            evidence_status="VERIFIED_DOCUMENTED",
+            applicable_order_type="ALL",
+            evidence_status="OFFICIAL_PROVIDER_TARIFF",
         ),
         fractional_supported=True,
         min_order_thb=Decimal("35.0"),  # ~$1 minimum
@@ -76,7 +77,8 @@ def get_default_dime_profile() -> BrokerProfile:
             rate=Decimal("0.0015"),  # 0.15% on subsequent orders
             free_orders_count=1,     # 1 free trade per calendar month for first qualifying trade
             vat_applicable=True,     # 7% Thai VAT on paid commission
-            evidence_status="VERIFIED_DOCUMENTED",
+            applicable_order_type="ALL",
+            evidence_status="OFFICIAL_PROVIDER_TARIFF",
         ),
         fractional_supported=True,
         min_order_thb=Decimal("50.0"),  # 50 THB minimum
@@ -98,14 +100,15 @@ def get_default_webull_manual_profile() -> BrokerProfile:
             policy_type="PERCENTAGE",
             rate=Decimal("0.0010"),  # 0.10% commission
             vat_applicable=True,     # 7% Thai VAT on commission
-            evidence_status="VERIFIED_DOCUMENTED",
+            applicable_order_type="MANUAL",
+            evidence_status="OFFICIAL_PROVIDER_TARIFF",
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),  # ~$1 / 40 THB
         funding_terms=None,
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
-            "Thai licensed broker: 0.10% commission + 7% VAT; no commission minimum; local THB deposit via QR/ATS.",
+            "Thai licensed broker: 0.10% commission + 7% VAT; CAT fee $0.000024/sh; no commission minimum; local THB deposit via QR/ATS.",
         ),
     )
 
@@ -120,7 +123,8 @@ def get_default_webull_dca_zero_profile() -> BrokerProfile:
             policy_type="ZERO_PROMOTIONAL",
             rate=Decimal("0.0"),
             vat_applicable=False,
-            evidence_status="TERMS_CONFLICTING",
+            applicable_order_type="DCA",
+            evidence_status="OFFICIAL_SOURCE_CONFLICT",
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),  # 40 THB minimum for fixed DCA
@@ -142,7 +146,8 @@ def get_default_webull_dca_standard_profile() -> BrokerProfile:
             policy_type="PERCENTAGE",
             rate=Decimal("0.0010"),
             vat_applicable=True,
-            evidence_status="TERMS_CONFLICTING",
+            applicable_order_type="DCA",
+            evidence_status="OFFICIAL_SOURCE_CONFLICT",
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),
@@ -164,7 +169,8 @@ def get_default_cash_profile() -> BrokerProfile:
             policy_type="NONE",
             rate=Decimal("0.0"),
             vat_applicable=False,
-            evidence_status="VERIFIED_DOCUMENTED",
+            applicable_order_type="ALL",
+            evidence_status="OFFICIAL_PROVIDER_TARIFF",
         ),
         fractional_supported=False,
         min_order_thb=Decimal("0.0"),
