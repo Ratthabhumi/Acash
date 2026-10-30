@@ -69,7 +69,7 @@ GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated 
 >    - [V36 Cost & Funding Audit](research/D6_V36_FUNDING_COST_AUDIT_RESULTS_20261026.md) (PR #66)
 >    - [V37A Fixed-THB Funding](research/V37A_FIXED_THB_RESULTS_20261027.md) (PR #68)
 >    - [V37B Research Evidence Integration](research/D6_V37B_RESEARCH_EVIDENCE_INTEGRATION_20261030.md)
->    - [V38 Retail Funding Feasibility](research/D6_V38_RETAIL_FUNDING_FEASIBILITY_20261030.md) (read-only; prospective cost rule; no route is all-in cost-verified; no transfer, deposit or account action)
+>    - [V38 Retail Funding Feasibility & Investor Decision Core](research/D6_V38_RETAIL_FUNDING_FEASIBILITY_20261030.md) (PR #71; multi-broker comparison across IBKR, Dime!, Webull Thailand, CASH; pure Decimal fail-closed; unknown FX spread lower bounds; external research handed off to ChatGPT)
 > 2. **Distinctions & Governance Boundary:**
 >    - *Implemented engineering capabilities:* D6 portfolio execution engine (`run_d6_portfolio`), cash conservation reconciliation, dated THB savings ledgers, independent Evidence Overlay.
 >    - *LOCAL_EXPLORATORY findings:* Retrospective sensitivity grids across 2016–2025 demonstrate funding cadence (monthly vs quarterly vs annual) and transaction frictions dominate asset-allocation differences at retail sizes; results are descriptive and exploratory.
