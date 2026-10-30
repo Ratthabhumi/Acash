@@ -64,6 +64,8 @@ docs/research/manifests/MEC-0015-sec31-fee-schedule.json text eol=lf
 docs/research/manifests/MEC-0016-alpaca-quote-conditions-tape-b.json text eol=lf
 docs/research/manifests/MEC-0017-HYP-007-M2-dividend-projection-manifest.json text eol=lf
 docs/research/manifests/MEC-0017-alpaca-direct-sip-transition-manifest.json text eol=lf
+docs/research/evidence/v37b_evidence_overlay_20261030.json text eol=lf
+docs/research/evidence/v37b_evidence_overlay_20261030.csv text eol=lf
 
 # CRLF-pinned artifacts: pins match CRLF worktree bytes (Windows-checkout seals).
 # Forced CRLF on every platform so byte audits are hermetic; LF-form digests
