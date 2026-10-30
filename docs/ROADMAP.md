@@ -27,7 +27,7 @@ Scientific evidence, software readiness, data qualification, strategy qualificat
 | **D3 📡 Authorized Market Data Acquisition** | HISTORICALLY_EXECUTED in HYP_009/010/011 | AUTHORITY_UNISSUED · ENTITLEMENT_UNVERIFIED | Exact-scope operator decision after D2 acceptance |
 | **D4 🔬 Data & Corporate-Action Qualification** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Qualify new prices and issuer/sponsor evidence |
 | **D5 🗃️ Qualified Historical Dataset** | SCIENTIFICALLY_QUALIFIED_FOR_ORIGINAL_SCOPE | SCOPE_NOT_ADMITTED | Separately authorize and seal new historical scope |
-| **D6 💰 Investment Economics** | IMPLEMENTED · HISTORICALLY_EXECUTED | EVIDENCE_INCOMPLETE for USD 1,000 | Matched-period, after-cost baseline study after D5 |
+| **D6 💰 Investment Economics** | IMPLEMENTED · HISTORICALLY_EXECUTED | LOCAL_EXPLORATORY EXECUTED (V32–V37B); D5 UNADMITTED | Formal D5-qualified study pending data rights |
 | **D7 🧠 Governed Strategy Research** | IMPLEMENTED tooling; historical research exists | SCIENTIFICALLY_BLOCKED for new candidates | Use qualified baseline or separately admitted hypothesis |
 | **D8 👁️ Prospective Shadow Validation** | IMPLEMENTED · HISTORICALLY_EXECUTED | AUTHORITY_UNISSUED for new program | PROPOSED stage; resolve segment/continuation authority |
 | **D9 🧪 Paper Trading & Operational Validation** | IMPLEMENTED · HISTORICALLY_EXECUTED | AUTHORITY_UNISSUED for ongoing program | PROPOSED stage; separate Human GO and paper gates |
@@ -61,6 +61,22 @@ GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated 
 **Integrated:** M1.6 benchmark contracts, M1.7 planner, M1.8 rehearsal, M1.8.1 storage/evidence, PPDS and Invest V0. **Update 2026-10-16:** D1 canary (PR #32), D2 safety (PR #37), D2 composition (PR #39), and docs consistency (PR #36) are MERGED; only the roadmap PR #38 remains open. The PR #32 description reports 39 focused canary tests; PR #37 reports 14 MockTransport tests. These are historical reports, not local reruns in this documentation task; green CI does not prove live-dispatch safety or entitlement.
 
 **Hard boundaries:** `REAL_CAPITAL_AUTHORITY = USD 0.00`; `NO_REAL_ORDERS=true`; Lane A **UNISSUED**. No provider HTTP, credential use, subscription purchase, protected dataset access, broker authentication, paper/live order, Homelab deployment or PR merge is authorized by this roadmap. Historical authorizations below remain bounded to their own decisions.
+
+> **Status update 2026-10-30 — V37B Integration (additive; historical checkpoints preserved):**
+> 1. **D6 Investment Economics Studies Executed (LOCAL_EXPLORATORY):**
+>    The USD 1,000 after-cost baseline investment study was fully executed across four research cycles:
+>    - [V35 Monthly Contribution Study](research/D6_V35_CONTRIBUTION_STUDY_RESULTS_20261025.md) (PR #65)
+>    - [V36 Cost & Funding Audit](research/D6_V36_FUNDING_COST_AUDIT_RESULTS_20261026.md) (PR #66)
+>    - [V37A Fixed-THB Funding](research/V37A_FIXED_THB_RESULTS_20261027.md) (PR #68)
+>    - [V37B Research Evidence Integration](research/D6_V37B_RESEARCH_EVIDENCE_INTEGRATION_20261030.md)
+> 2. **Distinctions & Governance Boundary:**
+>    - *Implemented engineering capabilities:* D6 portfolio execution engine (`run_d6_portfolio`), cash conservation reconciliation, dated THB savings ledgers, independent Evidence Overlay.
+>    - *LOCAL_EXPLORATORY findings:* Retrospective sensitivity grids across 2016–2025 demonstrate funding cadence (monthly vs quarterly vs annual) and transaction frictions dominate asset-allocation differences at retail sizes; results are descriptive and exploratory.
+>    - *V37B independent evidence observations:* Read-only Evidence Overlay reconciling Vanguard SEC financial highlights (2016–2025 BND annual capital gains corroborated; 2020/2021 Form 1042-S QSG lists corroborated; 63 imputed payable dates tracked as unverified pending lawful bulk export bytes).
+>    - *Formal D5 admission status:* **SCOPE_NOT_ADMITTED** (0/40 symbol-year cells admitted). No retrospective data is promoted to D5.
+>    - *Strategy scientific qualification:* **SCIENTIFICALLY_BLOCKED** for new candidate strategies. SAT-OPTIONS-001 and ATrain IV Walls remain strictly research-intake concepts.
+>    - *Operating authorities:* `REAL_CAPITAL_AUTHORITY = USD 0.00`, `NO_REAL_ORDERS = true`, `LANE_A/B = UNISSUED`.
+>    - *Pending owner decisions:* Clarification of corporate data rights / bulk export license; explicit ratification required before any D5 admission or D7 strategy initiative.
 
 <a id="stage-details"></a>
 ## 🗺️ 3. Stage Details
@@ -136,7 +152,7 @@ These identities are read from committed qualification records/manifests; protec
 
 **Benchmark limitation:** SPY buy-and-hold ended at **USD 317645.2207582**, higher than HYP_011's **USD 218852.857740** on that historical comparison. PASS does not establish universal outperformance, Alpha or future profitability.
 
-**Reuse / missing / authority / acceptance / next:** reuse accounting, valuation, holdings, dividends/splits, benchmarks and friction. The new USD 1,000 study has not been executed or qualified. After D5 and separate empirical authority, compare cash/no-trade, broad equity buy-and-hold, equity/bond and low-turnover diversification over matched periods. Disclose commissions, spreads, USD/THB FX, cash yield, funding, tax scenarios, drawdowns and evidence limits. No new empirical run here.
+**Reuse / missing / authority / acceptance / next:** reuse accounting, valuation, holdings, dividends/splits, benchmarks and friction. Retrospective exploratory execution of the USD 1,000 study was conducted in V32–V37A ([V35](research/D6_V35_CONTRIBUTION_STUDY_RESULTS_20261025.md), [V36](research/D6_V36_FUNDING_COST_AUDIT_RESULTS_20261026.md), [V37A](research/V37A_FIXED_THB_RESULTS_20261027.md)) and corroborated in [V37B](research/D6_V37B_RESEARCH_EVIDENCE_INTEGRATION_20261030.md) under the strict `LOCAL_EXPLORATORY` label; formal D5 empirical admission remains unissued. After D5 and separate empirical authority, compare cash/no-trade, broad equity buy-and-hold, equity/bond and low-turnover diversification over matched periods. Disclose commissions, spreads, USD/THB FX, cash yield, funding, tax scenarios, drawdowns and evidence limits. No new empirical run here.
 
 ### D7 — 🧠 Governed Strategy Research
 
