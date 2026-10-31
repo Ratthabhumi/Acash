@@ -246,6 +246,7 @@ class SecurityEligibility:
     source_url: str
     verified_date: str
     evidence_status: str
+    ui_capability_observed: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.platform_id.strip() or not self.symbol.strip():
@@ -469,7 +470,7 @@ def _order_eligibility(
     return False, False
 
 
-def _solve_order(allocation: Decimal, rate: Decimal, minimum: Decimal, vat_rate: Decimal, per_value_fee: Decimal) -> Tuple[Decimal, Decimal]:
+def solve_final_notional(allocation: Decimal, rate: Decimal, minimum: Decimal, vat_rate: Decimal, per_value_fee: Decimal) -> Tuple[Decimal, Decimal]:
     """Solve ``allocation = n + max(minimum, rate*n)*(1+vat) + per_value_fee*n`` for the final notional ``n``."""
     notional = allocation / (ONE + rate * (ONE + vat_rate) + per_value_fee)
     if rate * notional < minimum:
@@ -593,9 +594,9 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
                     rate = policy.per_share_usd / price
                 if policy.fractional_rate is not None and policy.fractional_min_usd is not None:
                     fractional_schedule = (policy.fractional_rate, policy.fractional_min_usd)
-        notional, commission = _solve_order(allocation, rate, minimum, vat_rate, cat_rate)
+        notional, commission = solve_final_notional(allocation, rate, minimum, vat_rate, cat_rate)
         if fractional_schedule is not None:
-            f_notional, f_commission = _solve_order(allocation, *fractional_schedule, vat_rate, cat_rate)
+            f_notional, f_commission = solve_final_notional(allocation, *fractional_schedule, vat_rate, cat_rate)
             whole = price is not None and notional > ZERO and (notional / price) == (notional / price).to_integral_value()
             pure_fraction = price is not None and notional < price and f_notional < price
             if pure_fraction:
@@ -772,6 +773,23 @@ def _thb(value: Decimal) -> str:
     return f"{value.quantize(CENT):,.2f}"
 
 
+DISCLOSURE_LINES = (
+    "- Reference FX provenance: the reference rate is a scenario input. A daily central-bank reference "
+    "rate is a `DAILY_REFERENCE_PROXY`, not a contemporaneous mid-rate; implied spreads against it include "
+    "intraday movement.",
+    "- Cadence: batching months lowers fixed per-transfer and per-order charges but keeps savings in cash "
+    "longer. No expected return is assumed, so the opportunity cost of waiting is disclosed, not computed.",
+    "- Portfolio risks: equity drawdown; bond duration/interest-rate risk; gold price risk; USD/THB currency "
+    "risk on every USD asset; concentration in US-listed funds; inflation erodes THB cash; holding cash "
+    "carries opportunity cost; historical drawdowns can be exceeded.",
+    "- Tax and jurisdiction (verify with a qualified adviser; no tax is calculated): US dividend withholding "
+    "is 30% by default and may be 15% under the US-Thailand treaty with a valid W-8BEN; Thai rules on "
+    "foreign income remitted from 2024 onward may apply; US estate tax may apply to US-situs assets above "
+    "USD 60,000 for non-resident aliens (Form 706-NA); custody and broker-insolvency protection differ by "
+    "platform and jurisdiction.",
+)
+
+
 def format_markdown_report(result: ComparisonResult) -> str:
     """Deterministic Markdown report; contains no wall-clock value."""
     p = result.plan
@@ -813,19 +831,7 @@ def format_markdown_report(result: ComparisonResult) -> str:
         "",
         "## Disclosures (informational, not advice)",
         "",
-        "- Reference FX provenance: the reference rate is a scenario input. A daily central-bank reference "
-        "rate is a `DAILY_REFERENCE_PROXY`, not a contemporaneous mid-rate; implied spreads against it include "
-        "intraday movement.",
-        "- Cadence: batching months lowers fixed per-transfer and per-order charges but keeps savings in cash "
-        "longer. No expected return is assumed, so the opportunity cost of waiting is disclosed, not computed.",
-        "- Portfolio risks: equity drawdown; bond duration/interest-rate risk; gold price risk; USD/THB currency "
-        "risk on every USD asset; concentration in US-listed funds; inflation erodes THB cash; holding cash "
-        "carries opportunity cost; historical drawdowns can be exceeded.",
-        "- Tax and jurisdiction (verify with a qualified adviser; no tax is calculated): US dividend withholding "
-        "is 30% by default and may be 15% under the US-Thailand treaty with a valid W-8BEN; Thai rules on "
-        "foreign income remitted from 2024 onward may apply; US estate tax may apply to US-situs assets above "
-        "USD 60,000 for non-resident aliens (Form 706-NA); custody and broker-insolvency protection differ by "
-        "platform and jurisdiction.",
+        *DISCLOSURE_LINES,
         "",
         "Before any real decision: observe a current FX quote per platform with a comparable reference "
         "timestamp; confirm per-security and fractional eligibility in the account; resolve conflicting "

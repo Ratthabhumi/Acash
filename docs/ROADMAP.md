@@ -78,6 +78,9 @@ GitHub PR metadata and PR-triggered CI were read on 2026-10-15. This is a dated 
 >    - *Strategy scientific qualification:* **SCIENTIFICALLY_BLOCKED** for new candidate strategies. SAT-OPTIONS-001 and ATrain IV Walls remain strictly research-intake concepts.
 >    - *Operating authorities:* `REAL_CAPITAL_AUTHORITY = USD 0.00`, `NO_REAL_ORDERS = true`, `LANE_A/B = UNISSUED`.
 >    - *Pending owner decisions:* Clarification of corporate data rights / bulk export license; explicit ratification required before any D5 admission or D7 strategy initiative.
+> 3. **Operating lanes (same repository and governance; no authority change):**
+>    - *Investor Decision Support* (current priority): broker costs, funding routes, ETF eligibility, owner evidence, cost reconciliation, portfolio and risk disclosures. Code: `src/acash/research/d6/` (`investor_decision`, `broker_profiles`, `route_cost`, `owner_evidence`, `decision_pack`). Output: [V38 Investor Decision Pack](research/evidence/v38_investor_decision_pack_20261101.md) (stacked on PR #71). External research is owned by the ChatGPT Research Lead.
+>    - *Quantitative Research*: data quality, backtesting, statistical validation, alpha qualification and governed prospective research (D1–D10 stages below). Shares the accounting, risk and audit components, but its results never feed investor-lane decisions without separate ratification.
 
 <a id="stage-details"></a>
 ## 🗺️ 3. Stage Details

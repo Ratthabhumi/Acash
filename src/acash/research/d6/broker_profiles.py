@@ -221,7 +221,7 @@ def get_default_cash_profile() -> BrokerProfile:
 ELIGIBILITY_COLUMNS = (
     "broker_id", "symbol", "instrument_type", "searchable", "whole_share_eligible", "fractional_eligible",
     "manual_order_eligible", "dca_eligible", "min_notional", "trading_session", "account_permission",
-    "source_url", "verified_date", "evidence_status",
+    "source_url", "verified_date", "evidence_status", "ui_capability_observed",
 )
 
 
@@ -235,7 +235,11 @@ def _tri_state(value: str, field: str) -> Optional[bool]:
 
 
 def load_security_eligibility(path: str) -> Tuple[SecurityEligibility, ...]:
-    """Read the owner-maintained ETF eligibility matrix; UNKNOWN cells stay ``None``."""
+    """Read the owner-maintained ETF eligibility matrix; UNKNOWN cells stay ``None``.
+
+    Account permission cannot be imported as VERIFIED: a file row is report evidence only and
+    never substitutes for broker authorization.
+    """
     with open(path, encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         if tuple(reader.fieldnames or ()) != ELIGIBILITY_COLUMNS:
@@ -243,6 +247,8 @@ def load_security_eligibility(path: str) -> Tuple[SecurityEligibility, ...]:
         rows = list(reader)
     entries = []
     for row in rows:
+        if row["account_permission"].strip() == "VERIFIED":
+            raise DataContractError(f"ELIGIBILITY_PERMISSION_NOT_IMPORTABLE: {row['broker_id']} {row['symbol']}.")
         min_text = row["min_notional"].strip().upper()
         entries.append(
             SecurityEligibility(
@@ -260,6 +266,7 @@ def load_security_eligibility(path: str) -> Tuple[SecurityEligibility, ...]:
                 source_url=row["source_url"].strip(),
                 verified_date=row["verified_date"].strip(),
                 evidence_status=row["evidence_status"].strip(),
+                ui_capability_observed=tuple(sorted(c for c in row["ui_capability_observed"].split(";") if c.strip())),
             )
         )
     return tuple(entries)

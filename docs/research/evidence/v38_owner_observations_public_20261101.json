@@ -1,0 +1,111 @@
+{
+  "schema": "ACASH_OWNER_OBSERVATIONS_PUBLIC_V1",
+  "classification": "SANITIZED_PUBLIC_DERIVED",
+  "notice": "Derived from private owner screenshots via the ChatGPT Research Lead. UI displays only: no exchange, order, transfer or DCA plan was executed or activated. Contains no account identifiers, balances or holdings.",
+  "observations": [
+    {
+      "observation_id": "DIME_FX_PREVIEW_20261101",
+      "platform_id": "DIME",
+      "kind": "FX_AMOUNT_PREVIEW",
+      "evidence_type": "INDICATIVE_AMOUNT_PREVIEW",
+      "time_precision": "MINUTE_APPROXIMATE",
+      "observed_at": "2026-11-01T00:27:00+07:00",
+      "source_amount_thb": "3000.00",
+      "payable_thb": "2999.87",
+      "target_amount_usd": "88.57",
+      "displayed_rate_thb_per_usd": "33.87",
+      "countdown_seconds": 79,
+      "notes": "Displayed countdown 01:19; no independent contemporaneous mid; no authenticated absolute expiry."
+    },
+    {
+      "observation_id": "WEBULL_FX_PREVIEW_20261031",
+      "platform_id": "WEBULL",
+      "kind": "FX_AMOUNT_PREVIEW",
+      "evidence_type": "INDICATIVE_AMOUNT_PREVIEW",
+      "time_precision": "MINUTE_APPROXIMATE",
+      "observed_at": "2026-10-31T21:49:00+07:00",
+      "source_amount_thb": "3000.00",
+      "target_amount_usd": "88.60",
+      "displayed_rate_thb_per_usd": "33.858804",
+      "notes": "Estimated rate; no expiry displayed; no independent contemporaneous mid."
+    },
+    {
+      "observation_id": "DIME_ORDER_PREVIEW_USD100",
+      "platform_id": "DIME",
+      "kind": "ORDER_PREVIEW",
+      "evidence_type": "FEE_ESTIMATE",
+      "time_precision": "UNKNOWN",
+      "order_type": "MANUAL",
+      "order_total_usd": "100.00",
+      "security_value_usd": "99.84",
+      "commission_usd": "0.15",
+      "vat_usd": "0.01",
+      "notes": "Ticker not visible; no CAT line displayed; no confirmed execution."
+    },
+    {
+      "observation_id": "WEBULL_AAPL_USD1_FRACTIONAL_PREVIEW",
+      "platform_id": "WEBULL",
+      "kind": "ORDER_PREVIEW",
+      "evidence_type": "FEE_ESTIMATE",
+      "time_precision": "UNKNOWN",
+      "symbol": "AAPL",
+      "order_type": "MANUAL",
+      "share_mode": "FRACTIONAL_USD",
+      "order_total_usd": "1.00",
+      "estimated_quantity": "0.0029",
+      "displayed_fee_usd": "0.00",
+      "notes": "Dollar-based fractional order UI; fee shown after UI rounding; no order submitted."
+    },
+    {
+      "observation_id": "WEBULL_VOO_USD1_FRACTIONAL_PREVIEW",
+      "platform_id": "WEBULL",
+      "kind": "ORDER_PREVIEW",
+      "evidence_type": "FEE_ESTIMATE",
+      "time_precision": "UNKNOWN",
+      "symbol": "VOO",
+      "order_type": "MANUAL",
+      "share_mode": "FRACTIONAL_USD",
+      "order_total_usd": "1.00",
+      "estimated_quantity": "0.00144",
+      "displayed_fee_usd": "0.00",
+      "notes": "Dollar-based fractional order UI; fee shown after UI rounding; no order submitted."
+    },
+    {
+      "observation_id": "WEBULL_AAPL_WHOLE_SHARE_PREVIEW",
+      "platform_id": "WEBULL",
+      "kind": "ORDER_PREVIEW",
+      "evidence_type": "FEE_ESTIMATE",
+      "time_precision": "UNKNOWN",
+      "symbol": "AAPL",
+      "order_type": "MANUAL",
+      "share_mode": "WHOLE",
+      "displayed_fee_usd": "0.37",
+      "notes": "Order value not captured; no order submitted."
+    },
+    {
+      "observation_id": "WEBULL_EWZ_WHOLE_SHARE_PREVIEW",
+      "platform_id": "WEBULL",
+      "kind": "ORDER_PREVIEW",
+      "evidence_type": "FEE_ESTIMATE",
+      "time_precision": "UNKNOWN",
+      "symbol": "EWZ",
+      "order_type": "MANUAL",
+      "share_mode": "WHOLE",
+      "displayed_fee_usd": "0.03",
+      "notes": "Order value not captured; no order submitted."
+    },
+    {
+      "observation_id": "WEBULL_VOO_DCA_SETUP_UI",
+      "platform_id": "WEBULL",
+      "kind": "DCA_SETUP_UI",
+      "evidence_type": "BROKER_UI_OBSERVATION",
+      "time_precision": "DATE_ONLY",
+      "observed_on": "2026-11-01",
+      "symbol": "VOO",
+      "order_type": "DCA",
+      "order_total_usd": "1.00",
+      "ui_claims": ["ZERO_COMMISSION_CLAIM", "WEEKLY_OR_MONTHLY_SCHEDULE_CONFIGURABLE", "PLAN_NOT_ACTIVATED"],
+      "notes": "VOO selectable for a USD 1 recurring amount; no plan activated; no execution or fill."
+    }
+  ]
+}
