@@ -4,38 +4,48 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "24.5000",
-        "commission_usd": "0.70",
+        "commission_thb": "23.25000000000000000000000000",
+        "commission_usd": "0.6642857142857142857142857143",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on IBKR.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on IBKR."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09151666666666666666666666667",
+        "friction_share_lower_bound": "0.09116666666666666666666666667",
         "funding_channel": "SWIFT_CROSS_BORDER",
-        "funding_friction_thb": "250.0",
+        "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.87",
+        "investable_balance_usd": "77.90",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "46.79285714285714285714285714"
+          ],
+          [
+            "BND",
+            "31.11428571428571428571428572"
+          ]
+        ],
         "regulatory_fees_thb": "0.00",
         "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.050000000000000000000000",
+        "rounding_residual_thb": "0.2500000000000000000000000",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "274.5500",
+        "total_known_friction_thb": "273.5000",
         "total_orders_count": 2,
         "unknown_components": [
           "DEDUCTED_FEE_USD",
+          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
+          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
@@ -52,19 +62,27 @@
         "evidence_notes": [
           "Thai licensed broker: 1 free trade/month for first chronological qualifying trade; subsequent 0.15% + 7% VAT; CAT fee $0.000046/sh.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on DIME.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on DIME."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on DIME.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on DIME."
         ],
         "free_orders_used": 1,
         "friction_share_lower_bound": "0.00075",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.65",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.42856669714285714285714286"
+          ],
+          [
+            "BND",
+            "34.23066380952380952380952381"
+          ]
+        ],
         "regulatory_fees_thb": "0.0009322666666666666666666666664",
         "regulatory_fees_usd": "0.00002663619047619047619047619047",
         "rounding_residual_thb": "0.323067733333333333333333333",
@@ -96,6 +114,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -116,20 +135,28 @@
         "evidence_notes": [
           "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on WEBULL_DCA_ZERO.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on WEBULL_DCA_ZERO.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on WEBULL_DCA_ZERO.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on WEBULL_DCA_ZERO.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL.",
           "TERMS_CONFLICTING: official provider sources disagree on this commission."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.00005",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.71",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.42856896000000000000000000"
+          ],
+          [
+            "BND",
+            "34.28570285714285714285714285"
+          ]
+        ],
         "regulatory_fees_thb": "0.0004864000000000000000000000001",
         "regulatory_fees_usd": "0.00001389714285714285714285714286",
         "rounding_residual_thb": "0.1495136000000000000000000000",
@@ -152,20 +179,28 @@
         "evidence_notes": [
           "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on WEBULL_DCA_STANDARD.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on WEBULL_DCA_STANDARD.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on WEBULL_DCA_STANDARD.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on WEBULL_DCA_STANDARD.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL.",
           "TERMS_CONFLICTING: official provider sources disagree on this commission."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.0011",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.62",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.37354038857142857142857143"
+          ],
+          [
+            "BND",
+            "34.24901714285714285714285714"
+          ]
+        ],
         "regulatory_fees_thb": "0.0004864000000000000000000000001",
         "regulatory_fees_usd": "0.00001389714285714285714285714286",
         "rounding_residual_thb": "0.089513600000000000000000000",
@@ -197,6 +232,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": "0",
         "numerically_complete": true,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -207,9 +243,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
-    "fee_snapshot_version": "2026-10-31b",
-    "input_hash": "196d6cbab0ed9206a3307496bc9b48b1c212a97931f7cf0d1163dcb34897a97f",
+    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
+    "fee_snapshot_version": "2026-11-01",
+    "input_hash": "1a05263e4fb24f22080a16cb7c1ee9caa3817fdb96cdade782ad4b8ec1885786",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -239,38 +275,48 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "24.5000",
-        "commission_usd": "0.70",
+        "commission_thb": "23.25000000000000000000000000",
+        "commission_usd": "0.6642857142857142857142857143",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on IBKR.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on IBKR."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09151666666666666666666666667",
+        "friction_share_lower_bound": "0.09116666666666666666666666667",
         "funding_channel": "SWIFT_CROSS_BORDER",
-        "funding_friction_thb": "250.0",
+        "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.87",
+        "investable_balance_usd": "77.90",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "46.79285714285714285714285714"
+          ],
+          [
+            "BND",
+            "31.11428571428571428571428572"
+          ]
+        ],
         "regulatory_fees_thb": "0.00",
         "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.050000000000000000000000",
+        "rounding_residual_thb": "0.2500000000000000000000000",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "274.5500",
+        "total_known_friction_thb": "273.5000",
         "total_orders_count": 2,
         "unknown_components": [
           "DEDUCTED_FEE_USD",
+          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
+          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
@@ -287,19 +333,27 @@
         "evidence_notes": [
           "Thai licensed broker: 1 free trade/month for first chronological qualifying trade; subsequent 0.15% + 7% VAT; CAT fee $0.000046/sh.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on DIME.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on DIME."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on DIME.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on DIME."
         ],
         "free_orders_used": 1,
         "friction_share_lower_bound": "0.00075",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.65",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.42856669714285714285714286"
+          ],
+          [
+            "BND",
+            "34.23066380952380952380952381"
+          ]
+        ],
         "regulatory_fees_thb": "0.0009322666666666666666666666664",
         "regulatory_fees_usd": "0.00002663619047619047619047619047",
         "rounding_residual_thb": "0.323067733333333333333333333",
@@ -322,19 +376,27 @@
         "evidence_notes": [
           "Thai licensed broker: 0.10% commission + 7% VAT; CAT fee $0.000024/sh; no commission minimum; local THB deposit via QR/ATS.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on WEBULL_MANUAL.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on WEBULL_MANUAL."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.0011",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.62",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.37354038857142857142857143"
+          ],
+          [
+            "BND",
+            "34.24901714285714285714285714"
+          ]
+        ],
         "regulatory_fees_thb": "0.0004864000000000000000000000001",
         "regulatory_fees_usd": "0.00001389714285714285714285714286",
         "rounding_residual_thb": "0.089513600000000000000000000",
@@ -366,6 +428,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -395,6 +458,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -424,6 +488,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": "0",
         "numerically_complete": true,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -434,9 +499,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
-    "fee_snapshot_version": "2026-10-31b",
-    "input_hash": "64b1a29cc635d2bc84865e24bde9e27f7a96e8b729e1b9faa8e1f7eed7673886",
+    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
+    "fee_snapshot_version": "2026-11-01",
+    "input_hash": "19ef5bc57dc569c6ea7e30472588d61b4aafe529bf39d5749a0f97fe762ac158",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -466,38 +531,48 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "24.5000",
-        "commission_usd": "0.70",
+        "commission_thb": "23.25000000000000000000000000",
+        "commission_usd": "0.6642857142857142857142857143",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on IBKR.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on IBKR."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09151666666666666666666666667",
+        "friction_share_lower_bound": "0.09116666666666666666666666667",
         "funding_channel": "SWIFT_CROSS_BORDER",
-        "funding_friction_thb": "250.0",
+        "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.87",
+        "investable_balance_usd": "77.90",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "46.79285714285714285714285714"
+          ],
+          [
+            "BND",
+            "31.11428571428571428571428572"
+          ]
+        ],
         "regulatory_fees_thb": "0.00",
         "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.050000000000000000000000",
+        "rounding_residual_thb": "0.2500000000000000000000000",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "274.5500",
+        "total_known_friction_thb": "273.5000",
         "total_orders_count": 2,
         "unknown_components": [
           "DEDUCTED_FEE_USD",
+          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
+          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
@@ -507,29 +582,38 @@
         "broker_id": "DIME",
         "commission_thb": "1.789264413518886679920477137",
         "commission_usd": "0.05112184038625390514058506106",
-        "cost_status": "QUOTE_OBSERVED",
+        "cost_status": "SCENARIO_ONLY",
         "decision_status": "SECURITY_ELIGIBILITY_UNKNOWN",
         "display_name": "Dime! Thailand (KKP)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
           "Thai licensed broker: 1 free trade/month for first chronological qualifying trade; subsequent 0.15% + 7% VAT; CAT fee $0.000046/sh.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on DIME.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on DIME."
+          "SYNTHETIC_QUOTE: fixture or hypothetical quote; not market evidence.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on DIME.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on DIME."
         ],
         "free_orders_used": 1,
         "friction_share_lower_bound": "0.0067",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "17.892644135188866799204772",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.14",
         "numerically_complete": true,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.12183568304458960522578813"
+          ],
+          [
+            "BND",
+            "34.02650478083877686263372148"
+          ]
+        ],
         "regulatory_fees_thb": "0.0009267064280980781974817760106",
         "regulatory_fees_usd": "0.00002647732651708794849947931459",
         "rounding_residual_thb": "0.29191623591782637508283568",
-        "spread_source": "USER_QUOTE_CURRENT",
+        "spread_source": "SYNTHETIC_QUOTE",
         "total_known_friction_thb": "20.1000",
         "total_orders_count": 2,
         "unknown_components": [],
@@ -546,19 +630,27 @@
         "evidence_notes": [
           "Thai licensed broker: 0.10% commission + 7% VAT; CAT fee $0.000024/sh; no commission minimum; local THB deposit via QR/ATS.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on WEBULL_MANUAL.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on WEBULL_MANUAL."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.0011",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
         "investable_balance_usd": "85.62",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "51.37354038857142857142857143"
+          ],
+          [
+            "BND",
+            "34.24901714285714285714285714"
+          ]
+        ],
         "regulatory_fees_thb": "0.0004864000000000000000000000001",
         "regulatory_fees_usd": "0.00001389714285714285714285714286",
         "rounding_residual_thb": "0.089513600000000000000000000",
@@ -590,6 +682,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -619,6 +712,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -648,6 +742,7 @@
         "gross_funding_thb": "3000",
         "investable_balance_usd": "0",
         "numerically_complete": true,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -658,9 +753,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
-    "fee_snapshot_version": "2026-10-31b",
-    "input_hash": "281dc247896e9bd10f0b3e5ba0568b2c72c5950cefe892480d50c1564fd8db2b",
+    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
+    "fee_snapshot_version": "2026-11-01",
+    "input_hash": "8a42aa425349eff1a4002371bf562798cfed3452662f721318553377e668fa56",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -685,13 +780,14 @@
       "user_quotes": {
         "DIME": {
           "broker_id": "DIME",
-          "observational_status": "USER_OBSERVED_QUOTE",
+          "observational_status": "SYNTHETIC",
           "quote_direction": "THB_TO_USD",
           "quote_observed_at": "2026-10-31T10:00:00+07:00",
           "quote_source_type": "SYNTHETIC_FIXTURE",
           "quote_valid_until": "2026-10-31T10:01:30+07:00",
           "quoted_thb_per_usd": "35.21",
           "reference_rate": "35.00",
+          "reference_rate_kind": "HYPOTHETICAL",
           "reference_rate_source": "SYNTHETIC_FIXTURE",
           "reference_rate_timestamp": "2026-10-31T10:02:00+07:00",
           "source_amount": "3000.00",
@@ -714,21 +810,29 @@
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on IBKR.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on IBKR.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on IBKR."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.0305",
         "funding_channel": "SWIFT_CROSS_BORDER",
-        "funding_friction_thb": "250.0",
+        "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0.0",
         "gross_funding_thb": "9000",
         "investable_balance_usd": "249.30",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "149.65"
+          ],
+          [
+            "BND",
+            "99.65"
+          ]
+        ],
         "regulatory_fees_thb": "0.00",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0.0000",
@@ -737,8 +841,10 @@
         "total_orders_count": 2,
         "unknown_components": [
           "DEDUCTED_FEE_USD",
+          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
+          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
@@ -755,19 +861,27 @@
         "evidence_notes": [
           "Thai licensed broker: 1 free trade/month for first chronological qualifying trade; subsequent 0.15% + 7% VAT; CAT fee $0.000046/sh.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on DIME.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on DIME.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on DIME."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on DIME.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on DIME."
         ],
         "free_orders_used": 1,
         "friction_share_lower_bound": "0.0006722222222222222222222222222",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "2E-24",
         "gross_funding_thb": "9000",
         "investable_balance_usd": "256.97",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "154.2857000914285714285714286"
+          ],
+          [
+            "BND",
+            "102.6919914285714285714285714"
+          ]
+        ],
         "regulatory_fees_thb": "0.002796799999999999999999999999",
         "regulatory_fees_usd": "0.00007990857142857142857142857141",
         "rounding_residual_thb": "0.269203199999999999999998003",
@@ -790,19 +904,27 @@
         "evidence_notes": [
           "Thai licensed broker: 0.10% commission + 7% VAT; CAT fee $0.000024/sh; no commission minimum; local THB deposit via QR/ATS.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: VOO not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: VOO on WEBULL_MANUAL.",
-          "SECURITY_ELIGIBILITY_UNKNOWN: BND not verified on WEBULL_MANUAL.",
-          "FRACTIONAL_ELIGIBILITY_UNVERIFIED: BND on WEBULL_MANUAL."
+          "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
+          "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL."
         ],
         "free_orders_used": 0,
         "friction_share_lower_bound": "0.0011",
         "funding_channel": "LOCAL_THB_QR_ATS",
-        "funding_friction_thb": "0",
+        "funding_friction_thb": "0.00",
         "fx_spread_cost_thb": "2E-24",
         "gross_funding_thb": "9000",
         "investable_balance_usd": "256.86",
         "numerically_complete": false,
+        "order_notionals_usd": [
+          [
+            "VOO",
+            "154.1206211657142857142857143"
+          ],
+          [
+            "BND",
+            "102.7470514285714285714285714"
+          ]
+        ],
         "regulatory_fees_thb": "0.001459200000000000000000000000",
         "regulatory_fees_usd": "0.00004169142857142857142857142856",
         "rounding_residual_thb": "0.268540799999999999999998002",
@@ -834,6 +956,7 @@
         "gross_funding_thb": "9000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -863,6 +986,7 @@
         "gross_funding_thb": "9000",
         "investable_balance_usd": null,
         "numerically_complete": false,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -892,6 +1016,7 @@
         "gross_funding_thb": "9000",
         "investable_balance_usd": "0",
         "numerically_complete": true,
+        "order_notionals_usd": [],
         "regulatory_fees_thb": "0",
         "regulatory_fees_usd": "0",
         "rounding_residual_thb": "0",
@@ -902,9 +1027,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
-    "fee_snapshot_version": "2026-10-31b",
-    "input_hash": "16b46130410d95eec03430e89832eccc1294264aa3ad090738d386057885ce5e",
+    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
+    "fee_snapshot_version": "2026-11-01",
+    "input_hash": "9e620d96717a9fb45d378544a4512d8dfb0e8813045bc4fa8482833dd6876d35",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,

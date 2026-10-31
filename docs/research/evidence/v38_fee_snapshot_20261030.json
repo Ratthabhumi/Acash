@@ -1,12 +1,12 @@
 {
-  "snapshot_version": "2026-10-31b",
+  "snapshot_version": "2026-11-01",
   "provenance": {
-    "snapshot_created_on": "2026-10-31",
+    "snapshot_created_on": "2026-11-01",
     "page_verification_date": "2026-10-31",
     "capture_timestamp_status": "CAPTURE_TIME_UNKNOWN",
     "provider_publication_timestamp": "UNKNOWN",
     "provider_effective_date": "Per rule; UNKNOWN unless the rule states one",
-    "research_owner": "ChatGPT research pack reviewed 2026-10-31; no capture log exists",
+    "research_owner": "ChatGPT broker research handoff integrated 2026-11-01; no capture log exists",
     "lineage": [
       {
         "snapshot_version": "2026-10-30",
@@ -17,6 +17,11 @@
         "snapshot_version": "2026-10-31",
         "sha256": "1ddbcf98950b2a10fe47fb47e88f7501f2712df0d0ffd2eb713c17c039c6541c",
         "superseded_because": "campaign version conflict not structured; CASH labelled as provider tariff; Webull sell-side fees absent"
+      },
+      {
+        "snapshot_version": "2026-10-31b",
+        "sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
+        "superseded_because": "Webull sell-side SEC/TAF limits, IBKR fractional candidate rule, Webull USD 1 order minimum and KBank promotion window integrated"
       }
     ]
   },
@@ -259,7 +264,7 @@
       "source_url": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "IBKR Pro Tiered: $0.0035 per share, minimum $0.35 per order (plus exchange/clearing pass-through). Fractional-trade footnotes and pass-through charges are not modeled; engine reports them UNKNOWN."
+      "notes": "IBKR Pro Tiered: $0.0035 per share, minimum $0.35 per order (plus exchange/clearing pass-through). Pass-through charges are UNKNOWN; fractional footnote recorded as a separate CANDIDATE rule."
     },
     {
       "broker_id": "IBKR",
@@ -296,12 +301,12 @@
       "tier": null,
       "formula": "0.0000206 * sell_value",
       "currency": "USD",
-      "min_fee": "UNKNOWN",
-      "max_fee": "UNKNOWN",
+      "min_fee": "0.01",
+      "max_fee": "NONE_STATED",
       "source_url": "https://www.webull.co.th/en/pricing",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "SEC transaction fee on sells, subject to a published minimum (value not captured). Engine models buy orders only; sell-side fees are not applied."
+      "notes": "SEC transaction fee on sells, subject to a published minimum. Engine models buy orders only; sell-side fees are not applied."
     },
     {
       "broker_id": "WEBULL",
@@ -312,12 +317,60 @@
       "tier": null,
       "formula": "0.000195 * share_count",
       "currency": "USD",
-      "min_fee": "UNKNOWN",
-      "max_fee": "UNKNOWN",
+      "min_fee": "0.01",
+      "max_fee": "9.79",
       "source_url": "https://www.webull.co.th/en/pricing",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "FINRA TAF on sells, with published minimum and cap (values not captured). Engine models buy orders only; sell-side fees are not applied."
+      "notes": "FINRA TAF on sells, with published minimum and cap. Engine models buy orders only; sell-side fees are not applied."
+    },
+    {
+      "broker_id": "IBKR",
+      "fee_category": "COMMISSION_FRACTIONAL_CANDIDATE",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "ALL",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "max(0.01 * order_value, 0.01)",
+      "currency": "USD",
+      "min_fee": "0.01",
+      "max_fee": "UNKNOWN",
+      "source_url": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
+      "verified_date": "2026-11-01",
+      "evidence_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+      "notes": "Footnote applicability to IBKR Pro Tiered fractional orders is not established. Engine bounds the commission by the cheaper schedule and reports the component UNKNOWN."
+    },
+    {
+      "broker_id": "WEBULL",
+      "fee_category": "ORDER_MINIMUM",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "BUY",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "order_notional >= 1",
+      "currency": "USD",
+      "min_fee": "NOT_APPLICABLE",
+      "max_fee": "NOT_APPLICABLE",
+      "source_url": "https://www.webull.co.th/help/faq/355-",
+      "verified_date": "2026-11-01",
+      "evidence_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+      "notes": "Candidate USD 1 fractional minimum; THB 40 equivalence not certified. Fractional trading only on eligible symbols with session and order-type restrictions. THB 20 minimum deposit is not an order minimum."
+    },
+    {
+      "broker_id": "KBANK",
+      "fee_category": "FUNDING_SWIFT_OUTWARD",
+      "applicable_instrument": "FUNDING",
+      "order_side": "NOT_APPLICABLE",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "250 THB per transfer during 2026-01-01..2026-12-31",
+      "currency": "THB",
+      "min_fee": "UNKNOWN",
+      "max_fee": "UNKNOWN",
+      "source_url": "PENDING_RESEARCH_SOURCE",
+      "verified_date": "2026-11-01",
+      "evidence_status": "PROMOTIONAL_CLAIM",
+      "notes": "Promotion not applied after its end date; POST_PROMOTION_FEE, charge bearer, deducted, intermediary and receiving USD fees UNKNOWN."
     }
   ]
 }

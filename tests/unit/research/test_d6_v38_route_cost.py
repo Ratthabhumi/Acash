@@ -36,8 +36,21 @@ def _terms(**changes: object) -> RouteTerms:
     return replace(base, **changes)  # type: ignore[arg-type]
 
 
-def test_all_documented_route_is_all_in() -> None:
+def test_complete_synthetic_terms_are_scenario_only() -> None:
     result = assess_transfer(_terms(), D("50000"), RATE, ON)
+    assert result.cost_status == "SCENARIO_ONLY"
+    with pytest.raises(DataContractError, match="ROUTE_UNKNOWN_EVIDENCE_STATUS"):
+        _terms(evidence_status="VERIFIED")
+
+
+def test_thb_and_usd_fee_components_are_separate() -> None:
+    result = assess_transfer(_terms(intermediary_fee_usd=D("15"), receiving_fee_usd=D("5")), D("50000"), RATE, ON)
+    assert (result.thb_fee_known, result.usd_fee_known) == (D("250"), D("20"))
+    assert result.fee_thb_known == D("250") + D("20") * RATE
+
+
+def test_all_documented_route_is_all_in() -> None:
+    result = assess_transfer(_terms(evidence_status="OFFICIAL_PROVIDER_TARIFF"), D("50000"), RATE, ON)
     assert result.cost_status == "ALL_IN_DOCUMENTED"
     assert result.eligibility_status == "DOCUMENTED"
     assert result.cost_share_lower_bound == D("250") / D("50000") + D("0.005")

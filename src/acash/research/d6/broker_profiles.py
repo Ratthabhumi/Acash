@@ -11,14 +11,19 @@ Maintains canonical definitions and evidence links for candidate platforms:
 
 from __future__ import annotations
 
+import csv
+from dataclasses import replace
+from datetime import date
 from decimal import Decimal
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from acash.research.d6.investor_decision import (
     FEE_SNAPSHOT_SHA256 as FEE_SNAPSHOT_SHA256,
     BrokerProfile,
     CommissionPolicy,
+    SecurityEligibility,
 )
+from acash.core.domain.exceptions import DataContractError
 from acash.research.d6.route_cost import RouteTerms
 
 ZERO = Decimal("0")
@@ -42,9 +47,13 @@ def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerPro
             deducted_fee_usd=None,
             intermediary_fee_usd=None,
             receiving_fee_usd=None,
-            min_amount_thb=Decimal("1000.0"),
+            min_amount_thb=ZERO,
+            promotion_start=date(2026, 1, 1),
+            promotion_end=date(2026, 12, 31),
+            standard_fee_thb=None,  # POST_PROMOTION_FEE UNKNOWN
             purpose_supported=None,      # ACCOUNT_SPECIFIC_UNVERIFIED
             beneficiary_supported=None,  # ACCOUNT_SPECIFIC_UNVERIFIED
+            evidence_status="PROMOTIONAL_CLAIM",
         )
     return BrokerProfile(
         broker_id="IBKR",
@@ -58,13 +67,15 @@ def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerPro
             applicable_order_type="ALL",
             evidence_status="OFFICIAL_PROVIDER_TARIFF",
             pass_through_fees_known=False,
+            candidate_fractional_rate=Decimal("0.01"),
+            candidate_fractional_min_usd=Decimal("0.01"),
         ),
         fractional_supported=True,
         min_order_thb=ZERO,
         funding_terms=terms,
         eligibility_status="ACCOUNT_SPECIFIC_UNVERIFIED",
         evidence_notes=(
-            "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
+            "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
         ),
     )
 
@@ -109,8 +120,8 @@ def get_default_webull_manual_profile() -> BrokerProfile:
             cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
-        min_order_thb=Decimal("40.0"),  # ~$1 / 40 THB
-        funding_terms=None,
+        min_order_usd=Decimal("1"),
+        platform_id="WEBULL",
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
             "Thai licensed broker: 0.10% commission + 7% VAT; CAT fee $0.000024/sh; no commission minimum; local THB deposit via QR/ATS.",
@@ -133,8 +144,8 @@ def get_default_webull_dca_zero_profile() -> BrokerProfile:
             cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
-        min_order_thb=Decimal("40.0"),  # 40 THB minimum for fixed DCA
-        funding_terms=None,
+        min_order_usd=Decimal("1"),
+        platform_id="WEBULL",
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
             "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
@@ -157,8 +168,8 @@ def get_default_webull_dca_standard_profile() -> BrokerProfile:
             cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
-        min_order_thb=Decimal("40.0"),
-        funding_terms=None,
+        min_order_usd=Decimal("1"),
+        platform_id="WEBULL",
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
             "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
@@ -189,9 +200,57 @@ def get_default_cash_profile() -> BrokerProfile:
     )
 
 
+ELIGIBILITY_COLUMNS = (
+    "broker_id", "symbol", "instrument_type", "searchable", "whole_share_eligible", "fractional_eligible",
+    "manual_order_eligible", "dca_eligible", "min_notional", "trading_session", "account_permission",
+    "source_url", "verified_date", "evidence_status",
+)
+
+
+def _tri_state(value: str, field: str) -> Optional[bool]:
+    text = value.strip().upper()
+    if text in ("", "UNKNOWN"):
+        return None
+    if text in ("TRUE", "FALSE"):
+        return text == "TRUE"
+    raise DataContractError(f"ELIGIBILITY_BAD_BOOLEAN: {field}={value!r}.")
+
+
+def load_security_eligibility(path: str) -> Tuple[SecurityEligibility, ...]:
+    """Read the owner-maintained ETF eligibility matrix; UNKNOWN cells stay ``None``."""
+    with open(path, encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if tuple(reader.fieldnames or ()) != ELIGIBILITY_COLUMNS:
+            raise DataContractError(f"ELIGIBILITY_BAD_COLUMNS: {reader.fieldnames}.")
+        rows = list(reader)
+    entries = []
+    for row in rows:
+        min_text = row["min_notional"].strip().upper()
+        entries.append(
+            SecurityEligibility(
+                platform_id=row["broker_id"].strip(),
+                symbol=row["symbol"].strip().upper(),
+                instrument_type=row["instrument_type"].strip(),
+                searchable=_tri_state(row["searchable"], "searchable"),
+                whole_share_eligible=_tri_state(row["whole_share_eligible"], "whole_share_eligible"),
+                fractional_eligible=_tri_state(row["fractional_eligible"], "fractional_eligible"),
+                manual_order_eligible=_tri_state(row["manual_order_eligible"], "manual_order_eligible"),
+                dca_eligible=_tri_state(row["dca_eligible"], "dca_eligible"),
+                min_notional_usd=None if min_text in ("", "UNKNOWN") else Decimal(min_text),
+                trading_session=row["trading_session"].strip(),
+                account_permission=row["account_permission"].strip(),
+                source_url=row["source_url"].strip(),
+                verified_date=row["verified_date"].strip(),
+                evidence_status=row["evidence_status"].strip(),
+            )
+        )
+    return tuple(entries)
+
+
 def load_candidate_profiles(
     route_terms: RouteTerms | None = None,
     include_both_webull_dca_scenarios: bool = True,
+    eligibility: Sequence[SecurityEligibility] = (),
 ) -> Tuple[BrokerProfile, ...]:
     """Return all standard candidate profiles with explicit evidence-aware variants."""
     profiles = [
@@ -203,4 +262,7 @@ def load_candidate_profiles(
     if include_both_webull_dca_scenarios:
         profiles.append(get_default_webull_dca_standard_profile())
     profiles.append(get_default_cash_profile())
-    return tuple(profiles)
+    return tuple(
+        replace(p, security_eligibility=tuple(e for e in eligibility if e.platform_id == p.platform_id))
+        for p in profiles
+    )

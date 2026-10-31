@@ -25,6 +25,16 @@ from acash.core.domain.exceptions import DataContractError
 ZERO = Decimal("0")
 ONE = Decimal("1")
 FUNDING_CURRENCY = "USD"
+EVIDENCE_STATUSES = (
+    "OFFICIAL_PROVIDER_TARIFF",
+    "OFFICIAL_PROVIDER_GUIDE",
+    "PROMOTIONAL_CLAIM",
+    "OFFICIAL_SOURCE_CONFLICT",
+    "HYPOTHETICAL_INPUT",
+    "USER_OBSERVED_QUOTE",
+    "ACCOUNT_SPECIFIC_UNVERIFIED",
+    "NOT_APPLICABLE",
+)
 
 
 def _amount(value: Optional[Decimal], context: str, *, positive: bool = False) -> None:
@@ -59,10 +69,13 @@ class RouteTerms:
     standard_fee_thb: Optional[Decimal] = None
     purpose_supported: Optional[bool] = None
     beneficiary_supported: Optional[bool] = None
+    evidence_status: str = "HYPOTHETICAL_INPUT"
 
     def __post_init__(self) -> None:
         if not self.route_id.strip():
             raise DataContractError("ROUTE_EMPTY_ID.")
+        if self.evidence_status not in EVIDENCE_STATUSES:
+            raise DataContractError(f"ROUTE_UNKNOWN_EVIDENCE_STATUS: {self.evidence_status}.")
         for name in ("fixed_fee_thb", "deducted_fee_usd", "intermediary_fee_usd", "receiving_fee_usd", "standard_fee_thb"):
             _amount(getattr(self, name), f"{self.route_id} {name}")
         _amount(self.variable_fee_min_thb, f"{self.route_id} variable_fee_min_thb")
@@ -83,6 +96,8 @@ class TransferAssessment:
     route_id: str
     amount_thb: Decimal
     fee_thb_known: Decimal
+    thb_fee_known: Decimal
+    usd_fee_known: Decimal
     cost_share_lower_bound: Decimal
     unknown_components: Tuple[str, ...]
     cost_status: str
@@ -124,12 +139,15 @@ def assess_transfer(
         fee += terms.variable_fee_min_thb
     else:
         fee += max(terms.variable_fee_rate * amount_thb, terms.variable_fee_min_thb)
+    thb_fee = fee
+    usd_fee = ZERO
     for name in ("deducted_fee_usd", "intermediary_fee_usd", "receiving_fee_usd"):
         value = getattr(terms, name)
         if value is None:
             unknown.append(name.upper())
         else:
-            fee += value * reference_thb_per_usd
+            usd_fee += value
+    fee = thb_fee + usd_fee * reference_thb_per_usd
     if fee >= amount_thb:
         raise DataContractError(f"ROUTE_FEE_EXCEEDS_AMOUNT: {terms.route_id} {fee} >= {amount_thb}.")
     spread = terms.fx_spread
@@ -141,9 +159,15 @@ def assess_transfer(
         route_id=terms.route_id,
         amount_thb=amount_thb,
         fee_thb_known=fee,
+        thb_fee_known=thb_fee,
+        usd_fee_known=usd_fee,
         cost_share_lower_bound=fee / amount_thb + spread,
         unknown_components=tuple(sorted(unknown)),
-        cost_status="LOWER_BOUND_ONLY" if unknown else "ALL_IN_DOCUMENTED",
+        cost_status=(
+            "LOWER_BOUND_ONLY" if unknown
+            else "ALL_IN_DOCUMENTED" if terms.evidence_status == "OFFICIAL_PROVIDER_TARIFF"
+            else "SCENARIO_ONLY"
+        ),
         eligibility_status="ACCOUNT_SPECIFIC_UNVERIFIED" if eligibility_unknown else "DOCUMENTED",
     )
 

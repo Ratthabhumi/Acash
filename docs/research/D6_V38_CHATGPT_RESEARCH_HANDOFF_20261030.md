@@ -59,3 +59,40 @@ To convert the `LOWER_BOUND_ONLY` cost assessments into `ALL_IN_DOCUMENTED` numb
 
 Open items for the owner or ChatGPT: RQ-01 to RQ-05 above, plus the authoritative Dime! campaign version,
 Webull SEC/TAF minimum and cap values (sell side is not modeled), and IBKR fractional-trade pricing footnotes.
+
+## 5. Evidence Integration Addendum (2026-11-01; snapshot 2026-11-01, SHA-256 `89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a`)
+
+Integrity fixes (engine): synthetic or indicative quotes can no longer yield `QUOTE_OBSERVED`; THB route fees apply before
+conversion and USD deducted/intermediary/receiving fees after it; order minimums are checked on the post-fee notional
+(`FEES_DEDUCTED_FROM_ALLOCATION`); `ALL_IN_DOCUMENTED` requires route terms with `OFFICIAL_PROVIDER_TARIFF` evidence.
+
+Integrated research (dated inputs, not re-verified by the engineering agent): Dime! chronological free trade, 0.15% at
+>= USD 6.67 or USD 0.01/share below, VAT, CAT 0.000046, supplemental freebie `SOURCE_VERSION_CONFLICT` (not applied);
+Webull manual 0.10% + VAT, DCA 0% vs 0.10% `TERMS_CONFLICTING`, CAT 0.000024, sell-side SEC (min USD 0.01) and TAF
+(min 0.01, max 9.79) recorded only (no sell engine), USD 1 candidate order minimum (THB 40 not certified); IBKR Tiered
+0.0035/share min 0.35 with the fractional footnote max(1%, USD 0.01) kept as an unverified lower bound; KBank 2026
+promotion window recorded as `PROMOTIONAL_CLAIM` with post-promotion fee UNKNOWN. ETF eligibility matrix
+[`v38_etf_eligibility_matrix_20261101.csv`](evidence/v38_etf_eligibility_matrix_20261101.csv) is entirely
+`ACCOUNT_SPECIFIC_UNVERIFIED`.
+
+### Candidate register (recorded only; no calculator, no ranking)
+
+| Candidate | Reported terms | Status |
+| :--- | :--- | :--- |
+| Pi Securities | 0.20%, no minimum, + VAT | UNVERIFIED_CANDIDATE |
+| InnovestX | USD 0.08/share, minimum USD 4.99, + VAT, 1-share minimum | UNVERIFIED_CANDIDATE |
+| TrueMoney / Webull distribution route | 0.15%, minimum USD 0.01 | UNVERIFIED_CANDIDATE |
+| SP50001 DR | Alternative instrument (Thai depositary receipt) | NOT_COMPARABLE_INSTRUMENT |
+
+### Open research questions for ChatGPT
+
+| # | Required value | Source needed | Why it matters | Blocking | Owner-app evidence |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | Dime! and Webull THB->USD FX spread vs a contemporaneous mid | Official FX page or in-app quote with notional | Largest unknown cost for local brokers | Yes (cost) | Yes: current quote with amount + timestamp |
+| 2 | Does the IBKR fractional footnote max(1%, USD 0.01) apply to IBKR Pro Tiered US ETF fractional orders? | IBKR commissions page footnote text | Decides IBKR commission for small orders | Yes (IBKR) | No |
+| 3 | KBank SWIFT outward fee source URL, post-2026 fee, charge bearer (OUR/SHA/BEN), USD intermediary and receiving fees | KBank tariff page; IBKR receiving-bank terms | IBKR funding cost and 2027 viability | Yes (IBKR) | Possibly: bank fee preview |
+| 4 | Webull DCA commission: 0% promotion vs 0.10% guide; effective dates | Webull TH official pages with dates | Resolves `TERMS_CONFLICTING` | Yes (DCA) | Optional: DCA order preview |
+| 5 | Dime! supplemental freebie authoritative end date (2026-08-31 vs 2026-12-31) | Dated official page/archive | Only affects supplemental accounts | No | No |
+| 6 | VOO/BND/GLD/BIL searchable, fractional, manual and DCA eligibility per platform | Official symbol lists | Fills the eligibility matrix | Yes (eligibility) | Yes: in-app search/order screen |
+| 7 | Whether Dime! charges CAT on buys in the order preview | Dime! fee page | Owner preview (USD 100 = 99.84 + 0.15 + 0.01 VAT) showed no CAT line | No | Yes: preview with ticker |
+| 8 | Webull order minimum in THB vs USD 1 | Webull fractional trading terms | Small-contribution eligibility | No | Optional |

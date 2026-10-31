@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
-from acash.research.d6.route_cost import RouteTerms, assess_transfer
+from acash.research.d6.route_cost import EVIDENCE_STATUSES, RouteTerms, assess_transfer
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -45,8 +45,8 @@ QUOTE_REFERENCE_MAX_GAP = timedelta(minutes=5)
 # Displayed USD amounts are rounded to the cent, so amount/rate consistency allows half a cent.
 QUOTE_DISPLAY_TOLERANCE_USD = Decimal("0.005")
 
-FEE_SNAPSHOT_VERSION = "2026-10-31b"
-FEE_SNAPSHOT_SHA256 = "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07"
+FEE_SNAPSHOT_VERSION = "2026-11-01"
+FEE_SNAPSHOT_SHA256 = "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a"
 
 COST_STATUS_ALL_IN_DOCUMENTED = "ALL_IN_DOCUMENTED"
 COST_STATUS_QUOTE_OBSERVED = "QUOTE_OBSERVED"
@@ -63,16 +63,10 @@ DECISION_STATUS_CASH_NO_TRADE = "CASH_NO_TRADE"
 DECISION_STATUS_TERMS_CONFLICTING = "TERMS_CONFLICTING"
 DECISION_STATUS_NOT_ELIGIBLE = "NOT_ELIGIBLE"
 
-EVIDENCE_STATUSES = (
-    "OFFICIAL_PROVIDER_TARIFF",
-    "OFFICIAL_PROVIDER_GUIDE",
-    "PROMOTIONAL_CLAIM",
-    "OFFICIAL_SOURCE_CONFLICT",
-    "HYPOTHETICAL_INPUT",
-    "USER_OBSERVED_QUOTE",
-    "ACCOUNT_SPECIFIC_UNVERIFIED",
-    "NOT_APPLICABLE",
-)
+QUOTE_SOURCE_TYPES = ("IN_APP_DISPLAY", "SYNTHETIC_FIXTURE", "HYPOTHETICAL_INPUT")
+QUOTE_OBSERVATIONAL_STATUSES = ("USER_OBSERVED_QUOTE", "USER_SCREENSHOT_INDICATIVE", "SYNTHETIC")
+REFERENCE_RATE_KINDS = ("CONTEMPORANEOUS", "DAILY_PROXY", "HYPOTHETICAL")
+SIZING_POLICY = "FEES_DEDUCTED_FROM_ALLOCATION"
 CONFLICT_STATUSES = ("OFFICIAL_SOURCE_CONFLICT",)
 POLICY_TYPES = ("FIXED_PER_SHARE", "PERCENTAGE", "FREE_MONTHLY_TIERED", "ZERO_PROMOTIONAL", "NONE")
 ORDER_TYPES = ("MANUAL", "DCA")
@@ -84,6 +78,9 @@ SPREAD_ASSUMED = "HYPOTHETICAL_INPUT"
 SPREAD_ROUTE_TERMS = "ROUTE_TERMS"
 SPREAD_QUOTE_CURRENT = "USER_QUOTE_CURRENT"
 SPREAD_QUOTE_HISTORICAL = "USER_QUOTE_HISTORICAL"
+SPREAD_QUOTE_SYNTHETIC = "SYNTHETIC_QUOTE"
+SPREAD_QUOTE_INDICATIVE = "USER_QUOTE_INDICATIVE"
+SPREAD_QUOTE_REFERENCE_LIMITED = "USER_QUOTE_REFERENCE_LIMITED"
 
 
 def _money(value: Optional[Decimal], context: str, *, positive: bool = False) -> None:
@@ -129,12 +126,21 @@ class UserFxQuote:
     reference_rate: Optional[Decimal] = None
     reference_rate_timestamp: Optional[str] = None
     reference_rate_source: Optional[str] = None
+    reference_rate_kind: str = "CONTEMPORANEOUS"
     quote_source_type: str = "IN_APP_DISPLAY"
     observational_status: str = "USER_OBSERVED_QUOTE"
 
     def __post_init__(self) -> None:
         if not self.broker_id.strip():
             raise DataContractError("USER_QUOTE_EMPTY_BROKER_ID.")
+        if (
+            self.quote_source_type not in QUOTE_SOURCE_TYPES
+            or self.observational_status not in QUOTE_OBSERVATIONAL_STATUSES
+            or self.reference_rate_kind not in REFERENCE_RATE_KINDS
+        ):
+            raise DataContractError(f"USER_QUOTE_UNKNOWN_PROVENANCE: {self.broker_id}.")
+        if (self.quote_source_type == "IN_APP_DISPLAY") != self.observational_status.startswith("USER_"):
+            raise DataContractError(f"USER_QUOTE_PROVENANCE_CONTRADICTION: {self.broker_id}.")
         if (self.quote_direction, self.source_currency, self.target_currency) != ("THB_TO_USD", "THB", "USD"):
             raise DataContractError(
                 f"USER_QUOTE_UNSUPPORTED_DIRECTION: {self.quote_direction} {self.source_currency}->{self.target_currency}."
@@ -166,10 +172,19 @@ class UserFxQuote:
     def spread_basis(self) -> str:
         if self.reference_rate is None:
             return "NO_REFERENCE"
+        if self.reference_rate_kind == "HYPOTHETICAL":
+            return "HYPOTHETICAL_REFERENCE"
+        if self.reference_rate_kind == "DAILY_PROXY":
+            return "DAILY_REFERENCE_PROXY"
         if self.reference_rate_timestamp is None:
             return "REFERENCE_TIME_UNKNOWN"
         gap = abs(_timestamp(self.reference_rate_timestamp, "reference") - _timestamp(self.quote_observed_at, "quote"))
-        return "COMPARABLE" if gap <= QUOTE_REFERENCE_MAX_GAP else "TIMING_MISMATCH"
+        return "CONTEMPORANEOUS_COMPARABLE_REFERENCE" if gap <= QUOTE_REFERENCE_MAX_GAP else "TIMING_MISMATCH"
+
+    @property
+    def is_user_observed_notional_quote(self) -> bool:
+        """User-reported (not authenticated) in-app quote for a stated THB/USD notional."""
+        return self.observational_status == "USER_OBSERVED_QUOTE" and self.source_amount is not None
 
     def is_current(self, evaluated_at: Optional[str]) -> bool:
         """True only when a validity window is known and the evaluation instant falls inside it."""
@@ -191,6 +206,10 @@ class CommissionPolicy:
     evidence_status: str = "OFFICIAL_PROVIDER_TARIFF"
     cat_fee_per_share_usd: Optional[Decimal] = None
     pass_through_fees_known: bool = True
+    # Candidate fractional schedule whose applicability is unverified: the engine bounds the
+    # commission by the cheaper of the two schedules and reports the component UNKNOWN.
+    candidate_fractional_rate: Optional[Decimal] = None
+    candidate_fractional_min_usd: Optional[Decimal] = None
 
     def __post_init__(self) -> None:
         if self.policy_type not in POLICY_TYPES:
@@ -203,8 +222,39 @@ class CommissionPolicy:
         _money(self.min_commission_usd, f"{self.policy_type} min_commission_usd")
         _money(self.per_share_usd, f"{self.policy_type} per_share_usd")
         _money(self.cat_fee_per_share_usd, f"{self.policy_type} cat_fee_per_share_usd")
+        _fraction(self.candidate_fractional_rate, f"{self.policy_type} candidate_fractional_rate")
+        _money(self.candidate_fractional_min_usd, f"{self.policy_type} candidate_fractional_min_usd")
         if self.free_orders_count < 0:
             raise DataContractError(f"DECISION_INVALID_FREE_ORDERS: {self.free_orders_count}.")
+
+
+@dataclass(frozen=True)
+class SecurityEligibility:
+    """Per-platform, per-symbol eligibility; ``None`` means UNKNOWN, never eligible."""
+
+    platform_id: str
+    symbol: str
+    instrument_type: str
+    searchable: Optional[bool]
+    whole_share_eligible: Optional[bool]
+    fractional_eligible: Optional[bool]
+    manual_order_eligible: Optional[bool]
+    dca_eligible: Optional[bool]
+    min_notional_usd: Optional[Decimal]
+    trading_session: str
+    account_permission: str
+    source_url: str
+    verified_date: str
+    evidence_status: str
+
+    def __post_init__(self) -> None:
+        if not self.platform_id.strip() or not self.symbol.strip():
+            raise DataContractError("ELIGIBILITY_EMPTY_KEY.")
+        if self.evidence_status not in EVIDENCE_STATUSES:
+            raise DataContractError(f"ELIGIBILITY_UNKNOWN_EVIDENCE_STATUS: {self.evidence_status}.")
+        if self.account_permission not in ("VERIFIED", "DENIED", "UNVERIFIED"):
+            raise DataContractError(f"ELIGIBILITY_BAD_ACCOUNT_PERMISSION: {self.account_permission}.")
+        _money(self.min_notional_usd, f"{self.symbol} min_notional_usd")
 
 
 @dataclass(frozen=True)
@@ -215,15 +265,22 @@ class BrokerProfile:
     commission_policy: CommissionPolicy
     fractional_supported: bool
     min_order_thb: Decimal = ZERO
+    min_order_usd: Decimal = ZERO
     funding_terms: Optional[RouteTerms] = None
-    supported_symbols: Optional[Tuple[str, ...]] = None
-    fractional_symbols: Optional[Tuple[str, ...]] = None
+    platform_id: str = ""
+    security_eligibility: Tuple[SecurityEligibility, ...] = ()
     eligibility_status: str = "ACCOUNT_SPECIFIC_UNVERIFIED"
     evidence_notes: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.broker_id.strip():
             raise DataContractError("DECISION_EMPTY_BROKER_ID.")
+        if not self.platform_id:
+            object.__setattr__(self, "platform_id", self.broker_id)
+        _money(self.min_order_usd, f"{self.broker_id} min_order_usd")
+        keys = [(e.platform_id, e.symbol) for e in self.security_eligibility]
+        if len(set(keys)) != len(keys) or any(p != self.platform_id for p, _ in keys):
+            raise DataContractError(f"DECISION_BAD_ELIGIBILITY_MATRIX: {self.broker_id}.")
         if self.funding_channel not in FUNDING_CHANNELS:
             raise DataContractError(f"DECISION_UNKNOWN_FUNDING_CHANNEL: {self.funding_channel}.")
         if self.eligibility_status not in ELIGIBILITY_ORDER:
@@ -297,6 +354,7 @@ class BrokerAssessment:
     total_known_friction_thb: Decimal
     friction_share_lower_bound: Decimal
     investable_balance_usd: Optional[Decimal]
+    order_notionals_usd: Tuple[Tuple[str, Decimal], ...]
     unknown_components: Tuple[str, ...]
     numerically_complete: bool
     spread_source: str
@@ -338,6 +396,7 @@ def _fixed_assessment(
         total_known_friction_thb=ZERO,
         friction_share_lower_bound=ZERO,
         investable_balance_usd=ZERO if is_cash else None,
+        order_notionals_usd=(),
         unknown_components=(),
         numerically_complete=is_cash,
         spread_source="NOT_APPLICABLE",
@@ -363,20 +422,51 @@ def _select_spread(profile: BrokerProfile, plan: InvestmentPlan, as_of: date, no
         if spread is None:
             notes.append("USER_QUOTE_WITHOUT_REFERENCE: implied spread cannot be computed.")
         else:
-            current = quote.is_current(plan.evaluated_at) and plan.evaluated_at is not None and (
+            current = plan.evaluated_at is not None and quote.is_current(plan.evaluated_at) and (
                 _timestamp(plan.evaluated_at, "evaluated_at").date() == as_of
             )
             basis = quote.spread_basis
+            if quote.observational_status == "SYNTHETIC":
+                notes.append("SYNTHETIC_QUOTE: fixture or hypothetical quote; not market evidence.")
+                return spread, SPREAD_QUOTE_SYNTHETIC
             if not current:
                 notes.append(f"USER_QUOTE_STALE: quote observed {quote.quote_observed_at} kept as historical observation only.")
-            if basis != "COMPARABLE":
-                notes.append(f"USER_QUOTE_REFERENCE_{basis}: implied spread may include market movement.")
-            if current and basis == "COMPARABLE":
-                return spread, SPREAD_QUOTE_CURRENT
-            return spread, SPREAD_QUOTE_HISTORICAL
+                return spread, SPREAD_QUOTE_HISTORICAL
+            if not quote.is_user_observed_notional_quote:
+                notes.append("USER_QUOTE_INDICATIVE: displayed rate without a stated notional; spread is an estimate.")
+                return spread, SPREAD_QUOTE_INDICATIVE
+            if basis != "CONTEMPORANEOUS_COMPARABLE_REFERENCE":
+                notes.append(f"USER_QUOTE_REFERENCE_{basis}: implied spread is an estimate that may include market movement.")
+                return spread, SPREAD_QUOTE_REFERENCE_LIMITED
+            notes.append("USER_QUOTE_CURRENT: user-reported, not independently authenticated.")
+            return spread, SPREAD_QUOTE_CURRENT
     if plan.assumed_fx_spread is not None:
         return plan.assumed_fx_spread, SPREAD_ASSUMED
     return None, SPREAD_UNKNOWN
+
+
+def _order_eligibility(
+    profile: BrokerProfile, plan: InvestmentPlan, sym: str, needs_fraction: bool, notional: Decimal, notes: List[str]
+) -> Tuple[bool, bool]:
+    """Return ``(not_eligible, unverified)`` for one symbol on one platform."""
+    entry = next((e for e in profile.security_eligibility if e.symbol == sym), None)
+    if needs_fraction and not profile.fractional_supported:
+        notes.append(f"FRACTIONAL_NOT_SUPPORTED: {sym}")
+        return True, False
+    if entry is None:
+        notes.append(f"SECURITY_ELIGIBILITY_UNKNOWN: {sym} on {profile.platform_id}.")
+        return False, True
+    order_flag = entry.manual_order_eligible if plan.order_type == "MANUAL" else entry.dca_eligible
+    share_flag = entry.fractional_eligible if needs_fraction else entry.whole_share_eligible
+    flags = (entry.searchable, order_flag, share_flag)
+    below_min = entry.min_notional_usd is not None and notional < entry.min_notional_usd
+    if False in flags or entry.account_permission == "DENIED" or below_min:
+        notes.append(f"SECURITY_NOT_ELIGIBLE: {sym} on {profile.platform_id} ({plan.order_type}, fractional={needs_fraction}).")
+        return True, False
+    if None in flags or entry.account_permission != "VERIFIED":
+        notes.append(f"SECURITY_ELIGIBILITY_UNVERIFIED: {sym} on {profile.platform_id}.")
+        return False, True
+    return False, False
 
 
 def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: date) -> BrokerAssessment:
@@ -404,7 +494,9 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
     security_unknown = False
     spread, spread_source = _select_spread(profile, plan, as_of, notes)
 
-    funding_thb = ZERO
+    thb_route_fee = ZERO
+    usd_route_fee = ZERO
+    route_documented = False
     if profile.funding_channel == "SWIFT_CROSS_BORDER":
         terms = profile.funding_terms
         if terms is None:
@@ -412,97 +504,120 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
         if gross < terms.min_amount_thb or (terms.max_amount_thb is not None and gross > terms.max_amount_thb):
             notes.append(f"AMOUNT_OUT_OF_ROUTE_RANGE: THB {gross} outside route limits.")
             return _not_eligible(profile, gross, notes)
-        transfer = assess_transfer(terms, gross, ref, as_of)
-        funding_thb = transfer.fee_thb_known
+        try:
+            transfer = assess_transfer(terms, gross, ref, as_of)
+        except DataContractError as exc:
+            if not str(exc).startswith("ROUTE_FEE_EXCEEDS_AMOUNT"):
+                raise
+            notes.append(f"FEES_EXCEED_FUNDING: {exc}")
+            return _not_eligible(profile, gross, notes)
+        thb_route_fee = transfer.thb_fee_known
+        usd_route_fee = transfer.usd_fee_known
         unknowns.extend(c for c in transfer.unknown_components if c != "FX_SPREAD")
         eligibility = _worse(eligibility, transfer.eligibility_status)
+        route_documented = terms.evidence_status == "OFFICIAL_PROVIDER_TARIFF"
         if spread is None and terms.fx_spread is not None:
             spread, spread_source = terms.fx_spread, SPREAD_ROUTE_TERMS
     elif profile.funding_terms is not None:
         raise DataContractError(f"DECISION_ROUTE_TERMS_ON_LOCAL_CHANNEL: {bid}.")
 
-    thb_to_convert = gross - funding_thb
+    thb_to_convert = gross - thb_route_fee
     if spread is None:
         unknowns.append(f"{bid}_FX_SPREAD")
         notes.append("FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.")
         rate_used = ref
     else:
         rate_used = ref * (ONE + spread)
-    usd_converted = thb_to_convert / rate_used
-    fx_cost_thb = thb_to_convert - usd_converted * ref
+    usd_bought = thb_to_convert / rate_used
+    fx_cost_thb = thb_to_convert - usd_bought * ref
+    usd_converted = usd_bought - usd_route_fee
+    if usd_converted <= ZERO:
+        notes.append("FEES_EXCEED_FUNDING: USD funding deductions consume the converted balance.")
+        return _not_eligible(profile, gross, notes)
 
     ordered = plan.order_sequence if plan.order_sequence is not None else tuple(sorted(plan.portfolio_weights))
     prices = plan.ref_prices_usd or {}
     remaining_free = min(policy.free_orders_count, plan.free_trades_available)
     free_used = 0
     commission_usd = ZERO
+    vat_usd = ZERO
     regulatory_usd = ZERO
+    notionals: List[Tuple[str, Decimal]] = []
 
     for sym in ordered:
-        order_usd = usd_converted * plan.portfolio_weights[sym]
+        allocation = usd_converted * plan.portfolio_weights[sym]
         price = prices.get(sym)
-        shares = order_usd / price if price is not None else None
-        if profile.supported_symbols is None:
-            security_unknown = True
-            notes.append(f"SECURITY_ELIGIBILITY_UNKNOWN: {sym} not verified on {bid}.")
-        elif sym not in profile.supported_symbols:
-            eligibility = "NOT_ELIGIBLE"
-            notes.append(f"SYMBOL_NOT_SUPPORTED: {sym}")
-        if order_usd * ref < profile.min_order_thb:
-            eligibility = "NOT_ELIGIBLE"
-            notes.append(f"ORDER_BELOW_MINIMUM: {sym} THB {order_usd * ref:.2f} < {profile.min_order_thb}")
-        needs_fraction = shares is None or shares != shares.to_integral_value()
-        if needs_fraction and not profile.fractional_supported:
-            eligibility = "NOT_ELIGIBLE"
-            notes.append(f"FRACTIONAL_NOT_SUPPORTED: {sym}")
-        elif needs_fraction and (profile.fractional_symbols is None or sym not in profile.fractional_symbols):
-            security_unknown = True
-            notes.append(f"FRACTIONAL_ELIGIBILITY_UNVERIFIED: {sym} on {bid}.")
-
+        alloc_shares = allocation / price if price is not None else None
+        commission = ZERO
         if policy.policy_type == "PERCENTAGE":
             if policy.rate is None:
                 unknowns.append(f"{bid}_COMMISSION_RATE")
             else:
-                commission_usd += order_usd * policy.rate
+                commission = allocation * policy.rate
         elif policy.policy_type == "FREE_MONTHLY_TIERED":
             if remaining_free > 0:
                 remaining_free -= 1
                 free_used += 1
             elif policy.rate is None:
                 unknowns.append(f"{bid}_COMMISSION_RATE")
-            elif shares is None or price is None:
+            elif alloc_shares is None or price is None:
                 unknowns.append(f"{bid}_{sym}_PRICE_TIER_UNKNOWN")
                 notes.append(f"PRICE_UNKNOWN: cannot tell whether {sym} is below USD {DIME_PRICE_TIER_USD}.")
             elif price < DIME_PRICE_TIER_USD:
-                commission_usd += shares * DIME_LOW_PRICE_PER_SHARE_USD
+                commission = alloc_shares * DIME_LOW_PRICE_PER_SHARE_USD
             else:
-                commission_usd += order_usd * policy.rate
+                commission = allocation * policy.rate
         elif policy.policy_type == "FIXED_PER_SHARE":
             if policy.per_share_usd is None or policy.min_commission_usd is None:
                 unknowns.append(f"{bid}_COMMISSION_SCHEDULE")
-            elif shares is None:
-                commission_usd += policy.min_commission_usd
+            elif alloc_shares is None:
+                commission = policy.min_commission_usd
                 unknowns.append(f"{bid}_{sym}_SHARE_COUNT")
             else:
-                commission_usd += max(policy.min_commission_usd, shares * policy.per_share_usd)
+                commission = max(policy.min_commission_usd, alloc_shares * policy.per_share_usd)
+        regulatory = ZERO
         if policy.cat_fee_per_share_usd is not None:
-            if shares is None:
+            if alloc_shares is None:
                 unknowns.append(f"{bid}_{sym}_CAT_FEE")
             else:
-                regulatory_usd += shares * policy.cat_fee_per_share_usd
+                regulatory = alloc_shares * policy.cat_fee_per_share_usd
+        vat = commission * THAI_VAT_RATE if policy.vat_applicable else ZERO
+        notional = allocation - commission - vat - regulatory
+        if notional <= ZERO:
+            notes.append(f"FEES_EXCEED_ORDER: {sym} charges consume the allocation.")
+            return _not_eligible(profile, gross, notes)
+        shares = notional / price if price is not None else None
+        needs_fraction = shares is None or shares != shares.to_integral_value()
+        if (
+            needs_fraction and policy.policy_type == "FIXED_PER_SHARE" and policy.candidate_fractional_rate is not None
+            and policy.candidate_fractional_min_usd is not None and commission > ZERO
+        ):
+            candidate = max(allocation * policy.candidate_fractional_rate, policy.candidate_fractional_min_usd)
+            if candidate < commission:
+                notional += commission - candidate
+                commission = candidate
+            unknowns.append(f"{bid}_{sym}_FRACTIONAL_COMMISSION_APPLICABILITY")
+        commission_usd += commission
+        vat_usd += vat
+        regulatory_usd += regulatory
+        notionals.append((sym, notional))
+        if notional * ref < profile.min_order_thb or notional < profile.min_order_usd:
+            eligibility = "NOT_ELIGIBLE"
+            notes.append(f"ORDER_BELOW_MINIMUM: {sym} post-fee notional USD {notional.quantize(CENT, rounding=ROUND_DOWN)}.")
+        not_eligible, unverified = _order_eligibility(profile, plan, sym, needs_fraction, notional, notes)
+        if not_eligible:
+            eligibility = "NOT_ELIGIBLE"
+        security_unknown = security_unknown or unverified
 
     if policy.evidence_status in CONFLICT_STATUSES:
         notes.append("TERMS_CONFLICTING: official provider sources disagree on this commission.")
     if not policy.pass_through_fees_known:
         unknowns.append(f"{bid}_PASS_THROUGH_FEES")
-    vat_usd = commission_usd * THAI_VAT_RATE if policy.vat_applicable else ZERO
-    usd_fees = commission_usd + vat_usd + regulatory_usd
-    if usd_fees >= usd_converted:
-        notes.append("FEES_EXCEED_FUNDING: trading charges consume the converted balance.")
-        return _not_eligible(profile, gross, notes)
-    investable = (usd_converted - usd_fees).quantize(CENT, rounding=ROUND_DOWN)
+    investable = sum((n for _, n in notionals), ZERO).quantize(CENT, rounding=ROUND_DOWN)
     total_friction = gross - investable * ref
-    known_components = funding_thb + fx_cost_thb + commission_usd * ref + vat_usd * ref + regulatory_usd * ref
+    known_components = (
+        thb_route_fee + usd_route_fee * ref + fx_cost_thb + commission_usd * ref + vat_usd * ref + regulatory_usd * ref
+    )
     unknown_tuple = tuple(sorted(set(unknowns)))
     official = policy.evidence_status == "OFFICIAL_PROVIDER_TARIFF"
 
@@ -510,7 +625,7 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
         cost_status = COST_STATUS_LOWER_BOUND_ONLY
     elif official and spread_source == SPREAD_QUOTE_CURRENT:
         cost_status = COST_STATUS_QUOTE_OBSERVED
-    elif official and spread_source == SPREAD_ROUTE_TERMS:
+    elif official and spread_source == SPREAD_ROUTE_TERMS and route_documented:
         cost_status = COST_STATUS_ALL_IN_DOCUMENTED
     else:
         cost_status = COST_STATUS_SCENARIO_ONLY
@@ -535,7 +650,7 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
         display_name=profile.display_name,
         funding_channel=profile.funding_channel,
         gross_funding_thb=gross,
-        funding_friction_thb=funding_thb,
+        funding_friction_thb=thb_route_fee + usd_route_fee * ref,
         fx_spread_cost_thb=fx_cost_thb,
         commission_usd=commission_usd,
         commission_thb=commission_usd * ref,
@@ -546,6 +661,7 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
         total_known_friction_thb=total_friction,
         friction_share_lower_bound=total_friction / gross,
         investable_balance_usd=investable,
+        order_notionals_usd=tuple(notionals),
         unknown_components=unknown_tuple,
         numerically_complete=not unknown_tuple,
         spread_source=spread_source,
@@ -675,6 +791,26 @@ def format_markdown_report(result: ComparisonResult) -> str:
         "No ranking is produced: unknown or hypothetical components can reverse any ordering. "
         "CASH / NO TRADE has zero friction and zero market exposure.",
         "",
+        f"Sizing policy `{SIZING_POLICY}`: commission, VAT and per-share regulatory fees are bounded on each "
+        "allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. "
+        "THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.",
+        "",
+        "## Disclosures (informational, not advice)",
+        "",
+        "- Reference FX provenance: the reference rate is a scenario input. A daily central-bank reference "
+        "rate is a `DAILY_REFERENCE_PROXY`, not a contemporaneous mid-rate; implied spreads against it include "
+        "intraday movement.",
+        "- Cadence: batching months lowers fixed per-transfer and per-order charges but keeps savings in cash "
+        "longer. No expected return is assumed, so the opportunity cost of waiting is disclosed, not computed.",
+        "- Portfolio risks: equity drawdown; bond duration/interest-rate risk; gold price risk; USD/THB currency "
+        "risk on every USD asset; concentration in US-listed funds; inflation erodes THB cash; holding cash "
+        "carries opportunity cost; historical drawdowns can be exceeded.",
+        "- Tax and jurisdiction (verify with a qualified adviser; no tax is calculated): US dividend withholding "
+        "is 30% by default and may be 15% under the US-Thailand treaty with a valid W-8BEN; Thai rules on "
+        "foreign income remitted from 2024 onward may apply; US estate tax may apply to US-situs assets above "
+        "USD 60,000 for non-resident aliens (Form 706-NA); custody and broker-insolvency protection differ by "
+        "platform and jurisdiction.",
+        "",
         "Before any real decision: observe a current FX quote per platform with a comparable reference "
         "timestamp; confirm per-security and fractional eligibility in the account; resolve conflicting "
         "commission terms; confirm funding-route fees and eligibility. "
@@ -699,7 +835,9 @@ DEMO_QUOTE = UserFxQuote(
     reference_rate=Decimal("35.00"),
     reference_rate_timestamp="2026-10-31T10:02:00+07:00",
     reference_rate_source="SYNTHETIC_FIXTURE",
+    reference_rate_kind="HYPOTHETICAL",
     quote_source_type="SYNTHETIC_FIXTURE",
+    observational_status="SYNTHETIC",
 )
 
 
@@ -745,7 +883,7 @@ def _parse_pairs(text: Optional[str]) -> Dict[str, Decimal]:
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Offline CLI. Writes files with LF endings; never contacts a provider."""
-    from acash.research.d6.broker_profiles import load_candidate_profiles
+    from acash.research.d6.broker_profiles import load_candidate_profiles, load_security_eligibility
 
     parser = argparse.ArgumentParser(description="ACASH V38 Investor Decision Core (offline)")
     parser.add_argument("--acceptance-demo", action="store_true", help="Emit the frozen synthetic acceptance demo")
@@ -761,6 +899,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--quote-file", default=None, help="JSON list of UserFxQuote objects")
     parser.add_argument("--evaluated-at", default=None, help="ISO timestamp with zone for quote validity")
     parser.add_argument("--free-trades", type=int, default=1)
+    parser.add_argument("--eligibility-file", default=None, help="Owner-maintained ETF eligibility CSV")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output", default=None, help="Output file (or prefix with --acceptance-demo)")
     args = parser.parse_args(argv)
@@ -800,7 +939,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         ref_prices_usd=_parse_pairs(args.prices) or None,
         evaluated_at=args.evaluated_at,
     )
-    result = compare_investment_plans(load_candidate_profiles(), plan, args.as_of)
+    eligibility = load_security_eligibility(args.eligibility_file) if args.eligibility_file else ()
+    result = compare_investment_plans(load_candidate_profiles(eligibility=eligibility), plan, args.as_of)
     text = json.dumps(comparison_to_dict(result), indent=2, sort_keys=True) + "\n" if args.json else format_markdown_report(result)
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="\n") as handle:
