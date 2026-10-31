@@ -3,24 +3,24 @@
 # ACASH Investor Decision Report
 
 - Scenario date: 2026-10-31
-- Fee snapshot: version 2026-11-01, SHA-256 `89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a`
-- Input SHA-256: `19ef5bc57dc569c6ea7e30472588d61b4aafe529bf39d5749a0f97fe762ac158`
+- Fee snapshot: version 2026-11-01b, SHA-256 `b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa`
+- Input SHA-256: `5f80e54095a5c69fa38dfb662b9ee95acb45f74c55bc2f1ed48276601133f5db`
 - Overall status: `COST_EVIDENCE_INCOMPLETE`
 - Savings: THB 3,000.00 x 1 month(s); order type `MANUAL`; weights BND 0.4, VOO 0.6
 - Hypothetical inputs: reference FX 35.00 THB/USD (HYPOTHETICAL_INPUT unless sourced); prices BND USD 72.00, VOO USD 500.00
 
 | Platform | Funding THB | Commission+VAT THB | Regulatory THB | FX cost THB | Known friction THB | Share | Numerically complete | Cost evidence | Spread source | Eligibility | Decision | Unknown |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| Interactive Brokers (IBKR Pro) | 250.00 | 23.25 | 0.00 | 0.00 | 273.50 | 9.12% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DEDUCTED_FEE_USD, IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY, IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
-| Dime! Thailand (KKP) | 0.00 | 1.93 | 0.00 | 0.00 | 2.25 | 0.08% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
+| Interactive Brokers (IBKR Pro) | 250.00 | 27.23 | 0.00 | 0.00 | 277.35 | 9.24% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
+| Dime! Thailand (KKP) | 0.00 | 1.92 | 0.00 | 0.00 | 2.25 | 0.08% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
 | Webull Thailand (Manual) | 0.00 | 3.21 | 0.00 | 0.00 | 3.30 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | WEBULL_MANUAL_FX_SPREAD |
-| Webull Thailand (DCA - Promo 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
-| Webull Thailand (DCA - Standard 0.10%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Webull Thailand (DCA - currently advertised 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Webull Thailand (DCA - 0.10% conflict sensitivity) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
 | CASH / NO TRADE | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | yes | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `DOCUMENTED` | `CASH_NO_TRADE` | - |
 
 No ranking is produced: unknown or hypothetical components can reverse any ordering. CASH / NO TRADE has zero friction and zero market exposure.
 
-Sizing policy `FEES_DEDUCTED_FROM_ALLOCATION`: commission, VAT and per-share regulatory fees are bounded on each allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
+Sizing policy `FEES_SOLVED_ON_FINAL_NOTIONAL`: each allocation splits exactly into final notional plus commission, VAT and per-share regulatory fees charged on that final notional; minimum-order and fractional checks use it. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
 
 ## Disclosures (informational, not advice)
 
@@ -36,24 +36,24 @@ Before any real decision: observe a current FX quote per platform with a compara
 # ACASH Investor Decision Report
 
 - Scenario date: 2026-10-31
-- Fee snapshot: version 2026-11-01, SHA-256 `89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a`
-- Input SHA-256: `9e620d96717a9fb45d378544a4512d8dfb0e8813045bc4fa8482833dd6876d35`
+- Fee snapshot: version 2026-11-01b, SHA-256 `b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa`
+- Input SHA-256: `f74e3c3e5cc8a9803deca76189e02a823c2adec689f1074a4e91dd7908736446`
 - Overall status: `COST_EVIDENCE_INCOMPLETE`
 - Savings: THB 3,000.00 x 3 month(s); order type `MANUAL`; weights BND 0.4, VOO 0.6
 - Hypothetical inputs: reference FX 35.00 THB/USD (HYPOTHETICAL_INPUT unless sourced); prices BND USD 72.00, VOO USD 500.00
 
 | Platform | Funding THB | Commission+VAT THB | Regulatory THB | FX cost THB | Known friction THB | Share | Numerically complete | Cost evidence | Spread source | Eligibility | Decision | Unknown |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| Interactive Brokers (IBKR Pro) | 250.00 | 24.50 | 0.00 | 0.00 | 274.50 | 3.05% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DEDUCTED_FEE_USD, IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY, IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
-| Dime! Thailand (KKP) | 0.00 | 5.78 | 0.00 | 0.00 | 6.05 | 0.07% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
-| Webull Thailand (Manual) | 0.00 | 9.63 | 0.00 | 0.00 | 9.90 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | WEBULL_MANUAL_FX_SPREAD |
-| Webull Thailand (DCA - Promo 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
-| Webull Thailand (DCA - Standard 0.10%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Interactive Brokers (IBKR Pro) | 250.00 | 64.23 | 0.00 | 0.00 | 314.40 | 3.49% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | IBKR_BND_MIXED_ORDER_COMMISSION, IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
+| Dime! Thailand (KKP) | 0.00 | 5.77 | 0.00 | 0.00 | 6.05 | 0.07% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
+| Webull Thailand (Manual) | 0.00 | 9.62 | 0.00 | 0.00 | 9.90 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | WEBULL_MANUAL_FX_SPREAD |
+| Webull Thailand (DCA - currently advertised 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Webull Thailand (DCA - 0.10% conflict sensitivity) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
 | CASH / NO TRADE | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | yes | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `DOCUMENTED` | `CASH_NO_TRADE` | - |
 
 No ranking is produced: unknown or hypothetical components can reverse any ordering. CASH / NO TRADE has zero friction and zero market exposure.
 
-Sizing policy `FEES_DEDUCTED_FROM_ALLOCATION`: commission, VAT and per-share regulatory fees are bounded on each allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
+Sizing policy `FEES_SOLVED_ON_FINAL_NOTIONAL`: each allocation splits exactly into final notional plus commission, VAT and per-share regulatory fees charged on that final notional; minimum-order and fractional checks use it. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
 
 ## Disclosures (informational, not advice)
 
@@ -69,24 +69,24 @@ Before any real decision: observe a current FX quote per platform with a compara
 # ACASH Investor Decision Report
 
 - Scenario date: 2026-10-31
-- Fee snapshot: version 2026-11-01, SHA-256 `89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a`
-- Input SHA-256: `1a05263e4fb24f22080a16cb7c1ee9caa3817fdb96cdade782ad4b8ec1885786`
+- Fee snapshot: version 2026-11-01b, SHA-256 `b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa`
+- Input SHA-256: `61289e1b5c114213fbfa4035062b1ed4e8b086da025200a4057c10d652431398`
 - Overall status: `COST_EVIDENCE_INCOMPLETE`
 - Savings: THB 3,000.00 x 1 month(s); order type `DCA`; weights BND 0.4, VOO 0.6
 - Hypothetical inputs: reference FX 35.00 THB/USD (HYPOTHETICAL_INPUT unless sourced); prices BND USD 72.00, VOO USD 500.00
 
 | Platform | Funding THB | Commission+VAT THB | Regulatory THB | FX cost THB | Known friction THB | Share | Numerically complete | Cost evidence | Spread source | Eligibility | Decision | Unknown |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| Interactive Brokers (IBKR Pro) | 250.00 | 23.25 | 0.00 | 0.00 | 273.50 | 9.12% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DEDUCTED_FEE_USD, IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY, IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
-| Dime! Thailand (KKP) | 0.00 | 1.93 | 0.00 | 0.00 | 2.25 | 0.08% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
+| Interactive Brokers (IBKR Pro) | 250.00 | 27.23 | 0.00 | 0.00 | 277.35 | 9.24% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
+| Dime! Thailand (KKP) | 0.00 | 1.92 | 0.00 | 0.00 | 2.25 | 0.08% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DIME_FX_SPREAD |
 | Webull Thailand (Manual) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
-| Webull Thailand (DCA - Promo 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.15 | 0.00% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `TERMS_CONFLICTING` | WEBULL_DCA_ZERO_FX_SPREAD |
-| Webull Thailand (DCA - Standard 0.10%) | 0.00 | 3.21 | 0.00 | 0.00 | 3.30 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `TERMS_CONFLICTING` | WEBULL_DCA_STANDARD_FX_SPREAD |
+| Webull Thailand (DCA - currently advertised 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.15 | 0.00% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `TERMS_CONFLICTING` | WEBULL_DCA_ZERO_FX_SPREAD |
+| Webull Thailand (DCA - 0.10% conflict sensitivity) | 0.00 | 3.21 | 0.00 | 0.00 | 3.30 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `TERMS_CONFLICTING` | WEBULL_DCA_STANDARD_FX_SPREAD |
 | CASH / NO TRADE | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | yes | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `DOCUMENTED` | `CASH_NO_TRADE` | - |
 
 No ranking is produced: unknown or hypothetical components can reverse any ordering. CASH / NO TRADE has zero friction and zero market exposure.
 
-Sizing policy `FEES_DEDUCTED_FROM_ALLOCATION`: commission, VAT and per-share regulatory fees are bounded on each allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
+Sizing policy `FEES_SOLVED_ON_FINAL_NOTIONAL`: each allocation splits exactly into final notional plus commission, VAT and per-share regulatory fees charged on that final notional; minimum-order and fractional checks use it. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
 
 ## Disclosures (informational, not advice)
 
@@ -102,24 +102,24 @@ Before any real decision: observe a current FX quote per platform with a compara
 # ACASH Investor Decision Report
 
 - Scenario date: 2026-10-31
-- Fee snapshot: version 2026-11-01, SHA-256 `89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a`
-- Input SHA-256: `8a42aa425349eff1a4002371bf562798cfed3452662f721318553377e668fa56`
+- Fee snapshot: version 2026-11-01b, SHA-256 `b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa`
+- Input SHA-256: `a0fce5416da614e1c932ba45a67f7e5256ed81d99a8943aae18afe873f5aa67d`
 - Overall status: `COST_EVIDENCE_INCOMPLETE`
 - Savings: THB 3,000.00 x 1 month(s); order type `MANUAL`; weights BND 0.4, VOO 0.6
 - Hypothetical inputs: reference FX 35.00 THB/USD (HYPOTHETICAL_INPUT unless sourced); prices BND USD 72.00, VOO USD 500.00
 
 | Platform | Funding THB | Commission+VAT THB | Regulatory THB | FX cost THB | Known friction THB | Share | Numerically complete | Cost evidence | Spread source | Eligibility | Decision | Unknown |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| Interactive Brokers (IBKR Pro) | 250.00 | 23.25 | 0.00 | 0.00 | 273.50 | 9.12% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | DEDUCTED_FEE_USD, IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY, IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
+| Interactive Brokers (IBKR Pro) | 250.00 | 27.23 | 0.00 | 0.00 | 277.35 | 9.24% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | IBKR_FX_SPREAD, IBKR_PASS_THROUGH_FEES, INTERMEDIARY_FEE_USD, RECEIVING_FEE_USD |
 | Dime! Thailand (KKP) | 0.00 | 1.91 | 0.00 | 17.89 | 20.10 | 0.67% | yes | `SCENARIO_ONLY` | `SYNTHETIC_QUOTE` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `SECURITY_ELIGIBILITY_UNKNOWN` | - |
 | Webull Thailand (Manual) | 0.00 | 3.21 | 0.00 | 0.00 | 3.30 | 0.11% | no | `LOWER_BOUND_ONLY` | `UNKNOWN` | `ACCOUNT_SPECIFIC_UNVERIFIED` | `COST_EVIDENCE_INCOMPLETE` | WEBULL_MANUAL_FX_SPREAD |
-| Webull Thailand (DCA - Promo 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
-| Webull Thailand (DCA - Standard 0.10%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Webull Thailand (DCA - currently advertised 0%) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
+| Webull Thailand (DCA - 0.10% conflict sensitivity) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | no | `NOT_EVALUATED` | `NOT_APPLICABLE` | `ORDER_TYPE_INCOMPATIBLE` | `NOT_ELIGIBLE` | - |
 | CASH / NO TRADE | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00% | yes | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `DOCUMENTED` | `CASH_NO_TRADE` | - |
 
 No ranking is produced: unknown or hypothetical components can reverse any ordering. CASH / NO TRADE has zero friction and zero market exposure.
 
-Sizing policy `FEES_DEDUCTED_FROM_ALLOCATION`: commission, VAT and per-share regulatory fees are bounded on each allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
+Sizing policy `FEES_SOLVED_ON_FINAL_NOTIONAL`: each allocation splits exactly into final notional plus commission, VAT and per-share regulatory fees charged on that final notional; minimum-order and fractional checks use it. THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.
 
 ## Disclosures (informational, not advice)
 

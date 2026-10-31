@@ -31,30 +31,48 @@ DIME_CAT_FEE_PER_SHARE_USD = Decimal("0.000046")
 WEBULL_CAT_FEE_PER_SHARE_USD = Decimal("0.000024")
 
 
+KBANK_KPLUS_SWIFT_SOURCE = (
+    "https://www.kasikornbank.com/en/international-business/global-money-transfer/pages/international-transferviakplus.aspx"
+)
+KBANK_SWIFT_CHARGE_BEARERS = ("SHAR", "DEBT", "CRED")
+
+
+def kbank_kplus_swift_terms(charge_bearer: str = "SHAR") -> RouteTerms:
+    """K PLUS Global Outward SWIFT terms for USD, published promotion 2026-01-01..2026-12-31.
+
+    SHAR: THB 250; DEBT: THB 950 (subject to conditions); CRED: USD 12 deducted from the amount.
+    Foreign-bank charges may still apply, so intermediary and receiving fees stay UNKNOWN; the
+    post-promotion fee is UNKNOWN. K BIZ terms are a separate channel and are not modeled here.
+    Beneficiary/purpose eligibility for an IBKR deposit is not inferred from the generic tariff.
+    """
+    if charge_bearer not in KBANK_SWIFT_CHARGE_BEARERS:
+        raise DataContractError(f"KBANK_UNKNOWN_CHARGE_BEARER: {charge_bearer}.")
+    fixed = {"SHAR": Decimal("250"), "DEBT": Decimal("950"), "CRED": ZERO}[charge_bearer]
+    return RouteTerms(
+        route_id=f"KBANK_KPLUS_SWIFT_{charge_bearer}",
+        delivered_currency="USD",
+        fixed_fee_thb=fixed,
+        fx_spread=None,
+        deducted_fee_usd=Decimal("12") if charge_bearer == "CRED" else ZERO,
+        intermediary_fee_usd=None,
+        receiving_fee_usd=None,
+        min_amount_thb=ZERO,
+        promotion_start=date(2026, 1, 1),
+        promotion_end=date(2026, 12, 31),
+        standard_fee_thb=None,
+        purpose_supported=None,
+        beneficiary_supported=None,
+        evidence_status="OFFICIAL_PROVIDER_TARIFF",
+    )
+
+
 def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerProfile:
-    """IBKR Pro Tiered profile funded via SWIFT outward remittance.
+    """IBKR Pro Tiered profile funded via K PLUS SWIFT (SHAR) unless other terms are supplied.
 
     Strict fail-closed: purpose_supported and beneficiary_supported are None
     (ACCOUNT_SPECIFIC_UNVERIFIED) unless specific account records verify them.
     """
-    terms = route_terms
-    if terms is None:
-        terms = RouteTerms(
-            route_id="KBANK_SWIFT_OUTWARD",
-            delivered_currency="USD",
-            fixed_fee_thb=Decimal("250.0"),
-            fx_spread=None,  # UNKNOWN
-            deducted_fee_usd=None,
-            intermediary_fee_usd=None,
-            receiving_fee_usd=None,
-            min_amount_thb=ZERO,
-            promotion_start=date(2026, 1, 1),
-            promotion_end=date(2026, 12, 31),
-            standard_fee_thb=None,  # POST_PROMOTION_FEE UNKNOWN
-            purpose_supported=None,      # ACCOUNT_SPECIFIC_UNVERIFIED
-            beneficiary_supported=None,  # ACCOUNT_SPECIFIC_UNVERIFIED
-            evidence_status="PROMOTIONAL_CLAIM",
-        )
+    terms = route_terms if route_terms is not None else kbank_kplus_swift_terms("SHAR")
     return BrokerProfile(
         broker_id="IBKR",
         display_name="Interactive Brokers (IBKR Pro)",
@@ -67,15 +85,15 @@ def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerPro
             applicable_order_type="ALL",
             evidence_status="OFFICIAL_PROVIDER_TARIFF",
             pass_through_fees_known=False,
-            candidate_fractional_rate=Decimal("0.01"),
-            candidate_fractional_min_usd=Decimal("0.01"),
+            fractional_rate=Decimal("0.01"),       # Footnote 11: max(1% of fractional value, USD 0.01)
+            fractional_min_usd=Decimal("0.01"),
         ),
         fractional_supported=True,
         min_order_thb=ZERO,
         funding_terms=terms,
         eligibility_status="ACCOUNT_SPECIFIC_UNVERIFIED",
         evidence_notes=(
-            "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
+            "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing and regulatory pass-through UNKNOWN; pure fractional trades use Footnote 11 max(1% of value, USD 0.01); mixed whole/fractional split UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
         ),
     )
 
@@ -133,7 +151,7 @@ def get_default_webull_dca_zero_profile() -> BrokerProfile:
     """Webull Thailand Recurring DCA (Promotional Zero Commission Scenario)."""
     return BrokerProfile(
         broker_id="WEBULL_DCA_ZERO",
-        display_name="Webull Thailand (DCA - Promo 0%)",
+        display_name="Webull Thailand (DCA - currently advertised 0%)",
         funding_channel="LOCAL_THB_QR_ATS",
         commission_policy=CommissionPolicy(
             policy_type="ZERO_PROMOTIONAL",
@@ -148,7 +166,7 @@ def get_default_webull_dca_zero_profile() -> BrokerProfile:
         platform_id="WEBULL",
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
-            "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
+            "CURRENTLY_ADVERTISED_0_PERCENT: official DCA page advertises zero commission for eligible US stocks/ETFs (min USD 1); owner app showed the same claim on 2026-11-01. Conflict with the 2026-06-15 guide (0.10%) is unresolved; duration not established; zero commission is not zero regulatory, FX or other cost.",
         ),
     )
 
@@ -157,7 +175,7 @@ def get_default_webull_dca_standard_profile() -> BrokerProfile:
     """Webull Thailand Recurring DCA (Standard 0.10% Scenario)."""
     return BrokerProfile(
         broker_id="WEBULL_DCA_STANDARD",
-        display_name="Webull Thailand (DCA - Standard 0.10%)",
+        display_name="Webull Thailand (DCA - 0.10% conflict sensitivity)",
         funding_channel="LOCAL_THB_QR_ATS",
         commission_policy=CommissionPolicy(
             policy_type="PERCENTAGE",
@@ -172,7 +190,7 @@ def get_default_webull_dca_standard_profile() -> BrokerProfile:
         platform_id="WEBULL",
         eligibility_status="CONDITIONALLY_ELIGIBLE",
         evidence_notes=(
-            "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
+            "0.10_PERCENT_CONFLICT_SENSITIVITY: 0.10% rate described by the Webull guide published 2026-06-15, kept until the conflict is resolved.",
         ),
     )
 

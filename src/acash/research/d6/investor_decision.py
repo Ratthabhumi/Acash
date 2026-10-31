@@ -45,8 +45,8 @@ QUOTE_REFERENCE_MAX_GAP = timedelta(minutes=5)
 # Displayed USD amounts are rounded to the cent, so amount/rate consistency allows half a cent.
 QUOTE_DISPLAY_TOLERANCE_USD = Decimal("0.005")
 
-FEE_SNAPSHOT_VERSION = "2026-11-01"
-FEE_SNAPSHOT_SHA256 = "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a"
+FEE_SNAPSHOT_VERSION = "2026-11-01b"
+FEE_SNAPSHOT_SHA256 = "b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa"
 
 COST_STATUS_ALL_IN_DOCUMENTED = "ALL_IN_DOCUMENTED"
 COST_STATUS_QUOTE_OBSERVED = "QUOTE_OBSERVED"
@@ -66,7 +66,7 @@ DECISION_STATUS_NOT_ELIGIBLE = "NOT_ELIGIBLE"
 QUOTE_SOURCE_TYPES = ("IN_APP_DISPLAY", "SYNTHETIC_FIXTURE", "HYPOTHETICAL_INPUT")
 QUOTE_OBSERVATIONAL_STATUSES = ("USER_OBSERVED_QUOTE", "USER_SCREENSHOT_INDICATIVE", "SYNTHETIC")
 REFERENCE_RATE_KINDS = ("CONTEMPORANEOUS", "DAILY_PROXY", "HYPOTHETICAL")
-SIZING_POLICY = "FEES_DEDUCTED_FROM_ALLOCATION"
+SIZING_POLICY = "FEES_SOLVED_ON_FINAL_NOTIONAL"
 CONFLICT_STATUSES = ("OFFICIAL_SOURCE_CONFLICT",)
 POLICY_TYPES = ("FIXED_PER_SHARE", "PERCENTAGE", "FREE_MONTHLY_TIERED", "ZERO_PROMOTIONAL", "NONE")
 ORDER_TYPES = ("MANUAL", "DCA")
@@ -206,10 +206,10 @@ class CommissionPolicy:
     evidence_status: str = "OFFICIAL_PROVIDER_TARIFF"
     cat_fee_per_share_usd: Optional[Decimal] = None
     pass_through_fees_known: bool = True
-    # Candidate fractional schedule whose applicability is unverified: the engine bounds the
-    # commission by the cheaper of the two schedules and reports the component UNKNOWN.
-    candidate_fractional_rate: Optional[Decimal] = None
-    candidate_fractional_min_usd: Optional[Decimal] = None
+    # Separate schedule for pure fractional-share trades (e.g. IBKR Footnote 11); mixed
+    # whole/fractional orders keep the cheaper schedule as a lower bound and stay UNKNOWN.
+    fractional_rate: Optional[Decimal] = None
+    fractional_min_usd: Optional[Decimal] = None
 
     def __post_init__(self) -> None:
         if self.policy_type not in POLICY_TYPES:
@@ -222,8 +222,8 @@ class CommissionPolicy:
         _money(self.min_commission_usd, f"{self.policy_type} min_commission_usd")
         _money(self.per_share_usd, f"{self.policy_type} per_share_usd")
         _money(self.cat_fee_per_share_usd, f"{self.policy_type} cat_fee_per_share_usd")
-        _fraction(self.candidate_fractional_rate, f"{self.policy_type} candidate_fractional_rate")
-        _money(self.candidate_fractional_min_usd, f"{self.policy_type} candidate_fractional_min_usd")
+        _fraction(self.fractional_rate, f"{self.policy_type} fractional_rate")
+        _money(self.fractional_min_usd, f"{self.policy_type} fractional_min_usd")
         if self.free_orders_count < 0:
             raise DataContractError(f"DECISION_INVALID_FREE_ORDERS: {self.free_orders_count}.")
 
@@ -469,6 +469,14 @@ def _order_eligibility(
     return False, False
 
 
+def _solve_order(allocation: Decimal, rate: Decimal, minimum: Decimal, vat_rate: Decimal, per_value_fee: Decimal) -> Tuple[Decimal, Decimal]:
+    """Solve ``allocation = n + max(minimum, rate*n)*(1+vat) + per_value_fee*n`` for the final notional ``n``."""
+    notional = allocation / (ONE + rate * (ONE + vat_rate) + per_value_fee)
+    if rate * notional < minimum:
+        notional = (allocation - minimum * (ONE + vat_rate)) / (ONE + per_value_fee)
+    return notional, max(minimum, rate * notional)
+
+
 def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: date) -> BrokerAssessment:
     gross = plan.monthly_savings_thb * Decimal(plan.batch_months)
     ref = plan.reference_thb_per_usd
@@ -544,59 +552,67 @@ def _calculate_broker_cost(profile: BrokerProfile, plan: InvestmentPlan, as_of: 
     regulatory_usd = ZERO
     notionals: List[Tuple[str, Decimal]] = []
 
+    vat_rate = THAI_VAT_RATE if policy.vat_applicable else ZERO
     for sym in ordered:
         allocation = usd_converted * plan.portfolio_weights[sym]
         price = prices.get(sym)
-        alloc_shares = allocation / price if price is not None else None
-        commission = ZERO
+        cat_rate = ZERO
+        if policy.cat_fee_per_share_usd is not None:
+            if price is None:
+                unknowns.append(f"{bid}_{sym}_CAT_FEE")
+            else:
+                cat_rate = policy.cat_fee_per_share_usd / price
+        rate, minimum = ZERO, ZERO
+        fractional_schedule: Optional[Tuple[Decimal, Decimal]] = None
         if policy.policy_type == "PERCENTAGE":
             if policy.rate is None:
                 unknowns.append(f"{bid}_COMMISSION_RATE")
             else:
-                commission = allocation * policy.rate
+                rate = policy.rate
         elif policy.policy_type == "FREE_MONTHLY_TIERED":
             if remaining_free > 0:
                 remaining_free -= 1
                 free_used += 1
             elif policy.rate is None:
                 unknowns.append(f"{bid}_COMMISSION_RATE")
-            elif alloc_shares is None or price is None:
+            elif price is None:
                 unknowns.append(f"{bid}_{sym}_PRICE_TIER_UNKNOWN")
                 notes.append(f"PRICE_UNKNOWN: cannot tell whether {sym} is below USD {DIME_PRICE_TIER_USD}.")
             elif price < DIME_PRICE_TIER_USD:
-                commission = alloc_shares * DIME_LOW_PRICE_PER_SHARE_USD
+                rate = DIME_LOW_PRICE_PER_SHARE_USD / price
             else:
-                commission = allocation * policy.rate
+                rate = policy.rate
         elif policy.policy_type == "FIXED_PER_SHARE":
             if policy.per_share_usd is None or policy.min_commission_usd is None:
                 unknowns.append(f"{bid}_COMMISSION_SCHEDULE")
-            elif alloc_shares is None:
-                commission = policy.min_commission_usd
-                unknowns.append(f"{bid}_{sym}_SHARE_COUNT")
             else:
-                commission = max(policy.min_commission_usd, alloc_shares * policy.per_share_usd)
-        regulatory = ZERO
-        if policy.cat_fee_per_share_usd is not None:
-            if alloc_shares is None:
-                unknowns.append(f"{bid}_{sym}_CAT_FEE")
-            else:
-                regulatory = alloc_shares * policy.cat_fee_per_share_usd
-        vat = commission * THAI_VAT_RATE if policy.vat_applicable else ZERO
-        notional = allocation - commission - vat - regulatory
+                minimum = policy.min_commission_usd
+                if price is None:
+                    unknowns.append(f"{bid}_{sym}_SHARE_COUNT")
+                else:
+                    rate = policy.per_share_usd / price
+                if policy.fractional_rate is not None and policy.fractional_min_usd is not None:
+                    fractional_schedule = (policy.fractional_rate, policy.fractional_min_usd)
+        notional, commission = _solve_order(allocation, rate, minimum, vat_rate, cat_rate)
+        if fractional_schedule is not None:
+            f_notional, f_commission = _solve_order(allocation, *fractional_schedule, vat_rate, cat_rate)
+            whole = price is not None and notional > ZERO and (notional / price) == (notional / price).to_integral_value()
+            pure_fraction = price is not None and notional < price and f_notional < price
+            if pure_fraction:
+                notional, commission = f_notional, f_commission
+            elif not whole:
+                if f_commission < commission:
+                    notional, commission = f_notional, f_commission
+                if price is not None:
+                    unknowns.append(f"{bid}_{sym}_MIXED_ORDER_COMMISSION")
+                    notes.append(f"MIXED_ORDER: {sym} whole/fractional pricing split undocumented; cheaper schedule kept as lower bound.")
         if notional <= ZERO:
             notes.append(f"FEES_EXCEED_ORDER: {sym} charges consume the allocation.")
             return _not_eligible(profile, gross, notes)
+        vat = commission * vat_rate
+        regulatory = notional * cat_rate
         shares = notional / price if price is not None else None
         needs_fraction = shares is None or shares != shares.to_integral_value()
-        if (
-            needs_fraction and policy.policy_type == "FIXED_PER_SHARE" and policy.candidate_fractional_rate is not None
-            and policy.candidate_fractional_min_usd is not None and commission > ZERO
-        ):
-            candidate = max(allocation * policy.candidate_fractional_rate, policy.candidate_fractional_min_usd)
-            if candidate < commission:
-                notional += commission - candidate
-                commission = candidate
-            unknowns.append(f"{bid}_{sym}_FRACTIONAL_COMMISSION_APPLICABILITY")
         commission_usd += commission
         vat_usd += vat
         regulatory_usd += regulatory
@@ -791,8 +807,8 @@ def format_markdown_report(result: ComparisonResult) -> str:
         "No ranking is produced: unknown or hypothetical components can reverse any ordering. "
         "CASH / NO TRADE has zero friction and zero market exposure.",
         "",
-        f"Sizing policy `{SIZING_POLICY}`: commission, VAT and per-share regulatory fees are bounded on each "
-        "allocation and deducted from it; minimum-order and fractional checks use the post-fee notional. "
+        f"Sizing policy `{SIZING_POLICY}`: each allocation splits exactly into final notional plus commission, VAT "
+        "and per-share regulatory fees charged on that final notional; minimum-order and fractional checks use it. "
         "THB funding fees apply before conversion; USD deducted, intermediary and receiving fees apply after it.",
         "",
         "## Disclosures (informational, not advice)",

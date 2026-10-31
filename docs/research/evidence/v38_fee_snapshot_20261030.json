@@ -1,12 +1,12 @@
 {
-  "snapshot_version": "2026-11-01",
+  "snapshot_version": "2026-11-01b",
   "provenance": {
     "snapshot_created_on": "2026-11-01",
     "page_verification_date": "2026-10-31",
     "capture_timestamp_status": "CAPTURE_TIME_UNKNOWN",
     "provider_publication_timestamp": "UNKNOWN",
     "provider_effective_date": "Per rule; UNKNOWN unless the rule states one",
-    "research_owner": "ChatGPT broker research handoff integrated 2026-11-01; no capture log exists",
+    "research_owner": "ChatGPT Research Lead source verification integrated 2026-11-01; no capture log exists",
     "lineage": [
       {
         "snapshot_version": "2026-10-30",
@@ -22,6 +22,11 @@
         "snapshot_version": "2026-10-31b",
         "sha256": "b2db8e05a098c1dedfef21cf0450262e3eb49a2b3d234bebef429f0df11a9b07",
         "superseded_because": "Webull sell-side SEC/TAF limits, IBKR fractional candidate rule, Webull USD 1 order minimum and KBank promotion window integrated"
+      },
+      {
+        "snapshot_version": "2026-11-01",
+        "sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
+        "superseded_because": "KBank source bound (K PLUS SHAR/DEBT/CRED, K BIZ separate), IBKR Footnote 11 verified, Webull DCA owner evidence, Dime! freebie current source version, Dime! CAT display note"
       }
     ]
   },
@@ -35,7 +40,11 @@
     "WEBULL_FX": "https://www.webull.co.th/help/faq/353-",
     "WEBULL_FRACTIONAL": "https://www.webull.co.th/help/faq/355-",
     "IBKR_COMMISSIONS": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
-    "IBKR_FUNDING": "https://www.interactivebrokers.com/en/support/fund-my-account.php"
+    "IBKR_FUNDING": "https://www.interactivebrokers.com/en/support/fund-my-account.php",
+    "KBANK_KPLUS_SWIFT": "https://www.kasikornbank.com/en/international-business/global-money-transfer/pages/international-transferviakplus.aspx",
+    "KBANK_KBIZ_INTERNATIONAL": "https://www.kasikornbank.com/th/international-business/global-money-transfer/pages/kbiz-international-transfer.aspx",
+    "DIME_US_STOCK_FEES": "https://dime.co.th/en/invest/stock-us",
+    "BOT_REFERENCE_FX": "https://www.bot.or.th/en/statistics/exchange-rate.html"
   },
   "rules": [
     {
@@ -108,10 +117,10 @@
       "formula": "0.000046 * share_count",
       "currency": "USD",
       "effective_start": "2025-06-01",
-      "source_url": "https://dime.co.th/invest/stock-us",
+      "source_url": "https://dime.co.th/en/invest/stock-us",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "US Consolidated Audit Trail fee applied to buy and sell executions on Dime."
+      "notes": "US Consolidated Audit Trail fee applied to buy and sell executions on Dime. Owner preview (USD 100.00 = 99.84 + 0.15 + 0.01 VAT) shows no CAT line; a sub-cent charge can be hidden by display rounding, so the documented rule is kept and not inferred zero."
     },
     {
       "broker_id": "DIME",
@@ -151,13 +160,18 @@
       "source_url": "https://dime.co.th/th/articles/monthly-freebie-2026",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
-      "notes": "Same URL observed in an older version ending 2026-08-31 and a newer indexed version ending 2026-12-31; no authoritative version evidence. Not applied by the engine.",
-      "campaign_status": "SOURCE_VERSION_CONFLICT",
+      "notes": "Current article states 2026-12-31; an older observed version ended 2026-08-31 (kept in observed_end_dates). Not applied to ordinary accounts; the normal monthly free trade is separate.",
+      "campaign_status": "CURRENT_SOURCE_2026-12-31_WITH_HISTORICAL_CONFLICT",
       "observed_end_dates": [
         "2026-08-31",
         "2026-12-31"
       ],
-      "applies_to": "SUPPLEMENTAL_ACCOUNTS_ONLY; not the standard monthly free trade"
+      "applies_to": "SUPPLEMENTAL_ACCOUNTS_ONLY; first qualifying trade of the month; transaction-value cap per terms (value not captured)",
+      "current_source_version": {
+        "observed_on": "2026-11-01",
+        "end_date": "2026-12-31",
+        "source_url": "https://dime.co.th/th/articles/monthly-freebie-2026"
+      }
     },
     {
       "broker_id": "DIME",
@@ -223,7 +237,15 @@
       "source_url": "https://www.webull.co.th/en/dollar-cost-averaging",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
-      "notes": "Advertised as Zero Commission on DCA page; conflicts with 0.10% recurring investment guide."
+      "notes": "CURRENTLY_ADVERTISED_0_PERCENT on the official DCA page and owner app; conflicts with the 2026-06-15 guide (0.10%); duration not established.",
+      "observations": [
+        {
+          "observed_on": "2026-11-01",
+          "type": "OWNER_OBSERVED_DCA_SETUP_UI",
+          "claim": "All DCA orders have zero commission (Thai UI text)",
+          "plan_activated": false
+        }
+      ]
     },
     {
       "broker_id": "WEBULL_DCA_STANDARD",
@@ -326,7 +348,7 @@
     },
     {
       "broker_id": "IBKR",
-      "fee_category": "COMMISSION_FRACTIONAL_CANDIDATE",
+      "fee_category": "COMMISSION_FRACTIONAL",
       "applicable_instrument": "US_STOCKS_ETFS",
       "order_side": "ALL",
       "order_type": "ALL",
@@ -337,8 +359,8 @@
       "max_fee": "UNKNOWN",
       "source_url": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
       "verified_date": "2026-11-01",
-      "evidence_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
-      "notes": "Footnote applicability to IBKR Pro Tiered fractional orders is not established. Engine bounds the commission by the cheaper schedule and reports the component UNKNOWN."
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "Footnote 11: applicable US fractional-share trades pay max(1% of fractional trade value, USD 0.01); the ordinary Pro Tiered table (USD 0.0035/share, min USD 0.35, plus third-party charges) applies to whole shares. Mixed whole/fractional split is not documented here: engine keeps the cheaper schedule as a lower bound and reports UNKNOWN. Footnote 12 context and pass-through charges remain UNKNOWN."
     },
     {
       "broker_id": "WEBULL",
@@ -357,20 +379,101 @@
       "notes": "Candidate USD 1 fractional minimum; THB 40 equivalence not certified. Fractional trading only on eligible symbols with session and order-type restrictions. THB 20 minimum deposit is not an order minimum."
     },
     {
-      "broker_id": "KBANK",
-      "fee_category": "FUNDING_SWIFT_OUTWARD",
       "applicable_instrument": "FUNDING",
       "order_side": "NOT_APPLICABLE",
       "order_type": "ALL",
       "tier": null,
-      "formula": "250 THB per transfer during 2026-01-01..2026-12-31",
+      "verified_date": "2026-11-01",
+      "max_fee": "UNKNOWN",
+      "promotion_effective_dates": [
+        "2026-01-01",
+        "2026-12-31"
+      ],
+      "post_promotion_fee": "UNKNOWN",
+      "broker_id": "KBANK_KPLUS",
+      "fee_category": "FUNDING_SWIFT_SHAR",
+      "formula": "250 THB per transfer",
+      "currency": "THB",
+      "min_fee": "NOT_APPLICABLE",
+      "source_url": "https://www.kasikornbank.com/en/international-business/global-money-transfer/pages/international-transferviakplus.aspx",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "K PLUS Global Outward promotion; foreign-bank (intermediary/receiving) charges may still apply and stay UNKNOWN; IBKR beneficiary eligibility not inferred."
+    },
+    {
+      "applicable_instrument": "FUNDING",
+      "order_side": "NOT_APPLICABLE",
+      "order_type": "ALL",
+      "tier": null,
+      "verified_date": "2026-11-01",
+      "max_fee": "UNKNOWN",
+      "promotion_effective_dates": [
+        "2026-01-01",
+        "2026-12-31"
+      ],
+      "post_promotion_fee": "UNKNOWN",
+      "broker_id": "KBANK_KPLUS",
+      "fee_category": "FUNDING_SWIFT_DEBT",
+      "formula": "950 THB per transfer for USD, subject to conditions",
+      "currency": "THB",
+      "min_fee": "NOT_APPLICABLE",
+      "source_url": "https://www.kasikornbank.com/en/international-business/global-money-transfer/pages/international-transferviakplus.aspx",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "K PLUS Global Outward promotion; foreign-bank (intermediary/receiving) charges may still apply and stay UNKNOWN; IBKR beneficiary eligibility not inferred."
+    },
+    {
+      "applicable_instrument": "FUNDING",
+      "order_side": "NOT_APPLICABLE",
+      "order_type": "ALL",
+      "tier": null,
+      "verified_date": "2026-11-01",
+      "max_fee": "UNKNOWN",
+      "promotion_effective_dates": [
+        "2026-01-01",
+        "2026-12-31"
+      ],
+      "post_promotion_fee": "UNKNOWN",
+      "broker_id": "KBANK_KPLUS",
+      "fee_category": "FUNDING_SWIFT_CRED",
+      "formula": "12 USD deducted from the amount transferred (USD)",
+      "currency": "USD",
+      "min_fee": "NOT_APPLICABLE",
+      "source_url": "https://www.kasikornbank.com/en/international-business/global-money-transfer/pages/international-transferviakplus.aspx",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "K PLUS Global Outward promotion; foreign-bank (intermediary/receiving) charges may still apply and stay UNKNOWN; IBKR beneficiary eligibility not inferred."
+    },
+    {
+      "applicable_instrument": "FUNDING",
+      "order_side": "NOT_APPLICABLE",
+      "order_type": "ALL",
+      "tier": null,
+      "verified_date": "2026-11-01",
+      "max_fee": "UNKNOWN",
+      "promotion_effective_dates": "UNKNOWN",
+      "post_promotion_fee": "UNKNOWN",
+      "broker_id": "KBANK_KBIZ",
+      "fee_category": "FUNDING_SWIFT_PROMOTION",
+      "formula": "UNKNOWN; some SWIFT sections show 2026-10-01..2026-12-31",
       "currency": "THB",
       "min_fee": "UNKNOWN",
-      "max_fee": "UNKNOWN",
-      "source_url": "PENDING_RESEARCH_SOURCE",
+      "source_url": "https://www.kasikornbank.com/th/international-business/global-money-transfer/pages/kbiz-international-transfer.aspx",
+      "evidence_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+      "notes": "Separate channel; not assumed identical to K PLUS; not modeled by the engine."
+    },
+    {
+      "broker_id": "BOT",
+      "fee_category": "FX_REFERENCE",
+      "applicable_instrument": "FX",
+      "order_side": "NOT_APPLICABLE",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "Daily reference rate",
+      "currency": "THB_PER_USD",
+      "min_fee": "NOT_APPLICABLE",
+      "max_fee": "NOT_APPLICABLE",
+      "source_url": "https://www.bot.or.th/en/statistics/exchange-rate.html",
       "verified_date": "2026-11-01",
-      "evidence_status": "PROMOTIONAL_CLAIM",
-      "notes": "Promotion not applied after its end date; POST_PROMOTION_FEE, charge bearer, deducted, intermediary and receiving USD fees UNKNOWN."
+      "evidence_status": "OFFICIAL_PROVIDER_GUIDE",
+      "notes": "DAILY_REFERENCE_PROXY only; not a contemporaneous executable mid; no intraday mid is manufactured."
     }
   ]
 }

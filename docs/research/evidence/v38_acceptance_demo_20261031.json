@@ -4,57 +4,54 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "23.25000000000000000000000000",
-        "commission_usd": "0.6642857142857142857142857143",
+        "commission_thb": "27.22772277227722772277227723",
+        "commission_usd": "0.7779349363507779349363507779",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing and regulatory pass-through UNKNOWN; pure fractional trades use Footnote 11 max(1% of value, USD 0.01); mixed whole/fractional split UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09116666666666666666666666667",
+        "friction_share_lower_bound": "0.09245",
         "funding_channel": "SWIFT_CROSS_BORDER",
         "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.90",
+        "investable_balance_usd": "77.79",
         "numerically_complete": false,
         "order_notionals_usd": [
           [
             "VOO",
-            "46.79285714285714285714285714"
+            "46.67609618104667609618104667"
           ],
           [
             "BND",
-            "31.11428571428571428571428572"
+            "31.11739745403111739745403112"
           ]
         ],
-        "regulatory_fees_thb": "0.00",
-        "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.2500000000000000000000000",
+        "regulatory_fees_thb": "0E-28",
+        "regulatory_fees_usd": "0E-26",
+        "rounding_residual_thb": "0.1222772277227722772277228",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "273.5000",
+        "total_known_friction_thb": "277.3500",
         "total_orders_count": 2,
         "unknown_components": [
-          "DEDUCTED_FEE_USD",
-          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
-          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
-        "vat_thb": "0.00"
+        "vat_thb": "0E-30"
       },
       {
         "broker_id": "DIME",
-        "commission_thb": "1.800000000000000000000000000",
-        "commission_usd": "0.05142857142857142857142857142",
+        "commission_thb": "1.797114483098152153085976979",
+        "commission_usd": "0.05134612808851863294531362798",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Dime! Thailand (KKP)",
@@ -76,23 +73,23 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.42856669714285714285714286"
+            "51.42856669714329243424566748"
           ],
           [
             "BND",
-            "34.23066380952380952380952381"
+            "34.23075205901242196354241865"
           ]
         ],
-        "regulatory_fees_thb": "0.0009322666666666666666666666664",
-        "regulatory_fees_usd": "0.00002663619047619047619047619047",
-        "rounding_residual_thb": "0.323067733333333333333333333",
+        "regulatory_fees_thb": "0.0009310376349732736149897056885",
+        "regulatory_fees_usd": "0.00002660107528495067471399159110",
+        "rounding_residual_thb": "0.326156465450003922583014926",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "2.2500",
         "total_orders_count": 2,
         "unknown_components": [
           "DIME_FX_SPREAD"
         ],
-        "vat_thb": "0.1260000000000000000000000000"
+        "vat_thb": "0.1257980138168706507160183886"
       },
       {
         "broker_id": "WEBULL_MANUAL",
@@ -130,10 +127,10 @@
         "commission_usd": "0",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "TERMS_CONFLICTING",
-        "display_name": "Webull Thailand (DCA - Promo 0%)",
+        "display_name": "Webull Thailand (DCA - currently advertised 0%)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
+          "CURRENTLY_ADVERTISED_0_PERCENT: official DCA page advertises zero commission for eligible US stocks/ETFs (min USD 1); owner app showed the same claim on 2026-11-01. Conflict with the 2026-06-15 guide (0.10%) is unresolved; duration not established; zero commission is not zero regulatory, FX or other cost.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL.",
@@ -150,16 +147,16 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.42856896000000000000000000"
+            "51.42856896000011849142288384"
           ],
           [
             "BND",
-            "34.28570285714285714285714285"
+            "34.28570285714666666539682583"
           ]
         ],
-        "regulatory_fees_thb": "0.0004864000000000000000000000001",
-        "regulatory_fees_usd": "0.00001389714285714285714285714286",
-        "rounding_residual_thb": "0.1495136000000000000000000000",
+        "regulatory_fees_thb": "0.0004863998625195113101618867460",
+        "regulatory_fees_usd": "0.00001389713892912889457605390703",
+        "rounding_residual_thb": "0.1495136001374804886898381133",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "0.1500",
         "total_orders_count": 2,
@@ -170,14 +167,14 @@
       },
       {
         "broker_id": "WEBULL_DCA_STANDARD",
-        "commission_thb": "3.000000000000000000000000000",
-        "commission_usd": "0.08571428571428571428571428571",
+        "commission_thb": "2.996792945668163967171175449",
+        "commission_usd": "0.08562265559051897049060501283",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "TERMS_CONFLICTING",
-        "display_name": "Webull Thailand (DCA - Standard 0.10%)",
+        "display_name": "Webull Thailand (DCA - 0.10% conflict sensitivity)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
+          "0.10_PERCENT_CONFLICT_SENSITIVITY: 0.10% rate described by the Webull guide published 2026-06-15, kept until the conflict is resolved.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on WEBULL.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on WEBULL.",
@@ -194,23 +191,23 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.37354038857142857142857143"
+            "51.37359921148238027338179978"
           ],
           [
             "BND",
-            "34.24901714285714285714285714"
+            "34.24905637903659021722321305"
           ]
         ],
-        "regulatory_fees_thb": "0.0004864000000000000000000000001",
-        "regulatory_fees_usd": "0.00001389714285714285714285714286",
-        "rounding_residual_thb": "0.089513600000000000000000000",
+        "regulatory_fees_thb": "0.0004858799710973839513935522424",
+        "regulatory_fees_usd": "0.00001388228488849668432553006407",
+        "rounding_residual_thb": "0.092945668163967171175448718",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "3.3000",
         "total_orders_count": 2,
         "unknown_components": [
           "WEBULL_DCA_STANDARD_FX_SPREAD"
         ],
-        "vat_thb": "0.2100000000000000000000000000"
+        "vat_thb": "0.2097755061967714777019822815"
       },
       {
         "broker_id": "CASH",
@@ -243,9 +240,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
-    "fee_snapshot_version": "2026-11-01",
-    "input_hash": "1a05263e4fb24f22080a16cb7c1ee9caa3817fdb96cdade782ad4b8ec1885786",
+    "fee_snapshot_sha256": "b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa",
+    "fee_snapshot_version": "2026-11-01b",
+    "input_hash": "61289e1b5c114213fbfa4035062b1ed4e8b086da025200a4057c10d652431398",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -275,57 +272,54 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "23.25000000000000000000000000",
-        "commission_usd": "0.6642857142857142857142857143",
+        "commission_thb": "27.22772277227722772277227723",
+        "commission_usd": "0.7779349363507779349363507779",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing and regulatory pass-through UNKNOWN; pure fractional trades use Footnote 11 max(1% of value, USD 0.01); mixed whole/fractional split UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09116666666666666666666666667",
+        "friction_share_lower_bound": "0.09245",
         "funding_channel": "SWIFT_CROSS_BORDER",
         "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.90",
+        "investable_balance_usd": "77.79",
         "numerically_complete": false,
         "order_notionals_usd": [
           [
             "VOO",
-            "46.79285714285714285714285714"
+            "46.67609618104667609618104667"
           ],
           [
             "BND",
-            "31.11428571428571428571428572"
+            "31.11739745403111739745403112"
           ]
         ],
-        "regulatory_fees_thb": "0.00",
-        "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.2500000000000000000000000",
+        "regulatory_fees_thb": "0E-28",
+        "regulatory_fees_usd": "0E-26",
+        "rounding_residual_thb": "0.1222772277227722772277228",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "273.5000",
+        "total_known_friction_thb": "277.3500",
         "total_orders_count": 2,
         "unknown_components": [
-          "DEDUCTED_FEE_USD",
-          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
-          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
-        "vat_thb": "0.00"
+        "vat_thb": "0E-30"
       },
       {
         "broker_id": "DIME",
-        "commission_thb": "1.800000000000000000000000000",
-        "commission_usd": "0.05142857142857142857142857142",
+        "commission_thb": "1.797114483098152153085976979",
+        "commission_usd": "0.05134612808851863294531362798",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Dime! Thailand (KKP)",
@@ -347,28 +341,28 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.42856669714285714285714286"
+            "51.42856669714329243424566748"
           ],
           [
             "BND",
-            "34.23066380952380952380952381"
+            "34.23075205901242196354241865"
           ]
         ],
-        "regulatory_fees_thb": "0.0009322666666666666666666666664",
-        "regulatory_fees_usd": "0.00002663619047619047619047619047",
-        "rounding_residual_thb": "0.323067733333333333333333333",
+        "regulatory_fees_thb": "0.0009310376349732736149897056885",
+        "regulatory_fees_usd": "0.00002660107528495067471399159110",
+        "rounding_residual_thb": "0.326156465450003922583014926",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "2.2500",
         "total_orders_count": 2,
         "unknown_components": [
           "DIME_FX_SPREAD"
         ],
-        "vat_thb": "0.1260000000000000000000000000"
+        "vat_thb": "0.1257980138168706507160183886"
       },
       {
         "broker_id": "WEBULL_MANUAL",
-        "commission_thb": "3.000000000000000000000000000",
-        "commission_usd": "0.08571428571428571428571428571",
+        "commission_thb": "2.996792945668163967171175449",
+        "commission_usd": "0.08562265559051897049060501283",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Webull Thailand (Manual)",
@@ -390,23 +384,23 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.37354038857142857142857143"
+            "51.37359921148238027338179978"
           ],
           [
             "BND",
-            "34.24901714285714285714285714"
+            "34.24905637903659021722321305"
           ]
         ],
-        "regulatory_fees_thb": "0.0004864000000000000000000000001",
-        "regulatory_fees_usd": "0.00001389714285714285714285714286",
-        "rounding_residual_thb": "0.089513600000000000000000000",
+        "regulatory_fees_thb": "0.0004858799710973839513935522424",
+        "regulatory_fees_usd": "0.00001388228488849668432553006407",
+        "rounding_residual_thb": "0.092945668163967171175448718",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "3.3000",
         "total_orders_count": 2,
         "unknown_components": [
           "WEBULL_MANUAL_FX_SPREAD"
         ],
-        "vat_thb": "0.2100000000000000000000000000"
+        "vat_thb": "0.2097755061967714777019822815"
       },
       {
         "broker_id": "WEBULL_DCA_ZERO",
@@ -414,10 +408,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Promo 0%)",
+        "display_name": "Webull Thailand (DCA - currently advertised 0%)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
+          "CURRENTLY_ADVERTISED_0_PERCENT: official DCA page advertises zero commission for eligible US stocks/ETFs (min USD 1); owner app showed the same claim on 2026-11-01. Conflict with the 2026-06-15 guide (0.10%) is unresolved; duration not established; zero commission is not zero regulatory, FX or other cost.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -444,10 +438,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Standard 0.10%)",
+        "display_name": "Webull Thailand (DCA - 0.10% conflict sensitivity)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
+          "0.10_PERCENT_CONFLICT_SENSITIVITY: 0.10% rate described by the Webull guide published 2026-06-15, kept until the conflict is resolved.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -499,9 +493,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
-    "fee_snapshot_version": "2026-11-01",
-    "input_hash": "19ef5bc57dc569c6ea7e30472588d61b4aafe529bf39d5749a0f97fe762ac158",
+    "fee_snapshot_sha256": "b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa",
+    "fee_snapshot_version": "2026-11-01b",
+    "input_hash": "5f80e54095a5c69fa38dfb662b9ee95acb45f74c55bc2f1ed48276601133f5db",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -531,57 +525,54 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "23.25000000000000000000000000",
-        "commission_usd": "0.6642857142857142857142857143",
+        "commission_thb": "27.22772277227722772277227723",
+        "commission_usd": "0.7779349363507779349363507779",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing and regulatory pass-through UNKNOWN; pure fractional trades use Footnote 11 max(1% of value, USD 0.01); mixed whole/fractional split UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.09116666666666666666666666667",
+        "friction_share_lower_bound": "0.09245",
         "funding_channel": "SWIFT_CROSS_BORDER",
         "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0E-24",
         "gross_funding_thb": "3000",
-        "investable_balance_usd": "77.90",
+        "investable_balance_usd": "77.79",
         "numerically_complete": false,
         "order_notionals_usd": [
           [
             "VOO",
-            "46.79285714285714285714285714"
+            "46.67609618104667609618104667"
           ],
           [
             "BND",
-            "31.11428571428571428571428572"
+            "31.11739745403111739745403112"
           ]
         ],
-        "regulatory_fees_thb": "0.00",
-        "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.2500000000000000000000000",
+        "regulatory_fees_thb": "0E-28",
+        "regulatory_fees_usd": "0E-26",
+        "rounding_residual_thb": "0.1222772277227722772277228",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "273.5000",
+        "total_known_friction_thb": "277.3500",
         "total_orders_count": 2,
         "unknown_components": [
-          "DEDUCTED_FEE_USD",
-          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
-          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
-        "vat_thb": "0.00"
+        "vat_thb": "0E-30"
       },
       {
         "broker_id": "DIME",
-        "commission_thb": "1.789264413518886679920477137",
-        "commission_usd": "0.05112184038625390514058506106",
+        "commission_thb": "1.786396106459395778415484075",
+        "commission_usd": "0.05103988875598273652615668786",
         "cost_status": "SCENARIO_ONLY",
         "decision_status": "SECURITY_ELIGIBILITY_UNKNOWN",
         "display_name": "Dime! Thailand (KKP)",
@@ -603,26 +594,26 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.12183568304458960522578813"
+            "51.12183568304502230044300942"
           ],
           [
             "BND",
-            "34.02650478083877686263372148"
+            "34.02659250398849101743779191"
           ]
         ],
-        "regulatory_fees_thb": "0.0009267064280980781974817760106",
-        "regulatory_fees_usd": "0.00002647732651708794849947931459",
-        "rounding_residual_thb": "0.29191623591782637508283568",
+        "regulatory_fees_thb": "0.0009254847266135920626140215595",
+        "regulatory_fees_usd": "0.00002644242076038834464611490170",
+        "rounding_residual_thb": "0.29498654617296612582804601",
         "spread_source": "SYNTHETIC_QUOTE",
         "total_known_friction_thb": "20.1000",
         "total_orders_count": 2,
         "unknown_components": [],
-        "vat_thb": "0.1252485089463220675944333996"
+        "vat_thb": "0.1250477274521577044890838852"
       },
       {
         "broker_id": "WEBULL_MANUAL",
-        "commission_thb": "3.000000000000000000000000000",
-        "commission_usd": "0.08571428571428571428571428571",
+        "commission_thb": "2.996792945668163967171175449",
+        "commission_usd": "0.08562265559051897049060501283",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Webull Thailand (Manual)",
@@ -644,23 +635,23 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "51.37354038857142857142857143"
+            "51.37359921148238027338179978"
           ],
           [
             "BND",
-            "34.24901714285714285714285714"
+            "34.24905637903659021722321305"
           ]
         ],
-        "regulatory_fees_thb": "0.0004864000000000000000000000001",
-        "regulatory_fees_usd": "0.00001389714285714285714285714286",
-        "rounding_residual_thb": "0.089513600000000000000000000",
+        "regulatory_fees_thb": "0.0004858799710973839513935522424",
+        "regulatory_fees_usd": "0.00001388228488849668432553006407",
+        "rounding_residual_thb": "0.092945668163967171175448718",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "3.3000",
         "total_orders_count": 2,
         "unknown_components": [
           "WEBULL_MANUAL_FX_SPREAD"
         ],
-        "vat_thb": "0.2100000000000000000000000000"
+        "vat_thb": "0.2097755061967714777019822815"
       },
       {
         "broker_id": "WEBULL_DCA_ZERO",
@@ -668,10 +659,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Promo 0%)",
+        "display_name": "Webull Thailand (DCA - currently advertised 0%)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
+          "CURRENTLY_ADVERTISED_0_PERCENT: official DCA page advertises zero commission for eligible US stocks/ETFs (min USD 1); owner app showed the same claim on 2026-11-01. Conflict with the 2026-06-15 guide (0.10%) is unresolved; duration not established; zero commission is not zero regulatory, FX or other cost.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -698,10 +689,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Standard 0.10%)",
+        "display_name": "Webull Thailand (DCA - 0.10% conflict sensitivity)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
+          "0.10_PERCENT_CONFLICT_SENSITIVITY: 0.10% rate described by the Webull guide published 2026-06-15, kept until the conflict is resolved.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -753,9 +744,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
-    "fee_snapshot_version": "2026-11-01",
-    "input_hash": "8a42aa425349eff1a4002371bf562798cfed3452662f721318553377e668fa56",
+    "fee_snapshot_sha256": "b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa",
+    "fee_snapshot_version": "2026-11-01b",
+    "input_hash": "a0fce5416da614e1c932ba45a67f7e5256ed81d99a8943aae18afe873f5aa67d",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,
@@ -803,57 +794,56 @@
     "assessments": [
       {
         "broker_id": "IBKR",
-        "commission_thb": "24.5000",
-        "commission_usd": "0.70",
+        "commission_thb": "64.23019801980198019801980198",
+        "commission_usd": "1.835148514851485148514851485",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Interactive Brokers (IBKR Pro)",
         "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
         "evidence_notes": [
-          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnote max(1% of value, USD 0.01) kept as a candidate lower bound with applicability UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
+          "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing and regulatory pass-through UNKNOWN; pure fractional trades use Footnote 11 max(1% of value, USD 0.01); mixed whole/fractional split UNKNOWN; minimum order not modeled; third-party deposits prohibited.",
           "FX_SPREAD_UNKNOWN: converted at the reference rate; USD is an upper bound and friction a lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: VOO on IBKR.",
+          "MIXED_ORDER: BND whole/fractional pricing split undocumented; cheaper schedule kept as lower bound.",
           "SECURITY_ELIGIBILITY_UNKNOWN: BND on IBKR."
         ],
         "free_orders_used": 0,
-        "friction_share_lower_bound": "0.0305",
+        "friction_share_lower_bound": "0.03493333333333333333333333333",
         "funding_channel": "SWIFT_CROSS_BORDER",
         "funding_friction_thb": "250.00",
         "fx_spread_cost_thb": "0.0",
         "gross_funding_thb": "9000",
-        "investable_balance_usd": "249.30",
+        "investable_balance_usd": "248.16",
         "numerically_complete": false,
         "order_notionals_usd": [
           [
             "VOO",
-            "149.65"
+            "148.5148514851485148514851485"
           ],
           [
             "BND",
             "99.65"
           ]
         ],
-        "regulatory_fees_thb": "0.00",
-        "regulatory_fees_usd": "0",
-        "rounding_residual_thb": "0.0000",
+        "regulatory_fees_thb": "0E-27",
+        "regulatory_fees_usd": "0E-25",
+        "rounding_residual_thb": "0.1698019801980198019801980",
         "spread_source": "UNKNOWN",
-        "total_known_friction_thb": "274.5000",
+        "total_known_friction_thb": "314.4000",
         "total_orders_count": 2,
         "unknown_components": [
-          "DEDUCTED_FEE_USD",
-          "IBKR_BND_FRACTIONAL_COMMISSION_APPLICABILITY",
+          "IBKR_BND_MIXED_ORDER_COMMISSION",
           "IBKR_FX_SPREAD",
           "IBKR_PASS_THROUGH_FEES",
-          "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY",
           "INTERMEDIARY_FEE_USD",
           "RECEIVING_FEE_USD"
         ],
-        "vat_thb": "0.00"
+        "vat_thb": "0E-29"
       },
       {
         "broker_id": "DIME",
-        "commission_thb": "5.399999999999999999999999997",
-        "commission_usd": "0.1542857142857142857142857142",
+        "commission_thb": "5.391343449294456459257930933",
+        "commission_usd": "0.1540383842655558988359408838",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Dime! Thailand (KKP)",
@@ -875,28 +865,28 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "154.2857000914285714285714286"
+            "154.2857000914298773027370024"
           ],
           [
             "BND",
-            "102.6919914285714285714285714"
+            "102.6922561770372658906272559"
           ]
         ],
-        "regulatory_fees_thb": "0.002796799999999999999999999999",
-        "regulatory_fees_usd": "0.00007990857142857142857142857141",
-        "rounding_residual_thb": "0.269203199999999999999998003",
+        "regulatory_fees_thb": "0.002793112904919820844969117064",
+        "regulatory_fees_usd": "0.00007980322585485202414197477327",
+        "rounding_residual_thb": "0.278469396350011767749042785",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "6.0500",
         "total_orders_count": 2,
         "unknown_components": [
           "DIME_FX_SPREAD"
         ],
-        "vat_thb": "0.3779999999999999999999999996"
+        "vat_thb": "0.3773940414506119521480551654"
       },
       {
         "broker_id": "WEBULL_MANUAL",
-        "commission_thb": "8.999999999999999999999999998",
-        "commission_usd": "0.2571428571428571428571428571",
+        "commission_thb": "8.990378837004491901513526348",
+        "commission_usd": "0.2568679667715569114718150385",
         "cost_status": "LOWER_BOUND_ONLY",
         "decision_status": "COST_EVIDENCE_INCOMPLETE",
         "display_name": "Webull Thailand (Manual)",
@@ -918,23 +908,23 @@
         "order_notionals_usd": [
           [
             "VOO",
-            "154.1206211657142857142857143"
+            "154.1207976344471408201453994"
           ],
           [
             "BND",
-            "102.7470514285714285714285714"
+            "102.7471691371097706516696391"
           ]
         ],
-        "regulatory_fees_thb": "0.001459200000000000000000000000",
-        "regulatory_fees_usd": "0.00004169142857142857142857142856",
-        "rounding_residual_thb": "0.268540799999999999999998002",
+        "regulatory_fees_thb": "0.001457639913292151854180656727",
+        "regulatory_fees_usd": "0.00004164685466549005297659019220",
+        "rounding_residual_thb": "0.278837004491901513526344151",
         "spread_source": "UNKNOWN",
         "total_known_friction_thb": "9.9000",
         "total_orders_count": 2,
         "unknown_components": [
           "WEBULL_MANUAL_FX_SPREAD"
         ],
-        "vat_thb": "0.6300000000000000000000000000"
+        "vat_thb": "0.6293265185903144331059468445"
       },
       {
         "broker_id": "WEBULL_DCA_ZERO",
@@ -942,10 +932,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Promo 0%)",
+        "display_name": "Webull Thailand (DCA - currently advertised 0%)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: DCA promotional marketing advertises 0% commission; conflicts with Recurring Investment Guide 0.10%. Unverified.",
+          "CURRENTLY_ADVERTISED_0_PERCENT: official DCA page advertises zero commission for eligible US stocks/ETFs (min USD 1); owner app showed the same claim on 2026-11-01. Conflict with the 2026-06-15 guide (0.10%) is unresolved; duration not established; zero commission is not zero regulatory, FX or other cost.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -972,10 +962,10 @@
         "commission_usd": "0",
         "cost_status": "NOT_EVALUATED",
         "decision_status": "NOT_ELIGIBLE",
-        "display_name": "Webull Thailand (DCA - Standard 0.10%)",
+        "display_name": "Webull Thailand (DCA - 0.10% conflict sensitivity)",
         "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
         "evidence_notes": [
-          "SCENARIO_ONLY: Standard 0.10% rate from Webull Recurring Investment Guide (June 15, 2026) applied to DCA.",
+          "0.10_PERCENT_CONFLICT_SENSITIVITY: 0.10% rate described by the Webull guide published 2026-06-15, kept until the conflict is resolved.",
           "ORDER_TYPE_INCOMPATIBLE: plan MANUAL; profile requires DCA."
         ],
         "free_orders_used": 0,
@@ -1027,9 +1017,9 @@
         "vat_thb": "0"
       }
     ],
-    "fee_snapshot_sha256": "89d223fac999065082af4964b5208d2bc6c4cac75550badef698f6570dd1eb6a",
-    "fee_snapshot_version": "2026-11-01",
-    "input_hash": "9e620d96717a9fb45d378544a4512d8dfb0e8813045bc4fa8482833dd6876d35",
+    "fee_snapshot_sha256": "b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa",
+    "fee_snapshot_version": "2026-11-01b",
+    "input_hash": "f74e3c3e5cc8a9803deca76189e02a823c2adec689f1074a4e91dd7908736446",
     "overall_status": "COST_EVIDENCE_INCOMPLETE",
     "plan": {
       "assumed_fx_spread": null,

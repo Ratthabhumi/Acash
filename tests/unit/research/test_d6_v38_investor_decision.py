@@ -21,6 +21,7 @@ from acash.research.d6.broker_profiles import (
     get_default_ibkr_profile,
     get_default_webull_dca_zero_profile,
     get_default_webull_manual_profile,
+    kbank_kplus_swift_terms,
     load_candidate_profiles,
     load_security_eligibility,
 )
@@ -118,7 +119,7 @@ def _documented_synthetic_profile(route_evidence: str = "OFFICIAL_PROVIDER_TARIF
     fields.update(term_changes)
     policy = replace(
         get_default_ibkr_profile().commission_policy,
-        pass_through_fees_known=True, candidate_fractional_rate=None, candidate_fractional_min_usd=None,
+        pass_through_fees_known=True, fractional_rate=None, fractional_min_usd=None,
     )
     return replace(
         get_default_ibkr_profile(_terms(**fields)),
@@ -270,7 +271,8 @@ def test_synthetic_route_terms_cannot_be_all_in_documented() -> None:
     assert official.cost_status == COST_STATUS_ALL_IN_DOCUMENTED and official.decision_status == DECISION_STATUS_COMPLETE
     default_terms = get_default_ibkr_profile().funding_terms
     assert default_terms is not None and default_terms.fx_spread is None
-    assert default_terms.evidence_status != "OFFICIAL_PROVIDER_TARIFF"
+    assert default_terms.route_id == "KBANK_KPLUS_SWIFT_SHAR" and default_terms.standard_fee_thb is None
+    assert _one(get_default_ibkr_profile(), _plan()).cost_status == COST_STATUS_LOWER_BOUND_ONLY
 
 
 # --- P0.2 input hash coverage ----------------------------------------------------------------
@@ -386,8 +388,12 @@ def test_dime_free_entitlement_follows_chronology() -> None:
     first_voo = _one(get_default_dime_profile(), _plan(portfolio_weights=weights, order_sequence=("VOO", "BND"), assumed_fx_spread=D("0")))
     first_bnd = _one(get_default_dime_profile(), _plan(portfolio_weights=weights, order_sequence=("BND", "VOO"), assumed_fx_spread=D("0")))
     usd = D("3500") / REF
-    assert first_voo.commission_usd == usd * D("0.4") * D("0.0015")
-    assert first_bnd.commission_usd == usd * D("0.6") * D("0.0015")
+
+    def paid(allocation: D, price: D) -> D:
+        return allocation / (1 + D("0.0015") * D("1.07") + D("0.000046") / price) * D("0.0015")
+
+    assert first_voo.commission_usd == paid(usd * D("0.4"), D("72"))
+    assert first_bnd.commission_usd == paid(usd * D("0.6"), D("500"))
     assert first_voo.free_orders_used == first_bnd.free_orders_used == 1
     none_free = _one(get_default_dime_profile(), _plan(portfolio_weights=weights, free_trades_available=0, assumed_fx_spread=D("0")))
     assert none_free.free_orders_used == 0
@@ -396,20 +402,22 @@ def test_dime_free_entitlement_follows_chronology() -> None:
 def test_dime_low_price_tier_uses_per_share_commission() -> None:
     plan = _plan(free_trades_available=0, ref_prices_usd={"VOO": D("5")}, assumed_fx_spread=D("0"))
     a = _one(get_default_dime_profile(), plan)
-    assert a.commission_usd == (D("3500") / REF / D("5")) * D("0.01")
+    notional = (D("3500") / REF) / (1 + D("0.002") * D("1.07") + D("0.000046") / D("5"))
+    assert a.commission_usd == notional / D("5") * D("0.01")
 
 
 def test_dime_supplemental_promotion_is_not_applied_and_conflict_recorded() -> None:
     assert get_default_dime_profile().commission_policy.free_orders_count == 1
     rules = json.loads(SNAPSHOT.read_text(encoding="utf-8"))["rules"]
     promo = [r for r in rules if r["fee_category"] == "PROMOTION_SUPPLEMENTAL_FREEBIE"]
-    assert len(promo) == 1 and promo[0]["campaign_status"] == "SOURCE_VERSION_CONFLICT"
+    assert len(promo) == 1 and promo[0]["campaign_status"] == "CURRENT_SOURCE_2026-12-31_WITH_HISTORICAL_CONFLICT"
     assert promo[0]["observed_end_dates"] == ["2026-08-31", "2026-12-31"]
 
 
 def test_webull_buy_side_cat_fee_and_missing_price() -> None:
     a = _one(get_default_webull_manual_profile(), _plan(assumed_fx_spread=D("0")))
-    assert a.regulatory_fees_usd == (D("3500") / REF / D("500")) * D("0.000024")
+    notional = (D("3500") / REF) / (1 + D("0.001") * D("1.07") + D("0.000024") / D("500"))
+    assert a.regulatory_fees_usd == notional / D("500") * D("0.000024")
     b = _one(get_default_webull_manual_profile(), _plan(ref_prices_usd=None, assumed_fx_spread=D("0")))
     assert "WEBULL_MANUAL_VOO_CAT_FEE" in b.unknown_components
 
@@ -483,13 +491,17 @@ def test_snapshot_digest_and_provenance() -> None:
     prov = data["provenance"]
     assert prov["capture_timestamp_status"] == "CAPTURE_TIME_UNKNOWN"
     assert "generated_at" not in data
-    assert [x["sha256"][:8] for x in prov["lineage"]] == ["ccb899ca", "1ddbcf98", "b2db8e05"]
+    assert [x["sha256"][:8] for x in prov["lineage"]] == ["ccb899ca", "1ddbcf98", "b2db8e05", "89d223fa"]
     assert FEE_SNAPSHOT_SHA256 not in {x["sha256"] for x in prov["lineage"]}
     by_key = {(r["broker_id"], r["fee_category"]): r for r in data["rules"]}
     assert (by_key[("WEBULL", "REGULATORY_TAF")]["min_fee"], by_key[("WEBULL", "REGULATORY_TAF")]["max_fee"]) == ("0.01", "9.79")
     assert by_key[("WEBULL", "REGULATORY_SEC")]["min_fee"] == "0.01"
-    assert by_key[("IBKR", "COMMISSION_FRACTIONAL_CANDIDATE")]["evidence_status"] == "ACCOUNT_SPECIFIC_UNVERIFIED"
-    assert by_key[("KBANK", "FUNDING_SWIFT_OUTWARD")]["evidence_status"] == "PROMOTIONAL_CLAIM"
+    assert by_key[("IBKR", "COMMISSION_FRACTIONAL")]["evidence_status"] == "OFFICIAL_PROVIDER_TARIFF"
+    assert {b: by_key[("KBANK_KPLUS", f"FUNDING_SWIFT_{b}")]["currency"] for b in ("SHAR", "DEBT", "CRED")} == {"SHAR": "THB", "DEBT": "THB", "CRED": "USD"}
+    assert by_key[("KBANK_KBIZ", "FUNDING_SWIFT_PROMOTION")]["promotion_effective_dates"] == "UNKNOWN"
+    assert "PENDING_RESEARCH_SOURCE" not in raw.decode("utf-8")
+    freebie = by_key[("DIME", "PROMOTION_SUPPLEMENTAL_FREEBIE")]
+    assert freebie["current_source_version"]["end_date"] == "2026-12-31" and "2026-08-31" in freebie["observed_end_dates"]
     created = date.fromisoformat(prov["snapshot_created_on"])
     assert all(date.fromisoformat(r["verified_date"]) <= created for r in data["rules"])
 
@@ -540,7 +552,7 @@ def test_minimum_is_checked_on_post_fee_notional() -> None:
     assert D("125.05") * D("0.4") > D("50")
     assert a.decision_status == DECISION_STATUS_NOT_ELIGIBLE
     assert any(n.startswith("ORDER_BELOW_MINIMUM: BND") for n in a.evidence_notes)
-    assert SIZING_POLICY == "FEES_DEDUCTED_FROM_ALLOCATION"
+    assert SIZING_POLICY == "FEES_SOLVED_ON_FINAL_NOTIONAL"
 
 
 def test_webull_usd_one_minimum_is_separate_from_thb() -> None:
@@ -550,16 +562,59 @@ def test_webull_usd_one_minimum_is_separate_from_thb() -> None:
     assert _one(profile, plan).decision_status == DECISION_STATUS_NOT_ELIGIBLE
 
 
-# --- IBKR fractional candidate rule ----------------------------------------------------------
+# --- KBank K PLUS SWIFT charge bearers -------------------------------------------------------
 
-def test_ibkr_fractional_candidate_rule_is_a_lower_bound_with_unknown() -> None:
-    large = _one(get_default_ibkr_profile(), _plan(assumed_fx_spread=D("0")))
-    assert large.commission_usd == D("0.35")
-    assert "IBKR_VOO_FRACTIONAL_COMMISSION_APPLICABILITY" in large.unknown_components
-    small = _one(get_default_ibkr_profile(), _plan(monthly_savings_thb=D("700"), assumed_fx_spread=D("0")))
-    allocation = (D("700") - D("250")) / REF
-    assert small.commission_usd == allocation * D("0.01") < D("0.35")
-    assert small.cost_status == COST_STATUS_LOWER_BOUND_ONLY
+@pytest.mark.parametrize(("bearer", "thb", "usd"), [("SHAR", "250", "0"), ("DEBT", "950", "0"), ("CRED", "0", "12")])
+def test_kbank_charge_bearers_preserve_currency_incidence(bearer: str, thb: str, usd: str) -> None:
+    profile = get_default_ibkr_profile(kbank_kplus_swift_terms(bearer))
+    a = _one(profile, _plan(assumed_fx_spread=D("0")))
+    assert a.funding_friction_thb == D(thb) + D(usd) * REF
+    assert {"INTERMEDIARY_FEE_USD", "RECEIVING_FEE_USD"} <= set(a.unknown_components)
+    later = _one(profile, _plan(assumed_fx_spread=D("0")), as_of=date(2027, 1, 4))
+    assert "POST_PROMOTION_FEE" in later.unknown_components and later.cost_status == COST_STATUS_LOWER_BOUND_ONLY
+    with pytest.raises(DataContractError, match="KBANK_UNKNOWN_CHARGE_BEARER"):
+        kbank_kplus_swift_terms("OUR")
+
+
+# --- IBKR whole versus fractional (Footnote 11) ----------------------------------------------
+
+def _ibkr_local(price: D) -> tuple[BrokerProfile, Any]:
+    profile = replace(
+        get_default_webull_manual_profile(), broker_id="IBKR_LOCAL", platform_id="IBKR_LOCAL",
+        commission_policy=get_default_ibkr_profile().commission_policy, min_order_usd=D("0"),
+    )
+    return profile, lambda usd: _plan(monthly_savings_thb=usd * REF, assumed_fx_spread=D("0"), ref_prices_usd={"VOO": price})
+
+
+@pytest.mark.parametrize(("allocation", "notional", "commission"), [(D("5.05"), D("5.00"), D("0.05")), (D("0.76"), D("0.75"), D("0.01"))])
+def test_ibkr_pure_fractional_uses_footnote_11_on_final_value(allocation: D, notional: D, commission: D) -> None:
+    profile, plan = _ibkr_local(D("500"))
+    a = _one(profile, plan(allocation))
+    assert a.order_notionals_usd == (("VOO", notional),)
+    assert a.commission_usd == commission
+    assert not any("FRACTIONAL" in c or "MIXED" in c for c in a.unknown_components)
+
+
+def test_ibkr_whole_share_uses_ordinary_minimum() -> None:
+    profile, plan = _ibkr_local(D("100"))
+    a = _one(profile, plan(D("300.35")))
+    assert a.order_notionals_usd == (("VOO", D("300.00")),) and a.commission_usd == D("0.35")
+
+
+def test_ibkr_whole_share_allocation_turns_mixed_after_fees() -> None:
+    profile, plan = _ibkr_local(D("100"))
+    a = _one(profile, plan(D("300")))
+    assert a.commission_usd == D("0.35") and a.order_notionals_usd == (("VOO", D("299.65")),)
+    assert "IBKR_LOCAL_VOO_MIXED_ORDER_COMMISSION" in a.unknown_components
+    assert a.cost_status == COST_STATUS_LOWER_BOUND_ONLY
+
+
+def test_fee_feedback_reclassifies_and_conserves_cash() -> None:
+    profile, plan = _ibkr_local(D("100"))
+    a = _one(profile, plan(D("100.20")))
+    ((_, notional),) = a.order_notionals_usd
+    assert notional < D("100") and a.commission_usd == notional * D("0.01")
+    assert notional + a.commission_usd == D("100.20")
 
 
 # --- ETF eligibility matrix ------------------------------------------------------------------

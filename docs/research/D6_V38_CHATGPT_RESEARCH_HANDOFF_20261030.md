@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-30  
 **Status**: V38 FINAL ENGINEERING CLOSURE COMPLETE
-**Fee Snapshot Hash (SHA-256)**: `3121459a2fcbf10cf9c840b7caa61d4bb2e4fd428262bea134d07de6b1ffd8b5`
+**Current Fee Snapshot**: version 2026-11-01b, SHA-256 `b837ea49d9075b5e9c5ca3a58d49636627d8e728014e5bddeedb4e6dad5c0baa` (original 2026-10-30 handoff hash `3121459a…` is historical; see snapshot lineage)
 
 ---
 
@@ -64,7 +64,7 @@ Webull SEC/TAF minimum and cap values (sell side is not modeled), and IBKR fract
 
 Integrity fixes (engine): synthetic or indicative quotes can no longer yield `QUOTE_OBSERVED`; THB route fees apply before
 conversion and USD deducted/intermediary/receiving fees after it; order minimums are checked on the post-fee notional
-(`FEES_DEDUCTED_FROM_ALLOCATION`); `ALL_IN_DOCUMENTED` requires route terms with `OFFICIAL_PROVIDER_TARIFF` evidence.
+(`FEES_DEDUCTED_FROM_ALLOCATION`, superseded in section 6 by `FEES_SOLVED_ON_FINAL_NOTIONAL`); `ALL_IN_DOCUMENTED` requires route terms with `OFFICIAL_PROVIDER_TARIFF` evidence.
 
 Integrated research (dated inputs, not re-verified by the engineering agent): Dime! chronological free trade, 0.15% at
 >= USD 6.67 or USD 0.01/share below, VAT, CAT 0.000046, supplemental freebie `SOURCE_VERSION_CONFLICT` (not applied);
@@ -96,3 +96,16 @@ promotion window recorded as `PROMOTIONAL_CLAIM` with post-promotion fee UNKNOWN
 | 6 | VOO/BND/GLD/BIL searchable, fractional, manual and DCA eligibility per platform | Official symbol lists | Fills the eligibility matrix | Yes (eligibility) | Yes: in-app search/order screen |
 | 7 | Whether Dime! charges CAT on buys in the order preview | Dime! fee page | Owner preview (USD 100 = 99.84 + 0.15 + 0.01 VAT) showed no CAT line | No | Yes: preview with ticker |
 | 8 | Webull order minimum in THB vs USD 1 | Webull fractional trading terms | Small-contribution eligibility | No | Optional |
+
+## 6. Source Verification Addendum (2026-11-01; snapshot 2026-11-01b)
+
+Closed by ChatGPT Research Lead sources (integrated, not re-fetched): question 2 (IBKR Footnote 11 applies to pure
+fractional trades; mixed whole/fractional split still UNKNOWN), question 3 in part (K PLUS SWIFT SHAR THB 250 / DEBT THB 950 /
+CRED USD 12 for 2026; K BIZ kept separate; post-promotion fee, intermediary and receiving charges still UNKNOWN), question 4
+in part (0% currently advertised and seen in the owner app; 0.10% sensitivity kept), question 5 (current article states
+2026-12-31; older 2026-08-31 version kept in lineage), question 7 (CAT rule kept; absence of a CAT line is attributed to
+display rounding, not zero).
+
+Engine correction: each allocation now splits exactly into final notional plus commission, VAT and per-share fees charged
+on that final notional (FEES_SOLVED_ON_FINAL_NOTIONAL). This removes the earlier systematic overstatement and is
+consistent with the owner Dime! preview (USD 100.00 -> 99.84 + 0.15 + 0.01 VAT).
