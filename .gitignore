@@ -28,6 +28,9 @@ Thumbs.db
 
 # Data & Artefacts
 /data/
+# Owner-private portfolio observations and packs; must stay ignored even if /data/ is narrowed.
+/data/private/
+/private/
 *.parquet
 *.duckdb
 /logs/
