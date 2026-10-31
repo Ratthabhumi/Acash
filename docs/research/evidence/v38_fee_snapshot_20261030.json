@@ -1,9 +1,24 @@
 {
-  "snapshot_version": "2026-10-31",
+  "snapshot_version": "2026-10-31b",
   "provenance": {
-    "creation_date": "2026-10-31",
+    "snapshot_created_on": "2026-10-31",
+    "page_verification_date": "2026-10-31",
     "capture_timestamp_status": "CAPTURE_TIME_UNKNOWN",
-    "authoritative_review_date": "2026-10-31"
+    "provider_publication_timestamp": "UNKNOWN",
+    "provider_effective_date": "Per rule; UNKNOWN unless the rule states one",
+    "research_owner": "ChatGPT research pack reviewed 2026-10-31; no capture log exists",
+    "lineage": [
+      {
+        "snapshot_version": "2026-10-30",
+        "sha256": "ccb899ca1f675fd4d466d2ba7a73b6cd72ea2b4c08f97e414188365ac15feef2",
+        "superseded_because": "generated_at 2026-10-30T23:55:00Z asserted a capture time with no capture log"
+      },
+      {
+        "snapshot_version": "2026-10-31",
+        "sha256": "1ddbcf98950b2a10fe47fb47e88f7501f2712df0d0ffd2eb713c17c039c6541c",
+        "superseded_because": "campaign version conflict not structured; CASH labelled as provider tariff; Webull sell-side fees absent"
+      }
+    ]
   },
   "sources": {
     "DIME_PRODUCT": "https://dime.co.th/invest/stock-us",
@@ -131,7 +146,13 @@
       "source_url": "https://dime.co.th/th/articles/monthly-freebie-2026",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_SOURCE_CONFLICT",
-      "notes": "Monthly Freebie for qualifying supplemental accounts. Older indexed source says end 2026-08-31; newer says 2026-12-31. SOURCE_VERSION_CONFLICT."
+      "notes": "Same URL observed in an older version ending 2026-08-31 and a newer indexed version ending 2026-12-31; no authoritative version evidence. Not applied by the engine.",
+      "campaign_status": "SOURCE_VERSION_CONFLICT",
+      "observed_end_dates": [
+        "2026-08-31",
+        "2026-12-31"
+      ],
+      "applies_to": "SUPPLEMENTAL_ACCOUNTS_ONLY; not the standard monthly free trade"
     },
     {
       "broker_id": "DIME",
@@ -238,7 +259,7 @@
       "source_url": "https://www.interactivebrokers.com/en/pricing/commissions-stocks.php",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "IBKR Pro Tiered: $0.0035 per share, minimum $0.35 per order (plus exchange/clearing pass-through)."
+      "notes": "IBKR Pro Tiered: $0.0035 per share, minimum $0.35 per order (plus exchange/clearing pass-through). Fractional-trade footnotes and pass-through charges are not modeled; engine reports them UNKNOWN."
     },
     {
       "broker_id": "IBKR",
@@ -261,10 +282,42 @@
       "order_type": "ALL",
       "formula": "0.00",
       "currency": "THB",
-      "source_url": "N/A",
+      "source_url": "NOT_APPLICABLE",
+      "verified_date": "2026-10-31",
+      "evidence_status": "NOT_APPLICABLE",
+      "notes": "Zero fee baseline control (funds remain in Thai bank)."
+    },
+    {
+      "broker_id": "WEBULL",
+      "fee_category": "REGULATORY_SEC",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "SELL",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "0.0000206 * sell_value",
+      "currency": "USD",
+      "min_fee": "UNKNOWN",
+      "max_fee": "UNKNOWN",
+      "source_url": "https://www.webull.co.th/en/pricing",
       "verified_date": "2026-10-31",
       "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
-      "notes": "Zero fee baseline control (funds remain in Thai bank)."
+      "notes": "SEC transaction fee on sells, subject to a published minimum (value not captured). Engine models buy orders only; sell-side fees are not applied."
+    },
+    {
+      "broker_id": "WEBULL",
+      "fee_category": "REGULATORY_TAF",
+      "applicable_instrument": "US_STOCKS_ETFS",
+      "order_side": "SELL",
+      "order_type": "ALL",
+      "tier": null,
+      "formula": "0.000195 * share_count",
+      "currency": "USD",
+      "min_fee": "UNKNOWN",
+      "max_fee": "UNKNOWN",
+      "source_url": "https://www.webull.co.th/en/pricing",
+      "verified_date": "2026-10-31",
+      "evidence_status": "OFFICIAL_PROVIDER_TARIFF",
+      "notes": "FINRA TAF on sells, with published minimum and cap (values not captured). Engine models buy orders only; sell-side fees are not applied."
     }
   ]
 }

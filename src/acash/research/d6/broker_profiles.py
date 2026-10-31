@@ -15,13 +15,15 @@ from decimal import Decimal
 from typing import Optional, Tuple
 
 from acash.research.d6.investor_decision import (
+    FEE_SNAPSHOT_SHA256 as FEE_SNAPSHOT_SHA256,
     BrokerProfile,
     CommissionPolicy,
 )
 from acash.research.d6.route_cost import RouteTerms
 
 ZERO = Decimal("0")
-FEE_SNAPSHOT_SHA256 = "1ddbcf98950b2a10fe47fb47e88f7501f2712df0d0ffd2eb713c17c039c6541c"
+DIME_CAT_FEE_PER_SHARE_USD = Decimal("0.000046")
+WEBULL_CAT_FEE_PER_SHARE_USD = Decimal("0.000024")
 
 
 def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerProfile:
@@ -55,13 +57,14 @@ def get_default_ibkr_profile(route_terms: RouteTerms | None = None) -> BrokerPro
             vat_applicable=False,
             applicable_order_type="ALL",
             evidence_status="OFFICIAL_PROVIDER_TARIFF",
+            pass_through_fees_known=False,
         ),
         fractional_supported=True,
-        min_order_thb=Decimal("35.0"),  # ~$1 minimum
+        min_order_thb=ZERO,
         funding_terms=terms,
         eligibility_status="ACCOUNT_SPECIFIC_UNVERIFIED",
         evidence_notes=(
-            "US broker pricing: Tiered $0.0035/sh min $0.35; third-party deposits prohibited; bank route eligibility is unverified per account.",
+            "IBKR Pro Tiered base USD 0.0035/sh, min USD 0.35; exchange, clearing, regulatory pass-through and fractional footnotes not modeled; minimum order not modeled; third-party deposits prohibited.",
         ),
     )
 
@@ -79,6 +82,7 @@ def get_default_dime_profile() -> BrokerProfile:
             vat_applicable=True,     # 7% Thai VAT on paid commission
             applicable_order_type="ALL",
             evidence_status="OFFICIAL_PROVIDER_TARIFF",
+            cat_fee_per_share_usd=DIME_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
         min_order_thb=Decimal("50.0"),  # 50 THB minimum
@@ -102,6 +106,7 @@ def get_default_webull_manual_profile() -> BrokerProfile:
             vat_applicable=True,     # 7% Thai VAT on commission
             applicable_order_type="MANUAL",
             evidence_status="OFFICIAL_PROVIDER_TARIFF",
+            cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),  # ~$1 / 40 THB
@@ -125,6 +130,7 @@ def get_default_webull_dca_zero_profile() -> BrokerProfile:
             vat_applicable=False,
             applicable_order_type="DCA",
             evidence_status="OFFICIAL_SOURCE_CONFLICT",
+            cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),  # 40 THB minimum for fixed DCA
@@ -148,6 +154,7 @@ def get_default_webull_dca_standard_profile() -> BrokerProfile:
             vat_applicable=True,
             applicable_order_type="DCA",
             evidence_status="OFFICIAL_SOURCE_CONFLICT",
+            cat_fee_per_share_usd=WEBULL_CAT_FEE_PER_SHARE_USD,
         ),
         fractional_supported=True,
         min_order_thb=Decimal("40.0"),
@@ -170,7 +177,7 @@ def get_default_cash_profile() -> BrokerProfile:
             rate=Decimal("0.0"),
             vat_applicable=False,
             applicable_order_type="ALL",
-            evidence_status="OFFICIAL_PROVIDER_TARIFF",
+            evidence_status="NOT_APPLICABLE",
         ),
         fractional_supported=False,
         min_order_thb=Decimal("0.0"),
