@@ -624,8 +624,10 @@ def test_committed_eligibility_matrix_is_all_unverified() -> None:
     assert {(e.platform_id, e.symbol) for e in entries} == {
         (b, s) for b in ("DIME", "IBKR", "WEBULL") for s in ("BIL", "BND", "GLD", "VOO")
     }
-    assert all(e.evidence_status == "ACCOUNT_SPECIFIC_UNVERIFIED" and e.account_permission == "UNVERIFIED" for e in entries)
-    assert all(e.searchable is None and e.fractional_eligible is None for e in entries)
+    assert all(e.account_permission == "UNVERIFIED" and e.fractional_eligible is None for e in entries)
+    observed = [e for e in entries if e.evidence_status != "ACCOUNT_SPECIFIC_UNVERIFIED"]
+    assert [(e.platform_id, e.symbol, e.evidence_status) for e in observed] == [("WEBULL", "VOO", "OWNER_UI_OBSERVATION")]
+    assert all(e.searchable is None for e in entries if e not in observed)
     profiles = load_candidate_profiles(eligibility=entries)
     webull = [p for p in profiles if p.platform_id == "WEBULL"]
     assert len(webull) == 3 and all(len(p.security_eligibility) == 4 for p in webull)
