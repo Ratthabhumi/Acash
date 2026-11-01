@@ -1,0 +1,24 @@
+{
+  "schema": "ACASH_CANONICAL_TRANSACTIONS_V1",
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "batch_id": "SYN_TXN_V2",
+  "transactions": [
+    {"transaction_id": "T_OPEN_CASH", "account_ref": "BANK_SAVINGS", "event_type": "OPENING_CASH", "trade_date": "2026-01-01", "currency": "THB", "net_cash": "20000.00"},
+    {"transaction_id": "T_OPEN_NEW", "account_ref": "BROKER_A_MAIN", "event_type": "OPENING_POSITION", "trade_date": "2026-01-01", "security_id": "SYNNEW", "quantity": "5", "currency": "USD"},
+    {"transaction_id": "T_DEP_THB", "account_ref": "BROKER_A_MAIN", "event_type": "DEPOSIT", "trade_date": "2026-01-05", "currency": "THB", "net_cash": "99000.00"},
+    {"transaction_id": "T_FX_1", "account_ref": "BROKER_A_MAIN", "event_type": "FX_CONVERSION", "trade_date": "2026-01-05", "fx_from_currency": "THB", "fx_from_amount": "99000.00", "fx_to_currency": "USD", "fx_to_amount": "3000.00"},
+    {"transaction_id": "T_BUY_IDX_1", "account_ref": "BROKER_A_MAIN", "event_type": "BUY", "trade_date": "2026-01-06", "settlement_date": "2026-01-07", "security_id": "SYNIDX", "quantity": "20", "price": "90.00", "gross_amount": "1800.00", "currency": "USD", "net_cash": "-1800.00"},
+    {"transaction_id": "T_DEP_FCD", "account_ref": "BANK_FCD", "event_type": "DEPOSIT", "trade_date": "2026-02-01", "currency": "USD", "net_cash": "600.00"},
+    {"transaction_id": "T_BUY_TECH", "account_ref": "BROKER_A_MAIN", "event_type": "BUY", "trade_date": "2026-02-02", "security_id": "SYNTECH", "quantity": "10.5", "price": "57.00", "gross_amount": "598.50", "commission": "1.50", "currency": "USD", "net_cash": "-600.00"},
+    {"transaction_id": "T_XFER_OUT", "account_ref": "BANK_FCD", "event_type": "INTERNAL_TRANSFER", "trade_date": "2026-02-10", "transfer_group_id": "TG_1", "currency": "USD", "net_cash": "-100.00"},
+    {"transaction_id": "T_XFER_IN", "account_ref": "BROKER_A_MAIN", "event_type": "INTERNAL_TRANSFER", "trade_date": "2026-02-10", "transfer_group_id": "TG_1", "currency": "USD", "net_cash": "100.00"},
+    {"transaction_id": "T_BUY_MOON_1", "account_ref": "BROKER_A_MAIN", "event_type": "BUY", "trade_date": "2026-03-02", "security_id": "SYNMOON", "quantity": "50", "price": "6.00", "gross_amount": "300.00", "currency": "USD", "net_cash": "-300.00"},
+    {"transaction_id": "T_BUY_MOON_2", "account_ref": "BROKER_A_MAIN", "event_type": "BUY", "trade_date": "2026-03-03", "security_id": "SYNMOON", "quantity": "10", "price": "5.00", "gross_amount": "50.00", "currency": "USD", "net_cash": "-50.00"},
+    {"transaction_id": "T_BUY_IDX_2", "account_ref": "BROKER_A_MAIN", "event_type": "BUY", "trade_date": "2026-04-01", "security_id": "SYNIDX", "quantity": "1.25", "price": "96.00", "gross_amount": "120.00", "currency": "USD", "net_cash": "-120.00"},
+    {"transaction_id": "T_DIV_IDX", "account_ref": "BROKER_A_MAIN", "event_type": "DIVIDEND", "trade_date": "2026-05-15", "security_id": "SYNIDX", "currency": "USD", "net_cash": "10.00"},
+    {"transaction_id": "T_DIV_WHT", "account_ref": "BROKER_A_MAIN", "event_type": "DIVIDEND_WITHHOLDING", "trade_date": "2026-05-15", "security_id": "SYNIDX", "currency": "USD", "net_cash": "-1.50"},
+    {"transaction_id": "T_SELL_MOON", "account_ref": "BROKER_A_MAIN", "event_type": "SELL", "trade_date": "2026-07-01", "settlement_date": "2026-07-02", "security_id": "SYNMOON", "quantity": "10", "price": "4.50", "gross_amount": "45.00", "currency": "USD", "net_cash": "45.00"},
+    {"account_ref": "BROKER_A_MAIN", "event_type": "FEE", "trade_date": "2026-08-01", "currency": "USD", "net_cash": "-0.50", "source_document_ref": "Synthetic platform fee notice"},
+    {"transaction_id": "T_WDR", "account_ref": "BROKER_A_MAIN", "event_type": "WITHDRAWAL", "trade_date": "2026-09-01", "currency": "USD", "net_cash": "-257.50"}
+  ]
+}
