@@ -7,17 +7,22 @@ never funded from the emergency reserve and is never authorized here.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from decimal import ROUND_CEILING, ROUND_DOWN, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from acash.core.domain.exceptions import DataContractError
-from acash.ppds.private_observation import DATA_CLASSES, assert_private_location
+from acash.ppds.private_observation import (
+    DATA_CLASSES,
+    assert_private_location,
+    assert_private_observation_authorized,
+    read_bounded_json,
+)
 
 CAPACITY_SCHEMA = "ACASH_PRIVATE_CAPACITY_V1"
 ZERO = Decimal("0")
+CENT = Decimal("0.01")
 CONTRIBUTION_SCENARIOS_THB = (Decimal("5000"), Decimal("7500"), Decimal("10000"))
 POLICY_FAMILIES: Dict[str, Dict[str, Any]] = {
     "A_HOLD_CURRENT": {"description": "Keep current holdings; contribute to cash only.", "example_instruments": []},
@@ -89,12 +94,9 @@ def parse_capacity(doc: Any) -> CapacityInputs:
 
 
 def load_capacity(path: Path) -> CapacityInputs:
-    try:
-        doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise DataContractError(f"CAPACITY_UNREADABLE: {type(exc).__name__}.") from exc
-    inputs = parse_capacity(doc)
+    inputs = parse_capacity(read_bounded_json(Path(path), "CAPACITY"))
     if inputs.data_class == "OWNER_PRIVATE_OBSERVATION":
+        assert_private_observation_authorized(inputs.data_class)
         assert_private_location(Path(path))
     return inputs
 
@@ -171,9 +173,17 @@ def assess_capacity(inputs: CapacityInputs, scenarios: Sequence[Decimal] = CONTR
 
 def contribution_first_allocation(current: Mapping[str, Decimal], target_weights: Mapping[str, Decimal],
                                   contribution: Decimal) -> Dict[str, Any]:
-    """Direct a new contribution to underweight buckets without selling anything."""
+    """Direct a new contribution to underweight buckets without selling anything.
+
+    Rounding policy (largest remainder): each bucket's exact share is truncated to the cent, and
+    the leftover cents go one each to the largest truncated remainders, ties broken by bucket name.
+    Only buckets with a positive exact share can receive a cent, so the rounded allocations always
+    sum to the contribution.
+    """
     if contribution <= ZERO:
         raise DataContractError("CONTRIBUTION_NONPOSITIVE.")
+    if contribution != contribution.quantize(CENT):
+        raise DataContractError("CONTRIBUTION_SUB_CENT: contribution must be whole minor units.")
     if not target_weights or sum(target_weights.values(), ZERO) != Decimal("1"):
         raise DataContractError("CONTRIBUTION_TARGET_WEIGHTS_MUST_SUM_TO_ONE.")
     if any(w < ZERO for w in target_weights.values()) or any(v < ZERO for v in current.values()):
@@ -182,10 +192,18 @@ def contribution_first_allocation(current: Mapping[str, Decimal], target_weights
     total_after = sum(current.values(), ZERO) + contribution
     deficits = {b: max(ZERO, target_weights.get(b, ZERO) * total_after - current.get(b, ZERO)) for b in buckets}
     deficit_sum = sum(deficits.values(), ZERO)
-    alloc = {b: contribution * deficits[b] / deficit_sum for b in buckets}
+    exact = {b: contribution * deficits[b] / deficit_sum for b in buckets}
+    alloc = {b: exact[b].quantize(CENT, rounding=ROUND_DOWN) for b in buckets}
+    leftover = int((contribution - sum(alloc.values(), ZERO)) / CENT)
+    order = sorted((b for b in buckets if exact[b] > alloc[b]), key=lambda b: (-(exact[b] - alloc[b]), b))
+    if leftover > len(order):
+        raise DataContractError("CONTRIBUTION_ROUNDING_INVARIANT_BROKEN.")
+    for b in order[:leftover]:
+        alloc[b] += CENT
     after = {b: current.get(b, ZERO) + alloc[b] for b in buckets}
     return {
         "label": "ILLUSTRATIVE_ALLOCATION_NOT_AN_ORDER",
+        "rounding_policy": "LARGEST_REMAINDER_CENTS_TIE_BY_BUCKET_NAME",
         "contribution": _q(contribution),
         "allocation": {b: _q(alloc[b]) for b in buckets},
         "weights_after": {b: str((after[b] / total_after).quantize(Decimal("0.0001"))) for b in buckets},

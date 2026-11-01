@@ -98,6 +98,36 @@ def test_contribution_first_never_sells_and_conserves() -> None:
         cp.contribution_first_allocation(current, targets, Decimal("0"))
 
 
+@pytest.mark.parametrize("current, targets, contribution", [
+    ({"A": "0", "B": "0", "C": "0"}, {"A": "0.5", "B": "0.25", "C": "0.25"}, "0.03"),
+    ({"A": "10", "B": "10", "C": "10"},
+     {"A": "0.3333333333333333333333333334", "B": "0.3333333333333333333333333333", "C": "0.3333333333333333333333333333"}, "100"),
+    ({"A": "0", "B": "0", "C": "0", "D": "0"}, {"A": "0.25", "B": "0.25", "C": "0.25", "D": "0.25"}, "0.01"),
+    ({"A": "900", "B": "1", "C": "1", "Z": "50"}, {"A": "0.2", "B": "0.4", "C": "0.4"}, "7.77"),
+    ({"A": "1", "B": "2", "C": "3"}, {"A": "0.6", "B": "0.3", "C": "0.1", "Z": "0"}, "1000.01"),
+])
+def test_contribution_rounding_conserves_cash(current: Dict[str, str], targets: Dict[str, str], contribution: str) -> None:
+    cur = {k: Decimal(v) for k, v in current.items()}
+    tgt = {k: Decimal(v) for k, v in targets.items()}
+    result = cp.contribution_first_allocation(cur, tgt, Decimal(contribution))
+    alloc = {k: Decimal(v) for k, v in result["allocation"].items()}
+    assert sum(alloc.values()) == Decimal(contribution)
+    assert all(v >= 0 for v in alloc.values())
+    assert all(alloc[k] == 0 for k in alloc if tgt.get(k, Decimal(0)) == 0)
+    reordered = cp.contribution_first_allocation(dict(reversed(list(cur.items()))), dict(reversed(list(tgt.items()))),
+                                                 Decimal(contribution))
+    assert reordered["allocation"] == result["allocation"]
+
+
+def test_contribution_ties_broken_by_bucket_name() -> None:
+    zero = {"D": Decimal(0), "C": Decimal(0), "B": Decimal(0), "A": Decimal(0)}
+    quarter = {k: Decimal("0.25") for k in zero}
+    result = cp.contribution_first_allocation(zero, quarter, Decimal("0.02"))
+    assert result["allocation"] == {"A": "0.01", "B": "0.01", "C": "0.00", "D": "0.00"}
+    with pytest.raises(DataContractError, match="CONTRIBUTION_SUB_CENT"):
+        cp.contribution_first_allocation(zero, {"A": Decimal(1)}, Decimal("0.005"))
+
+
 def test_pack_concludes_no_action_and_generates_no_orders() -> None:
     pack = _pack()
     assert pack["E_decision"]["conclusion"] == "NO_ACTION_PENDING_EVIDENCE"
@@ -124,6 +154,12 @@ def test_pack_rejects_mixed_data_classes() -> None:
 def test_owner_private_pack_cannot_be_written_to_tracked_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     pack = dict(_pack(), data_class="OWNER_PRIVATE_OBSERVATION")
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
+        wp.write_pack(pack, tmp_path / "data" / "private" / "out")
+    record = tmp_path / po.AUTHORIZATION_RECORD
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED",
+                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01"}), encoding="utf-8")
     with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
         wp.write_pack(pack, tmp_path / "docs")
     written = wp.write_pack(pack, tmp_path / "data" / "private" / "out")

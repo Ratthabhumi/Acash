@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_UPI_V1` valued 2026-11-01 · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `42c8d46be3066d86`
+Snapshot `SYN_UPI_V1` valued 2026-10-30 (observed 2026-11-01T09:00:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `da4003ce0d078705`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -31,7 +31,7 @@ Read-only decision support. No orders, transfers, recurring plans or authority. 
 | USD | 114691.50 | 0.8515 |
 
 Concentration (DIRECT_HOLDINGS_ONLY; OVERLAP_NOT_ESTABLISHED): top1 0.5206, top5 0.7228, HHI 0.2906
-Unrealized P&L (security currency): {'USD': '20.00'} — OBSERVED_COST_BASIS; FX_COMPONENT_NOT_ESTABLISHED; ACQUISITION_HISTORY_NOT_ESTABLISHED
+Unrealized P&L (PARTIAL_COST_BASIS, cost-basis coverage 0.9661): {'USD': '30.00'} — UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines; FX_COMPONENT_NOT_ESTABLISHED; ACQUISITION_HISTORY_NOT_ESTABLISHED
 
 ### Illustrative stress (not forecasts)
 | Scenario | NAV delta | Share |
@@ -44,10 +44,10 @@ Not evaluated: {'TECH_SELLOFF': 'NOT_EVALUATED_SECTOR_DATA_MISSING', 'SMALL_CAP_
 
 ### Reconciliation (observed vs quantity x price)
 - BROKER_A_MAIN SYNIDX Core: CONSISTENT_WITHIN_DISPLAY_ROUNDING
-- BROKER_A_MAIN SYNTECH Theme: CONSISTENT_WITHIN_DISPLAY_ROUNDING
-- BROKER_A_MAIN SYNMOON Theme: UNEXPLAINED_DIFFERENCE
 - BROKER_A_MAIN SYNIDX Theme: NOT_DISPLAYED
+- BROKER_A_MAIN SYNMOON Theme: UNEXPLAINED_DIFFERENCE
 - BROKER_A_MAIN SYNNEW Unsorted: CONSISTENT_WITHIN_DISPLAY_ROUNDING
+- BROKER_A_MAIN SYNTECH Theme: CONSISTENT_WITHIN_DISPLAY_ROUNDING
 
 ## B. Long-term accounts
 | Bucket | Value | Weight |
@@ -119,6 +119,7 @@ V38 route costs for 10000 THB (MANUAL, 1 month; unranked):
 **NO_ACTION_PENDING_EVIDENCE** (orders generated: 0)
 - PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.
 - OVERLAP_NOT_ESTABLISHED: no dated constituent weights.
+- COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.
 - UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.
 - RESERVE_SHORTFALL: rebuild emergency reserve before new risk.
 - V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.

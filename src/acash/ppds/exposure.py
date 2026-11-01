@@ -10,10 +10,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Mapping, Tuple
+from typing import Dict, List, Mapping, Protocol, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.ppds.ledger import NormalizedPortfolioLedger
+
+
+class ValuedLotLike(Protocol):
+    @property
+    def symbol(self) -> str: ...
+
+    @property
+    def quantity(self) -> Decimal: ...
+
+    @property
+    def currency(self) -> str: ...
+
+
+class ValuationSource(Protocol):
+    """Quantities and cash a valuation needs.
+
+    Satisfied by ``NormalizedPortfolioLedger`` and by snapshot valuation views
+    that carry no acquisition history; valuation never reads cost basis.
+    """
+
+    @property
+    def position_lots(self) -> Sequence[ValuedLotLike]: ...
+
+    def cash_by_currency(self) -> Dict[str, Decimal]: ...
+
+    def quantity_by_symbol(self) -> Dict[str, Decimal]: ...
 
 
 @dataclass(frozen=True)
@@ -242,7 +268,7 @@ class PortfolioValuation:
 
 
 def evaluate_portfolio_base_currency(
-    ledger: NormalizedPortfolioLedger,
+    ledger: ValuationSource,
     base_currency: str,
     as_of: date,
     prices: Mapping[str, PriceQuote],

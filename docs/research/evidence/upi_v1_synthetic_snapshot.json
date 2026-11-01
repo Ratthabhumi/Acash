@@ -1,25 +1,81 @@
 {
-  "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1",
+  "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
   "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
   "snapshot_id": "SYN_UPI_V1",
   "observed_at": "2026-11-01T09:00:00+07:00",
+  "valuation_date": "2026-10-30",
   "evidence_source": "MANUAL_SNAPSHOT",
   "reporting_currency": "THB",
-  "report_currencies": ["THB", "USD"],
+  "report_currencies": [
+    "THB",
+    "USD"
+  ],
   "fx_rates": [
-    {"from": "USD", "to": "THB", "rate": "33.00", "as_of": "2026-11-01", "source_id": "SYNTHETIC_FX_FIXTURE"},
-    {"from": "THB", "to": "USD", "rate": "0.030303030303030303", "as_of": "2026-11-01", "source_id": "SYNTHETIC_FX_FIXTURE"}
+    {
+      "from": "USD",
+      "to": "THB",
+      "rate": "33.00",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_FX_FIXTURE"
+    },
+    {
+      "from": "THB",
+      "to": "USD",
+      "rate": "0.030303030303030303",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_FX_FIXTURE"
+    }
   ],
   "prices": [
-    {"security_id": "SYNIDX", "currency": "USD", "price": "100.00", "as_of": "2026-11-01", "source_id": "SYNTHETIC_PRICE_FIXTURE"},
-    {"security_id": "SYNTECH", "currency": "USD", "price": "50.00", "as_of": "2026-11-01", "source_id": "SYNTHETIC_PRICE_FIXTURE"},
-    {"security_id": "SYNMOON", "currency": "USD", "price": "4.00", "as_of": "2026-11-01", "source_id": "SYNTHETIC_PRICE_FIXTURE"},
-    {"security_id": "SYNNEW", "currency": "USD", "price": "20.00", "as_of": "2026-11-01", "source_id": "SYNTHETIC_PRICE_FIXTURE"}
+    {
+      "security_id": "SYNIDX",
+      "currency": "USD",
+      "price": "100.00",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_PRICE_FIXTURE",
+      "published_at": "2026-10-30T16:00:00-04:00"
+    },
+    {
+      "security_id": "SYNTECH",
+      "currency": "USD",
+      "price": "50.00",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_PRICE_FIXTURE"
+    },
+    {
+      "security_id": "SYNMOON",
+      "currency": "USD",
+      "price": "4.00",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_PRICE_FIXTURE"
+    },
+    {
+      "security_id": "SYNNEW",
+      "currency": "USD",
+      "price": "20.00",
+      "as_of": "2026-10-30",
+      "source_id": "SYNTHETIC_PRICE_FIXTURE"
+    }
   ],
   "securities": [
-    {"security_id": "SYNIDX", "classification": "CORE_DIVERSIFIED", "methodology": "OWNER_DECLARED_WITH_EVIDENCE", "evidence_ref": "Synthetic index factsheet"},
-    {"security_id": "SYNTECH", "classification": "THEMATIC", "methodology": "OWNER_DECLARED_WITH_EVIDENCE", "evidence_ref": "Synthetic sector fund prospectus"},
-    {"security_id": "SYNMOON", "classification": "SPECULATIVE", "methodology": "OWNER_DECLARED_WITH_EVIDENCE", "evidence_ref": "Synthetic pre-revenue filing"}
+    {
+      "security_id": "SYNIDX",
+      "classification": "CORE_DIVERSIFIED",
+      "methodology": "OWNER_DECLARED_WITH_EVIDENCE",
+      "evidence_ref": "Synthetic index factsheet"
+    },
+    {
+      "security_id": "SYNTECH",
+      "classification": "THEMATIC",
+      "methodology": "OWNER_DECLARED_WITH_EVIDENCE",
+      "evidence_ref": "Synthetic sector fund prospectus"
+    },
+    {
+      "security_id": "SYNMOON",
+      "classification": "SPECULATIVE",
+      "methodology": "OWNER_DECLARED_WITH_EVIDENCE",
+      "evidence_ref": "Synthetic pre-revenue filing"
+    }
   ],
   "accounts": [
     {
@@ -28,14 +84,57 @@
       "role": "LONG_TERM",
       "base_currency": "USD",
       "cash": [
-        {"currency": "USD", "amount": "25.50", "kind": "SETTLED", "sub_portfolio": null}
+        {
+          "currency": "USD",
+          "amount": "25.50",
+          "kind": "SETTLED",
+          "sub_portfolio": null
+        }
       ],
       "positions": [
-        {"security_id": "SYNIDX", "sub_portfolio": "Core", "quantity": "20", "cost_basis_total": "1800.00", "observed_market_value": "2000.00"},
-        {"security_id": "SYNTECH", "sub_portfolio": "Theme", "quantity": "10.5", "cost_basis_total": "600.00", "observed_market_value": "525.00"},
-        {"security_id": "SYNMOON", "sub_portfolio": "Theme", "quantity": "50", "cost_basis_total": "300.00", "observed_market_value": "201.37"},
-        {"security_id": "SYNIDX", "sub_portfolio": "Theme", "quantity": "1.25", "cost_basis_total": "120.00"},
-        {"security_id": "SYNNEW", "sub_portfolio": "Unsorted", "quantity": "5", "cost_basis_total": "110.00", "observed_market_value": "100.00"}
+        {
+          "security_id": "SYNIDX",
+          "sub_portfolio": "Core",
+          "quantity": "20",
+          "cost_basis_total": "1800.00",
+          "observed_market_value": "2000.00",
+          "cost_basis_currency": "USD",
+          "observed_market_value_currency": "USD"
+        },
+        {
+          "security_id": "SYNTECH",
+          "sub_portfolio": "Theme",
+          "quantity": "10.5",
+          "cost_basis_total": "600.00",
+          "observed_market_value": "17325.00",
+          "cost_basis_currency": "USD",
+          "observed_market_value_currency": "THB"
+        },
+        {
+          "security_id": "SYNMOON",
+          "sub_portfolio": "Theme",
+          "quantity": "50",
+          "cost_basis_total": "300.00",
+          "observed_market_value": "201.37",
+          "cost_basis_currency": "USD",
+          "observed_market_value_currency": "USD"
+        },
+        {
+          "security_id": "SYNIDX",
+          "sub_portfolio": "Theme",
+          "quantity": "1.25",
+          "cost_basis_total": "120.00",
+          "cost_basis_currency": "USD"
+        },
+        {
+          "security_id": "SYNNEW",
+          "sub_portfolio": "Unsorted",
+          "quantity": "5",
+          "cost_basis_total": null,
+          "observed_market_value": "100.00",
+          "observed_market_value_currency": "USD",
+          "cost_basis_currency": null
+        }
       ]
     },
     {
@@ -44,8 +143,18 @@
       "role": "CASH_RESERVE",
       "base_currency": "USD",
       "cash": [
-        {"currency": "USD", "amount": "500.00", "kind": "SETTLED", "sub_portfolio": null},
-        {"currency": "USD", "amount": "0.40", "kind": "ACCRUED_INTEREST", "sub_portfolio": null}
+        {
+          "currency": "USD",
+          "amount": "500.00",
+          "kind": "SETTLED",
+          "sub_portfolio": null
+        },
+        {
+          "currency": "USD",
+          "amount": "0.40",
+          "kind": "ACCRUED_INTEREST",
+          "sub_portfolio": null
+        }
       ],
       "positions": []
     },
@@ -55,7 +164,12 @@
       "role": "CASH_RESERVE",
       "base_currency": "THB",
       "cash": [
-        {"currency": "THB", "amount": "20000.00", "kind": "SETTLED", "sub_portfolio": null}
+        {
+          "currency": "THB",
+          "amount": "20000.00",
+          "kind": "SETTLED",
+          "sub_portfolio": null
+        }
       ],
       "positions": []
     }

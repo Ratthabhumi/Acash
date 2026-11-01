@@ -30,6 +30,7 @@ from acash.invest.capacity_plan import (
 from acash.ppds.private_observation import (
     PortfolioBook,
     assert_private_location,
+    assert_private_observation_authorized,
     book_summary,
     build_book,
     load_snapshot,
@@ -88,6 +89,8 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any]) -> Dict[s
     analytics = summary["analytics"][next(iter(summary["analytics"]))]
     if analytics["concentration"]["look_through_status"] != "LOOK_THROUGH_QUALIFIED":
         reasons.append("OVERLAP_NOT_ESTABLISHED: no dated constituent weights.")
+    if analytics["unrealized_pnl"]["status"] != "OBSERVED_COST_BASIS":
+        reasons.append(f"COST_BASIS_INCOMPLETE: {analytics['unrealized_pnl']['status']}; unrealized P&L only for the known-cost subset.")
     if "UNKNOWN" in analytics["allocation_by_classification"]:
         reasons.append("UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.")
     if capacity["reserve"]["status"] != "RESERVE_TARGET_MET":
@@ -141,7 +144,7 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     rep = next(iter(a["analytics"]))
     an = a["analytics"][rep]
     out = [f"# ACASH Unified Portfolio Intelligence — {pack['data_class']}", "",
-           f"Snapshot `{a['snapshot_id']}` valued {a['valuation_date']} · support state **{a['support_state']}** · "
+           f"Snapshot `{a['snapshot_id']}` valued {a['valuation_date']} (observed {a['time_alignment']['observed_at']}) · support state **{a['support_state']}** · "
            f"performance **{a['performance_status']}** · pack `{pack['pack_sha256'][:16]}`", "",
            "Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.", "",
            "## A. Total wealth"]
@@ -154,7 +157,8 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
             "", f"Concentration ({an['concentration']['basis']}; {an['concentration']['look_through_status']}): "
             f"top1 {an['concentration']['top1_weight']}, top5 {an['concentration']['top5_weight']}, "
             f"HHI {an['concentration']['hhi_securities_of_nav']}",
-            f"Unrealized P&L (security currency): {an['unrealized_pnl_security_currency']} — {an['unrealized_pnl_status']}",
+            f"Unrealized P&L ({an['unrealized_pnl']['status']}, cost-basis coverage {an['unrealized_pnl']['cost_basis_value_coverage']}): "
+            f"{an['unrealized_pnl']['unrealized_pnl_security_currency_known_cost_subset']} — {'; '.join(an['unrealized_pnl']['limitations'])}",
             "", "### Illustrative stress (not forecasts)", "| Scenario | NAV delta | Share |", "|---|---:|---:|"]
     out += [f"| {s['scenario']} | {s['nav_delta']} | {s['nav_delta_share']} |" for s in an["stress_illustrative"]["scenarios"]]
     out += [f"Not evaluated: {an['stress_illustrative']['not_evaluated']}", "",
@@ -189,6 +193,7 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
 
 def write_pack(pack: Mapping[str, Any], output_dir: Path) -> List[Path]:
     if pack["data_class"] == "OWNER_PRIVATE_OBSERVATION":
+        assert_private_observation_authorized(pack["data_class"])
         assert_private_location(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = "upi_v1_pack"

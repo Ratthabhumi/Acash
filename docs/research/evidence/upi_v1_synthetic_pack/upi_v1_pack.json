@@ -5,25 +5,22 @@
         "account_ref": "BANK_FCD",
         "base_currency": "USD",
         "broker": "BANK_B",
-        "ledger_entry_count": 1,
-        "ledger_head_sha256": "ed3536557702899f970f56bedeb7e18a7281d0e098041cfc9a5b2adde626429c",
-        "role": "CASH_RESERVE"
+        "role": "CASH_RESERVE",
+        "valuation_view_sha256": "6898516d76ea268b7990ab877178aebf094463bd45ac57036da3668aeeae5fec"
       },
       {
         "account_ref": "BANK_SAVINGS",
         "base_currency": "THB",
         "broker": "BANK_C",
-        "ledger_entry_count": 1,
-        "ledger_head_sha256": "36ed36ba6a50bef0f9c9b68746713600943dd233dea243bb7b6b4c0270bba792",
-        "role": "CASH_RESERVE"
+        "role": "CASH_RESERVE",
+        "valuation_view_sha256": "97b8ff9480346116591e0c583e8b9eaeffcd7240a752b5929183ab8cb71d46c5"
       },
       {
         "account_ref": "BROKER_A_MAIN",
         "base_currency": "USD",
         "broker": "BROKER_A",
-        "ledger_entry_count": 6,
-        "ledger_head_sha256": "359dd10c4df843054bf02555fe30f5430d7fd4a713abedd86a93bbadd86edf31",
-        "role": "LONG_TERM"
+        "role": "LONG_TERM",
+        "valuation_view_sha256": "c40946123a9d0b24a150357e06587ff4b66de14e3015344f1257fea0a1e2a56c"
       }
     ],
     "analytics": {
@@ -178,10 +175,50 @@
           ],
           "unknown_classified_value_excluded_from_thematic": "3300.00"
         },
-        "unrealized_pnl_security_currency": {
-          "USD": "20.00"
-        },
-        "unrealized_pnl_status": "OBSERVED_COST_BASIS; FX_COMPONENT_NOT_ESTABLISHED; ACQUISITION_HISTORY_NOT_ESTABLISHED"
+        "unrealized_pnl": {
+          "cost_basis_value_coverage": "0.9661",
+          "limitations": [
+            "UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines",
+            "FX_COMPONENT_NOT_ESTABLISHED",
+            "ACQUISITION_HISTORY_NOT_ESTABLISHED"
+          ],
+          "lines": [
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Core"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNMOON",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNNEW",
+              "status": "COST_BASIS_UNKNOWN",
+              "sub_portfolio": "Unsorted"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNTECH",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            }
+          ],
+          "status": "PARTIAL_COST_BASIS",
+          "unrealized_pnl_security_currency_known_cost_subset": {
+            "USD": "30.00"
+          }
+        }
       },
       "USD": {
         "accrued_interest_excluded_from_nav": "0.40",
@@ -334,10 +371,50 @@
           ],
           "unknown_classified_value_excluded_from_thematic": "100.00"
         },
-        "unrealized_pnl_security_currency": {
-          "USD": "20.00"
-        },
-        "unrealized_pnl_status": "OBSERVED_COST_BASIS; FX_COMPONENT_NOT_ESTABLISHED; ACQUISITION_HISTORY_NOT_ESTABLISHED"
+        "unrealized_pnl": {
+          "cost_basis_value_coverage": "0.9661",
+          "limitations": [
+            "UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines",
+            "FX_COMPONENT_NOT_ESTABLISHED",
+            "ACQUISITION_HISTORY_NOT_ESTABLISHED"
+          ],
+          "lines": [
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Core"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNMOON",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNNEW",
+              "status": "COST_BASIS_UNKNOWN",
+              "sub_portfolio": "Unsorted"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNTECH",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            }
+          ],
+          "status": "PARTIAL_COST_BASIS",
+          "unrealized_pnl_security_currency_known_cost_subset": {
+            "USD": "30.00"
+          }
+        }
       }
     },
     "classification_methodologies": {
@@ -366,53 +443,78 @@
       "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
       "trading_authority": "NONE"
     },
-    "observed_at": "2026-11-01T09:00:00+07:00",
     "performance_reason": "SNAPSHOT_ONLY: no contribution, withdrawal or transfer history; TWR/XIRR undefined.",
     "performance_status": "PERFORMANCE_NOT_ESTABLISHED",
     "reconciliation": [
       {
         "account_ref": "BROKER_A_MAIN",
-        "difference_local": "0.00",
+        "currency": "USD",
+        "difference": "0.00",
         "security_id": "SYNIDX",
         "sub_portfolio": "Core",
+        "tolerance": "0.105",
+        "tolerance_source": "DISPLAYED_PRECISION",
         "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
       },
       {
         "account_ref": "BROKER_A_MAIN",
-        "difference_local": "0.000",
-        "security_id": "SYNTECH",
-        "sub_portfolio": "Theme",
-        "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
-      },
-      {
-        "account_ref": "BROKER_A_MAIN",
-        "difference_local": "1.37",
-        "security_id": "SYNMOON",
-        "sub_portfolio": "Theme",
-        "verdict": "UNEXPLAINED_DIFFERENCE"
-      },
-      {
-        "account_ref": "BROKER_A_MAIN",
-        "difference_local": "",
+        "currency": "",
+        "difference": "",
         "security_id": "SYNIDX",
         "sub_portfolio": "Theme",
+        "tolerance": "",
+        "tolerance_source": "DISPLAYED_PRECISION",
         "verdict": "NOT_DISPLAYED"
       },
       {
         "account_ref": "BROKER_A_MAIN",
-        "difference_local": "0.00",
+        "currency": "USD",
+        "difference": "1.37",
+        "security_id": "SYNMOON",
+        "sub_portfolio": "Theme",
+        "tolerance": "0.255",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "UNEXPLAINED_DIFFERENCE"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "USD",
+        "difference": "0.00",
         "security_id": "SYNNEW",
         "sub_portfolio": "Unsorted",
+        "tolerance": "0.030",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "THB",
+        "difference": "0.00000",
+        "security_id": "SYNTECH",
+        "sub_portfolio": "Theme",
+        "tolerance": "1.737500",
+        "tolerance_source": "DISPLAYED_PRECISION",
         "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
       }
     ],
-    "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1",
-    "snapshot_content_sha256": "c5b08a0417f9e7bc47abc72e92f0e41c6ecdf267123d8e4cc94d5be0685ac18b",
+    "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
+    "snapshot_content_sha256": "ab772e3ccf92c8abe091e5f3985732ba5bba1c141a5cb7e930ac6463f10f942f",
     "snapshot_id": "SYN_UPI_V1",
     "stale_after_days": 7,
     "support_state": "SNAPSHOT_ONLY",
+    "time_alignment": {
+      "asynchronous_prices": "NOT_SUPPORTED_V1_1",
+      "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+      "observation_lag_days": 2,
+      "observed_at": "2026-11-01T09:00:00+07:00",
+      "price_and_fx_dates": "SINGLE_VALUATION_DATE",
+      "price_published_at": {
+        "SYNIDX": "2026-10-30T16:00:00-04:00"
+      },
+      "valuation_date": "2026-10-30"
+    },
     "valuation_age_days": 0,
-    "valuation_date": "2026-11-01",
+    "valuation_date": "2026-10-30",
     "valuation_stale": false
   },
   "B_long_term": {
@@ -433,6 +535,7 @@
         "THEMATIC": "0.1231",
         "UNKNOWN": "0.0235"
       },
+      "rounding_policy": "LARGEST_REMAINDER_CENTS_TIE_BY_BUCKET_NAME",
       "sells": "NONE",
       "weights_after": {
         "CASH": "0.2717",
@@ -790,6 +893,7 @@
     "reasons": [
       "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
       "OVERLAP_NOT_ESTABLISHED: no dated constituent weights.",
+      "COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.",
       "UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
@@ -815,6 +919,6 @@
     "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "42c8d46be3066d86bba5e85aac6b6a2453313e64273ac6c5787aae65954c8888",
+  "pack_sha256": "da4003ce0d078705190badbe514a0576f06396f802b44d45256287d87f12dc8d",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

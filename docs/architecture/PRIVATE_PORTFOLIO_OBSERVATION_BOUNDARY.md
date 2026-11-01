@@ -1,6 +1,6 @@
 # Unified Portfolio Intelligence V1 — Private Observation Boundary
 
-Status: **IMPLEMENTED (synthetic fixtures verified). Governance amendment PROPOSED, NOT RATIFIED.**
+Status: **V1.1 IMPLEMENTED (synthetic fixtures verified). Owner-private runtime GATED by `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json` (PROPOSED_NOT_RATIFIED).**
 
 ## 1. Purpose
 
@@ -13,9 +13,8 @@ trading, transfer or capital authority.
 
 | Component | Status | Role in UPI V1 |
 |---|---|---|
-| `src/acash/ppds/ledger.py` `NormalizedPortfolioLedger` | REUSED | One hash-chained ledger per observed account |
-| `src/acash/ppds/lots.py` `CashLot` / `PositionLot` | REUSED | Snapshot lines; `acquired_on` = observation date (acquisition history NOT established) |
-| `src/acash/ppds/exposure.py` `evaluate_portfolio_base_currency` | REUSED | Per-account valuation with strict price/FX date, source and orientation checks |
+| `src/acash/ppds/ledger.py` / `lots.py` | UNCHANGED | Historical acquisition lots; snapshots no longer build lots (V1.1), so no cost or acquisition date is invented |
+| `src/acash/ppds/exposure.py` `evaluate_portfolio_base_currency` | EXTENDED (signature only) | Accepts the `ValuationSource` protocol; the ledger and the snapshot `SnapshotValuationView` both satisfy it |
 | `src/acash/ppds/registry.py` `AccountRegistry`, `consolidate_portfolio_valuations` | REUSED | Multi-account consolidation per report currency |
 | `src/acash/ppds/private_observation.py` | NEW (PPDS extension) | Snapshot schema, trust boundary, sub-portfolio/classification/concentration/stress analytics |
 | `src/acash/invest/capacity_plan.py` | NEW | Liquidity adequacy, contribution scenarios, quant-budget isolation, contribution-first allocation |
@@ -25,8 +24,7 @@ trading, transfer or capital authority.
 | `src/acash/ppds/reconcile.py`, `provenance.py`, `statement_ingest.py` | UNCHANGED | Synthetic statement path stays synthetic-only |
 | `src/acash/invest/v0_report.py` | UNCHANGED | Synthetic demonstration report |
 
-Not reused: `NormalizedPortfolioLedger` has no sub-portfolio dimension, so
-sub-portfolio views are computed from snapshot lines through the same FX path
+Sub-portfolio views are computed from snapshot lines through the same FX path
 and checked against the PPDS NAV (conservation residual ≤ 1e-12, a 28-digit
 Decimal context bound).
 
@@ -48,13 +46,17 @@ created only in ignored paths, so they never reach `git add`.
 
 ## 4. Data contract (V1)
 
-Schema `ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1` (see
+Schema `ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1` (see
 `docs/research/evidence/upi_v1_synthetic_snapshot.json`): tz-aware `observed_at`,
-explicit FX rates (no inversion; both directions must be supplied for two report
-currencies), dated prices with source IDs, evidence-backed classifications,
-accounts with role, cash lines (`SETTLED` in NAV, `ACCRUED_INTEREST` reported
-but excluded), positions with quantity, required cost basis and optional
-observed market value.
+an explicit `valuation_date` (the market session all prices and FX are pinned to;
+may precede the local observation date, never follow it), explicit FX rates (no
+inversion), dated prices with optional tz-aware `published_at` (must not follow
+`observed_at`), evidence-backed classifications, accounts with role, cash lines
+(`SETTLED` in NAV, `ACCRUED_INTEREST` reported but excluded), positions with
+quantity, optional cost basis + currency (missing: `COST_BASIS_UNKNOWN`, NAV-only)
+and optional observed market value + currency (reconciled at displayed precision).
+No market-session calendar authority exists in the repo, so session validity is
+`NOT_PERFORMED`; asynchronous price dates are not supported.
 
 Support state is always `SNAPSHOT_ONLY` in V1; performance is
 `PERFORMANCE_NOT_ESTABLISHED`. TWR/XIRR, realized P&L, dividends, fees, taxes,
@@ -65,7 +67,7 @@ reference; otherwise `UNKNOWN`. Sub-portfolio names never imply a class.
 Look-through is `OVERLAP_NOT_ESTABLISHED` until dated constituent weights exist
 (`etf_overlap_exposure` can consume them later).
 
-## 5. Owner local usage (not run by AI on real data)
+## 5. Owner local usage (only after the owner ratifies the ODR; not run by AI on real data)
 
 ```text
 mkdir data/private
@@ -86,5 +88,5 @@ read-only processing of `OWNER_PRIVATE_OBSERVATION` snapshots for personal
 decision support only, under the boundary in §3. It does not admit data to D5,
 does not change `NO_REAL_ORDERS`, `REAL_CAPITAL_AUTHORITY = USD 0.00`, Lane A/B,
 HYP_003, broker connectivity, credentials or the synthetic-only status of the
-PPDS statement-import path. Until the owner records a decision, the code exists
-and is tested on synthetic data; running it on real data is the owner's own act.
+PPDS statement-import path. The decision record is `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.md`.
+Until it is ratified, the runtime gate refuses `OWNER_PRIVATE_OBSERVATION` data.

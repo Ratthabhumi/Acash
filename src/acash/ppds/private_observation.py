@@ -5,15 +5,17 @@ Trust boundary (docs/architecture/PRIVATE_PORTFOLIO_OBSERVATION_BOUNDARY.md):
 - An owner snapshot is a personal decision-support observation. It is never
   D5 research data, never proof of acquisition history and never carries
   trading, transfer or capital authority.
-- ``OWNER_PRIVATE_OBSERVATION`` files are only read from, and outputs only
-  written to, locations outside the repository or under the git-ignored
-  ``data/private/`` directory. Public fixtures must be ``SYNTHETIC_PUBLIC_FIXTURE``.
-- Valuation reuses the PPDS ledger, account registry, base-currency valuation
-  and consolidation. This module adds no second ledger and no FX inversion.
+- ``OWNER_PRIVATE_OBSERVATION`` data is processed only when the owner decision
+  record ``docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`` is RATIFIED,
+  and only from/to locations outside the repository or under ``data/private/``.
+- Valuation reuses PPDS base-currency valuation and consolidation through a
+  snapshot valuation view. Snapshot positions are not acquisition lots, so no
+  cost basis or acquisition date is ever invented to build a ledger.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -25,8 +27,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from acash.core.domain.exceptions import DataContractError
 from acash.core.serialization import CanonicalConfigSerializer
 from acash.ppds.exposure import FXRate, PortfolioValuation, PriceQuote, evaluate_portfolio_base_currency
-from acash.ppds.ledger import NormalizedPortfolioLedger
-from acash.ppds.lots import CashLot, PositionLot
 from acash.ppds.registry import (
     AccountRegistration,
     AccountRegistry,
@@ -34,7 +34,7 @@ from acash.ppds.registry import (
     consolidate_portfolio_valuations,
 )
 
-SCHEMA = "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1"
+SCHEMA = "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1"
 DATA_CLASSES = ("SYNTHETIC_PUBLIC_FIXTURE", "OWNER_PRIVATE_OBSERVATION")
 EVIDENCE_SOURCES = ("MANUAL_SNAPSHOT", "CSV_STATEMENT")
 ACCOUNT_ROLES = ("LONG_TERM", "QUANT_RESEARCH", "CASH_RESERVE", "OTHER")
@@ -71,10 +71,12 @@ STRESS_NOT_EVALUATED = {
     "SMALL_CAP_GROWTH_DRAWDOWN": "NOT_EVALUATED_SIZE_STYLE_DATA_MISSING",
     "LIQUIDITY_STRESS": "NOT_EVALUATED_LIQUIDITY_DATA_MISSING",
 }
-# 28-digit Decimal context residual only; any economic break is at least one cent.
+# 28-digit Decimal context residual only; any economic break is at least one minor unit.
 CONSERVATION_TOLERANCE = Decimal("1e-12")
-DISPLAY_HALF_UNIT = Decimal("0.005")
 STALE_AFTER_DAYS = 7
+MAX_INPUT_BYTES = 2_000_000
+AUTHORIZATION_RECORD = Path("docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json")
+AUTHORIZED_CAPABILITY = "OWNER_PRIVATE_OBSERVATION_AUTHORIZED"
 GOVERNANCE_FLAGS = {
     "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
     "d5_eligible": False,
@@ -87,13 +89,14 @@ _REF = re.compile(r"^[A-Z][A-Z0-9_]{1,31}$")
 _SECURITY = re.compile(r"^[A-Z0-9][A-Z0-9._:\-]{0,23}$")
 _DIGIT_RUN = re.compile(r"\d{6,}")
 _LONG_DIGIT_RUN = re.compile(r"\d{9,}")
-_TOP_FIELDS = {"schema", "data_class", "snapshot_id", "observed_at", "evidence_source", "reporting_currency",
-               "report_currencies", "fx_rates", "prices", "securities", "accounts"}
+_TOP_FIELDS = {"schema", "data_class", "snapshot_id", "observed_at", "valuation_date", "evidence_source",
+               "reporting_currency", "report_currencies", "fx_rates", "prices", "securities", "accounts"}
 _ACCOUNT_FIELDS = {"account_ref", "broker", "role", "base_currency", "cash", "positions"}
 _CASH_FIELDS = {"currency", "amount", "kind", "sub_portfolio"}
-_POSITION_FIELDS = {"security_id", "sub_portfolio", "quantity", "cost_basis_total", "observed_market_value"}
+_POSITION_FIELDS = {"security_id", "sub_portfolio", "quantity", "cost_basis_total", "cost_basis_currency",
+                    "observed_market_value", "observed_market_value_currency"}
 _FX_FIELDS = {"from", "to", "rate", "as_of", "source_id"}
-_PRICE_FIELDS = {"security_id", "currency", "price", "as_of", "source_id"}
+_PRICE_FIELDS = {"security_id", "currency", "price", "as_of", "published_at", "source_id"}
 _SECURITY_FIELDS = {"security_id", "classification", "methodology", "evidence_ref"}
 ZERO = Decimal("0")
 
@@ -103,7 +106,10 @@ def _repo_root() -> Path:
 
 
 def assert_private_location(path: Path, root: Optional[Path] = None) -> None:
-    """Owner-private files must live outside the repository or under ``data/private/``."""
+    """Owner-private files must live outside the repository or under ``data/private/``.
+
+    The path is resolved first, so symlinks and ``..`` segments are judged by their real target.
+    """
     resolved, base = Path(path).resolve(), (root or _repo_root()).resolve()
     try:
         rel = resolved.relative_to(base)
@@ -113,12 +119,45 @@ def assert_private_location(path: Path, root: Optional[Path] = None) -> None:
         raise DataContractError("PRIVATE_LOCATION_NOT_IGNORED: owner data must be outside the repo or under data/private/.")
 
 
+def private_observation_authorized(record: Optional[Path] = None) -> bool:
+    """True only if the owner decision record is RATIFIED by the OWNER for this capability."""
+    path = record or (_repo_root() / AUTHORIZATION_RECORD)
+    try:
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (isinstance(doc, dict) and doc.get("capability") == AUTHORIZED_CAPABILITY
+            and doc.get("status") == "RATIFIED" and doc.get("ratified_by") == "OWNER"
+            and isinstance(doc.get("ratified_on"), str))
+
+
+def assert_private_observation_authorized(data_class: str) -> None:
+    if data_class == "OWNER_PRIVATE_OBSERVATION" and not private_observation_authorized():
+        raise DataContractError(
+            "PRIVATE_OBSERVATION_NOT_AUTHORIZED: owner decision record "
+            f"{AUTHORIZATION_RECORD.as_posix()} is not RATIFIED; owner-private processing is disabled.")
+
+
+def read_bounded_json(path: Path, code: str) -> Any:
+    """Read a JSON input with a size bound; errors never echo file contents."""
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as exc:
+        raise DataContractError(f"{code}_UNREADABLE: {type(exc).__name__}.") from exc
+    if len(raw) > MAX_INPUT_BYTES:
+        raise DataContractError(f"{code}_TOO_LARGE: limit {MAX_INPUT_BYTES} bytes.")
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise DataContractError(f"{code}_MALFORMED_JSON: {type(exc).__name__}.") from exc
+
+
 def _fields(doc: Any, allowed: Set[str], ctx: str) -> Mapping[str, Any]:
     if not isinstance(doc, Mapping):
         raise DataContractError(f"PRIVATE_NOT_A_MAPPING: {ctx}.")
     unknown = set(doc) - allowed
     if unknown:
-        raise DataContractError(f"PRIVATE_UNKNOWN_FIELDS: {ctx} {sorted(unknown)}.")
+        raise DataContractError(f"PRIVATE_UNKNOWN_FIELDS: {ctx} {sorted(str(k) for k in unknown)}.")
     return doc
 
 
@@ -168,6 +207,31 @@ def _security(raw: Any, ctx: str) -> str:
     return value
 
 
+def _date(raw: Any, ctx: str) -> date:
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError as exc:
+        raise DataContractError(f"PRIVATE_DATE_INVALID: {ctx}.") from exc
+
+
+def _aware(raw: Any, ctx: str) -> datetime:
+    try:
+        value = datetime.fromisoformat(str(raw))
+    except ValueError as exc:
+        raise DataContractError(f"PRIVATE_TIMESTAMP_INVALID: {ctx}.") from exc
+    if value.tzinfo is None:
+        raise DataContractError(f"PRIVATE_TIMESTAMP_NAIVE: {ctx} requires a timezone offset.")
+    return value
+
+
+def _half_unit(value: Decimal) -> Decimal:
+    """Half of the last displayed digit, taken from the value's own precision."""
+    exponent = value.as_tuple().exponent
+    if not isinstance(exponent, int):
+        raise DataContractError("PRIVATE_NONFINITE_DECIMAL: precision.")
+    return Decimal(1).scaleb(exponent) / 2
+
+
 @dataclass(frozen=True)
 class CashLine:
     account_ref: str
@@ -184,7 +248,9 @@ class PositionLine:
     sub_portfolio: Optional[str]
     quantity: Decimal
     cost_basis_total: Optional[Decimal]
+    cost_basis_currency: Optional[str]
     observed_market_value: Optional[Decimal]
+    observed_market_value_currency: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -210,22 +276,25 @@ class PortfolioSnapshot:
     data_class: str
     snapshot_id: str
     observed_at: datetime
+    valuation_date: date
     evidence_source: str
     reporting_currency: str
     report_currencies: Tuple[str, ...]
     fx_rates: Tuple[FXRate, ...]
     prices: Tuple[PriceQuote, ...]
+    published_at: Tuple[Tuple[str, str], ...]
     securities: Tuple[SecurityClass, ...]
     accounts: Tuple[AccountObservation, ...]
     content_sha256: str
 
-    @property
-    def valuation_date(self) -> date:
-        return self.observed_at.date()
-
 
 def parse_snapshot(doc: Any) -> PortfolioSnapshot:
-    """Validate a snapshot document; every amount is a decimal string, every field is known."""
+    """Validate a snapshot document; every amount is a decimal string, every field is known.
+
+    ``valuation_date`` is the market-session date all prices and FX rates are pinned to; it may
+    precede the local date of ``observed_at`` (e.g. a Bangkok morning after the US close) but
+    never follow it.
+    """
     top = _fields(doc, _TOP_FIELDS, "snapshot")
     if top.get("schema") != SCHEMA:
         raise DataContractError(f"PRIVATE_SCHEMA_MISMATCH: expected {SCHEMA}.")
@@ -233,12 +302,10 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
     if data_class not in DATA_CLASSES:
         raise DataContractError("PRIVATE_DATA_CLASS_INVALID.")
     snapshot_id = _ref(top.get("snapshot_id"), "snapshot_id")
-    try:
-        observed_at = datetime.fromisoformat(str(top.get("observed_at")))
-    except ValueError as exc:
-        raise DataContractError("PRIVATE_OBSERVED_AT_INVALID.") from exc
-    if observed_at.tzinfo is None:
-        raise DataContractError("PRIVATE_OBSERVED_AT_NAIVE: timezone offset required.")
+    observed_at = _aware(top.get("observed_at"), "observed_at")
+    vdate = _date(top.get("valuation_date"), "valuation_date")
+    if vdate > observed_at.date():
+        raise DataContractError("PRIVATE_VALUATION_DATE_AFTER_OBSERVATION.")
     source = top.get("evidence_source")
     if source not in EVIDENCE_SOURCES:
         raise DataContractError("PRIVATE_EVIDENCE_SOURCE_INVALID.")
@@ -246,7 +313,6 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
     report_ccys = tuple(_ccy(c, "report_currencies") for c in top.get("report_currencies") or [reporting])
     if reporting not in report_ccys or len(set(report_ccys)) != len(report_ccys):
         raise DataContractError("PRIVATE_REPORT_CURRENCIES_INVALID: must be unique and include reporting_currency.")
-    vdate = observed_at.date()
 
     fx: Dict[Tuple[str, str], FXRate] = {}
     for i, raw in enumerate(top.get("fx_rates") or []):
@@ -255,9 +321,11 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
         if key[0] == key[1] or key in fx:
             raise DataContractError(f"PRIVATE_FX_DUPLICATE_OR_IDENTITY: {key}.")
         fx[key] = FXRate(key[0], key[1], _dec(row.get("rate"), f"fx {key}", positive=True),
-                         _date(row.get("as_of"), f"fx {key}"), _label(row.get("source_id"), f"fx {key} source", _LONG_DIGIT_RUN) or "")
+                         _date(row.get("as_of"), f"fx {key}"),
+                         _label(row.get("source_id"), f"fx {key} source", _LONG_DIGIT_RUN) or "")
 
     prices: Dict[str, PriceQuote] = {}
+    published: Dict[str, str] = {}
     for i, raw in enumerate(top.get("prices") or []):
         row = _fields(raw, _PRICE_FIELDS, f"prices[{i}]")
         sid = _security(row.get("security_id"), f"prices[{i}]")
@@ -266,6 +334,11 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
         prices[sid] = PriceQuote(sid, _dec(row.get("price"), f"price {sid}", positive=True),
                                  _date(row.get("as_of"), f"price {sid}"), _ccy(row.get("currency"), f"price {sid}"),
                                  _label(row.get("source_id"), f"price {sid} source", _LONG_DIGIT_RUN) or "")
+        if row.get("published_at") is not None:
+            stamp = _aware(row.get("published_at"), f"price {sid} published_at")
+            if stamp > observed_at:
+                raise DataContractError(f"PRIVATE_PRICE_PUBLISHED_AFTER_OBSERVATION: {sid}.")
+            published[sid] = stamp.isoformat()
 
     classes: Dict[str, SecurityClass] = {}
     for i, raw in enumerate(top.get("securities") or []):
@@ -298,25 +371,28 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
         raise DataContractError(f"PRIVATE_CLASSIFICATION_FOR_UNHELD_SECURITY: {unknown_class}.")
     for quote in prices.values():
         if quote.as_of != vdate:
-            raise DataContractError(f"PRIVATE_PRICE_DATE_MISMATCH: {quote.symbol} must be dated {vdate.isoformat()}.")
+            raise DataContractError(f"PRIVATE_PRICE_DATE_MISMATCH: {quote.symbol} must be dated valuation_date.")
     for rate in fx.values():
         if rate.as_of != vdate:
             raise DataContractError(f"PRIVATE_FX_DATE_MISMATCH: {rate.from_currency}->{rate.to_currency}.")
 
     return PortfolioSnapshot(
-        data_class=str(data_class), snapshot_id=snapshot_id, observed_at=observed_at, evidence_source=str(source),
-        reporting_currency=reporting, report_currencies=report_ccys,
+        data_class=str(data_class), snapshot_id=snapshot_id, observed_at=observed_at, valuation_date=vdate,
+        evidence_source=str(source), reporting_currency=reporting, report_currencies=report_ccys,
         fx_rates=tuple(fx[k] for k in sorted(fx)), prices=tuple(prices[k] for k in sorted(prices)),
+        published_at=tuple(sorted(published.items())),
         securities=tuple(classes[k] for k in sorted(classes)), accounts=tuple(sorted(accounts, key=lambda a: a.account_ref)),
         content_sha256=CanonicalConfigSerializer.compute_sha256(json.loads(json.dumps(doc, sort_keys=True))),
     )
 
 
-def _date(raw: Any, ctx: str) -> date:
-    try:
-        return date.fromisoformat(str(raw))
-    except ValueError as exc:
-        raise DataContractError(f"PRIVATE_DATE_INVALID: {ctx}.") from exc
+def _optional_amount(prow: Mapping[str, Any], amount_key: str, ccy_key: str, ctx: str) -> Tuple[Optional[Decimal], Optional[str]]:
+    amount, ccy = prow.get(amount_key), prow.get(ccy_key)
+    if amount is None and ccy is None:
+        return None, None
+    if amount is None or ccy is None:
+        raise DataContractError(f"PRIVATE_AMOUNT_CURRENCY_PAIR_INCOMPLETE: {ctx} {amount_key}.")
+    return _dec(amount, f"{ctx} {amount_key}", nonnegative=True), _ccy(ccy, f"{ctx} {ccy_key}")
 
 
 def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used: Set[str]) -> AccountObservation:
@@ -353,13 +429,10 @@ def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used:
         if (sid, sub) in seen_pos:
             raise DataContractError(f"PRIVATE_DUPLICATE_POSITION_LINE: {ref} {sid}.")
         seen_pos.add((sid, sub))
-        cost = prow.get("cost_basis_total")
-        observed = prow.get("observed_market_value")
-        positions.append(PositionLine(
-            ref, sid, sub, _dec(prow.get("quantity"), f"{ref} {sid} quantity", positive=True),
-            None if cost is None else _dec(cost, f"{ref} {sid} cost_basis_total", nonnegative=True),
-            None if observed is None else _dec(observed, f"{ref} {sid} observed_market_value", nonnegative=True),
-        ))
+        cost, cost_ccy = _optional_amount(prow, "cost_basis_total", "cost_basis_currency", f"{ref} {sid}")
+        observed, observed_ccy = _optional_amount(prow, "observed_market_value", "observed_market_value_currency", f"{ref} {sid}")
+        positions.append(PositionLine(ref, sid, sub, _dec(prow.get("quantity"), f"{ref} {sid} quantity", positive=True),
+                                      cost, cost_ccy, observed, observed_ccy))
         used.add(sid)
     if not cash and not positions:
         raise DataContractError(f"PRIVATE_EMPTY_ACCOUNT: {ref}.")
@@ -367,12 +440,9 @@ def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used:
 
 
 def load_snapshot(path: Path) -> PortfolioSnapshot:
-    try:
-        doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise DataContractError(f"PRIVATE_SNAPSHOT_UNREADABLE: {type(exc).__name__}.") from exc
-    snapshot = parse_snapshot(doc)
+    snapshot = parse_snapshot(read_bounded_json(Path(path), "PRIVATE_SNAPSHOT"))
     if snapshot.data_class == "OWNER_PRIVATE_OBSERVATION":
+        assert_private_observation_authorized(snapshot.data_class)
         assert_private_location(Path(path))
     return snapshot
 
@@ -384,20 +454,53 @@ def assert_no_duplicate_snapshots(snapshots: Sequence[PortfolioSnapshot]) -> Non
         raise DataContractError("PRIVATE_DUPLICATE_SNAPSHOT: identical snapshot_id or content.")
 
 
-def _ledger(snapshot: PortfolioSnapshot, account: AccountObservation) -> NormalizedPortfolioLedger:
-    """Snapshot lots: ``acquired_on`` is the OBSERVATION date; acquisition history is not established."""
+@dataclass(frozen=True)
+class ValuationPosition:
+    """Quantity observed at the valuation date; deliberately carries no cost or acquisition date."""
+
+    symbol: str
+    quantity: Decimal
+    currency: str
+
+
+@dataclass(frozen=True)
+class SnapshotValuationView:
+    """Observation-to-valuation adapter satisfying ``ppds.exposure.ValuationSource``."""
+
+    account_id: str
+    as_of: date
+    cash: Tuple[Tuple[str, Decimal], ...]
+    position_lots: Tuple[ValuationPosition, ...]
+
+    def cash_by_currency(self) -> Dict[str, Decimal]:
+        totals: Dict[str, Decimal] = {}
+        for currency, amount in self.cash:
+            totals[currency] = totals.get(currency, ZERO) + amount
+        return totals
+
+    def quantity_by_symbol(self) -> Dict[str, Decimal]:
+        totals: Dict[str, Decimal] = {}
+        for lot in self.position_lots:
+            totals[lot.symbol] = totals.get(lot.symbol, ZERO) + lot.quantity
+        return totals
+
+    @property
+    def sha256(self) -> str:
+        payload = {"account_id": self.account_id, "as_of": self.as_of.isoformat(),
+                   "cash": [[c, str(a)] for c, a in self.cash],
+                   "positions": [[p.symbol, str(p.quantity), p.currency] for p in self.position_lots]}
+        return hashlib.sha256(CanonicalConfigSerializer.to_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _view(snapshot: PortfolioSnapshot, account: AccountObservation) -> SnapshotValuationView:
     prices = {p.symbol: p for p in snapshot.prices}
-    ledger = NormalizedPortfolioLedger(account_id=account.account_ref, as_of=snapshot.valuation_date)
-    for c in account.cash:
-        if c.kind == "SETTLED" and c.amount != ZERO:
-            ledger = ledger.post_cash_lot(CashLot(c.currency, c.amount, snapshot.valuation_date))
-    for p in account.positions:
-        if p.cost_basis_total is None:
-            raise DataContractError(f"PRIVATE_COST_BASIS_REQUIRED: {account.account_ref} {p.security_id}.")
-        ledger = ledger.post_position_lot(PositionLot(
-            p.security_id, p.quantity, p.cost_basis_total / p.quantity, snapshot.valuation_date, prices[p.security_id].currency,
-        ))
-    return ledger
+    return SnapshotValuationView(
+        account_id=account.account_ref,
+        as_of=snapshot.valuation_date,
+        cash=tuple((c.currency, c.amount) for c in account.cash if c.kind == "SETTLED"),
+        position_lots=tuple(ValuationPosition(p.security_id, p.quantity, prices[p.security_id].currency)
+                            for p in account.positions),
+    )
 
 
 def _fx_map(snapshot: PortfolioSnapshot) -> Dict[Tuple[str, str], FXRate]:
@@ -415,29 +518,31 @@ def _rate(fx: Mapping[Tuple[str, str], FXRate], src: str, dst: str) -> Decimal:
 @dataclass(frozen=True)
 class PortfolioBook:
     snapshot: PortfolioSnapshot
-    ledgers: Dict[str, NormalizedPortfolioLedger]
+    views: Dict[str, SnapshotValuationView]
     valuations: Dict[str, PortfolioValuation]
     consolidated: Dict[str, ConsolidatedPortfolioValuation]
 
 
 def build_book(snapshot: PortfolioSnapshot) -> PortfolioBook:
     """Value every account with PPDS and consolidate into each report currency."""
+    assert_private_observation_authorized(snapshot.data_class)
     fx = _fx_map(snapshot)
     prices = {p.symbol: p for p in snapshot.prices}
-    ledgers, valuations = {}, {}
+    views: Dict[str, SnapshotValuationView] = {}
+    valuations: Dict[str, PortfolioValuation] = {}
     registry = AccountRegistry(portfolio_id=snapshot.snapshot_id)
     for account in snapshot.accounts:
-        ledger = _ledger(snapshot, account)
-        ledgers[account.account_ref] = ledger
+        view = _view(snapshot, account)
+        views[account.account_ref] = view
         valuations[account.account_ref] = evaluate_portfolio_base_currency(
-            ledger, account.base_currency, snapshot.valuation_date, prices, fx)
+            view, account.base_currency, snapshot.valuation_date, prices, fx)
         registry = registry.register(AccountRegistration(
             portfolio_id=snapshot.snapshot_id, account_id=account.account_ref, source_id=snapshot.snapshot_id,
             as_of=snapshot.valuation_date, base_currency=account.base_currency,
             evidence_refs=(f"{snapshot.snapshot_id}:{account.account_ref}:{snapshot.content_sha256[:16]}",),
         ))
     consolidated = {ccy: consolidate_portfolio_valuations(registry, valuations, ccy, fx) for ccy in snapshot.report_currencies}
-    return PortfolioBook(snapshot, ledgers, valuations, consolidated)
+    return PortfolioBook(snapshot, views, valuations, consolidated)
 
 
 def _q(value: Decimal) -> str:
@@ -481,22 +586,39 @@ def _classification(book: PortfolioBook, security_id: str) -> SecurityClass:
 
 
 def reconciliation_checks(book: PortfolioBook) -> List[Dict[str, str]]:
-    """Observed broker market value vs quantity x price (display-rounding bound assumes 2-dp display)."""
+    """Observed broker market value vs quantity x price, in the observed value's own currency.
+
+    Tolerance comes from displayed precision: half a unit of the observed value's last digit plus
+    quantity x half a unit of the price's last digit (converted at the snapshot rate when the
+    currencies differ). A cross-currency comparison relies on the snapshot FX source, which may
+    differ from the broker's display rate.
+    """
     prices = {p.symbol: p for p in book.snapshot.prices}
+    fx = _fx_map(book.snapshot)
     checks = []
     for account in book.snapshot.accounts:
         for line in account.positions:
-            computed = line.quantity * prices[line.security_id].price
-            if line.observed_market_value is None:
-                verdict, diff = "NOT_DISPLAYED", None
+            quote = prices[line.security_id]
+            row = {"account_ref": account.account_ref, "security_id": line.security_id,
+                   "sub_portfolio": line.sub_portfolio or "", "currency": line.observed_market_value_currency or "",
+                   "difference": "", "tolerance": "", "tolerance_source": "DISPLAYED_PRECISION"}
+            if line.observed_market_value is None or line.observed_market_value_currency is None:
+                row["verdict"] = "NOT_DISPLAYED"
+            elif (quote.currency != line.observed_market_value_currency
+                  and (quote.currency, line.observed_market_value_currency) not in fx):
+                row["verdict"] = "CURRENCY_CONVERSION_NOT_AVAILABLE"
             else:
-                diff = line.observed_market_value - computed
-                bound = DISPLAY_HALF_UNIT + line.quantity * DISPLAY_HALF_UNIT
-                verdict = "CONSISTENT_WITHIN_DISPLAY_ROUNDING" if abs(diff) <= bound else "UNEXPLAINED_DIFFERENCE"
-            checks.append({"account_ref": account.account_ref, "security_id": line.security_id,
-                           "sub_portfolio": line.sub_portfolio or "", "verdict": verdict,
-                           "difference_local": "" if diff is None else str(diff)})
-    return checks
+                rate = _rate(fx, quote.currency, line.observed_market_value_currency)
+                diff = line.observed_market_value - line.quantity * quote.price * rate
+                bound = _half_unit(line.observed_market_value) + line.quantity * _half_unit(quote.price) * rate
+                cross = quote.currency != line.observed_market_value_currency
+                if abs(diff) <= bound:
+                    row["verdict"] = "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
+                else:
+                    row["verdict"] = "UNEXPLAINED_DIFFERENCE_FX_SOURCE_MAY_DIFFER" if cross else "UNEXPLAINED_DIFFERENCE"
+                row["difference"], row["tolerance"] = str(diff), str(bound)
+            checks.append(row)
+    return sorted(checks, key=lambda r: (r["account_ref"], r["security_id"], r["sub_portfolio"]))
 
 
 def _grouped(pairs: Sequence[Tuple[str, Decimal]], nav: Decimal) -> Dict[str, Dict[str, str]]:
@@ -504,6 +626,40 @@ def _grouped(pairs: Sequence[Tuple[str, Decimal]], nav: Decimal) -> Dict[str, Di
     for key, value in pairs:
         totals[key] = totals.get(key, ZERO) + value
     return {k: {"value": _q(v), "weight": _w(v / nav)} for k, v in sorted(totals.items())}
+
+
+def _pnl(book: PortfolioBook, positions: Sequence[Tuple[AccountObservation, PositionLine, Decimal, Decimal]]) -> Dict[str, Any]:
+    prices = {p.symbol: p for p in book.snapshot.prices}
+    totals: Dict[str, Decimal] = {}
+    lines: List[Dict[str, str]] = []
+    known_value, all_value = ZERO, ZERO
+    for account, line, local, rep in positions:
+        quote_ccy = prices[line.security_id].currency
+        all_value += rep
+        if line.cost_basis_total is None:
+            status = "COST_BASIS_UNKNOWN"
+        elif line.cost_basis_currency != quote_ccy:
+            status = "COST_CURRENCY_DIFFERS_PNL_NOT_ESTABLISHED"
+        else:
+            status = "OBSERVED_COST_BASIS"
+            totals[quote_ccy] = totals.get(quote_ccy, ZERO) + local - line.cost_basis_total
+            known_value += rep
+        lines.append({"account_ref": account.account_ref, "security_id": line.security_id,
+                      "sub_portfolio": line.sub_portfolio or "", "status": status})
+    if known_value == ZERO:
+        overall = "NAV_ONLY"
+    elif known_value == all_value:
+        overall = "OBSERVED_COST_BASIS"
+    else:
+        overall = "PARTIAL_COST_BASIS"
+    return {
+        "status": overall,
+        "unrealized_pnl_security_currency_known_cost_subset": {k: _q(v) for k, v in sorted(totals.items())},
+        "cost_basis_value_coverage": _w(known_value / all_value) if all_value > ZERO else "0.0000",
+        "lines": sorted(lines, key=lambda r: (r["account_ref"], r["security_id"], r["sub_portfolio"])),
+        "limitations": ["UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines",
+                        "FX_COMPONENT_NOT_ESTABLISHED", "ACQUISITION_HISTORY_NOT_ESTABLISHED"],
+    }
 
 
 def book_analytics(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, Any]:
@@ -520,7 +676,7 @@ def book_analytics(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, 
 
     residual = sum((v for *_, v in positions), ZERO) + sum((v for *_, v in cash), ZERO) - nav
     if abs(residual) > CONSERVATION_TOLERANCE:
-        raise DataContractError(f"PRIVATE_CONSERVATION_BREAK: line totals differ from PPDS NAV by {residual}.")
+        raise DataContractError("PRIVATE_CONSERVATION_BREAK: line totals differ from PPDS NAV.")
 
     by_class = [(_classification(book, line.security_id).classification, v) for _, line, _, v in positions]
     by_class += [("CASH", v) for *_, v in cash]
@@ -530,12 +686,6 @@ def book_analytics(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, 
     weights = sorted(((v / nav, k) for k, v in by_security.items()), reverse=True)
     sub_portfolios = [(f"{a.account_ref}/{line.sub_portfolio or '(unassigned)'}", v) for a, line, _, v in positions]
     sub_portfolios += [(f"{a.account_ref}/{line.sub_portfolio or '(account cash)'}", v) for a, line, v in cash]
-
-    pnl: Dict[str, Decimal] = {}
-    for _, line, local, _ in positions:
-        quote_ccy = next(p.currency for p in book.snapshot.prices if p.symbol == line.security_id)
-        assert line.cost_basis_total is not None
-        pnl[quote_ccy] = pnl.get(quote_ccy, ZERO) + local - line.cost_basis_total
 
     return {
         "report_currency": ccy,
@@ -559,8 +709,7 @@ def book_analytics(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, 
             "top5_weight": _w(sum((w for w, _ in weights[:5]), ZERO)),
             "hhi_securities_of_nav": _w(sum((w * w for w, _ in weights), ZERO)),
         },
-        "unrealized_pnl_security_currency": {k: _q(v) for k, v in sorted(pnl.items())},
-        "unrealized_pnl_status": "OBSERVED_COST_BASIS; FX_COMPONENT_NOT_ESTABLISHED; ACQUISITION_HISTORY_NOT_ESTABLISHED",
+        "unrealized_pnl": _pnl(book, positions),
         "stress_illustrative": _stress(book, ccy, nav, positions),
         "conservation_residual": str(residual),
     }
@@ -589,6 +738,25 @@ def _stress(book: PortfolioBook, ccy: str, nav: Decimal,
     }
 
 
+def valuation_age_days(book: PortfolioBook, report_date: date) -> Dict[str, Any]:
+    age = (report_date - book.snapshot.valuation_date).days
+    if age < 0:
+        raise DataContractError("PRIVATE_REPORT_DATE_BEFORE_VALUATION.")
+    return {"valuation_age_days": age, "stale": age > STALE_AFTER_DAYS}
+
+
+def time_alignment(snapshot: PortfolioSnapshot) -> Dict[str, Any]:
+    return {
+        "observed_at": snapshot.observed_at.isoformat(),
+        "valuation_date": snapshot.valuation_date.isoformat(),
+        "observation_lag_days": (snapshot.observed_at.date() - snapshot.valuation_date).days,
+        "price_and_fx_dates": "SINGLE_VALUATION_DATE",
+        "price_published_at": dict(snapshot.published_at),
+        "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+        "asynchronous_prices": "NOT_SUPPORTED_V1_1",
+    }
+
+
 def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dict[str, Any]:
     snap = book.snapshot
     freshness = valuation_age_days(book, report_date or snap.valuation_date)
@@ -597,8 +765,8 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
         "data_class": snap.data_class,
         "snapshot_id": snap.snapshot_id,
         "snapshot_content_sha256": snap.content_sha256,
-        "observed_at": snap.observed_at.isoformat(),
         "valuation_date": snap.valuation_date.isoformat(),
+        "time_alignment": time_alignment(snap),
         "evidence_source": snap.evidence_source,
         "support_state": "SNAPSHOT_ONLY",
         "performance_status": "PERFORMANCE_NOT_ESTABLISHED",
@@ -607,8 +775,7 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
         "valuation_age_days": freshness["valuation_age_days"],
         "valuation_stale": freshness["stale"],
         "accounts": [{"account_ref": a.account_ref, "broker": a.broker, "role": a.role, "base_currency": a.base_currency,
-                      "ledger_head_sha256": book.ledgers[a.account_ref].head_sha256,
-                      "ledger_entry_count": book.ledgers[a.account_ref].entry_count} for a in snap.accounts],
+                      "valuation_view_sha256": book.views[a.account_ref].sha256} for a in snap.accounts],
         "fx_rates": [{"pair": f"{r.from_currency}->{r.to_currency}", "rate": str(r.rate), "source_id": r.source_id}
                      for r in snap.fx_rates],
         "classification_methodologies": dict(METHODOLOGIES),
@@ -616,10 +783,3 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
         "reconciliation": reconciliation_checks(book),
         "analytics": {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies},
     }
-
-
-def valuation_age_days(book: PortfolioBook, report_date: date) -> Dict[str, Any]:
-    age = (report_date - book.snapshot.valuation_date).days
-    if age < 0:
-        raise DataContractError("PRIVATE_REPORT_DATE_BEFORE_VALUATION.")
-    return {"valuation_age_days": age, "stale": age > STALE_AFTER_DAYS}
