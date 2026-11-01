@@ -1,0 +1,924 @@
+{
+  "A_total_wealth": {
+    "accounts": [
+      {
+        "account_ref": "BANK_FCD",
+        "base_currency": "USD",
+        "broker": "BANK_B",
+        "role": "CASH_RESERVE",
+        "valuation_view_sha256": "6898516d76ea268b7990ab877178aebf094463bd45ac57036da3668aeeae5fec"
+      },
+      {
+        "account_ref": "BANK_SAVINGS",
+        "base_currency": "THB",
+        "broker": "BANK_C",
+        "role": "CASH_RESERVE",
+        "valuation_view_sha256": "97b8ff9480346116591e0c583e8b9eaeffcd7240a752b5929183ab8cb71d46c5"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "base_currency": "USD",
+        "broker": "BROKER_A",
+        "role": "LONG_TERM",
+        "valuation_view_sha256": "c40946123a9d0b24a150357e06587ff4b66de14e3015344f1257fea0a1e2a56c"
+      }
+    ],
+    "analytics": {
+      "THB": {
+        "accrued_interest_excluded_from_nav": "13.20",
+        "allocation_by_broker": {
+          "BANK_B": {
+            "value": "16500.00",
+            "weight": "0.1225"
+          },
+          "BANK_C": {
+            "value": "20000.00",
+            "weight": "0.1485"
+          },
+          "BROKER_A": {
+            "value": "98191.50",
+            "weight": "0.7290"
+          }
+        },
+        "allocation_by_classification": {
+          "CASH": {
+            "value": "37341.50",
+            "weight": "0.2772"
+          },
+          "CORE_DIVERSIFIED": {
+            "value": "70125.00",
+            "weight": "0.5206"
+          },
+          "SPECULATIVE": {
+            "value": "6600.00",
+            "weight": "0.0490"
+          },
+          "THEMATIC": {
+            "value": "17325.00",
+            "weight": "0.1286"
+          },
+          "UNKNOWN": {
+            "value": "3300.00",
+            "weight": "0.0245"
+          }
+        },
+        "allocation_by_currency": {
+          "THB": {
+            "value": "20000.00",
+            "weight": "0.1485"
+          },
+          "USD": {
+            "value": "114691.50",
+            "weight": "0.8515"
+          }
+        },
+        "allocation_by_role": {
+          "CASH_RESERVE": {
+            "value": "36500.00",
+            "weight": "0.2710"
+          },
+          "LONG_TERM": {
+            "value": "98191.50",
+            "weight": "0.7290"
+          }
+        },
+        "allocation_by_sub_portfolio": {
+          "BANK_FCD/(account cash)": {
+            "value": "16500.00",
+            "weight": "0.1225"
+          },
+          "BANK_SAVINGS/(account cash)": {
+            "value": "20000.00",
+            "weight": "0.1485"
+          },
+          "BROKER_A_MAIN/(account cash)": {
+            "value": "841.50",
+            "weight": "0.0062"
+          },
+          "BROKER_A_MAIN/Core": {
+            "value": "66000.00",
+            "weight": "0.4900"
+          },
+          "BROKER_A_MAIN/Theme": {
+            "value": "28050.00",
+            "weight": "0.2083"
+          },
+          "BROKER_A_MAIN/Unsorted": {
+            "value": "3300.00",
+            "weight": "0.0245"
+          }
+        },
+        "concentration": {
+          "basis": "DIRECT_HOLDINGS_ONLY",
+          "hhi_securities_of_nav": "0.2906",
+          "look_through_status": "OVERLAP_NOT_ESTABLISHED",
+          "top1_weight": "0.5206",
+          "top5_weight": "0.7228",
+          "top_holdings": [
+            {
+              "security_id": "SYNIDX",
+              "weight": "0.5206"
+            },
+            {
+              "security_id": "SYNTECH",
+              "weight": "0.1286"
+            },
+            {
+              "security_id": "SYNMOON",
+              "weight": "0.0490"
+            },
+            {
+              "security_id": "SYNNEW",
+              "weight": "0.0245"
+            }
+          ],
+          "underlying_holdings": "UNDERLYING_HOLDINGS_INCOMPLETE"
+        },
+        "conservation_residual": "0.000000",
+        "nav": "134691.50",
+        "nav_exact": "134691.500000",
+        "report_currency": "THB",
+        "securities_value": "97350.00",
+        "settled_cash": "37341.50",
+        "stress_illustrative": {
+          "label": "ILLUSTRATIVE_NOT_FORECAST",
+          "not_evaluated": {
+            "LIQUIDITY_STRESS": "NOT_EVALUATED_LIQUIDITY_DATA_MISSING",
+            "SMALL_CAP_GROWTH_DRAWDOWN": "NOT_EVALUATED_SIZE_STYLE_DATA_MISSING",
+            "TECH_SELLOFF": "NOT_EVALUATED_SECTOR_DATA_MISSING"
+          },
+          "scenarios": [
+            {
+              "definition": "All non-cash securities -30%.",
+              "nav_delta": "-29205.00",
+              "nav_delta_share": "-0.2168",
+              "scenario": "EQUITY_DRAWDOWN_30"
+            },
+            {
+              "definition": "THEMATIC and SPECULATIVE securities -50%; UNKNOWN excluded and reported.",
+              "nav_delta": "-11962.50",
+              "nav_delta_share": "-0.0888",
+              "scenario": "THEMATIC_SPECULATIVE_DRAWDOWN_50"
+            },
+            {
+              "definition": "Foreign-currency exposure revalued -10% in reporting currency.",
+              "nav_delta": "-11469.15",
+              "nav_delta_share": "-0.0852",
+              "scenario": "REPORTING_CCY_APPRECIATION_10"
+            },
+            {
+              "definition": "Foreign-currency exposure revalued +10% in reporting currency.",
+              "nav_delta": "11469.15",
+              "nav_delta_share": "0.0852",
+              "scenario": "REPORTING_CCY_DEPRECIATION_10"
+            }
+          ],
+          "unknown_classified_value_excluded_from_thematic": "3300.00"
+        },
+        "unrealized_pnl": {
+          "cost_basis_value_coverage": "0.9661",
+          "limitations": [
+            "UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines",
+            "FX_COMPONENT_NOT_ESTABLISHED",
+            "ACQUISITION_HISTORY_NOT_ESTABLISHED"
+          ],
+          "lines": [
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Core"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNMOON",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNNEW",
+              "status": "COST_BASIS_UNKNOWN",
+              "sub_portfolio": "Unsorted"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNTECH",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            }
+          ],
+          "status": "PARTIAL_COST_BASIS",
+          "unrealized_pnl_security_currency_known_cost_subset": {
+            "USD": "30.00"
+          }
+        }
+      },
+      "USD": {
+        "accrued_interest_excluded_from_nav": "0.40",
+        "allocation_by_broker": {
+          "BANK_B": {
+            "value": "500.00",
+            "weight": "0.1225"
+          },
+          "BANK_C": {
+            "value": "606.06",
+            "weight": "0.1485"
+          },
+          "BROKER_A": {
+            "value": "2975.50",
+            "weight": "0.7290"
+          }
+        },
+        "allocation_by_classification": {
+          "CASH": {
+            "value": "1131.56",
+            "weight": "0.2772"
+          },
+          "CORE_DIVERSIFIED": {
+            "value": "2125.00",
+            "weight": "0.5206"
+          },
+          "SPECULATIVE": {
+            "value": "200.00",
+            "weight": "0.0490"
+          },
+          "THEMATIC": {
+            "value": "525.00",
+            "weight": "0.1286"
+          },
+          "UNKNOWN": {
+            "value": "100.00",
+            "weight": "0.0245"
+          }
+        },
+        "allocation_by_currency": {
+          "THB": {
+            "value": "606.06",
+            "weight": "0.1485"
+          },
+          "USD": {
+            "value": "3475.50",
+            "weight": "0.8515"
+          }
+        },
+        "allocation_by_role": {
+          "CASH_RESERVE": {
+            "value": "1106.06",
+            "weight": "0.2710"
+          },
+          "LONG_TERM": {
+            "value": "2975.50",
+            "weight": "0.7290"
+          }
+        },
+        "allocation_by_sub_portfolio": {
+          "BANK_FCD/(account cash)": {
+            "value": "500.00",
+            "weight": "0.1225"
+          },
+          "BANK_SAVINGS/(account cash)": {
+            "value": "606.06",
+            "weight": "0.1485"
+          },
+          "BROKER_A_MAIN/(account cash)": {
+            "value": "25.50",
+            "weight": "0.0062"
+          },
+          "BROKER_A_MAIN/Core": {
+            "value": "2000.00",
+            "weight": "0.4900"
+          },
+          "BROKER_A_MAIN/Theme": {
+            "value": "850.00",
+            "weight": "0.2083"
+          },
+          "BROKER_A_MAIN/Unsorted": {
+            "value": "100.00",
+            "weight": "0.0245"
+          }
+        },
+        "concentration": {
+          "basis": "DIRECT_HOLDINGS_ONLY",
+          "hhi_securities_of_nav": "0.2906",
+          "look_through_status": "OVERLAP_NOT_ESTABLISHED",
+          "top1_weight": "0.5206",
+          "top5_weight": "0.7228",
+          "top_holdings": [
+            {
+              "security_id": "SYNIDX",
+              "weight": "0.5206"
+            },
+            {
+              "security_id": "SYNTECH",
+              "weight": "0.1286"
+            },
+            {
+              "security_id": "SYNMOON",
+              "weight": "0.0490"
+            },
+            {
+              "security_id": "SYNNEW",
+              "weight": "0.0245"
+            }
+          ],
+          "underlying_holdings": "UNDERLYING_HOLDINGS_INCOMPLETE"
+        },
+        "conservation_residual": "0E-20",
+        "nav": "4081.56",
+        "nav_exact": "4081.56060606060606000000",
+        "report_currency": "USD",
+        "securities_value": "2950.00",
+        "settled_cash": "1131.56",
+        "stress_illustrative": {
+          "label": "ILLUSTRATIVE_NOT_FORECAST",
+          "not_evaluated": {
+            "LIQUIDITY_STRESS": "NOT_EVALUATED_LIQUIDITY_DATA_MISSING",
+            "SMALL_CAP_GROWTH_DRAWDOWN": "NOT_EVALUATED_SIZE_STYLE_DATA_MISSING",
+            "TECH_SELLOFF": "NOT_EVALUATED_SECTOR_DATA_MISSING"
+          },
+          "scenarios": [
+            {
+              "definition": "All non-cash securities -30%.",
+              "nav_delta": "-885.00",
+              "nav_delta_share": "-0.2168",
+              "scenario": "EQUITY_DRAWDOWN_30"
+            },
+            {
+              "definition": "THEMATIC and SPECULATIVE securities -50%; UNKNOWN excluded and reported.",
+              "nav_delta": "-362.50",
+              "nav_delta_share": "-0.0888",
+              "scenario": "THEMATIC_SPECULATIVE_DRAWDOWN_50"
+            },
+            {
+              "definition": "Foreign-currency exposure revalued -10% in reporting currency.",
+              "nav_delta": "-60.61",
+              "nav_delta_share": "-0.0148",
+              "scenario": "REPORTING_CCY_APPRECIATION_10"
+            },
+            {
+              "definition": "Foreign-currency exposure revalued +10% in reporting currency.",
+              "nav_delta": "60.61",
+              "nav_delta_share": "0.0148",
+              "scenario": "REPORTING_CCY_DEPRECIATION_10"
+            }
+          ],
+          "unknown_classified_value_excluded_from_thematic": "100.00"
+        },
+        "unrealized_pnl": {
+          "cost_basis_value_coverage": "0.9661",
+          "limitations": [
+            "UNREALIZED_PNL_NOT_ESTABLISHED for COST_BASIS_UNKNOWN lines",
+            "FX_COMPONENT_NOT_ESTABLISHED",
+            "ACQUISITION_HISTORY_NOT_ESTABLISHED"
+          ],
+          "lines": [
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Core"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNIDX",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNMOON",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNNEW",
+              "status": "COST_BASIS_UNKNOWN",
+              "sub_portfolio": "Unsorted"
+            },
+            {
+              "account_ref": "BROKER_A_MAIN",
+              "security_id": "SYNTECH",
+              "status": "OBSERVED_COST_BASIS",
+              "sub_portfolio": "Theme"
+            }
+          ],
+          "status": "PARTIAL_COST_BASIS",
+          "unrealized_pnl_security_currency_known_cost_subset": {
+            "USD": "30.00"
+          }
+        }
+      }
+    },
+    "classification_methodologies": {
+      "CASH_BALANCE": "Cash balance line; assigned automatically to CASH.",
+      "NOT_CLASSIFIED": "No evidence-backed classification supplied; bucket is UNKNOWN.",
+      "OWNER_DECLARED_WITH_EVIDENCE": "Owner-assigned bucket backed by a cited document (factsheet, prospectus, index rules)."
+    },
+    "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+    "evidence_source": "MANUAL_SNAPSHOT",
+    "fx_rates": [
+      {
+        "pair": "THB->USD",
+        "rate": "0.030303030303030303",
+        "source_id": "SYNTHETIC_FX_FIXTURE"
+      },
+      {
+        "pair": "USD->THB",
+        "rate": "33.00",
+        "source_id": "SYNTHETIC_FX_FIXTURE"
+      }
+    ],
+    "governance": {
+      "capital_authority_usd": "0.00",
+      "d5_eligible": false,
+      "order_controls": null,
+      "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
+      "trading_authority": "NONE"
+    },
+    "performance_reason": "SNAPSHOT_ONLY: no contribution, withdrawal or transfer history; TWR/XIRR undefined.",
+    "performance_status": "PERFORMANCE_NOT_ESTABLISHED",
+    "reconciliation": [
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "USD",
+        "difference": "0.00",
+        "security_id": "SYNIDX",
+        "sub_portfolio": "Core",
+        "tolerance": "0.105",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "",
+        "difference": "",
+        "security_id": "SYNIDX",
+        "sub_portfolio": "Theme",
+        "tolerance": "",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "NOT_DISPLAYED"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "USD",
+        "difference": "1.37",
+        "security_id": "SYNMOON",
+        "sub_portfolio": "Theme",
+        "tolerance": "0.255",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "UNEXPLAINED_DIFFERENCE"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "USD",
+        "difference": "0.00",
+        "security_id": "SYNNEW",
+        "sub_portfolio": "Unsorted",
+        "tolerance": "0.030",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
+      },
+      {
+        "account_ref": "BROKER_A_MAIN",
+        "currency": "THB",
+        "difference": "0.00000",
+        "security_id": "SYNTECH",
+        "sub_portfolio": "Theme",
+        "tolerance": "1.737500",
+        "tolerance_source": "DISPLAYED_PRECISION",
+        "verdict": "CONSISTENT_WITHIN_DISPLAY_ROUNDING"
+      }
+    ],
+    "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
+    "snapshot_content_sha256": "ab772e3ccf92c8abe091e5f3985732ba5bba1c141a5cb7e930ac6463f10f942f",
+    "snapshot_id": "SYN_UPI_V1",
+    "stale_after_days": 7,
+    "support_state": "SNAPSHOT_ONLY",
+    "time_alignment": {
+      "asynchronous_prices": "NOT_SUPPORTED_V1_1",
+      "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+      "observation_lag_days": 2,
+      "observed_at": "2026-11-01T09:00:00+07:00",
+      "price_and_fx_dates": "SINGLE_VALUATION_DATE",
+      "price_published_at": {
+        "SYNIDX": "2026-10-30T16:00:00-04:00"
+      },
+      "valuation_date": "2026-10-30"
+    },
+    "valuation_age_days": 0,
+    "valuation_date": "2026-10-30",
+    "valuation_stale": false
+  },
+  "B_long_term": {
+    "contribution_first": {
+      "allocation": {
+        "CASH": "878.73",
+        "CORE_DIVERSIFIED": "5121.27",
+        "SPECULATIVE": "0.00",
+        "THEMATIC": "0.00",
+        "UNKNOWN": "0.00"
+      },
+      "contribution": "6000.00",
+      "label": "ILLUSTRATIVE_ALLOCATION_NOT_AN_ORDER",
+      "residual_drift": {
+        "CASH": "-0.0283",
+        "CORE_DIVERSIFIED": "-0.1652",
+        "SPECULATIVE": "0.0469",
+        "THEMATIC": "0.1231",
+        "UNKNOWN": "0.0235"
+      },
+      "rounding_policy": "LARGEST_REMAINDER_CENTS_TIE_BY_BUCKET_NAME",
+      "sells": "NONE",
+      "weights_after": {
+        "CASH": "0.2717",
+        "CORE_DIVERSIFIED": "0.5348",
+        "SPECULATIVE": "0.0469",
+        "THEMATIC": "0.1231",
+        "UNKNOWN": "0.0235"
+      }
+    },
+    "policy_families": {
+      "A_HOLD_CURRENT": {
+        "description": "Keep current holdings; contribute to cash only.",
+        "example_instruments": []
+      },
+      "B_GLOBAL_EQUITY": {
+        "description": "Single global equity index fund.",
+        "example_instruments": [
+          "VT"
+        ]
+      },
+      "C_US_CORE_PLUS_EX_US": {
+        "description": "US broad index plus ex-US index.",
+        "example_instruments": [
+          "VOO",
+          "VXUS"
+        ]
+      },
+      "D_EQUITY_PLUS_DEFENSIVE": {
+        "description": "Broad equity plus bonds or T-bills.",
+        "example_instruments": [
+          "VT",
+          "BND",
+          "BIL"
+        ]
+      },
+      "E_CASH_ACCUMULATION": {
+        "description": "Accumulate cash/reserve before any investing.",
+        "example_instruments": [
+          "BIL"
+        ]
+      }
+    },
+    "policy_note": "DESCRIPTIVE_ONLY: families are not ranked, not recommended and not suitability-assessed.",
+    "sub_portfolios": {
+      "BROKER_A_MAIN/(account cash)": {
+        "value": "841.50",
+        "weight": "0.0062"
+      },
+      "BROKER_A_MAIN/Core": {
+        "value": "66000.00",
+        "weight": "0.4900"
+      },
+      "BROKER_A_MAIN/Theme": {
+        "value": "28050.00",
+        "weight": "0.2083"
+      },
+      "BROKER_A_MAIN/Unsorted": {
+        "value": "3300.00",
+        "weight": "0.0245"
+      }
+    }
+  },
+  "C_quant_workspace": {
+    "budget": {
+      "authorization": "NOT_AUTHORIZED",
+      "budget_thb": "8000.00",
+      "fundable_from_reserve_excess": false,
+      "label": "HYPOTHETICAL_RESEARCH_BUDGET",
+      "months_from_residual_after_planned_contribution": 1,
+      "reserve_funding": "FORBIDDEN"
+    },
+    "new_strategies": "NONE_CREATED",
+    "paper_or_live_connectivity": "DISABLED",
+    "quant_accounts": [],
+    "real_capital_authority_usd": "0.00",
+    "required_benchmarks": [
+      "CASH",
+      "BUY_AND_HOLD",
+      "EQUAL_WEIGHT"
+    ],
+    "required_validation": [
+      "DSR",
+      "CPCV",
+      "PBO"
+    ],
+    "status": "RESEARCH_ONLY_NOT_AUTHORIZED",
+    "webull_openapi": "INTERFACE_NOT_DOCUMENTED: EXTERNAL_RESEARCH_REQUIRED (no credentials, no endpoints called)"
+  },
+  "D_financial_capacity": {
+    "capacity_status": "SURPLUS_POSITIVE",
+    "flexible_contribution_thb": "2000.00",
+    "horizon_years": 7,
+    "monthly_need_thb": "10000.00",
+    "monthly_surplus_thb": "15000.00",
+    "notes": [
+      "Contributions are not profit; no return forecast is made.",
+      "Reserve target and horizon are owner declarations; ACASH does not infer risk tolerance."
+    ],
+    "quant_budget": {
+      "authorization": "NOT_AUTHORIZED",
+      "budget_thb": "8000.00",
+      "fundable_from_reserve_excess": false,
+      "label": "HYPOTHETICAL_RESEARCH_BUDGET",
+      "months_from_residual_after_planned_contribution": 1,
+      "reserve_funding": "FORBIDDEN"
+    },
+    "reserve": {
+      "coverage_months": "2.00",
+      "current_thb": "20000.00",
+      "effective_thb": "20000.00",
+      "exceptional_expenses_12m_thb": "0.00",
+      "shortfall_thb": "10000.00",
+      "status": "RESERVE_SHORTFALL",
+      "target_thb": "30000.00"
+    },
+    "scenarios": [
+      {
+        "monthly_contribution_thb": "5000.00",
+        "months_to_reserve_target_from_residual": 1,
+        "residual_after_contribution_thb": "10000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "7500.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "7500.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "10000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "5000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "6000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "9000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      }
+    ],
+    "v38_route_costs_per_contribution": {
+      "10000": {
+        "input_hash": "3935bd333c835d9656936d289bbd776f129f4190831a87663490f699fffa0236",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "285.88",
+            "known_friction_thb": "320.1032",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "265.33",
+            "known_friction_thb": "1015.9262",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "281.30",
+            "known_friction_thb": "475.1820",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "295.14",
+            "known_friction_thb": "6.5596",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "295.01",
+            "known_friction_thb": "10.9614",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      },
+      "5000": {
+        "input_hash": "2e9af32685bf911316d6e9cbd599b23333efab09103e7684eb6123590cafc4dc",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "138.89",
+            "known_friction_thb": "297.1846",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "118.42",
+            "known_friction_thb": "990.2988",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "134.32",
+            "known_friction_thb": "451.9248",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "147.57",
+            "known_friction_thb": "3.2798",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "147.50",
+            "known_friction_thb": "5.6500",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      },
+      "7500": {
+        "input_hash": "613a4a517082e5903f3fae91baa06fc9e2826b1bd18c48be4552011acfd4059e",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "212.49",
+            "known_friction_thb": "305.0886",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "191.94",
+            "known_friction_thb": "1000.9116",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "207.90",
+            "known_friction_thb": "460.5060",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "221.35",
+            "known_friction_thb": "5.0890",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "221.26",
+            "known_friction_thb": "8.1364",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      }
+    }
+  },
+  "E_decision": {
+    "conclusion": "NO_ACTION_PENDING_EVIDENCE",
+    "orders_generated": 0,
+    "reasons": [
+      "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
+      "OVERLAP_NOT_ESTABLISHED: no dated constituent weights.",
+      "COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.",
+      "UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.",
+      "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
+      "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
+      "GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc)."
+    ],
+    "v38_decision_pack": {
+      "pack_sha256": "31d381a296303aaf49e1d373f160d48654b14ed35a7308235024ce794d38d46b",
+      "pack_version": "V38_DECISION_PACK_1",
+      "path": "docs/research/evidence/v38_investor_decision_pack_20261101.json"
+    }
+  },
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "governance": {
+    "D5_REAL_ADMISSION": "NOT_ADMITTED",
+    "EXECUTION_AUTHORITY_FROM_EVIDENCE": "NONE",
+    "HYP_003": "TERMINALLY_FALSIFIED",
+    "LANE_A_B": "UNISSUED",
+    "NO_REAL_ORDERS": true,
+    "REAL_CAPITAL_AUTHORITY_USD": "0.00",
+    "capital_authority_usd": "0.00",
+    "d5_eligible": false,
+    "order_controls": null,
+    "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
+    "trading_authority": "NONE"
+  },
+  "pack_sha256": "da4003ce0d078705190badbe514a0576f06396f802b44d45256287d87f12dc8d",
+  "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
+}

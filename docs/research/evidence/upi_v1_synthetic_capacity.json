@@ -1,0 +1,14 @@
+{
+  "schema": "ACASH_PRIVATE_CAPACITY_V1",
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "monthly_income_thb": "25000",
+  "essential_expenses_thb": "9000",
+  "obligations_thb": "1000",
+  "emergency_reserve_thb": "20000",
+  "reserve_target_months": "3",
+  "planned_contribution_thb": "6000",
+  "flexible_contribution_thb": "2000",
+  "exceptional_expenses_12m_thb": "0",
+  "horizon_years": 7,
+  "quant_budget_thb": "8000"
+}
