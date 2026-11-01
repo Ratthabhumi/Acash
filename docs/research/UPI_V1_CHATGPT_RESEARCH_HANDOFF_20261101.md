@@ -3,40 +3,68 @@
 Each item is a question the code cannot answer without external sources. Return
 answers with source URL, publication/effective date and quoted text.
 
+Facts marked "owner-supplied" were returned by external research (ChatGPT) on
+2026-11-01 and are recorded as received. The coding agent did not verify them and
+no code depends on them.
+
 ## 1. Webull Thailand OpenAPI (interface documentation only)
 
 Source: https://developer.webull.co.th/apis/docs/
 
-- Which endpoints are read-only (account balances, positions, order history, market data)? List path, method, auth scheme.
-- Is market data separately entitled or billed? Any subscription cost?
-- Does a read-only scope exist without trading permission?
-- Rate limits and data retention for transaction history.
+Owner-supplied: read-only account/data APIs exist; the historical-orders endpoint
+covers 7 days; market data requires a separate subscription; data API rate limit
+300 requests / 60 s.
+
+Still open:
+- Exact read-only endpoint list (path, method, auth scheme) and whether a read-only scope exists without trading permission.
+- Transaction history beyond 7 days (dividends, withholding, FX, fees): available through any endpoint or export?
+- Market-data subscription cost and terms.
 
 Constraint: documentation only. No credentials, no calls, no paper/live activation.
+Engineering status: BLOCKED_BY_AUTHORIZATION (broker connectivity is not authorized).
 
-## 2. Transaction exports (needed for V2 performance)
+## 2. Transaction exports (needed for V2 replay of real data)
 
-- Dime!: can the app export transaction history (buys, sells, dividends, withholding tax, FX conversions, fees) as CSV/PDF? Column list?
+Owner-supplied: Dime! and Webull export formats are unverified.
+
+- Dime!: can the app export transaction history (buys, sells, dividends, withholding tax, FX conversions, fees) as CSV/PDF? Column list, date/time zone, decimal format?
 - Webull Thailand: same question.
-- Bank FCD statement format: does it show interest accrual vs paid?
+- Bank FCD statement: does it show interest accrual vs paid?
+
+V2 accepts only `ACASH_CANONICAL_TRANSACTIONS_V1` JSON. A broker mapping contract
+can be written only after a real redacted sample format is supplied.
 
 ## 3. Look-through data
 
-- Free, dated constituent weights for VOO, VT, VXUS, BND, BIL (issuer holdings files): URL, update frequency, licence terms.
+Owner-supplied candidate sources: Vanguard issuer holdings files, SEC N-PORT
+filings, TickerInside (licence check required).
 
-## 4. Research utilization matrix inputs
+Still open: licence terms permitting local storage, update frequency and as-of date
+semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 
-For each, confirm the specific feature ACASH should mirror and whether the description below is accurate:
+## 4. Research utilization matrix
 
-| Reference | Feature mirrored in UPI V1 | Status |
+| Reference | Feature mirrored | Status |
 |---|---|---|
-| Morningstar X-Ray | Allocation by bucket, concentration, overlap | Direct-holdings only; overlap NOT_ESTABLISHED |
-| Portfolio Performance / Sharesight | Multi-account book, TWR/XIRR from transactions | Book done; performance needs V2 transactions |
-| IBKR PortfolioAnalyst | Consolidated NAV across accounts | Done (snapshot) |
-| Bloomberg PORT / Aladdin | Illustrative scenario stress | Simple parametric shocks only |
-| Wealthfront | Cash-flow/reserve planning, contribution-first rebalancing | Done (no forecasts) |
-| QuantConnect LEAN | Backtest benchmarks | Not used; existing ACASH engine retained |
+| IBKR PortfolioAnalyst | Consolidated NAV across accounts (snapshot) | IMPLEMENTED_AND_TESTED |
+| Portfolio Performance / Sharesight | Transaction ledger, FIFO lots, TWR/XIRR from flows | IMPLEMENTED_AND_TESTED (synthetic only, V2) |
+| Wealthfront | Reserve planning, contribution-first allocation (cent-exact) | IMPLEMENTED_AND_TESTED |
+| Morningstar X-Ray | Allocation, concentration | PARTIALLY_IMPLEMENTED (direct holdings only; look-through WAITING_FOR_EVIDENCE) |
+| Bloomberg PORT / Aladdin | Scenario stress | PARTIALLY_IMPLEMENTED (illustrative parametric shocks only) |
+| Benchmark-relative performance | Benchmark comparison | WAITING_FOR_EVIDENCE (no admitted benchmark series) |
+| FX attribution | Currency vs local return split | DOCUMENTED_ONLY (FX_ATTRIBUTION_NOT_ESTABLISHED) |
+| Webull read-only API | Automated position import | WAITING_FOR_EVIDENCE + authorization |
+| Dime!/Webull exports | Native import mapping | WAITING_FOR_EVIDENCE |
+| Thai/US tax | After-tax return | DOCUMENTED_ONLY |
+| QuantConnect LEAN | Backtest engine | NOT_RELEVANT_CURRENT_SCOPE |
 
-## 5. Thai tax treatment (owner decision support)
+## 5. Tax treatment (owner decision support)
 
-- Withholding tax on US ETF dividends for Thai residents via Dime!/Webull; treatment of foreign-sourced income remitted to Thailand (2024+ rules). Effective dates.
+Owner-supplied: US dividend withholding 30% unless a treaty rate applies via
+W-8BEN; Thai foreign-sourced income rules changed from 2024 and need
+product-specific interpretation.
+
+Still open: the Thailand–US treaty dividend rate as applied by Dime!/Webull custody
+chains; whether remittance timing of FCD balances triggers Thai assessable income;
+effective dates. V2 records DIVIDEND_WITHHOLDING as observed amounts only and makes
+no tax computation.

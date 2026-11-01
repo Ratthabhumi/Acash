@@ -43,23 +43,32 @@ def monthly_contribution_schedule(sessions: Sequence[date], amount: Decimal) -> 
     return {day: amount for month, day in firsts.items() if month != initial_month}
 
 
+def twr_levels(initial_nav: Decimal, navs: Sequence[Tuple[date, Decimal]], flows: Mapping[date, Decimal]) -> List[Decimal]:
+    """Chained index with r_t = NAV_t / (NAV_{t-1} + CF_t) - 1, base ``initial_nav``.
+
+    Flows are credited at the start of the period that ends on their date.
+    """
+    pending = dict(flows)
+    index: List[Decimal] = []
+    prior_nav, level = initial_nav, initial_nav
+    for session, nav in navs:
+        start = prior_nav + pending.pop(session, ZERO)
+        if start <= ZERO:
+            raise DataContractError(f"TWR_NONPOSITIVE_START_VALUE: {session}.")
+        level = level * nav / start
+        index.append(level)
+        prior_nav = nav
+    if pending:
+        raise DataContractError(f"TWR_FLOW_OUTSIDE_CURVE: {sorted(pending)[0]}.")
+    return index
+
+
 def twr_index(result: D6Result, initial_nav: Decimal) -> List[Decimal]:
     """Chained index with r_t = NAV_t / (NAV_{t-1} + CF_t) - 1, base ``initial_nav``."""
     flows = dict(result.contributions)
     if len(flows) != len(result.contributions):
         raise DataContractError("TWR_DUPLICATE_CONTRIBUTION_SESSION.")
-    index: List[Decimal] = []
-    prior_nav, level = initial_nav, initial_nav
-    for record in result.nav_curve:
-        start = prior_nav + flows.pop(record.session, ZERO)
-        if start <= ZERO:
-            raise DataContractError(f"TWR_NONPOSITIVE_START_VALUE: {record.session}.")
-        level = level * record.nav / start
-        index.append(level)
-        prior_nav = record.nav
-    if flows:
-        raise DataContractError(f"TWR_FLOW_OUTSIDE_CURVE: {sorted(flows)[0]}.")
-    return index
+    return twr_levels(initial_nav, [(r.session, r.nav) for r in result.nav_curve], flows)
 
 
 def xirr(flows: Sequence[Tuple[date, Decimal]]) -> float:
