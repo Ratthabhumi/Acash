@@ -152,6 +152,15 @@ export const MESSAGES_TH: Record<string, string> = {
   PREFLIGHT_BLOCKED: 'ถูกระงับโดยการตรวจสิทธิ์',
   GENERATION_FAILED: 'สร้างรายงานไม่สำเร็จ ข้อมูลเดิมยังอยู่ครบ',
   WRITE_FAILED: 'บันทึกไฟล์ไม่สำเร็จ ไฟล์เดิมยังอยู่ครบ',
+  WRITE_FAILED_ROLLED_BACK: 'บันทึกไม่สำเร็จ ระบบคืนค่าไฟล์ทั้งสองเป็นชุดเดิมแล้ว',
+  WRITE_FAILED_RECOVERY_PENDING: 'บันทึกไม่สำเร็จและคืนค่ายังไม่ครบ ระบบจะกู้คืนอัตโนมัติก่อนการบันทึกหรือสร้างรายงานครั้งถัดไป (สำรองอยู่ใน data/private/backups)',
+  INPUT_RECOVERY_REQUIRED: 'มีการบันทึกครั้งก่อนที่ค้างอยู่และกู้คืนอัตโนมัติไม่ได้ ดูวิธีกู้คืนใน docs/research/UPI_PRIVATE_PILOT_RUNBOOK.md',
+  INPUT_PATH_REFUSED: 'ปฏิเสธการเขียน: พบ symlink/junction หรือ path ผิดปกติใน data/private',
+  INPUT_PATH_LINK_REFUSED: 'ปฏิเสธการเขียน: พบ symlink/junction ใน data/private',
+  CONFIRMATION_REQUIRED: 'ต้องติ๊กยืนยันการแทนที่ข้อมูลก่อนบันทึก',
+  GENERATION_PUBLISH_INCOMPLETE: 'เผยแพร่รายงานไม่ครบ ให้กดสร้างรายงานใหม่อีกครั้ง',
+  GENERATION_INPUTS_CHANGED: 'ข้อมูลถูกแก้ระหว่างสร้างรายงาน รายงานเดิมยังอยู่ ให้กดสร้างใหม่',
+  EVIDENCE_ONLY_REPORT: 'รายงานจะเป็นแบบยอดรวมตามที่แอปแสดง (EVIDENCE_ONLY) ยังไม่แยกรายหลักทรัพย์',
 };
 
 export const messageTh = (code: string) => MESSAGES_TH[code] ?? `ข้อมูลไม่ผ่านการตรวจ (${code})`;

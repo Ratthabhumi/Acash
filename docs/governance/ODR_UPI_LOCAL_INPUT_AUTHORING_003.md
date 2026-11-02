@@ -24,10 +24,46 @@ Validation and report generation stay under ODR-001 and need no new authority.
 
 ## 3. Runtime enforcement
 
-`acash.dashboard_api.private_input_server` writes only while both ODR-001 and this record
-are RATIFIED; every write request re-reads both records. While this record is unratified,
-the wizard can still validate a draft in memory, and the Owner can keep editing the two
-files directly. The wizard never offers a browser download of private data.
+`acash.dashboard_api.private_input` (served by `private_view_server`) writes only while
+ODR-001 and this record are RATIFIED. The check reads both records again on every write
+request and once more before each file replacement. It refuses this record unless all of the
+following hold:
+
+- `decision_id` and `capability` are exact;
+- `ratified_on` is an ISO date;
+- `requires` is exactly ODR-001;
+- `scope_schemas` and `scope_files` equal the two entries in section 2.
+
+A broader, narrower or malformed record counts as not ratified. Revocation stops the write
+before the next file is replaced.
+
+A save is one request (`PUT /api/upi/input/inputs`) carrying both documents. The steps are:
+
+1. Both documents are validated, the request must confirm the replacement, and both base
+   revisions must match the files on disk.
+2. Both files are staged next to their targets, and the current files are copied to
+   `data/private/backups/`.
+3. A transaction journal (`data/private/.input_transaction.json`) is written.
+4. Each file is replaced atomically.
+
+A failure after the first replacement restores both files from the journal. A journal left
+by a crash is recovered before any later write or report generation. If recovery is not
+possible, writes and generation are refused (`INPUT_RECOVERY_REQUIRED`). Two separate file
+replacements are not one atomic operation; the journal makes a partial pair recoverable and
+blocks its use, but does not make it impossible.
+
+Writes are refused if `data`, `data/private`, its subdirectories or the target file is a
+symbolic link or junction. A directory swapped between this check and the replacement is a
+residual risk; it needs local write access to the Owner's profile.
+
+Report generation (ODR-001) builds the pack and view in a new directory under
+`data/private/out/generations/`, verifies the view hash, publishes `upi_view.json`, and then
+publishes `report_generation.json`. The record holds the input revisions and hashes. On any
+failure the previous view stays in place.
+
+While this record is unratified, the wizard can still validate a draft in memory, and the
+Owner can keep editing the two files directly. The wizard never offers a browser download of
+private data.
 
 ## 4. Ratification
 

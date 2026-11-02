@@ -1,11 +1,13 @@
-"""Setup Wizard input routes: ODR gating, strict persistence and request security (synthetic, isolated roots)."""
+"""Setup Wizard input routes: ODR gating and scope, transactional saves, report publication and request
+security (synthetic fixtures, isolated roots)."""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import pytest
 
@@ -20,6 +22,7 @@ TOKEN = "s" * 43
 ORIGIN = srv.ALLOWED_ORIGINS[0]
 SNAPSHOT = Path("docs/research/evidence/upi_v1_2_synthetic_snapshot.json")
 CAPACITY = Path("docs/research/evidence/upi_v1_synthetic_capacity.json")
+BOTH = {"snapshot": pi.ABSENT, "capacity": pi.ABSENT}
 
 
 def _owner(path: Path) -> Dict[str, Any]:
@@ -28,25 +31,39 @@ def _owner(path: Path) -> Dict[str, Any]:
     return doc
 
 
-def _record(root: Path, rel: Path, capability: str, status: str, scope: Optional[List[str]] = None) -> None:
-    record = root / rel
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(json.dumps({"capability": capability, "status": status, "ratified_by": "OWNER",
-                                  "ratified_on": "2026-11-02", "scope_schemas": scope or []}), encoding="utf-8")
-
-
 def _odr1(root: Path, status: str = "RATIFIED") -> None:
-    _record(root, po.AUTHORIZATION_RECORD, po.AUTHORIZED_CAPABILITY, status, [po.SCHEMA_V1_2, CAPACITY_SCHEMA])
+    record = root / po.AUTHORIZATION_RECORD
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": status, "ratified_by": "OWNER",
+                                  "ratified_on": "2026-11-02", "scope_schemas": [po.SCHEMA_V1_2, CAPACITY_SCHEMA]}),
+                      encoding="utf-8")
 
 
-def _odr3(root: Path, status: str = "RATIFIED") -> None:
-    _record(root, pi.AUTHORING_RECORD, pi.AUTHORING_CAPABILITY, status, [po.SCHEMA_V1_2, CAPACITY_SCHEMA])
+def _odr3_doc(status: str = "RATIFIED") -> Dict[str, Any]:
+    return {"decision_id": pi.AUTHORING_DECISION_ID, "capability": pi.AUTHORING_CAPABILITY, "status": status,
+            "ratified_by": "OWNER", "ratified_on": "2026-11-02", "requires": [pi.OBSERVATION_DECISION_ID],
+            "scope_schemas": [po.SCHEMA_V1_2, CAPACITY_SCHEMA],
+            "scope_files": ["data/private/snapshot.json", "data/private/capacity.json"]}
+
+
+def _odr3(root: Path, status: str = "RATIFIED", **changes: Any) -> None:
+    doc = {**_odr3_doc(status), **changes}
+    record = root / pi.AUTHORING_RECORD
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({k: v for k, v in doc.items() if v is not ...}), encoding="utf-8")
 
 
 @pytest.fixture
 def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     return tmp_path
+
+
+@pytest.fixture
+def authorized(root: Path) -> Path:
+    _odr1(root)
+    _odr3(root)
+    return root
 
 
 def _headers(**extra: str) -> Dict[str, str]:
@@ -63,8 +80,15 @@ def _call(service: pi.InputService, method: str, name: str, body: Any = None, ra
     return status, json.loads(out) if out else None
 
 
-def _save(service: pi.InputService, kind: str, doc: Any, base: str = pi.ABSENT) -> Any:
-    return _call(service, "PUT", kind, {"document": doc, "base_revision": base, "confirm_replace": True})
+def _save(service: pi.InputService, snapshot: Any = None, capacity: Any = None,
+          bases: Optional[Dict[str, str]] = None) -> Any:
+    return _call(service, "PUT", "inputs", {"snapshot": snapshot or _owner(SNAPSHOT),
+                                            "capacity": capacity or _owner(CAPACITY),
+                                            "base_revisions": bases or BOTH, "confirm_replace": True})
+
+
+def _files(root: Path) -> Dict[str, str]:
+    return {kind: pi._revision(root / pi.PRIVATE_DIR / name) for kind, (name, _) in pi.INPUTS.items()}
 
 
 def _leaves(node: Any) -> Iterator[str]:
@@ -84,77 +108,190 @@ def test_reading_needs_odr_001_and_saving_also_needs_odr_003(root: Path) -> None
     assert (status, body["status"], body["odr_001"]) == (403, "AUTHORIZATION_REQUIRED", "RECORD_UNREADABLE")
     _odr1(root)
     status, body = _call(service, "GET", "status")
-    assert (status, body["odr_003"], body["revisions"]) == (200, "RECORD_UNREADABLE",
-                                                            {"snapshot": pi.ABSENT, "capacity": pi.ABSENT})
+    assert (status, body["odr_003"], body["revisions"], body["report"]) == (200, "RECORD_UNREADABLE", BOTH,
+                                                                            {"status": "NO_REPORT"})
     for state in ("PROPOSED_NOT_RATIFIED", "REVOKED"):
         _odr3(root, state)
-        status, body = _save(service, "snapshot", _owner(SNAPSHOT))
+        status, body = _save(service)
         assert (status, body["status"], body["odr_003"]) == (403, "AUTHORING_AUTHORIZATION_REQUIRED", state)
-    assert not (root / pi.PRIVATE_DIR / "snapshot.json").exists()
+    assert _files(root) == BOTH
     assert _call(service, "POST", "validate", {"snapshot": _owner(SNAPSHOT)})[1]["status"] == "VALID"
+    _odr3(root)
     _odr1(root, "REVOKED")
+    assert _save(service)[0] == 403 and _files(root) == BOTH
     assert _call(service, "POST", "validate", {"snapshot": _owner(SNAPSHOT)})[0] == 403
 
 
-def test_save_is_strict_atomic_and_detects_conflicts(root: Path) -> None:
-    _odr1(root)
-    _odr3(root)
-    service, path = pi.InputService(), root / pi.PRIVATE_DIR / "snapshot.json"
-    status, body = _save(service, "snapshot", _owner(SNAPSHOT))
+@pytest.mark.parametrize("changes, state", [
+    ({}, "RATIFIED"),
+    ({"decision_id": "ODR_SOMETHING_ELSE"}, "RECORD_IDENTITY_MISMATCH"),
+    ({"capability": "OWNER_TRADING_AUTHORIZED"}, "RECORD_CAPABILITY_MISMATCH"),
+    ({"ratified_by": "CODING_AGENT"}, "RECORD_INVALID"),
+    ({"ratified_on": "yesterday"}, "RECORD_INVALID"),
+    ({"requires": ...}, "RECORD_DEPENDENCY_INVALID"),
+    ({"requires": ["ODR_UPI_PRIVATE_TRANSACTIONS_002"]}, "RECORD_DEPENDENCY_INVALID"),
+    ({"scope_schemas": ...}, "RECORD_SCOPE_INVALID"),
+    ({"scope_schemas": [po.SCHEMA_V1_2]}, "RECORD_SCOPE_INVALID"),
+    ({"scope_schemas": [po.SCHEMA_V1_2, CAPACITY_SCHEMA, "ACASH_CANONICAL_TRANSACTIONS_V1"]}, "RECORD_SCOPE_INVALID"),
+    ({"scope_files": ...}, "RECORD_SCOPE_INVALID"),
+    ({"scope_files": ["data/private/snapshot.json"]}, "RECORD_SCOPE_INVALID"),
+    ({"scope_files": ["data/private/snapshot.json", "data/private/capacity.json", "data/private/x.json"]},
+     "RECORD_SCOPE_INVALID"),
+    ({"scope_files": ["data/private/snapshot.json", "../capacity.json"]}, "RECORD_SCOPE_INVALID"),
+])
+def test_odr_003_identity_dependency_and_scope_are_exact(authorized: Path, changes: Dict[str, Any], state: str) -> None:
+    _odr3(authorized, **changes)
+    assert pi.authoring_state() == state
+    status, body = _save(pi.InputService())
+    assert (status == 200) is (state == "RATIFIED")
+    if state != "RATIFIED":
+        assert body["status"] == "AUTHORING_AUTHORIZATION_REQUIRED" and _files(authorized) == BOTH
+
+
+def test_save_is_strict_confirmed_and_detects_conflicts(authorized: Path) -> None:
+    service = pi.InputService()
+    status, body = _save(service)
     assert (status, body["status"]) == (200, "SAVED")
-    first = body["revision"]
-    assert _call(service, "GET", "snapshot") == (200, {"status": "OK", "revision": first, "document": _owner(SNAPSHOT)})
-    assert _call(service, "GET", "capacity") == (404, {"status": "NO_INPUT", "revision": pi.ABSENT})
-    assert _save(service, "snapshot", _owner(SNAPSHOT))[1] == {"status": "REVISION_CONFLICT", "revision": first}
+    first = body["revisions"]
+    assert first == _files(authorized) and pi.ABSENT not in first.values()
+    assert _call(service, "GET", "snapshot") == (200, {"status": "OK", "revision": first["snapshot"],
+                                                       "document": _owner(SNAPSHOT)})
+    assert _save(service)[1] == {"status": "REVISION_CONFLICT", "revisions": first}
 
-    broken = _owner(SNAPSHOT)
-    broken["accounts"][0]["cash"][0]["amount"] = "REPLACE_WITH_AMOUNT"
-    status, body = _save(service, "snapshot", broken, first)
-    assert (status, body["status"]) == (422, "INVALID") and body["errors"][0]["code"].startswith("PRIVATE_")
+    broken = _owner(CAPACITY)
+    broken["essential_expenses_thb"] = "REPLACE_WITH_THB"
+    status, body = _save(service, capacity=broken, bases=first)
+    assert (status, body["status"], body["capacity"]["errors"][0]["code"]) == (422, "INVALID", "CAPACITY_MALFORMED_DECIMAL")
     synthetic = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-    assert _save(service, "snapshot", synthetic, first)[1]["errors"][0]["code"] == "INPUT_SNAPSHOT_SCHEMA_OR_DATA_CLASS"
-    assert pi._revision(path) == first
+    assert _save(service, snapshot=synthetic, bases=first)[1]["snapshot"]["errors"][0]["code"] == \
+        "INPUT_SNAPSHOT_SCHEMA_OR_DATA_CLASS"
+    assert _files(authorized) == first
 
-    request = {"document": _owner(SNAPSHOT), "base_revision": first, "confirm_replace": False}
-    assert _call(service, "PUT", "snapshot", request)[1]["status"] == "CONFIRMATION_REQUIRED"
-    assert _call(service, "PUT", "snapshot", {**request, "confirm_replace": True, "path": "x"})[1]["status"] == \
-        "REQUEST_FIELDS_INVALID"
+    request = {"snapshot": _owner(SNAPSHOT), "capacity": _owner(CAPACITY), "base_revisions": first,
+               "confirm_replace": False}
+    assert _call(service, "PUT", "inputs", request)[1]["status"] == "CONFIRMATION_REQUIRED"
+    for bad in ({**request, "confirm_replace": True, "path": "x"}, {**request, "confirm_replace": True,
+                                                                    "base_revisions": {"snapshot": "x"}}):
+        assert _call(service, "PUT", "inputs", bad)[1]["status"] == "REQUEST_FIELDS_INVALID"
 
     changed = _owner(SNAPSHOT)
     changed["snapshot_id"] = "OWNER_SNAPSHOT_TWO"
-    status, body = _save(service, "snapshot", changed, first)
-    assert (status, body["status"]) == (200, "SAVED") and body["revision"] != first
-    backups = list((root / pi.BACKUP_DIR).glob("snapshot-*.json"))
-    assert len(backups) == 1 and pi._revision(backups[0]) == first
-    assert not list(path.parent.glob(".*.tmp"))
+    status, body = _save(service, snapshot=changed, bases=first)
+    assert (status, body["status"]) == (200, "SAVED") and body["revisions"]["snapshot"] != first["snapshot"]
+    backups = sorted((authorized / pi.BACKUP_DIR).glob("*.json"))
+    assert {pi._revision(b) for b in backups} == set(first.values())
+    assert not list((authorized / pi.PRIVATE_DIR).glob(".*"))
 
 
-def test_backup_retention_and_failed_write_keep_the_valid_observation(root: Path,
-                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
-    _odr1(root)
-    _odr3(root)
+@pytest.mark.parametrize("fail_on", [1, 2])
+def test_failed_replacement_restores_the_previous_pair(authorized: Path, monkeypatch: pytest.MonkeyPatch,
+                                                       fail_on: int) -> None:
+    service = pi.InputService()
+    first = _save(service)[1]["revisions"]
+    real_replace, calls = os.replace, []
+
+    def flaky(src: Any, dst: Any) -> None:
+        if str(src).endswith(".staged"):
+            calls.append(dst)
+            if len(calls) == fail_on:
+                raise OSError("disk full")
+        real_replace(src, dst)
+    monkeypatch.setattr(os, "replace", flaky)
+    changed_snap, changed_cap = _owner(SNAPSHOT), _owner(CAPACITY)
+    changed_snap["snapshot_id"] = "OWNER_SNAPSHOT_TWO"
+    changed_cap["reserve_target_months"] = "6"
+    status, body = _save(service, changed_snap, changed_cap, first)
+    assert (status, body["status"]) == (500, "WRITE_FAILED_ROLLED_BACK")
+    assert _files(authorized) == first
+    assert not (authorized / pi.JOURNAL).exists() and not list((authorized / pi.PRIVATE_DIR).glob(".*.staged"))
+
+
+def test_interrupted_save_is_recovered_before_any_further_write_or_report(authorized: Path,
+                                                                         monkeypatch: pytest.MonkeyPatch) -> None:
+    service = pi.InputService()
+    first = _save(service)[1]["revisions"]
+    real_replace, calls = os.replace, []
+
+    def crash(src: Any, dst: Any) -> None:
+        if str(src).endswith(".staged"):
+            calls.append(dst)
+            if len(calls) == 2:
+                raise KeyboardInterrupt
+        real_replace(src, dst)
+    monkeypatch.setattr(os, "replace", crash)
+    changed = _owner(SNAPSHOT)
+    changed["snapshot_id"] = "OWNER_SNAPSHOT_TWO"
+    with pytest.raises(KeyboardInterrupt):
+        _save(service, snapshot=changed, bases=first)
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert (authorized / pi.JOURNAL).exists() and _files(authorized) != first
+    assert _call(service, "GET", "status")[1]["recovery_pending"] is True
+    assert pi.recover() == "RECOVERED" and _files(authorized) == first
+    (authorized / pi.JOURNAL).write_text("{not json", encoding="utf-8")
+    assert _save(service, bases=first)[1]["status"] == "INPUT_RECOVERY_REQUIRED"
+    assert pi.generate()[1]["status"] == "INPUT_RECOVERY_REQUIRED"
+    (authorized / pi.JOURNAL).write_text(json.dumps({"transaction": "0" * 16, "files": {
+        "snapshot": {"previous_revision": "x", "backup": "../../snapshot.json"},
+        "capacity": {"previous_revision": pi.ABSENT, "backup": None}}}), encoding="utf-8")
+    assert pi.recover() == "RECOVERY_REQUIRED" and _files(authorized) == first
+
+
+def test_revocation_between_validation_and_replacement_stops_the_write(authorized: Path,
+                                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    service = pi.InputService()
+    first = _save(service)[1]["revisions"]
+    real_backup = pi._backup
+
+    def revoke_then_backup(*args: Any) -> str:
+        _odr3(authorized, "REVOKED")
+        return real_backup(*args)
+    monkeypatch.setattr(pi, "_backup", revoke_then_backup)
+    changed = _owner(SNAPSHOT)
+    changed["snapshot_id"] = "OWNER_SNAPSHOT_TWO"
+    status, body = _save(service, snapshot=changed, bases=first)
+    assert (status, body["status"], body["odr_003"]) == (403, "AUTHORING_AUTHORIZATION_REQUIRED", "REVOKED")
+    assert _files(authorized) == first
+
+
+@pytest.mark.parametrize("link", ["data/private", "data/private/snapshot.json", "data/private/backups"])
+def test_links_inside_the_private_tree_are_refused(authorized: Path, tmp_path_factory: pytest.TempPathFactory,
+                                                   link: str) -> None:
+    outside = tmp_path_factory.mktemp("outside")
+    target = authorized / link
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if link.endswith("backups"):
+        assert _save(pi.InputService())[0] == 200
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        target.symlink_to(outside / "x.json" if link.endswith(".json") else outside,
+                          target_is_directory=not link.endswith(".json"))
+    except OSError:
+        if os.name != "nt" or link.endswith(".json"):
+            pytest.skip("symlink creation not permitted on this host")
+        import _winapi  # junctions need no privilege on Windows
+
+        _winapi.CreateJunction(str(outside), str(target))
+    status, body = _save(pi.InputService(), bases=_files(authorized) if link.endswith("backups") else None)
+    assert (status, body["status"]) == (403, "INPUT_PATH_REFUSED")
+    assert body["code"] == "INPUT_PATH_LINK_REFUSED" and not list(outside.iterdir())
+
+
+def test_backup_retention_keeps_recent_copies(authorized: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pi, "BACKUPS_KEPT", 2)
-    service, path = pi.InputService(), root / pi.PRIVATE_DIR / "capacity.json"
-    revision = pi.ABSENT
+    service, bases = pi.InputService(), BOTH
     for months in ("3", "4", "5", "6"):
-        doc = _owner(CAPACITY)
-        doc["reserve_target_months"] = months
-        status, body = _save(service, "capacity", doc, revision)
+        cap = _owner(CAPACITY)
+        cap["reserve_target_months"] = months
+        status, body = _save(service, capacity=cap, bases=bases)
         assert status == 200
-        revision = body["revision"]
-    assert len(list((root / pi.BACKUP_DIR).glob("capacity-*.json"))) == 2
-
-    def fail(*_: Any) -> None:
-        raise OSError("disk full")
-    monkeypatch.setattr(os, "replace", fail)
-    doc = _owner(CAPACITY)
-    status, body = _save(service, "capacity", doc, revision)
-    assert (status, body) == (500, {"status": "WRITE_FAILED", "code": "OSError"})
-    assert pi._revision(path) == revision and not list(path.parent.glob(".*.tmp"))
+        bases = body["revisions"]
+    backups = authorized / pi.BACKUP_DIR
+    assert len(list(backups.glob("capacity-*.json"))) == 2 and len(list(backups.glob("snapshot-*.json"))) == 2
+    assert (authorized / pi.PRIVATE_DIR / "capacity.json").is_file()
 
 
-def test_validation_reports_codes_and_locations_never_values(root: Path) -> None:
-    _odr1(root)
+def test_validation_reports_codes_and_locations_never_values(authorized: Path) -> None:
     service = pi.InputService()
     snapshot, capacity = _owner(SNAPSHOT), _owner(CAPACITY)
     snapshot["fx_rates"] = []
@@ -167,52 +304,87 @@ def test_validation_reports_codes_and_locations_never_values(root: Path) -> None
     amounts = {v for v in _leaves(_owner(SNAPSHOT)) if any(c.isdigit() for c in v) and "." in v and len(v) >= 4}
     assert amounts and not [a for a in amounts if a in text]
     assert _call(service, "POST", "validate", {"other": {}})[1]["status"] == "REQUEST_FIELDS_INVALID"
+    totals_only = json.loads(Path("docs/research/evidence/upi_v1_2_synthetic_totals_only.json").read_text("utf-8"))
+    totals_only["data_class"] = "OWNER_PRIVATE_OBSERVATION"
+    body = _call(service, "POST", "validate", {"snapshot": totals_only})[1]
+    assert body["status"] == "VALID" and "EVIDENCE_ONLY_REPORT" in {w["code"] for w in body["snapshot"]["warnings"]}
 
 
-def test_generate_runs_the_canonical_pipeline_and_opens_private_mode(root: Path,
-                                                                    capsys: pytest.CaptureFixture[str]) -> None:
-    _odr1(root)
-    _odr3(root)
+def test_generate_publishes_one_consistent_generation(authorized: Path, capsys: pytest.CaptureFixture[str]) -> None:
     service = pi.InputService()
-    view = root / srv.DEFAULT_VIEW
+    view = authorized / srv.DEFAULT_VIEW
     assert rd.readiness(view)["private_mode"] == "SETUP"
     status, body = _call(service, "POST", "generate", {})
     assert (status, body["status"]) == (422, "PREFLIGHT_INVALID") and not view.exists()
-    assert _save(service, "snapshot", _owner(SNAPSHOT))[0] == 200
-    assert _save(service, "capacity", _owner(CAPACITY))[0] == 200
+    revisions = _save(service)[1]["revisions"]
     assert _call(service, "POST", "generate", {"force": True})[1]["status"] == "REQUEST_FIELDS_INVALID"
     status, body = _call(service, "POST", "generate", {})
     assert (status, body["status"]) == (200, "GENERATED"), body
-    assert srv.load_view(view)[0] == "READY"
-    assert rd.readiness(view)["private_mode"] == "READY"
+    assert srv.load_view(view)[0] == "READY" and rd.readiness(view)["private_mode"] == "READY"
+    report = _call(service, "GET", "status")[1]["report"]
+    assert (report["status"], report["generation_id"], report["inputs_changed_since"]) == (
+        "CONSISTENT", body["generation_id"], False)
+    record = json.loads((view.parent / pi.GENERATION_RECORD).read_text(encoding="utf-8"))
+    assert record["input_revisions"] == revisions
+    assert (view.parent / "generations" / body["generation_id"] / "upi_v1_pack.json").is_file()
     assert capsys.readouterr() == ("", "")
+
+
+@pytest.mark.parametrize("break_step", ["build_view", "write_view", "publish_record"])
+def test_failed_generation_keeps_the_previous_report(authorized: Path, monkeypatch: pytest.MonkeyPatch,
+                                                     break_step: str) -> None:
+    service = pi.InputService()
+    _save(service)
+    first = _call(service, "POST", "generate", {})[1]["generation_id"]
+    view = authorized / srv.DEFAULT_VIEW
+    before = view.read_bytes()
+
+    def boom(*_: Any, **__: Any) -> Any:
+        raise OSError("disk full")
+    if break_step == "publish_record":
+        real: Callable[[Path, bytes], None] = pi._atomic_write
+
+        def fail_on_record(path: Path, data: bytes) -> None:
+            if path.name == pi.GENERATION_RECORD and path.parent.name == "out":
+                raise OSError("disk full")
+            real(path, data)
+        monkeypatch.setattr(pi, "_atomic_write", fail_on_record)
+    else:
+        monkeypatch.setattr(pi, break_step, boom)
+    status, body = _call(service, "POST", "generate", {})
+    assert (status, body["status"]) == (500, "GENERATION_FAILED")
+    report = _call(service, "GET", "status")[1]["report"]
+    assert view.read_bytes() == before and (report["status"], report["generation_id"]) == ("CONSISTENT", first)
+    assert [p.name for p in (view.parent / "generations").iterdir()] == [first]
 
 
 @pytest.mark.parametrize("method, name, raw, headers, expired, status, code", [
     ("GET", "status", b"", {"Host": "evil.example", "Origin": ORIGIN, srv.TOKEN_HEADER: TOKEN}, False, 421,
      "HOST_NOT_ALLOWED"),
-    ("PUT", "snapshot", b"{}", {"Host": f"127.0.0.1:{PORT}", "Origin": "http://evil.example",
-                                srv.TOKEN_HEADER: TOKEN, "Content-Type": "application/json"}, False, 403,
+    ("PUT", "inputs", b"{}", {"Host": f"127.0.0.1:{PORT}", "Origin": "http://evil.example",
+                              srv.TOKEN_HEADER: TOKEN, "Content-Type": "application/json"}, False, 403,
      "ORIGIN_NOT_ALLOWED"),
-    ("PUT", "snapshot", b"{}", {"Host": f"127.0.0.1:{PORT}", "Origin": ORIGIN,
-                                "Content-Type": "application/json"}, False, 401, "SESSION_TOKEN_REQUIRED"),
-    ("PUT", "snapshot", b"{}", None, True, 401, "SESSION_EXPIRED"),
-    ("PUT", "snapshot", b"{}", {**_headers(), "Content-Type": "text/plain"}, False, 415, "CONTENT_TYPE_NOT_ALLOWED"),
-    ("PUT", "snapshot", b"{" + b" " * po.MAX_INPUT_BYTES + b"}", None, False, 413, "PAYLOAD_TOO_LARGE"),
+    ("PUT", "inputs", b"{}", {"Host": f"127.0.0.1:{PORT}", "Content-Type": "application/json",
+                              srv.TOKEN_HEADER: TOKEN}, False, 403, "ORIGIN_NOT_ALLOWED"),
+    ("PUT", "inputs", b"{}", {"Host": f"127.0.0.1:{PORT}", "Origin": ORIGIN,
+                              "Content-Type": "application/json"}, False, 401, "SESSION_TOKEN_REQUIRED"),
+    ("PUT", "inputs", b"{}", {**_headers(), srv.TOKEN_HEADER: "wrong"}, False, 401, "SESSION_TOKEN_REQUIRED"),
+    ("PUT", "inputs", b"{}", None, True, 401, "SESSION_EXPIRED"),
+    ("PUT", "inputs", b"{}", {**_headers(), "Content-Type": "text/plain"}, False, 415, "CONTENT_TYPE_NOT_ALLOWED"),
+    ("PUT", "inputs", b"a=1", {**_headers(), "Content-Type": "application/x-www-form-urlencoded"}, False, 415,
+     "CONTENT_TYPE_NOT_ALLOWED"),
+    ("PUT", "inputs", b"{" + b" " * po.MAX_INPUT_BYTES + b"}", None, False, 413, "PAYLOAD_TOO_LARGE"),
     ("POST", "validate", b"{bad", None, False, 400, "MALFORMED_JSON"),
     ("GET", "status", b"{}", None, False, 400, "BODY_NOT_ALLOWED"),
-    ("DELETE", "snapshot", b"", None, False, 405, "METHOD_NOT_ALLOWED"),
-    ("PUT", "status", b"{}", None, False, 405, "METHOD_NOT_ALLOWED"),
-    ("PUT", "../snapshot", b"{}", None, False, 404, "NOT_FOUND"),
-    ("PUT", "snapshot?path=C:/x.json", b"{}", None, False, 404, "NOT_FOUND"),
+    ("DELETE", "inputs", b"", None, False, 405, "METHOD_NOT_ALLOWED"),
+    ("PUT", "snapshot", b"{}", None, False, 405, "METHOD_NOT_ALLOWED"),
+    ("PUT", "../inputs", b"{}", None, False, 404, "NOT_FOUND"),
+    ("PUT", "inputs?path=C:/x.json", b"{}", None, False, 404, "NOT_FOUND"),
     ("PUT", "upi_view", b"{}", None, False, 404, "NOT_FOUND"),
 ], ids=lambda value: value.decode()[:8] if isinstance(value, bytes) else None)
-def test_requests_are_refused_before_any_file_access(root: Path, monkeypatch: pytest.MonkeyPatch, method: str,
+def test_requests_are_refused_before_any_file_access(authorized: Path, monkeypatch: pytest.MonkeyPatch, method: str,
                                                      name: str, raw: bytes, headers: Any, expired: bool,
                                                      status: int, code: str) -> None:
-    _odr1(root)
-    _odr3(root)
-
     def never(*_: Any) -> None:
         raise AssertionError("file touched before request checks")
     monkeypatch.setattr(pi, "_input_path", never)
@@ -222,41 +394,45 @@ def test_requests_are_refused_before_any_file_access(root: Path, monkeypatch: py
 
 
 def test_preflight_cors_and_disabled_service(root: Path) -> None:
-    status, headers, _ = srv.respond("OPTIONS", pi.PREFIX + "snapshot", _headers(), TOKEN, Path("v.json"), PORT,
+    status, headers, _ = srv.respond("OPTIONS", pi.PREFIX + "inputs", _headers(), TOKEN, Path("v.json"), PORT,
                                      b"", pi.InputService())
-    assert (status, headers["Access-Control-Allow-Methods"]) == (204, "GET, PUT")
+    assert (status, headers["Access-Control-Allow-Methods"]) == (204, "PUT")
     assert "Content-Type" in headers["Access-Control-Allow-Headers"]
     status, _, body = srv.respond("GET", pi.PREFIX + "status", _headers(), TOKEN, Path("v.json"), PORT)
     assert (status, json.loads(body)) == (404, {"status": "NOT_FOUND"})
 
 
-def test_rate_limits_refuse_bursts(root: Path) -> None:
-    _odr1(root)
-    _odr3(root)
+def test_rate_limits_refuse_bursts(authorized: Path) -> None:
     now = [0.0]
     service = pi.InputService(clock=lambda: now[0])
-    codes = [_save(service, "capacity", _owner(CAPACITY), "stale")[1]["status"] for _ in range(pi.WRITES_PER_MINUTE + 1)]
+    stale = {"snapshot": "stale", "capacity": "stale"}
+    codes: List[str] = [_save(service, bases=stale)[1]["status"] for _ in range(pi.WRITES_PER_MINUTE + 1)]
     assert codes[:-1] == ["REVISION_CONFLICT"] * pi.WRITES_PER_MINUTE and codes[-1] == "RATE_LIMITED"
     now[0] = 61.0
-    assert _save(service, "capacity", _owner(CAPACITY), "stale")[1]["status"] == "REVISION_CONFLICT"
+    assert _save(service, bases=stale)[1]["status"] == "REVISION_CONFLICT"
 
 
 def test_launcher_opens_setup_mode_only_with_odr_001(root: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    monkey_view = root / srv.DEFAULT_VIEW
-    assert rd.readiness(monkey_view)["private_mode"] == "BLOCKED"
+    view = root / srv.DEFAULT_VIEW
+    assert rd.readiness(view)["private_mode"] == "BLOCKED"
     _odr1(root)
-    state = rd.readiness(monkey_view)
+    state = rd.readiness(view)
     assert (state["private_mode"], state["odr_003"]) == ("SETUP", "RECORD_UNREADABLE")
     rd.main(["--require-private"])
     out = capsys.readouterr().out
     assert "Private mode : SETUP - private view NO_REPORT" in out and "ODR-003" in out
 
 
-def test_committed_authoring_record_is_proposed_and_scoped() -> None:
+def test_committed_authoring_record_keeps_its_exact_scope() -> None:
     doc = json.loads(Path(pi.AUTHORING_RECORD).read_text(encoding="utf-8"))
-    assert (doc["status"], doc["ratified_by"], doc["capability"]) == (
-        "PROPOSED_NOT_RATIFIED", None, pi.AUTHORING_CAPABILITY)
-    assert doc["scope_files"] == [(pi.PRIVATE_DIR / f).as_posix() for f, _ in pi.INPUTS.values()]
-    assert doc["scope_schemas"] == [s for _, s in pi.INPUTS.values()]
-    assert {"TRADING_AUTHORIZED", "CAPITAL_TRANSFER", "BROKER_ACCOUNT_CONNECTIVITY"} <= set(doc["independent_of"])
-    assert po.odr_state(Path(pi.AUTHORING_RECORD), None, pi.AUTHORING_CAPABILITY) == "PROPOSED_NOT_RATIFIED"
+    assert (doc["decision_id"], doc["capability"], doc["requires"]) == (
+        pi.AUTHORING_DECISION_ID, pi.AUTHORING_CAPABILITY, [pi.OBSERVATION_DECISION_ID])
+    assert sorted(doc["scope_files"]) == pi.SCOPE_FILES and sorted(doc["scope_schemas"]) == pi.SCOPE_SCHEMAS
+    assert {"TRADING_AUTHORIZED", "CAPITAL_TRANSFER", "BROKER_ACCOUNT_CONNECTIVITY",
+            "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED"} <= set(doc["independent_of"])
+    state = po.odr_state(Path(pi.AUTHORING_RECORD), None, pi.AUTHORING_CAPABILITY)
+    assert state in ("PROPOSED_NOT_RATIFIED", "RATIFIED")
+    if state == "RATIFIED":
+        lineage = doc["ratification_lineage"]
+        assert (doc["ratified_by"], lineage["decided_by"], lineage["applied_by"], lineage["scope_changed"]) == (
+            "OWNER", "OWNER", "CODING_AGENT_AT_OWNER_DIRECTION", False)

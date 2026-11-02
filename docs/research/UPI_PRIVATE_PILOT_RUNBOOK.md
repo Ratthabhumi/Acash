@@ -168,14 +168,25 @@ as empty fields and nothing is filled in for the Owner.
 | Action | Authority | Effect |
 |---|---|---|
 | Load, validate | ODR-001 | Python parsers check the draft in memory; Thai messages plus code and field location, never amounts |
-| Save | ODR-001 **and** [ODR-003](../governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md) | Explicit confirmation; strict validation first; atomic replace of `data/private/snapshot.json` / `capacity.json` only; 409 if the file changed since loading; previous file copied to `data/private/backups/` (latest 20 per file kept, the live file is never deleted) |
-| Validate & generate report | ODR-001 | Runs preflight, wealth pack and view on the saved files into `data/private/out/`; on failure the previous report and inputs stay untouched |
+| Save | ODR-001 **and** [ODR-003](../governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md) | One request saves snapshot and capacity together. It needs explicit confirmation and strict validation of both, and returns 409 if either file changed since loading. The journal (`data/private/.input_transaction.json`) restores both files if a replacement fails. Previous files are copied to `data/private/backups/`, keeping the latest 20 per file; the live file is never deleted |
+| Validate & generate report | ODR-001 | Runs preflight, wealth pack and view on the saved files into a new `data/private/out/generations/<id>/`, then publishes `out/upi_view.json` and `out/report_generation.json`. It keeps the input revisions and hashes and the last 5 generations. On failure the previous report and inputs stay untouched |
+
+Recovering inputs:
+
+- A crash during Save leaves the journal. The next Save or report generation restores the previous pair automatically.
+- If the page reports `INPUT_RECOVERY_REQUIRED`, stop the service and pick the newest
+  `snapshot-*.json` / `capacity-*.json` pair with the same timestamp in
+  `data/private/backups/`. Copy the pair over `data/private/snapshot.json` /
+  `capacity.json`, delete `data/private/.input_transaction.json`, and restart.
+- Backups and generations are owner-private. They stay under the git-ignored
+  `data/private/` and inherit your Windows user-profile permissions; ACASH does not change
+  ACLs. Delete old copies yourself when they are no longer needed.
 
 The input routes (`/api/upi/input/*` in `acash.dashboard_api.private_input`) share the
 view server's Host, Origin and session-token checks; the token expires after 4 hours.
 Requests are limited by content type (`application/json`), size (2 MB), field allowlists and a
-per-minute rate limit; nothing is logged. ODR-003 is PROPOSED_NOT_RATIFIED until the Owner
-ratifies it; until then saving is refused and the files can still be edited directly.
+per-minute rate limit; nothing is logged. While ODR-003 is not RATIFIED, saving is refused
+and the files can still be edited directly.
 
 ## 4. Troubleshooting
 
