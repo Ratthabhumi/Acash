@@ -1,0 +1,95 @@
+{
+  "record": "ODR_UPI_PRIVATE_TRANSACTIONS_002_ACCEPTANCE",
+  "decision_id": "ODR_UPI_PRIVATE_TRANSACTIONS_002",
+  "condition": "Owner approval of ODR-002 was conditional on the Transaction Accounting V2 authority, correctness, security and scope checks passing",
+  "tested_commit": "5b7b10485b45a9357ec691c6d25870086256e89e",
+  "audit_fix_commits": [
+    "5b7b10485b45a9357ec691c6d25870086256e89e"
+  ],
+  "ci": {
+    "push_run": 41453325772,
+    "pull_request_run": 41453335699,
+    "head": "5b7b10485b45a9357ec691c6d25870086256e89e",
+    "conclusion": "success"
+  },
+  "local_verification": {
+    "pytest_full": "4928 passed, 22 skipped before the three date cases were added; transaction module 58 passed after",
+    "mypy": "683 source files clean (Windows); ppds and dashboard_api clean with --platform linux",
+    "dashboard": "typecheck clean, 58 node tests passed, build ok"
+  },
+  "defects_found_and_fixed": [
+    "odr_state accepted any string as ratified_on (including empty or non-dates); it now requires an ISO YYYY-MM-DD date",
+    "load_batch checked the ODR-002 capability but not its schema scope before reading a presumed-private file; the pre-read check now includes ACASH_CANONICAL_TRANSACTIONS_V1"
+  ],
+  "checks": [
+    {
+      "requirement": "authority: ODR-002 checked before private bytes are read, exact capability, OWNER ratifier, ISO date, exact schema scope; ODR-001 does not extend to transactions; revocation closes the gate",
+      "tests": [
+        "test_owner_private_batch_is_gated",
+        "test_malformed_transaction_odr_refuses_before_reading",
+        "test_snapshot_odr_does_not_extend_to_transactions",
+        "test_ratified_transaction_odr_loads_private_batch_until_revoked"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "privacy and scope: private batches only outside the repository or under data/private; synthetic files in private locations are not read without ODR-002; no synthetic/private merge; refusals carry no ids, paths or contents",
+      "tests": [
+        "test_ratified_odr_still_refuses_private_batch_in_a_tracked_location",
+        "test_synthetic_batch_in_private_location_is_not_read_without_odr",
+        "test_private_and_synthetic_batches_never_merge",
+        "test_mixed_data_classes_cannot_merge"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "accounting: ordering independence, duplicates, idempotent batch merge, trade vs settlement date, fees, dividend vs withholding, FIFO analytical lots, splits, internal transfers, currency separation, cash conservation, snapshot reconciliation without repair, malformed and non-ISO dates",
+      "tests": [
+        "test_replay_reconciles_with_snapshot",
+        "test_fifo_realized_pnl_and_remaining_cost",
+        "test_income_costs_and_external_flows",
+        "test_internal_transfer_is_neutral_at_consolidated_level",
+        "test_settlement_timing_moves_cash_after_trade_date",
+        "test_stock_split_scales_quantity_not_cost",
+        "test_idempotent_merge_and_preview",
+        "test_fingerprint_duplicates_need_sequence",
+        "test_order_independence",
+        "test_malformed_transactions_fail_closed",
+        "test_accounting_breaks_fail_closed",
+        "test_dividend_double_count_detected",
+        "test_reconciliation_reports_breaks_without_repair",
+        "test_replayed_state_values_through_ppds_and_matches_snapshot_nav",
+        "test_ppds_ledger_export_requires_full_cost_history"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "performance: PERFORMANCE_NOT_ESTABLISHED unless the history reconciles and valuations cover every external flow; TWR/XIRR golden reference",
+      "tests": [
+        "test_twr_and_xirr_golden_reference",
+        "test_withdrawal_makes_xirr_not_established_but_twr_qualified",
+        "test_performance_not_fabricated_when_evidence_missing"
+      ],
+      "result": "PASS"
+    }
+  ],
+  "test_module": "tests/unit/ppds/test_ppds_transactions.py",
+  "limitations": [
+    "FIFO lots are an analytical assumption, not a tax method",
+    "Only hand-prepared canonical JSON batches are in scope; Dime!/Webull CSV or PDF mapping is not established",
+    "Verified on synthetic fixtures only; no Owner transaction history has been processed",
+    "Benchmark comparison and FX attribution remain NOT_ESTABLISHED"
+  ],
+  "rollback": "Set status in docs/governance/ODR_UPI_PRIVATE_TRANSACTIONS_002.json to REVOKED (closes the gate immediately) or revert the ratification commit",
+  "unchanged": {
+    "scope_changed": false,
+    "dashboard_transaction_write": "not authorized",
+    "csv_pdf_import": "not authorized",
+    "browser_upload": "not authorized",
+    "broker_connectivity": "not authorized",
+    "NO_REAL_ORDERS": true,
+    "real_capital_authority_usd": "0.00",
+    "trading_authority": "none"
+  },
+  "result": "ALL_CHECKS_PASSED"
+}

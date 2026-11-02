@@ -297,7 +297,13 @@ def test_snapshot_ratification_does_not_open_transactions(tmp_path: Path, monkey
 
 def test_committed_records_keep_scope_and_governance_unchanged() -> None:
     tx_doc = json.loads(tx.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
-    assert (tx_doc["status"], tx_doc["ratified_by"], tx_doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    if tx_doc["status"] == "RATIFIED":
+        lineage = tx_doc["ratification_lineage"]
+        assert tx_doc["ratified_by"] == "OWNER" and lineage["decided_by"] == "OWNER"
+        assert lineage["scope_changed"] is False and Path(lineage["acceptance_evidence"]).is_file()
+    else:
+        assert (tx_doc["status"], tx_doc["ratified_by"], tx_doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    assert tx_doc["scope_schemas"] == [tx.SCHEMA] and "BROKER_NATIVE_IMPORT" in tx_doc["independent_of"]
     obs = json.loads(po.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
     if obs["status"] == "RATIFIED":
         assert obs["ratified_by"] == "OWNER" and obs["ratification_lineage"]["decided_by"] == "OWNER"

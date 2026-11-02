@@ -1,4 +1,10 @@
-# ODR_UPI_PRIVATE_TRANSACTIONS_002 — Owner-private transaction histories (PROPOSED, NOT RATIFIED)
+# ODR_UPI_PRIVATE_TRANSACTIONS_002 — Owner-private transaction histories (RATIFIED 2026-11-02)
+
+Ratified by the OWNER on 2026-11-02 through a conditional instruction ("ODR-002 ผมอนุมัติ ถ้ามันถูกต้องแล้ว"),
+applied by the coding agent at the Owner's direction after the checks in
+[the acceptance record](ODR_UPI_PRIVATE_TRANSACTIONS_002_ACCEPTANCE.json) passed. The scope below is
+unchanged; the ratification does not authorize Dashboard transaction writing, CSV/PDF import,
+browser upload or broker connectivity.
 
 ## 1. Capability
 

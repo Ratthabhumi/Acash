@@ -1,9 +1,17 @@
 {
   "decision_id": "ODR_UPI_PRIVATE_TRANSACTIONS_002",
   "capability": "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED",
-  "status": "PROPOSED_NOT_RATIFIED",
-  "ratified_by": null,
-  "ratified_on": null,
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-02",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's conditional authorization in the Cursor chat on 2026-11-02: \"ODR-002 ผมอนุมัติ ถ้ามันถูกต้องแล้ว\", effective only after the Transaction Accounting V2 authority, correctness, security and scope checks pass; not an approval of CSV/PDF import, browser upload, Dashboard transaction writing or broker connectivity",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "acceptance_evidence": "docs/governance/ODR_UPI_PRIVATE_TRANSACTIONS_002_ACCEPTANCE.json",
+    "acceptance_commit": "5b7b10485b45a9357ec691c6d25870086256e89e",
+    "scope_changed": false
+  },
   "document": "docs/governance/ODR_UPI_PRIVATE_TRANSACTIONS_002.md",
   "scope_schemas": [
     "ACASH_CANONICAL_TRANSACTIONS_V1"
