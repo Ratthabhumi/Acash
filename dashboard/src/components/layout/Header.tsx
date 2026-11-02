@@ -5,7 +5,7 @@ import { RunMetadata } from '../../types/research';
 import { useTheme } from '../../context/ThemeContext';
 
 interface HeaderProps {
-  metadata: RunMetadata;
+  metadata: RunMetadata | null;
   onOpenCommandPalette: () => void;
   isMobileMenuOpen?: boolean;
   onToggleMobileMenu?: () => void;
@@ -49,14 +49,16 @@ export const Header: React.FC<HeaderProps> = ({
               </h1>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono-code font-medium bg-surface-muted text-secondary border border-default shrink-0">
                 <Activity className="w-3 h-3 text-secondary" />
-                {metadata.strategyId}
+                {metadata ? metadata.strategyId : 'RESEARCH RUN NOT LOADED'}
               </span>
             </div>
-            <div className="flex items-center space-x-2 text-[11px] text-secondary font-mono-code mt-0.5 truncate">
-              <span>Session: {metadata.sessionId}</span>
-              <span>·</span>
-              <span>Env: {metadata.environment}</span>
-            </div>
+            {metadata && (
+              <div className="flex items-center space-x-2 text-[11px] text-secondary font-mono-code mt-0.5 truncate">
+                <span>Session: {metadata.sessionId}</span>
+                <span>·</span>
+                <span>Env: {metadata.environment}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -90,13 +92,15 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Manifest Hash Pill */}
-          <div className="hidden xl:flex items-center">
-            <CopyablePill
-              label="Manifest"
-              value={metadata.manifestHash}
-              truncateLength={10}
-            />
-          </div>
+          {metadata && (
+            <div className="hidden xl:flex items-center">
+              <CopyablePill
+                label="Manifest"
+                value={metadata.manifestHash}
+                truncateLength={10}
+              />
+            </div>
+          )}
 
           {/* Research View Only Pill */}
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono-code font-medium bg-surface-muted text-secondary border border-strong shrink-0 whitespace-nowrap">
@@ -107,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Human Authorization Badge */}
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono-code font-semibold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 shrink-0 whitespace-nowrap">
             <ShieldAlert className="w-3 h-3 text-rose-600 dark:text-rose-400 shrink-0" />
-            Human Auth: {metadata.humanAuthorizationStatus.replace('_', ' ')}
+            Human Auth: {(metadata?.humanAuthorizationStatus ?? 'NOT_AUTHORIZED').replace('_', ' ')}
           </span>
         </div>
       </div>

@@ -1,0 +1,188 @@
+"""Dashboard view model projection and the loopback private view server (synthetic and isolated ODR fixtures)."""
+
+from __future__ import annotations
+
+import copy
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterator
+
+import pytest
+
+from acash.core.domain.exceptions import DataContractError
+from acash.dashboard_api import private_view_server as srv
+from acash.invest import upi_view as uv
+from acash.ppds import private_observation as po
+
+PORT = srv.DEFAULT_PORT
+TOKEN = "t" * 43
+ORIGIN = srv.ALLOWED_ORIGINS[0]
+
+
+def _pack(path: str = uv.SYNTHETIC_PACK) -> Dict[str, Any]:
+    doc: Dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
+    return doc
+
+
+def _leaves(node: Any) -> Iterator[Any]:
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _leaves(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _leaves(value)
+    else:
+        yield node
+
+
+def test_synthetic_view_golden_values_copied_not_recomputed() -> None:
+    view = uv.build_view(_pack())
+    assert (view["view_schema"], view["data_mode"]) == ("ACASH_UPI_VIEW_V1", "SYNTHETIC_DEMO")
+    overview = view["portfolio_overview"]
+    assert (overview["computed_nav_ppds"], overview["observed_position_value"], overview["unclassified_holdings_value"],
+            overview["total_best_evidence"]) == ("77220.00", "8250.00", "10280.00", "95750.00")
+    assert overview["computed_nav_is_total_best_evidence"] is False
+    assert view["concentration"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
+    amounts = {r["monthly_contribution_thb"] for r in view["financial_capacity"]["scenarios"]}
+    assert {"5000.00", "7500.00", "10000.00"} <= amounts
+    assert view["decision_status"]["orders_generated"] == 0
+    assert "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED" in view["data_quality"]["reason_codes"]
+    assert view["governance"]["observation_authority"]["trading_authority"] == "NONE"
+    assert not any(isinstance(v, float) for v in _leaves(view))
+
+
+def test_evidence_only_view_keeps_unknown_as_null() -> None:
+    view = uv.build_view(_pack(uv.SYNTHETIC_EVIDENCE_ONLY_PACK))
+    assert view["report_metadata"]["report_type"] == "EVIDENCE_ONLY_REPORT"
+    assert view["allocation"]["computed_by_classification"] is None
+    assert view["allocation"]["computed_status"] == "NOT_COMPUTED_EVIDENCE_ONLY_REPORT"
+    assert "EVIDENCE_ONLY_REPORT" in view["data_quality"]["reason_codes"]
+
+
+def test_committed_dashboard_fixtures_match_regeneration(tmp_path: Path) -> None:
+    for pack_path, fixture in uv.DASHBOARD_FIXTURES.items():
+        out = uv.write_view(uv.build_view(_pack(pack_path)), tmp_path / Path(fixture).name)
+        assert out.read_bytes() == Path(fixture).read_bytes()
+
+
+@pytest.mark.parametrize("mutate, code", [
+    (lambda p: p.update(pack_version="X"), "VIEW_PACK_VERSION_UNSUPPORTED"),
+    (lambda p: p.update(data_class="PUBLIC"), "VIEW_DATA_CLASS_INVALID"),
+    (lambda p: p.update(data_class="OWNER_PRIVATE_OBSERVATION"), "PACK_AUTHORITY_INCONSISTENT"),
+    (lambda p: p["A_total_wealth"].pop("evidence"), "VIEW_SNAPSHOT_SCHEMA_UNSUPPORTED"),
+])
+def test_malformed_or_contradictory_packs_fail_closed(mutate: Any, code: str) -> None:
+    pack = copy.deepcopy(_pack())
+    mutate(pack)
+    with pytest.raises(DataContractError, match=code):
+        uv.build_view(pack)
+
+
+def test_v1_1_pack_is_unsupported() -> None:
+    with pytest.raises(DataContractError, match="VIEW_SNAPSHOT_SCHEMA_UNSUPPORTED"):
+        uv.build_view(_pack("docs/research/evidence/upi_v1_synthetic_pack/upi_v1_pack.json"))
+
+
+def _private_view() -> Dict[str, Any]:
+    view = uv.build_view(_pack())
+    view["data_mode"] = "OWNER_PRIVATE_READ_ONLY"
+    return view
+
+
+def _ratify(root: Path, status: str = "RATIFIED") -> None:
+    record = root / po.AUTHORIZATION_RECORD
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": status, "ratified_by": "OWNER",
+                                  "ratified_on": "2026-11-02", "scope_schemas": [po.SCHEMA_V1_2]}), encoding="utf-8")
+
+
+def test_private_view_write_requires_odr_and_private_location(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    target = tmp_path / "data" / "private" / "out" / "upi_view.json"
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
+        uv.write_view(_private_view(), target)
+    _ratify(tmp_path)
+    with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
+        uv.write_view(_private_view(), tmp_path / "dashboard" / "src" / "fixtures" / "leak.json")
+    assert uv.write_view(_private_view(), target).is_file()
+
+
+def _headers(**extra: str) -> Dict[str, str]:
+    return {"Host": f"127.0.0.1:{PORT}", "Origin": ORIGIN, srv.TOKEN_HEADER: TOKEN, **extra}
+
+
+def _call(view_path: Path, method: str = "GET", target: str = srv.ROUTE, **headers: Any) -> Any:
+    status, out_headers, body = srv.respond(method, target, headers if headers else _headers(), TOKEN, view_path, PORT)
+    return status, out_headers, json.loads(body) if body else None
+
+
+@pytest.mark.parametrize("method, target, headers, status, code", [
+    ("GET", srv.ROUTE, {"Host": "evil.example", "Origin": ORIGIN, srv.TOKEN_HEADER: TOKEN}, 421, "HOST_NOT_ALLOWED"),
+    ("GET", srv.ROUTE, {"Host": f"127.0.0.1:{PORT}", srv.TOKEN_HEADER: TOKEN}, 403, "ORIGIN_NOT_ALLOWED"),
+    ("GET", srv.ROUTE, {"Host": f"127.0.0.1:{PORT}", "Origin": "http://evil.example", srv.TOKEN_HEADER: TOKEN}, 403,
+     "ORIGIN_NOT_ALLOWED"),
+    ("GET", srv.ROUTE + "?path=C:/x.json", None, 404, "NOT_FOUND"),
+    ("GET", "/api/upi/order", None, 404, "NOT_FOUND"),
+    ("POST", srv.ROUTE, None, 405, "METHOD_NOT_ALLOWED"),
+    ("DELETE", srv.ROUTE, None, 405, "METHOD_NOT_ALLOWED"),
+    ("GET", srv.ROUTE, {"Host": f"127.0.0.1:{PORT}", "Origin": ORIGIN}, 401, "SESSION_TOKEN_REQUIRED"),
+    ("GET", srv.ROUTE, {"Host": f"127.0.0.1:{PORT}", "Origin": ORIGIN, srv.TOKEN_HEADER: "wrong"}, 401,
+     "SESSION_TOKEN_REQUIRED"),
+])
+def test_server_rejects_before_reading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, target: str,
+                                       headers: Any, status: int, code: str) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    _ratify(tmp_path)
+
+    def never(*_: Any) -> None:
+        raise AssertionError("view read before request checks")
+    monkeypatch.setattr(po, "read_bounded_json", never)
+    got_status, out_headers, body = srv.respond(method, target, headers or _headers(), TOKEN, tmp_path / "v.json", PORT)
+    assert (got_status, json.loads(body)["status"]) == (status, code)
+    assert out_headers["Cache-Control"] == "no-store"
+
+
+def test_server_odr_states_and_view_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    view_path = tmp_path / "data" / "private" / "out" / "upi_view.json"
+    status, _, body = _call(view_path)
+    assert (status, body) == (403, {"status": "AUTHORIZATION_REQUIRED", "odr_state": "RECORD_UNREADABLE"})
+    _ratify(tmp_path)
+    assert _call(view_path)[2] == {"status": "NO_REPORT"}
+    assert _call(view_path, "OPTIONS")[0] == 204
+    uv.write_view(_private_view(), view_path)
+    status, headers, body = _call(view_path)
+    assert status == 200 and body["data_mode"] == "OWNER_PRIVATE_READ_ONLY"
+    assert (headers["Cache-Control"], headers["Access-Control-Allow-Origin"]) == ("no-store", ORIGIN)
+    view_path.write_text(json.dumps(uv.build_view(_pack())), encoding="utf-8")
+    assert _call(view_path)[2] == {"status": "INVALID_REPORT", "code": "VIEW_CONTRACT_MISMATCH"}
+    view_path.write_text("{bad", encoding="utf-8")
+    assert _call(view_path)[2]["code"] == "UPI_VIEW_MALFORMED_JSON"
+    _ratify(tmp_path, "REVOKED")
+    assert _call(view_path)[2] == {"status": "AUTHORIZATION_REQUIRED", "odr_state": "REVOKED"}
+
+
+def test_dashboard_api_has_no_trading_or_outbound_network_imports() -> None:
+    import re
+
+    package_dir = Path(srv.__file__).resolve().parent
+    import_pattern = re.compile(r"^\s*(import|from)\s+([\w\.]+)", re.MULTILINE)
+    for path in sorted(package_dir.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for match in import_pattern.finditer(text):
+            parts = match.group(2).lower().split(".")
+            for banned in ("alpaca", "broker", "order", "socket", "urllib", "requests", "websocket", "execution", "paper"):
+                assert banned not in parts, f"{path.name} imports {match.group(2)!r}"
+        for token in ("api_secret", "api_key", "password"):
+            assert token not in text.lower()
+
+
+def test_server_binds_loopback_and_refuses_tracked_view_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
+        srv.serve(0, tmp_path / "dashboard" / "public" / "view.json")
+    server = srv.serve(0, tmp_path / "data" / "private" / "out" / "upi_view.json")
+    try:
+        assert server.server_address[0] == "127.0.0.1"
+    finally:
+        server.server_close()

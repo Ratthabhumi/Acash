@@ -115,6 +115,24 @@ Revoke: set `status` to anything other than `RATIFIED` (e.g. `REVOKED`) and comm
 gate closes immediately. Remove private data: `Remove-Item -Recurse -Force data/private`
 (this also deletes reports and manifests). Check the recycle bin and any backups yourself.
 
+### Dashboard (owner-private, local only)
+
+Synthetic mode works now: `cd dashboard; npm ci; npm run dev`, open
+`http://127.0.0.1:3002`, choose "Wealth, Accounts & Capacity". After step 5 and only with
+ODR-001 RATIFIED:
+
+```powershell
+uv run python -m acash.invest.upi_view --pack data/private/out/upi_v1_pack.json --output data/private/out/upi_view.json
+uv run python -m acash.dashboard_api.private_view_server
+```
+
+The server binds 127.0.0.1:8765, prints a one-time session token, re-checks ODR-001 on every
+request and serves only `data/private/out/upi_view.json` (no parameters, no write routes).
+In the dashboard choose `OWNER PRIVATE READ ONLY`, paste the token and press Load. The token
+and figures live only in page memory; switching mode or Clear removes them, and the next Load
+after revoking ODR-001 or stopping the server replaces them with a status and no figures.
+Closing the tab discards everything. Owner-private mode does not work from the Docker/Nginx image by design.
+
 ## 4. Troubleshooting
 
 | Code | Meaning / fix |

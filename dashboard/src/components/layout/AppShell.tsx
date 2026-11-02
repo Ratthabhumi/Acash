@@ -5,7 +5,7 @@ import { CommandPalette } from './CommandPalette';
 import { ResearchRun } from '../../types/research';
 
 interface AppShellProps {
-  researchRun: ResearchRun;
+  researchRun: ResearchRun | null;
   currentTab: DashboardTab;
   onSelectTab: (tab: DashboardTab) => void;
   children: React.ReactNode;
@@ -36,7 +36,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     <div className="min-h-screen w-full bg-app flex flex-col font-sans text-primary antialiased selection:bg-accent-subtle">
       {/* 1. Primary Header */}
       <Header
-        metadata={researchRun.metadata}
+        metadata={researchRun ? researchRun.metadata : null}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
@@ -48,7 +48,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         <Sidebar
           currentTab={currentTab}
           onSelectTab={onSelectTab}
-          tradeCount={researchRun.metadata.totalTradeCount}
+          tradeCount={researchRun ? researchRun.metadata.totalTradeCount : null}
           isMobileOpen={isMobileMenuOpen}
           onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
