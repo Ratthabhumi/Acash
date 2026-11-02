@@ -20,6 +20,8 @@ FIXTURE = Path("docs/research/evidence/upi_v1_2_synthetic_snapshot.json")
 V1_1 = Path("docs/research/evidence/upi_v1_synthetic_snapshot.json")
 TXNS = Path("docs/research/evidence/upi_v2_synthetic_transactions.json")
 PILOT_PACK_DIR = Path("docs/research/evidence/upi_v1_2_synthetic_pack")
+TOTALS_ONLY = Path("docs/research/evidence/upi_v1_2_synthetic_totals_only.json")
+TOTALS_ONLY_PACK_DIR = Path("docs/research/evidence/upi_v1_2_synthetic_totals_only_pack")
 TARGETS = '{"CORE_DIVERSIFIED": "0.7", "CASH": "0.3"}'
 
 
@@ -115,7 +117,8 @@ def test_missing_fx_for_total_leaves_residual_unestablished() -> None:
     doc = _doc()
     _acct_doc(doc, "BROKER_D_MAIN")["reported_total"]["currency"] = "EUR"
     main = _account(_ev(doc), "BROKER_D_MAIN")
-    assert main["account_total"]["reason"] == "CURRENCY_CONVERSION_NOT_AVAILABLE"
+    assert (main["account_total"]["status"], main["account_total"]["reason"]) == (
+        "RESIDUAL_NOT_ESTABLISHED", "CURRENCY_CONVERSION_NOT_AVAILABLE")
     assert main["flags"] == ["RESIDUAL_NOT_ESTABLISHED_FX_MISSING", "SUBPORTFOLIO_TOTALS_INFORMATIONAL_ACCOUNT_TOTAL_GOVERNS"]
     assert main["unclassified_holdings_value"] == "0.00"
 
@@ -142,14 +145,43 @@ def test_unverified_identity_is_not_merged_across_accounts() -> None:
     assert keys["ZZSYNIDX0005"] == "0.4317"
 
 
-def test_whole_snapshot_of_totals_only_supports_evidence_but_not_analytics() -> None:
-    doc = _doc()
-    doc["prices"], doc["securities"] = [], []
-    doc["accounts"] = [_acct_doc(doc, "BROKER_X_OTHER")]
-    book = po.build_book(po.parse_snapshot(doc))
-    assert po.evidence_report(book)["valuation_basis"]["total_best_evidence"] == "5000.00"
-    with pytest.raises(DataContractError, match="PRIVATE_NAV_NONPOSITIVE"):
-        po.book_summary(book)
+def test_totals_only_snapshot_yields_evidence_only_report() -> None:
+    summary = po.book_summary(po.build_book(po.load_snapshot(TOTALS_ONLY)))
+    assert (summary["report_type"], summary["analytics"]) == ("EVIDENCE_ONLY_REPORT", {})
+    assert summary["unsupported_analyses"] == list(po.EVIDENCE_ONLY_UNSUPPORTED)
+    ev = summary["evidence"]["THB"]
+    assert ev["valuation_basis"] == {"computed_nav_ppds": "0.00", "observed_position_value": "0.00",
+                                     "unclassified_holdings_value": "90750.00", "total_best_evidence": "90750.00"}
+    assert ev["concentration_best_evidence"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
+    assert ev["concentration_best_evidence"]["top_holdings"] == []
+    assert [(a["account_ref"], a["evidence_level"]) for a in ev["accounts"]] == [
+        ("BROKER_D_FCD", "ACCOUNT_TOTAL_ONLY"), ("BROKER_D_MAIN", "SUBPORTFOLIO_TOTAL_ONLY")]
+    assert all(a["account_total"]["status"] == "INSUFFICIENT_EVIDENCE" for a in ev["accounts"])
+
+
+def test_full_v1_2_report_is_labelled() -> None:
+    assert po.book_summary(po.build_book(po.parse_snapshot(_doc())))["report_type"] == "FULL_REPORT"
+
+
+def test_evidence_only_pack_and_golden(tmp_path: Path) -> None:
+    targets = tmp_path / "targets.json"
+    targets.write_text(TARGETS, encoding="utf-8")
+    wp.main(["--snapshot", str(TOTALS_ONLY), "--target-weights-file", str(targets), "--output", str(tmp_path / "out")])
+    pack = json.loads((tmp_path / "out" / "upi_v1_pack.json").read_text(encoding="utf-8"))
+    assert pack["B_long_term"]["contribution_first"] == "NOT_EVALUATED_EVIDENCE_ONLY_REPORT"
+    assert pack["E_decision"]["reasons"][1].startswith("EVIDENCE_ONLY_REPORT")
+    assert pack["E_decision"]["orders_generated"] == 0
+    for name in ("upi_v1_pack.json", "upi_v1_pack.md"):
+        assert (tmp_path / "out" / name).read_bytes() == (TOTALS_ONLY_PACK_DIR / name).read_bytes()
+
+
+def test_target_weights_inputs_fail_closed(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"CASH": "x"}', encoding="utf-8")
+    with pytest.raises(DataContractError, match="TARGET_WEIGHTS_MALFORMED_DECIMAL"):
+        wp.main(["--target-weights-file", str(bad), "--output", str(tmp_path / "o")])
+    with pytest.raises(DataContractError, match="TARGET_WEIGHTS_AMBIGUOUS"):
+        wp.main(["--target-weights", TARGETS, "--target-weights-file", str(bad), "--output", str(tmp_path / "o")])
 
 
 def test_permutation_invariance() -> None:

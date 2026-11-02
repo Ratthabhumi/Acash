@@ -13,7 +13,7 @@ import json
 import subprocess
 from dataclasses import replace
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -36,6 +36,7 @@ from acash.ppds.private_observation import (
     book_summary,
     build_book,
     load_snapshot,
+    read_bounded_json,
 )
 from acash.research.d6.broker_profiles import load_security_eligibility
 from acash.research.d6.decision_pack import (
@@ -88,13 +89,17 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any]) -> Dict[s
     reasons: List[str] = []
     if summary["performance_status"] != "PERFORMANCE_QUALIFIED":
         reasons.append("PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.")
-    analytics = summary["analytics"][next(iter(summary["analytics"]))]
-    if analytics["concentration"]["look_through_status"] != "LOOK_THROUGH_QUALIFIED":
-        reasons.append("OVERLAP_NOT_ESTABLISHED: no dated constituent weights.")
-    if analytics["unrealized_pnl"]["status"] != "OBSERVED_COST_BASIS":
-        reasons.append(f"COST_BASIS_INCOMPLETE: {analytics['unrealized_pnl']['status']}; unrealized P&L only for the known-cost subset.")
-    if "UNKNOWN" in analytics["allocation_by_classification"]:
-        reasons.append("UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.")
+    if not summary["analytics"]:
+        reasons.append("EVIDENCE_ONLY_REPORT: no cash or quantity line carries value; allocation, concentration, "
+                       "P&L and stress are not computed.")
+    else:
+        analytics = summary["analytics"][next(iter(summary["analytics"]))]
+        if analytics["concentration"]["look_through_status"] != "LOOK_THROUGH_QUALIFIED":
+            reasons.append("OVERLAP_NOT_ESTABLISHED: no dated constituent weights.")
+        if analytics["unrealized_pnl"]["status"] != "OBSERVED_COST_BASIS":
+            reasons.append(f"COST_BASIS_INCOMPLETE: {analytics['unrealized_pnl']['status']}; unrealized P&L only for the known-cost subset.")
+        if "UNKNOWN" in analytics["allocation_by_classification"]:
+            reasons.append("UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.")
     if capacity["reserve"]["status"] != "RESERVE_TARGET_MET":
         reasons.append("RESERVE_SHORTFALL: rebuild emergency reserve before new risk.")
     if summary["valuation_stale"]:
@@ -123,11 +128,18 @@ def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
     summary = book_summary(book, report_date)
     capacity = assess_capacity(capacity_inputs)
     reporting = book.snapshot.reporting_currency
-    analytics = summary["analytics"][reporting]
-    long_term = {k: v for k, v in analytics["allocation_by_sub_portfolio"].items()
+    evidence_only = not summary["analytics"]
+    if evidence_only:
+        allocation = summary["evidence"][reporting]["allocation_by_sub_portfolio_best_evidence"]
+    else:
+        allocation = summary["analytics"][reporting]["allocation_by_sub_portfolio"]
+    long_term = {k: v for k, v in allocation.items()
                  if any(a.role == "LONG_TERM" and k.startswith(f"{a.account_ref}/") for a in book.snapshot.accounts)}
-    contribution_view: Optional[Dict[str, Any]] = None
-    if target_weights is not None:
+    contribution_view: Any = None
+    if target_weights is not None and evidence_only:
+        contribution_view = "NOT_EVALUATED_EVIDENCE_ONLY_REPORT"
+    elif target_weights is not None:
+        analytics = summary["analytics"][reporting]
         current = {k: Decimal(v["value"]) for k, v in analytics["allocation_by_classification"].items()}
         contribution_view = contribution_first_allocation(current, target_weights, capacity_inputs.planned_contribution_thb)
     pack: Dict[str, Any] = {
@@ -174,13 +186,18 @@ def _evidence_markdown(ev: Mapping[str, Any]) -> List[str]:
 
 def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     a, d, e = pack["A_total_wealth"], pack["D_financial_capacity"], pack["E_decision"]
-    rep = next(iter(a["analytics"]))
-    an = a["analytics"][rep]
     out = [f"# ACASH Unified Portfolio Intelligence — {pack['data_class']}", "",
            f"Snapshot `{a['snapshot_id']}` valued {a['valuation_date']} (observed {a['time_alignment']['observed_at']}) · support state **{a['support_state']}** · "
            f"performance **{a['performance_status']}** · pack `{pack['pack_sha256'][:16]}`", "",
            "Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.", "",
            "## A. Total wealth"]
+    if not a["analytics"]:
+        rep = next(iter(a["evidence"]))
+        out += [f"**{a['report_type']}**: computed analytics are not produced. Not supported: {', '.join(a['unsupported_analyses'])}."]
+        out += _evidence_markdown(a["evidence"][rep])
+        return "\n".join(out + _sections_b_to_e(pack, d, e))
+    rep = next(iter(a["analytics"]))
+    an = a["analytics"][rep]
     for ccy, block in a["analytics"].items():
         out.append(f"- NAV {ccy}: **{block['nav']}** (securities {block['securities_value']}, settled cash {block['settled_cash']}; "
                    f"accrued interest excluded {block['accrued_interest_excluded_from_nav']})")
@@ -199,8 +216,12 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     out += [f"- {r['account_ref']} {r['security_id']} {r['sub_portfolio']}: {r['verdict']}" for r in a["reconciliation"]]
     if "evidence" in a:
         out += _evidence_markdown(a["evidence"][rep])
-    out += ["", "## B. Long-term accounts", *_table(pack["B_long_term"]["sub_portfolios"]), "",
-            pack["B_long_term"]["policy_note"]]
+    return "\n".join(out + _sections_b_to_e(pack, d, e))
+
+
+def _sections_b_to_e(pack: Mapping[str, Any], d: Mapping[str, Any], e: Mapping[str, Any]) -> List[str]:
+    out = ["", "## B. Long-term accounts", *_table(pack["B_long_term"]["sub_portfolios"]), "",
+           pack["B_long_term"]["policy_note"]]
     out += [f"- {k}: {v['description']} e.g. {', '.join(v['example_instruments']) or '-'}"
             for k, v in pack["B_long_term"]["policy_families"].items()]
     cf = pack["B_long_term"]["contribution_first"]
@@ -223,7 +244,7 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     out += [f"- {r}" for r in e["reasons"]]
     out += [f"- V38 pack reference `{e['v38_decision_pack']['pack_sha256'][:16]}` ({e['v38_decision_pack']['path']})", "",
             "## Governance", *[f"- {k}: {v}" for k, v in pack["governance"].items()], ""]
-    return "\n".join(out)
+    return out
 
 
 def write_pack(pack: Mapping[str, Any], output_dir: Path) -> List[Path]:
@@ -258,13 +279,21 @@ def _code_version() -> Dict[str, str]:
     return {"commit": sha.stdout.strip(), "working_tree": "DIRTY" if dirty.stdout.strip() else "CLEAN"}
 
 
-def _weights(raw: Optional[str]) -> Optional[Dict[str, Decimal]]:
-    if raw is None:
+def _weights(raw: Optional[str], path: Optional[str] = None) -> Optional[Dict[str, Decimal]]:
+    if raw is not None and path is not None:
+        raise DataContractError("TARGET_WEIGHTS_AMBIGUOUS: use --target-weights or --target-weights-file, not both.")
+    if raw is None and path is None:
         return None
-    doc = json.loads(raw)
+    try:
+        doc = read_bounded_json(Path(path), "TARGET_WEIGHTS") if path is not None else json.loads(str(raw))
+    except json.JSONDecodeError as exc:
+        raise DataContractError("TARGET_WEIGHTS_MALFORMED_JSON.") from exc
     if not isinstance(doc, dict) or not all(isinstance(v, str) for v in doc.values()):
         raise DataContractError("TARGET_WEIGHTS_MUST_BE_STRING_MAPPING.")
-    return {str(k): Decimal(v) for k, v in doc.items()}
+    try:
+        return {str(k): Decimal(v) for k, v in doc.items()}
+    except InvalidOperation as exc:
+        raise DataContractError("TARGET_WEIGHTS_MALFORMED_DECIMAL.") from exc
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -272,13 +301,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--snapshot", default=PUBLIC_SNAPSHOT)
     parser.add_argument("--capacity", default=PUBLIC_CAPACITY)
     parser.add_argument("--target-weights", default=None, help='JSON mapping, e.g. {"CORE_DIVERSIFIED": "0.8", "CASH": "0.2"}')
+    parser.add_argument("--target-weights-file", default=None, help="Path to the same JSON mapping (avoids shell quoting).")
     parser.add_argument("--report-date", default=None, help="ISO date used for the staleness check.")
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     book = build_book(load_snapshot(Path(args.snapshot)))
     capacity = load_capacity(Path(args.capacity))
     report_date = date.fromisoformat(args.report_date) if args.report_date else None
-    pack = build_wealth_pack(book, capacity, _weights(args.target_weights), report_date)
+    pack = build_wealth_pack(book, capacity, _weights(args.target_weights, args.target_weights_file), report_date)
     for path in write_pack(pack, Path(args.output)):
         print(path)
 

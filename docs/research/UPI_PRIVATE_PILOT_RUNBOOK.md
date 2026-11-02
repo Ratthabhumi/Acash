@@ -1,20 +1,23 @@
 # UPI Private Snapshot Pilot — Runbook (V1_2)
 
 Status: engineering ready, synthetic only. Owner-private runs stay disabled until the
-owner ratifies `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`. Nothing here
-connects to a broker, places orders, moves money or uses the network.
+owner ratifies `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`. ODR-002
+(transaction histories) is not needed for this pilot. Nothing here connects to a broker,
+places orders, moves money or uses the network. All commands are for Windows PowerShell,
+run from the repository root.
 
 ## 1. Synthetic smoke test (works now)
 
 ```powershell
-uv run python -m acash.invest.wealth_pack --snapshot docs/research/evidence/upi_v1_2_synthetic_snapshot.json --target-weights '{\"CORE_DIVERSIFIED\": \"0.7\", \"CASH\": \"0.3\"}' --output tmp_pilot
+Set-Content -Path tmp_targets.json -Value '{"CORE_DIVERSIFIED": "0.7", "CASH": "0.3"}' -Encoding ascii
+uv run python -m acash.invest.preflight --snapshot docs/research/evidence/upi_v1_2_synthetic_snapshot.json --capacity docs/research/evidence/upi_v1_synthetic_capacity.json
+uv run python -m acash.invest.wealth_pack --snapshot docs/research/evidence/upi_v1_2_synthetic_snapshot.json --target-weights-file tmp_targets.json --output tmp_pilot
 ```
 
-(The escaped quotes are for Windows PowerShell 5.1. In PowerShell 7.3+ or bash, use
-`'{"CORE_DIVERSIFIED": "0.7", "CASH": "0.3"}'`.)
-
-Expected output: `tmp_pilot/upi_v1_pack.json` and `tmp_pilot/upi_v1_pack.md`, byte-identical
-to `docs/research/evidence/upi_v1_2_synthetic_pack/`. Expected values in THB:
+The preflight should report `READY_WITH_WARNINGS` (the fixture contains deliberate
+gaps). `tmp_pilot/upi_v1_pack.{json,md}` should be byte-identical to
+`docs/research/evidence/upi_v1_2_synthetic_pack/`. The THB values are synthetic, not the
+owner's:
 
 | Field | Value |
 |---|---|
@@ -22,73 +25,112 @@ to `docs/research/evidence/upi_v1_2_synthetic_pack/`. Expected values in THB:
 | Observed value-only positions | 8250.00 |
 | UNCLASSIFIED_HOLDINGS_VALUE | 10280.00 |
 | Total best evidence | 95750.00 |
-| Known-value / position-level coverage | 0.8926 / 0.7622 |
 
-## 2. What a snapshot may contain (schema `ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2`)
+A totals-only snapshot (`upi_v1_2_synthetic_totals_only.json`) gives
+`EVIDENCE_ONLY_REPORT`: no computed NAV, and allocation, concentration, P&L, stress and
+contribution-first are not computed. Totals are reported as observed and unclassified
+(THB 90750.00 in that fixture).
 
-Copy the synthetic file as a template. Every amount is a decimal string.
+## 2. Snapshot contents (`ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2`)
 
-| Evidence level | How to enter it |
-|---|---|
-| ACCOUNT_TOTAL_ONLY | `reported_total: {"amount", "currency"}` with no lines |
-| SUBPORTFOLIO_TOTAL_ONLY | `sub_portfolio_totals: [{"sub_portfolio", "amount", "currency"}]` |
-| POSITION_MARKET_VALUE_ONLY | a position with `observed_market_value` + currency and **no** `quantity` |
-| QUANTITY_AND_PRICE_OBSERVED | a position with `quantity` plus a dated price in `prices` |
-| TRANSACTION_HISTORY_RECONCILED | only through V2 replay (needs ODR 002); never from a snapshot |
+Copy `docs/research/evidence/upi_v1_2_synthetic_snapshot.json` as the template. Every
+amount is a decimal string such as `"123.45"`, typed exactly as the app displays it (the
+displayed precision sets the rounding tolerance).
 
-Rules the validator enforces:
-- A broker total is compared with its lines and never added to them. Its positive
-  unexplained remainder is reported as UNCLASSIFIED_HOLDINGS_VALUE, never as cash or a holding.
-- If an account has a total, its sub-portfolio totals are informational only.
-- Optional identifiers per security: `instrument_type` (ETF, COMMON_STOCK, ADR, DR, CFD,
-  MUTUAL_FUND, OTHER), `exchange_mic`, `isin` (check digit verified), `figi`, `trading_currency`.
-  Without them a holding is SECURITY_IDENTITY_UNVERIFIED and is not merged across accounts.
-- `valuation_date` is the US session date of the prices (for example, a Monday-morning
-  Bangkok screenshot shows Friday's close). Session validity is reported as
-  MARKET_SESSION_NOT_VERIFIED because there is no exchange calendar in the repository.
-- `observed_at` needs a timezone offset, for example `2026-11-02T08:15:00+07:00`.
-- Use opaque references such as `DIME_MAIN`, never account numbers (6+ digit runs are rejected).
+| What the app shows | How to enter it | Evidence level |
+|---|---|---|
+| Account total only | `reported_total: {"amount", "currency"}` with no lines | ACCOUNT_TOTAL_ONLY |
+| Sub-portfolio totals only | `sub_portfolio_totals: [{"sub_portfolio", "amount", "currency"}]` | SUBPORTFOLIO_TOTAL_ONLY |
+| Holding value but no share count | position with `observed_market_value` + currency, no `quantity` | POSITION_MARKET_VALUE_ONLY |
+| Shares and price | position with `quantity`, plus the price in `prices` dated `valuation_date` | QUANTITY_AND_PRICE_OBSERVED |
+| Cash | `cash: [{"currency", "amount", "kind": "SETTLED"}]`; interest not yet paid uses `"ACCRUED_INTEREST"` (excluded from NAV) | — |
 
-## 3. Owner-local preparation (after ratification only)
+### Dime! accounts: one account per real balance, never twice
+
+- Dime! securities account (e.g. `DIME_MAIN`, role `LONG_TERM`, base `USD`): holdings,
+  sub-portfolio totals, its USD cash, and the account total shown on the portfolio screen.
+- Dime! FCD (e.g. `DIME_FCD`, role `CASH_RESERVE` or `OTHER`): the FCD balance only.
+  Dime!'s guide distinguishes FCD from another Dime! USD account type. Enter a USD figure
+  under one account only, unless the app shows it as two separate balances.
+- Bank savings or the emergency reserve (e.g. `BANK_SAVINGS`, `CASH_RESERVE`, `THB`).
+- If the portfolio screen's total already includes the USD cash, enter the cash as a line
+  in the same account. The total is compared with its lines and never added to them.
+- The preflight warns `POSSIBLE_DUPLICATE_CASH_ACROSS_ACCOUNTS` when two accounts of one
+  broker carry identical cash amounts. This is a heuristic, and you must confirm or fix it.
+
+### Dates and identifiers
+
+- `observed_at` is when you read the app, with offset, e.g. `2026-11-02T08:15:00+07:00`.
+- `valuation_date` is the US session date of the prices. A Monday-morning Bangkok reading
+  shows Friday's close. The US open moves with US daylight saving (21:30 ICT in November
+  2026). Session validity is reported as `MARKET_SESSION_NOT_VERIFIED`, because no exchange
+  calendar is bundled.
+- FX: add both directions (`USD->THB` and `THB->USD`) with the source and the same `as_of`.
+  Do not reuse an app's FX conversion quote as a reference rate unless you label its
+  `source_id` accordingly.
+- Use opaque references (`DIME_MAIN`, not account numbers; 6+ digit runs are rejected).
+- Optional identifiers: `instrument_type`, `exchange_mic`, `isin`, `figi`, `trading_currency`.
+  Without them a holding stays `SECURITY_IDENTITY_UNVERIFIED` and is not merged across accounts.
+- Leave out cost basis if unknown. Never estimate it.
+
+## 3. Owner activation (only after you ratify ODR-001)
 
 1. Ratify: in `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`, set `status` to
-   `RATIFIED`, `ratified_by` to `OWNER` and `ratified_on` to the date, and keep
+   `RATIFIED`, `ratified_by` to `OWNER` and `ratified_on` to the date. Keep
    `scope_schemas`. Commit this yourself.
-2. Create `data/private/` (git-ignored). Confirm with `git check-ignore -v data/private/snapshot.json`.
-   Do not put it in OneDrive, Dropbox or any other synced folder.
-3. Copy the synthetic snapshot to `data/private/snapshot.json`, set
-   `"data_class": "OWNER_PRIVATE_OBSERVATION"` and type your figures.
-4. Copy `docs/research/evidence/upi_v1_synthetic_capacity.json` to `data/private/capacity.json`,
-   set the same data class and type your figures.
+2. Make sure the repository is not inside OneDrive, Dropbox, iCloud or Google Drive
+   (`(Get-Location).Path` must not contain such a folder). Then:
+   ```powershell
+   New-Item -ItemType Directory -Force data/private | Out-Null
+   git check-ignore -v data/private/snapshot.json
+   ```
+   The second command must print a `.gitignore` rule. If it prints nothing, stop.
+3. Copy the templates and set `"data_class": "OWNER_PRIVATE_OBSERVATION"` in both:
+   ```powershell
+   Copy-Item docs/research/evidence/upi_v1_2_synthetic_snapshot.json data/private/snapshot.json
+   Copy-Item docs/research/evidence/upi_v1_synthetic_capacity.json data/private/capacity.json
+   ```
+   Replace every synthetic figure with what the app shows on the same day. Delete the
+   lines you cannot see. Do not keep synthetic values.
+4. Preflight (read-only; prints statuses, never amounts):
+   ```powershell
+   uv run python -m acash.invest.preflight --snapshot data/private/snapshot.json --capacity data/private/capacity.json --output data/private/out --report-date 2026-11-02
+   ```
+5. Report:
+   ```powershell
+   uv run python -m acash.invest.wealth_pack --snapshot data/private/snapshot.json --capacity data/private/capacity.json --report-date 2026-11-02 --output data/private/out
+   ```
+   This writes `data/private/out/upi_v1_pack.json`, `upi_v1_pack.md` and
+   `upi_run_manifest.json`. The manifest holds the commit and input digests; keep it private.
+6. Reconcile: in the Markdown section "Evidence and observed totals", each account should
+   read `RECONCILED` or `CONSISTENT_WITH_DISPLAY_ROUNDING`. `UNEXPLAINED_DIFFERENCE` means a
+   holding or cash line is missing or mistyped. A negative difference with
+   `KNOWN_VALUE_EXCEEDS_REPORTED_TOTAL` usually means a duplicated line. Fix the snapshot
+   and rerun; the same input always gives the same pack.
 
-## 4. Private command
+Revoke: set `status` to anything other than `RATIFIED` (e.g. `REVOKED`) and commit; the
+gate closes immediately. Remove private data: `Remove-Item -Recurse -Force data/private`
+(this also deletes reports and manifests). Check the recycle bin and any backups yourself.
 
-```powershell
-uv run python -m acash.invest.wealth_pack --snapshot data/private/snapshot.json --capacity data/private/capacity.json --report-date 2026-11-02 --output data/private/out
-```
+## 4. Troubleshooting
 
-Output files: `data/private/out/upi_v1_pack.json`, `upi_v1_pack.md` and
-`upi_run_manifest.json` (code commit, working-tree state and digests; keep it private).
-Compare `evidence.THB.accounts[].account_total` against what the broker app shows. If
-the totals differ, fix the snapshot and rerun. The same input always gives the same pack.
-
-## 5. Troubleshooting
-
-| Error code | Meaning / fix |
+| Code | Meaning / fix |
 |---|---|
-| PRIVATE_OBSERVATION_NOT_AUTHORIZED | ODR not ratified, or its `scope_schemas` lacks the file's schema |
-| PRIVATE_LOCATION_NOT_IGNORED | input/output path is inside the repo but not under `data/private/` |
-| PRIVATE_REF_NOT_OPAQUE | account/snapshot reference contains 6+ digits or lowercase letters |
-| PRIVATE_NUMBER_MUST_BE_STRING | write amounts as `"123.45"`, not `123.45` |
+| PRIVATE_OBSERVATION_NOT_AUTHORIZED | ODR-001 not ratified, or `scope_schemas` lacks the file's schema |
+| PRIVATE_LOCATION_NOT_IGNORED | input/output inside the repo but not under `data/private/` |
+| PRIVATE_REF_NOT_OPAQUE | reference has lowercase letters or 6+ digits |
+| PRIVATE_NUMBER_MUST_BE_STRING | write `"123.45"`, not `123.45` |
 | PRIVATE_POSITION_EVIDENCE_MISSING | position has neither `quantity` nor `observed_market_value` |
 | PRIVATE_PRICE_MISSING / PRIVATE_UNUSED_PRICE | quantity line without a price, or a price for nothing held by quantity |
 | PRIVATE_PRICE_DATE_MISMATCH / PRIVATE_FX_DATE_MISMATCH | price/FX `as_of` must equal `valuation_date` |
-| PRIVATE_FX_RATE_MISSING | add both directions of each currency pair used |
-| PRIVATE_NAV_NONPOSITIVE | the snapshot has no cash or quantity line at all; add at least one (totals-only snapshots support the evidence report but not the full pack) |
-| PRIVATE_ISIN_INVALID | wrong ISIN check digit |
+| PRIVATE_FX_RATE_MISSING | add both directions of each currency pair |
+| PRIVATE_DUPLICATE_CASH_LINE / PRIVATE_DUPLICATE_POSITION_LINE | same line entered twice in one account |
+| PRIVATE_ISIN_INVALID | ISIN check digit wrong |
+| RESIDUAL_NOT_ESTABLISHED (status) | a total's currency cannot be converted with the supplied FX |
+| TARGET_WEIGHTS_* | target weights file is not a JSON mapping of decimal strings |
 
-## 6. Not supported in this pilot
+## 5. Not supported in this pilot
 
-Native Dime!/Webull CSV/PDF import (BROKER_NATIVE_IMPORT_NOT_ESTABLISHED), screenshots/OCR,
-historical performance from a snapshot, ETF look-through, tax computation, and any order
-or transfer.
+Native Dime!/Webull CSV/PDF import (`BROKER_NATIVE_IMPORT_NOT_ESTABLISHED`),
+screenshots/OCR, performance from a snapshot, ETF look-through, exchange-calendar
+validation, tax computation, and any order or transfer.

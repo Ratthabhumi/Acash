@@ -65,7 +65,7 @@ semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 | Dime! FCD statement / Webull monthly CSV | Native import mapping | WAITING_FOR_EVIDENCE (channel documented, schema not) |
 | Broker-displayed totals (V1_2) | Account/sub-portfolio total reconciliation, unclassified residual | IMPLEMENTED_AND_TESTED (synthetic) |
 | Security identifiers (ISIN/FIGI/MIC) | Non-merging of unverified tickers | IMPLEMENTED_AND_TESTED (format checks only; no security master) |
-| NYSE hours/calendar | Market-session validation | DOCUMENTED_ONLY (MARKET_SESSION_NOT_VERIFIED) |
+| NYSE hours/calendar | Market-session validation | DOCUMENTED_ONLY (MARKET_SESSION_NOT_VERIFIED). Source confirmed (nyse.com hours-calendars, 2026–2028). An offline fixture still needs the exact holiday and early-close date list, quoted from that page, to avoid typing dates from memory |
 | Broker fees / FX route costs | V38 route cost engine | PARTIALLY_IMPLEMENTED (owner quote evidence still open) |
 | ETF holdings (Vanguard, QQQM, SEC N-PORT) | Look-through | WAITING_FOR_EVIDENCE |
 | Alpaca / IBKR / Settrade | Broker capability registry | DOCUMENTED_ONLY (not built; no adapters) |

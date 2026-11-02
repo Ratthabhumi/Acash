@@ -790,6 +790,7 @@
         "verdict": "NOT_DISPLAYED"
       }
     ],
+    "report_type": "FULL_REPORT",
     "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "snapshot_content_sha256": "3cdac6e73a4cc7f241cd2dfff571874f9e0ac1066234abaf4e7af7129ff3b13f",
     "snapshot_id": "SYN_PILOT_V1_2",
@@ -1200,6 +1201,6 @@
     "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "0cde777bd6aa70f6d361bd76c804e90c7ed624138bf10906cc5b923a1c46c943",
+  "pack_sha256": "a9f10621bbde68c622ef6ef60f265f03b988c3c53d078721750976e48cbc2196",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

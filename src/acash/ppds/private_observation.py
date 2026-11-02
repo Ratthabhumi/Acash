@@ -46,7 +46,10 @@ EVIDENCE_LEVELS = (
     "QUANTITY_AND_PRICE_OBSERVED",
     "TRANSACTION_HISTORY_RECONCILED",
 )
-TOTAL_STATUSES = ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING", "UNEXPLAINED_DIFFERENCE", "INSUFFICIENT_EVIDENCE")
+TOTAL_STATUSES = ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING", "UNEXPLAINED_DIFFERENCE", "INSUFFICIENT_EVIDENCE",
+                  "RESIDUAL_NOT_ESTABLISHED")
+EVIDENCE_ONLY_UNSUPPORTED = ("ALLOCATION_BY_CLASSIFICATION", "COMPUTED_CONCENTRATION", "UNREALIZED_PNL",
+                             "ILLUSTRATIVE_STRESS", "CONTRIBUTION_FIRST_ALLOCATION", "PERFORMANCE")
 INSTRUMENT_TYPES = ("COMMON_STOCK", "ETF", "ADR", "DR", "CFD", "MUTUAL_FUND", "OTHER")
 DATA_CLASSES = ("SYNTHETIC_PUBLIC_FIXTURE", "OWNER_PRIVATE_OBSERVATION")
 EVIDENCE_SOURCES = ("MANUAL_SNAPSHOT", "CSV_STATEMENT")
@@ -905,7 +908,7 @@ def _compare_total(total: ReportedTotal, rows: Sequence[_Component], base: str,
     for _, _, _, ccy, local, half in rows:
         rate = _chain(fx, ccy, base, total.currency)
         if rate is None:
-            return {**out, "status": "INSUFFICIENT_EVIDENCE", "reason": "CURRENCY_CONVERSION_NOT_AVAILABLE", "difference": ""}
+            return {**out, "status": "RESIDUAL_NOT_ESTABLISHED", "reason": "CURRENCY_CONVERSION_NOT_AVAILABLE", "difference": ""}
         value += local * rate
         tolerance += half * rate
     diff = total.amount - value
@@ -989,7 +992,7 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
             (s, c) for s, c in zip(a.sub_portfolio_totals, sub_checks)]
         for total, check in sources:
             assert total is not None
-            if check["status"] == "INSUFFICIENT_EVIDENCE" and check["difference"] == "":
+            if check["status"] == "RESIDUAL_NOT_ESTABLISHED":
                 flags.append("RESIDUAL_NOT_ESTABLISHED_FX_MISSING")
                 continue
             if check["difference"] and Decimal(check["difference"]) < ZERO and check["status"] == "UNEXPLAINED_DIFFERENCE":
@@ -1110,8 +1113,17 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
         "classification_methodologies": dict(METHODOLOGIES),
         "governance": dict(GOVERNANCE_FLAGS),
         "reconciliation": reconciliation_checks(book),
-        "analytics": {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies},
+        "analytics": {},
     }
-    if snap.schema == SCHEMA_V1_2:
-        summary["evidence"] = {ccy: evidence_report(book, ccy) for ccy in snap.report_currencies}
+    if snap.schema != SCHEMA_V1_2:
+        summary["analytics"] = {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies}
+        return summary
+    summary["evidence"] = {ccy: evidence_report(book, ccy) for ccy in snap.report_currencies}
+    if book.consolidated[snap.reporting_currency].consolidated_nav == ZERO:
+        # No cash or quantity line carries value: analytics weights are undefined, so none are produced.
+        summary["report_type"] = "EVIDENCE_ONLY_REPORT"
+        summary["unsupported_analyses"] = list(EVIDENCE_ONLY_UNSUPPORTED)
+    else:
+        summary["report_type"] = "FULL_REPORT"
+        summary["analytics"] = {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies}
     return summary

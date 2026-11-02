@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `0cde777bd6aa70f6`
+Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `a9f10621bbde68c6`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
