@@ -1,9 +1,15 @@
 {
   "decision_id": "ODR_UPI_PRIVATE_OBSERVATION_001",
   "capability": "OWNER_PRIVATE_OBSERVATION_AUTHORIZED",
-  "status": "PROPOSED_NOT_RATIFIED",
-  "ratified_by": null,
-  "ratified_on": null,
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-02",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Explicit Owner instruction in the Cursor chat, 2026-11-02 16:19 +07:00, to ratify ODR-001 and have the agent apply the edit",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "scope_changed": false
+  },
   "document": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.md",
   "scope_schemas": [
     "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",

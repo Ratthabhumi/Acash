@@ -75,6 +75,7 @@ def test_closed_odr_blocks_before_reading(tmp_path: Path, monkeypatch: pytest.Mo
 def test_file_outside_repository_is_presumed_private(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     outside = tmp_path / "anything.json"
     outside.write_text(FULL.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path / "repo_without_ratification")
     monkeypatch.setattr(po, "read_bounded_json", _never)
     assert pf.preflight(outside)["preflight"] == "BLOCKED"
     for loader in (po.load_snapshot, cp.load_capacity, tx.load_batch):
