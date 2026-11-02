@@ -6,12 +6,17 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set
 
 import pytest
 
+from acash.dashboard_api import launcher
 from acash.dashboard_api import private_input as pi
 from acash.dashboard_api import private_view_server as srv
 from acash.dashboard_api import readiness as rd
@@ -423,6 +428,128 @@ def test_launcher_opens_setup_mode_only_with_odr_001(root: Path, capsys: pytest.
     rd.main(["--require-private"])
     out = capsys.readouterr().out
     assert "Private mode : SETUP - private view NO_REPORT" in out and "ODR-003" in out
+
+
+def _session(launch_key: Optional[str] = "k" * 64, seconds: float = 100.0) -> srv.Session:
+    return srv.Session(TOKEN, time.monotonic() + seconds, launch_key)
+
+
+def _boot(session: Optional[srv.Session], target: str, method: str = "GET", **headers: str) -> Any:
+    return srv.respond(method, target, {"Host": f"127.0.0.1:{PORT}", **headers}, TOKEN, Path("v.json"), PORT,
+                       b"", pi.InputService(), False, session)
+
+
+def test_sign_in_link_sets_an_httponly_strict_cookie_exactly_once(authorized: Path) -> None:
+    session = _session()
+    nonce = session.mint()
+    status, headers, _ = _boot(session, f"{srv.SESSION_ROUTE}?nonce={nonce}", **{"Sec-Fetch-Site": "none"})
+    assert (status, headers["Location"]) == (303, srv.DASHBOARD_URL)
+    assert headers["Set-Cookie"] == f"{srv.COOKIE}={TOKEN}; HttpOnly; SameSite=Strict; Path=/api/upi"
+    assert TOKEN not in headers["Location"] and headers["Referrer-Policy"] == "no-referrer"
+    assert _boot(session, f"{srv.SESSION_ROUTE}?nonce={nonce}")[0] == 403
+    cookie = {k: v for k, v in _headers(Cookie=f"{srv.COOKIE}={TOKEN}").items() if k != srv.TOKEN_HEADER}
+    status, body = _call(pi.InputService(), "GET", "status", headers=cookie)
+    assert (status, body["odr_003"]) == (200, "RATIFIED")
+    _, cors, _ = srv.respond("GET", srv.ROUTE, cookie, TOKEN, Path("v.json"), PORT)
+    assert (cors["Access-Control-Allow-Origin"], cors["Access-Control-Allow-Credentials"]) == (ORIGIN, "true")
+
+
+@pytest.mark.parametrize("case", ["wrong", "extra", "cross_site", "post", "stale", "expired_session", "none"])
+def test_sign_in_link_is_refused_unless_fresh_unused_and_top_level(case: str) -> None:
+    session = None if case == "none" else _session(seconds=-1 if case == "expired_session" else 100)
+    nonce = session.mint() if session else "x"
+    if case == "stale" and session:
+        session._nonces[nonce] = 0.0
+    target = f"{srv.SESSION_ROUTE}?nonce={'other' if case == 'wrong' else nonce}" + ("&x=1" if case == "extra" else "")
+    headers = {"Sec-Fetch-Site": "cross-site"} if case == "cross_site" else {}
+    status, out_headers, body = _boot(session, target, "POST" if case == "post" else "GET", **headers)
+    assert (status, json.loads(body)["status"]) == (403, "SESSION_BOOTSTRAP_REJECTED")
+    assert "Set-Cookie" not in out_headers
+
+
+def test_launch_route_needs_the_key_and_refuses_browser_pages() -> None:
+    session = _session()
+    status, _, body = _boot(session, srv.LAUNCH_ROUTE, "POST", **{srv.LAUNCH_HEADER: "k" * 64})
+    assert status == 200 and session.consume(json.loads(body)["nonce"])
+    for s, method, headers in [(session, "POST", {srv.LAUNCH_HEADER: "k" * 64, "Origin": ORIGIN}),
+                               (session, "POST", {srv.LAUNCH_HEADER: "j" * 64}), (session, "GET", {srv.LAUNCH_HEADER: "k" * 64}),
+                               (_session(None), "POST", {srv.LAUNCH_HEADER: "k" * 64}), (session, "POST", {})]:
+        assert _boot(s, srv.LAUNCH_ROUTE, method, **headers)[:1] == (403,)
+
+
+@pytest.mark.parametrize("cookie,origin,expired,revoked,expected", [
+    (f"{srv.COOKIE}={TOKEN}", "http://evil.example", False, False, (403, "ORIGIN_NOT_ALLOWED")),
+    (f"{srv.COOKIE}=wrong", ORIGIN, False, False, (401, "SESSION_TOKEN_REQUIRED")),
+    ('acash_session="unterminated', ORIGIN, False, False, (401, "SESSION_TOKEN_REQUIRED")),
+    ("", ORIGIN, False, False, (401, "SESSION_TOKEN_REQUIRED")),
+    (f"{srv.COOKIE}={TOKEN}", ORIGIN, True, False, (401, "SESSION_EXPIRED")),
+    (f"{srv.COOKIE}={TOKEN}", ORIGIN, False, True, (403, "AUTHORIZATION_REQUIRED")),
+])
+def test_cookie_session_keeps_origin_expiry_and_odr_checks(authorized: Path, cookie: str, origin: str, expired: bool,
+                                                          revoked: bool, expected: Any) -> None:
+    if revoked:
+        _odr1(authorized, "REVOKED")
+    headers = {"Host": f"127.0.0.1:{PORT}", "Origin": origin, "Cookie": cookie}
+    status, body = _call(pi.InputService(), "GET", "status", headers=headers, expired=expired)
+    assert (status, body["status"]) == expected
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def test_launcher_reaches_only_its_own_service(root: Path) -> None:
+    _odr1(root)
+    port = _free_port()
+    server = srv.serve(port, launch_key="k" * 64)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        nonce = launcher.request_nonce(port, "k" * 64)
+        assert nonce and getattr(server, "acash_session").consume(nonce)
+        assert launcher.request_nonce(port, "j" * 64) is None
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert launcher.request_nonce(port, "k" * 64) is None
+
+
+@pytest.mark.parametrize("busy,key,nonce,code", [
+    ({PORT}, None, None, launcher.EXIT_PORT_BUSY),
+    ({PORT}, "k" * 64, None, launcher.EXIT_PORT_BUSY),
+    ({launcher.DASHBOARD_PORT}, None, None, launcher.EXIT_PORT_BUSY),
+    ({PORT, launcher.DASHBOARD_PORT}, "k" * 64, "n" * 43, 0),
+])
+def test_launcher_refuses_unverified_ports_and_reuses_its_own_instance(
+        root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+        busy: Set[int], key: Optional[str], nonce: Optional[str], code: int) -> None:
+    _odr1(root)
+    if key:
+        (root / pi.PRIVATE_DIR).mkdir(parents=True, exist_ok=True)
+        (root / pi.PRIVATE_DIR / launcher.KEY_NAME).write_text(key, encoding="utf-8")
+    monkeypatch.setattr(launcher, "port_open", lambda p: p in busy)
+    monkeypatch.setattr(launcher, "request_nonce", lambda p, k: nonce)
+    monkeypatch.setattr(launcher, "dashboard_is_acash", lambda: True)
+    started: List[Any] = []
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: started.append(a))
+    assert launcher.main(["--no-browser"]) == code and not started
+    out = capsys.readouterr().out
+    assert (f"nonce={nonce}" in out) == (code == 0) and TOKEN not in out
+
+
+def test_launcher_starts_nothing_without_odr_001(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(launcher, "port_open", lambda p: False)
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("started"))
+    assert launcher.main(["--no-browser"]) == launcher.EXIT_NOT_AUTHORIZED
+    assert not (root / pi.PRIVATE_DIR / launcher.KEY_NAME).exists()
+
+
+def test_launcher_talks_only_to_loopback_and_never_prints_the_session_secret() -> None:
+    text = Path(launcher.__file__).read_text(encoding="utf-8")
+    assert text.count("HTTPConnection(") == 2 and text.count("HTTPConnection(srv.HOST, ") == 2
+    assert srv.HOST == "127.0.0.1" and "session.token" not in text and "acash_session.token" not in text
 
 
 def test_committed_authoring_record_keeps_its_exact_scope() -> None:

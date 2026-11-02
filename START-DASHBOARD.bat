@@ -2,17 +2,19 @@
 setlocal EnableExtensions DisableDelayedExpansion
 
 rem ACASH dashboard launcher. Read-only: no git pull/reset/merge, no broker access, no orders.
-rem Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
-rem   synthetic (default)  React dashboard with the committed synthetic demo on 127.0.0.1:3002
-rem   private              Also starts the loopback private-view service (127.0.0.1:8765);
-rem                        refuses to start unless ODR-001 is RATIFIED and the private view is valid
-rem   check                Runs every prerequisite and governance check, starts nothing
+rem Usage: START-DASHBOARD.bat [private^|synthetic^|check] [--no-browser]
+rem   (no argument)  Owner-private dashboard when ODR-001 is RATIFIED, opened already signed in
+rem                  (one-time sign-in link, HttpOnly session cookie, no token to copy);
+rem                  otherwise the synthetic demo, labelled as such
+rem   private        Owner-private only; refuses to start unless ODR-001 is RATIFIED
+rem   synthetic      React dashboard with the committed synthetic demo on 127.0.0.1:3002
+rem   check          Runs every prerequisite and governance check, starts nothing
 rem Set ACASH_LAUNCHER_NO_PAUSE=1 to skip the final pause (scripted runs).
 
 set "REPO_ROOT=%~dp0"
 set "DASHBOARD_DIR=%REPO_ROOT%dashboard"
 set "DASHBOARD_URL=http://127.0.0.1:3002/"
-set "MODE=synthetic"
+set "MODE=auto"
 set "OPEN_BROWSER=1"
 
 :parse_args
@@ -80,6 +82,7 @@ if not defined HAVE_UV (
         echo [ERROR] Private mode needs uv to verify ODR-001 and run the loopback service.
         goto fail
     )
+    if /i "%MODE%"=="auto" set "MODE=synthetic"
     goto status_done
 )
 pushd "%REPO_ROOT%"
@@ -98,10 +101,10 @@ echo           It needs ODR-001 ratified by the Owner in
 echo           docs\governance\ODR_UPI_PRIVATE_OBSERVATION_001.json.
 echo           With ODR-001 ratified and no report yet, private mode opens the Setup Wizard.
 echo           Details: docs\research\UPI_PRIVATE_PILOT_RUNBOOK.md
-echo           The synthetic demo is still available:  START-DASHBOARD.bat
+echo           The synthetic demo is still available:  START-DASHBOARD.bat synthetic
 goto fail
 :status_done
-echo       Data shown by default: SYNTHETIC DEMO (no owner data, no orders, no broker access)
+if /i "%MODE%"=="synthetic" echo       Data shown: SYNTHETIC DEMO (no owner data, no orders, no broker access)
 
 echo [4/4] Ports
 set "DASH_RUNNING="
@@ -117,17 +120,26 @@ if /i "%MODE%"=="check" (
     goto done
 )
 
-if /i not "%MODE%"=="private" goto start_dashboard
-if defined PRIVATE_RUNNING (
+if /i "%MODE%"=="synthetic" goto start_dashboard
+echo.
+echo [*] Starting ACASH owner-private (loopback only; the browser opens signed in, no token to copy)
+set "LAUNCH_FLAGS="
+if not defined OPEN_BROWSER set "LAUNCH_FLAGS=--no-browser"
+pushd "%REPO_ROOT%"
+uv run --quiet python -m acash.dashboard_api.launcher %LAUNCH_FLAGS%
+set "LAUNCH_EXIT=%ERRORLEVEL%"
+popd
+if "%LAUNCH_EXIT%"=="0" goto done
+if /i "%MODE%"=="auto" if "%LAUNCH_EXIT%"=="3" (
     echo.
-    echo [*] The private-view service is already running in its own window; reuse the token shown there.
-    echo     For a new token, close that window and run START-DASHBOARD.bat private again.
+    echo [*] Owner-private mode is not authorized; starting the SYNTHETIC DEMO instead ^(labelled as such^).
+    set "MODE=synthetic"
     goto start_dashboard
 )
 echo.
-echo [*] Starting the loopback private-view service in a separate window.
-echo     The session token is printed ONLY in that window and is never saved to a file.
-start "ACASH Private View - 127.0.0.1:8765 - close this window to stop" /d "%REPO_ROOT%." cmd /k uv run --quiet python -m acash.dashboard_api.private_view_server
+echo [STOPPED] ACASH did not start ^(code %LAUNCH_EXIT%^). Read the message above.
+echo           Details: docs\research\UPI_PRIVATE_PILOT_RUNBOOK.md
+goto fail
 
 :start_dashboard
 if defined DASH_RUNNING (
@@ -138,14 +150,8 @@ if defined DASH_RUNNING (
     goto done
 )
 echo.
-echo [*] Starting the dashboard at %DASHBOARD_URL%
-if /i "%MODE%"=="private" (
-    echo     Portfolio page: paste the token from the private-view window into "Session token" and press Enter.
-    echo     Without a token the page keeps showing the synthetic demo.
-    echo     No report yet? The page then offers "Set up your portfolio".
-)
+echo [*] Starting the synthetic demo dashboard at %DASHBOARD_URL%
 echo     Stop: press Ctrl+C here, then answer Y.
-if /i "%MODE%"=="private" echo           Also close the "ACASH Private View" window.
 echo.
 if defined OPEN_BROWSER start "" /b powershell -NoProfile -NonInteractive -Command "$u='%DASHBOARD_URL%'; for($i=0;$i -lt 60;$i++){ try { $r=Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process $u; exit 0 } } catch {}; Start-Sleep -Seconds 1 }"
 pushd "%DASHBOARD_DIR%"
@@ -166,11 +172,11 @@ echo         The launcher does not modify the repository; restore the file yours
 goto fail
 
 :usage
-echo Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
+echo Usage: START-DASHBOARD.bat [private^|synthetic^|check] [--no-browser]
 goto done
 
 :usage_fail
-echo Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
+echo Usage: START-DASHBOARD.bat [private^|synthetic^|check] [--no-browser]
 goto fail
 
 :fail

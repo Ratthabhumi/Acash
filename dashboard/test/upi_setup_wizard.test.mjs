@@ -68,10 +68,10 @@ test('wizard sources do not compute, persist, log or download private figures', 
   const wizard = sources[0];
   assert.match(wizard, /ACASH ได้รับอนุญาตให้อ่านและวิเคราะห์ข้อมูลพอร์ตส่วนตัวในเครื่องนี้เท่านั้น ไม่มีสิทธิ์ซื้อขายหรือโอนเงิน/);
   assert.match(wizard, /confirm_replace: true/);
-  assert.match(wizard, /callInput\(token, 'PUT', 'inputs', \{\s*snapshot: compact\(snap\), capacity: capacityForSave\(cap\), base_revisions: revisions/);
+  assert.match(wizard, /callInput\('PUT', 'inputs', \{\s*snapshot: compact\(snap\), capacity: capacityForSave\(cap\), base_revisions: revisions/);
   assert.doesNotMatch(wizard, /'PUT', kind/);
   assert.match(wizard, /disabled=\{busy \|\| !canSave \|\| !confirm\}/);
   const repo = read('src/services/upiRepository.ts');
   assert.match(repo, /INPUT_ENDPOINT \+ route/);
-  assert.match(repo, /credentials: 'omit'/);
+  assert.match(repo, /credentials: 'include'/);
 });

@@ -90,9 +90,9 @@ const Issues: React.FC<{ title: string; items: Issue[]; tone: 'error' | 'warn'; 
   </div>
 );
 
-interface Props { token: string; hasReport: boolean; onGenerated: () => void }
+interface Props { hasReport: boolean; onGenerated: () => void }
 
-export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) => {
+export const SetupWizard: React.FC<Props> = ({ hasReport, onGenerated }) => {
   const [step, setStep] = useState(0);
   const [snap, setSnap] = useState<SnapshotDoc>(emptySnapshot);
   const [cap, setCap] = useState<CapacityDoc>(emptyCapacity);
@@ -114,14 +114,14 @@ export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) 
   const load = useCallback(async () => {
     setBusy(true);
     setNotice('');
-    const status = await callInput(token, 'GET', 'status');
+    const status = await callInput('GET', 'status');
     if (status.http !== 200) { setErrors([{ code: status.body.status }]); setBusy(false); return; }
     setAuth({ odr_001: String(status.body.odr_001), odr_003: String(status.body.odr_003) });
     setReport((status.body.report as ReportState | undefined) ?? null);
     setRecovery(status.body.recovery_pending === true);
     const revs: Record<string, string> = {};
     for (const kind of ['snapshot', 'capacity'] as const) {
-      const r = await callInput(token, 'GET', kind);
+      const r = await callInput('GET', kind);
       revs[kind] = String(r.body.revision ?? 'ABSENT');
       const doc = r.http === 200 ? clearPlaceholders(r.body.document) : null;
       if (kind === 'snapshot') setSnap(doc && typeof doc === 'object' ? { ...emptySnapshot(), ...(doc as Partial<SnapshotDoc>) } : emptySnapshot());
@@ -132,10 +132,10 @@ export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) 
     setWarnings([]);
     setDirty(false);
     setBusy(false);
-  }, [token]);
+  }, []);
 
   const refreshStatus = async () => {
-    const s = await callInput(token, 'GET', 'status');
+    const s = await callInput('GET', 'status');
     if (s.http !== 200) return;
     setReport((s.body.report as ReportState | undefined) ?? null);
     setRecovery(s.body.recovery_pending === true);
@@ -162,7 +162,7 @@ export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) 
   const validate = async () => {
     setBusy(true);
     setNotice('');
-    const r = await callInput(token, 'POST', 'validate', { snapshot: compact(snap), capacity: capacityForSave(cap) });
+    const r = await callInput('POST', 'validate', { snapshot: compact(snap), capacity: capacityForSave(cap) });
     if (r.http !== 200) setErrors([{ code: r.body.status }]);
     else {
       const { errs, warns } = collect(r.body);
@@ -176,7 +176,7 @@ export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) 
   const save = async () => {
     setBusy(true);
     setNotice('');
-    const r = await callInput(token, 'PUT', 'inputs', {
+    const r = await callInput('PUT', 'inputs', {
       snapshot: compact(snap), capacity: capacityForSave(cap), base_revisions: revisions, confirm_replace: true,
     });
     setBusy(false);
@@ -201,7 +201,7 @@ export const SetupWizard: React.FC<Props> = ({ token, hasReport, onGenerated }) 
   const generate = async () => {
     setBusy(true);
     setNotice('');
-    const r = await callInput(token, 'POST', 'generate', {});
+    const r = await callInput('POST', 'generate', {});
     setBusy(false);
     void refreshStatus();
     if (r.http === 200) { setErrors([]); onGenerated(); return; }

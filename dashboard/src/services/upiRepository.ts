@@ -1,26 +1,26 @@
 import syntheticFull from '../fixtures/upi_synthetic_view.json';
 import syntheticEvidenceOnly from '../fixtures/upi_synthetic_evidence_only_view.json';
-import { LoadState, PRIVATE_ENDPOINT, TOKEN_HEADER, classifyResponse, classifyView } from './upiView';
+import { LoadState, PRIVATE_ENDPOINT, classifyResponse, classifyView } from './upiView';
 import { ApiResult, INPUT_ENDPOINT } from './privateInput';
 
 export type SyntheticVariant = 'FULL_REPORT' | 'EVIDENCE_ONLY_REPORT';
 
 // Modes never fall back to each other: a failed private load is reported as its own state
 // and synthetic fixtures are never substituted for owner data.
+// Authentication is the HttpOnly session cookie set by the launcher's one-time sign-in link;
+// the page never sees or stores the secret.
 export const upiRepository = {
   loadSynthetic(variant: SyntheticVariant): LoadState {
     return classifyView(variant === 'FULL_REPORT' ? syntheticFull : syntheticEvidenceOnly, 'SYNTHETIC_DEMO');
   },
 
-  async loadOwnerPrivate(token: string, signal?: AbortSignal): Promise<LoadState> {
-    if (!token) return { status: 'AUTHORIZATION_REQUIRED', detail: 'SESSION_TOKEN_REQUIRED' };
+  async loadOwnerPrivate(signal?: AbortSignal): Promise<LoadState> {
     let response: Response;
     try {
       response = await fetch(PRIVATE_ENDPOINT, {
         method: 'GET',
-        headers: { [TOKEN_HEADER]: token },
         cache: 'no-store',
-        credentials: 'omit',
+        credentials: 'include',
         referrerPolicy: 'no-referrer',
         signal,
       });
@@ -38,15 +38,15 @@ export const upiRepository = {
     return classifyResponse(response.status, body);
   },
 
-  async callInput(token: string, method: 'GET' | 'PUT' | 'POST', route: string, payload?: unknown,
+  async callInput(method: 'GET' | 'PUT' | 'POST', route: string, payload?: unknown,
                   signal?: AbortSignal): Promise<ApiResult> {
     try {
       const response = await fetch(INPUT_ENDPOINT + route, {
         method,
-        headers: payload === undefined ? { [TOKEN_HEADER]: token } : { [TOKEN_HEADER]: token, 'Content-Type': 'application/json' },
+        headers: payload === undefined ? undefined : { 'Content-Type': 'application/json' },
         body: payload === undefined ? undefined : JSON.stringify(payload),
         cache: 'no-store',
-        credentials: 'omit',
+        credentials: 'include',
         referrerPolicy: 'no-referrer',
         signal,
       });
