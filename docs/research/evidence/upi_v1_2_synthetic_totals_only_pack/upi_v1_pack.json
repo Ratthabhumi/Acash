@@ -1,0 +1,661 @@
+{
+  "A_total_wealth": {
+    "accounts": [
+      {
+        "account_ref": "BROKER_D_FCD",
+        "base_currency": "USD",
+        "broker": "BROKER_D",
+        "role": "CASH_RESERVE",
+        "valuation_view_sha256": "91e7d3478eff3472613ae339746326bd3f0df2f9602239ff8ba02076d7f1f063"
+      },
+      {
+        "account_ref": "BROKER_D_MAIN",
+        "base_currency": "USD",
+        "broker": "BROKER_D",
+        "role": "LONG_TERM",
+        "valuation_view_sha256": "dc8fc3cd875098d62f92a366e6238580786cca15674aa570b876529296ae8d6a"
+      }
+    ],
+    "analytics": {},
+    "classification_methodologies": {
+      "CASH_BALANCE": "Cash balance line; assigned automatically to CASH.",
+      "NOT_CLASSIFIED": "No evidence-backed classification supplied; bucket is UNKNOWN.",
+      "OWNER_DECLARED_WITH_EVIDENCE": "Owner-assigned bucket backed by a cited document (factsheet, prospectus, index rules)."
+    },
+    "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+    "evidence": {
+      "THB": {
+        "accounts": [
+          {
+            "account_ref": "BROKER_D_FCD",
+            "account_total": {
+              "basis": "OBSERVED_NOT_COMPUTED",
+              "currency": "USD",
+              "difference": "500.00",
+              "observed_total": "500.00",
+              "reason": "NO_COMPONENT_LINES",
+              "status": "INSUFFICIENT_EVIDENCE"
+            },
+            "cash_lines_observed": false,
+            "computed_value": "0.00",
+            "evidence_level": "ACCOUNT_TOTAL_ONLY",
+            "flags": [],
+            "observed_position_value": "0.00",
+            "sub_portfolio_totals": [],
+            "unclassified_holdings_value": "16500.00"
+          },
+          {
+            "account_ref": "BROKER_D_MAIN",
+            "account_total": {
+              "basis": "OBSERVED_NOT_COMPUTED",
+              "currency": "USD",
+              "difference": "2250.00",
+              "observed_total": "2250.00",
+              "reason": "NO_COMPONENT_LINES",
+              "status": "INSUFFICIENT_EVIDENCE"
+            },
+            "cash_lines_observed": false,
+            "computed_value": "0.00",
+            "evidence_level": "SUBPORTFOLIO_TOTAL_ONLY",
+            "flags": [
+              "SUBPORTFOLIO_TOTALS_INFORMATIONAL_ACCOUNT_TOTAL_GOVERNS"
+            ],
+            "observed_position_value": "0.00",
+            "sub_portfolio_totals": [
+              {
+                "basis": "OBSERVED_NOT_COMPUTED",
+                "currency": "USD",
+                "difference": "1800.00",
+                "observed_total": "1800.00",
+                "reason": "NO_COMPONENT_LINES",
+                "status": "INSUFFICIENT_EVIDENCE",
+                "sub_portfolio": "Core"
+              },
+              {
+                "basis": "OBSERVED_NOT_COMPUTED",
+                "currency": "USD",
+                "difference": "410.00",
+                "observed_total": "410.00",
+                "reason": "NO_COMPONENT_LINES",
+                "status": "INSUFFICIENT_EVIDENCE",
+                "sub_portfolio": "Theme"
+              }
+            ],
+            "unclassified_holdings_value": "74250.00"
+          }
+        ],
+        "allocation_by_sub_portfolio_best_evidence": {
+          "BROKER_D_FCD/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+            "value": "16500.00",
+            "weight": "0.1818"
+          },
+          "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+            "value": "74250.00",
+            "weight": "0.8182"
+          }
+        },
+        "concentration_best_evidence": {
+          "denominator": "TOTAL_BEST_EVIDENCE",
+          "hhi_identified_securities": "0.0000",
+          "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
+          "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+          "top1_weight": "0.0000",
+          "top_holdings": [],
+          "unclassified_share": "1.0000"
+        },
+        "coverage": {
+          "account_total_reconciliation_coverage": "0.0000",
+          "cash_observed_accounts": "0/2",
+          "cost_basis_coverage": "0.0000",
+          "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
+          "known_value_coverage": "0.0000",
+          "position_level_coverage": "0.0000"
+        },
+        "currency_exposure_best_evidence": {
+          "UNCLASSIFIED_RESIDUAL": {
+            "value": "90750.00",
+            "weight": "1.0000"
+          }
+        },
+        "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
+        "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+        "report_currency": "THB",
+        "security_identity": [],
+        "valuation_basis": {
+          "computed_nav_ppds": "0.00",
+          "observed_position_value": "0.00",
+          "total_best_evidence": "90750.00",
+          "unclassified_holdings_value": "90750.00"
+        }
+      },
+      "USD": {
+        "accounts": [
+          {
+            "account_ref": "BROKER_D_FCD",
+            "account_total": {
+              "basis": "OBSERVED_NOT_COMPUTED",
+              "currency": "USD",
+              "difference": "500.00",
+              "observed_total": "500.00",
+              "reason": "NO_COMPONENT_LINES",
+              "status": "INSUFFICIENT_EVIDENCE"
+            },
+            "cash_lines_observed": false,
+            "computed_value": "0.00",
+            "evidence_level": "ACCOUNT_TOTAL_ONLY",
+            "flags": [],
+            "observed_position_value": "0.00",
+            "sub_portfolio_totals": [],
+            "unclassified_holdings_value": "500.00"
+          },
+          {
+            "account_ref": "BROKER_D_MAIN",
+            "account_total": {
+              "basis": "OBSERVED_NOT_COMPUTED",
+              "currency": "USD",
+              "difference": "2250.00",
+              "observed_total": "2250.00",
+              "reason": "NO_COMPONENT_LINES",
+              "status": "INSUFFICIENT_EVIDENCE"
+            },
+            "cash_lines_observed": false,
+            "computed_value": "0.00",
+            "evidence_level": "SUBPORTFOLIO_TOTAL_ONLY",
+            "flags": [
+              "SUBPORTFOLIO_TOTALS_INFORMATIONAL_ACCOUNT_TOTAL_GOVERNS"
+            ],
+            "observed_position_value": "0.00",
+            "sub_portfolio_totals": [
+              {
+                "basis": "OBSERVED_NOT_COMPUTED",
+                "currency": "USD",
+                "difference": "1800.00",
+                "observed_total": "1800.00",
+                "reason": "NO_COMPONENT_LINES",
+                "status": "INSUFFICIENT_EVIDENCE",
+                "sub_portfolio": "Core"
+              },
+              {
+                "basis": "OBSERVED_NOT_COMPUTED",
+                "currency": "USD",
+                "difference": "410.00",
+                "observed_total": "410.00",
+                "reason": "NO_COMPONENT_LINES",
+                "status": "INSUFFICIENT_EVIDENCE",
+                "sub_portfolio": "Theme"
+              }
+            ],
+            "unclassified_holdings_value": "2250.00"
+          }
+        ],
+        "allocation_by_sub_portfolio_best_evidence": {
+          "BROKER_D_FCD/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+            "value": "500.00",
+            "weight": "0.1818"
+          },
+          "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+            "value": "2250.00",
+            "weight": "0.8182"
+          }
+        },
+        "concentration_best_evidence": {
+          "denominator": "TOTAL_BEST_EVIDENCE",
+          "hhi_identified_securities": "0.0000",
+          "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
+          "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+          "top1_weight": "0.0000",
+          "top_holdings": [],
+          "unclassified_share": "1.0000"
+        },
+        "coverage": {
+          "account_total_reconciliation_coverage": "0.0000",
+          "cash_observed_accounts": "0/2",
+          "cost_basis_coverage": "0.0000",
+          "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
+          "known_value_coverage": "0.0000",
+          "position_level_coverage": "0.0000"
+        },
+        "currency_exposure_best_evidence": {
+          "UNCLASSIFIED_RESIDUAL": {
+            "value": "2750.00",
+            "weight": "1.0000"
+          }
+        },
+        "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
+        "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+        "report_currency": "USD",
+        "security_identity": [],
+        "valuation_basis": {
+          "computed_nav_ppds": "0.00",
+          "observed_position_value": "0.00",
+          "total_best_evidence": "2750.00",
+          "unclassified_holdings_value": "2750.00"
+        }
+      }
+    },
+    "evidence_source": "MANUAL_SNAPSHOT",
+    "fx_rates": [
+      {
+        "pair": "THB->USD",
+        "rate": "0.030303030303030303",
+        "source_id": "SYNTHETIC_REFERENCE"
+      },
+      {
+        "pair": "USD->THB",
+        "rate": "33.00",
+        "source_id": "SYNTHETIC_REFERENCE"
+      }
+    ],
+    "governance": {
+      "capital_authority_usd": "0.00",
+      "d5_eligible": false,
+      "order_controls": null,
+      "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
+      "trading_authority": "NONE"
+    },
+    "performance_reason": "SNAPSHOT_ONLY: no contribution, withdrawal or transfer history; TWR/XIRR undefined.",
+    "performance_status": "PERFORMANCE_NOT_ESTABLISHED",
+    "reconciliation": [],
+    "report_type": "EVIDENCE_ONLY_REPORT",
+    "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "snapshot_content_sha256": "452de53265d48d118d5a08a6a807acd874bb5a1220bdeb349a4ce48d1934c654",
+    "snapshot_id": "SYN_TOTALS_ONLY_V1_2",
+    "stale_after_days": 7,
+    "support_state": "SNAPSHOT_ONLY",
+    "time_alignment": {
+      "asynchronous_prices": "NOT_SUPPORTED_V1_1",
+      "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+      "observation_lag_days": 3,
+      "observed_at": "2026-11-02T08:15:00+07:00",
+      "price_and_fx_dates": "SINGLE_VALUATION_DATE",
+      "price_published_at": {},
+      "valuation_date": "2026-10-30"
+    },
+    "unsupported_analyses": [
+      "ALLOCATION_BY_CLASSIFICATION",
+      "COMPUTED_CONCENTRATION",
+      "UNREALIZED_PNL",
+      "ILLUSTRATIVE_STRESS",
+      "CONTRIBUTION_FIRST_ALLOCATION",
+      "PERFORMANCE"
+    ],
+    "valuation_age_days": 0,
+    "valuation_date": "2026-10-30",
+    "valuation_stale": false
+  },
+  "B_long_term": {
+    "contribution_first": "NOT_EVALUATED_EVIDENCE_ONLY_REPORT",
+    "policy_families": {
+      "A_HOLD_CURRENT": {
+        "description": "Keep current holdings; contribute to cash only.",
+        "example_instruments": []
+      },
+      "B_GLOBAL_EQUITY": {
+        "description": "Single global equity index fund.",
+        "example_instruments": [
+          "VT"
+        ]
+      },
+      "C_US_CORE_PLUS_EX_US": {
+        "description": "US broad index plus ex-US index.",
+        "example_instruments": [
+          "VOO",
+          "VXUS"
+        ]
+      },
+      "D_EQUITY_PLUS_DEFENSIVE": {
+        "description": "Broad equity plus bonds or T-bills.",
+        "example_instruments": [
+          "VT",
+          "BND",
+          "BIL"
+        ]
+      },
+      "E_CASH_ACCUMULATION": {
+        "description": "Accumulate cash/reserve before any investing.",
+        "example_instruments": [
+          "BIL"
+        ]
+      }
+    },
+    "policy_note": "DESCRIPTIVE_ONLY: families are not ranked, not recommended and not suitability-assessed.",
+    "sub_portfolios": {
+      "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+        "value": "74250.00",
+        "weight": "0.8182"
+      }
+    }
+  },
+  "C_quant_workspace": {
+    "budget": {
+      "authorization": "NOT_AUTHORIZED",
+      "budget_thb": "8000.00",
+      "fundable_from_reserve_excess": false,
+      "label": "HYPOTHETICAL_RESEARCH_BUDGET",
+      "months_from_residual_after_planned_contribution": 1,
+      "reserve_funding": "FORBIDDEN"
+    },
+    "new_strategies": "NONE_CREATED",
+    "paper_or_live_connectivity": "DISABLED",
+    "quant_accounts": [],
+    "real_capital_authority_usd": "0.00",
+    "required_benchmarks": [
+      "CASH",
+      "BUY_AND_HOLD",
+      "EQUAL_WEIGHT"
+    ],
+    "required_validation": [
+      "DSR",
+      "CPCV",
+      "PBO"
+    ],
+    "status": "RESEARCH_ONLY_NOT_AUTHORIZED",
+    "webull_openapi": "INTERFACE_NOT_DOCUMENTED: EXTERNAL_RESEARCH_REQUIRED (no credentials, no endpoints called)"
+  },
+  "D_financial_capacity": {
+    "capacity_status": "SURPLUS_POSITIVE",
+    "flexible_contribution_thb": "2000.00",
+    "horizon_years": 7,
+    "monthly_need_thb": "10000.00",
+    "monthly_surplus_thb": "15000.00",
+    "notes": [
+      "Contributions are not profit; no return forecast is made.",
+      "Reserve target and horizon are owner declarations; ACASH does not infer risk tolerance."
+    ],
+    "quant_budget": {
+      "authorization": "NOT_AUTHORIZED",
+      "budget_thb": "8000.00",
+      "fundable_from_reserve_excess": false,
+      "label": "HYPOTHETICAL_RESEARCH_BUDGET",
+      "months_from_residual_after_planned_contribution": 1,
+      "reserve_funding": "FORBIDDEN"
+    },
+    "reserve": {
+      "coverage_months": "2.00",
+      "current_thb": "20000.00",
+      "effective_thb": "20000.00",
+      "exceptional_expenses_12m_thb": "0.00",
+      "shortfall_thb": "10000.00",
+      "status": "RESERVE_SHORTFALL",
+      "target_thb": "30000.00"
+    },
+    "scenarios": [
+      {
+        "monthly_contribution_thb": "5000.00",
+        "months_to_reserve_target_from_residual": 1,
+        "residual_after_contribution_thb": "10000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "7500.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "7500.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "10000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "5000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "6000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "9000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      }
+    ],
+    "v38_route_costs_per_contribution": {
+      "10000": {
+        "input_hash": "3935bd333c835d9656936d289bbd776f129f4190831a87663490f699fffa0236",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "285.88",
+            "known_friction_thb": "320.1032",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "265.33",
+            "known_friction_thb": "1015.9262",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "281.30",
+            "known_friction_thb": "475.1820",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "295.14",
+            "known_friction_thb": "6.5596",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "295.01",
+            "known_friction_thb": "10.9614",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      },
+      "5000": {
+        "input_hash": "2e9af32685bf911316d6e9cbd599b23333efab09103e7684eb6123590cafc4dc",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "138.89",
+            "known_friction_thb": "297.1846",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "118.42",
+            "known_friction_thb": "990.2988",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "134.32",
+            "known_friction_thb": "451.9248",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "147.57",
+            "known_friction_thb": "3.2798",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "147.50",
+            "known_friction_thb": "5.6500",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      },
+      "7500": {
+        "input_hash": "613a4a517082e5903f3fae91baa06fc9e2826b1bd18c48be4552011acfd4059e",
+        "rows": [
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "212.49",
+            "known_friction_thb": "305.0886",
+            "route": "IBKR Pro via K PLUS SWIFT SHAR"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "191.94",
+            "known_friction_thb": "1000.9116",
+            "route": "IBKR Pro via K PLUS SWIFT DEBT"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "207.90",
+            "known_friction_thb": "460.5060",
+            "route": "IBKR Pro via K PLUS SWIFT CRED"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "221.35",
+            "known_friction_thb": "5.0890",
+            "route": "Dime! Thailand (KKP)"
+          },
+          {
+            "cost_status": "LOWER_BOUND_ONLY",
+            "decision_status": "COST_EVIDENCE_INCOMPLETE",
+            "eligibility_status": "ACCOUNT_SPECIFIC_UNVERIFIED",
+            "investable_usd": "221.26",
+            "known_friction_thb": "8.1364",
+            "route": "Webull Thailand (Manual)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - currently advertised 0%)"
+          },
+          {
+            "cost_status": "NOT_EVALUATED",
+            "decision_status": "NOT_ELIGIBLE",
+            "eligibility_status": "ORDER_TYPE_INCOMPATIBLE",
+            "investable_usd": null,
+            "known_friction_thb": "0",
+            "route": "Webull Thailand (DCA - 0.10% conflict sensitivity)"
+          },
+          {
+            "cost_status": "NOT_APPLICABLE",
+            "decision_status": "CASH_NO_TRADE",
+            "eligibility_status": "DOCUMENTED",
+            "investable_usd": "0",
+            "known_friction_thb": "0",
+            "route": "CASH / NO TRADE"
+          }
+        ]
+      }
+    }
+  },
+  "E_decision": {
+    "conclusion": "NO_ACTION_PENDING_EVIDENCE",
+    "orders_generated": 0,
+    "reasons": [
+      "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
+      "EVIDENCE_ONLY_REPORT: no cash or quantity line carries value; allocation, concentration, P&L and stress are not computed.",
+      "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
+      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
+      "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
+      "MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.",
+      "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
+      "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
+    ],
+    "v38_decision_pack": {
+      "pack_sha256": "31d381a296303aaf49e1d373f160d48654b14ed35a7308235024ce794d38d46b",
+      "pack_version": "V38_DECISION_PACK_1",
+      "path": "docs/research/evidence/v38_investor_decision_pack_20261101.json"
+    }
+  },
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "governance": {
+    "D5_REAL_ADMISSION": "NOT_ADMITTED",
+    "EXECUTION_AUTHORITY_FROM_EVIDENCE": "NONE",
+    "HYP_003": "TERMINALLY_FALSIFIED",
+    "LANE_A_B": "UNISSUED",
+    "NO_REAL_ORDERS": true,
+    "REAL_CAPITAL_AUTHORITY_USD": "0.00",
+    "capital_authority_usd": "0.00",
+    "d5_eligible": false,
+    "order_controls": null,
+    "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
+    "trading_authority": "NONE"
+  },
+  "observation_authority": {
+    "capital_authority_usd": "0.00",
+    "observation_authority": "NOT_REQUIRED_SYNTHETIC_FIXTURE",
+    "odr_record": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json",
+    "odr_state": "NOT_CONSULTED_SYNTHETIC_FIXTURE",
+    "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "trading_authority": "NONE"
+  },
+  "pack_sha256": "b9b9d4b4932599cb98e4d64c6e77ba878a823f7594b91cbaae16038897bc2cff",
+  "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
+}

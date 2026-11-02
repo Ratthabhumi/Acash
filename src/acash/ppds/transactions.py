@@ -38,10 +38,13 @@ from acash.ppds.private_observation import (
     _LONG_DIGIT_RUN,
     assert_private_location,
     assert_private_observation_authorized,
-    read_bounded_json,
+    read_gated_json,
 )
 
 SCHEMA = "ACASH_CANONICAL_TRANSACTIONS_V1"
+# Transaction histories need their own owner decision; the snapshot ODR does not extend to them.
+AUTHORIZATION_RECORD = Path("docs/governance/ODR_UPI_PRIVATE_TRANSACTIONS_002.json")
+AUTHORIZED_CAPABILITY = "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED"
 LOT_METHOD = "FIFO_COST_INCLUDES_COMMISSION_FEES_AND_TAX"
 LOT_METHOD_NOTE = "Analytical accounting assumption; not a jurisdictional tax method."
 UNSUPPORTED = {
@@ -215,9 +218,11 @@ def parse_batch(doc: Any) -> TransactionBatch:
 
 
 def load_batch(path: Path) -> TransactionBatch:
-    batch = parse_batch(read_bounded_json(Path(path), "TXN_BATCH"))
+    batch = parse_batch(read_gated_json(Path(path), "TXN_BATCH", record=AUTHORIZATION_RECORD,
+                                        capability=AUTHORIZED_CAPABILITY))
     if batch.data_class == "OWNER_PRIVATE_OBSERVATION":
-        assert_private_observation_authorized(batch.data_class)
+        assert_private_observation_authorized(batch.data_class, SCHEMA, record=AUTHORIZATION_RECORD,
+                                              capability=AUTHORIZED_CAPABILITY)
         assert_private_location(Path(path))
     return batch
 
@@ -432,6 +437,7 @@ def reconcile_with_snapshot(state: LedgerState, snapshot: PortfolioSnapshot) -> 
         raise DataContractError("TXN_RECONCILE_DATE_MISMATCH: replay as_of must equal snapshot valuation_date.")
     snap_qty: Dict[Tuple[str, str], Decimal] = {}
     snap_cash: Dict[Tuple[str, str], Decimal] = {}
+    value_only = {(a.account_ref, o.security_id) for a in snapshot.accounts for o in a.observed_value_positions}
     for account in snapshot.accounts:
         for p in account.positions:
             snap_qty[(account.account_ref, p.security_id)] = snap_qty.get((account.account_ref, p.security_id), ZERO) + p.quantity
@@ -440,8 +446,11 @@ def reconcile_with_snapshot(state: LedgerState, snapshot: PortfolioSnapshot) -> 
                 snap_cash[(account.account_ref, c.currency)] = snap_cash.get((account.account_ref, c.currency), ZERO) + c.amount
     breaks: List[Dict[str, str]] = []
     replay_qty = quantities(state)
-    for key in sorted(set(replay_qty) | set(snap_qty)):
-        if replay_qty.get(key, ZERO) != snap_qty.get(key, ZERO):
+    for key in sorted(set(replay_qty) | set(snap_qty) | value_only):
+        if key in value_only:
+            breaks.append({"scope": "POSITION", "key": f"{key[0]}:{key[1]}", "status": "QUANTITY_NOT_OBSERVED",
+                           "difference": ""})
+        elif replay_qty.get(key, ZERO) != snap_qty.get(key, ZERO):
             breaks.append({"scope": "POSITION", "key": f"{key[0]}:{key[1]}", "status": "QUANTITY_BREAK",
                            "difference": str(replay_qty.get(key, ZERO) - snap_qty.get(key, ZERO))})
     for key in sorted(set(state.cash) | set(snap_cash)):

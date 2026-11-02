@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_UPI_V1` valued 2026-10-30 (observed 2026-11-01T09:00:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `da4003ce0d078705`
+Snapshot `SYN_UPI_V1` valued 2026-10-30 (observed 2026-11-01T09:00:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `a6fd6504a061781d`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -123,7 +123,7 @@ V38 route costs for 10000 THB (MANUAL, 1 month; unranked):
 - UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.
 - RESERVE_SHORTFALL: rebuild emergency reserve before new risk.
 - V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.
-- GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc).
+- PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority.
 - V38 pack reference `31d381a296303aaf` (docs/research/evidence/v38_investor_decision_pack_20261101.json)
 
 ## Governance

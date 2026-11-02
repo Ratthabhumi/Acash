@@ -1,0 +1,56 @@
+{
+  "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "snapshot_id": "SYN_PILOT_V1_2",
+  "observed_at": "2026-11-02T08:15:00+07:00",
+  "valuation_date": "2026-10-30",
+  "evidence_source": "MANUAL_SNAPSHOT",
+  "reporting_currency": "THB",
+  "report_currencies": ["THB", "USD"],
+  "fx_rates": [
+    {"from": "USD", "to": "THB", "rate": "33.00", "as_of": "2026-10-30", "source_id": "SYNTHETIC_REFERENCE"},
+    {"from": "THB", "to": "USD", "rate": "0.030303030303030303", "as_of": "2026-10-30", "source_id": "SYNTHETIC_REFERENCE"}
+  ],
+  "prices": [
+    {"security_id": "SYNIDX", "currency": "USD", "price": "100.00", "as_of": "2026-10-30", "published_at": "2026-10-30T16:00:00-04:00", "source_id": "SYNTHETIC_CLOSE"},
+    {"security_id": "SYNBOND", "currency": "USD", "price": "20.00", "as_of": "2026-10-30", "source_id": "SYNTHETIC_CLOSE"}
+  ],
+  "securities": [
+    {"security_id": "SYNIDX", "classification": "CORE_DIVERSIFIED", "methodology": "OWNER_DECLARED_WITH_EVIDENCE", "evidence_ref": "Synthetic index fund factsheet", "instrument_type": "ETF", "exchange_mic": "ARCX", "isin": "ZZSYNIDX0005", "trading_currency": "USD"},
+    {"security_id": "SYNBOND", "classification": "CORE_DIVERSIFIED", "methodology": "OWNER_DECLARED_WITH_EVIDENCE", "evidence_ref": "Synthetic bond fund factsheet", "instrument_type": "ETF", "exchange_mic": "XNAS", "figi": "BBG00SYNBND1", "trading_currency": "USD"},
+    {"security_id": "SYNTHEME", "classification": "UNKNOWN", "methodology": "NOT_CLASSIFIED"}
+  ],
+  "accounts": [
+    {
+      "account_ref": "BROKER_D_MAIN", "broker": "BROKER_D", "role": "LONG_TERM", "base_currency": "USD",
+      "reported_total": {"amount": "2250.00", "currency": "USD"},
+      "sub_portfolio_totals": [
+        {"sub_portfolio": "Core", "amount": "1800.00", "currency": "USD"},
+        {"sub_portfolio": "Theme", "amount": "410.00", "currency": "USD"}
+      ],
+      "cash": [{"currency": "USD", "amount": "40.00", "kind": "SETTLED"}],
+      "positions": [
+        {"security_id": "SYNIDX", "sub_portfolio": "Core", "quantity": "12", "cost_basis_total": "1100.00", "cost_basis_currency": "USD"},
+        {"security_id": "SYNBOND", "sub_portfolio": "Core", "quantity": "30"},
+        {"security_id": "SYNTHEME", "sub_portfolio": "Theme", "observed_market_value": "250.00", "observed_market_value_currency": "USD", "cost_basis_total": "300.00", "cost_basis_currency": "USD"}
+      ]
+    },
+    {
+      "account_ref": "BANK_FCD", "broker": "BANK_A", "role": "CASH_RESERVE", "base_currency": "USD",
+      "reported_total": {"amount": "500.00", "currency": "USD"},
+      "cash": [
+        {"currency": "USD", "amount": "500.00", "kind": "SETTLED"},
+        {"currency": "USD", "amount": "0.35", "kind": "ACCRUED_INTEREST"}
+      ]
+    },
+    {
+      "account_ref": "BROKER_W_QUANT", "broker": "BROKER_W", "role": "QUANT_RESEARCH", "base_currency": "USD",
+      "reported_total": {"amount": "0.00", "currency": "USD"},
+      "cash": [{"currency": "USD", "amount": "0.00", "kind": "SETTLED"}]
+    },
+    {
+      "account_ref": "BROKER_X_OTHER", "broker": "BROKER_X", "role": "OTHER", "base_currency": "THB",
+      "reported_total": {"amount": "5000.00", "currency": "THB"}
+    }
+  ]
+}

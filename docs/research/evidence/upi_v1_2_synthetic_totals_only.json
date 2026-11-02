@@ -1,0 +1,28 @@
+{
+  "schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+  "data_class": "SYNTHETIC_PUBLIC_FIXTURE",
+  "snapshot_id": "SYN_TOTALS_ONLY_V1_2",
+  "observed_at": "2026-11-02T08:15:00+07:00",
+  "valuation_date": "2026-10-30",
+  "evidence_source": "MANUAL_SNAPSHOT",
+  "reporting_currency": "THB",
+  "report_currencies": ["THB", "USD"],
+  "fx_rates": [
+    {"from": "USD", "to": "THB", "rate": "33.00", "as_of": "2026-10-30", "source_id": "SYNTHETIC_REFERENCE"},
+    {"from": "THB", "to": "USD", "rate": "0.030303030303030303", "as_of": "2026-10-30", "source_id": "SYNTHETIC_REFERENCE"}
+  ],
+  "accounts": [
+    {
+      "account_ref": "BROKER_D_MAIN", "broker": "BROKER_D", "role": "LONG_TERM", "base_currency": "USD",
+      "reported_total": {"amount": "2250.00", "currency": "USD"},
+      "sub_portfolio_totals": [
+        {"sub_portfolio": "Core", "amount": "1800.00", "currency": "USD"},
+        {"sub_portfolio": "Theme", "amount": "410.00", "currency": "USD"}
+      ]
+    },
+    {
+      "account_ref": "BROKER_D_FCD", "broker": "BROKER_D", "role": "CASH_RESERVE", "base_currency": "USD",
+      "reported_total": {"amount": "500.00", "currency": "USD"}
+    }
+  ]
+}

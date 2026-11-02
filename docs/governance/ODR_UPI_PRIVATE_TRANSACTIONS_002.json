@@ -1,0 +1,21 @@
+{
+  "decision_id": "ODR_UPI_PRIVATE_TRANSACTIONS_002",
+  "capability": "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED",
+  "status": "PROPOSED_NOT_RATIFIED",
+  "ratified_by": null,
+  "ratified_on": null,
+  "document": "docs/governance/ODR_UPI_PRIVATE_TRANSACTIONS_002.md",
+  "scope_schemas": [
+    "ACASH_CANONICAL_TRANSACTIONS_V1"
+  ],
+  "independent_of": [
+    "OWNER_PRIVATE_OBSERVATION_AUTHORIZED",
+    "D5_DATA_ADMITTED",
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CREDENTIAL_STORAGE",
+    "MARKET_DATA_SUBSCRIPTION",
+    "CAPITAL_TRANSFER",
+    "BROKER_NATIVE_IMPORT"
+  ]
+}

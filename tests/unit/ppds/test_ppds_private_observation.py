@@ -46,7 +46,8 @@ def _ratify(root: Path) -> None:
     record = root / po.AUTHORIZATION_RECORD
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED",
-                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01"}), encoding="utf-8")
+                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01",
+                                  "scope_schemas": [po.SCHEMA]}), encoding="utf-8")
 
 
 def test_golden_nav_in_both_report_currencies() -> None:
@@ -329,10 +330,12 @@ def test_committed_decision_record_is_well_formed() -> None:
 def test_oversized_and_malformed_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     big = tmp_path / "big.json"
     big.write_text(json.dumps(_doc()), encoding="utf-8")
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    limit = po.MAX_INPUT_BYTES
     monkeypatch.setattr(po, "MAX_INPUT_BYTES", 100)
     with pytest.raises(DataContractError, match="PRIVATE_SNAPSHOT_TOO_LARGE"):
         po.load_snapshot(big)
-    monkeypatch.undo()
+    monkeypatch.setattr(po, "MAX_INPUT_BYTES", limit)
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     with pytest.raises(DataContractError, match="PRIVATE_SNAPSHOT_MALFORMED_JSON"):

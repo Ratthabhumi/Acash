@@ -897,7 +897,7 @@
       "UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
-      "GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc)."
+      "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
     ],
     "v38_decision_pack": {
       "pack_sha256": "31d381a296303aaf49e1d373f160d48654b14ed35a7308235024ce794d38d46b",
@@ -919,6 +919,14 @@
     "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "da4003ce0d078705190badbe514a0576f06396f802b44d45256287d87f12dc8d",
+  "observation_authority": {
+    "capital_authority_usd": "0.00",
+    "observation_authority": "NOT_REQUIRED_SYNTHETIC_FIXTURE",
+    "odr_record": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json",
+    "odr_state": "NOT_CONSULTED_SYNTHETIC_FIXTURE",
+    "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
+    "trading_authority": "NONE"
+  },
+  "pack_sha256": "a6fd6504a061781d408b0806deb82a914c52af06b864bc82b9eac1b0cbc6c082",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

@@ -17,7 +17,7 @@ from acash.ppds.private_observation import (
     DATA_CLASSES,
     assert_private_location,
     assert_private_observation_authorized,
-    read_bounded_json,
+    read_gated_json,
 )
 
 CAPACITY_SCHEMA = "ACASH_PRIVATE_CAPACITY_V1"
@@ -94,9 +94,9 @@ def parse_capacity(doc: Any) -> CapacityInputs:
 
 
 def load_capacity(path: Path) -> CapacityInputs:
-    inputs = parse_capacity(read_bounded_json(Path(path), "CAPACITY"))
+    inputs = parse_capacity(read_gated_json(Path(path), "CAPACITY"))
     if inputs.data_class == "OWNER_PRIVATE_OBSERVATION":
-        assert_private_observation_authorized(inputs.data_class)
+        assert_private_observation_authorized(inputs.data_class, CAPACITY_SCHEMA)
         assert_private_location(Path(path))
     return inputs
 

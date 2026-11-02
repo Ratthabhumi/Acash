@@ -152,18 +152,23 @@ def test_pack_rejects_mixed_data_classes() -> None:
 
 
 def test_owner_private_pack_cannot_be_written_to_tracked_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    synthetic = _pack()
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
-    pack = dict(_pack(), data_class="OWNER_PRIVATE_OBSERVATION")
+    with pytest.raises(DataContractError, match="PACK_AUTHORITY_INCONSISTENT"):
+        wp.write_pack(dict(synthetic, data_class="OWNER_PRIVATE_OBSERVATION"), tmp_path / "data" / "private" / "out")
+    authority = dict(synthetic["observation_authority"], odr_state="RATIFIED",
+                     observation_authority="OWNER_PRIVATE_READ_ONLY_OBSERVATION")
+    pack = dict(synthetic, data_class="OWNER_PRIVATE_OBSERVATION", observation_authority=authority)
     with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
         wp.write_pack(pack, tmp_path / "data" / "private" / "out")
     record = tmp_path / po.AUTHORIZATION_RECORD
     record.parent.mkdir(parents=True)
-    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED",
-                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01"}), encoding="utf-8")
+    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED", "ratified_by": "OWNER",
+                                  "ratified_on": "2026-11-01", "scope_schemas": [po.SCHEMA]}), encoding="utf-8")
     with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
         wp.write_pack(pack, tmp_path / "docs")
     written = wp.write_pack(pack, tmp_path / "data" / "private" / "out")
-    assert [p.name for p in written] == ["upi_v1_pack.json", "upi_v1_pack.md"]
+    assert [p.name for p in written] == ["upi_v1_pack.json", "upi_v1_pack.md", "upi_run_manifest.json"]
 
 
 def test_committed_public_pack_matches_regeneration(tmp_path: Path) -> None:
