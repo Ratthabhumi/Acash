@@ -143,7 +143,13 @@ uv run python -m acash.invest.upi_view --pack data/private/out/upi_v1_pack.json 
 The service (`acash.dashboard_api.private_view_server`) binds 127.0.0.1:8765, prints a
 session token only in its own window (never written to a file), re-checks ODR-001 on every
 request and serves only `data/private/out/upi_view.json` (no parameters, no write routes).
-In the dashboard choose `OWNER PRIVATE READ ONLY`, paste the token and press Enter or Load. The token
+The Portfolio page is organised as A Executive overview, Findings, B Allocation & exposure,
+C Financial capacity, D Accounts & holdings and E Evidence & governance. Charts only draw
+Python values and weights; every chart has a Table toggle. Findings use a fixed severity
+per reason code (`dashboard/src/services/upiFindings.ts`): Critical means a figure may be
+wrong or out of date, Important means correct but incomplete or a planning constraint, and
+Info means not available in a snapshot report.
+In the dashboard choose `Owner private`, paste the token and press Enter or Load. The token
 and figures live only in page memory; switching mode or Clear removes them, and the next Load
 after revoking ODR-001 or stopping the server replaces them with a status and no figures.
 Closing the tab discards everything. Owner-private mode does not work from the Docker/Nginx image by design.

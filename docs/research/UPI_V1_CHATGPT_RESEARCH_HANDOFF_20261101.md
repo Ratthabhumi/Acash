@@ -71,8 +71,7 @@ semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 | Alpaca / IBKR / Settrade | Broker capability registry | DOCUMENTED_ONLY (not built; no adapters) |
 | Thai/US tax | After-tax return | DOCUMENTED_ONLY |
 | QuantConnect LEAN | Backtest engine | NOT_RELEVANT_CURRENT_SCOPE |
-| Unified dashboard (Portfolio Intelligence) | Read-only view of the Python pack (`ACASH_UPI_VIEW_V1`), synthetic and owner-private modes | IMPLEMENTED_AND_TESTED (synthetic E2E; owner-private path verified up to the ODR refusal, never with real data) |
-| Governance reason / ODR state | Decision reason and manifest derived from `odr_state()` | IMPLEMENTED_AND_TESTED |
+| Unified dashboard (Portfolio Intelligence) | Read-only view of the Python pack (`ACASH_UPI_VIEW_V1`), synthetic and owner-private modes; UX V2 summary cards, findings and charts drawn from Python weights | IMPLEMENTED_AND_TESTED (synthetic E2E and browser check; owner-private path verified up to the ODR refusal, never with real data) || Governance reason / ODR state | Decision reason and manifest derived from `odr_state()` | IMPLEMENTED_AND_TESTED |
 
 ### NYSE calendar fixture (delivered 2026-11-02)
 

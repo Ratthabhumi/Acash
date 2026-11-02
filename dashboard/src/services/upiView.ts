@@ -275,6 +275,16 @@ export function formatDec(value: Dec | null | undefined, unit?: string): string 
   return unit ? `${body} ${unit}` : body;
 }
 
+// Chart geometry only: maps an already-qualified decimal (a Python weight, or part/whole of
+// Python values) to a bar fraction in [0, 1]. Never use the result as a displayed figure.
+export function barFraction(part: Dec | null | undefined, whole: Dec | null | undefined = '1'): number {
+  if (part == null || whole == null || !DECIMAL.test(part) || !DECIMAL.test(whole)) return 0;
+  const p = Number(part);
+  const w = Number(whole);
+  if (!(w > 0) || !(p > 0)) return 0;
+  return Math.min(1, p / w);
+}
+
 export function formatWeight(value: Dec | null | undefined): string {
   if (value === null || value === undefined) return NOT_ESTABLISHED;
   if (!DECIMAL.test(value)) return 'INVALID';
