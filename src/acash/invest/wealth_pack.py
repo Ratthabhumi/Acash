@@ -29,6 +29,7 @@ from acash.invest.capacity_plan import (
     load_capacity,
 )
 from acash.ppds.private_observation import (
+    AUTHORIZATION_RECORD,
     PortfolioBook,
     _repo_root,
     assert_private_location,
@@ -36,7 +37,8 @@ from acash.ppds.private_observation import (
     book_summary,
     build_book,
     load_snapshot,
-    read_bounded_json,
+    odr_state,
+    read_gated_json,
 )
 from acash.research.d6.broker_profiles import load_security_eligibility
 from acash.research.d6.decision_pack import (
@@ -85,7 +87,27 @@ def _v38_reference() -> Dict[str, str]:
     return {"path": V38_PACK_JSON, "pack_version": doc["pack_version"], "pack_sha256": doc["pack_sha256"]}
 
 
-def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any]) -> Dict[str, Any]:
+def observation_authority(data_class: str, schema: str) -> Dict[str, str]:
+    """Observation authority for the pack, derived from ``odr_state``; never trading authority."""
+    block = {"odr_record": AUTHORIZATION_RECORD.as_posix(), "snapshot_schema": schema, "trading_authority": "NONE",
+             "capital_authority_usd": "0.00"}
+    if data_class != "OWNER_PRIVATE_OBSERVATION":
+        return {**block, "odr_state": "NOT_CONSULTED_SYNTHETIC_FIXTURE",
+                "observation_authority": "NOT_REQUIRED_SYNTHETIC_FIXTURE"}
+    state = odr_state(None, schema)
+    if state != "RATIFIED":
+        raise DataContractError(f"PRIVATE_OBSERVATION_NOT_AUTHORIZED: {AUTHORIZATION_RECORD.as_posix()} {state} for {schema}.")
+    return {**block, "odr_state": state, "observation_authority": "OWNER_PRIVATE_READ_ONLY_OBSERVATION"}
+
+
+def _authority_reason(authority: Mapping[str, str]) -> str:
+    if authority["odr_state"] == "NOT_CONSULTED_SYNTHETIC_FIXTURE":
+        return "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
+    return (f"OWNER_PRIVATE_OBSERVATION_AUTHORIZED: {authority['odr_record']} {authority['odr_state']} for "
+            f"{authority['snapshot_schema']}; read-only observation, no trading or capital authority.")
+
+
+def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority: Mapping[str, str]) -> Dict[str, Any]:
     reasons: List[str] = []
     if summary["performance_status"] != "PERFORMANCE_QUALIFIED":
         reasons.append("PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.")
@@ -116,7 +138,7 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any]) -> Dict[s
             reasons.append("ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.")
         reasons.append("MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.")
     reasons.append("V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.")
-    reasons.append("GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc).")
+    reasons.append(_authority_reason(authority))
     return {"conclusion": "NO_ACTION_PENDING_EVIDENCE", "reasons": reasons, "orders_generated": 0}
 
 
@@ -125,6 +147,7 @@ def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
                       report_date: Optional[date] = None) -> Dict[str, Any]:
     if capacity_inputs.data_class != book.snapshot.data_class:
         raise DataContractError("PACK_DATA_CLASS_MISMATCH: snapshot and capacity must share a data class.")
+    authority = observation_authority(book.snapshot.data_class, book.snapshot.schema)
     summary = book_summary(book, report_date)
     capacity = assess_capacity(capacity_inputs)
     reporting = book.snapshot.reporting_currency
@@ -146,13 +169,14 @@ def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
         "pack_version": PACK_VERSION,
         "data_class": book.snapshot.data_class,
         "governance": {**GOVERNANCE, **summary["governance"]},
+        "observation_authority": authority,
         "A_total_wealth": summary,
         "B_long_term": {"sub_portfolios": long_term, "policy_families": POLICY_FAMILIES, "policy_note": POLICY_NOTE,
                         "contribution_first": contribution_view or "NOT_EVALUATED_NO_TARGET_WEIGHTS"},
         "C_quant_workspace": {**QUANT_WORKSPACE, "budget": capacity["quant_budget"],
                               "quant_accounts": [a.account_ref for a in book.snapshot.accounts if a.role == "QUANT_RESEARCH"]},
         "D_financial_capacity": {**capacity, "v38_route_costs_per_contribution": _v38_scenarios(CONTRIBUTION_SCENARIOS_THB)},
-        "E_decision": {**_decision(summary, capacity), "v38_decision_pack": _v38_reference()},
+        "E_decision": {**_decision(summary, capacity, authority), "v38_decision_pack": _v38_reference()},
     }
     pack["pack_sha256"] = CanonicalConfigSerializer.compute_sha256(json.loads(json.dumps(pack, sort_keys=True)))
     return pack
@@ -248,8 +272,13 @@ def _sections_b_to_e(pack: Mapping[str, Any], d: Mapping[str, Any], e: Mapping[s
 
 
 def write_pack(pack: Mapping[str, Any], output_dir: Path) -> List[Path]:
+    schema = pack["A_total_wealth"]["schema"]
+    expected = ("OWNER_PRIVATE_READ_ONLY_OBSERVATION" if pack["data_class"] == "OWNER_PRIVATE_OBSERVATION"
+                else "NOT_REQUIRED_SYNTHETIC_FIXTURE")
+    if pack["observation_authority"]["observation_authority"] != expected:
+        raise DataContractError("PACK_AUTHORITY_INCONSISTENT: observation_authority does not match data_class.")
     if pack["data_class"] == "OWNER_PRIVATE_OBSERVATION":
-        assert_private_observation_authorized(pack["data_class"])
+        assert_private_observation_authorized(pack["data_class"], schema)
         assert_private_location(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = "upi_v1_pack"
@@ -259,7 +288,9 @@ def write_pack(pack: Mapping[str, Any], output_dir: Path) -> List[Path]:
     written = [json_path, md_path]
     if pack["data_class"] == "OWNER_PRIVATE_OBSERVATION":
         manifest = {"pack_version": PACK_VERSION, "pack_sha256": pack["pack_sha256"],
-                    "snapshot_schema": pack["A_total_wealth"]["schema"],
+                    "snapshot_schema": schema,
+                    "observation_authority": pack["observation_authority"],
+                    "odr_state_at_write": odr_state(None, schema),
                     "snapshot_content_sha256": pack["A_total_wealth"]["snapshot_content_sha256"],
                     "code_version": _code_version(), "files": [p.name for p in written],
                     "note": "Private run record. Digests identify private inputs; do not publish."}
@@ -285,7 +316,7 @@ def _weights(raw: Optional[str], path: Optional[str] = None) -> Optional[Dict[st
     if raw is None and path is None:
         return None
     try:
-        doc = read_bounded_json(Path(path), "TARGET_WEIGHTS") if path is not None else json.loads(str(raw))
+        doc = read_gated_json(Path(path), "TARGET_WEIGHTS") if path is not None else json.loads(str(raw))
     except json.JSONDecodeError as exc:
         raise DataContractError("TARGET_WEIGHTS_MALFORMED_JSON.") from exc
     if not isinstance(doc, dict) or not all(isinstance(v, str) for v in doc.values()):

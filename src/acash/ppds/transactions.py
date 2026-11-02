@@ -38,7 +38,7 @@ from acash.ppds.private_observation import (
     _LONG_DIGIT_RUN,
     assert_private_location,
     assert_private_observation_authorized,
-    read_bounded_json,
+    read_gated_json,
 )
 
 SCHEMA = "ACASH_CANONICAL_TRANSACTIONS_V1"
@@ -218,7 +218,8 @@ def parse_batch(doc: Any) -> TransactionBatch:
 
 
 def load_batch(path: Path) -> TransactionBatch:
-    batch = parse_batch(read_bounded_json(Path(path), "TXN_BATCH"))
+    batch = parse_batch(read_gated_json(Path(path), "TXN_BATCH", record=AUTHORIZATION_RECORD,
+                                        capability=AUTHORIZED_CAPABILITY))
     if batch.data_class == "OWNER_PRIVATE_OBSERVATION":
         assert_private_observation_authorized(batch.data_class, SCHEMA, record=AUTHORIZATION_RECORD,
                                               capability=AUTHORIZED_CAPABILITY)

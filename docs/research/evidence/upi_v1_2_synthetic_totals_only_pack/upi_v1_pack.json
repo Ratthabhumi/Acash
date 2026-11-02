@@ -626,7 +626,7 @@
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
       "MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
-      "GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc)."
+      "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
     ],
     "v38_decision_pack": {
       "pack_sha256": "31d381a296303aaf49e1d373f160d48654b14ed35a7308235024ce794d38d46b",
@@ -648,6 +648,14 @@
     "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "62a19e1b0041cd58329ea1a48a6b71025e75663136e3102a5e509081828b4724",
+  "observation_authority": {
+    "capital_authority_usd": "0.00",
+    "observation_authority": "NOT_REQUIRED_SYNTHETIC_FIXTURE",
+    "odr_record": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json",
+    "odr_state": "NOT_CONSULTED_SYNTHETIC_FIXTURE",
+    "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "trading_authority": "NONE"
+  },
+  "pack_sha256": "b9b9d4b4932599cb98e4d64c6e77ba878a823f7594b91cbaae16038897bc2cff",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

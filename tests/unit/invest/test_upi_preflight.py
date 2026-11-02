@@ -1,4 +1,4 @@
-"""Read-only pilot preflight: gate before parse, no amounts in output, actionable statuses."""
+"""Read-only pilot preflight: gate before read, no amounts in output, actionable statuses."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ from typing import Any, Dict
 
 import pytest
 
+from acash.core.domain.exceptions import DataContractError
+from acash.invest import capacity_plan as cp
 from acash.invest import preflight as pf
 from acash.ppds import private_observation as po
+from acash.ppds import transactions as tx
 
 FULL = Path("docs/research/evidence/upi_v1_2_synthetic_snapshot.json")
 TOTALS_ONLY = Path("docs/research/evidence/upi_v1_2_synthetic_totals_only.json")
@@ -47,18 +50,48 @@ def _private(tmp_path: Path, source: Path) -> Path:
     return path
 
 
-def test_closed_odr_blocks_before_parsing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _never(*_: Any) -> None:
+    raise AssertionError("presumed-private file read while unauthorized")
+
+
+@pytest.mark.parametrize("status", ["PROPOSED_NOT_RATIFIED", "REVOKED", None])
+def test_closed_odr_blocks_before_reading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: Any) -> None:
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    if status is not None:
+        record = tmp_path / po.AUTHORIZATION_RECORD
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": status}), encoding="utf-8")
     path = _private(tmp_path, FULL)
     before = path.read_bytes()
-
-    def never(*_: Any) -> None:
-        raise AssertionError("private content parsed while unauthorized")
-    monkeypatch.setattr(pf, "parse_snapshot", never)
+    monkeypatch.setattr(po, "read_bounded_json", _never)
+    monkeypatch.setattr(pf, "parse_snapshot", _never)
     report = pf.preflight(path, output_dir=tmp_path / "data" / "private" / "out")
     assert report["preflight"] == "BLOCKED"
-    assert _status(report, "odr_authorization") == "BLOCKED"
+    detail = next(c["detail"] for c in report["checks"] if c["check"] == "odr_authorization")
+    assert (status or "RECORD_UNREADABLE") in detail and "file not read" in detail
     assert path.read_bytes() == before
+
+
+def test_file_outside_repository_is_presumed_private(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    outside = tmp_path / "anything.json"
+    outside.write_text(FULL.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(po, "read_bounded_json", _never)
+    assert pf.preflight(outside)["preflight"] == "BLOCKED"
+    for loader in (po.load_snapshot, cp.load_capacity, tx.load_batch):
+        with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED.*file was not read"):
+            loader(outside)
+
+
+def test_ratified_out_of_scope_schema_blocks_after_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    record = tmp_path / po.AUTHORIZATION_RECORD
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED", "ratified_by": "OWNER",
+                                  "ratified_on": "2026-11-02", "scope_schemas": [po.SCHEMA]}), encoding="utf-8")
+    monkeypatch.setattr(pf, "parse_snapshot", _never)
+    report = pf.preflight(_private(tmp_path, FULL))
+    detail = next(c["detail"] for c in report["checks"] if c["check"] == "odr_authorization")
+    assert report["preflight"] == "BLOCKED" and "RATIFIED_SCHEMA_OUT_OF_SCOPE" in detail
 
 
 def test_ratified_fixture_passes_and_rejects_unsafe_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,7 +108,8 @@ def test_ratified_fixture_passes_and_rejects_unsafe_output(tmp_path: Path, monke
     assert _status(blocked_capacity, "capacity") == "FAIL"
 
 
-def test_malformed_snapshot_is_invalid_with_code(tmp_path: Path) -> None:
+def test_malformed_snapshot_is_invalid_with_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     doc = json.loads(FULL.read_text(encoding="utf-8"))
     doc["accounts"][0]["reported_total"]["amount"] = "-2250.00"
     path = tmp_path / "bad.json"
@@ -86,7 +120,8 @@ def test_malformed_snapshot_is_invalid_with_code(tmp_path: Path) -> None:
     assert detail == "PRIVATE_NEGATIVE_VALUE" and "2250" not in json.dumps(report)
 
 
-def test_possible_duplicate_cash_across_accounts_is_warned(tmp_path: Path) -> None:
+def test_possible_duplicate_cash_across_accounts_is_warned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     doc = json.loads(FULL.read_text(encoding="utf-8"))
     doc["accounts"].append({"account_ref": "BANK_FCD_COPY", "broker": "BANK_A", "role": "CASH_RESERVE", "base_currency": "USD",
                             "cash": [{"currency": "USD", "amount": "500.00", "kind": "SETTLED"}]})
@@ -97,10 +132,12 @@ def test_possible_duplicate_cash_across_accounts_is_warned(tmp_path: Path) -> No
             "detail": "POSSIBLE_DUPLICATE_CASH_ACROSS_ACCOUNTS: BANK_FCD,BANK_FCD_COPY"} in report["checks"]
 
 
-def test_cli_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as ok:
         pf.main(["--snapshot", str(FULL)])
     assert ok.value.code == 0
+    capsys.readouterr()
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     missing = tmp_path / "missing.json"
     with pytest.raises(SystemExit) as bad:
         pf.main(["--snapshot", str(missing)])

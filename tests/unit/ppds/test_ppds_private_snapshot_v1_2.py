@@ -12,6 +12,8 @@ from typing import Any, Dict, List
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
+from acash.invest import capacity_plan as cp
+from acash.invest import preflight as pf
 from acash.invest import wealth_pack as wp
 from acash.ppds import private_observation as po
 from acash.ppds import transactions as tx
@@ -163,7 +165,13 @@ def test_full_v1_2_report_is_labelled() -> None:
     assert po.book_summary(po.build_book(po.parse_snapshot(_doc())))["report_type"] == "FULL_REPORT"
 
 
-def test_evidence_only_pack_and_golden(tmp_path: Path) -> None:
+def _tmp_inputs_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Synthetic inputs written to tmp_path are outside the repository, which is presumed private."""
+    monkeypatch.setattr(po, "presumed_private", lambda path, root=None: False)
+
+
+def test_evidence_only_pack_and_golden(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _tmp_inputs_public(monkeypatch)
     targets = tmp_path / "targets.json"
     targets.write_text(TARGETS, encoding="utf-8")
     wp.main(["--snapshot", str(TOTALS_ONLY), "--target-weights-file", str(targets), "--output", str(tmp_path / "out")])
@@ -175,8 +183,12 @@ def test_evidence_only_pack_and_golden(tmp_path: Path) -> None:
         assert (tmp_path / "out" / name).read_bytes() == (TOTALS_ONLY_PACK_DIR / name).read_bytes()
 
 
-def test_target_weights_inputs_fail_closed(tmp_path: Path) -> None:
+def test_target_weights_inputs_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bad = tmp_path / "bad.json"
+    bad.write_text('{"CASH": "x"}', encoding="utf-8")
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED.*not read"):
+        wp.main(["--target-weights-file", str(bad), "--output", str(tmp_path / "o")])
+    _tmp_inputs_public(monkeypatch)
     bad.write_text('{"CASH": "x"}', encoding="utf-8")
     with pytest.raises(DataContractError, match="TARGET_WEIGHTS_MALFORMED_DECIMAL"):
         wp.main(["--target-weights-file", str(bad), "--output", str(tmp_path / "o")])
@@ -324,6 +336,57 @@ def test_owner_private_run_writes_manifest(tmp_path: Path, monkeypatch: pytest.M
     manifest = json.loads((out / "upi_run_manifest.json").read_text(encoding="utf-8"))
     assert manifest["snapshot_schema"] == po.SCHEMA_V1_2
     assert set(manifest["code_version"]) == {"commit", "working_tree"}
+    pack = json.loads((out / "upi_v1_pack.json").read_text(encoding="utf-8"))
+    assert manifest["observation_authority"] == pack["observation_authority"]
+    assert (manifest["odr_state_at_write"], pack["observation_authority"]["odr_state"]) == ("RATIFIED", "RATIFIED")
+    assert pack["observation_authority"]["trading_authority"] == "NONE"
+    reasons = pack["E_decision"]["reasons"]
+    assert any(r.startswith("OWNER_PRIVATE_OBSERVATION_AUTHORIZED:") and "no trading" in r for r in reasons)
+    assert not any("PROPOSED_NOT_RATIFIED" in r for r in reasons)
+    assert pack["E_decision"]["conclusion"] == "NO_ACTION_PENDING_EVIDENCE"
+    assert pf.preflight(snapshot, cap_path, out)["preflight"] in ("READY", "READY_WITH_WARNINGS")
+
+
+def test_synthetic_pack_authority_is_independent_of_odr_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    book = po.build_book(po.load_snapshot(FIXTURE))
+    capacity = cp.load_capacity(Path(wp.PUBLIC_CAPACITY))
+    closed = wp.build_wealth_pack(book, capacity)
+    assert closed["observation_authority"]["odr_state"] == "NOT_CONSULTED_SYNTHETIC_FIXTURE"
+    reasons = closed["E_decision"]["reasons"]
+    assert reasons[-1].startswith("PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED:")
+    assert not any("GOVERNANCE_AMENDMENT" in r or "PROPOSED_NOT_RATIFIED" in r for r in reasons)
+    monkeypatch.setattr(wp, "odr_state", lambda *a, **k: "RATIFIED")
+    assert wp.build_wealth_pack(book, capacity)["pack_sha256"] == closed["pack_sha256"]
+
+
+@pytest.mark.parametrize("record, state", [
+    (None, "RECORD_UNREADABLE"),
+    ({"capability": "OTHER", "status": "RATIFIED"}, "RECORD_CAPABILITY_MISMATCH"),
+    ({"status": "PROPOSED_NOT_RATIFIED"}, "PROPOSED_NOT_RATIFIED"),
+    ({"status": "REVOKED", "ratified_by": "OWNER", "ratified_on": "2026-11-02"}, "REVOKED"),
+    ({"status": "RATIFIED", "ratified_by": "AGENT", "ratified_on": "2026-11-02"}, "RECORD_INVALID"),
+    ({"status": "RATIFIED", "ratified_by": "OWNER"}, "RECORD_INVALID"),
+    ({"status": "SOMETHING", "ratified_by": "OWNER", "ratified_on": "2026-11-02"}, "RECORD_INVALID"),
+    ({"status": "RATIFIED", "ratified_by": "OWNER", "ratified_on": "2026-11-02", "scope_schemas": ["X"]},
+     "RATIFIED_SCHEMA_OUT_OF_SCOPE"),
+    ({"status": "RATIFIED", "ratified_by": "OWNER", "ratified_on": "2026-11-02", "scope_schemas": [po.SCHEMA_V1_2]},
+     "RATIFIED"),
+])
+def test_odr_state_and_private_pack_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                              record: Any, state: str) -> None:
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    if record is not None:
+        path = tmp_path / po.AUTHORIZATION_RECORD
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, **record}), encoding="utf-8")
+    assert po.odr_state(None, po.SCHEMA_V1_2) == state
+    assert po.private_observation_authorized(None, po.SCHEMA_V1_2) is (state == "RATIFIED")
+    if state == "RATIFIED":
+        assert wp.observation_authority("OWNER_PRIVATE_OBSERVATION", po.SCHEMA_V1_2)["odr_state"] == "RATIFIED"
+    else:
+        with pytest.raises(DataContractError, match=f"PRIVATE_OBSERVATION_NOT_AUTHORIZED: .* {state} for"):
+            wp.observation_authority("OWNER_PRIVATE_OBSERVATION", po.SCHEMA_V1_2)
+    assert po.odr_state(None, po.SCHEMA_V1_2, "OTHER_CAPABILITY") in ("RECORD_UNREADABLE", "RECORD_CAPABILITY_MISMATCH")
 
 
 def test_v2_reconciliation_reports_quantity_not_observed() -> None:

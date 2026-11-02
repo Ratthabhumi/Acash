@@ -154,25 +154,66 @@ def assert_private_location(path: Path, root: Optional[Path] = None) -> None:
         raise DataContractError("PRIVATE_LOCATION_NOT_IGNORED: owner data must be outside the repo or under data/private/.")
 
 
-def private_observation_authorized(record: Optional[Path] = None, schema: Optional[str] = None,
-                                   capability: str = AUTHORIZED_CAPABILITY) -> bool:
-    """True only if the decision record is RATIFIED by the OWNER for ``capability``.
+ODR_STATES = ("RATIFIED", "RATIFIED_SCHEMA_OUT_OF_SCOPE", "PROPOSED_NOT_RATIFIED", "REVOKED",
+              "RECORD_INVALID", "RECORD_CAPABILITY_MISMATCH", "RECORD_UNREADABLE")
 
-    When ``schema`` is given, the record must also list it in ``scope_schemas``; a ratification
-    never extends to input formats it does not name.
+
+def odr_state(record: Optional[Path] = None, schema: Optional[str] = None,
+              capability: str = AUTHORIZED_CAPABILITY) -> str:
+    """Single authority for the state of an owner decision record (one of ``ODR_STATES``).
+
+    RATIFIED requires the OWNER as ratifier, a ``ratified_on`` string and the matching
+    capability; when ``schema`` is given it must also be listed in ``scope_schemas``.
     """
     path = record or (_repo_root() / AUTHORIZATION_RECORD)
     try:
         doc = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
-    ratified = (isinstance(doc, dict) and doc.get("capability") == capability
-                and doc.get("status") == "RATIFIED" and doc.get("ratified_by") == "OWNER"
-                and isinstance(doc.get("ratified_on"), str))
-    if not ratified or schema is None:
-        return ratified
+        return "RECORD_UNREADABLE"
+    if not isinstance(doc, dict):
+        return "RECORD_UNREADABLE"
+    if doc.get("capability") != capability:
+        return "RECORD_CAPABILITY_MISMATCH"
+    status = doc.get("status")
+    if status in ("PROPOSED_NOT_RATIFIED", "REVOKED"):
+        return str(status)
+    if status != "RATIFIED" or doc.get("ratified_by") != "OWNER" or not isinstance(doc.get("ratified_on"), str):
+        return "RECORD_INVALID"
+    if schema is None:
+        return "RATIFIED"
     scope = doc.get("scope_schemas")
-    return isinstance(scope, list) and schema in scope
+    return "RATIFIED" if isinstance(scope, list) and schema in scope else "RATIFIED_SCHEMA_OUT_OF_SCOPE"
+
+
+def private_observation_authorized(record: Optional[Path] = None, schema: Optional[str] = None,
+                                   capability: str = AUTHORIZED_CAPABILITY) -> bool:
+    """True only if ``odr_state`` is RATIFIED; a ratification never extends to unnamed schemas."""
+    return odr_state(record, schema, capability) == "RATIFIED"
+
+
+def presumed_private(path: Path, root: Optional[Path] = None) -> bool:
+    """Files outside the repository or under ``data/private/`` may hold owner data."""
+    resolved, base = Path(path).resolve(), (root or _repo_root()).resolve()
+    try:
+        rel = resolved.relative_to(base)
+    except ValueError:
+        return True
+    return rel.parts[:2] == ("data", "private")
+
+
+def read_gated_json(path: Path, code: str, *, record: Path = AUTHORIZATION_RECORD,
+                    capability: str = AUTHORIZED_CAPABILITY) -> Any:
+    """Read a JSON input, refusing presumed-private locations before any byte is read.
+
+    The data class is only known after parsing, so the location decides: a file outside the
+    repository or under ``data/private/`` is read only while ``capability`` is RATIFIED.
+    Schema scope and data class are checked again by the caller after parsing.
+    """
+    if presumed_private(path) and not private_observation_authorized(_repo_root() / record, None, capability):
+        raise DataContractError(
+            f"PRIVATE_OBSERVATION_NOT_AUTHORIZED: {code} path is presumed owner-private and "
+            f"{record.as_posix()} is not RATIFIED; the file was not read.")
+    return read_bounded_json(path, code)
 
 
 def assert_private_observation_authorized(data_class: str, schema: Optional[str] = None, *,
@@ -572,7 +613,7 @@ def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used:
 
 
 def load_snapshot(path: Path) -> PortfolioSnapshot:
-    snapshot = parse_snapshot(read_bounded_json(Path(path), "PRIVATE_SNAPSHOT"))
+    snapshot = parse_snapshot(read_gated_json(Path(path), "PRIVATE_SNAPSHOT"))
     if snapshot.data_class == "OWNER_PRIVATE_OBSERVATION":
         assert_private_observation_authorized(snapshot.data_class, snapshot.schema)
         assert_private_location(Path(path))

@@ -1,8 +1,9 @@
 """Read-only preflight for the UPI private snapshot pilot.
 
 Never writes or alters inputs. The result carries statuses, error codes and opaque
-references only, never amounts. For owner-private files the authorization gate and the
-storage location are checked before the document content is parsed.
+references only, never amounts. Paths outside the repository or under ``data/private/`` are
+presumed owner-private and are not read at all unless ODR-001 is RATIFIED; after reading,
+the schema scope, data class and storage location are checked before the contract is parsed.
 """
 
 from __future__ import annotations
@@ -24,9 +25,10 @@ from acash.ppds.private_observation import (
     assert_private_location,
     book_summary,
     build_book,
+    odr_state,
     parse_snapshot,
-    private_observation_authorized,
-    read_bounded_json,
+    presumed_private,
+    read_gated_json,
 )
 
 _RECONCILED = ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING")
@@ -60,8 +62,14 @@ def preflight(snapshot_path: Path, capacity_path: Optional[Path] = None, output_
         return {"preflight": overall, "checks": checks, "inputs_modified": False,
                 "note": "Statuses and codes only; amounts are never printed."}
 
+    if presumed_private(snapshot_path):
+        state = odr_state(None, None)
+        if state != "RATIFIED":
+            add("odr_authorization", "BLOCKED",
+                f"{AUTHORIZATION_RECORD.as_posix()} {state}; presumed owner-private path, file not read")
+            return result()
     try:
-        doc = read_bounded_json(snapshot_path, "PRIVATE_SNAPSHOT")
+        doc = read_gated_json(snapshot_path, "PRIVATE_SNAPSHOT")
     except DataContractError as exc:
         add("snapshot_readable", "FAIL", _code(exc))
         return result()
@@ -82,9 +90,10 @@ def preflight(snapshot_path: Path, capacity_path: Optional[Path] = None, output_
             add("snapshot_location", "PASS")
         except DataContractError as exc:
             add("snapshot_location", "FAIL", _code(exc))
-        if not private_observation_authorized(None, str(schema)):
+        state = odr_state(None, str(schema))
+        if state != "RATIFIED":
             add("odr_authorization", "BLOCKED",
-                f"{AUTHORIZATION_RECORD.as_posix()} is not RATIFIED for {schema}; content not parsed")
+                f"{AUTHORIZATION_RECORD.as_posix()} {state} for {schema}; snapshot contract not parsed")
             return result()
         add("odr_authorization", "PASS", f"{AUTHORIZATION_RECORD.as_posix()} RATIFIED for {schema}")
     else:

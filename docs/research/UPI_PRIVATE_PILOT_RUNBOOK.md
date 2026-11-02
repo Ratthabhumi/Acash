@@ -101,7 +101,10 @@ displayed precision sets the rounding tolerance).
    uv run python -m acash.invest.wealth_pack --snapshot data/private/snapshot.json --capacity data/private/capacity.json --report-date 2026-11-02 --output data/private/out
    ```
    This writes `data/private/out/upi_v1_pack.json`, `upi_v1_pack.md` and
-   `upi_run_manifest.json`. The manifest holds the commit and input digests; keep it private.
+   `upi_run_manifest.json`. The manifest holds the commit, input digests and the ODR state
+   observed at write time (`observation_authority`, `odr_state_at_write`); keep it private.
+   Decision reason `OWNER_PRIVATE_OBSERVATION_AUTHORIZED` means read-only observation only;
+   it never grants trading or capital authority.
 6. Reconcile: in the Markdown section "Evidence and observed totals", each account should
    read `RECONCILED` or `CONSISTENT_WITH_DISPLAY_ROUNDING`. `UNEXPLAINED_DIFFERENCE` means a
    holding or cash line is missing or mistyped. A negative difference with
@@ -116,7 +119,7 @@ gate closes immediately. Remove private data: `Remove-Item -Recurse -Force data/
 
 | Code | Meaning / fix |
 |---|---|
-| PRIVATE_OBSERVATION_NOT_AUTHORIZED | ODR-001 not ratified, or `scope_schemas` lacks the file's schema |
+| PRIVATE_OBSERVATION_NOT_AUTHORIZED | ODR-001 not ratified, or `scope_schemas` lacks the file's schema. Any file outside the repository or under `data/private/` is presumed owner-private and is not read at all while ODR-001 is closed (preflight shows `odr_authorization BLOCKED ... file not read`); synthetic files run only from inside the repository |
 | PRIVATE_LOCATION_NOT_IGNORED | input/output inside the repo but not under `data/private/` |
 | PRIVATE_REF_NOT_OPAQUE | reference has lowercase letters or 6+ digits |
 | PRIVATE_NUMBER_MUST_BE_STRING | write `"123.45"`, not `123.45` |

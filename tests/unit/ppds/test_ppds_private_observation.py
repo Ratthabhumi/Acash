@@ -330,10 +330,12 @@ def test_committed_decision_record_is_well_formed() -> None:
 def test_oversized_and_malformed_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     big = tmp_path / "big.json"
     big.write_text(json.dumps(_doc()), encoding="utf-8")
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    limit = po.MAX_INPUT_BYTES
     monkeypatch.setattr(po, "MAX_INPUT_BYTES", 100)
     with pytest.raises(DataContractError, match="PRIVATE_SNAPSHOT_TOO_LARGE"):
         po.load_snapshot(big)
-    monkeypatch.undo()
+    monkeypatch.setattr(po, "MAX_INPUT_BYTES", limit)
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     with pytest.raises(DataContractError, match="PRIVATE_SNAPSHOT_MALFORMED_JSON"):
