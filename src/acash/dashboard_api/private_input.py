@@ -188,6 +188,12 @@ def _check_snapshot(doc: Any, report_date: Optional[date]) -> Tuple[List[Dict[st
     evidence = summary.get("evidence")
     if summary.get("report_type") == "EVIDENCE_ONLY_REPORT":
         warnings.append({"code": "EVIDENCE_ONLY_REPORT", "where": "report_type"})
+    value_only = sum(len(a.observed_value_positions) for a in snapshot.accounts)
+    unknown = sum(s.classification == "UNKNOWN" for s in snapshot.securities)
+    if value_only:
+        warnings.append({"code": "VALUE_ONLY_HOLDINGS", "where": f"count={value_only}"})
+    if unknown:
+        warnings.append({"code": "UNKNOWN_CLASSIFICATION", "where": f"count={unknown}"})
     if evidence:
         for acct in evidence[snapshot.reporting_currency]["accounts"]:
             total = acct["account_total"]

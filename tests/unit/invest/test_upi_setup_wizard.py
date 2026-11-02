@@ -317,6 +317,12 @@ def test_validation_reports_codes_and_locations_never_values(authorized: Path) -
     assert body["status"] == "VALID" and "EVIDENCE_ONLY_REPORT" in {w["code"] for w in body["snapshot"]["warnings"]}
     full = _call(service, "POST", "validate", {"snapshot": _owner(SNAPSHOT)})[1]
     assert full["status"] == "VALID" and "EVIDENCE_ONLY_REPORT" not in {w["code"] for w in full["snapshot"]["warnings"]}
+    parsed = po.parse_snapshot(_owner(SNAPSHOT))
+    value_only = sum(len(a.observed_value_positions) for a in parsed.accounts)
+    unknown = sum(s.classification == "UNKNOWN" for s in parsed.securities)
+    expected = {w["code"]: w["where"] for w in full["snapshot"]["warnings"]}
+    assert value_only and expected["VALUE_ONLY_HOLDINGS"] == f"count={value_only}"
+    assert ("UNKNOWN_CLASSIFICATION" in expected) == bool(unknown)
 
 
 def test_generate_publishes_one_consistent_generation(authorized: Path, capsys: pytest.CaptureFixture[str]) -> None:
