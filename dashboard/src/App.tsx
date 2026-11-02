@@ -8,13 +8,14 @@ import { TradesPage } from './pages/TradesPage';
 import { EvidencePage } from './pages/EvidencePage';
 import { ValidationPage } from './pages/ValidationPage';
 import { ShadowTournamentPage } from './pages/ShadowTournamentPage';
+import { PortfolioPage } from './pages/PortfolioPage';
 import { SkeletonLoader } from './components/common/SkeletonLoader';
 import { ThemeProvider } from './context/ThemeContext';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<DashboardTab>('overview');
   const [researchRun, setResearchRun] = useState<ResearchRun | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [researchState, setResearchState] = useState<'LOADING' | 'READY' | 'SERVICE_UNAVAILABLE'>('LOADING');
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,32 +23,31 @@ export const App: React.FC = () => {
       try {
         const run = await researchRunRepository.getLatestRun();
         setResearchRun(run);
+        setResearchState('READY');
       } catch (err) {
         console.error('Failed to load research run data', err);
-      } finally {
-        setLoading(false);
+        setResearchState('SERVICE_UNAVAILABLE');
       }
     }
     loadData();
   }, []);
 
-  if (loading || !researchRun) {
-    return (
-      <div className="min-h-screen w-full bg-app">
-        <div className="p-8 flex flex-col space-y-4 max-w-6xl mx-auto">
-          <SkeletonLoader className="h-10 w-full" />
-          <SkeletonLoader className="h-16 w-full" />
-          <div className="grid grid-cols-4 gap-4">
-            <SkeletonLoader className="h-24" />
-            <SkeletonLoader className="h-24" />
-            <SkeletonLoader className="h-24" />
-            <SkeletonLoader className="h-24" />
-          </div>
-          <SkeletonLoader className="h-96 w-full" />
-        </div>
+  const researchPlaceholder = researchState === 'LOADING' ? (
+    <div className="flex flex-col space-y-4 max-w-6xl">
+      <SkeletonLoader className="h-16 w-full" />
+      <div className="grid grid-cols-4 gap-4">
+        <SkeletonLoader className="h-24" />
+        <SkeletonLoader className="h-24" />
+        <SkeletonLoader className="h-24" />
+        <SkeletonLoader className="h-24" />
       </div>
-    );
-  }
+      <SkeletonLoader className="h-96 w-full" />
+    </div>
+  ) : (
+    <div className="bg-surface border border-default rounded-md p-6 text-sm text-secondary">
+      RESEARCH RUN UNAVAILABLE · the research workspace could not be loaded; portfolio views are unaffected.
+    </div>
+  );
 
   const handleNavigateTab = (tab: DashboardTab) => {
     setCurrentTab(tab);
@@ -67,7 +67,11 @@ export const App: React.FC = () => {
         currentTab={currentTab}
         onSelectTab={handleNavigateTab}
       >
-        {currentTab === 'overview' && (
+        {currentTab === 'portfolio' && <PortfolioPage />}
+
+        {['overview', 'trades', 'evidence', 'validation'].includes(currentTab) && !researchRun && researchPlaceholder}
+
+        {currentTab === 'overview' && researchRun && (
           <OverviewPage
             researchRun={researchRun}
             onNavigateTab={handleNavigateTab}
@@ -75,18 +79,18 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'trades' && (
+        {currentTab === 'trades' && researchRun && (
           <TradesPage
             trades={researchRun.trades}
             initialSelectedTradeId={selectedTradeId}
           />
         )}
 
-        {currentTab === 'evidence' && (
+        {currentTab === 'evidence' && researchRun && (
           <EvidencePage researchRun={researchRun} />
         )}
 
-        {currentTab === 'validation' && (
+        {currentTab === 'validation' && researchRun && (
           <ValidationPage researchRun={researchRun} />
         )}
 

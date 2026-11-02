@@ -1,0 +1,361 @@
+{
+  "accounts": [
+    {
+      "account_ref": "BANK_FCD",
+      "account_total": {
+        "currency": "USD",
+        "difference": "0.00",
+        "fx_source_may_differ": false,
+        "known_components": "500.00",
+        "observed_total": "500.00",
+        "status": "RECONCILED",
+        "tolerance": "0.010"
+      },
+      "base_currency": "USD",
+      "broker": "BANK_A",
+      "cash_lines_observed": true,
+      "computed_value": "16500.00",
+      "evidence_level": "QUANTITY_AND_PRICE_OBSERVED",
+      "flags": [],
+      "observed_position_value": "0.00",
+      "role": "CASH_RESERVE",
+      "sub_portfolio_totals": [],
+      "unclassified_holdings_value": "0.00"
+    },
+    {
+      "account_ref": "BROKER_D_MAIN",
+      "account_total": {
+        "currency": "USD",
+        "difference": "160.00",
+        "fx_source_may_differ": false,
+        "known_components": "2090.00",
+        "observed_total": "2250.00",
+        "status": "UNEXPLAINED_DIFFERENCE",
+        "tolerance": "0.225"
+      },
+      "base_currency": "USD",
+      "broker": "BROKER_D",
+      "cash_lines_observed": true,
+      "computed_value": "60720.00",
+      "evidence_level": "POSITION_MARKET_VALUE_ONLY",
+      "flags": [
+        "SUBPORTFOLIO_TOTALS_INFORMATIONAL_ACCOUNT_TOTAL_GOVERNS"
+      ],
+      "observed_position_value": "8250.00",
+      "role": "LONG_TERM",
+      "sub_portfolio_totals": [
+        {
+          "basis": "OBSERVED_NOT_COMPUTED",
+          "currency": "USD",
+          "difference": "0.00",
+          "fx_source_may_differ": false,
+          "known_components": "1800.00",
+          "observed_total": "1800.00",
+          "status": "RECONCILED",
+          "sub_portfolio": "Core",
+          "tolerance": "0.215"
+        },
+        {
+          "basis": "OBSERVED_NOT_COMPUTED",
+          "currency": "USD",
+          "difference": "160.00",
+          "fx_source_may_differ": false,
+          "known_components": "250.00",
+          "observed_total": "410.00",
+          "status": "UNEXPLAINED_DIFFERENCE",
+          "sub_portfolio": "Theme",
+          "tolerance": "0.010"
+        }
+      ],
+      "unclassified_holdings_value": "5280.00"
+    },
+    {
+      "account_ref": "BROKER_W_QUANT",
+      "account_total": {
+        "currency": "USD",
+        "difference": "0.00",
+        "fx_source_may_differ": false,
+        "known_components": "0.00",
+        "observed_total": "0.00",
+        "status": "RECONCILED",
+        "tolerance": "0.010"
+      },
+      "base_currency": "USD",
+      "broker": "BROKER_W",
+      "cash_lines_observed": true,
+      "computed_value": "0.00",
+      "evidence_level": "QUANTITY_AND_PRICE_OBSERVED",
+      "flags": [],
+      "observed_position_value": "0.00",
+      "role": "QUANT_RESEARCH",
+      "sub_portfolio_totals": [],
+      "unclassified_holdings_value": "0.00"
+    },
+    {
+      "account_ref": "BROKER_X_OTHER",
+      "account_total": {
+        "currency": "THB",
+        "difference": "5000.00",
+        "fx_source_may_differ": null,
+        "known_components": null,
+        "observed_total": "5000.00",
+        "status": "INSUFFICIENT_EVIDENCE",
+        "tolerance": null
+      },
+      "base_currency": "THB",
+      "broker": "BROKER_X",
+      "cash_lines_observed": false,
+      "computed_value": "0.00",
+      "evidence_level": "ACCOUNT_TOTAL_ONLY",
+      "flags": [],
+      "observed_position_value": "0.00",
+      "role": "OTHER",
+      "sub_portfolio_totals": [],
+      "unclassified_holdings_value": "5000.00"
+    }
+  ],
+  "allocation": {
+    "by_sub_portfolio_best_evidence": {
+      "BANK_FCD/(account cash)": {
+        "value": "16500.00",
+        "weight": "0.1723"
+      },
+      "BROKER_D_MAIN/(account cash)": {
+        "value": "1320.00",
+        "weight": "0.0138"
+      },
+      "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+        "value": "5280.00",
+        "weight": "0.0551"
+      },
+      "BROKER_D_MAIN/Core": {
+        "value": "59400.00",
+        "weight": "0.6204"
+      },
+      "BROKER_D_MAIN/Theme": {
+        "value": "8250.00",
+        "weight": "0.0862"
+      },
+      "BROKER_W_QUANT/(account cash)": {
+        "value": "0.00",
+        "weight": "0.0000"
+      },
+      "BROKER_X_OTHER/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
+        "value": "5000.00",
+        "weight": "0.0522"
+      }
+    },
+    "computed_by_classification": {
+      "CASH": {
+        "value": "17820.00",
+        "weight": "0.2308"
+      },
+      "CORE_DIVERSIFIED": {
+        "value": "59400.00",
+        "weight": "0.7692"
+      }
+    },
+    "computed_status": "COMPUTED_SUBSET_PPDS",
+    "currency_exposure_best_evidence": {
+      "UNCLASSIFIED_RESIDUAL": {
+        "value": "10280.00",
+        "weight": "0.1074"
+      },
+      "USD": {
+        "value": "85470.00",
+        "weight": "0.8926"
+      }
+    }
+  },
+  "concentration": {
+    "denominator": "TOTAL_BEST_EVIDENCE",
+    "hhi_identified_securities": "0.2212",
+    "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
+    "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+    "top1_weight": "0.4136",
+    "top_holdings": [
+      {
+        "key": "ZZSYNIDX0005",
+        "weight": "0.4136"
+      },
+      {
+        "key": "BBG00SYNBND1",
+        "weight": "0.2068"
+      },
+      {
+        "key": "BROKER_D_MAIN:SYNTHEME",
+        "weight": "0.0862"
+      }
+    ],
+    "unclassified_share": "0.1074"
+  },
+  "coverage": {
+    "account_total_reconciliation_coverage": "0.1723",
+    "cash_observed_accounts": "3/4",
+    "cost_basis_coverage": "0.4997",
+    "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
+    "known_value_coverage": "0.8926",
+    "position_level_coverage": "0.7622"
+  },
+  "data_mode": "SYNTHETIC_DEMO",
+  "data_quality": {
+    "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+    "performance_status": "PERFORMANCE_NOT_ESTABLISHED",
+    "reason_codes": [
+      "PERFORMANCE_NOT_ESTABLISHED",
+      "OVERLAP_NOT_ESTABLISHED",
+      "COST_BASIS_INCOMPLETE",
+      "RESERVE_SHORTFALL",
+      "UNCLASSIFIED_HOLDINGS_PRESENT",
+      "SECURITY_IDENTITY_UNVERIFIED",
+      "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED",
+      "MARKET_SESSION_NOT_VERIFIED",
+      "V38_ROUTE_EVIDENCE_INCOMPLETE",
+      "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED"
+    ]
+  },
+  "decision_status": {
+    "conclusion": "NO_ACTION_PENDING_EVIDENCE",
+    "orders_generated": 0,
+    "reasons": [
+      "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
+      "OVERLAP_NOT_ESTABLISHED: no dated constituent weights.",
+      "COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.",
+      "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
+      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
+      "SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.",
+      "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
+      "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
+      "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
+      "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
+    ]
+  },
+  "financial_capacity": {
+    "capacity_status": "SURPLUS_POSITIVE",
+    "monthly_surplus_thb": "15000.00",
+    "quant_budget": {
+      "authorization": "NOT_AUTHORIZED",
+      "budget_thb": "8000.00",
+      "fundable_from_reserve_excess": false,
+      "label": "HYPOTHETICAL_RESEARCH_BUDGET",
+      "months_from_residual_after_planned_contribution": 1,
+      "reserve_funding": "FORBIDDEN"
+    },
+    "reserve": {
+      "coverage_months": "2.00",
+      "current_thb": "20000.00",
+      "effective_thb": "20000.00",
+      "exceptional_expenses_12m_thb": "0.00",
+      "shortfall_thb": "10000.00",
+      "status": "RESERVE_SHORTFALL",
+      "target_thb": "30000.00"
+    },
+    "scenarios": [
+      {
+        "monthly_contribution_thb": "5000.00",
+        "months_to_reserve_target_from_residual": 1,
+        "residual_after_contribution_thb": "10000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "7500.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "7500.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "10000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "5000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      },
+      {
+        "monthly_contribution_thb": "6000.00",
+        "months_to_reserve_target_from_residual": 2,
+        "residual_after_contribution_thb": "9000.00",
+        "status": "RESERVE_SHORTFALL_PRIORITY"
+      }
+    ]
+  },
+  "governance": {
+    "flags": {
+      "D5_REAL_ADMISSION": "NOT_ADMITTED",
+      "EXECUTION_AUTHORITY_FROM_EVIDENCE": "NONE",
+      "HYP_003": "TERMINALLY_FALSIFIED",
+      "LANE_A_B": "UNISSUED",
+      "NO_REAL_ORDERS": true,
+      "REAL_CAPITAL_AUTHORITY_USD": "0.00",
+      "capital_authority_usd": "0.00",
+      "d5_eligible": false,
+      "order_controls": null,
+      "research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION",
+      "trading_authority": "NONE"
+    },
+    "observation_authority": {
+      "capital_authority_usd": "0.00",
+      "observation_authority": "NOT_REQUIRED_SYNTHETIC_FIXTURE",
+      "odr_record": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json",
+      "odr_state": "NOT_CONSULTED_SYNTHETIC_FIXTURE",
+      "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+      "trading_authority": "NONE"
+    }
+  },
+  "portfolio_overview": {
+    "computed_nav_is_total_best_evidence": false,
+    "computed_nav_ppds": "77220.00",
+    "observed_position_value": "8250.00",
+    "total_best_evidence": "95750.00",
+    "unclassified_holdings_value": "10280.00"
+  },
+  "quant_workspace": {
+    "new_strategies": "NONE_CREATED",
+    "paper_or_live_connectivity": "DISABLED",
+    "real_capital_authority_usd": "0.00",
+    "required_benchmarks": [
+      "CASH",
+      "BUY_AND_HOLD",
+      "EQUAL_WEIGHT"
+    ],
+    "required_validation": [
+      "DSR",
+      "CPCV",
+      "PBO"
+    ],
+    "status": "RESEARCH_ONLY_NOT_AUTHORIZED"
+  },
+  "report_metadata": {
+    "observation_lag_days": 3,
+    "observed_at": "2026-11-02T08:15:00+07:00",
+    "pack_sha256": "c7e6fae827c44954994bb1775fc47dc603597ceca75620e6b7b12bf6c3495716",
+    "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
+    "report_currency": "THB",
+    "report_type": "FULL_REPORT",
+    "snapshot_id": "SYN_PILOT_V1_2",
+    "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "stale_after_days": 7,
+    "support_state": "SNAPSHOT_ONLY",
+    "unsupported_analyses": [],
+    "valuation_age_days": 0,
+    "valuation_date": "2026-10-30",
+    "valuation_stale": false
+  },
+  "security_identity": [
+    {
+      "identity_status": "IDENTITY_MAPPED_OWNER_SUPPLIED",
+      "instrument_type": "ETF",
+      "security_id": "SYNBOND"
+    },
+    {
+      "identity_status": "IDENTITY_MAPPED_OWNER_SUPPLIED",
+      "instrument_type": "ETF",
+      "security_id": "SYNIDX"
+    },
+    {
+      "identity_status": "SECURITY_IDENTITY_UNVERIFIED",
+      "instrument_type": null,
+      "security_id": "SYNTHEME"
+    }
+  ],
+  "view_schema": "ACASH_UPI_VIEW_V1",
+  "view_sha256": "8c01bb8aa86551521ae7b8fb7f9e8cd9cbab44a37a355fcc0dcdb4e89268a447"
+}

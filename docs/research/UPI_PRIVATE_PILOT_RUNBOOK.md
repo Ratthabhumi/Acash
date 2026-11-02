@@ -63,8 +63,11 @@ displayed precision sets the rounding tolerance).
 - `observed_at` is when you read the app, with offset, e.g. `2026-11-02T08:15:00+07:00`.
 - `valuation_date` is the US session date of the prices. A Monday-morning Bangkok reading
   shows Friday's close. The US open moves with US daylight saving (21:30 ICT in November
-  2026). Session validity is reported as `MARKET_SESSION_NOT_VERIFIED`, because no exchange
-  calendar is bundled.
+  2026). The preflight checks each `published_at` against the bundled NYSE (XNYS) calendar
+  for 2026–2028 (`docs/research/evidence/nyse_xnys_calendar_2026_2028.json`). Other venues
+  (e.g. ARCX, XNAS) and other years are reported as `MARKET_SESSION_NOT_VERIFIED_*`. The
+  pack's `market_session_status` stays `MARKET_SESSION_NOT_VERIFIED`. The calendar says when
+  the venue was open; it is not evidence that a price exists.
 - FX: add both directions (`USD->THB` and `THB->USD`) with the source and the same `as_of`.
   Do not reuse an app's FX conversion quote as a reference rate unless you label its
   `source_id` accordingly.
@@ -115,6 +118,36 @@ Revoke: set `status` to anything other than `RATIFIED` (e.g. `REVOKED`) and comm
 gate closes immediately. Remove private data: `Remove-Item -Recurse -Force data/private`
 (this also deletes reports and manifests). Check the recycle bin and any backups yourself.
 
+### Dashboard (owner-private, local only)
+
+Launcher (repository root, double-click or from a terminal):
+
+| Command | What it does |
+|---|---|
+| `START-DASHBOARD.bat` | Synthetic demo on `http://127.0.0.1:3002`; opens the browser when ready |
+| `START-DASHBOARD.bat check` | Checks files, Node/npm, dependencies, governance, ODR states and ports; starts nothing |
+| `START-DASHBOARD.bat private` | Refuses to start unless ODR-001 is RATIFIED and `data/private/out/upi_view.json` passes the view contract; then opens the loopback service in its own window and starts the dashboard |
+| `... --no-browser` | Same, without opening the browser |
+
+The launcher prints the commit and statuses only; it never pulls, resets or merges, and does
+not start a second dashboard if port 3002 is already in use. Stop with Ctrl+C (answer Y) and
+close the "ACASH Private View" window. If dependencies are missing: `cd dashboard; npm ci`.
+
+Owner-private, after step 5 and only with ODR-001 RATIFIED:
+
+```powershell
+uv run python -m acash.invest.upi_view --pack data/private/out/upi_v1_pack.json --output data/private/out/upi_view.json
+.\START-DASHBOARD.bat private
+```
+
+The service (`acash.dashboard_api.private_view_server`) binds 127.0.0.1:8765, prints a
+session token only in its own window (never written to a file), re-checks ODR-001 on every
+request and serves only `data/private/out/upi_view.json` (no parameters, no write routes).
+In the dashboard choose `OWNER PRIVATE READ ONLY`, paste the token and press Enter or Load. The token
+and figures live only in page memory; switching mode or Clear removes them, and the next Load
+after revoking ODR-001 or stopping the server replaces them with a status and no figures.
+Closing the tab discards everything. Owner-private mode does not work from the Docker/Nginx image by design.
+
 ## 4. Troubleshooting
 
 | Code | Meaning / fix |
@@ -135,5 +168,5 @@ gate closes immediately. Remove private data: `Remove-Item -Recurse -Force data/
 ## 5. Not supported in this pilot
 
 Native Dime!/Webull CSV/PDF import (`BROKER_NATIVE_IMPORT_NOT_ESTABLISHED`),
-screenshots/OCR, performance from a snapshot, ETF look-through, exchange-calendar
-validation, tax computation, and any order or transfer.
+screenshots/OCR, performance from a snapshot, ETF look-through, exchange calendars other
+than XNYS 2026–2028, tax computation, and any order or transfer.

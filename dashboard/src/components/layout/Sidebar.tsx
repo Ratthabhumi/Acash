@@ -8,15 +8,16 @@ import {
   Lock, 
   Layers,
   X,
-  Swords
+  Swords,
+  Wallet
 } from 'lucide-react';
 
-export type DashboardTab = 'overview' | 'trades' | 'evidence' | 'validation' | 'shadow';
+export type DashboardTab = 'portfolio' | 'overview' | 'trades' | 'evidence' | 'validation' | 'shadow';
 
 interface SidebarProps {
   currentTab: DashboardTab;
   onSelectTab: (tab: DashboardTab) => void;
-  tradeCount: number;
+  tradeCount: number | null;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -30,6 +31,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     {
+      id: 'portfolio' as DashboardTab,
+      group: 'Portfolio Intelligence',
+      label: 'Wealth, Accounts & Capacity',
+      icon: Wallet,
+      badge: 'READ-ONLY',
+      description: 'Total wealth, accounts, allocation, capacity, evidence',
+    },
+    {
       id: 'overview' as DashboardTab,
       label: 'Research Overview',
       icon: BarChart3,
@@ -40,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'trades' as DashboardTab,
       label: 'Simulated Trades',
       icon: ArrowLeftRight,
-      badge: String(tradeCount),
+      badge: tradeCount === null ? '-' : String(tradeCount),
       description: 'Causal trade audit & evidence',
     },
     {
@@ -75,13 +84,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const renderNavContent = () => (
     <div className="p-4 space-y-6 overflow-y-auto flex-1">
-      {/* Navigation Category */}
-      <div>
+      {['Portfolio Intelligence', 'Quant Research'].map((group) => (
+      <div key={group}>
         <div className="text-[11px] font-mono-code uppercase font-semibold text-muted px-2 tracking-wider mb-2">
-          Research Views
+          {group}
         </div>
         <nav className="space-y-1">
-          {navItems.map((item) => {
+          {navItems.filter((item) => (item.group ?? 'Quant Research') === group).map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
             return (
@@ -114,6 +123,7 @@ className={`w-full flex items-center justify-between px-3 py-2.5 rounded text-le
           })}
         </nav>
       </div>
+      ))}
 
       {/* System Architecture Metadata Card */}
       <div className="rounded-md border border-default bg-surface-muted/60 p-3 text-xs space-y-2 font-mono-code">

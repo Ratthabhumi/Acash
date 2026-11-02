@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, BarChart3, ArrowLeftRight, GitBranch, ShieldCheck, CornerDownLeft, X } from 'lucide-react';
+import { Search, BarChart3, ArrowLeftRight, GitBranch, ShieldCheck, CornerDownLeft, X, Wallet, Swords } from 'lucide-react';
 import { DashboardTab } from './Sidebar';
 
 interface CommandPaletteProps {
@@ -18,6 +18,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const actions = [
+    {
+      id: 'portfolio' as DashboardTab,
+      label: 'Navigate to Portfolio Intelligence',
+      subtitle: 'Read-only wealth, accounts, allocation, capacity & evidence',
+      icon: Wallet,
+      shortcut: '0',
+    },
     {
       id: 'overview' as DashboardTab,
       label: 'Navigate to Research Overview',
@@ -45,6 +52,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Multi-gate statistical evaluation, friction stress & blind OOS',
       icon: ShieldCheck,
       shortcut: '4',
+    },
+    {
+      id: 'shadow' as DashboardTab,
+      label: 'Navigate to Shadow Tournament',
+      subtitle: 'Simulated shadow alpha tournament (read-only)',
+      icon: Swords,
+      shortcut: '5',
     },
   ];
 

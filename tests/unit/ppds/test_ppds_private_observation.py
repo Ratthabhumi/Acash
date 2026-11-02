@@ -125,7 +125,7 @@ def test_weekend_observation_uses_previous_session() -> None:
     alignment = po.book_summary(_book(_doc()))["time_alignment"]
     assert alignment["valuation_date"] == "2026-10-30"
     assert alignment["observation_lag_days"] == 2
-    assert alignment["market_session_calendar_check"] == "NOT_PERFORMED_NO_CALENDAR_AUTHORITY"
+    assert alignment["market_session_calendar_check"] == "NOT_PERFORMED_IN_PACK"
 
 
 @pytest.mark.parametrize("observed_at, lag", [

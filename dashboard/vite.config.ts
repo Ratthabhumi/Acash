@@ -11,9 +11,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Loopback only: the owner-private view service accepts only these origins.
   server: {
+    host: '127.0.0.1',
     port: 3002,
     open: false,
+    strictPort: true,
+  },
+  preview: {
+    host: '127.0.0.1',
+    port: 3002,
     strictPort: true,
   },
 });

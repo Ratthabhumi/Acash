@@ -11,12 +11,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.invest.capacity_plan import load_capacity
+from acash.invest.market_calendar import load_calendar, price_session_status
 from acash.ppds.private_observation import (
     AUTHORIZATION_RECORD,
     DATA_CLASSES,
@@ -126,6 +127,13 @@ def preflight(snapshot_path: Path, capacity_path: Optional[Path] = None, output_
         add("security_identity", "WARN" if unverified else "PASS",
             f"SECURITY_IDENTITY_UNVERIFIED: {','.join(unverified)}" if unverified else "all mapped")
         add("market_session", "INFO", block["market_session_status"])
+        calendar = load_calendar()
+        mics = {s.security_id: s.exchange_mic for s in snapshot.securities}
+        for sid, stamp in snapshot.published_at:
+            status = price_session_status(calendar, mics.get(sid), datetime.fromisoformat(stamp))
+            level = ("PASS" if status == "WITHIN_REGULAR_SESSION" else
+                     "INFO" if status.startswith("MARKET_SESSION_NOT_VERIFIED") else "WARN")
+            add(f"market_session:{sid}", level, f"{status} ({calendar.calendar_id})")
 
     if capacity_path is not None:
         try:
