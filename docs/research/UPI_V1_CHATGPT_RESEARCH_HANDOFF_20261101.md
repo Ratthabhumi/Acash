@@ -27,6 +27,14 @@ Engineering status: BLOCKED_BY_AUTHORIZATION (broker connectivity is not authori
 
 Owner-supplied: Dime! and Webull export formats are unverified.
 
+Owner-supplied (2026-11-02): Webull Thailand documents trade confirmations and monthly
+statements downloadable as PDF or CSV
+(https://www.webull.co.th/help/faq/494-Can-I-export-my-trading-transactions-to-Excel-or-CSV-format).
+Dime! documents requesting FCD statements
+(https://dime.co.th/th/articles/how-to-request-dime-fcd-statement). Neither establishes a
+column schema, and an FCD statement is not assumed to contain stock trades. Status:
+BROKER_NATIVE_IMPORT_NOT_ESTABLISHED until a redacted sample exists.
+
 - Dime!: can the app export transaction history (buys, sells, dividends, withholding tax, FX conversions, fees) as CSV/PDF? Column list, date/time zone, decimal format?
 - Webull Thailand: same question.
 - Bank FCD statement: does it show interest accrual vs paid?
@@ -54,7 +62,13 @@ semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 | Benchmark-relative performance | Benchmark comparison | WAITING_FOR_EVIDENCE (no admitted benchmark series) |
 | FX attribution | Currency vs local return split | DOCUMENTED_ONLY (FX_ATTRIBUTION_NOT_ESTABLISHED) |
 | Webull read-only API | Automated position import | WAITING_FOR_EVIDENCE + authorization |
-| Dime!/Webull exports | Native import mapping | WAITING_FOR_EVIDENCE |
+| Dime! FCD statement / Webull monthly CSV | Native import mapping | WAITING_FOR_EVIDENCE (channel documented, schema not) |
+| Broker-displayed totals (V1_2) | Account/sub-portfolio total reconciliation, unclassified residual | IMPLEMENTED_AND_TESTED (synthetic) |
+| Security identifiers (ISIN/FIGI/MIC) | Non-merging of unverified tickers | IMPLEMENTED_AND_TESTED (format checks only; no security master) |
+| NYSE hours/calendar | Market-session validation | DOCUMENTED_ONLY (MARKET_SESSION_NOT_VERIFIED) |
+| Broker fees / FX route costs | V38 route cost engine | PARTIALLY_IMPLEMENTED (owner quote evidence still open) |
+| ETF holdings (Vanguard, QQQM, SEC N-PORT) | Look-through | WAITING_FOR_EVIDENCE |
+| Alpaca / IBKR / Settrade | Broker capability registry | DOCUMENTED_ONLY (not built; no adapters) |
 | Thai/US tax | After-tax return | DOCUMENTED_ONLY |
 | QuantConnect LEAN | Backtest engine | NOT_RELEVANT_CURRENT_SCOPE |
 

@@ -96,7 +96,7 @@ def parse_capacity(doc: Any) -> CapacityInputs:
 def load_capacity(path: Path) -> CapacityInputs:
     inputs = parse_capacity(read_bounded_json(Path(path), "CAPACITY"))
     if inputs.data_class == "OWNER_PRIVATE_OBSERVATION":
-        assert_private_observation_authorized(inputs.data_class)
+        assert_private_observation_authorized(inputs.data_class, CAPACITY_SCHEMA)
         assert_private_location(Path(path))
     return inputs
 

@@ -67,6 +67,14 @@ reference; otherwise `UNKNOWN`. Sub-portfolio names never imply a class.
 Look-through is `OVERLAP_NOT_ESTABLISHED` until dated constituent weights exist
 (`etf_overlap_exposure` can consume them later).
 
+V1_2 (`ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2`, superset of V1_1) adds broker-displayed
+account/sub-portfolio totals, value-only positions and owner-supplied identifiers. PPDS
+still values only quantity x price and settled cash. `evidence_report` overlays the
+value-only positions as observed values. It compares each broker total with its components,
+never adds a total to them, and labels any positive unexplained remainder as
+`UNCLASSIFIED_HOLDINGS_VALUE`. V1_1 documents report byte-identically. Pilot steps are in
+`docs/research/UPI_PRIVATE_PILOT_RUNBOOK.md`.
+
 ## 5. Owner local usage (only after the owner ratifies the ODR; not run by AI on real data)
 
 ```text

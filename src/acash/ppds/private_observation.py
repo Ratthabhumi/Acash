@@ -35,6 +35,19 @@ from acash.ppds.registry import (
 )
 
 SCHEMA = "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1"
+# V1_2 is a superset: broker-displayed account/sub-portfolio totals, value-only positions and
+# owner-supplied security identifiers. V1_1 documents parse and report exactly as before.
+SCHEMA_V1_2 = "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2"
+SCHEMAS = (SCHEMA, SCHEMA_V1_2)
+EVIDENCE_LEVELS = (
+    "ACCOUNT_TOTAL_ONLY",
+    "SUBPORTFOLIO_TOTAL_ONLY",
+    "POSITION_MARKET_VALUE_ONLY",
+    "QUANTITY_AND_PRICE_OBSERVED",
+    "TRANSACTION_HISTORY_RECONCILED",
+)
+TOTAL_STATUSES = ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING", "UNEXPLAINED_DIFFERENCE", "INSUFFICIENT_EVIDENCE")
+INSTRUMENT_TYPES = ("COMMON_STOCK", "ETF", "ADR", "DR", "CFD", "MUTUAL_FUND", "OTHER")
 DATA_CLASSES = ("SYNTHETIC_PUBLIC_FIXTURE", "OWNER_PRIVATE_OBSERVATION")
 EVIDENCE_SOURCES = ("MANUAL_SNAPSHOT", "CSV_STATEMENT")
 ACCOUNT_ROLES = ("LONG_TERM", "QUANT_RESEARCH", "CASH_RESERVE", "OTHER")
@@ -98,7 +111,26 @@ _POSITION_FIELDS = {"security_id", "sub_portfolio", "quantity", "cost_basis_tota
 _FX_FIELDS = {"from", "to", "rate", "as_of", "source_id"}
 _PRICE_FIELDS = {"security_id", "currency", "price", "as_of", "published_at", "source_id"}
 _SECURITY_FIELDS = {"security_id", "classification", "methodology", "evidence_ref"}
+_V1_2_ACCOUNT_FIELDS = {"reported_total", "sub_portfolio_totals"}
+_V1_2_SECURITY_FIELDS = {"instrument_type", "exchange_mic", "isin", "figi", "trading_currency"}
+_TOTAL_FIELDS = {"amount", "currency"}
+_SUB_TOTAL_FIELDS = {"sub_portfolio", "amount", "currency"}
+_ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+_FIGI = re.compile(r"^[A-Z0-9]{2}G[A-Z0-9]{8}[0-9]$")
+_MIC = re.compile(r"^[A-Z0-9]{4}$")
 ZERO = Decimal("0")
+
+
+def isin_check_digit_valid(code: str) -> bool:
+    """ISO 6166 check digit: letters expand to two digits, then the Luhn mod-10 rule."""
+    if not _ISIN.match(code):
+        return False
+    digits = "".join(str(int(ch, 36)) for ch in code[:-1])
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch) * (2 if i % 2 == 0 else 1)
+        total += d - 9 if d > 9 else d
+    return (10 - total % 10) % 10 == int(code[-1])
 
 
 def _repo_root() -> Path:
@@ -119,23 +151,35 @@ def assert_private_location(path: Path, root: Optional[Path] = None) -> None:
         raise DataContractError("PRIVATE_LOCATION_NOT_IGNORED: owner data must be outside the repo or under data/private/.")
 
 
-def private_observation_authorized(record: Optional[Path] = None) -> bool:
-    """True only if the owner decision record is RATIFIED by the OWNER for this capability."""
+def private_observation_authorized(record: Optional[Path] = None, schema: Optional[str] = None,
+                                   capability: str = AUTHORIZED_CAPABILITY) -> bool:
+    """True only if the decision record is RATIFIED by the OWNER for ``capability``.
+
+    When ``schema`` is given, the record must also list it in ``scope_schemas``; a ratification
+    never extends to input formats it does not name.
+    """
     path = record or (_repo_root() / AUTHORIZATION_RECORD)
     try:
         doc = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return (isinstance(doc, dict) and doc.get("capability") == AUTHORIZED_CAPABILITY
-            and doc.get("status") == "RATIFIED" and doc.get("ratified_by") == "OWNER"
-            and isinstance(doc.get("ratified_on"), str))
+    ratified = (isinstance(doc, dict) and doc.get("capability") == capability
+                and doc.get("status") == "RATIFIED" and doc.get("ratified_by") == "OWNER"
+                and isinstance(doc.get("ratified_on"), str))
+    if not ratified or schema is None:
+        return ratified
+    scope = doc.get("scope_schemas")
+    return isinstance(scope, list) and schema in scope
 
 
-def assert_private_observation_authorized(data_class: str) -> None:
-    if data_class == "OWNER_PRIVATE_OBSERVATION" and not private_observation_authorized():
+def assert_private_observation_authorized(data_class: str, schema: Optional[str] = None, *,
+                                          record: Path = AUTHORIZATION_RECORD,
+                                          capability: str = AUTHORIZED_CAPABILITY) -> None:
+    if data_class == "OWNER_PRIVATE_OBSERVATION" and not private_observation_authorized(
+            _repo_root() / record, schema, capability):
         raise DataContractError(
-            "PRIVATE_OBSERVATION_NOT_AUTHORIZED: owner decision record "
-            f"{AUTHORIZATION_RECORD.as_posix()} is not RATIFIED; owner-private processing is disabled.")
+            f"PRIVATE_OBSERVATION_NOT_AUTHORIZED: owner decision record {record.as_posix()} is not RATIFIED"
+            f"{' for ' + schema if schema else ''}; owner-private processing is disabled.")
 
 
 def read_bounded_json(path: Path, code: str) -> Any:
@@ -254,6 +298,28 @@ class PositionLine:
 
 
 @dataclass(frozen=True)
+class ObservedValueLine:
+    """Broker-displayed market value without a quantity; never valued by PPDS, never a lot."""
+
+    account_ref: str
+    security_id: str
+    sub_portfolio: Optional[str]
+    market_value: Decimal
+    currency: str
+    cost_basis_total: Optional[Decimal]
+    cost_basis_currency: Optional[str]
+
+
+@dataclass(frozen=True)
+class ReportedTotal:
+    """Broker-displayed total; compared with its components, never added to them."""
+
+    sub_portfolio: Optional[str]
+    amount: Decimal
+    currency: str
+
+
+@dataclass(frozen=True)
 class AccountObservation:
     account_ref: str
     broker: str
@@ -261,6 +327,9 @@ class AccountObservation:
     base_currency: str
     cash: Tuple[CashLine, ...]
     positions: Tuple[PositionLine, ...]
+    observed_value_positions: Tuple[ObservedValueLine, ...] = ()
+    reported_total: Optional[ReportedTotal] = None
+    sub_portfolio_totals: Tuple[ReportedTotal, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -269,6 +338,17 @@ class SecurityClass:
     classification: str
     methodology: str
     evidence_ref: Optional[str]
+    instrument_type: Optional[str] = None
+    exchange_mic: Optional[str] = None
+    isin: Optional[str] = None
+    figi: Optional[str] = None
+    trading_currency: Optional[str] = None
+
+    @property
+    def identity_status(self) -> str:
+        if self.instrument_type and self.exchange_mic and (self.isin or self.figi):
+            return "IDENTITY_MAPPED_OWNER_SUPPLIED"
+        return "SECURITY_IDENTITY_UNVERIFIED"
 
 
 @dataclass(frozen=True)
@@ -286,6 +366,7 @@ class PortfolioSnapshot:
     securities: Tuple[SecurityClass, ...]
     accounts: Tuple[AccountObservation, ...]
     content_sha256: str
+    schema: str = SCHEMA
 
 
 def parse_snapshot(doc: Any) -> PortfolioSnapshot:
@@ -296,8 +377,10 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
     never follow it.
     """
     top = _fields(doc, _TOP_FIELDS, "snapshot")
-    if top.get("schema") != SCHEMA:
-        raise DataContractError(f"PRIVATE_SCHEMA_MISMATCH: expected {SCHEMA}.")
+    schema = top.get("schema")
+    if schema not in SCHEMAS:
+        raise DataContractError(f"PRIVATE_SCHEMA_MISMATCH: expected one of {list(SCHEMAS)}.")
+    v12 = schema == SCHEMA_V1_2
     data_class = top.get("data_class")
     if data_class not in DATA_CLASSES:
         raise DataContractError("PRIVATE_DATA_CLASS_INVALID.")
@@ -342,7 +425,7 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
 
     classes: Dict[str, SecurityClass] = {}
     for i, raw in enumerate(top.get("securities") or []):
-        row = _fields(raw, _SECURITY_FIELDS, f"securities[{i}]")
+        row = _fields(raw, _SECURITY_FIELDS | (_V1_2_SECURITY_FIELDS if v12 else set()), f"securities[{i}]")
         sid = _security(row.get("security_id"), f"securities[{i}]")
         cls, method = row.get("classification"), row.get("methodology")
         evidence = _label(row.get("evidence_ref"), f"securities {sid} evidence_ref", _LONG_DIGIT_RUN)
@@ -352,12 +435,13 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
             raise DataContractError(f"PRIVATE_CLASSIFICATION_EVIDENCE_REQUIRED: {sid}.")
         if method != "OWNER_DECLARED_WITH_EVIDENCE" and cls != "UNKNOWN":
             raise DataContractError(f"PRIVATE_CLASSIFICATION_WITHOUT_METHODOLOGY: {sid}.")
-        classes[sid] = SecurityClass(sid, str(cls), str(method), evidence)
+        classes[sid] = SecurityClass(sid, str(cls), str(method), evidence, *_identity(row, sid, prices))
 
     accounts: List[AccountObservation] = []
     used_prices: Set[str] = set()
+    value_only: Set[str] = set()
     for i, raw in enumerate(top.get("accounts") or []):
-        accounts.append(_parse_account(raw, i, prices, used_prices))
+        accounts.append(_parse_account(raw, i, prices, used_prices, value_only, v12))
     if not accounts:
         raise DataContractError("PRIVATE_NO_ACCOUNTS.")
     refs = [a.account_ref for a in accounts]
@@ -366,7 +450,7 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
     unused = sorted(set(prices) - used_prices)
     if unused:
         raise DataContractError(f"PRIVATE_UNUSED_PRICE: {unused}.")
-    unknown_class = sorted(set(classes) - used_prices)
+    unknown_class = sorted(set(classes) - used_prices - value_only)
     if unknown_class:
         raise DataContractError(f"PRIVATE_CLASSIFICATION_FOR_UNHELD_SECURITY: {unknown_class}.")
     for quote in prices.values():
@@ -383,7 +467,35 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
         published_at=tuple(sorted(published.items())),
         securities=tuple(classes[k] for k in sorted(classes)), accounts=tuple(sorted(accounts, key=lambda a: a.account_ref)),
         content_sha256=CanonicalConfigSerializer.compute_sha256(json.loads(json.dumps(doc, sort_keys=True))),
+        schema=str(schema),
     )
+
+
+def _identity(row: Mapping[str, Any], sid: str, prices: Mapping[str, PriceQuote]) -> Tuple[Optional[str], ...]:
+    """Owner-supplied identifiers, format-checked only; no external security master is consulted."""
+    itype = row.get("instrument_type")
+    if itype is not None and itype not in INSTRUMENT_TYPES:
+        raise DataContractError(f"PRIVATE_INSTRUMENT_TYPE_INVALID: {sid}.")
+    mic, isin, figi = row.get("exchange_mic"), row.get("isin"), row.get("figi")
+    if mic is not None and not _MIC.match(str(mic)):
+        raise DataContractError(f"PRIVATE_EXCHANGE_MIC_INVALID: {sid}.")
+    if isin is not None and not isin_check_digit_valid(str(isin)):
+        raise DataContractError(f"PRIVATE_ISIN_INVALID: {sid}.")
+    if figi is not None and not _FIGI.match(str(figi)):
+        raise DataContractError(f"PRIVATE_FIGI_INVALID: {sid}.")
+    trading = _ccy(row.get("trading_currency"), f"{sid} trading_currency") if row.get("trading_currency") is not None else None
+    if trading is not None and sid in prices and prices[sid].currency != trading:
+        raise DataContractError(f"PRIVATE_IDENTITY_CURRENCY_MISMATCH: {sid} price currency differs from trading_currency.")
+    return (None if itype is None else str(itype), None if mic is None else str(mic),
+            None if isin is None else str(isin), None if figi is None else str(figi), trading)
+
+
+def _reported_total(raw: Any, ctx: str, sub_required: bool) -> ReportedTotal:
+    row = _fields(raw, _SUB_TOTAL_FIELDS if sub_required else _TOTAL_FIELDS, ctx)
+    sub = _label(row.get("sub_portfolio"), f"{ctx}.sub_portfolio") if sub_required else None
+    if sub_required and sub is None:
+        raise DataContractError(f"PRIVATE_SUBPORTFOLIO_TOTAL_UNLABELLED: {ctx}.")
+    return ReportedTotal(sub, _dec(row.get("amount"), f"{ctx}.amount", nonnegative=True), _ccy(row.get("currency"), ctx))
 
 
 def _optional_amount(prow: Mapping[str, Any], amount_key: str, ccy_key: str, ctx: str) -> Tuple[Optional[Decimal], Optional[str]]:
@@ -395,8 +507,9 @@ def _optional_amount(prow: Mapping[str, Any], amount_key: str, ccy_key: str, ctx
     return _dec(amount, f"{ctx} {amount_key}", nonnegative=True), _ccy(ccy, f"{ctx} {ccy_key}")
 
 
-def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used: Set[str]) -> AccountObservation:
-    row = _fields(raw, _ACCOUNT_FIELDS, f"accounts[{index}]")
+def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used: Set[str],
+                   value_only: Set[str], v12: bool = False) -> AccountObservation:
+    row = _fields(raw, _ACCOUNT_FIELDS | (_V1_2_ACCOUNT_FIELDS if v12 else set()), f"accounts[{index}]")
     ref = _ref(row.get("account_ref"), f"accounts[{index}].account_ref")
     broker = _ref(row.get("broker"), f"{ref}.broker")
     role = row.get("role")
@@ -419,11 +532,13 @@ def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used:
         seen_cash.add(key)
         cash.append(line)
     positions: List[PositionLine] = []
+    observed_lines: List[ObservedValueLine] = []
     seen_pos: Set[Tuple[str, Optional[str]]] = set()
     for j, p in enumerate(row.get("positions") or []):
         prow = _fields(p, _POSITION_FIELDS, f"{ref}.positions[{j}]")
         sid = _security(prow.get("security_id"), f"{ref}.positions[{j}]")
-        if sid not in prices:
+        value_only_line = v12 and prow.get("quantity") is None
+        if sid not in prices and not value_only_line:
             raise DataContractError(f"PRIVATE_PRICE_MISSING: {sid}.")
         sub = _label(prow.get("sub_portfolio"), f"{ref}.positions[{j}].sub_portfolio")
         if (sid, sub) in seen_pos:
@@ -431,18 +546,32 @@ def _parse_account(raw: Any, index: int, prices: Mapping[str, PriceQuote], used:
         seen_pos.add((sid, sub))
         cost, cost_ccy = _optional_amount(prow, "cost_basis_total", "cost_basis_currency", f"{ref} {sid}")
         observed, observed_ccy = _optional_amount(prow, "observed_market_value", "observed_market_value_currency", f"{ref} {sid}")
+        if value_only_line:
+            if observed is None or observed_ccy is None:
+                raise DataContractError(f"PRIVATE_POSITION_EVIDENCE_MISSING: {ref} {sid} needs quantity or observed_market_value.")
+            observed_lines.append(ObservedValueLine(ref, sid, sub, observed, observed_ccy, cost, cost_ccy))
+            value_only.add(sid)
+            continue
         positions.append(PositionLine(ref, sid, sub, _dec(prow.get("quantity"), f"{ref} {sid} quantity", positive=True),
                                       cost, cost_ccy, observed, observed_ccy))
         used.add(sid)
-    if not cash and not positions:
+    reported = (_reported_total(row["reported_total"], f"{ref}.reported_total", False)
+                if row.get("reported_total") is not None else None)
+    subs: List[ReportedTotal] = []
+    for j, s in enumerate(row.get("sub_portfolio_totals") or []):
+        subs.append(_reported_total(s, f"{ref}.sub_portfolio_totals[{j}]", True))
+    if len({s.sub_portfolio for s in subs}) != len(subs):
+        raise DataContractError(f"PRIVATE_DUPLICATE_SUBPORTFOLIO_TOTAL: {ref}.")
+    if not cash and not positions and not observed_lines and reported is None and not subs:
         raise DataContractError(f"PRIVATE_EMPTY_ACCOUNT: {ref}.")
-    return AccountObservation(ref, broker, str(role), base, tuple(cash), tuple(positions))
+    return AccountObservation(ref, broker, str(role), base, tuple(cash), tuple(positions), tuple(observed_lines),
+                              reported, tuple(sorted(subs, key=lambda s: s.sub_portfolio or "")))
 
 
 def load_snapshot(path: Path) -> PortfolioSnapshot:
     snapshot = parse_snapshot(read_bounded_json(Path(path), "PRIVATE_SNAPSHOT"))
     if snapshot.data_class == "OWNER_PRIVATE_OBSERVATION":
-        assert_private_observation_authorized(snapshot.data_class)
+        assert_private_observation_authorized(snapshot.data_class, snapshot.schema)
         assert_private_location(Path(path))
     return snapshot
 
@@ -525,7 +654,7 @@ class PortfolioBook:
 
 def build_book(snapshot: PortfolioSnapshot) -> PortfolioBook:
     """Value every account with PPDS and consolidate into each report currency."""
-    assert_private_observation_authorized(snapshot.data_class)
+    assert_private_observation_authorized(snapshot.data_class, snapshot.schema)
     fx = _fx_map(snapshot)
     prices = {p.symbol: p for p in snapshot.prices}
     views: Dict[str, SnapshotValuationView] = {}
@@ -738,6 +867,206 @@ def _stress(book: PortfolioBook, ccy: str, nav: Decimal,
     }
 
 
+_Component = Tuple[str, Optional[str], Optional[str], str, Decimal, Decimal]
+
+
+def _components(snapshot: PortfolioSnapshot, account: AccountObservation) -> List[_Component]:
+    """(kind, sub_portfolio, security_id, currency, local value, displayed-precision half unit)."""
+    prices = {p.symbol: p for p in snapshot.prices}
+    rows: List[_Component] = []
+    for p in account.positions:
+        q = prices[p.security_id]
+        rows.append(("QUANTITY_X_PRICE", p.sub_portfolio, p.security_id, q.currency, p.quantity * q.price,
+                     p.quantity * _half_unit(q.price)))
+    for c in account.cash:
+        if c.kind == "SETTLED":
+            rows.append(("SETTLED_CASH", c.sub_portfolio, None, c.currency, c.amount, _half_unit(c.amount)))
+    for o in account.observed_value_positions:
+        rows.append(("OBSERVED_MARKET_VALUE", o.sub_portfolio, o.security_id, o.currency, o.market_value,
+                     _half_unit(o.market_value)))
+    return rows
+
+
+def _chain(fx: Mapping[Tuple[str, str], FXRate], src: str, base: str, dst: str) -> Optional[Decimal]:
+    """Same conversion path as PPDS valuation: line currency -> account base -> target."""
+    try:
+        return _rate(fx, src, base) * _rate(fx, base, dst)
+    except DataContractError:
+        return None
+
+
+def _compare_total(total: ReportedTotal, rows: Sequence[_Component], base: str,
+                   fx: Mapping[Tuple[str, str], FXRate]) -> Dict[str, Any]:
+    """Broker-displayed total vs its known components, in the total's own currency."""
+    out: Dict[str, Any] = {"observed_total": str(total.amount), "currency": total.currency, "basis": "OBSERVED_NOT_COMPUTED"}
+    if not rows:
+        return {**out, "status": "INSUFFICIENT_EVIDENCE", "reason": "NO_COMPONENT_LINES", "difference": str(total.amount)}
+    value = tolerance = ZERO
+    for _, _, _, ccy, local, half in rows:
+        rate = _chain(fx, ccy, base, total.currency)
+        if rate is None:
+            return {**out, "status": "INSUFFICIENT_EVIDENCE", "reason": "CURRENCY_CONVERSION_NOT_AVAILABLE", "difference": ""}
+        value += local * rate
+        tolerance += half * rate
+    diff = total.amount - value
+    tolerance += _half_unit(total.amount)
+    status = ("RECONCILED" if diff == ZERO else
+              "CONSISTENT_WITH_DISPLAY_ROUNDING" if abs(diff) <= tolerance else "UNEXPLAINED_DIFFERENCE")
+    return {**out, "status": status, "known_components": str(value), "difference": str(diff), "tolerance": str(tolerance),
+            "fx_source_may_differ": any(r[3] != total.currency for r in rows)}
+
+
+def _residual(check: Mapping[str, Any]) -> Optional[Decimal]:
+    """Positive unexplained remainder of a reported total, in the total's currency; None if not established."""
+    if check["status"] in ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING") or check["difference"] == "":
+        return None
+    diff = Decimal(check["difference"])
+    return diff if diff > ZERO else None
+
+
+def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, Any]:
+    """Evidence levels, total reconciliation, unclassified residual and coverage (V1_2 snapshots).
+
+    Computed value is PPDS quantity x price plus settled cash. Value-only positions are added as
+    observed values. A broker total is compared with its components and contributes only its
+    positive unexplained remainder, labelled UNCLASSIFIED_HOLDINGS_VALUE (never cash, never a
+    holding). Sub-portfolio totals contribute remainders only when the account has no total.
+    """
+    snap = book.snapshot
+    ccy = ccy or snap.reporting_currency
+    if ccy not in book.consolidated:
+        raise DataContractError(f"PRIVATE_REPORT_CURRENCY_NOT_BUILT: {ccy}.")
+    fx = _fx_map(snap)
+    identity = {c.security_id: c for c in snap.securities}
+    totals = {"computed": ZERO, "securities": ZERO, "observed": ZERO, "residual": ZERO, "cost_known": ZERO, "reconciled": ZERO}
+    exposure: Dict[str, Decimal] = {}
+    currencies: Dict[str, Decimal] = {}
+    subs_alloc: Dict[str, Decimal] = {}
+    accounts_out: List[Dict[str, Any]] = []
+    prices = {p.symbol: p for p in snap.prices}
+
+    def to_rep(src: str, base: str) -> Decimal:
+        rate = _chain(fx, src, base, ccy)
+        if rate is None:
+            raise DataContractError(f"PRIVATE_FX_RATE_MISSING: {src}->{ccy}.")
+        return rate
+
+    for a in snap.accounts:
+        rows = _components(snap, a)
+        computed = observed = residual = ZERO
+        flags: List[str] = []
+        for kind, sub, sid, cur, local, _ in rows:
+            value = local * to_rep(cur, a.base_currency)
+            key = f"{a.account_ref}/{sub or ('(account cash)' if sid is None else '(unassigned)')}"
+            subs_alloc[key] = subs_alloc.get(key, ZERO) + value
+            currencies[cur] = currencies.get(cur, ZERO) + value
+            if kind == "OBSERVED_MARKET_VALUE":
+                observed += value
+            else:
+                computed += value
+            if sid is not None:
+                cls = identity.get(sid)
+                mapped = cls is not None and cls.identity_status == "IDENTITY_MAPPED_OWNER_SUPPLIED"
+                ekey = (cls.isin or cls.figi or sid) if mapped and cls is not None else f"{a.account_ref}:{sid}"
+                exposure[ekey] = exposure.get(ekey, ZERO) + value
+                if kind == "QUANTITY_X_PRICE":
+                    totals["securities"] += value
+        for p in a.positions:
+            if p.cost_basis_total is not None and p.cost_basis_currency == prices[p.security_id].currency:
+                totals["cost_known"] += p.quantity * prices[p.security_id].price * to_rep(prices[p.security_id].currency, a.base_currency)
+        for o in a.observed_value_positions:
+            if o.cost_basis_total is not None and o.cost_basis_currency == o.currency:
+                totals["cost_known"] += o.market_value * to_rep(o.currency, a.base_currency)
+
+        account_check: Any = "NOT_REPORTED"
+        if a.reported_total is not None:
+            account_check = _compare_total(a.reported_total, rows, a.base_currency, fx)
+        sub_checks = []
+        for s in a.sub_portfolio_totals:
+            check = _compare_total(s, [r for r in rows if r[1] == s.sub_portfolio], a.base_currency, fx)
+            sub_checks.append({"sub_portfolio": s.sub_portfolio, **check})
+        sources = [(a.reported_total, account_check)] if a.reported_total is not None else [
+            (s, c) for s, c in zip(a.sub_portfolio_totals, sub_checks)]
+        for total, check in sources:
+            assert total is not None
+            if check["status"] == "INSUFFICIENT_EVIDENCE" and check["difference"] == "":
+                flags.append("RESIDUAL_NOT_ESTABLISHED_FX_MISSING")
+                continue
+            if check["difference"] and Decimal(check["difference"]) < ZERO and check["status"] == "UNEXPLAINED_DIFFERENCE":
+                flags.append("KNOWN_VALUE_EXCEEDS_REPORTED_TOTAL")
+            remainder = _residual(check)
+            if remainder is not None:
+                value = remainder * to_rep(total.currency, a.base_currency)
+                residual += value
+                label = f"{a.account_ref}/{total.sub_portfolio or '(account)'}:UNCLASSIFIED_HOLDINGS_VALUE"
+                subs_alloc[label] = subs_alloc.get(label, ZERO) + value
+        if a.reported_total is not None and a.sub_portfolio_totals:
+            flags.append("SUBPORTFOLIO_TOTALS_INFORMATIONAL_ACCOUNT_TOTAL_GOVERNS")
+
+        has_lines = bool(a.positions or a.cash or a.observed_value_positions)
+        level = ("QUANTITY_AND_PRICE_OBSERVED" if has_lines and not a.observed_value_positions else
+                 "POSITION_MARKET_VALUE_ONLY" if has_lines else
+                 "SUBPORTFOLIO_TOTAL_ONLY" if a.sub_portfolio_totals else "ACCOUNT_TOTAL_ONLY")
+        account_value = computed + observed + residual
+        if isinstance(account_check, dict) and account_check["status"] in ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING"):
+            totals["reconciled"] += account_value
+        totals["computed"] += computed
+        totals["observed"] += observed
+        totals["residual"] += residual
+        accounts_out.append({
+            "account_ref": a.account_ref, "evidence_level": level, "computed_value": _q(computed),
+            "observed_position_value": _q(observed), "unclassified_holdings_value": _q(residual),
+            "account_total": account_check, "sub_portfolio_totals": sub_checks, "flags": sorted(flags),
+            "cash_lines_observed": bool(a.cash),
+        })
+
+    if abs(totals["computed"] - book.consolidated[ccy].consolidated_nav) > CONSERVATION_TOLERANCE:
+        raise DataContractError("PRIVATE_CONSERVATION_BREAK: evidence components differ from PPDS NAV.")
+    denom = totals["computed"] + totals["observed"] + totals["residual"]
+    if denom <= ZERO:
+        raise DataContractError("PRIVATE_NAV_NONPOSITIVE: evidence weights undefined.")
+    non_cash = totals["securities"] + totals["observed"] + totals["residual"]
+    weights = sorted(((v / denom, k) for k, v in exposure.items()), reverse=True)
+    held = sorted({p.security_id for a in snap.accounts for p in a.positions}
+                  | {o.security_id for a in snap.accounts for o in a.observed_value_positions})
+    if totals["residual"] > ZERO:
+        currencies["UNCLASSIFIED_RESIDUAL"] = totals["residual"]
+    return {
+        "report_currency": ccy,
+        "valuation_basis": {
+            "computed_nav_ppds": _q(totals["computed"]),
+            "observed_position_value": _q(totals["observed"]),
+            "unclassified_holdings_value": _q(totals["residual"]),
+            "total_best_evidence": _q(denom),
+        },
+        "accounts": accounts_out,
+        "coverage": {
+            "known_value_coverage": _w((totals["computed"] + totals["observed"]) / denom),
+            "position_level_coverage": _w(totals["securities"] / non_cash) if non_cash > ZERO else "NOT_APPLICABLE_NO_SECURITIES",
+            "cash_observed_accounts": f"{sum(1 for x in accounts_out if x['cash_lines_observed'])}/{len(accounts_out)}",
+            "account_total_reconciliation_coverage": _w(totals["reconciled"] / denom),
+            "cost_basis_coverage": _w(totals["cost_known"] / denom),
+            "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
+        },
+        "concentration_best_evidence": {
+            "status": "COMPLETE" if totals["residual"] == ZERO else "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+            "denominator": "TOTAL_BEST_EVIDENCE",
+            "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
+            "unclassified_share": _w(totals["residual"] / denom),
+            "top_holdings": [{"key": k, "weight": _w(w)} for w, k in weights[:5]],
+            "top1_weight": _w(weights[0][0]) if weights else "0.0000",
+            "hhi_identified_securities": _w(sum((w * w for w, _ in weights), ZERO)),
+        },
+        "currency_exposure_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom)} for k, v in sorted(currencies.items())},
+        "allocation_by_sub_portfolio_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom)} for k, v in sorted(subs_alloc.items())},
+        "security_identity": [{"security_id": s, "identity_status": (identity[s].identity_status if s in identity
+                                                                     else "SECURITY_IDENTITY_UNVERIFIED"),
+                               "instrument_type": identity[s].instrument_type if s in identity else None} for s in held],
+        "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+        "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
+    }
+
+
 def valuation_age_days(book: PortfolioBook, report_date: date) -> Dict[str, Any]:
     age = (report_date - book.snapshot.valuation_date).days
     if age < 0:
@@ -760,8 +1089,8 @@ def time_alignment(snapshot: PortfolioSnapshot) -> Dict[str, Any]:
 def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dict[str, Any]:
     snap = book.snapshot
     freshness = valuation_age_days(book, report_date or snap.valuation_date)
-    return {
-        "schema": SCHEMA,
+    summary: Dict[str, Any] = {
+        "schema": snap.schema,
         "data_class": snap.data_class,
         "snapshot_id": snap.snapshot_id,
         "snapshot_content_sha256": snap.content_sha256,
@@ -783,3 +1112,6 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
         "reconciliation": reconciliation_checks(book),
         "analytics": {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies},
     }
+    if snap.schema == SCHEMA_V1_2:
+        summary["evidence"] = {ccy: evidence_report(book, ccy) for ccy in snap.report_currencies}
+    return summary

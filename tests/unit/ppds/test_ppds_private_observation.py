@@ -46,7 +46,8 @@ def _ratify(root: Path) -> None:
     record = root / po.AUTHORIZATION_RECORD
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(json.dumps({"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED",
-                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01"}), encoding="utf-8")
+                                  "ratified_by": "OWNER", "ratified_on": "2026-11-01",
+                                  "scope_schemas": [po.SCHEMA]}), encoding="utf-8")
 
 
 def test_golden_nav_in_both_report_currencies() -> None:

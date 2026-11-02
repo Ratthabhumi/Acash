@@ -5,12 +5,22 @@
   "ratified_by": null,
   "ratified_on": null,
   "document": "docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.md",
+  "scope_schemas": [
+    "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
+    "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "ACASH_PRIVATE_CAPACITY_V1"
+  ],
+  "proposal_history": [
+    "2026-11-01 proposed with V1_1 snapshots and capacity files",
+    "2026-11-02 proposal scope lists V1_2 owner-typed snapshots (broker-displayed totals, value-only positions, identifiers); still unratified"
+  ],
   "independent_of": [
     "D5_DATA_ADMITTED",
     "TRADING_AUTHORIZED",
     "BROKER_ACCOUNT_CONNECTIVITY",
     "CREDENTIAL_STORAGE",
     "MARKET_DATA_SUBSCRIPTION",
-    "CAPITAL_TRANSFER"
+    "CAPITAL_TRANSFER",
+    "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED"
   ]
 }

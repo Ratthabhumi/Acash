@@ -22,8 +22,13 @@ owner snapshots only. The PPDS statement-import path (`provenance.py`,
 
 | Included | Excluded |
 |---|---|
-| Owner-typed snapshots (`ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1`) and capacity files | Broker statements imported by an adapter, OCR and screenshots |
-| Valuation, allocation, concentration, illustrative stress, capacity scenarios | Orders, transfers, FX conversion, recurring plans |
+| Owner-typed snapshots (`ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1`, `_V1_2`) and capacity files (`ACASH_PRIVATE_CAPACITY_V1`), exactly the schemas listed in `scope_schemas` | Broker statements imported by an adapter, OCR and screenshots |
+| Valuation, allocation, concentration, broker-total reconciliation, illustrative stress, capacity scenarios | Orders, transfers, FX conversion, recurring plans |
+| — | Transaction histories (`ACASH_CANONICAL_TRANSACTIONS_V1`): separate proposal `ODR_UPI_PRIVATE_TRANSACTIONS_002` |
+
+The runtime gate accepts a ratified record only for the input schemas it lists.
+Proposal history: on 2026-11-02, before any ratification, the proposed scope added V1_2
+(owner-typed broker-displayed totals, value-only positions and identifiers).
 | Private JSON/Markdown report under `data/private/` | Publishing, syncing or uploading the report |
 
 ## 4. Storage boundary

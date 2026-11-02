@@ -163,7 +163,7 @@ def test_owner_private_pack_cannot_be_written_to_tracked_tree(tmp_path: Path, mo
     with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
         wp.write_pack(pack, tmp_path / "docs")
     written = wp.write_pack(pack, tmp_path / "data" / "private" / "out")
-    assert [p.name for p in written] == ["upi_v1_pack.json", "upi_v1_pack.md"]
+    assert [p.name for p in written] == ["upi_v1_pack.json", "upi_v1_pack.md", "upi_run_manifest.json"]
 
 
 def test_committed_public_pack_matches_regeneration(tmp_path: Path) -> None:

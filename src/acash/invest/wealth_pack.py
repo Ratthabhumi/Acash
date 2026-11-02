@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
@@ -29,6 +30,7 @@ from acash.invest.capacity_plan import (
 )
 from acash.ppds.private_observation import (
     PortfolioBook,
+    _repo_root,
     assert_private_location,
     assert_private_observation_authorized,
     book_summary,
@@ -97,6 +99,17 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any]) -> Dict[s
         reasons.append("RESERVE_SHORTFALL: rebuild emergency reserve before new risk.")
     if summary["valuation_stale"]:
         reasons.append("STALE_VALUATION: snapshot older than the freshness window.")
+    evidence = summary.get("evidence")
+    if evidence:
+        block = evidence[next(iter(evidence))]
+        if block["valuation_basis"]["unclassified_holdings_value"] != "0.00":
+            reasons.append("UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.")
+        if any(s["identity_status"] == "SECURITY_IDENTITY_UNVERIFIED" for s in block["security_identity"]):
+            reasons.append("SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.")
+        if any(not isinstance(a["account_total"], dict) or a["account_total"]["status"] not in
+               ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING") for a in block["accounts"]):
+            reasons.append("ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.")
+        reasons.append("MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.")
     reasons.append("V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.")
     reasons.append("GOVERNANCE_AMENDMENT_PROPOSED_NOT_RATIFIED: private observation path (see boundary doc).")
     return {"conclusion": "NO_ACTION_PENDING_EVIDENCE", "reasons": reasons, "orders_generated": 0}
@@ -139,6 +152,26 @@ def _table(rows: Mapping[str, Mapping[str, str]]) -> List[str]:
     return lines
 
 
+def _evidence_markdown(ev: Mapping[str, Any]) -> List[str]:
+    vb, cov, conc = ev["valuation_basis"], ev["coverage"], ev["concentration_best_evidence"]
+    out = ["", f"### Evidence and observed totals ({ev['report_currency']})",
+           f"- Computed (PPDS quantity x price + settled cash): {vb['computed_nav_ppds']}; observed value-only positions: "
+           f"{vb['observed_position_value']}; UNCLASSIFIED_HOLDINGS_VALUE: {vb['unclassified_holdings_value']}; "
+           f"total best evidence: **{vb['total_best_evidence']}**",
+           f"- Coverage: known value {cov['known_value_coverage']}, position level {cov['position_level_coverage']}, "
+           f"cash observed accounts {cov['cash_observed_accounts']}, totals reconciled {cov['account_total_reconciliation_coverage']}, "
+           f"cost basis {cov['cost_basis_coverage']}, history {cov['historical_transaction_coverage']}",
+           f"- Concentration ({conc['status']}): top1 {conc['top1_weight']}, unclassified share {conc['unclassified_share']}, "
+           f"HHI {conc['hhi_identified_securities']}; market session {ev['market_session_status']}",
+           "| Account | Evidence level | Account total | Difference | Flags |", "|---|---|---|---:|---|"]
+    for acct in ev["accounts"]:
+        total = acct["account_total"]
+        status, diff = (total["status"], total["difference"]) if isinstance(total, dict) else (total, "")
+        out.append(f"| {acct['account_ref']} | {acct['evidence_level']} | {status} | {diff} | {', '.join(acct['flags']) or '-'} |")
+    out += [f"- Identity {s['security_id']}: {s['identity_status']}" for s in ev["security_identity"]]
+    return out
+
+
 def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     a, d, e = pack["A_total_wealth"], pack["D_financial_capacity"], pack["E_decision"]
     rep = next(iter(a["analytics"]))
@@ -164,6 +197,8 @@ def format_wealth_markdown(pack: Mapping[str, Any]) -> str:
     out += [f"Not evaluated: {an['stress_illustrative']['not_evaluated']}", "",
             "### Reconciliation (observed vs quantity x price)"]
     out += [f"- {r['account_ref']} {r['security_id']} {r['sub_portfolio']}: {r['verdict']}" for r in a["reconciliation"]]
+    if "evidence" in a:
+        out += _evidence_markdown(a["evidence"][rep])
     out += ["", "## B. Long-term accounts", *_table(pack["B_long_term"]["sub_portfolios"]), "",
             pack["B_long_term"]["policy_note"]]
     out += [f"- {k}: {v['description']} e.g. {', '.join(v['example_instruments']) or '-'}"
@@ -200,7 +235,27 @@ def write_pack(pack: Mapping[str, Any], output_dir: Path) -> List[Path]:
     json_path, md_path = output_dir / f"{stem}.json", output_dir / f"{stem}.md"
     json_path.write_text(json.dumps(pack, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     md_path.write_text(format_wealth_markdown(pack), encoding="utf-8", newline="\n")
-    return [json_path, md_path]
+    written = [json_path, md_path]
+    if pack["data_class"] == "OWNER_PRIVATE_OBSERVATION":
+        manifest = {"pack_version": PACK_VERSION, "pack_sha256": pack["pack_sha256"],
+                    "snapshot_schema": pack["A_total_wealth"]["schema"],
+                    "snapshot_content_sha256": pack["A_total_wealth"]["snapshot_content_sha256"],
+                    "code_version": _code_version(), "files": [p.name for p in written],
+                    "note": "Private run record. Digests identify private inputs; do not publish."}
+        manifest_path = output_dir / "upi_run_manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+        written.append(manifest_path)
+    return written
+
+
+def _code_version() -> Dict[str, str]:
+    try:
+        root = _repo_root()
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True, timeout=10)
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return {"commit": "NOT_AVAILABLE", "working_tree": "NOT_AVAILABLE"}
+    return {"commit": sha.stdout.strip(), "working_tree": "DIRTY" if dirty.stdout.strip() else "CLEAN"}
 
 
 def _weights(raw: Optional[str]) -> Optional[Dict[str, Decimal]]:
