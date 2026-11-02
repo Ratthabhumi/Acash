@@ -1,6 +1,9 @@
 # ODR_UPI_LOCAL_INPUT_AUTHORING_003 — Owner-directed local input authoring
 
-Status: **PROPOSED_NOT_RATIFIED**. Machine record:
+Status: **RATIFIED** by the Owner on 2026-11-02. The Owner approved conditionally on the P0
+security and integrity tests passing, and the agent applied the edit at the Owner's direction
+after they passed ([acceptance record](ODR_UPI_LOCAL_INPUT_AUTHORING_003_ACCEPTANCE.json)). The
+scope is unchanged. Machine record:
 [`ODR_UPI_LOCAL_INPUT_AUTHORING_003.json`](ODR_UPI_LOCAL_INPUT_AUTHORING_003.json).
 Capability: `OWNER_LOCAL_INPUT_AUTHORING_AUTHORIZED`. Amends and requires
 [ODR-001](ODR_UPI_PRIVATE_OBSERVATION_001.md).

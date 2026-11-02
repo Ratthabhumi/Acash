@@ -1,9 +1,17 @@
 {
   "decision_id": "ODR_UPI_LOCAL_INPUT_AUTHORING_003",
   "capability": "OWNER_LOCAL_INPUT_AUTHORING_AUTHORIZED",
-  "status": "PROPOSED_NOT_RATIFIED",
-  "ratified_by": null,
-  "ratified_on": null,
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-02",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's conditional authorization in the Cursor chat on 2026-11-02: \"ODR-003 — บันทึกข้อมูลผ่าน Dashboard ผมอนุมัติ ถ้ามันถูกต้องแล้ว\", effective only after the P0 security and integrity tests pass",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "acceptance_evidence": "docs/governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003_ACCEPTANCE.json",
+    "acceptance_commit": "9c45185b7583bda9ae88afc149bbb07a2258e8fc",
+    "scope_changed": false
+  },
   "document": "docs/governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md",
   "amends": "ODR_UPI_PRIVATE_OBSERVATION_001",
   "requires": [

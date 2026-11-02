@@ -438,3 +438,8 @@ def test_committed_authoring_record_keeps_its_exact_scope() -> None:
         lineage = doc["ratification_lineage"]
         assert (doc["ratified_by"], lineage["decided_by"], lineage["applied_by"], lineage["scope_changed"]) == (
             "OWNER", "OWNER", "CODING_AGENT_AT_OWNER_DIRECTION", False)
+        evidence = json.loads(Path(lineage["acceptance_evidence"]).read_text(encoding="utf-8"))
+        assert evidence["decision_id"] == pi.AUTHORING_DECISION_ID and evidence["result"] == "ALL_P0_PASSED"
+        assert lineage["acceptance_commit"] in evidence["security_fix_commits"]
+        assert all(check["result"] == "PASS" for check in evidence["p0_checks"])
+        assert evidence["unchanged"]["scope_changed"] is False

@@ -1,0 +1,83 @@
+{
+  "record": "ODR_UPI_LOCAL_INPUT_AUTHORING_003_ACCEPTANCE",
+  "decision_id": "ODR_UPI_LOCAL_INPUT_AUTHORING_003",
+  "condition": "Owner approval of ODR-003 was conditional on the P0 security and integrity corrections passing",
+  "security_fix_commits": [
+    "521c1ea4ce7241eb12f02170fa536e56939f3b2c",
+    "9c45185b7583bda9ae88afc149bbb07a2258e8fc"
+  ],
+  "ci": {
+    "push_run": 41444140343,
+    "pull_request_run": 41444148654,
+    "head": "9c45185b7583bda9ae88afc149bbb07a2258e8fc",
+    "conclusion": "success"
+  },
+  "local_verification": {
+    "pytest_full": "4884 passed, 22 skipped",
+    "mypy": "682 source files clean (Windows); test module clean with --platform linux",
+    "dashboard": "typecheck clean, 58 node tests passed, build ok"
+  },
+  "p0_checks": [
+    {
+      "requirement": "2.1 exact ODR-003 identity, capability, ratifier, ISO date, ODR-001 dependency, schemas and files; recheck at the write boundary; revocation stops writes",
+      "tests": [
+        "test_reading_needs_odr_001_and_saving_also_needs_odr_003",
+        "test_odr_003_identity_dependency_and_scope_are_exact",
+        "test_revocation_between_validation_and_replacement_stops_the_write"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "2.2 one confirmed request for both files, both revisions checked, staging, backups, journal, deterministic rollback, recovery before any later write or report",
+      "tests": [
+        "test_save_is_strict_confirmed_and_detects_conflicts",
+        "test_failed_replacement_restores_the_previous_pair",
+        "test_interrupted_save_is_recovered_before_any_further_write_or_report"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "2.3 report built in a generation directory, view hash verified, provenance and input revisions recorded, previous report kept on failure",
+      "tests": [
+        "test_generate_publishes_one_consistent_generation",
+        "test_failed_generation_keeps_the_previous_report"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "2.4 link and junction refusal, backup retention, codes and locations only in responses",
+      "tests": [
+        "test_links_inside_the_private_tree_are_refused",
+        "test_backup_retention_keeps_recent_copies",
+        "test_validation_reports_codes_and_locations_never_values"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "2.5 request security: Host, Origin, token, method, content type, size, field allowlist, CORS, rate limits",
+      "tests": [
+        "test_requests_are_refused_before_any_file_access",
+        "test_preflight_cors_and_disabled_service",
+        "test_rate_limits_refuse_bursts"
+      ],
+      "result": "PASS"
+    }
+  ],
+  "test_module": "tests/unit/invest/test_upi_setup_wizard.py",
+  "accepted_residual_risks": [
+    "Two file replacements are not one atomic operation; the journal restores or blocks a partial pair",
+    "A directory swapped for a link between the check and the replacement needs local write access to the Owner profile",
+    "Windows ACLs are inherited from the user profile and not changed by ACASH",
+    "File-level symlink refusal is exercised on Linux CI; this Windows host lacks symlink privilege and tests directory junctions instead"
+  ],
+  "unchanged": {
+    "odr_001": "RATIFIED (lineage untouched)",
+    "odr_002": "not ratified",
+    "scope_changed": false,
+    "NO_REAL_ORDERS": true,
+    "real_capital_authority_usd": "0.00",
+    "broker_credentials": "none",
+    "trading_authority": "none"
+  },
+  "result": "ALL_P0_PASSED"
+}
