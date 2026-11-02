@@ -3,13 +3,14 @@ import { AlertOctagon, AlertTriangle, ChevronDown, Info, Lock, RefreshCw, Search
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } from '../components/charts/PortfolioCharts';
+import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
 import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, formatDec, formatWeight } from '../services/upiView';
 
 const STATUS_HELP: Record<string, string> = {
   AUTHORIZATION_REQUIRED: 'ODR-001 is not RATIFIED, or the session token is wrong or from an earlier server start. Restart START-DASHBOARD.bat private for a new token.',
-  NO_REPORT: 'The service is running but data/private/out/upi_view.json does not exist yet. Generate it with acash.invest.upi_view (see the runbook).',
+  NO_REPORT: 'No private portfolio yet. Set up your portfolio with the wizard below.',
   INVALID_REPORT: 'The private view failed contract validation. Regenerate it from the current wealth pack.',
   SERVICE_UNAVAILABLE: 'The loopback service is not reachable on 127.0.0.1:8765. Start it with START-DASHBOARD.bat private.',
 };
@@ -382,12 +383,16 @@ export const PortfolioPage: React.FC = () => {
   const [token, setToken] = useState('');
   const [state, setState] = useState<LoadState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [session, setSession] = useState('');
+  const [editing, setEditing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const switchMode = (next: DataMode) => {
     abortRef.current?.abort();
     setState(null);
     setToken('');
+    setSession('');
+    setEditing(false);
     setLoading(false);
     setMode(next);
   };
@@ -411,11 +416,15 @@ export const PortfolioPage: React.FC = () => {
     if (abortRef.current === controller) {
       setState(result);
       setLoading(false);
+      setSession(result.status === 'AUTHORIZATION_REQUIRED' || result.status === 'SERVICE_UNAVAILABLE' ? '' : session);
       if (result.status === 'AUTHORIZATION_REQUIRED') setToken('');
     }
   }, [token]);
 
   const ready = state && 'view' in state;
+  const setupOpen = mode === 'OWNER_PRIVATE_READ_ONLY' && !!session && !loading && state !== null &&
+    (state.status === 'NO_REPORT' || state.status === 'INVALID_REPORT' || editing);
+  const onGenerated = () => { setEditing(false); void connect(session); };
   return (
     <div className="space-y-4 max-w-7xl">
       <div className="bg-surface border border-default rounded-lg p-4 space-y-3">
@@ -459,6 +468,10 @@ export const PortfolioPage: React.FC = () => {
                 <RefreshCw className="w-3.5 h-3.5" /> Load
               </button>
               {ready && (
+                <button type="button" onClick={() => setEditing((v) => !v)} aria-pressed={editing}
+                  className="px-3 py-1 rounded border border-default text-secondary hover:bg-surface-muted">Update portfolio snapshot</button>
+              )}
+              {ready && (
                 <button type="button" onClick={() => switchMode('OWNER_PRIVATE_READ_ONLY')}
                   className="px-3 py-1 rounded border border-default text-secondary hover:bg-surface-muted">Clear</button>
               )}
@@ -477,6 +490,7 @@ export const PortfolioPage: React.FC = () => {
       </div>
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
+      {setupOpen && <SetupWizard token={session} hasReport={!!ready} onGenerated={onGenerated} />}
       {!loading && state && 'view' in state && <PortfolioReport view={state.view} warnings={state.warnings} />}
       {!loading && state && !('view' in state) && (
         <div className="bg-surface border border-default rounded-lg p-6 flex items-start gap-3 text-sm">

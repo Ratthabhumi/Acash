@@ -127,7 +127,7 @@ Launcher (repository root, double-click or from a terminal):
 |---|---|
 | `START-DASHBOARD.bat` | Synthetic demo on `http://127.0.0.1:3002`; opens the browser when ready |
 | `START-DASHBOARD.bat check` | Checks files, Node/npm, dependencies, governance, ODR states and ports; starts nothing |
-| `START-DASHBOARD.bat private` | Refuses to start unless ODR-001 is RATIFIED and `data/private/out/upi_view.json` passes the view contract; then opens the loopback service in its own window and starts the dashboard |
+| `START-DASHBOARD.bat private` | Refuses to start unless ODR-001 is RATIFIED. With a valid `data/private/out/upi_view.json` it opens the report (private mode READY); without one it opens setup mode (SETUP) so the Portfolio page offers the Setup Wizard. The loopback service runs in its own window |
 | `... --no-browser` | Same, without opening the browser |
 
 The launcher prints the commit and statuses only; it never pulls, resets or merges, and does
@@ -143,7 +143,8 @@ uv run python -m acash.invest.upi_view --pack data/private/out/upi_v1_pack.json 
 
 The service (`acash.dashboard_api.private_view_server`) binds 127.0.0.1:8765, prints a
 session token only in its own window (never written to a file), re-checks ODR-001 on every
-request and serves only `data/private/out/upi_view.json` (no parameters, no write routes).
+request and serves only `data/private/out/upi_view.json` on the view route (no parameters);
+the only write routes are the Setup Wizard input routes below.
 The Portfolio page is organised as A Executive overview, Findings, B Allocation & exposure,
 C Financial capacity, D Accounts & holdings and E Evidence & governance. Charts only draw
 Python values and weights; every chart has a Table toggle. Findings use a fixed severity
@@ -154,6 +155,27 @@ In the dashboard choose `Owner private`, paste the token and press Enter or Load
 and figures live only in page memory; switching mode or Clear removes them, and the next Load
 after revoking ODR-001 or stopping the server replaces them with a status and no figures.
 Closing the tab discards everything. Owner-private mode does not work from the Docker/Nginx image by design.
+
+### Setup Wizard (dashboard-native input, CLI stays as fallback)
+
+With the token loaded and no report yet, the page shows "Set up your portfolio"; with a report,
+`Update portfolio snapshot` opens the same wizard with the last saved input. Steps:
+authorization and privacy, accounts (Dime! Securities / FCD / Save / other), holdings
+(value-only, quantity + price, or totals-only), cash and FX, capacity, review. The wizard
+edits the canonical V1_2 snapshot and capacity documents directly; template placeholders load
+as empty fields and nothing is filled in for the Owner.
+
+| Action | Authority | Effect |
+|---|---|---|
+| Load, validate | ODR-001 | Python parsers check the draft in memory; Thai messages plus code and field location, never amounts |
+| Save | ODR-001 **and** [ODR-003](../governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md) | Explicit confirmation; strict validation first; atomic replace of `data/private/snapshot.json` / `capacity.json` only; 409 if the file changed since loading; previous file copied to `data/private/backups/` (latest 20 per file kept, the live file is never deleted) |
+| Validate & generate report | ODR-001 | Runs preflight, wealth pack and view on the saved files into `data/private/out/`; on failure the previous report and inputs stay untouched |
+
+The input routes (`/api/upi/input/*` in `acash.dashboard_api.private_input`) share the
+view server's Host, Origin and session-token checks; the token expires after 4 hours.
+Requests are limited by content type (`application/json`), size (2 MB), field allowlists and a
+per-minute rate limit; nothing is logged. ODR-003 is PROPOSED_NOT_RATIFIED until the Owner
+ratifies it; until then saving is refused and the files can still be edited directly.
 
 ## 4. Troubleshooting
 

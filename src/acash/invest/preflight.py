@@ -39,7 +39,7 @@ def _code(exc: Exception) -> str:
     return str(exc).split(":")[0].rstrip(".")
 
 
-def _duplicate_cash(snapshot: PortfolioSnapshot) -> List[str]:
+def duplicate_cash_groups(snapshot: PortfolioSnapshot) -> List[str]:
     """Heuristic only: equal non-zero settled cash in the same currency at two accounts of one broker."""
     seen: Dict[Tuple[str, str, str], List[str]] = {}
     for account in snapshot.accounts:
@@ -111,7 +111,7 @@ def preflight(snapshot_path: Path, capacity_path: Optional[Path] = None, output_
     add("freshness", "WARN" if summary["valuation_stale"] else "PASS",
         f"valuation_age_days={summary['valuation_age_days']} observation_lag_days="
         f"{summary['time_alignment']['observation_lag_days']}")
-    for group in _duplicate_cash(snapshot):
+    for group in duplicate_cash_groups(snapshot):
         add("cash_overlap", "WARN", f"POSSIBLE_DUPLICATE_CASH_ACROSS_ACCOUNTS: {group}")
     evidence = summary.get("evidence")
     if evidence:

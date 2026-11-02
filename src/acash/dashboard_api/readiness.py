@@ -2,6 +2,8 @@
 
 Prints statuses only; never amounts, file contents or session tokens. The private view is
 opened only when ODR-001 is RATIFIED, and then only through the server's contract check.
+Private mode is READY with a valid report, SETUP when ODR-001 is RATIFIED but no valid report
+exists yet (the dashboard then offers the Setup Wizard), and BLOCKED otherwise.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from acash.dashboard_api import private_input
 from acash.dashboard_api.private_view_server import DEFAULT_VIEW, load_view
 from acash.ppds import private_observation as po
 from acash.ppds import transactions
@@ -34,8 +37,10 @@ def readiness(view_path: Optional[Path] = None) -> Dict[str, Any]:
         blockers.append(f"ODR-001 {odr1}")
     if view != "READY":
         blockers.append(f"private view {view}")
-    return {"governance": dict(GOVERNANCE), "odr_001": odr1, "odr_002": odr2, "private_view": view,
-            "private_mode": "BLOCKED" if blockers else "READY", "blockers": blockers}
+    mode = "READY" if not blockers else "SETUP" if odr1 == "RATIFIED" else "BLOCKED"
+    return {"governance": dict(GOVERNANCE), "odr_001": odr1, "odr_002": odr2,
+            "odr_003": private_input.authority()["odr_003"], "private_view": view,
+            "private_mode": mode, "blockers": blockers}
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -49,11 +54,13 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
           f" | HYP_003 {g['HYP_003']}")
     print(f"  ODR-001    : {state['odr_001']} (owner-private observation)")
     print(f"  ODR-002    : {state['odr_002']} (owner-private transactions)")
+    print(f"  ODR-003    : {state['odr_003']} (saving inputs from the Setup Wizard)")
     print(f"  Private view report : {state['private_view']}")
     blockers = f" - {'; '.join(state['blockers'])}" if state["blockers"] else ""
-    print(f"  Private mode : {state['private_mode']}{blockers}")
+    hint = "; open Portfolio > Owner private to set up the portfolio" if state["private_mode"] == "SETUP" else ""
+    print(f"  Private mode : {state['private_mode']}{blockers}{hint}")
     sys.stdout.flush()
-    if args.require_private and state["private_mode"] != "READY":
+    if args.require_private and state["private_mode"] not in ("READY", "SETUP"):
         sys.exit(3)
 
 

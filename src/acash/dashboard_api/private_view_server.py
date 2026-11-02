@@ -1,9 +1,11 @@
-"""Loopback-only, read-only server for the owner-private dashboard view.
+"""Loopback-only server for the owner-private dashboard view and the Setup Wizard inputs.
 
-One GET route, no parameters, no write or order endpoints. Every request re-checks the
-Host, the Origin allowlist, a per-start session token and the ODR-001 state before the
-view file is read; localhost alone is never treated as authentication. Responses are
-``no-store`` and the server never logs paths or values.
+The view route is one parameterless GET. The input routes (``private_input``) can replace
+only the two fixed input files and only while ODR-003 is also RATIFIED; there are no order,
+broker or arbitrary-path endpoints. Every request re-checks the Host, the Origin allowlist,
+a per-start session token that expires, and the ODR state before any file is read;
+localhost alone is never treated as authentication. Responses are ``no-store`` and the
+server never logs paths, payloads or values.
 """
 
 from __future__ import annotations
@@ -12,13 +14,16 @@ import argparse
 import hmac
 import json
 import secrets
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
+from acash.dashboard_api import private_input
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
+    MAX_INPUT_BYTES,
     SCHEMA_V1_2,
     _repo_root,
     assert_private_location,
@@ -32,6 +37,7 @@ ROUTE = "/api/upi/view"
 TOKEN_HEADER = "X-ACASH-Session"
 ALLOWED_ORIGINS = ("http://127.0.0.1:3002", "http://localhost:3002")
 DEFAULT_VIEW = Path("data/private/out/upi_view.json")
+SESSION_SECONDS = 4 * 60 * 60
 
 Response = Tuple[int, Dict[str, str], bytes]
 
@@ -40,7 +46,9 @@ def _json(status: int, headers: Dict[str, str], body: Mapping[str, Any]) -> Resp
     return status, headers, json.dumps(body, sort_keys=True).encode("utf-8")
 
 
-def respond(method: str, target: str, headers: Mapping[str, str], token: str, view_path: Path, port: int) -> Response:
+def respond(method: str, target: str, headers: Mapping[str, str], token: str, view_path: Path, port: int,
+            body: bytes = b"", service: Optional[private_input.InputService] = None,
+            session_expired: bool = False) -> Response:
     base = {"Cache-Control": "no-store", "Pragma": "no-cache", "Content-Type": "application/json",
             "X-Content-Type-Options": "nosniff", "Vary": "Origin"}
     if headers.get("Host") not in (f"127.0.0.1:{port}", f"localhost:{port}"):
@@ -48,6 +56,12 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     origin = headers.get("Origin")
     if origin not in ALLOWED_ORIGINS:
         return _json(403, base, {"status": "ORIGIN_NOT_ALLOWED"})
+    name = target[len(private_input.PREFIX):] if target.startswith(private_input.PREFIX) else None
+    if service is not None and name in private_input.ROUTES:
+        return _input_route(method, name, headers, token, body, service, session_expired,
+                            {**base, "Access-Control-Allow-Origin": str(origin),
+                             "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                             "Access-Control-Allow-Methods": ", ".join(private_input.ROUTES[name])})
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Headers": TOKEN_HEADER,
             "Access-Control-Allow-Methods": "GET"}
     if target != ROUTE:
@@ -58,6 +72,8 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
         return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
     if not hmac.compare_digest(headers.get(TOKEN_HEADER, "").encode("utf-8"), token.encode("utf-8")):
         return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
+    if session_expired:
+        return _json(401, cors, {"status": "SESSION_EXPIRED"})
     state = odr_state(None, SCHEMA_V1_2)
     if state != "RATIFIED":
         return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state})
@@ -67,6 +83,21 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     if status == "INVALID_REPORT":
         return _json(422, cors, {"status": status, "code": code})
     return _json(200, cors, doc)
+
+
+def _input_route(method: str, name: str, headers: Mapping[str, str], token: str, body: bytes,
+                 service: private_input.InputService, session_expired: bool, cors: Dict[str, str]) -> Response:
+    if method == "OPTIONS":
+        return 204, cors, b""
+    if method not in private_input.ROUTES[name]:
+        return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
+    if not hmac.compare_digest(headers.get(TOKEN_HEADER, "").encode("utf-8"), token.encode("utf-8")):
+        return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
+    if session_expired:
+        return _json(401, cors, {"status": "SESSION_EXPIRED"})
+    rejected, payload = private_input.parse_body(method, headers, body)
+    status, doc = rejected or private_input.handle(method, name, payload, service)
+    return _json(status, cors, doc)
 
 
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
@@ -85,13 +116,38 @@ def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
     return "READY", None, doc
 
 
-def make_handler(token: str, view_path: Path, port: int) -> type:
+def _read_body(handler: BaseHTTPRequestHandler) -> Optional[bytes]:
+    """Bounded request body; None means it was refused without reading."""
+    if handler.headers.get("Transfer-Encoding"):
+        return None
+    try:
+        length = int(handler.headers.get("Content-Length") or "0")
+    except ValueError:
+        return None
+    if length < 0 or length > MAX_INPUT_BYTES:
+        return None
+    return handler.rfile.read(length) if length else b""
+
+
+def make_handler(token: str, view_path: Path, port: int, service: Optional[private_input.InputService] = None,
+                 expires_at: Optional[float] = None) -> type:
     class Handler(BaseHTTPRequestHandler):
         server_version = "acash-private-view"
         sys_version = ""
 
         def _send(self) -> None:
-            status, headers, body = respond(self.command, self.path, dict(self.headers.items()), token, view_path, port)
+            body = _read_body(self)
+            if body is None:
+                self.close_connection = True
+                status, headers, out = _json(413, {"Cache-Control": "no-store", "Content-Type": "application/json"},
+                                             {"status": "PAYLOAD_TOO_LARGE_OR_UNBOUNDED"})
+            else:
+                expired = expires_at is not None and time.monotonic() > expires_at
+                status, headers, out = respond(self.command, self.path, dict(self.headers.items()), token,
+                                               view_path, port, body, service, expired)
+            self._write(status, headers, out)
+
+        def _write(self, status: int, headers: Dict[str, str], body: bytes) -> None:
             self.send_response(status)
             for key, value in headers.items():
                 self.send_header(key, value)
@@ -112,18 +168,23 @@ def serve(port: int = DEFAULT_PORT, view_path: Optional[Path] = None, token: Opt
     path = view_path or (_repo_root() / DEFAULT_VIEW)
     assert_private_location(path)
     session = token or secrets.token_urlsafe(32)
-    server = ThreadingHTTPServer((HOST, port), make_handler(session, path, port))
-    return server
+    handler = make_handler(session, path, port, private_input.InputService(), time.monotonic() + SESSION_SECONDS)
+    return ThreadingHTTPServer((HOST, port), handler)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    parser = argparse.ArgumentParser(description="Serve the owner-private dashboard view on 127.0.0.1 (read-only).")
+    parser = argparse.ArgumentParser(description="Serve the owner-private dashboard view on 127.0.0.1 (loopback only).")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args(argv)
     token = secrets.token_urlsafe(32)
     server = serve(args.port, token=token)
-    print(f"Serving {ROUTE} on http://{HOST}:{args.port} (read-only, loopback only). Ctrl+C stops it.", flush=True)
-    print(f"Session token (paste into the dashboard; valid until this process stops): {token}", flush=True)
+    auth = private_input.authority()
+    print(f"Serving {ROUTE} and the Setup Wizard on http://{HOST}:{args.port} (loopback only). Ctrl+C stops it.",
+          flush=True)
+    print(f"Input saving: {'ENABLED' if auth['odr_003'] == 'RATIFIED' else 'DISABLED'} (ODR-003 {auth['odr_003']})",
+          flush=True)
+    print(f"Session token (paste into the dashboard; expires after {SESSION_SECONDS // 3600} hours "
+          f"or when this window closes): {token}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
