@@ -114,6 +114,7 @@ export const MESSAGES_TH: Record<string, string> = {
   PRIVATE_PRICE_DATE_MISMATCH: 'วันที่ราคาต้องตรงกับวันที่ประเมินมูลค่า',
   PRIVATE_FX_DATE_MISMATCH: 'วันที่อัตราแลกเปลี่ยนต้องตรงกับวันที่ประเมินมูลค่า',
   PRIVATE_FX_DUPLICATE_OR_IDENTITY: 'อัตราแลกเปลี่ยนซ้ำ หรือแปลงสกุลเงินเป็นตัวเอง',
+  PRIVATE_FX_RECIPROCAL_INCONSISTENT: 'อัตราไปและกลับของคู่สกุลเงินเดียวกันขัดกัน (คูณกันแล้วไม่ใกล้ 1) น่าจะกรอกสลับทิศ เช่น THB→USD ต้องน้อยกว่า 1',
   PRIVATE_UNUSED_PRICE: 'มีราคาของหลักทรัพย์ที่ไม่ได้ถืออยู่ ให้ลบออก',
   PRIVATE_PRICE_DUPLICATE: 'มีราคาซ้ำของหลักทรัพย์เดียวกัน',
   PRIVATE_DUPLICATE_POSITION_LINE: 'มีหลักทรัพย์ซ้ำในพอร์ตย่อยเดียวกัน',

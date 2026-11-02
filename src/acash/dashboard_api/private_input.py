@@ -186,8 +186,9 @@ def _check_snapshot(doc: Any, report_date: Optional[date]) -> Tuple[List[Dict[st
     if summary["valuation_stale"]:
         warnings.append({"code": "STALE_VALUATION", "where": f"valuation_age_days={summary['valuation_age_days']}"})
     evidence = summary.get("evidence")
+    if summary.get("report_type") == "EVIDENCE_ONLY_REPORT":
+        warnings.append({"code": "EVIDENCE_ONLY_REPORT", "where": "report_type"})
     if evidence:
-        warnings.append({"code": "EVIDENCE_ONLY_REPORT", "where": summary.get("report_type", "")})
         for acct in evidence[snapshot.reporting_currency]["accounts"]:
             total = acct["account_total"]
             status = total["status"] if isinstance(total, dict) else str(total)
