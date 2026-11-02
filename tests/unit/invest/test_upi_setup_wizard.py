@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
@@ -267,11 +268,12 @@ def test_links_inside_the_private_tree_are_refused(authorized: Path, tmp_path_fa
         target.symlink_to(outside / "x.json" if link.endswith(".json") else outside,
                           target_is_directory=not link.endswith(".json"))
     except OSError:
-        if os.name != "nt" or link.endswith(".json"):
+        if sys.platform != "win32" or link.endswith(".json"):
             pytest.skip("symlink creation not permitted on this host")
-        import _winapi  # junctions need no privilege on Windows
+        else:
+            import _winapi  # junctions need no privilege on Windows
 
-        _winapi.CreateJunction(str(outside), str(target))
+            _winapi.CreateJunction(str(outside), str(target))
     status, body = _save(pi.InputService(), bases=_files(authorized) if link.endswith("backups") else None)
     assert (status, body["status"]) == (403, "INPUT_PATH_REFUSED")
     assert body["code"] == "INPUT_PATH_LINK_REFUSED" and not list(outside.iterdir())
