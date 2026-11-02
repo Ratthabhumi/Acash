@@ -219,7 +219,7 @@ def parse_batch(doc: Any) -> TransactionBatch:
 
 def load_batch(path: Path) -> TransactionBatch:
     batch = parse_batch(read_gated_json(Path(path), "TXN_BATCH", record=AUTHORIZATION_RECORD,
-                                        capability=AUTHORIZED_CAPABILITY))
+                                        capability=AUTHORIZED_CAPABILITY, schema=SCHEMA))
     if batch.data_class == "OWNER_PRIVATE_OBSERVATION":
         assert_private_observation_authorized(batch.data_class, SCHEMA, record=AUTHORIZATION_RECORD,
                                               capability=AUTHORIZED_CAPABILITY)
