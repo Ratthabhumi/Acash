@@ -147,6 +147,9 @@ def test_mixed_data_classes_cannot_merge() -> None:
     ("T_DEP_FCD", "event_type", "TRANSFER", "TXN_EVENT_TYPE_INVALID"),
     ("T_DEP_FCD", "account_ref", "ACC_1234567", "PRIVATE_REF_NOT_OPAQUE"),
     ("T_FX_1", "fx_to_currency", "THB", "TXN_FX_SAME_CURRENCY"),
+    ("T_DEP_FCD", "trade_date", None, "TXN_FIELDS_INVALID"),
+    ("T_DEP_FCD", "trade_date", "2026-02-30", "DATE"),
+    ("T_DEP_FCD", "trade_date", "01/02/2026", "DATE"),
 ])
 def test_malformed_transactions_fail_closed(txn_id: str, field: str, value: Any, code: str) -> None:
     doc = _doc()
@@ -265,3 +268,95 @@ def test_owner_private_batch_is_gated(tmp_path: Path, monkeypatch: pytest.Monkey
     path.write_text(json.dumps(doc), encoding="utf-8")
     with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
         tx.load_batch(path)
+
+
+def _ratified(**changes: Any) -> Dict[str, Any]:
+    record: Dict[str, Any] = json.loads(
+        (Path(__file__).resolve().parents[3] / tx.AUTHORIZATION_RECORD).read_text(encoding="utf-8"))
+    record.update(status="RATIFIED", ratified_by="OWNER", ratified_on="2026-01-01")
+    record.update(changes)
+    return record
+
+
+def _private_batch(root: Path, monkeypatch: pytest.MonkeyPatch, record: Any, data_class: str = "OWNER_PRIVATE_OBSERVATION",
+                   where: Tuple[str, ...] = ("data", "private")) -> Path:
+    monkeypatch.setattr(po, "_repo_root", lambda: root)
+    odr = root / tx.AUTHORIZATION_RECORD
+    odr.parent.mkdir(parents=True, exist_ok=True)
+    odr.write_text(record if isinstance(record, str) else json.dumps(record), encoding="utf-8")
+    doc = _doc()
+    doc["data_class"] = data_class
+    path = root.joinpath(*where, "txns.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def _refuse_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    def read(*_: Any) -> Any:
+        raise AssertionError("private bytes were read before authorization")
+    monkeypatch.setattr(po, "read_bounded_json", read)
+
+
+@pytest.mark.parametrize("record", [
+    "{not json", "[]",
+    _ratified(capability="OWNER_PRIVATE_OBSERVATION_AUTHORIZED"),
+    _ratified(status="PROPOSED_NOT_RATIFIED"), _ratified(status="REVOKED"), _ratified(status="ratified"),
+    _ratified(ratified_by="CODING_AGENT"), _ratified(ratified_by=None),
+    _ratified(ratified_on=None), _ratified(ratified_on=""), _ratified(ratified_on="today"),
+    _ratified(ratified_on="2026-13-40"), _ratified(ratified_on="20260101"), _ratified(ratified_on=20260101),
+    _ratified(scope_schemas=[]), _ratified(scope_schemas=["ACASH_PRIVATE_OBSERVATION_SNAPSHOT_V1_2"]),
+    _ratified(scope_schemas="ACASH_CANONICAL_TRANSACTIONS_V1"),
+], ids=["unparseable", "not_object", "snapshot_capability", "proposed", "revoked", "lowercase_status",
+        "agent_ratifier", "no_ratifier", "no_date", "empty_date", "word_date", "impossible_date", "compact_date",
+        "numeric_date", "empty_scope", "other_schema", "scope_not_list"])
+def test_malformed_transaction_odr_refuses_before_reading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                          record: Any) -> None:
+    path = _private_batch(tmp_path, monkeypatch, record)
+    _refuse_reads(monkeypatch)
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED") as err:
+        tx.load_batch(path)
+    assert not any(leak in str(err.value) for leak in ("T_OPEN", "SYN_TXN", "txns.json", str(tmp_path)))
+
+
+def test_snapshot_odr_does_not_extend_to_transactions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _private_batch(tmp_path, monkeypatch, _ratified(status="PROPOSED_NOT_RATIFIED"))
+    snapshot_odr = Path(__file__).resolve().parents[3] / po.AUTHORIZATION_RECORD
+    (tmp_path / po.AUTHORIZATION_RECORD).write_text(snapshot_odr.read_text(encoding="utf-8"), encoding="utf-8")
+    assert po.odr_state() == "RATIFIED"
+    _refuse_reads(monkeypatch)
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
+        tx.load_batch(path)
+
+
+def test_ratified_transaction_odr_loads_private_batch_until_revoked(tmp_path: Path,
+                                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _private_batch(tmp_path, monkeypatch, _ratified())
+    batch = tx.load_batch(path)
+    assert batch.data_class == "OWNER_PRIVATE_OBSERVATION" and batch.transactions
+    (tmp_path / tx.AUTHORIZATION_RECORD).write_text(json.dumps(_ratified(status="REVOKED")), encoding="utf-8")
+    _refuse_reads(monkeypatch)
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
+        tx.load_batch(path)
+
+
+def test_ratified_odr_still_refuses_private_batch_in_a_tracked_location(tmp_path: Path,
+                                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _private_batch(tmp_path, monkeypatch, _ratified(), where=("tests", "fixtures"))
+    with pytest.raises(DataContractError, match="PRIVATE_LOCATION_NOT_IGNORED"):
+        tx.load_batch(path)
+
+
+def test_synthetic_batch_in_private_location_is_not_read_without_odr(tmp_path: Path,
+                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    path = _private_batch(tmp_path, monkeypatch, _ratified(status="PROPOSED_NOT_RATIFIED"), data_class="SYNTHETIC")
+    _refuse_reads(monkeypatch)
+    with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED"):
+        tx.load_batch(path)
+
+
+def test_private_and_synthetic_batches_never_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    private = tx.load_batch(_private_batch(tmp_path, monkeypatch, _ratified()))
+    synthetic = tx.parse_batch(_doc())
+    with pytest.raises(DataContractError, match="TXN_DATA_CLASS_MIXED"):
+        tx.merge_batches([private, synthetic])

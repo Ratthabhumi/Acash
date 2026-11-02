@@ -3,15 +3,16 @@ import { AlertOctagon, AlertTriangle, ChevronDown, Info, Lock, RefreshCw, Search
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } from '../components/charts/PortfolioCharts';
+import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
 import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, formatDec, formatWeight } from '../services/upiView';
 
 const STATUS_HELP: Record<string, string> = {
-  AUTHORIZATION_REQUIRED: 'ODR-001 is not RATIFIED, or the session token is wrong or from an earlier server start. Restart START-DASHBOARD.bat private for a new token.',
-  NO_REPORT: 'The service is running but data/private/out/upi_view.json does not exist yet. Generate it with acash.invest.upi_view (see the runbook).',
+  AUTHORIZATION_REQUIRED: 'Session expired, not signed in, or ODR-001 is not RATIFIED. Close the ACASH window and double-click START-DASHBOARD.bat again.',
+  NO_REPORT: 'No private portfolio yet. Set up your portfolio with the wizard below.',
   INVALID_REPORT: 'The private view failed contract validation. Regenerate it from the current wealth pack.',
-  SERVICE_UNAVAILABLE: 'The loopback service is not reachable on 127.0.0.1:8765. Start it with START-DASHBOARD.bat private.',
+  SERVICE_UNAVAILABLE: 'The local ACASH service is not running. Double-click START-DASHBOARD.bat (it starts everything).',
 };
 
 // Presentation ordering only (never displayed): sorts rows by a Python decimal string.
@@ -379,43 +380,55 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
 export const PortfolioPage: React.FC = () => {
   const [mode, setMode] = useState<DataMode>('SYNTHETIC_DEMO');
   const [variant, setVariant] = useState<SyntheticVariant>('FULL_REPORT');
-  const [token, setToken] = useState('');
   const [state, setState] = useState<LoadState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [editing, setEditing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const switchMode = (next: DataMode) => {
-    abortRef.current?.abort();
-    setState(null);
-    setToken('');
-    setLoading(false);
-    setMode(next);
-  };
-
-  useEffect(() => {
-    if (mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
-  }, [mode, variant]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  const connect = useCallback(async (value?: string) => {
-    const session = value ?? token;
+  const connect = useCallback(async () => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
     setState(null);
     const timer = window.setTimeout(() => controller.abort(), 8000);
-    const result = await upiRepository.loadOwnerPrivate(session, controller.signal);
+    const result = await upiRepository.loadOwnerPrivate(controller.signal);
     window.clearTimeout(timer);
     if (abortRef.current === controller) {
       setState(result);
       setLoading(false);
-      if (result.status === 'AUTHORIZATION_REQUIRED') setToken('');
+      setConnected(result.status !== 'AUTHORIZATION_REQUIRED' && result.status !== 'SERVICE_UNAVAILABLE');
     }
-  }, [token]);
+  }, []);
+
+  const switchMode = (next: DataMode) => {
+    abortRef.current?.abort();
+    setState(null);
+    setConnected(false);
+    setEditing(false);
+    setLoading(false);
+    setMode(next);
+    if (next === 'OWNER_PRIVATE_READ_ONLY') void connect();
+  };
+
+  useEffect(() => {
+    if (mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
+  }, [mode, variant]);
+
+  // The launcher's private service answering at all means ACASH was opened in private mode.
+  useEffect(() => {
+    let live = true;
+    void upiRepository.callInput('GET', 'status').then((r) => {
+      if (live && r.http !== 0) { setMode('OWNER_PRIVATE_READ_ONLY'); void connect(); }
+    });
+    return () => { live = false; abortRef.current?.abort(); };
+  }, [connect]);
 
   const ready = state && 'view' in state;
+  const setupOpen = mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && state !== null &&
+    (state.status === 'NO_REPORT' || state.status === 'INVALID_REPORT' || editing);
+  const onGenerated = () => { setEditing(false); void connect(); };
   return (
     <div className="space-y-4 max-w-7xl">
       <div className="bg-surface border border-default rounded-lg p-4 space-y-3">
@@ -445,24 +458,20 @@ export const PortfolioPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-2 text-xs">
-            <div className="flex items-center gap-2 text-secondary">
+            <div className="flex flex-wrap items-center gap-2 text-secondary">
               <Lock className="w-3.5 h-3.5" />
-              <span>Owner private · read-only · loopback only. Requires ODR-001 RATIFIED. Start with <code className="font-mono-code">START-DASHBOARD.bat private</code>, then paste the token from the "ACASH Private View" window.</span>
-            </div>
-            <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void connect(); }}>
-              <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.currentTarget.value && !loading) void connect(e.currentTarget.value); } }}
-                placeholder="Session token printed by the local service" aria-label="Session token"
-                className="flex-1 min-w-[16rem] bg-surface border border-default rounded px-2 py-1 font-mono-code focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
-              <button type="submit" disabled={!token || loading}
+              <span>{connected
+                ? 'Local session connected · owner private · read-only · loopback only'
+                : 'Not signed in · double-click START-DASHBOARD.bat; it opens this page already signed in'}</span>
+              <button type="button" onClick={() => void connect()} disabled={loading}
                 className="inline-flex items-center gap-1 px-3 py-1 rounded border border-default text-secondary hover:bg-surface-muted disabled:opacity-50">
-                <RefreshCw className="w-3.5 h-3.5" /> Load
+                <RefreshCw className="w-3.5 h-3.5" /> Reload
               </button>
               {ready && (
-                <button type="button" onClick={() => switchMode('OWNER_PRIVATE_READ_ONLY')}
-                  className="px-3 py-1 rounded border border-default text-secondary hover:bg-surface-muted">Clear</button>
+                <button type="button" onClick={() => setEditing((v) => !v)} aria-pressed={editing}
+                  className="px-3 py-1 rounded border border-default text-secondary hover:bg-surface-muted">Update portfolio snapshot</button>
               )}
-            </form>
+            </div>
           </div>
         )}
         {state && (
@@ -477,6 +486,7 @@ export const PortfolioPage: React.FC = () => {
       </div>
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
+      {setupOpen && <SetupWizard hasReport={!!ready} onGenerated={onGenerated} />}
       {!loading && state && 'view' in state && <PortfolioReport view={state.view} warnings={state.warnings} />}
       {!loading && state && !('view' in state) && (
         <div className="bg-surface border border-default rounded-lg p-6 flex items-start gap-3 text-sm">
@@ -490,7 +500,7 @@ export const PortfolioPage: React.FC = () => {
       )}
       {!loading && !state && mode === 'OWNER_PRIVATE_READ_ONLY' && (
         <div className="bg-surface border border-default rounded-lg p-6 text-xs text-secondary">
-          AUTHORIZATION REQUIRED · enter the session token from the local service to load the owner-private view.
+          NOT SIGNED IN · double-click START-DASHBOARD.bat to open the owner-private view.
         </div>
       )}
     </div>

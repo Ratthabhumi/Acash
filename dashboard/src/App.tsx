@@ -13,7 +13,7 @@ import { SkeletonLoader } from './components/common/SkeletonLoader';
 import { ThemeProvider } from './context/ThemeContext';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<DashboardTab>('overview');
+  const [currentTab, setCurrentTab] = useState<DashboardTab>(window.location.hash === '#portfolio' ? 'portfolio' : 'overview');
   const [researchRun, setResearchRun] = useState<ResearchRun | null>(null);
   const [researchState, setResearchState] = useState<'LOADING' | 'READY' | 'SERVICE_UNAVAILABLE'>('LOADING');
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);

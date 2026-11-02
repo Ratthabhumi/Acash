@@ -110,12 +110,17 @@ test('repository and page keep private values out of storage, URLs, logs and ana
   }
   assert.equal(PRIVATE_ENDPOINT, 'http://127.0.0.1:8765/api/upi/view');
   assert.match(read('src/services/upiRepository.ts'), /cache:\s*'no-store'/);
-  assert.match(read('src/services/upiRepository.ts'), /credentials:\s*'omit'/);
+  const repo = read('src/services/upiRepository.ts');
+  assert.match(repo, /credentials:\s*'include'/);
+  assert.doesNotMatch(repo, /credentials:\s*'omit'|TOKEN_HEADER/);
 });
 
-test('portfolio is reachable from the command palette and Enter submits the token', () => {
+test('portfolio opens signed in from the launcher without any token entry', () => {
   assert.match(read('src/components/layout/CommandPalette.tsx'), /id: 'portfolio' as DashboardTab/);
-  assert.match(read('src/pages/PortfolioPage.tsx'), /onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\)/);
+  assert.match(read('src/App.tsx'), /window\.location\.hash === '#portfolio' \? 'portfolio'/);
+  const page = read('src/pages/PortfolioPage.tsx');
+  assert.doesNotMatch(page, /type="password"|Session token|setToken/);
+  assert.match(page, /upiRepository\.callInput\('GET', 'status'\)/);
 });
 
 test('golden figures are not hardcoded in the UI', () => {

@@ -206,7 +206,8 @@ def test_launcher_readiness_never_opens_view_without_odr(tmp_path: Path, monkeyp
     assert rd.readiness(view_path)["private_view"] == "INVALID_REPORT (VIEW_CONTRACT_MISMATCH)"
     uv.write_view(_private_view(), view_path)
     assert rd.readiness(view_path) | {"governance": None} == {
-        "governance": None, "odr_001": "RATIFIED", "odr_002": "RECORD_UNREADABLE", "private_view": "READY",
+        "governance": None, "odr_001": "RATIFIED", "odr_002": "RECORD_UNREADABLE", "odr_003": "RECORD_UNREADABLE",
+        "private_view": "READY",
         "private_mode": "READY", "blockers": []}
 
     _ratify(tmp_path, "REVOKED")

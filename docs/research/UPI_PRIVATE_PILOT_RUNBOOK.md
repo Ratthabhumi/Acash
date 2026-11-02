@@ -125,35 +125,85 @@ Launcher (repository root, double-click or from a terminal):
 
 | Command | What it does |
 |---|---|
-| `START-DASHBOARD.bat` | Synthetic demo on `http://127.0.0.1:3002`; opens the browser when ready |
+| `START-DASHBOARD.bat` (double-click) | With ODR-001 RATIFIED: starts the loopback service and the dashboard and opens Portfolio Intelligence already signed in (report, or the Setup Wizard when there is no report). Without ODR-001 it says so and opens the synthetic demo |
+| `START-DASHBOARD.bat private` | Same, but runs the private readiness check first and never falls back to the demo |
+| `START-DASHBOARD.bat synthetic` | Synthetic demo only; starts no private service |
 | `START-DASHBOARD.bat check` | Checks files, Node/npm, dependencies, governance, ODR states and ports; starts nothing |
-| `START-DASHBOARD.bat private` | Refuses to start unless ODR-001 is RATIFIED and `data/private/out/upi_view.json` passes the view contract; then opens the loopback service in its own window and starts the dashboard |
-| `... --no-browser` | Same, without opening the browser |
+| `... --no-browser` | Same, printing the one-time sign-in link instead of opening the browser |
 
-The launcher prints the commit and statuses only; it never pulls, resets or merges, and does
-not start a second dashboard if port 3002 is already in use. Stop with Ctrl+C (answer Y) and
-close the "ACASH Private View" window. If dependencies are missing: `cd dashboard; npm ci`.
+Sign-in (`acash.dashboard_api.launcher` with `private_view_server`): each launch creates a
+random session secret in memory. The browser receives a one-time link
+`http://127.0.0.1:8765/api/upi/session?nonce=...` (valid 60 seconds, usable once, top-level
+navigation only), which sets an `HttpOnly; SameSite=Strict; Path=/api/upi` session cookie and
+redirects to `http://127.0.0.1:3002/#portfolio`. The secret never appears in the URL, the
+page, the build, `localStorage` or a file; refresh keeps the session until the browser closes
+or 4 hours pass. Every API request still needs an allowed Origin and Host, and ODR-001 is
+re-checked on every request, so revoking it blocks the next load.
+
+Double-clicking again while ACASH runs opens a new signed-in tab in the same instance: the
+running launcher keeps a per-launch key in `data/private/.launch_key` (git-ignored, deleted at
+shutdown) that only it accepts, and only from a non-browser request. A fresh start needs ports
+3002 and 8765 free; if either belongs to something that is not this ACASH instance the
+launcher stops instead of trusting it. It never pulls, resets or merges. Stop by closing the
+launcher window or Ctrl+C. If dependencies are missing: `cd dashboard; npm ci`.
+
+Residual limits: the cookie is sent to any `127.0.0.1` port under `/api/upi` (browsers scope
+cookies by host, not port), so other local programs on this account are trusted as much as
+the account itself; the one-time link appears in browser history but is spent and expires
+within 60 seconds.
 
 Owner-private, after step 5 and only with ODR-001 RATIFIED:
 
 ```powershell
 uv run python -m acash.invest.upi_view --pack data/private/out/upi_v1_pack.json --output data/private/out/upi_view.json
-.\START-DASHBOARD.bat private
+.\START-DASHBOARD.bat
 ```
 
-The service (`acash.dashboard_api.private_view_server`) binds 127.0.0.1:8765, prints a
-session token only in its own window (never written to a file), re-checks ODR-001 on every
-request and serves only `data/private/out/upi_view.json` (no parameters, no write routes).
+The service (`acash.dashboard_api.private_view_server`) binds 127.0.0.1:8765, re-checks
+ODR-001 on every request and serves only `data/private/out/upi_view.json` on the view route (no parameters);
+the only write routes are the Setup Wizard input routes below.
 The Portfolio page is organised as A Executive overview, Findings, B Allocation & exposure,
 C Financial capacity, D Accounts & holdings and E Evidence & governance. Charts only draw
 Python values and weights; every chart has a Table toggle. Findings use a fixed severity
 per reason code (`dashboard/src/services/upiFindings.ts`): Critical means a figure may be
 wrong or out of date, Important means correct but incomplete or a planning constraint, and
 Info means not available in a snapshot report.
-In the dashboard choose `Owner private`, paste the token and press Enter or Load. The token
-and figures live only in page memory; switching mode or Clear removes them, and the next Load
-after revoking ODR-001 or stopping the server replaces them with a status and no figures.
+The page selects `Owner private` by itself when the signed-in service answers. Figures live
+only in page memory; switching mode removes them, and the next Reload after revoking ODR-001
+or stopping the server replaces them with a status and no figures.
 Closing the tab discards everything. Owner-private mode does not work from the Docker/Nginx image by design.
+
+### Setup Wizard (dashboard-native input, CLI stays as fallback)
+
+Signed in and with no report yet, the page shows "Set up your portfolio"; with a report,
+`Update portfolio snapshot` opens the same wizard with the last saved input. Steps:
+authorization and privacy, accounts (Dime! Securities / FCD / Save / other), holdings
+(value-only, quantity + price, or totals-only), cash and FX, capacity, review. The wizard
+edits the canonical V1_2 snapshot and capacity documents directly; template placeholders load
+as empty fields and nothing is filled in for the Owner.
+
+| Action | Authority | Effect |
+|---|---|---|
+| Load, validate | ODR-001 | Python parsers check the draft in memory; Thai messages plus code and field location, never amounts |
+| Save | ODR-001 **and** [ODR-003](../governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md) | One request saves snapshot and capacity together. It needs explicit confirmation and strict validation of both, and returns 409 if either file changed since loading. The journal (`data/private/.input_transaction.json`) restores both files if a replacement fails. Previous files are copied to `data/private/backups/`, keeping the latest 20 per file; the live file is never deleted |
+| Validate & generate report | ODR-001 | Runs preflight, wealth pack and view on the saved files into a new `data/private/out/generations/<id>/`, then publishes `out/upi_view.json` and `out/report_generation.json`. It keeps the input revisions and hashes and the last 5 generations. On failure the previous report and inputs stay untouched |
+
+Recovering inputs:
+
+- A crash during Save leaves the journal. The next Save or report generation restores the previous pair automatically.
+- If the page reports `INPUT_RECOVERY_REQUIRED`, stop the service and pick the newest
+  `snapshot-*.json` / `capacity-*.json` pair with the same timestamp in
+  `data/private/backups/`. Copy the pair over `data/private/snapshot.json` /
+  `capacity.json`, delete `data/private/.input_transaction.json`, and restart.
+- Backups and generations are owner-private. They stay under the git-ignored
+  `data/private/` and inherit your Windows user-profile permissions; ACASH does not change
+  ACLs. Delete old copies yourself when they are no longer needed.
+
+The input routes (`/api/upi/input/*` in `acash.dashboard_api.private_input`) share the
+view server's Host, Origin and session checks; the session expires after 4 hours.
+Requests are limited by content type (`application/json`), size (2 MB), field allowlists and a
+per-minute rate limit; nothing is logged. While ODR-003 is not RATIFIED, saving is refused
+and the files can still be edited directly.
 
 ## 4. Troubleshooting
 

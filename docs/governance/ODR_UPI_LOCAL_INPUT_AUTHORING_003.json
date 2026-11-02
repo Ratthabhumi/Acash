@@ -1,0 +1,40 @@
+{
+  "decision_id": "ODR_UPI_LOCAL_INPUT_AUTHORING_003",
+  "capability": "OWNER_LOCAL_INPUT_AUTHORING_AUTHORIZED",
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-02",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's conditional authorization in the Cursor chat on 2026-11-02: \"ODR-003 — บันทึกข้อมูลผ่าน Dashboard ผมอนุมัติ ถ้ามันถูกต้องแล้ว\", effective only after the P0 security and integrity tests pass",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "acceptance_evidence": "docs/governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003_ACCEPTANCE.json",
+    "acceptance_commit": "9c45185b7583bda9ae88afc149bbb07a2258e8fc",
+    "scope_changed": false
+  },
+  "document": "docs/governance/ODR_UPI_LOCAL_INPUT_AUTHORING_003.md",
+  "amends": "ODR_UPI_PRIVATE_OBSERVATION_001",
+  "requires": [
+    "ODR_UPI_PRIVATE_OBSERVATION_001"
+  ],
+  "scope_schemas": [
+    "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
+    "ACASH_PRIVATE_CAPACITY_V1"
+  ],
+  "scope_files": [
+    "data/private/snapshot.json",
+    "data/private/capacity.json"
+  ],
+  "proposal_history": [
+    "2026-11-02 proposed: Owner-directed creation and replacement of the two local input files through the loopback Setup Wizard"
+  ],
+  "independent_of": [
+    "D5_DATA_ADMITTED",
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CREDENTIAL_STORAGE",
+    "MARKET_DATA_SUBSCRIPTION",
+    "CAPITAL_TRANSFER",
+    "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED"
+  ]
+}

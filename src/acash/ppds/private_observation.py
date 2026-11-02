@@ -158,11 +158,21 @@ ODR_STATES = ("RATIFIED", "RATIFIED_SCHEMA_OUT_OF_SCOPE", "PROPOSED_NOT_RATIFIED
               "RECORD_INVALID", "RECORD_CAPABILITY_MISMATCH", "RECORD_UNREADABLE")
 
 
+def _iso_date(value: Any) -> bool:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def odr_state(record: Optional[Path] = None, schema: Optional[str] = None,
               capability: str = AUTHORIZED_CAPABILITY) -> str:
     """Single authority for the state of an owner decision record (one of ``ODR_STATES``).
 
-    RATIFIED requires the OWNER as ratifier, a ``ratified_on`` string and the matching
+    RATIFIED requires the OWNER as ratifier, a ``ratified_on`` ISO date and the matching
     capability; when ``schema`` is given it must also be listed in ``scope_schemas``.
     """
     path = record or (_repo_root() / AUTHORIZATION_RECORD)
@@ -177,7 +187,7 @@ def odr_state(record: Optional[Path] = None, schema: Optional[str] = None,
     status = doc.get("status")
     if status in ("PROPOSED_NOT_RATIFIED", "REVOKED"):
         return str(status)
-    if status != "RATIFIED" or doc.get("ratified_by") != "OWNER" or not isinstance(doc.get("ratified_on"), str):
+    if status != "RATIFIED" or doc.get("ratified_by") != "OWNER" or not _iso_date(doc.get("ratified_on")):
         return "RECORD_INVALID"
     if schema is None:
         return "RATIFIED"
@@ -202,14 +212,14 @@ def presumed_private(path: Path, root: Optional[Path] = None) -> bool:
 
 
 def read_gated_json(path: Path, code: str, *, record: Path = AUTHORIZATION_RECORD,
-                    capability: str = AUTHORIZED_CAPABILITY) -> Any:
+                    capability: str = AUTHORIZED_CAPABILITY, schema: Optional[str] = None) -> Any:
     """Read a JSON input, refusing presumed-private locations before any byte is read.
 
     The data class is only known after parsing, so the location decides: a file outside the
-    repository or under ``data/private/`` is read only while ``capability`` is RATIFIED.
-    Schema scope and data class are checked again by the caller after parsing.
+    repository or under ``data/private/`` is read only while ``capability`` is RATIFIED (for
+    ``schema`` when the caller knows it). The caller checks schema and data class again after parsing.
     """
-    if presumed_private(path) and not private_observation_authorized(_repo_root() / record, None, capability):
+    if presumed_private(path) and not private_observation_authorized(_repo_root() / record, schema, capability):
         raise DataContractError(
             f"PRIVATE_OBSERVATION_NOT_AUTHORIZED: {code} path is presumed owner-private and "
             f"{record.as_posix()} is not RATIFIED; the file was not read.")
@@ -450,6 +460,15 @@ def parse_snapshot(doc: Any) -> PortfolioSnapshot:
         fx[key] = FXRate(key[0], key[1], _dec(row.get("rate"), f"fx {key}", positive=True),
                          _date(row.get("as_of"), f"fx {key}"),
                          _label(row.get("source_id"), f"fx {key} source", _LONG_DIGIT_RUN) or "")
+    for (src, dst), forward in fx.items():
+        back = fx.get((dst, src))
+        if back is None or src > dst:
+            continue
+        hf, hb = _half_unit(forward.rate), _half_unit(back.rate)
+        if not (forward.rate - hf) * (back.rate - hb) <= 1 <= (forward.rate + hf) * (back.rate + hb):
+            raise DataContractError(
+                f"PRIVATE_FX_RECIPROCAL_INCONSISTENT: fx_rates {src}->{dst} and {dst}->{src} are not reciprocal "
+                "within displayed precision; one direction is likely entered the wrong way round.")
 
     prices: Dict[str, PriceQuote] = {}
     published: Dict[str, str] = {}

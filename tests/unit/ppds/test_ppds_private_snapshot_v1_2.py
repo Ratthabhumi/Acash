@@ -54,6 +54,21 @@ def _ratify(root: Path, record: Path, capability: str, schemas: List[str], statu
                                 "ratified_on": "2026-11-02", "scope_schemas": schemas}), encoding="utf-8")
 
 
+@pytest.mark.parametrize("back, ok", [
+    ("0.030303030303030303", True), ("0.0303", True), ("0.03", True), ("0.031", False),
+    ("33.00", False), ("30.30", False),
+])
+def test_reciprocal_fx_rates_must_agree_within_displayed_precision(back: str, ok: bool) -> None:
+    doc = _doc()
+    next(r for r in doc["fx_rates"] if (r["from"], r["to"]) == ("THB", "USD"))["rate"] = back
+    if ok:
+        po.parse_snapshot(doc)
+    else:
+        with pytest.raises(DataContractError, match="PRIVATE_FX_RECIPROCAL_INCONSISTENT") as err:
+            po.parse_snapshot(doc)
+        assert back not in str(err.value)
+
+
 def test_golden_evidence_values() -> None:
     ev = _ev(_doc())
     assert ev["valuation_basis"] == {"computed_nav_ppds": "77220.00", "observed_position_value": "8250.00",
@@ -297,7 +312,13 @@ def test_snapshot_ratification_does_not_open_transactions(tmp_path: Path, monkey
 
 def test_committed_records_keep_scope_and_governance_unchanged() -> None:
     tx_doc = json.loads(tx.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
-    assert (tx_doc["status"], tx_doc["ratified_by"], tx_doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    if tx_doc["status"] == "RATIFIED":
+        lineage = tx_doc["ratification_lineage"]
+        assert tx_doc["ratified_by"] == "OWNER" and lineage["decided_by"] == "OWNER"
+        assert lineage["scope_changed"] is False and Path(lineage["acceptance_evidence"]).is_file()
+    else:
+        assert (tx_doc["status"], tx_doc["ratified_by"], tx_doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    assert tx_doc["scope_schemas"] == [tx.SCHEMA] and "BROKER_NATIVE_IMPORT" in tx_doc["independent_of"]
     obs = json.loads(po.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
     if obs["status"] == "RATIFIED":
         assert obs["ratified_by"] == "OWNER" and obs["ratification_lineage"]["decided_by"] == "OWNER"
