@@ -1,0 +1,31 @@
+{
+  "decision_id": "ODR_UPI_MARKET_DATA_004",
+  "capability": "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+  "status": "PROPOSED_NOT_RATIFIED",
+  "ratified_by": null,
+  "ratified_on": null,
+  "document": "docs/governance/ODR_UPI_MARKET_DATA_004.md",
+  "requires": [
+    "ODR_UPI_PRIVATE_OBSERVATION_001"
+  ],
+  "candidate_providers": [
+    "WEBULL_TH_OPENAPI",
+    "ALPACA_BASIC",
+    "MASSIVE_BASIC",
+    "BOT_REFERENCE_FX"
+  ],
+  "scope_providers": [],
+  "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
+  "scope_files": [
+    "data/private/market/"
+  ],
+  "independent_of": [
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CAPITAL_TRANSFER",
+    "MARKET_DATA_SUBSCRIPTION",
+    "BROKER_NATIVE_IMPORT",
+    "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED",
+    "D5_DATA_ADMITTED"
+  ]
+}

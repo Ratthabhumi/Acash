@@ -1,0 +1,27 @@
+{
+  "decision_id": "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005",
+  "capability": "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED",
+  "status": "PROPOSED_NOT_RATIFIED",
+  "ratified_by": null,
+  "ratified_on": null,
+  "document": "docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.md",
+  "requires": [
+    "ODR_UPI_PRIVATE_OBSERVATION_001",
+    "ODR_UPI_PRIVATE_TRANSACTIONS_002"
+  ],
+  "scope_schemas": [
+    "ACASH_CANONICAL_TRANSACTIONS_V1"
+  ],
+  "scope_files": [
+    "data/private/transactions/"
+  ],
+  "independent_of": [
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CREDENTIAL_STORAGE",
+    "CAPITAL_TRANSFER",
+    "BROKER_NATIVE_IMPORT",
+    "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+    "D5_DATA_ADMITTED"
+  ]
+}
