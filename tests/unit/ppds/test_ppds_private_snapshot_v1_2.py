@@ -186,6 +186,7 @@ def test_evidence_only_pack_and_golden(tmp_path: Path, monkeypatch: pytest.Monke
 def test_target_weights_inputs_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text('{"CASH": "x"}', encoding="utf-8")
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path / "repo_without_ratification")
     with pytest.raises(DataContractError, match="PRIVATE_OBSERVATION_NOT_AUTHORIZED.*not read"):
         wp.main(["--target-weights-file", str(bad), "--output", str(tmp_path / "o")])
     _tmp_inputs_public(monkeypatch)
@@ -294,12 +295,20 @@ def test_snapshot_ratification_does_not_open_transactions(tmp_path: Path, monkey
     assert tx.load_batch(path).data_class == "OWNER_PRIVATE_OBSERVATION"
 
 
-def test_committed_records_remain_unratified_and_governance_unchanged() -> None:
-    for record in (po.AUTHORIZATION_RECORD, tx.AUTHORIZATION_RECORD):
-        doc = json.loads(record.read_text(encoding="utf-8"))
-        assert (doc["status"], doc["ratified_by"], doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
-        assert "TRADING_AUTHORIZED" in doc["independent_of"]
-    assert po.private_observation_authorized() is False
+def test_committed_records_keep_scope_and_governance_unchanged() -> None:
+    tx_doc = json.loads(tx.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
+    assert (tx_doc["status"], tx_doc["ratified_by"], tx_doc["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    obs = json.loads(po.AUTHORIZATION_RECORD.read_text(encoding="utf-8"))
+    if obs["status"] == "RATIFIED":
+        assert obs["ratified_by"] == "OWNER" and obs["ratification_lineage"]["decided_by"] == "OWNER"
+        assert obs["ratification_lineage"]["scope_changed"] is False
+    else:
+        assert (obs["status"], obs["ratified_by"], obs["ratified_on"]) == ("PROPOSED_NOT_RATIFIED", None, None)
+    assert obs["scope_schemas"] == [po.SCHEMA, po.SCHEMA_V1_2, "ACASH_PRIVATE_CAPACITY_V1"]
+    for doc in (obs, tx_doc):
+        assert {"TRADING_AUTHORIZED", "CAPITAL_TRANSFER", "BROKER_ACCOUNT_CONNECTIVITY"} <= set(doc["independent_of"])
+    assert "OWNER_PRIVATE_TRANSACTIONS_AUTHORIZED" in obs["independent_of"]
+    assert po.private_observation_authorized(None, tx.SCHEMA) is False
     assert po.GOVERNANCE_FLAGS == {"research_admission": "NOT_ADMITTED_PRIVATE_OBSERVATION", "d5_eligible": False,
                                    "trading_authority": "NONE", "capital_authority_usd": "0.00", "order_controls": None}
 

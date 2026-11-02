@@ -1,6 +1,8 @@
 # ODR_UPI_PRIVATE_OBSERVATION_001 — Owner-Private Portfolio Observation
 
-Status: **PROPOSED_NOT_RATIFIED** (machine record: `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`).
+Status: **RATIFIED** by the Owner on 2026-11-02 (machine record: `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`).
+The Owner decided and instructed the ratification in the Cursor chat; the coding agent applied
+the edit at the Owner's direction (`ratification_lineage`). Scope is unchanged; ODR-002 stays unratified.
 Prepared by an AI engineering agent. AI agents cannot ratify this record.
 
 ## 1. Proposed capability

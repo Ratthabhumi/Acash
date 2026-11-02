@@ -1,7 +1,8 @@
 # UPI Private Snapshot Pilot — Runbook (V1_2)
 
-Status: engineering ready, synthetic only. Owner-private runs stay disabled until the
-owner ratifies `docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`. ODR-002
+Status: engineering ready. ODR-001 (`docs/governance/ODR_UPI_PRIVATE_OBSERVATION_001.json`)
+was ratified by the Owner on 2026-11-02, so step 1 of section 3 is done; owner-private runs
+still need a completed snapshot and capacity file. ODR-002
 (transaction histories) is not needed for this pilot. Nothing here connects to a broker,
 places orders, moves money or uses the network. All commands are for Windows PowerShell,
 run from the repository root.
