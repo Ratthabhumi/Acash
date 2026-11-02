@@ -1125,7 +1125,7 @@ def time_alignment(snapshot: PortfolioSnapshot) -> Dict[str, Any]:
         "observation_lag_days": (snapshot.observed_at.date() - snapshot.valuation_date).days,
         "price_and_fx_dates": "SINGLE_VALUATION_DATE",
         "price_published_at": dict(snapshot.published_at),
-        "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+        "market_session_calendar_check": "NOT_PERFORMED_IN_PACK",
         "asynchronous_prices": "NOT_SUPPORTED_V1_1",
     }
 

@@ -109,3 +109,5 @@ docs/research/evidence/upi_v1_2_synthetic_totals_only_pack/upi_v1_pack.json text
 docs/research/evidence/upi_v1_2_synthetic_totals_only_pack/upi_v1_pack.md text eol=lf
 dashboard/src/fixtures/upi_synthetic_view.json text eol=lf
 dashboard/src/fixtures/upi_synthetic_evidence_only_view.json text eol=lf
+docs/research/evidence/nyse_xnys_calendar_2026_2028.json text eol=lf
+START-DASHBOARD.bat text eol=crlf

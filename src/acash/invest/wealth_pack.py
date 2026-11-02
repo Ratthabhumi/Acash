@@ -136,7 +136,8 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority
         if any(not isinstance(a["account_total"], dict) or a["account_total"]["status"] not in
                ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING") for a in block["accounts"]):
             reasons.append("ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.")
-        reasons.append("MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.")
+        reasons.append("MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS "
+                       "price times against the 2026-2028 NYSE fixture only.")
     reasons.append("V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.")
     reasons.append(_authority_reason(authority))
     return {"conclusion": "NO_ACTION_PENDING_EVIDENCE", "reasons": reasons, "orders_generated": 0}

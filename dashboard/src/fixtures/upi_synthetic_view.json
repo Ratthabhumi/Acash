@@ -225,7 +225,7 @@
       "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
       "SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
-      "MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.",
+      "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
       "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
     ]
@@ -326,7 +326,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "2dcbb5527e3f59772ec99df9ce2250f65d144a0ac8441f4130adebfa219f1351",
+    "pack_sha256": "c7e6fae827c44954994bb1775fc47dc603597ceca75620e6b7b12bf6c3495716",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "FULL_REPORT",
@@ -357,5 +357,5 @@
     }
   ],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "f0dbfcf9a185cd2b32b62731296a2a6bd95c3a19c63974f153b2bd769742968a"
+  "view_sha256": "8c01bb8aa86551521ae7b8fb7f9e8cd9cbab44a37a355fcc0dcdb4e89268a447"
 }

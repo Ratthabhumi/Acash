@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `b9b9d4b4932599cb`
+Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `72f9606db1eed262`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -86,7 +86,7 @@ V38 route costs for 10000 THB (MANUAL, 1 month; unranked):
 - RESERVE_SHORTFALL: rebuild emergency reserve before new risk.
 - UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.
 - ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.
-- MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.
+- MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.
 - V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.
 - PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority.
 - V38 pack reference `31d381a296303aaf` (docs/research/evidence/v38_investor_decision_pack_20261101.json)

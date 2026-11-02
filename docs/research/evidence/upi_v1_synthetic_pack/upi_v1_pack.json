@@ -504,7 +504,7 @@
     "support_state": "SNAPSHOT_ONLY",
     "time_alignment": {
       "asynchronous_prices": "NOT_SUPPORTED_V1_1",
-      "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+      "market_session_calendar_check": "NOT_PERFORMED_IN_PACK",
       "observation_lag_days": 2,
       "observed_at": "2026-11-01T09:00:00+07:00",
       "price_and_fx_dates": "SINGLE_VALUATION_DATE",
@@ -927,6 +927,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_1",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "a6fd6504a061781d408b0806deb82a914c52af06b864bc82b9eac1b0cbc6c082",
+  "pack_sha256": "9722dabc916bbb01ad47d6c3f791ab40524eebd23f3bc8266b4ea42d3009bae3",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

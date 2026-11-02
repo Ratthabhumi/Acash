@@ -61,15 +61,28 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     state = odr_state(None, SCHEMA_V1_2)
     if state != "RATIFIED":
         return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state})
+    status, code, doc = load_view(view_path)
+    if status == "NO_REPORT":
+        return _json(404, cors, {"status": status})
+    if status == "INVALID_REPORT":
+        return _json(422, cors, {"status": status, "code": code})
+    return _json(200, cors, doc)
+
+
+def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
+    """Single authority for the private view contract: (READY | NO_REPORT | INVALID_REPORT, code, doc).
+
+    Callers must check ODR-001 first; ``read_gated_json`` refuses the read otherwise.
+    """
     if not view_path.is_file():
-        return _json(404, cors, {"status": "NO_REPORT"})
+        return "NO_REPORT", None, None
     try:
         doc = read_gated_json(view_path, "UPI_VIEW")
     except DataContractError as exc:
-        return _json(422, cors, {"status": "INVALID_REPORT", "code": str(exc).split(":")[0].rstrip(".")})
+        return "INVALID_REPORT", str(exc).split(":")[0].rstrip("."), None
     if not isinstance(doc, dict) or doc.get("view_schema") != VIEW_SCHEMA or doc.get("data_mode") != "OWNER_PRIVATE_READ_ONLY":
-        return _json(422, cors, {"status": "INVALID_REPORT", "code": "VIEW_CONTRACT_MISMATCH"})
-    return _json(200, cors, doc)
+        return "INVALID_REPORT", "VIEW_CONTRACT_MISMATCH", None
+    return "READY", None, doc
 
 
 def make_handler(token: str, view_path: Path, port: int) -> type:

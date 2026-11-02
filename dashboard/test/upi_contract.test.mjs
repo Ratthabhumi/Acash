@@ -113,6 +113,11 @@ test('repository and page keep private values out of storage, URLs, logs and ana
   assert.match(read('src/services/upiRepository.ts'), /credentials:\s*'omit'/);
 });
 
+test('portfolio is reachable from the command palette and Enter submits the token', () => {
+  assert.match(read('src/components/layout/CommandPalette.tsx'), /id: 'portfolio' as DashboardTab/);
+  assert.match(read('src/pages/PortfolioPage.tsx'), /onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\)/);
+});
+
 test('golden figures are not hardcoded in the UI', () => {
   const page = read('src/pages/PortfolioPage.tsx');
   for (const figure of ['77220', '77,220', '95750', '95,750', '10280', '8250']) {
@@ -137,7 +142,14 @@ test('no wealth pack or view data in public assets or the build output', () => {
 
 test('nginx CSP allows only same-origin connections and keeps the shadow proxy', () => {
   const conf = read('nginx.conf');
-  const csp = conf.match(/Content-Security-Policy "([^"]+)"/)[1];
+  const csps = [...conf.matchAll(/Content-Security-Policy "([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(csps.length, 2, 'server-level CSP and the static-asset location repeat');
+  assert.equal(csps[0], csps[1]);
+  const assets = conf.slice(conf.indexOf('location ~*'));
+  for (const header of ['X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy']) {
+    assert.match(assets.slice(0, assets.indexOf('}')), new RegExp(header), `${header} on static assets`);
+  }
+  const csp = csps[0];
   const connect = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src'));
   assert.equal(connect, "connect-src 'self'");
   assert.match(csp, /frame-ancestors 'none'/);

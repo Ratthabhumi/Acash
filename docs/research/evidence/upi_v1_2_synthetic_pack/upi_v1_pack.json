@@ -798,7 +798,7 @@
     "support_state": "SNAPSHOT_ONLY",
     "time_alignment": {
       "asynchronous_prices": "NOT_SUPPORTED_V1_1",
-      "market_session_calendar_check": "NOT_PERFORMED_NO_CALENDAR_AUTHORITY",
+      "market_session_calendar_check": "NOT_PERFORMED_IN_PACK",
       "observation_lag_days": 3,
       "observed_at": "2026-11-02T08:15:00+07:00",
       "price_and_fx_dates": "SINGLE_VALUATION_DATE",
@@ -1177,7 +1177,7 @@
       "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
       "SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
-      "MARKET_SESSION_NOT_VERIFIED: no qualified exchange calendar in the repository.",
+      "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
       "PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED: synthetic fixture; no trading or capital authority."
     ],
@@ -1209,6 +1209,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "2dcbb5527e3f59772ec99df9ce2250f65d144a0ac8441f4130adebfa219f1351",
+  "pack_sha256": "c7e6fae827c44954994bb1775fc47dc603597ceca75620e6b7b12bf6c3495716",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

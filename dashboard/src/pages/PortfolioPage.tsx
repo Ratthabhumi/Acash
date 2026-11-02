@@ -6,6 +6,13 @@ import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Bucket, DataMode, LoadState, UpiView, formatDec, formatWeight } from '../services/upiView';
 
+const STATUS_HELP: Record<string, string> = {
+  AUTHORIZATION_REQUIRED: 'ODR-001 is not RATIFIED, or the session token is wrong or from an earlier server start. Restart START-DASHBOARD.bat private for a new token.',
+  NO_REPORT: 'The service is running but data/private/out/upi_view.json does not exist yet. Generate it with acash.invest.upi_view (see the runbook).',
+  INVALID_REPORT: 'The private view failed contract validation. Regenerate it from the current wealth pack.',
+  SERVICE_UNAVAILABLE: 'The loopback service is not reachable on 127.0.0.1:8765. Start it with START-DASHBOARD.bat private.',
+};
+
 const Section: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
   <section className="bg-surface border border-default rounded-md p-4 space-y-3">
     <div>
@@ -205,14 +212,15 @@ export const PortfolioPage: React.FC = () => {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (value?: string) => {
+    const session = value ?? token;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
     setState(null);
     const timer = window.setTimeout(() => controller.abort(), 8000);
-    const result = await upiRepository.loadOwnerPrivate(token, controller.signal);
+    const result = await upiRepository.loadOwnerPrivate(session, controller.signal);
     window.clearTimeout(timer);
     if (abortRef.current === controller) {
       setState(result);
@@ -257,6 +265,7 @@ export const PortfolioPage: React.FC = () => {
             </div>
             <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void connect(); }}>
               <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.currentTarget.value && !loading) void connect(e.currentTarget.value); } }}
                 placeholder="Session token printed by the local service" aria-label="Session token"
                 className="flex-1 min-w-[16rem] bg-surface border border-default rounded px-2 py-1 font-mono-code" />
               <button type="submit" disabled={!token || loading}
@@ -288,6 +297,7 @@ export const PortfolioPage: React.FC = () => {
           <ShieldAlert className="w-5 h-5 text-muted shrink-0" />
           <div className="space-y-1">
             <div className="font-semibold text-primary">{state.status.replace(/_/g, ' ')}</div>
+            <div className="text-xs text-secondary">{STATUS_HELP[state.status]}</div>
             <div className="text-xs text-secondary">No figures are shown. Synthetic data is never substituted for owner data.</div>
           </div>
         </div>

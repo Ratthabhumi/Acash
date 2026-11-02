@@ -65,7 +65,7 @@ semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 | Dime! FCD statement / Webull monthly CSV | Native import mapping | WAITING_FOR_EVIDENCE (channel documented, schema not) |
 | Broker-displayed totals (V1_2) | Account/sub-portfolio total reconciliation, unclassified residual | IMPLEMENTED_AND_TESTED (synthetic) |
 | Security identifiers (ISIN/FIGI/MIC) | Non-merging of unverified tickers | IMPLEMENTED_AND_TESTED (format checks only; no security master) |
-| NYSE hours/calendar | Market-session validation | DOCUMENTED_ONLY (MARKET_SESSION_NOT_VERIFIED). Source confirmed (nyse.com hours-calendars, 2026–2028). An offline fixture still needs the exact holiday and early-close date list, quoted from that page, to avoid typing dates from memory |
+| NYSE hours/calendar | Market-session validation | IMPLEMENTED_AND_TESTED (XNYS only, 2026-01-01 to 2028-12-31, preflight-level only). Pack `market_session_status` stays MARKET_SESSION_NOT_VERIFIED; other venues and years report MARKET_SESSION_NOT_VERIFIED_* |
 | Broker fees / FX route costs | V38 route cost engine | PARTIALLY_IMPLEMENTED (owner quote evidence still open) |
 | ETF holdings (Vanguard, QQQM, SEC N-PORT) | Look-through | WAITING_FOR_EVIDENCE |
 | Alpaca / IBKR / Settrade | Broker capability registry | DOCUMENTED_ONLY (not built; no adapters) |
@@ -74,15 +74,16 @@ semantics for VOO, VT, VXUS, BND, BIL; N-PORT reporting lag.
 | Unified dashboard (Portfolio Intelligence) | Read-only view of the Python pack (`ACASH_UPI_VIEW_V1`), synthetic and owner-private modes | IMPLEMENTED_AND_TESTED (synthetic E2E; owner-private path verified up to the ODR refusal, never with real data) |
 | Governance reason / ODR state | Decision reason and manifest derived from `odr_state()` | IMPLEMENTED_AND_TESTED |
 
-### NYSE calendar fixture contract (requested from external research)
+### NYSE calendar fixture (delivered 2026-11-02)
 
-`market_session_status` stays `MARKET_SESSION_NOT_VERIFIED` until a fixture is committed.
-The coding agent will not type dates. Please supply one JSON document per year with:
-`mic` (`XNYS`), `timezone` (`America/New_York`), `source_url`, `source_version_or_last_updated`,
-`retrieved_on`, and `sessions`: a list of `{session_date, status (OPEN / CLOSED / EARLY_CLOSE),
-open_time, close_time, early_close (bool), note}` copied verbatim from the nyse.com
-hours-calendars page. Planned importer (not yet built): record a SHA-256 digest of the
-document and reject missing fields, duplicate dates and early closes without a close time.
+`docs/research/evidence/nyse_xnys_calendar_2026_2028.json` (`ACASH_EXCHANGE_CALENDAR_V1`)
+holds the full closures and 13:00 ET early closes for 2026–2028, transcribed from the
+external research the Owner supplied (sources: nyse.com hours-calendars and the ICE release
+of 2025-12-23). The coding agent did not browse these sources. `acash.invest.market_calendar`
+validates the document (exact fields, weekday dates, coverage, no overlaps, open < early
+close < close), records its SHA-256 and converts sessions with `zoneinfo`. Before using
+another year, re-check the dates against the official page and add a new fixture; do not
+extend this one from memory.
 
 ## 5. Tax treatment (owner decision support)
 

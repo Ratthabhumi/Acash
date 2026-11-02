@@ -1,74 +1,182 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions DisableDelayedExpansion
 
-title ACASH Research Dashboard - Development Server
+rem ACASH dashboard launcher. Read-only: no git pull/reset/merge, no broker access, no orders.
+rem Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
+rem   synthetic (default)  React dashboard with the committed synthetic demo on 127.0.0.1:3002
+rem   private              Also starts the loopback private-view service (127.0.0.1:8765);
+rem                        refuses to start unless ODR-001 is RATIFIED and the private view is valid
+rem   check                Runs every prerequisite and governance check, starts nothing
+rem Set ACASH_LAUNCHER_NO_PAUSE=1 to skip the final pause (scripted runs).
 
-echo ============================================================
-echo   ACASH Research Dashboard Launcher
-echo ============================================================
-echo.
-
-:: 1. Determine ACASH root directory from script location
 set "REPO_ROOT=%~dp0"
 set "DASHBOARD_DIR=%REPO_ROOT%dashboard"
+set "DASHBOARD_URL=http://127.0.0.1:3002/"
+set "MODE=synthetic"
+set "OPEN_BROWSER=1"
 
-:: 2. Pre-flight checks
-if not exist "%DASHBOARD_DIR%\package.json" (
-    echo [ERROR] Dashboard directory or package.json not found at:
-    echo   "%DASHBOARD_DIR%\package.json"
-    echo.
-    echo Please ensure the ACASH repository is intact.
-    echo.
-    pause
-    exit /b 1
-)
+:parse_args
+if "%~1"=="" goto args_done
+if /i "%~1"=="synthetic" (set "MODE=synthetic" & shift & goto parse_args)
+if /i "%~1"=="private" (set "MODE=private" & shift & goto parse_args)
+if /i "%~1"=="check" (set "MODE=check" & shift & goto parse_args)
+if /i "%~1"=="--no-browser" (set "OPEN_BROWSER=" & shift & goto parse_args)
+if /i "%~1"=="--help" goto usage
+if /i "%~1"=="/?" goto usage
+echo [ERROR] Unknown argument.
+goto usage_fail
 
-where node >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Node.js is not found in system PATH.
-    echo Please install Node.js or run SETUP.bat first.
-    echo.
-    pause
-    exit /b 1
-)
+:args_done
+title ACASH Dashboard - %MODE%
+echo ============================================================
+echo   ACASH Dashboard Launcher - mode: %MODE%
+echo ============================================================
 
-where npm >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] npm is not found in system PATH.
-    echo Please ensure Node.js and npm are properly installed.
-    echo.
-    pause
-    exit /b 1
-)
-
-if not exist "%DASHBOARD_DIR%\node_modules" (
-    echo.
-    echo [ERROR] Dashboard dependencies are not installed.
-    echo Please run SETUP.bat first.
-    echo.
-    pause
-    exit /b 1
-)
-
-:: 3. Launch dashboard
-echo [*] Starting ACASH Research Dashboard development server...
-echo [*] Target URL: http://localhost:3002
-echo [*] Waiting for server readiness before opening browser...
-echo [*] Press Ctrl+C in this terminal to stop the server.
+set "GIT_SHA=unknown"
+set "GIT_BRANCH=unknown"
+where git >nul 2>&1
+if errorlevel 1 goto git_done
+for /f "delims=" %%c in ('git -C "%REPO_ROOT%." rev-parse --short HEAD 2^>nul') do set "GIT_SHA=%%c"
+for /f "delims=" %%b in ('git -C "%REPO_ROOT%." rev-parse --abbrev-ref HEAD 2^>nul') do set "GIT_BRANCH=%%b"
+:git_done
+echo   Commit : %GIT_SHA% on %GIT_BRANCH%  (the launcher never pulls, resets or merges)
+echo   URL    : %DASHBOARD_URL%
 echo.
 
-cd /d "%DASHBOARD_DIR%"
+echo [1/4] Required files
+call :require_file "%DASHBOARD_DIR%\package.json" "dashboard\package.json" || goto fail_repo
+call :require_file "%DASHBOARD_DIR%\vite.config.ts" "dashboard\vite.config.ts" || goto fail_repo
+call :require_file "%DASHBOARD_DIR%\src\fixtures\upi_synthetic_view.json" "dashboard\src\fixtures\upi_synthetic_view.json" || goto fail_repo
+call :require_file "%REPO_ROOT%src\acash\dashboard_api\private_view_server.py" "src\acash\dashboard_api\private_view_server.py" || goto fail_repo
+echo       OK
 
-:: Background readiness watcher: polls http://localhost:3002 until responsive, then opens browser exactly once
-where curl >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    start /b "" cmd /c "for /l %%i in (1,1,60) do (curl.exe -s -f -o nul http://localhost:3002 && (start """" http://localhost:3002 & exit) || timeout /t 1 /nobreak >nul)"
+echo [2/4] Node.js, npm and dashboard dependencies
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js was not found on PATH.
+    echo         Install Node.js 24 LTS from https://nodejs.org/ or run SETUP.bat, then open a new terminal.
+    goto fail
+)
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] npm was not found on PATH. Reinstall Node.js with npm included.
+    goto fail
+)
+for /f "delims=" %%v in ('node --version') do echo       node %%v
+if not exist "%DASHBOARD_DIR%\node_modules\.bin\vite.cmd" (
+    echo [ERROR] Dashboard dependencies are not installed.
+    echo         Run:  cd /d "%DASHBOARD_DIR%" ^&^& npm ci
+    goto fail
+)
+echo       OK
+
+echo [3/4] Governance and owner-private authorization (statuses only, no values)
+set "HAVE_UV=1"
+where uv >nul 2>&1
+if errorlevel 1 set "HAVE_UV="
+if not defined HAVE_UV (
+    echo       uv was not found on PATH; governance status unavailable. Run SETUP.bat to install it.
+    if /i "%MODE%"=="private" (
+        echo [ERROR] Private mode needs uv to verify ODR-001 and run the loopback service.
+        goto fail
+    )
+    goto status_done
+)
+pushd "%REPO_ROOT%"
+if /i "%MODE%"=="private" (
+    uv run --quiet python -m acash.dashboard_api.readiness --require-private
 ) else (
-    start /b "" powershell -NoProfile -Command "$u='http://localhost:3002'; for($i=0;$i -lt 60;$i++){ try { $r=Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 1; if($r.StatusCode -eq 200){ Start-Process $u; exit 0 } } catch {} Start-Sleep -Seconds 1 }"
+    uv run --quiet python -m acash.dashboard_api.readiness
+)
+set "READY_EXIT=%ERRORLEVEL%"
+popd
+if /i not "%MODE%"=="private" goto status_done
+if "%READY_EXIT%"=="0" goto status_done
+echo.
+echo [BLOCKED] Private mode stays closed (fail-closed). Nothing was started.
+echo           It needs BOTH: ODR-001 ratified by the Owner in
+echo           docs\governance\ODR_UPI_PRIVATE_OBSERVATION_001.json, and a valid
+echo           data\private\out\upi_view.json generated by the private pilot runbook:
+echo           docs\research\UPI_PRIVATE_PILOT_RUNBOOK.md
+echo           The synthetic demo is still available:  START-DASHBOARD.bat
+goto fail
+:status_done
+echo       Data shown by default: SYNTHETIC DEMO (no owner data, no orders, no broker access)
+
+echo [4/4] Ports
+set "DASH_RUNNING="
+netstat -ano -p tcp | findstr /c:"127.0.0.1:3002 " /c:"0.0.0.0:3002 " | findstr /c:"LISTENING" >nul && set "DASH_RUNNING=1"
+set "PRIVATE_RUNNING="
+netstat -ano -p tcp | findstr /c:"127.0.0.1:8765 " | findstr /c:"LISTENING" >nul && set "PRIVATE_RUNNING=1"
+if defined DASH_RUNNING (echo       port 3002: already in use) else (echo       port 3002: free)
+if defined PRIVATE_RUNNING (echo       port 8765: already in use) else (echo       port 8765: free)
+
+if /i "%MODE%"=="check" (
+    echo.
+    echo Check complete. Nothing was started.
+    goto done
 )
 
-:: Run Vite development server in foreground (keeps terminal open)
-call npm run dev
+if /i not "%MODE%"=="private" goto start_dashboard
+if defined PRIVATE_RUNNING (
+    echo.
+    echo [*] The private-view service is already running in its own window; reuse the token shown there.
+    echo     For a new token, close that window and run START-DASHBOARD.bat private again.
+    goto start_dashboard
+)
+echo.
+echo [*] Starting the loopback private-view service in a separate window.
+echo     The session token is printed ONLY in that window and is never saved to a file.
+start "ACASH Private View - 127.0.0.1:8765 - close this window to stop" /d "%REPO_ROOT%." cmd /k uv run --quiet python -m acash.dashboard_api.private_view_server
 
-cd /d "%REPO_ROOT%"
-pause
+:start_dashboard
+if defined DASH_RUNNING (
+    echo.
+    echo [*] Port 3002 is already in use - a dashboard is probably running already.
+    echo     Not starting a duplicate. If it is not the ACASH dashboard, close that program and retry.
+    if defined OPEN_BROWSER start "" "%DASHBOARD_URL%"
+    goto done
+)
+echo.
+echo [*] Starting the dashboard at %DASHBOARD_URL%
+if /i "%MODE%"=="private" (
+    echo     Portfolio page: paste the token from the private-view window into "Session token" and press Enter.
+    echo     Without a token the page keeps showing the synthetic demo.
+)
+echo     Stop: press Ctrl+C here, then answer Y.
+if /i "%MODE%"=="private" echo           Also close the "ACASH Private View" window.
+echo.
+if defined OPEN_BROWSER start "" /b powershell -NoProfile -NonInteractive -Command "$u='%DASHBOARD_URL%'; for($i=0;$i -lt 60;$i++){ try { $r=Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 2; if($r.StatusCode -eq 200){ Start-Process $u; exit 0 } } catch {}; Start-Sleep -Seconds 1 }"
+pushd "%DASHBOARD_DIR%"
+call npm run dev
+popd
+echo.
+echo Dashboard stopped.
+goto done
+
+:require_file
+if exist "%~1" exit /b 0
+echo [ERROR] Missing required file: %~2
+exit /b 1
+
+:fail_repo
+echo         The checkout looks incomplete. Check with:  git status
+echo         The launcher does not modify the repository; restore the file yourself.
+goto fail
+
+:usage
+echo Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
+goto done
+
+:usage_fail
+echo Usage: START-DASHBOARD.bat [synthetic^|private^|check] [--no-browser]
+goto fail
+
+:fail
+echo.
+if not defined ACASH_LAUNCHER_NO_PAUSE pause
+endlocal & exit /b 1
+
+:done
+if not defined ACASH_LAUNCHER_NO_PAUSE pause
+endlocal & exit /b 0

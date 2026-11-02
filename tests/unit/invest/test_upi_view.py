@@ -65,6 +65,25 @@ def test_committed_dashboard_fixtures_match_regeneration(tmp_path: Path) -> None
         assert out.read_bytes() == Path(fixture).read_bytes()
 
 
+@pytest.mark.parametrize("snapshot, pack_path, report_type", [
+    ("docs/research/evidence/upi_v1_2_synthetic_snapshot.json", uv.SYNTHETIC_PACK, "FULL_REPORT"),
+    ("docs/research/evidence/upi_v1_2_synthetic_totals_only.json", uv.SYNTHETIC_EVIDENCE_ONLY_PACK, "EVIDENCE_ONLY_REPORT"),
+])
+def test_synthetic_end_to_end_snapshot_to_dashboard_fixture(tmp_path: Path, snapshot: str, pack_path: str,
+                                                            report_type: str) -> None:
+    from acash.invest import preflight as pf
+    from acash.invest import wealth_pack as wp
+
+    report = pf.preflight(Path(snapshot), Path(wp.PUBLIC_CAPACITY))
+    assert report["preflight"] == "READY_WITH_WARNINGS"
+    targets = json.dumps({"CORE_DIVERSIFIED": "0.7", "CASH": "0.3"})
+    wp.main(["--snapshot", snapshot, "--target-weights", targets, "--output", str(tmp_path / "pack")])
+    pack = json.loads((tmp_path / "pack" / "upi_v1_pack.json").read_text(encoding="utf-8"))
+    view_path = uv.write_view(uv.build_view(pack), tmp_path / "view.json")
+    assert view_path.read_bytes() == Path(uv.DASHBOARD_FIXTURES[pack_path]).read_bytes()
+    assert json.loads(view_path.read_text(encoding="utf-8"))["report_metadata"]["report_type"] == report_type
+
+
 @pytest.mark.parametrize("mutate, code", [
     (lambda p: p.update(pack_version="X"), "VIEW_PACK_VERSION_UNSUPPORTED"),
     (lambda p: p.update(data_class="PUBLIC"), "VIEW_DATA_CLASS_INVALID"),
@@ -160,6 +179,45 @@ def test_server_odr_states_and_view_contract(tmp_path: Path, monkeypatch: pytest
     assert _call(view_path)[2]["code"] == "UPI_VIEW_MALFORMED_JSON"
     _ratify(tmp_path, "REVOKED")
     assert _call(view_path)[2] == {"status": "AUTHORIZATION_REQUIRED", "odr_state": "REVOKED"}
+
+
+def test_launcher_readiness_never_opens_view_without_odr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                         capsys: pytest.CaptureFixture[str]) -> None:
+    from acash.dashboard_api import readiness as rd
+
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    view_path = tmp_path / "data" / "private" / "out" / "upi_view.json"
+    state = rd.readiness(view_path)
+    assert (state["odr_001"], state["private_view"], state["private_mode"]) == (
+        "RECORD_UNREADABLE", "NO_REPORT", "BLOCKED")
+    assert state["governance"]["NO_REAL_ORDERS"] is True
+    _ratify(tmp_path, "PROPOSED_NOT_RATIFIED")
+    view_path.parent.mkdir(parents=True)
+    view_path.write_text("{}", encoding="utf-8")
+
+    real_read = po.read_bounded_json
+
+    def never(*_: Any) -> None:
+        raise AssertionError("view read while ODR-001 is not ratified")
+    monkeypatch.setattr(po, "read_bounded_json", never)
+    assert rd.readiness(view_path)["private_view"] == "PRESENT_NOT_OPENED"
+    monkeypatch.setattr(po, "read_bounded_json", real_read)
+    _ratify(tmp_path)
+    assert rd.readiness(view_path)["private_view"] == "INVALID_REPORT (VIEW_CONTRACT_MISMATCH)"
+    uv.write_view(_private_view(), view_path)
+    assert rd.readiness(view_path) | {"governance": None} == {
+        "governance": None, "odr_001": "RATIFIED", "odr_002": "RECORD_UNREADABLE", "private_view": "READY",
+        "private_mode": "READY", "blockers": []}
+
+    _ratify(tmp_path, "REVOKED")
+    monkeypatch.setattr(rd, "DEFAULT_VIEW", view_path.relative_to(tmp_path))
+    with pytest.raises(SystemExit) as exit_info:
+        rd.main(["--require-private"])
+    assert exit_info.value.code == 3
+    out = capsys.readouterr().out
+    assert "Private mode : BLOCKED - ODR-001 REVOKED; private view PRESENT_NOT_OPENED" in out
+    assert "NO_REAL_ORDERS=true" in out and '"' not in out
+    rd.main([])
 
 
 def test_dashboard_api_has_no_trading_or_outbound_network_imports() -> None:
