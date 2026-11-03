@@ -1,4 +1,9 @@
-# ODR_UPI_MARKET_DATA_004 — Market price and reference FX retrieval (PROPOSED, NOT RATIFIED)
+# ODR_UPI_MARKET_DATA_004 — Market price and reference FX retrieval (RATIFIED 2026-11-03, empty provider scope)
+
+Ratified by the OWNER on 2026-11-03 through a conditional instruction ("ODR-004, ODR-005 ผมอนุมัติ
+ถ้ามันถูกต้องแล้ว"), applied by the coding agent after the checks in
+`ODR_UPI_MARKET_DATA_004_ACCEPTANCE.json` passed. `scope_providers` stays empty, so no provider is
+enabled and no outbound request is possible; enabling a provider is a separate scope change.
 
 ## 1. Capability
 
@@ -42,8 +47,9 @@ against a live response. `WEBULL_TH_OPENAPI` has no adapter.
 
 ## 4. Valuation rules already enforced in code
 
-One market date per valuation; unknown or value-only holdings stop the revaluation instead of
-counting as zero; reference FX is labelled as not executable; broker totals from another time are
+One market date per valuation; holdings without a price on that date, value-only holdings and
+total-only accounts are excluded and reported (`PARTIAL_INDICATIVE_VALUATION`), never counted as
+zero; reference FX is labelled as not executable; broker totals from another time are
 marked `TIME_MISALIGNED_COMPARISON` and never reconciled against new prices.
 
 ## 5. Ratify, revoke, rollback

@@ -1,9 +1,17 @@
 {
   "decision_id": "ODR_UPI_MARKET_DATA_004",
   "capability": "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
-  "status": "PROPOSED_NOT_RATIFIED",
-  "ratified_by": null,
-  "ratified_on": null,
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-03",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's conditional authorization in the Cursor chat on 2026-11-03: \"ODR-004, ODR-005 ผมอนุมัติ ถ้ามันถูกต้องแล้ว\", effective for ODR-004 only after the market-data security tests pass and with scope_providers kept empty; not an approval of any specific provider, credentials, paid subscriptions, trading or ODR-005",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "acceptance_evidence": "docs/governance/ODR_UPI_MARKET_DATA_004_ACCEPTANCE.json",
+    "acceptance_commit": "6f33983e55b9950112be687fcdcca22390ccc91e",
+    "scope_changed": false
+  },
   "document": "docs/governance/ODR_UPI_MARKET_DATA_004.md",
   "requires": [
     "ODR_UPI_PRIVATE_OBSERVATION_001"

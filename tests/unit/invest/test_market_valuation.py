@@ -46,17 +46,20 @@ def _fx(day: date = DAY, kind: str = "REFERENCE_FX", back: str = "0.030303") -> 
 POLICY = mv.QuotePolicy(as_of=DAY, max_age_days=3, price_types=("EOD_CLOSE",), now=NOW)
 
 
-@pytest.mark.parametrize("record, capability", [
-    ("ODR_UPI_MARKET_DATA_004.json", "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED"),
-    ("ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json", "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED"),
+@pytest.mark.parametrize("record, capability, state", [
+    ("ODR_UPI_MARKET_DATA_004.json", "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED", "RATIFIED"),
+    ("ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json", "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED", "PROPOSED_NOT_RATIFIED"),
 ])
-def test_new_capabilities_are_proposals_only(record: str, capability: str) -> None:
+def test_new_capability_states_and_scope(record: str, capability: str, state: str) -> None:
     path = Path("docs/governance") / record
     doc = json.loads(path.read_text(encoding="utf-8"))
-    assert po.odr_state(path, None, capability) == "PROPOSED_NOT_RATIFIED"
+    assert po.odr_state(path, None, capability) == state
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "CAPITAL_TRANSFER"} <= set(doc["independent_of"])
     if capability == "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED":
         assert doc["scope_providers"] == []
+        lineage = doc["ratification_lineage"]
+        assert lineage["decided_by"] == "OWNER" and lineage["scope_changed"] is False
+        assert (Path(".") / lineage["acceptance_evidence"]).is_file()
 
 
 def test_market_valuation_has_no_network_client() -> None:
