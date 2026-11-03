@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
@@ -12,6 +14,8 @@ import pytest
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import private_view_server as srv
 from acash.invest import upi_view as uv
+from acash.invest.capacity_plan import load_capacity
+from acash.invest.wealth_pack import build_wealth_pack
 from acash.ppds import private_observation as po
 
 PORT = srv.DEFAULT_PORT
@@ -245,3 +249,40 @@ def test_server_binds_loopback_and_refuses_tracked_view_path(tmp_path: Path, mon
         assert server.server_address[0] == "127.0.0.1"
     finally:
         server.server_close()
+
+
+def _synthetic_pack_with_fund(tmp_path: Path, with_fund: bool) -> Dict[str, Any]:
+    snapshot = json.loads((Path("docs/research/evidence/upi_v1_2_synthetic_snapshot.json")).read_text(encoding="utf-8"))
+    snapshot["data_class"] = "OWNER_PRIVATE_OBSERVATION"
+    capacity = json.loads((Path("docs/research/evidence/upi_v1_synthetic_capacity.json")).read_text(encoding="utf-8"))
+    capacity["data_class"] = snapshot["data_class"]
+    cap_path = tmp_path / "capacity.json"
+    cap_path.write_text(json.dumps(capacity), encoding="utf-8")
+    if with_fund:
+        snapshot["securities"].append({"security_id": "SCBSET50", "instrument_type": "OTHER",
+                                       "classification": "UNKNOWN", "methodology": "NOT_CLASSIFIED"})
+        snapshot["prices"].append({"security_id": "SCBSET50", "price": "24.0440", "currency": "THB",
+                                   "as_of": snapshot["valuation_date"], "source_id": "DIME_APP_DISPLAY"})
+        main = next(a for a in snapshot["accounts"] if a["account_ref"] == "BROKER_D_MAIN")
+        main["positions"].append({"security_id": "SCBSET50", "quantity": "4.3422",
+                                  "cost_basis_total": "100.00", "cost_basis_currency": "THB"})
+    pack = build_wealth_pack(po.build_book(po.parse_snapshot(snapshot)), load_capacity(cap_path), None,
+                             date.fromisoformat(snapshot["valuation_date"]))
+    return uv.build_view(json.loads(json.dumps(pack)))
+
+
+def test_thb_fund_inside_a_usd_account_is_not_multiplied_by_fx(tmp_path: Path) -> None:
+    """Regression (Owner SCBSET50): a THB NAV per unit must stay THB, never take an FX multiplier."""
+    before = _synthetic_pack_with_fund(tmp_path, with_fund=False)
+    after = _synthetic_pack_with_fund(tmp_path, with_fund=True)
+
+    def account_value(view: Dict[str, Any], ref: str) -> Decimal:
+        return Decimal(str(next(a for a in view["accounts"] if a["account_ref"] == ref)["computed_value"]))
+
+    delta = account_value(after, "BROKER_D_MAIN") - account_value(before, "BROKER_D_MAIN")
+    expected = Decimal("4.3422") * Decimal("24.0440")
+    assert abs(delta - expected) < Decimal("0.01")          # units x THB NAV, no x33 and no /0.03
+    assert delta < Decimal("200")                            # a double FX conversion would exceed 3,500
+    nav_delta = Decimal(str(after["portfolio_overview"]["computed_nav_ppds"])) - \
+        Decimal(str(before["portfolio_overview"]["computed_nav_ppds"]))
+    assert abs(nav_delta - expected) < Decimal("0.01")
