@@ -132,3 +132,28 @@ def test_setup_module_holds_no_trading_surface() -> None:
     for banned in ("/v2/orders", "/v2/account", "/v2/positions", "paper-api", "api.alpaca.markets",
                    "import socket", "import subprocess"):
         assert banned not in text
+
+
+def test_openfigi_is_a_separate_identity_provider_with_its_own_target(
+        monkeypatch: pytest.MonkeyPatch, store: SharedStore, capsys: pytest.CaptureFixture[str]) -> None:
+    ids = [row[0] for row in cs.KEYED_PROVIDERS]
+    assert "OPENFIGI_IDENTITY" in ids and "ALPACA_BASIC" in ids
+    monkeypatch.setattr(ma, "identity_credential", lambda provider_id="OPENFIGI_IDENTITY": store.lookup(provider_id))
+    monkeypatch.setattr(cs, "_hidden", lambda prompt: "SYNTHETIC_OPENFIGI_KEY_NEVER_REAL")
+    target = cs._configure(store, "OPENFIGI_IDENTITY", (("OpenFIGI API Key", True),))
+    assert target == "ACASH/IDENTITY/OPENFIGI_IDENTITY"
+    assert store.creds["OPENFIGI_IDENTITY"] == ("OPENFIGI_IDENTITY", "SYNTHETIC_OPENFIGI_KEY_NEVER_REAL")
+    assert "SYNTHETIC_OPENFIGI_KEY_NEVER_REAL" not in capsys.readouterr().out
+    rows = "\n".join(cs.status_rows(store))
+    assert "OPENFIGI_IDENTITY" in rows
+
+
+def test_replace_and_remove_ask_for_the_provider_instead_of_defaulting_to_alpaca(
+        monkeypatch: pytest.MonkeyPatch, store: SharedStore) -> None:
+    monkeypatch.setattr(cs, "_visible", lambda prompt: "2")
+    provider_id, fields = cs._choose_provider("Provider to replace")
+    assert provider_id == "MARKETDATA_APP_FREE"  # explicit selection, never a hidden Alpaca default
+    assert fields
+    monkeypatch.setattr(cs, "_visible", lambda prompt: "not-a-number")
+    with pytest.raises(DataContractError, match="PROVIDER_CHOICE_INVALID"):
+        cs._choose_provider("Provider to remove")

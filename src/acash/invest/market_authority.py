@@ -27,6 +27,10 @@ ADAPTED_PROVIDERS = ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE",
 KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
 # Providers that authenticate without a stored credential (published keyless endpoints).
 KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
+# Identity providers are a separate authority from price/FX feeds: they return candidate FIGI
+# metadata, never a quote, and reuse the same credential store under their own namespace.
+IDENTITY_PROVIDERS = ("OPENFIGI_IDENTITY",)
+IDENTITY_CREDENTIAL_TARGET_PREFIX = "ACASH/IDENTITY/"
 # One Owner-supplied credential may serve several read-only feeds of the same vendor. The alias only
 # reuses the secret: it never implies entitlement, display or derived-use rights, which each provider
 # must still attest separately before it can become READY.
@@ -77,7 +81,9 @@ class CredentialStore(Protocol):
 
 
 def credential_target(provider_id: str) -> str:
-    """The Windows Credential Manager target for one adapted market-data provider."""
+    """The Windows Credential Manager target for one adapted market-data or identity provider."""
+    if provider_id in IDENTITY_PROVIDERS:
+        return IDENTITY_CREDENTIAL_TARGET_PREFIX + provider_id
     if provider_id not in ADAPTED_PROVIDERS:
         raise DataContractError(f"PROVIDER_NOT_ADAPTED: {provider_id}.")
     return CREDENTIAL_TARGET_PREFIX + provider_id
@@ -189,6 +195,13 @@ class WindowsCredentialWriter:
 
     def remove(self, provider_id: str) -> bool:
         return _cred_delete(credential_target(provider_id))
+
+
+def identity_credential(provider_id: str = "OPENFIGI_IDENTITY") -> Optional[Credential]:
+    """Read-only lookup for an identity provider; absence is not an error."""
+    if provider_id not in IDENTITY_PROVIDERS:
+        raise DataContractError(f"IDENTITY_PROVIDER_UNKNOWN: {provider_id}.")
+    return _cred_read(IDENTITY_CREDENTIAL_TARGET_PREFIX + provider_id)
 
 
 def record_state(record: Optional[Path] = None, observation_record: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:

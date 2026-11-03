@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.invest import market_authority as ma
+from acash.market_data import openfigi as of
 from acash.market_data import providers as mp
 
 SAMPLE_SYMBOLS = ("AAPL", "VOO", "BIL")
@@ -28,6 +29,8 @@ KEYED_PROVIDERS: Tuple[Tuple[str, str, Tuple[Tuple[str, bool], ...]], ...] = (
      (("API Key ID", False), ("API Secret Key", True))),
     ("MARKETDATA_APP_FREE", "MarketData.app Free Forever (API token, sent as a Bearer header only)",
      (("API Token", True),)),
+    ("OPENFIGI_IDENTITY", "OpenFIGI identity API (candidate FIGI mapping; key sent as a header only)",
+     (("OpenFIGI API Key", True),)),
 )
 PROVIDER_LABELS = {provider_id: label for provider_id, label, _ in KEYED_PROVIDERS}
 
@@ -62,7 +65,24 @@ def status_rows(store: Optional[ma.CredentialStore] = None) -> List[str]:
     for entry in statuses:
         credentials = entry["capabilities"].get("credentials_configured", "UNKNOWN")
         out.append(f"  {entry['provider_id']:<20} {entry['status']:<24} credentials={credentials}")
+    out.append(f"  {'OPENFIGI_IDENTITY':<20} {'CONFIGURED' if ma.identity_credential() is not None else 'NOT_CONFIGURED':<24} "
+               "credentials=" + ("ESTABLISHED" if ma.identity_credential() is not None else "MISSING"))
     return out
+
+
+def _test_identity() -> str:
+    """One bounded mapping request with the public demonstration ticker IBM; never Owner holdings."""
+    key = ma.identity_credential()
+    if key is None:
+        return "REFUSED_NO_CREDENTIAL"
+    provider = of.OpenFIGIIdentityProvider(key, of.urllib_post, lambda: True,
+                                           lambda: datetime.now(timezone.utc))
+    results = provider.map_identifiers("TICKER", ["IBM"], exchCode="US")
+    if not results:
+        return "NO_CANDIDATE"
+    first = results[0]
+    return (f"REAL_RESPONSE_OBSERVED candidates={len(first.candidates)} "
+            f"state={first.status} (candidate only; Owner confirmation still required)")
 
 
 def _configure(writer: Any, provider_id: str,
@@ -73,10 +93,21 @@ def _configure(writer: Any, provider_id: str,
         raise DataContractError("CREDENTIAL_INVALID: empty value.")
     username, secret = (values[0], values[1]) if len(values) == 2 else (provider_id, values[0])
     target = writer.store(provider_id, (username, secret))
-    back = ma.WindowsCredentialStore().lookup(provider_id)
+    back = (ma.identity_credential(provider_id) if provider_id in ma.IDENTITY_PROVIDERS
+            else ma.WindowsCredentialStore().lookup(provider_id))
     if back is None or back != (username, secret):
         raise DataContractError("CREDENTIAL_READBACK_FAILED.")
     return str(target)
+
+
+def _choose_provider(prompt: str) -> Tuple[str, Tuple[Tuple[str, bool], ...]]:
+    """Explicit provider selection for replace/remove/test; never defaults to Alpaca."""
+    for index, (provider_id, label, _) in enumerate(KEYED_PROVIDERS, start=1):
+        print(f"    {index}. {provider_id} — {label}")
+    choice = _visible(prompt)
+    if not choice.isdigit() or not 1 <= int(choice) <= len(KEYED_PROVIDERS):
+        raise DataContractError("PROVIDER_CHOICE_INVALID.")
+    return KEYED_PROVIDERS[int(choice) - 1][0], KEYED_PROVIDERS[int(choice) - 1][2]
 
 
 def _test_connection(provider_id: str) -> str:
@@ -121,11 +152,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     menu = {
         "1": "Configure Alpaca API",
         "2": "Configure MarketData.app API",
-        "3": "Check Credential Status",
-        "4": "Test Authorized Provider Connection",
-        "5": "Replace Existing Credentials",
-        "6": "Remove Credentials",
-        "7": "Exit",
+        "3": "Configure OpenFIGI identity API",
+        "4": "Check Credential Status",
+        "5": "Test Authorized Provider Connection",
+        "6": "Replace Existing Credentials",
+        "7": "Remove Credentials",
+        "8": "Exit",
     }
     while True:
         print()
@@ -136,21 +168,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         except DataContractError as exc:
             print(f"  {exc}")
             return 2
-        if choice == "7":
+        if choice == "8":
             return 0
         try:
-            if choice in ("1", "2", "5"):
-                provider_id, _, fields = KEYED_PROVIDERS[0 if choice in ("1", "5") else 1]
+            if choice in ("1", "2", "3"):
+                provider_id, _, fields = KEYED_PROVIDERS[int(choice) - 1]
                 target = _configure(writer, provider_id, fields)
                 print(f"  CREDENTIAL_CONFIGURED at {target} (this does not mean PROVIDER_READY)")
-            elif choice == "3":
+            elif choice == "4":
                 for row in status_rows():
                     print(row)
-            elif choice == "4":
-                provider_id = _visible("Provider id")
-                print("  " + _test_connection(provider_id))
+            elif choice == "5":
+                test_id, _fields = _choose_provider("Provider to test")
+                print("  " + (_test_identity() if test_id in ma.IDENTITY_PROVIDERS
+                              else _test_connection(test_id)))
             elif choice == "6":
-                provider_id = _visible("Provider id to remove")
+                provider_id, fields = _choose_provider("Provider to replace")
+                target = _configure(writer, provider_id, fields)
+                print(f"  CREDENTIAL_CONFIGURED at {target} (replaced)")
+            elif choice == "7":
+                provider_id, _ = _choose_provider("Provider to remove")
                 print("  REMOVED" if writer.remove(provider_id) else "  NOT_FOUND")
             else:
                 print("  Unknown choice.")
