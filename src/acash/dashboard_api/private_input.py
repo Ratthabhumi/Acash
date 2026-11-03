@@ -74,16 +74,16 @@ Result = Tuple[int, Dict[str, Any]]
 
 
 class RateLimiter:
-    """Sliding one-minute window; a refused request is not counted."""
+    """Sliding window (one minute unless given); a refused request is not counted."""
 
-    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic) -> None:
-        self._limit, self._clock, self._lock = limit, clock, threading.Lock()
+    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic, window: float = 60) -> None:
+        self._limit, self._clock, self._lock, self._window = limit, clock, threading.Lock(), window
         self._hits: Deque[float] = deque()
 
     def allow(self) -> bool:
         with self._lock:
             now = self._clock()
-            while self._hits and now - self._hits[0] >= 60:
+            while self._hits and now - self._hits[0] >= self._window:
                 self._hits.popleft()
             if len(self._hits) >= self._limit:
                 return False

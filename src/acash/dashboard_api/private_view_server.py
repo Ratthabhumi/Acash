@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
-from acash.dashboard_api import private_input
+from acash.dashboard_api import market_service, private_input
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
     MAX_INPUT_BYTES,
@@ -131,7 +131,8 @@ def _bootstrap(method: str, target: str, headers: Mapping[str, str], session: Op
 
 def respond(method: str, target: str, headers: Mapping[str, str], token: str, view_path: Path, port: int,
             body: bytes = b"", service: Optional[private_input.InputService] = None,
-            session_expired: bool = False, session: Optional[Session] = None) -> Response:
+            session_expired: bool = False, session: Optional[Session] = None,
+            market: Optional[market_service.MarketService] = None) -> Response:
     headers = _Headers(headers)
     base = {"Cache-Control": "no-store", "Pragma": "no-cache", "Content-Type": "application/json",
             "X-Content-Type-Options": "nosniff", "Vary": "Origin"}
@@ -143,6 +144,13 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     origin = headers.get("Origin")
     if origin not in ALLOWED_ORIGINS:
         return _json(403, base, {"status": "ORIGIN_NOT_ALLOWED"})
+    market_name = target[len(market_service.PREFIX):] if target.startswith(market_service.PREFIX) else None
+    if market is not None and market_name in market_service.ROUTES:
+        return _market_route(method, market_name, headers, token, body, market, session_expired,
+                             {**base, "Access-Control-Allow-Origin": str(origin),
+                              "Access-Control-Allow-Credentials": "true",
+                              "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                              "Access-Control-Allow-Methods": ", ".join(market_service.ROUTES[market_name])})
     name = target[len(private_input.PREFIX):] if target.startswith(private_input.PREFIX) else None
     if service is not None and name in private_input.ROUTES:
         return _input_route(method, name, headers, token, body, service, session_expired,
@@ -188,6 +196,37 @@ def _input_route(method: str, name: str, headers: Mapping[str, str], token: str,
     return _json(status, cors, doc)
 
 
+def _market_route(method: str, name: str, headers: Mapping[str, str], token: str, body: bytes,
+                  market: market_service.MarketService, session_expired: bool, cors: Dict[str, str]) -> Response:
+    if method == "OPTIONS":
+        return 204, cors, b""
+    if method not in market_service.ROUTES[name]:
+        return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
+    if not _authenticated(headers, token):
+        return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
+    if session_expired:
+        return _json(401, cors, {"status": "SESSION_EXPIRED"})
+    rejected, payload = private_input.parse_body(method, headers, body)
+    if rejected:
+        return _json(rejected[0], cors, rejected[1])
+    if name != "view":
+        status, doc = market_service.handle(method, name, payload, market)
+        return _json(status, cors, doc)
+    state = odr_state(None, SCHEMA_V1_2)
+    market_state = market.statuses()["odr_004"]
+    if state != "RATIFIED" or market_state != "RATIFIED":
+        return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state, "odr_004": market_state})
+    try:
+        view_status, code, doc = load_view(market_service.market_path(market_service.VIEW_FILE))
+    except DataContractError as exc:
+        return _json(403, cors, {"status": "INPUT_PATH_REFUSED", "code": str(exc).split(":")[0]})
+    if view_status == "NO_REPORT":
+        return _json(404, cors, {"status": view_status})
+    if view_status == "INVALID_REPORT":
+        return _json(422, cors, {"status": view_status, "code": code})
+    return _json(200, cors, doc)
+
+
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
     """Single authority for the private view contract: (READY | NO_REPORT | INVALID_REPORT, code, doc).
 
@@ -218,7 +257,8 @@ def _read_body(handler: BaseHTTPRequestHandler) -> Optional[bytes]:
 
 
 def make_handler(token: str, view_path: Path, port: int, service: Optional[private_input.InputService] = None,
-                 expires_at: Optional[float] = None, session: Optional[Session] = None) -> type:
+                 expires_at: Optional[float] = None, session: Optional[Session] = None,
+                 market: Optional[market_service.MarketService] = None) -> type:
     class Handler(BaseHTTPRequestHandler):
         server_version = "acash-private-view"
         sys_version = ""
@@ -232,7 +272,7 @@ def make_handler(token: str, view_path: Path, port: int, service: Optional[priva
             else:
                 expired = expires_at is not None and time.monotonic() > expires_at
                 status, headers, out = respond(self.command, self.path, dict(self.headers.items()), token,
-                                               view_path, port, body, service, expired, session)
+                                               view_path, port, body, service, expired, session, market)
             self._write(status, headers, out)
 
         def _write(self, status: int, headers: Dict[str, str], body: bytes) -> None:
@@ -258,7 +298,8 @@ def serve(port: int = DEFAULT_PORT, view_path: Optional[Path] = None, token: Opt
     path = view_path or (_repo_root() / DEFAULT_VIEW)
     assert_private_location(path)
     session = Session(token or secrets.token_urlsafe(32), time.monotonic() + SESSION_SECONDS, launch_key)
-    handler = make_handler(session.token, path, port, private_input.InputService(), session.expires_at, session)
+    handler = make_handler(session.token, path, port, private_input.InputService(), session.expires_at, session,
+                           market_service.MarketService())
     server = ThreadingHTTPServer((HOST, port), handler)
     setattr(server, "acash_session", session)
     return server
