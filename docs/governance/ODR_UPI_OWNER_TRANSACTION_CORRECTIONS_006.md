@@ -1,4 +1,4 @@
-# ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006 — Correcting recorded local transactions (PROPOSED, NOT RATIFIED)
+# ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006 — Correcting recorded local transactions (RATIFIED 2026-11-03)
 
 ## 1. Capability
 
@@ -39,3 +39,13 @@ journals remain readable under ODR-002 and ODR-005. Revert the commit to roll ba
 
 Trading (paper or live), broker connectivity or credentials, capital or currency transfers,
 market-data retrieval, native broker import and D5 admission.
+
+## 6. Accepted state
+
+The engine is `src/acash/ppds/corrections.py` and the Dashboard route is
+`POST /api/upi/transactions/correction`. Acceptance evidence is
+`tests/unit/ppds/test_ppds_corrections.py` plus the Dashboard cases in
+`tests/unit/invest/test_private_transactions.py` (void, supersede, nonexistent target,
+conflicting supersession, double application, restart replay, and refusal while ODR-006 is
+unratified). No correction has been applied to Owner data: the Owner's
+`data/private/transactions/` journal does not exist yet.

@@ -2,11 +2,19 @@
   "record": "ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006",
   "decision_id": "ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006",
   "capability": "OWNER_LOCAL_TRANSACTION_CORRECTION_AUTHORIZED",
-  "status": "PROPOSED_NOT_RATIFIED",
+  "status": "RATIFIED",
   "proposed_on": "2026-11-03",
   "proposed_by": "CODING_AGENT_AT_OWNER_DIRECTION",
-  "ratified_by": null,
-  "ratified_on": null,
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-03",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's explicit approval on 2026-11-03: ODR-004, ODR-005, ODR-006 approved within their documented, bounded scopes (chat directive V84.1 section 0).",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "scope_changed": false,
+    "acceptance_evidence": "tests/unit/ppds/test_ppds_corrections.py",
+    "acceptance_commit": null
+  },
   "document": "docs/governance/ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006.md",
   "requires": [
     "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005"
@@ -40,9 +48,11 @@
   "accounting_semantics": "A correction amends recorded evidence; it is not an executed trade. A mistaken BUY is never represented as a real SELL. Cash and positions are recomputed from the effective event projection, and the original evidence stays readable.",
   "schema_versioning": "ACASH_CANONICAL_TRANSACTIONS_V1 is not silently expanded; corrections use a versioned envelope (or a V2 journal contract) decided before implementation, and V1 history stays replayable unchanged.",
   "engineering_status": {
-    "correction_engine": "NOT_IMPLEMENTED — deferred; V1 authoring ships first",
-    "dashboard_correction_ui": "DISABLED",
-    "real_correction_authoring": "NOT_AUTHORIZED"
+    "correction_engine": "IMPLEMENTED (src/acash/ppds/corrections.py, ACASH_CANONICAL_TRANSACTIONS_V2_CORRECTION_ENVELOPE)",
+    "dashboard_route": "IMPLEMENTED (/api/upi/transactions/correction, preview-free explicit confirmation, append-only envelope)",
+    "acceptance_tests": "tests/unit/ppds/test_ppds_corrections.py (12 synthetic cases: void, supersede, cycles, conflicts, double application, replay through PPDS)",
+    "real_owner_journal": "NOT APPLIED — no correction has been recorded against Owner data",
+    "trading": "NOT_AUTHORIZED"
   },
   "rollback": "Any status other than RATIFIED disables correction authoring at once; existing journals stay readable under ODR-002 and ODR-005. Reverting the ratifying commit removes the capability.",
   "independent_of": [

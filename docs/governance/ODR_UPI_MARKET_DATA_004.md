@@ -1,4 +1,4 @@
-# ODR_UPI_MARKET_DATA_004 — Market price and reference FX retrieval (RATIFIED 2026-11-03, empty provider scope)
+# ODR_UPI_MARKET_DATA_004 — Market price and reference FX retrieval (RATIFIED 2026-11-03; provider scope expanded by AMENDMENT_001 with every right UNKNOWN)
 
 Ratified by the OWNER on 2026-11-03 through a conditional instruction ("ODR-004, ODR-005 ผมอนุมัติ
 ถ้ามันถูกต้องแล้ว"), applied by the coding agent after the checks in

@@ -1,4 +1,4 @@
-# ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005 — Recording completed transactions from the Dashboard (PROPOSED, NOT RATIFIED)
+# ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005 — Recording completed transactions from the Dashboard (RATIFIED 2026-11-03, narrowed to V1 by AMENDMENT_001)
 
 ## 1. Capability
 

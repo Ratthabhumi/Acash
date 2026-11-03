@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from acash.core.domain.exceptions import DataContractError
+from acash.invest import market_authority as ma
 from acash.invest import market_valuation as mv
 from acash.ppds import private_observation as po
 
@@ -48,7 +49,7 @@ POLICY = mv.QuotePolicy(as_of=DAY, max_age_days=3, price_types=("EOD_CLOSE",), n
 
 @pytest.mark.parametrize("record, capability, state", [
     ("ODR_UPI_MARKET_DATA_004.json", "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED", "RATIFIED"),
-    ("ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json", "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED", "PROPOSED_NOT_RATIFIED"),
+    ("ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json", "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED", "RATIFIED"),
 ])
 def test_new_capability_states_and_scope(record: str, capability: str, state: str) -> None:
     path = Path("docs/governance") / record
@@ -56,9 +57,14 @@ def test_new_capability_states_and_scope(record: str, capability: str, state: st
     assert po.odr_state(path, None, capability) == state
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "CAPITAL_TRANSFER"} <= set(doc["independent_of"])
     if capability == "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED":
-        assert doc["scope_providers"] == []
+        assert {e["provider_id"] for e in doc["scope_providers"]} == {
+            "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
+        for entry in doc["scope_providers"]:
+            for k in ma.ATTESTATIONS:
+                assert entry[k] in (False, None), (entry["provider_id"], k)
         lineage = doc["ratification_lineage"]
-        assert lineage["decided_by"] == "OWNER" and lineage["scope_changed"] is False
+        assert lineage["decided_by"] == "OWNER" and lineage["scope_changed"] is False  # original history intact
+        assert "ODR_UPI_MARKET_DATA_004_AMENDMENT_001" in doc.get("amendments", [])
         assert (Path(".") / lineage["acceptance_evidence"]).is_file()
 
 

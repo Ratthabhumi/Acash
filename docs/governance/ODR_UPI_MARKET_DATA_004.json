@@ -22,7 +22,49 @@
     "MASSIVE_BASIC",
     "BOT_REFERENCE_FX"
   ],
-  "scope_providers": [],
+  "scope_providers": [
+    {
+      "provider_id": "ALPACA_BASIC",
+      "entitlement_verified": false,
+      "display_permitted": false,
+      "calculation_permitted": false,
+      "derived_value_permitted": false,
+      "cache_permitted": false,
+      "retention_policy_verified": false,
+      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; provider not READY until credentialed and attested."
+    },
+    {
+      "provider_id": "ALPACA_HISTORICAL",
+      "entitlement_verified": false,
+      "display_permitted": false,
+      "calculation_permitted": false,
+      "derived_value_permitted": false,
+      "cache_permitted": false,
+      "retention_policy_verified": false,
+      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; Basic-plan SIP delay enforcement is adapter-side only, not an entitlement."
+    },
+    {
+      "provider_id": "MARKETDATA_APP_FREE",
+      "entitlement_verified": false,
+      "display_permitted": false,
+      "calculation_permitted": false,
+      "derived_value_permitted": false,
+      "cache_permitted": false,
+      "retention_policy_verified": false,
+      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; personal-localhost use noted in ToS 2026-10-26 but exchange-level derived-value rights unverified."
+    },
+    {
+      "provider_id": "FRANKFURTER_ECB_FX",
+      "entitlement_verified": false,
+      "display_permitted": false,
+      "calculation_permitted": false,
+      "derived_value_permitted": false,
+      "cache_permitted": false,
+      "retention_policy_verified": false,
+      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). Keyless, but all rights UNKNOWN pending separate Owner attestation; keyless != authorized for outbound access."
+    }
+  ],
+  "amendments": ["ODR_UPI_MARKET_DATA_004_AMENDMENT_001"],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [
     "data/private/market/"
