@@ -7,11 +7,11 @@ import { MARKET_ENDPOINT, MARKET_TH, PRICE_PROVIDERS, PROVIDER_INFO, marketTh, r
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf-8');
-const pyTuple = (src, name) => [...src.match(new RegExp(`${name} = ([^\\n]*\\n(?:\\s+[^\\n]*\\n)*?[^\\n]*\\))`))[1].matchAll(/"([A-Z_]+)"/g)].map((m) => m[1]);
+const pyTuple = (src, name) => [...src.match(new RegExp(`${name} = (?:[A-Z_]+ \\+ )?\\(([^)]*)\\)`))[1].matchAll(/"([A-Z_]+)"/g)].map((m) => m[1]);
 
 test('provider ids and activation statuses mirror the Python authority', () => {
   const ma = read('../src/acash/invest/market_authority.py');
-  assert.deepEqual(new Set(Object.keys(PROVIDER_INFO)), new Set([...pyTuple(ma, 'ADAPTED_PROVIDERS'), 'WEBULL_TH_OPENAPI']));
+  assert.deepEqual(new Set(Object.keys(PROVIDER_INFO)), new Set([...pyTuple(ma, 'ADAPTED_PROVIDERS'), ...pyTuple(ma, 'KNOWN_PROVIDERS')]));
   for (const s of pyTuple(ma, 'STATUSES').filter((s) => s !== 'RATE_LIMITED' && s !== 'SERVICE_UNAVAILABLE')) {
     assert.ok(MARKET_TH[s], `missing Thai text for ${s}`);
   }

@@ -5,7 +5,17 @@
 export const MARKET_ENDPOINT = 'http://127.0.0.1:8765/api/upi/market/';
 export const PRICE_PROVIDERS = ['ALPACA_BASIC', 'MASSIVE_BASIC'] as const;
 
-export interface ProviderStatus { provider_id: string; status: string; detail?: string }
+export interface ProviderStatus {
+  provider_id: string; status: string; detail?: string; cache_permitted?: boolean;
+  capabilities?: Record<string, string>; registry?: Record<string, string | null>;
+}
+
+export interface HoldingRow {
+  account_ref: string; security_id: string; quantity: string; price: string; price_currency: string;
+  provider_id: string | null; price_type: string | null; market_timestamp: string | null;
+  market_value_local: string | null; market_value_reporting: string; weight_of_priced_subtotal: string | null;
+  unrealized_pnl_local: string | null; unrealized_status: string;
+}
 
 export interface MarketQuote {
   security_id: string; provider_id: string; price: string; currency: string; price_type: string;
@@ -20,10 +30,15 @@ export interface RefreshRecord {
   meta?: { market_date: string | null; holdings_observed_on: string; flags: string[]; price_sources: string[];
            coverage: Record<string, number> };
   quotes?: MarketQuote[];
+  holdings?: { reporting_currency: string; priced_subtotal: string; weight_basis: string; rows: HoldingRow[] } | null;
+  providers_used?: string[]; persisted?: boolean; holdings_basis?: string;
 }
 
+export interface AttemptRecord { requested_at: string; completed_at: string; status: string; code?: string }
+
 export interface MarketStatus {
-  status: string; odr_004?: string; odr_001?: string; providers?: ProviderStatus[]; last_refresh?: RefreshRecord | null;
+  status: string; odr_004?: string; odr_001?: string; providers?: ProviderStatus[];
+  last_attempt?: AttemptRecord | null; last_success?: RefreshRecord | null;
 }
 
 export interface MarketCall<T> { http: number; body: T }
@@ -32,6 +47,7 @@ export const PROVIDER_INFO: Record<string, { name: string; coverage: string }> =
   ALPACA_BASIC: { name: 'Alpaca Basic', coverage: 'IEX real-time (single venue, not consolidated)' },
   MASSIVE_BASIC: { name: 'Massive Basic', coverage: 'Previous session close (EOD)' },
   BOT_REFERENCE_FX: { name: 'BOT FX', coverage: 'Reference USD/THB (not executable)' },
+  ALPACA_HISTORICAL: { name: 'Alpaca historical', coverage: 'Historical bars · contract not supplied · no adapter' },
   WEBULL_TH_OPENAPI: { name: 'Webull Thailand', coverage: 'Pending entitlement · no adapter' },
 };
 
@@ -42,6 +58,16 @@ export const MARKET_TH: Record<string, string> = {
   CREDENTIALS_REQUIRED: 'ยังไม่ได้ตั้งค่า API key ในเครื่อง (Windows Credential Manager)',
   ENTITLEMENT_REQUIRED: 'ยังไม่ได้ยืนยันสิทธิ์ข้อมูลกับผู้ให้บริการ',
   DISPLAY_RIGHTS_UNVERIFIED: 'ยังไม่ได้ยืนยันสิทธิ์การแสดงผล',
+  CONTRACT_UNVERIFIED: 'สเปก API ยังไม่ได้ยืนยันจากเอกสาร/ข้อมูลจริง จึงไม่เปิดใช้',
+  DERIVED_USE_UNVERIFIED: 'ยังไม่ได้ยืนยันสิทธิ์นำราคาไปคำนวณมูลค่าพอร์ต (derived use)',
+  AUTHORIZATION_CHANGED_DURING_REFRESH: 'สิทธิ์เปลี่ยนระหว่างอัปเดต จึงไม่เผยแพร่ผล',
+  REFRESH_PUBLISH_FAILED: 'บันทึกผลไม่สำเร็จ ผลล่าสุดที่สำเร็จยังอยู่',
+  REFRESH_FAILED: 'อัปเดตไม่สำเร็จ',
+  REFRESHED: 'อัปเดตสำเร็จ',
+  REFRESHED_WITHOUT_VALUATION: 'ดึงราคาได้บางส่วนแต่คำนวณมูลค่าไม่ได้ ผลล่าสุดที่สำเร็จยังอยู่',
+  STATEMENT_BASELINE: 'จำนวนหุ้นตาม statement ที่บันทึก',
+  STATEMENT_BASELINE_PLUS_JOURNAL: 'จำนวนหุ้นตาม statement + ธุรกรรมที่บันทึกหลังวันนั้น',
+  ATTESTED: 'Owner รับรอง', DENIED: 'Owner ระบุว่าไม่อนุญาต', UNKNOWN: 'ไม่ทราบ', ESTABLISHED: 'มีแล้ว', MISSING: 'ยังไม่มี', NOT_OBSERVED: 'ยังไม่เคยเห็นจริง',
   QUERIED: 'ดึงข้อมูลแล้ว',
   NOT_NEEDED: 'ไม่ต้องใช้ (ได้ราคาครบจากแหล่งก่อนหน้า)',
   PROVIDER_ACCESS_DENIED: 'ผู้ให้บริการปฏิเสธ (key ผิดหรือไม่มีสิทธิ์)',

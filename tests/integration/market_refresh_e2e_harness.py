@@ -2,7 +2,7 @@
 
 Run ``uv run python tests/integration/market_refresh_e2e_harness.py`` next to ``npm run dev`` and
 open the printed one-time link. Nothing here is reachable from the launcher: the root, the ODR
-records (including a synthetic ODR-004 scope) and the provider transport exist only inside this
+records (synthetic ODR-001/002/003/004/005) and the provider transport exist only inside this
 process. The mocked transport answers with response-shaped synthetic payloads; the first refresh
 returns an Alpaca quote for SYNIDX, a Massive previous close for SYNBOND and a BOT reference
 rate, and ``FAIL_AFTER`` refreshes later every provider fails with HTTP 503.
@@ -24,12 +24,14 @@ sys.path.insert(0, str(REPO / "src"))
 
 from acash.dashboard_api import market_service as ms  # noqa: E402
 from acash.dashboard_api import private_input as pi  # noqa: E402
+from acash.dashboard_api import private_transactions as pt  # noqa: E402
 from acash.dashboard_api import private_view_server as srv  # noqa: E402
 from acash.invest import market_authority as ma  # noqa: E402
 from acash.invest import market_refresh as mr  # noqa: E402
 from acash.market_data import providers as mp  # noqa: E402
 from acash.invest.capacity_plan import CAPACITY_SCHEMA  # noqa: E402
 from acash.ppds import private_observation as po  # noqa: E402
+from acash.ppds import transactions as txn  # noqa: E402
 
 FAIL_AFTER = 1
 
@@ -45,6 +47,7 @@ class MockTransport:
 
     def __call__(self, request: mp.HttpRequest) -> Tuple[int, bytes]:
         mp.assert_allowed(request)
+        print("provider call:", request.provider_id, flush=True)
         if request.provider_id == "ALPACA_BASIC":
             self.refreshes += 1
         if self.refreshes > FAIL_AFTER:
@@ -80,9 +83,18 @@ def main() -> None:
     (root / ma.RECORD).write_text(json.dumps({
         "decision_id": ma.DECISION_ID, "capability": ma.CAPABILITY, "status": "RATIFIED", "ratified_by": "OWNER",
         "ratified_on": "2026-11-03", "requires": ma.REQUIRES,
-        "scope_providers": [{"provider_id": p, "entitlement_verified": True, "display_permitted": True,
+        "scope_providers": [{"provider_id": p, "entitlement_verified": True, "display_permitted": True, "calculation_permitted": True, "derived_value_permitted": True,
                              "cache_permitted": False, "evidence": "SYNTHETIC_E2E"} for p in ma.ADAPTED_PROVIDERS]}),
         encoding="utf-8")
+    (root / txn.AUTHORIZATION_RECORD).write_text(json.dumps({
+        "decision_id": "ODR_UPI_PRIVATE_TRANSACTIONS_002", "capability": txn.AUTHORIZED_CAPABILITY, "status": "RATIFIED",
+        "ratified_by": "OWNER", "ratified_on": "2026-11-03", "scope_schemas": [txn.SCHEMA]}), encoding="utf-8")
+    (root / pt.RECORD).write_text(json.dumps({
+        "decision_id": pt.DECISION_ID, "capability": pt.CAPABILITY, "status": "RATIFIED", "ratified_by": "OWNER",
+        "ratified_on": "2026-11-03", "requires": pt.REQUIRES, "scope_schemas": [txn.SCHEMA], "scope_files": pt.SCOPE_FILES}),
+        encoding="utf-8")
+    # The BOT response contract is unverified in the product; only this synthetic harness treats it as known.
+    ma.REGISTRY["BOT_REFERENCE_FX"]["contract_verified"] = True
     private = root / "data" / "private"
     private.mkdir(parents=True)
     for name, source in (("snapshot.json", "upi_v1_2_synthetic_snapshot.json"), ("capacity.json", "upi_v1_synthetic_capacity.json")):

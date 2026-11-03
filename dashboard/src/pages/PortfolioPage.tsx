@@ -5,6 +5,7 @@ import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } from '../components/charts/PortfolioCharts';
 import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
+import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
 import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
@@ -30,6 +31,8 @@ const classTone = (key: string): Tone => {
 };
 
 const humanize = (code: string) => code.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+
+const EXCLUDED = 'NOT_ESTABLISHED (not in this valuation)';
 
 const SectionHeader: React.FC<{ id: string; letter: string; title: string; note?: string }> = ({ id, letter, title, note }) => (
   <div className="flex items-baseline gap-3 pt-2">
@@ -140,7 +143,7 @@ const GovernanceStrip: React.FC<{ view: UpiView }> = ({ view }) => {
   );
 };
 
-const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, ccy }) => {
+const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: boolean }> = ({ view, ccy, partial = false }) => {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const accounts = view.accounts.filter((a) => !q || [a.account_ref, a.broker, a.role, a.account_total.status].some((s) => s?.toLowerCase().includes(q)));
@@ -167,7 +170,7 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, c
                 </div>
                 <dl className="grid grid-cols-3 gap-2 text-[11px]">
                   {([['Computed', a.computed_value], ['Value-only', a.observed_position_value], ['Unclassified', a.unclassified_holdings_value]] as const).map(([k, v]) => (
-                    <div key={k}><dt className="text-muted">{k}</dt><dd className="font-mono-code text-primary tabular-nums">{formatDec(v)}</dd></div>
+                    <div key={k}><dt className="text-muted">{k}</dt><dd className="font-mono-code text-primary tabular-nums">{partial && k !== 'Computed' ? EXCLUDED : formatDec(v)}</dd></div>
                   ))}
                 </dl>
               </summary>
@@ -199,7 +202,7 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, c
   );
 };
 
-const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view, warnings }) => {
+const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: boolean }> = ({ view, warnings, partial = false }) => {
   const meta = view.report_metadata;
   const ccy = meta.report_currency;
   const ov = view.portfolio_overview;
@@ -216,8 +219,8 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
 
   const composition: Segment[] = [
     { label: 'Computed NAV (PPDS)', value: evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds), fraction: barFraction(ov.computed_nav_ppds, ov.total_best_evidence), tone: 'accent' },
-    { label: 'Observed value-only positions', value: formatDec(ov.observed_position_value), fraction: barFraction(ov.observed_position_value, ov.total_best_evidence), tone: 'sky' },
-    { label: 'Unclassified holdings value', value: formatDec(ov.unclassified_holdings_value), fraction: barFraction(ov.unclassified_holdings_value, ov.total_best_evidence), tone: 'unknown', note: formatWeight(conc.unclassified_share) },
+    { label: 'Observed value-only positions', value: partial ? EXCLUDED : formatDec(ov.observed_position_value), fraction: barFraction(ov.observed_position_value, ov.total_best_evidence), tone: 'sky' },
+    { label: 'Unclassified holdings value', value: partial ? EXCLUDED : formatDec(ov.unclassified_holdings_value), fraction: barFraction(ov.unclassified_holdings_value, ov.total_best_evidence), tone: 'unknown', note: formatWeight(conc.unclassified_share) },
   ];
   const classification = view.allocation.computed_by_classification;
   const classSegments: Segment[] = classification
@@ -248,10 +251,11 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
       <section aria-labelledby="sec-a" className="space-y-3">
         <SectionHeader id="sec-a" letter="A" title="Executive overview" note="Total best evidence combines computed NAV, broker-displayed values and unidentified holdings. It is not a verified NAV. Broker totals are compared, never added." />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          <SummaryCard label="Total best evidence" value={formatDec(ov.total_best_evidence)} unit={ccy} subtitle="Computed + observed value-only + unclassified. Not a verified NAV." />
+          <SummaryCard label={partial ? 'Priced holdings subtotal' : 'Total best evidence'} value={formatDec(ov.total_best_evidence)} unit={ccy}
+            subtitle={partial ? 'Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV.' : 'Computed + observed value-only + unclassified. Not a verified NAV.'} />
           <SummaryCard label="Computed NAV (PPDS)" value={evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds)} unit={ccy}
             subtitle={evidenceOnly ? 'No cash or quantity line carries value in this report.' : 'Quantity × price + settled cash. A subset of the portfolio.'} />
-          <SummaryCard label="Unclassified holdings" value={formatDec(ov.unclassified_holdings_value)} unit={ccy} tone={Number(ov.unclassified_holdings_value) > 0 ? 'warn' : 'default'}
+          <SummaryCard label="Unclassified holdings" value={partial ? EXCLUDED : formatDec(ov.unclassified_holdings_value)} unit={partial ? undefined : ccy} tone={!partial && Number(ov.unclassified_holdings_value) > 0 ? 'warn' : 'default'}
             subtitle={`Broker totals minus identified lines · ${formatWeight(conc.unclassified_share)} of best evidence`} />
           <SummaryCard label="Cash (settled lines)" value={cash ? formatDec(cash.value) : NOT_ESTABLISHED} unit={ccy}
             subtitle="Settled cash lines in computed NAV. Cash inside broker totals is not separated." />
@@ -342,7 +346,7 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
 
       <section aria-labelledby="sec-d" className="space-y-3">
         <SectionHeader id="sec-d" letter="D" title="Accounts & holdings" note="One card per observed account; open a card for totals, differences and sub-portfolio checks." />
-        <AccountsAndHoldings view={view} ccy={ccy} />
+        <AccountsAndHoldings view={view} ccy={ccy} partial={partial} />
       </section>
 
       <section aria-labelledby="sec-e" className="space-y-3">
@@ -499,6 +503,7 @@ export const PortfolioPage: React.FC = () => {
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
       {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && <MarketRefreshPanel onMarketView={onMarketView} />}
+      {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && <TransactionJournalPanel />}
       {mode === 'OWNER_PRIVATE_READ_ONLY' && marketAvailable && !loading && (
         <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Valuation source">
           {(['STATEMENT', 'MARKET'] as const).map((s) => (
@@ -511,7 +516,7 @@ export const PortfolioPage: React.FC = () => {
         </div>
       )}
       {setupOpen && <SetupWizard hasReport={!!ready} onGenerated={onGenerated} />}
-      {!loading && shown && 'view' in shown && <PortfolioReport view={shown.view} warnings={shown.warnings} />}
+      {!loading && shown && 'view' in shown && <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} />}
       {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
         <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>
       )}
