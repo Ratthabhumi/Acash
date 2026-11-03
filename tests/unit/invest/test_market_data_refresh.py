@@ -359,7 +359,18 @@ def test_marketdata_app_bearer_token_never_in_url(monkeypatch: pytest.MonkeyPatc
     provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
     assert len(t.calls) == 1
     assert "token" not in t.calls[0].url
-    assert t.calls[0].headers.get("Authorization") == f"Bearer {CRED[0]}"
+    # The token lives in the credential's secret half (SETUP-MARKET-DATA writes it there).
+    assert t.calls[0].headers.get("Authorization") == f"Bearer {CRED[1]}"
+
+
+def test_marketdata_app_bearer_uses_whichever_credential_half_carries_the_token(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    for credential, expected in ((("SYNKEYID", "SYNTOKEN"), "SYNTOKEN"), (("SYNTOKEN", ""), "SYNTOKEN")):
+        t = FakeTransport({"quotes": (200, _MARKETDATA_OK)})
+        mp.MarketDataAppFreeProvider(credential, t, _allow, _clock).latest_prices(["SYNA", "SYNB"],
+                                                                                 date(2026, 11, 3))
+        assert t.calls[0].headers.get("Authorization") == f"Bearer {expected}"
 
 
 def test_marketdata_app_handles_no_data_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -679,20 +690,23 @@ def test_capabilities_default_to_unknown_and_never_claim_live_verification(root:
     assert ready["capabilities"]["authentication_verified"] == ready["capabilities"]["real_response_verified"] == "NOT_OBSERVED"
 
 
-def test_repository_odr4_scope_carries_no_attested_rights() -> None:
-    """The ratified scope expansion still authorises nothing: every right is false/absent."""
+def test_repository_odr4_scope_attests_only_documented_rights() -> None:
+    """The attested set is explicit: Alpaca keeps cache/retention denied; nothing is inferred."""
     doc = json.loads((Path(".") / ma.RECORD).read_text(encoding="utf-8"))
     assert doc["decision_id"] == ma.DECISION_ID
-    assert {e["provider_id"] for e in doc["scope_providers"]} == {
-        "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
-    for entry in doc["scope_providers"]:
-        assert all(entry.get(name) in (False, None) for name in ma.ATTESTATIONS), entry["provider_id"]
+    entries = {e["provider_id"]: e for e in doc["scope_providers"]}
+    assert set(entries) == {"ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
+    for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
+        assert entries[provider_id]["entitlement_verified"] is True
+        assert entries[provider_id]["cache_permitted"] is False
+        assert entries[provider_id]["retention_policy_verified"] is False
+    for provider_id in ("MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"):
+        assert entries[provider_id]["cache_permitted"] is True
+    assert entries["FRANKFURTER_ECB_FX"]["retention_policy_verified"] is True
+    assert doc["attestation_record"]["attested_on"] == "2026-11-03"
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "MARKET_DATA_SUBSCRIPTION"} <= set(doc["independent_of"])
-    assert {p["status"] for p in ma.provider_statuses(Store({}))[1]} <= {"ENTITLEMENT_REQUIRED",
-                                                                        "CREDENTIALS_REQUIRED",
-                                                                        "CONTRACT_UNVERIFIED",
-                                                                        "GOVERNANCE_REQUIRED",
-                                                                        "NOT_CONFIGURED"}
+    statuses = {p["provider_id"]: p["status"] for p in ma.provider_statuses(Store({}))[1]}
+    assert statuses["MASSIVE_BASIC"] == "GOVERNANCE_REQUIRED"
 
 
 # ---- partial valuation ------------------------------------------------------------------------

@@ -454,7 +454,9 @@ class MarketDataAppFreeProvider:
         if not self.allow():
             raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
         self._reserve(len(symbols))
-        token = self.credential[0]
+        # The credential layout is (username, secret); SETUP-MARKET-DATA stores the token in the
+        # secret half, so read that first and fall back to the username half for older entries.
+        token = self.credential[1] or self.credential[0]
         url = build_url(self.provider_id, "/v1/stocks/quotes/", {"symbols": ",".join(symbols)})
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         request = HttpRequest(self.provider_id, url, headers)
