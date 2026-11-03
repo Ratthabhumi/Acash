@@ -6,6 +6,7 @@ import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } fr
 import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
+import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
 import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
@@ -569,6 +570,7 @@ export const PortfolioPage: React.FC = () => {
         )}
       </TabPanel>
       <TabPanel id="data" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <ExternalCashPanel />}
         {!loading && shown && 'view' in shown && (
           <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="data" />
         )}

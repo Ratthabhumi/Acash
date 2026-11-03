@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import market_service, private_input, private_transactions
+from acash.invest import broker_observation, external_cash
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
     MAX_INPUT_BYTES,
@@ -37,6 +38,7 @@ from acash.ppds.private_observation import (
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 ROUTE = "/api/upi/view"
+WEALTH_ROUTE = "/api/upi/wealth"
 SESSION_ROUTE = "/api/upi/session"
 LAUNCH_ROUTE = "/api/upi/launch"
 TOKEN_HEADER = "X-ACASH-Session"
@@ -163,7 +165,7 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
                                 module.ROUTES, module.handle)
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": TOKEN_HEADER, "Access-Control-Allow-Methods": "GET"}
-    if target != ROUTE:
+    if target not in (ROUTE, WEALTH_ROUTE):
         return _json(404, cors, {"status": "NOT_FOUND"})
     if method == "OPTIONS":
         return 204, cors, b""
@@ -176,6 +178,8 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     state = odr_state(None, SCHEMA_V1_2)
     if state != "RATIFIED":
         return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state})
+    if target == WEALTH_ROUTE:
+        return _json(200, cors, _wealth_payload(view_path))
     status, code, doc = load_view(view_path)
     if status == "NO_REPORT":
         return _json(404, cors, {"status": status})
@@ -223,6 +227,46 @@ def _market_route(method: str, name: str, headers: Mapping[str, str], token: str
         return _json(rejected[0], cors, rejected[1])
     status, doc = market_service.handle(method, name, payload, market)
     return _json(status, cors, doc)
+
+
+def _wealth_payload(view_path: Path) -> Dict[str, Any]:
+    """Owner-declared external cash plus the latest broker-displayed observation.
+
+    Read-only and sanitized: totals the Owner already declared, never a re-valuation. External cash
+    is reported in its own scope and the consolidated figure is labelled mixed evidence.
+    """
+    from decimal import Decimal
+    from datetime import date
+
+    from acash.ppds.private_observation import _repo_root
+
+    root = _repo_root()
+    payload: Dict[str, Any] = {"status": "OK"}
+    cash = None
+    try:
+        cash = external_cash.load_external_cash(root / "data/private/external_accounts.json")
+        payload["external_cash"] = external_cash.summary(cash)
+    except (OSError, ValueError, DataContractError) as exc:
+        payload["external_cash"] = {"status": "NO_EXTERNAL_CASH", "code": str(exc).split(":")[0]}
+    observation = None
+    try:
+        observation = broker_observation.latest(root / "data/private/broker_observations.json")
+        payload["broker_observation"] = broker_observation.summary(observation)
+    except (OSError, ValueError, DataContractError) as exc:
+        payload["broker_observation"] = {"status": "NO_OBSERVATION", "code": str(exc).split(":")[0]}
+    status, _code, doc = load_view(view_path)
+    nav = None
+    valuation_date = None
+    if status == "READY" and isinstance(doc, dict):
+        nav = Decimal(str(doc["portfolio_overview"]["computed_nav_ppds"]))
+        valuation_date = date.fromisoformat(str(doc["report_metadata"]["valuation_date"]))
+    if observation is not None:
+        payload["comparison"] = broker_observation.compare(observation, nav, valuation_date)
+    if cash is not None:
+        payload["consolidated"] = external_cash.consolidated(
+            Decimal(str(observation.displayed_total)) if observation else nav,
+            observation.observed_at if observation else None, cash)
+    return payload
 
 
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:

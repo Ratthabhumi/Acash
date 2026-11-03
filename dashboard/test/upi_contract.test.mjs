@@ -205,3 +205,17 @@ test('market mode never claims a reconciled NAV or zero for unpriced instruments
   assert.match(page, /ไม่ใช่ 0/);
   assert.match(page, /position_level_coverage/);
 });
+
+test('external cash stays outside the broker scope and is labelled mixed evidence', () => {
+  const panel = read('src/components/portfolio/ExternalCashPanel.tsx');
+  const service = read('src/services/wealth.ts');
+  assert.match(service, /api\/upi\/wealth/);
+  assert.match(service, /cache: 'no-store'/);
+  assert.match(panel, /เงินสดนอกพอร์ต/);
+  assert.match(panel, /เป้าหมายเงินสดนอกพอร์ต/);
+  assert.match(panel, /ไม่ถูกนำไปคิดใน NAV ของโบรกเกอร์/);
+  assert.match(panel, /mixed evidence/i);
+  for (const banned of [/localStorage/, /sessionStorage/, /document\.cookie/]) {
+    assert.doesNotMatch(panel + service, banned);
+  }
+});
