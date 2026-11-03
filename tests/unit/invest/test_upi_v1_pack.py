@@ -176,3 +176,19 @@ def test_committed_public_pack_matches_regeneration(tmp_path: Path) -> None:
     wp.main(["--target-weights", targets, "--output", str(tmp_path)])
     for name in ("upi_v1_pack.json", "upi_v1_pack.md"):
         assert (tmp_path / name).read_bytes() == (PUBLIC_PACK_DIR / name).read_bytes()
+
+
+def test_planned_contribution_equal_to_a_scenario_is_not_rendered_twice() -> None:
+    """Owner screenshot showed the same monthly amount twice: dedupe without dropping a real one."""
+    doc = _capacity_doc()
+    first = doc["scenarios"][0] if doc.get("scenarios") else None
+    base = cp.parse_capacity(doc)
+    planned = cp.CONTRIBUTION_SCENARIOS_THB[0]
+    values = [r["monthly_contribution_thb"] for r in cp.assess_capacity(replace(base, planned_contribution_thb=planned))["scenarios"]]
+    assert len(values) == len(set(values))
+    assert Decimal(values[0]) == planned
+
+    unique = planned + Decimal("1234")
+    with_unique = [r["monthly_contribution_thb"] for r in cp.assess_capacity(replace(base, planned_contribution_thb=unique))["scenarios"]]
+    assert [v for v in with_unique if Decimal(v) == unique] == [with_unique[-1]]
+    assert len(with_unique) == len(set(with_unique)) == len(cp.CONTRIBUTION_SCENARIOS_THB) + 1
