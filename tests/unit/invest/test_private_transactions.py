@@ -18,6 +18,7 @@ from acash.dashboard_api import private_transactions as pt
 from acash.dashboard_api import private_view_server as srv
 from acash.invest import market_authority as ma
 from acash.invest.capacity_plan import CAPACITY_SCHEMA
+from acash.ppds import corrections as cr
 from acash.ppds import private_observation as po
 from acash.ppds import transactions as txn
 
@@ -33,12 +34,17 @@ def _write(root: Path, record: Path, doc: Dict[str, Any]) -> None:
     (root / record).write_text(json.dumps(doc), encoding="utf-8")
 
 
-def _odr(root: Path, odr2: str = "RATIFIED", odr5: str = "RATIFIED", **odr5_changes: Any) -> None:
+def _odr(root: Path, odr2: str = "RATIFIED", odr5: str = "RATIFIED", odr6: str = "RATIFIED",
+         **odr5_changes: Any) -> None:
     _write(root, po.AUTHORIZATION_RECORD, {"capability": po.AUTHORIZED_CAPABILITY, "status": "RATIFIED", "ratified_by": "OWNER",
                                            "ratified_on": "2026-11-02", "scope_schemas": [po.SCHEMA_V1_2, CAPACITY_SCHEMA]})
     _write(root, txn.AUTHORIZATION_RECORD, {"decision_id": "ODR_UPI_PRIVATE_TRANSACTIONS_002",
                                             "capability": txn.AUTHORIZED_CAPABILITY, "status": odr2, "ratified_by": "OWNER",
                                             "ratified_on": "2026-11-02", "scope_schemas": [txn.SCHEMA]})
+    _write(root, pt.CORRECTIONS_RECORD, {"decision_id": "ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006",
+                                         "capability": pt.CORRECTIONS_CAPABILITY, "status": odr6, "ratified_by": "OWNER",
+                                         "ratified_on": "2026-11-03", "requires": [pt.DECISION_ID],
+                                         "scope_schemas": [cr.CORRECTION_SCHEMA], "scope_files": pt.SCOPE_FILES})
     _write(root, pt.RECORD, {"decision_id": pt.DECISION_ID, "capability": pt.CAPABILITY, "status": odr5,
                              "ratified_by": "OWNER", "ratified_on": "2026-11-03", "requires": pt.REQUIRES,
                              "scope_schemas": [txn.SCHEMA], "scope_files": pt.SCOPE_FILES, **odr5_changes})
@@ -105,7 +111,7 @@ def test_baseline_comes_from_snapshot_quantities_and_settled_cash(root: Path) ->
     assert {"code": "VALUE_ONLY_POSITION_NOT_IN_BASELINE", "where": "BROKER_D_MAIN:SYNTHEME"} in state["baseline"]["baseline_excluded"]
     known = {p["security_id"]: p["cost_status"] for p in state["projection"]["positions"]}
     assert known == {"SYNIDX": "KNOWN", "SYNBOND": "COST_NOT_ESTABLISHED"}
-    assert state["corrections"] == "NOT_ENABLED_PENDING_OWNER_DECISION"
+    assert state["corrections"] == pt.CORRECTIONS
 
 
 def test_buy_sell_and_cash_events_replay_through_the_canonical_ledger(root: Path) -> None:
@@ -266,10 +272,11 @@ def test_journal_cash_on_a_negative_baseline_line_fails_closed(root: Path) -> No
 
 
 def test_transaction_routes_have_no_broker_or_edit_surface(root: Path) -> None:
-    assert set(pt.ROUTES) == {"state", "preview", "record", "rebase"}
+    assert set(pt.ROUTES) == {"state", "preview", "record", "rebase", "correction"}
     assert all(m in ("GET", "POST") for methods in pt.ROUTES.values() for m in methods)
     for method in ("PUT", "DELETE", "PATCH"):
         assert _call(method, "record", {})[0] == 405
+        assert _call(method, "correction", {})[0] == 405
     text = Path(str(pt.__file__)).read_text(encoding="utf-8")
     for banned in ("import urllib", "import socket", "import requests", "alpaca", "/v2/orders"):
         assert banned not in text
@@ -397,3 +404,68 @@ def test_replay_is_deterministic_across_restarts_and_conserves_cash(root: Path) 
     assert Decimal(_cash(first, "BROKER_D_MAIN") or "0") == Decimal("40") + nets
     assert Decimal(_position(first, "BROKER_D_MAIN", "SYNIDX") or "0") == Decimal("12") + 2 + Decimal("0.5") - Decimal("1.25")
     assert first["event_date_policy"] == "TRADE_DATE_AS_ENTERED_FUTURE_CHECK_ASIA_BANGKOK"
+
+def _correction(cid: str, kind: str, target: str, confirm: bool = True, **row: Any) -> Tuple[int, Any]:
+    revision = _call("GET", "state")[1]["revision"]
+    correction = {"correction_id": cid, "kind": kind, "target_id": target, "reason": "entered wrong",
+                  "confirmed_by": "OWNER", "confirmed_at": "2026-11-03T12:00:00+00:00", **row}
+    return _call("POST", "correction", {"base_revision": revision, "confirm": confirm, "correction": correction})
+
+
+def test_correction_voids_event_without_touching_journal_bytes(root: Path) -> None:
+    assert _record(_buy())[0] == 200
+    before = pt.journal_path().read_bytes()
+    status, out = _correction("COR_VOIDAAAA", cr.VOID_ENTERED_EVENT, "TX_BUYSYNIDXA")
+    assert status == 200 and out["status"] == "CORRECTED"
+    assert pt.journal_path().read_bytes() == before          # append-only: the evidence file is untouched
+    st = _call("GET", "state")[1]
+    assert st["correction_count"] == 1 and st["effective_count"] == 0
+    assert st["entries"][0]["transaction_id"] == "TX_BUYSYNIDXA"   # still listed as recorded evidence
+    assert _position(st, "BROKER_D_MAIN", "SYNIDX") == "12"        # back to the baseline quantity
+
+
+def test_correction_supersede_recomputes_positions_and_cash(root: Path) -> None:
+    assert _record(_buy(qty="2"))[0] == 200
+    replacement = _buy("TX_BUYCORRAAA", qty="3", commission="0")
+    status, out = _correction("COR_SUPAAAAA", cr.SUPERSEDE_ENTERED_EVENT, "TX_BUYSYNIDXA",
+                              replacement=replacement)
+    assert status == 200 and out["audit"]["reason"] == "SUPERSEDED"
+    st = _call("GET", "state")[1]
+    assert _position(st, "BROKER_D_MAIN", "SYNIDX") == "15"
+    assert Decimal(_cash(st, "BROKER_D_MAIN") or "0") == Decimal("40") - Decimal("31.50")
+
+
+def test_correction_rejects_unknown_target_and_confirmation_absence(root: Path) -> None:
+    assert _record(_buy())[0] == 200
+    assert _correction("COR_NOPEAAAAA", cr.VOID_ENTERED_EVENT, "TX_DOESNOTEXIST")[0] == 422
+    assert _correction("COR_NCONFIRM", cr.VOID_ENTERED_EVENT, "TX_BUYSYNIDXA", confirm=False)[0] == 400
+    assert pt.corrections_path().is_file() is False
+
+
+def test_correction_refused_while_odr_006_is_not_ratified(tmp_path: Path,
+                                                          monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path
+    monkeypatch.setattr(po, "_repo_root", lambda: root)
+    monkeypatch.setattr(ma, "_repo_root", lambda: root)
+    monkeypatch.setattr(pt, "_today", lambda: TODAY)
+    _odr(root, odr6="PROPOSED_NOT_RATIFIED")
+    private = root / "data" / "private"
+    private.mkdir(parents=True)
+    for name, source in (("snapshot.json", "upi_v1_2_synthetic_snapshot.json"),
+                         ("capacity.json", "upi_v1_synthetic_capacity.json")):
+        doc = json.loads((EVIDENCE / source).read_text(encoding="utf-8"))
+        doc["data_class"] = "OWNER_PRIVATE_OBSERVATION"
+        (private / name).write_text(json.dumps(doc), encoding="utf-8")
+    assert _record(_buy())[0] == 200
+    status, out = _correction("COR_BLOCKAAAA", cr.VOID_ENTERED_EVENT, "TX_BUYSYNIDXA")
+    assert status == 403 and out["odr_006"] == "PROPOSED_NOT_RATIFIED"
+    assert pt.corrections_path().is_file() is False
+
+
+def test_journal_replay_survives_restart_with_corrections_applied(root: Path) -> None:
+    for row in (_buy(), _buy("TX_BUYAGAINAAA", qty="1", price="9.00", day="2026-11-03")):
+        assert _record(row)[0] == 200
+    assert _correction("COR_RRSTARTA", cr.VOID_ENTERED_EVENT, "TX_BUYAGAINAAA")[0] == 200
+    first = _call("GET", "state", service=pi.InputService())[1]
+    second = _call("GET", "state", service=pi.InputService())[1]
+    assert first["projection"] == second["projection"] and first["effective_count"] == 1

@@ -9,8 +9,8 @@ is the cutoff, and events on or before it are never replayed. A later snapshot w
 or date differ does not move the cutoff: the journal is then not applied and writes stop until the
 Owner previews and confirms a rebase, which archives the previous baseline. Recording needs ODR-001, ODR-002 and ODR-005 RATIFIED; reading needs ODR-001 and ODR-002. Nothing
 here contacts a broker: BUY/SELL rows describe trades the Owner already executed elsewhere.
-Corrections (reversal/supersession) are not enabled: the canonical schema has no correction
-event, and adding one is a separate Owner decision.
+Corrections (ODR-006) are append-only supersession in a separate V2 envelope: the journal bytes
+never change, and only the ratified corrections alter the effective events that are replayed.
 """
 
 from __future__ import annotations
@@ -26,14 +26,18 @@ from zoneinfo import ZoneInfo
 
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import private_input as pi
+from acash.ppds import corrections as corr
 from acash.ppds import transactions as txn
 from acash.ppds.private_observation import SCHEMA_V1_2, odr_state, read_gated_json
 
 PREFIX = "/api/upi/transactions/"
-ROUTES: Dict[str, Tuple[str, ...]] = {"state": ("GET",), "preview": ("POST",), "record": ("POST",), "rebase": ("POST",)}
+ROUTES: Dict[str, Tuple[str, ...]] = {"state": ("GET",), "preview": ("POST",), "record": ("POST",),
+                                      "rebase": ("POST",), "correction": ("POST",)}
 RECORD = Path("docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json")
 DECISION_ID = "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005"
 CAPABILITY = "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED"
+CORRECTIONS_RECORD = Path("docs/governance/ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006.json")
+CORRECTIONS_CAPABILITY = "OWNER_LOCAL_TRANSACTION_CORRECTION_AUTHORIZED"
 REQUIRES = ["ODR_UPI_PRIVATE_OBSERVATION_001", "ODR_UPI_PRIVATE_TRANSACTIONS_002"]
 SCOPE_FILES = ["data/private/transactions/"]
 JOURNAL_FILE = "journal.json"
@@ -42,7 +46,7 @@ DATA_CLASS = "OWNER_PRIVATE_OBSERVATION"
 AUTHORED_EVENTS = ("BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "DIVIDEND", "FEE")
 TRANSACTION_ID = re.compile(r"^TX_[A-Z]{8,28}$")
 BACKUPS_KEPT = 20
-CORRECTIONS = "NOT_ENABLED_PENDING_OWNER_DECISION"
+CORRECTIONS = "APPEND_ONLY_SUPERSEDE_BY_ID"
 CENT = Decimal("0.01")
 BASELINE_FILE = "baseline.json"
 BASELINE_PREFIX = "BASELINE_V"
@@ -72,11 +76,12 @@ def authoring_state() -> str:
 def authority() -> Dict[str, str]:
     return {"odr_001": odr_state(None, SCHEMA_V1_2),
             "odr_002": odr_state(pi._root() / txn.AUTHORIZATION_RECORD, txn.SCHEMA, txn.AUTHORIZED_CAPABILITY),
-            "odr_005": authoring_state()}
+            "odr_005": authoring_state(), "odr_006": correction_authority()}
 
 
 def _write_authorized() -> bool:
-    return all(v == "RATIFIED" for v in authority().values())
+    auth = authority()
+    return all(auth[k] == "RATIFIED" for k in ("odr_001", "odr_002", "odr_005"))
 
 
 def journal_path() -> Path:
@@ -145,6 +150,96 @@ def load_rows() -> List[Dict[str, Any]]:
     return list(doc["transactions"])
 
 
+def corrections_path() -> Path:
+    path = pi._private_dir("transactions") / corr.CORRECTIONS_FILE
+    if pi._is_link(path):
+        raise DataContractError("TXN_PATH_LINK_REFUSED: corrections.")
+    return path
+
+
+def _corrections() -> List[corr.Correction]:
+    path = corrections_path()
+    if not path.is_file():
+        return []
+    read_gated_json(path, "TXN_CORRECTIONS", record=CORRECTIONS_RECORD, capability=CORRECTIONS_CAPABILITY,
+                    schema=corr.CORRECTION_SCHEMA)
+    return list(corr.load_envelope(path)["corrections"])
+
+
+def effective_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Journal rows with ratified corrections applied; original rows are never edited or deleted."""
+    return corr.resolve_effective(rows, _corrections())[0]
+
+
+def correction_authority() -> str:
+    """ODR-006: RATIFIED only with the V2 envelope in scope and ODR-005 already ratified."""
+    state = odr_state(pi._root() / CORRECTIONS_RECORD, corr.CORRECTION_SCHEMA, CORRECTIONS_CAPABILITY)
+    if state != "RATIFIED":
+        return state
+    return "RATIFIED" if authoring_state() == "RATIFIED" else "DEPENDENCY_NOT_RATIFIED"
+
+
+def _correction_doc(c: corr.Correction) -> Dict[str, Any]:
+    row: Dict[str, Any] = {"correction_id": c.correction_id, "kind": c.kind, "target_id": c.target_id,
+                           "reason": c.reason, "confirmed_by": c.confirmed_by,
+                           "confirmed_at": c.confirmed_at.isoformat()}
+    if c.replacement is not None:
+        row["replacement"] = c.replacement
+    if c.superseded_by is not None:
+        row["superseded_by"] = c.superseded_by
+    return row
+
+
+def _corrections_bytes(items: List[corr.Correction]) -> bytes:
+    doc = {"schema": corr.CORRECTION_SCHEMA, "data_class": DATA_CLASS,
+           "corrections": [_correction_doc(c) for c in items]}
+    corr.load_envelope_from_doc(doc)
+    return (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def record_correction(body: Any, service: pi.InputService) -> pi.Result:
+    """Append one confirmed correction to the envelope; the journal itself is never rewritten."""
+    if not isinstance(body, dict) or set(body) != {"base_revision", "confirm", "correction"}:
+        return 400, {"status": "REQUEST_FIELDS_INVALID"}
+    if body["confirm"] is not True:
+        return 400, {"status": "CONFIRMATION_REQUIRED"}
+    with service.write_lock:
+        if correction_authority() != "RATIFIED":
+            return 403, {"status": "TRANSACTION_CORRECTION_AUTHORIZATION_REQUIRED",
+                         "odr_006": correction_authority()}
+        doc = _snapshot()
+        if doc is None:
+            return 404, {"status": "NO_INPUT"}
+        rows, current = load_rows(), journal_revision()
+        if current != body["base_revision"]:
+            return 409, {"status": "REVISION_CONFLICT", "revision": current}
+        existing = _corrections()
+        try:
+            new = corr.parse_correction(body["correction"], len(existing))
+        except DataContractError as exc:
+            return 422, {"status": "TRANSACTION_REFUSED", **pi._code(exc)}
+        if any(c.correction_id == new.correction_id for c in existing):
+            return 200, {"status": "ALREADY_CORRECTED", "revision": current}
+        if new.target_id not in {r.get("transaction_id") for r in rows}:
+            return 422, {"status": "TRANSACTION_REFUSED", "code": "NONEEXISTENT_TARGET"}
+        _, audit = corr.resolve_effective(rows, existing + [new])
+        last = audit[-1]
+        if last["status"] != "APPLIED":
+            return 409, {"status": "CORRECTION_REJECTED", "reason": last["reason"]}
+        path = corrections_path()
+        before = journal_path().read_bytes() if journal_path().is_file() else None
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            pi._atomic_write(path, _corrections_bytes(existing + [new]))
+        except OSError as exc:
+            return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
+        if before is not None and journal_path().read_bytes() != before:
+            raise DataContractError("TXN_JOURNAL_NOT_APPEND_ONLY.")
+        ledger, _ = _ledger(doc, rows, _today())
+        return 200, {"status": "CORRECTED", "revision": journal_revision(), "audit": last,
+                    "projection": _projection(ledger)}
+
+
 def _snapshot() -> Optional[Dict[str, Any]]:
     path = pi._input_path("snapshot")
     if not path.is_file():
@@ -207,9 +302,10 @@ def _ledger(doc: Dict[str, Any], rows: List[Dict[str, Any]], as_of: date,
             base: Optional[Dict[str, Any]] = None) -> Tuple[Optional[txn.LedgerState], Dict[str, Any]]:
     base = base or active_baseline(doc, rows)
     cutoff, openings = base["cutoff"], base["openings"]
-    events = [r for r in rows if date.fromisoformat(str(r["trade_date"])) > cutoff]
+    effective = effective_rows(rows)
+    events = [r for r in effective if date.fromisoformat(str(r["trade_date"])) > cutoff]
     info = {"cutoff": cutoff.isoformat(), "baseline_excluded": base["excluded"], "applied": len(events),
-            "before_cutoff": len(rows) - len(events), "baseline_id": base["baseline_id"],
+            "before_cutoff": len(effective) - len(events), "baseline_id": base["baseline_id"],
             "baseline_status": base["status"], "snapshot_cutoff": base["snapshot_cutoff"].isoformat()}
     parsed = [txn.parse_transaction(r, i) for i, r in enumerate(openings + events)]
     if len({t.key for t in parsed}) != len(parsed):
@@ -274,10 +370,14 @@ def state() -> pi.Result:
     rows = load_rows()
     ledger, info = _ledger(doc, rows, _today())
     cutoff = date.fromisoformat(info["cutoff"])
+    corrections = _corrections()
+    _, audit = corr.resolve_effective(rows, corrections)
     entries = [{**r, "status": "APPLIED" if date.fromisoformat(str(r["trade_date"])) > cutoff else "BEFORE_BASELINE_CUTOFF"}
                for r in rows]
     return 200, {"status": "OK", **authority(), "revision": journal_revision(), "baseline": info,
                  "entries": entries, "projection": _projection(ledger), "corrections": CORRECTIONS,
+                 "correction_count": len(corrections), "correction_audit": audit,
+                 "effective_count": len(effective_rows(rows)),
                  "authored_events": list(AUTHORED_EVENTS), "event_date_policy": EVENT_DATE_POLICY}
 
 
@@ -484,6 +584,8 @@ def handle(method: str, name: str, body: Any, service: pi.InputService) -> pi.Re
             return 429, {"status": "RATE_LIMITED"}
         if name == "rebase":
             return rebase(body, service)
+        if name == "correction":
+            return record_correction(body, service)
         return record(body, service)
     except DataContractError as exc:
         return 422, {"status": "TRANSACTION_REFUSED", **pi._code(exc)}
