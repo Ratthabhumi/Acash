@@ -161,3 +161,13 @@ test('nginx CSP allows only same-origin connections and keeps the shadow proxy',
   assert.match(conf, /location \/api\/shadow\/ \{/);
   assert.doesNotMatch(conf, /api\/upi/);
 });
+
+test('portfolio opens owner-private by default and only a test harness may opt into demo', () => {
+  const page = read('src/pages/PortfolioPage.tsx');
+  assert.match(page, /const ALLOW_SYNTHETIC = /);
+  assert.match(page, /__ACASH_ALLOW_SYNTHETIC_DEMO__/);
+  assert.match(page, /useState<DataMode>\(ALLOW_SYNTHETIC \? 'SYNTHETIC_DEMO' : 'OWNER_PRIVATE_READ_ONLY'\)/);
+  assert.match(page, /\{ALLOW_SYNTHETIC && \(/);
+  assert.doesNotMatch(page, /import\.meta\.env/);
+  assert.match(read('src/services/upiRepository.ts'), /never substituted for owner data/);
+});

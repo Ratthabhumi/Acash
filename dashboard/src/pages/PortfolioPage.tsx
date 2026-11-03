@@ -383,8 +383,14 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
   );
 };
 
+// Production never offers synthetic data. A development or test harness may opt in by setting
+// window.__ACASH_ALLOW_SYNTHETIC_DEMO__ = true before the app starts; there is no URL, storage or
+// environment toggle, so an ordinary launch can never fall back to demo figures.
+const ALLOW_SYNTHETIC = typeof window !== 'undefined'
+  && (window as unknown as { __ACASH_ALLOW_SYNTHETIC_DEMO__?: boolean }).__ACASH_ALLOW_SYNTHETIC_DEMO__ === true;
+
 export const PortfolioPage: React.FC = () => {
-  const [mode, setMode] = useState<DataMode>('SYNTHETIC_DEMO');
+  const [mode, setMode] = useState<DataMode>(ALLOW_SYNTHETIC ? 'SYNTHETIC_DEMO' : 'OWNER_PRIVATE_READ_ONLY');
   const [variant, setVariant] = useState<SyntheticVariant>('FULL_REPORT');
   const [state, setState] = useState<LoadState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -422,7 +428,7 @@ export const PortfolioPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
+    if (ALLOW_SYNTHETIC && mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
   }, [mode, variant]);
 
   // The launcher's private service answering at all means ACASH was opened in private mode.
@@ -453,14 +459,16 @@ export const PortfolioPage: React.FC = () => {
             <h1 className="text-lg font-semibold text-primary">Portfolio Intelligence</h1>
             <p className="text-xs text-secondary">Read-only view of the Python wealth pack. Figures are computed in Python; this page only displays them.</p>
           </div>
-          <div className="flex gap-1 p-1 bg-surface-muted rounded-md" role="group" aria-label="Data mode">
-            {(['SYNTHETIC_DEMO', 'OWNER_PRIVATE_READ_ONLY'] as DataMode[]).map((m) => (
-              <button key={m} onClick={() => switchMode(m)} aria-pressed={mode === m}
-                className={`text-xs px-3 py-1.5 rounded font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === m ? 'bg-accent text-white shadow-sm' : 'text-secondary hover:text-primary'}`}>
-                {m === 'SYNTHETIC_DEMO' ? 'Synthetic demo' : 'Owner private'}
-              </button>
-            ))}
-          </div>
+          {ALLOW_SYNTHETIC && (
+            <div className="flex gap-1 p-1 bg-surface-muted rounded-md" role="group" aria-label="Data mode">
+              {(['SYNTHETIC_DEMO', 'OWNER_PRIVATE_READ_ONLY'] as DataMode[]).map((m) => (
+                <button key={m} onClick={() => switchMode(m)} aria-pressed={mode === m}
+                  className={`text-xs px-3 py-1.5 rounded font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === m ? 'bg-accent text-white shadow-sm' : 'text-secondary hover:text-primary'}`}>
+                  {m === 'SYNTHETIC_DEMO' ? 'Synthetic demo' : 'Owner private'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {mode === 'SYNTHETIC_DEMO' ? (
           <div className="flex flex-wrap items-center gap-3 text-xs">
