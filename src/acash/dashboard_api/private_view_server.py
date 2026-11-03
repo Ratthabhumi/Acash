@@ -1,8 +1,9 @@
 """Loopback-only server for the owner-private dashboard view and the Setup Wizard inputs.
 
 The view route is one parameterless GET. The input routes (``private_input``) can replace
-only the two fixed input files and only while ODR-003 is also RATIFIED; there are no order,
-broker or arbitrary-path endpoints. Every request re-checks the Host, the Origin allowlist,
+only the two fixed input files and only while ODR-003 is also RATIFIED; the transaction routes
+(``private_transactions``) can only append to the fixed journal while ODR-005 is RATIFIED; there
+are no order, broker or arbitrary-path endpoints. Every request re-checks the Host, the Origin allowlist,
 a per-start session token that expires, and the ODR state before any file is read;
 localhost alone is never treated as authentication. Responses are ``no-store`` and the
 server never logs paths, payloads or values.
@@ -19,10 +20,10 @@ import time
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
-from acash.dashboard_api import market_service, private_input
+from acash.dashboard_api import market_service, private_input, private_transactions
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
     MAX_INPUT_BYTES,
@@ -151,13 +152,15 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
                               "Access-Control-Allow-Credentials": "true",
                               "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
                               "Access-Control-Allow-Methods": ", ".join(market_service.ROUTES[market_name])})
-    name = target[len(private_input.PREFIX):] if target.startswith(private_input.PREFIX) else None
-    if service is not None and name in private_input.ROUTES:
-        return _input_route(method, name, headers, token, body, service, session_expired,
-                            {**base, "Access-Control-Allow-Origin": str(origin),
-                             "Access-Control-Allow-Credentials": "true",
-                             "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
-                             "Access-Control-Allow-Methods": ", ".join(private_input.ROUTES[name])})
+    for module in (private_input, private_transactions):
+        name = target[len(module.PREFIX):] if target.startswith(module.PREFIX) else None
+        if service is not None and name is not None and name in module.ROUTES:
+            return _input_route(method, name, headers, token, body, service, session_expired,
+                                {**base, "Access-Control-Allow-Origin": str(origin),
+                                 "Access-Control-Allow-Credentials": "true",
+                                 "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                                 "Access-Control-Allow-Methods": ", ".join(module.ROUTES[name])},
+                                module.ROUTES, module.handle)
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": TOKEN_HEADER, "Access-Control-Allow-Methods": "GET"}
     if target != ROUTE:
@@ -182,17 +185,20 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
 
 
 def _input_route(method: str, name: str, headers: Mapping[str, str], token: str, body: bytes,
-                 service: private_input.InputService, session_expired: bool, cors: Dict[str, str]) -> Response:
+                 service: private_input.InputService, session_expired: bool, cors: Dict[str, str],
+                 routes: Mapping[str, Tuple[str, ...]] = private_input.ROUTES,
+                 dispatch: Callable[[str, str, Any, private_input.InputService], private_input.Result]
+                 = private_input.handle) -> Response:
     if method == "OPTIONS":
         return 204, cors, b""
-    if method not in private_input.ROUTES[name]:
+    if method not in routes[name]:
         return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
     if not _authenticated(headers, token):
         return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
     if session_expired:
         return _json(401, cors, {"status": "SESSION_EXPIRED"})
     rejected, payload = private_input.parse_body(method, headers, body)
-    status, doc = rejected or private_input.handle(method, name, payload, service)
+    status, doc = rejected or dispatch(method, name, payload, service)
     return _json(status, cors, doc)
 
 
@@ -209,22 +215,8 @@ def _market_route(method: str, name: str, headers: Mapping[str, str], token: str
     rejected, payload = private_input.parse_body(method, headers, body)
     if rejected:
         return _json(rejected[0], cors, rejected[1])
-    if name != "view":
-        status, doc = market_service.handle(method, name, payload, market)
-        return _json(status, cors, doc)
-    state = odr_state(None, SCHEMA_V1_2)
-    market_state = market.statuses()["odr_004"]
-    if state != "RATIFIED" or market_state != "RATIFIED":
-        return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state, "odr_004": market_state})
-    try:
-        view_status, code, doc = load_view(market_service.market_path(market_service.VIEW_FILE))
-    except DataContractError as exc:
-        return _json(403, cors, {"status": "INPUT_PATH_REFUSED", "code": str(exc).split(":")[0]})
-    if view_status == "NO_REPORT":
-        return _json(404, cors, {"status": view_status})
-    if view_status == "INVALID_REPORT":
-        return _json(422, cors, {"status": view_status, "code": code})
-    return _json(200, cors, doc)
+    status, doc = market_service.handle(method, name, payload, market)
+    return _json(status, cors, doc)
 
 
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
