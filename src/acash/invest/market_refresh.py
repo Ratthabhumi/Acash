@@ -26,7 +26,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 SYMBOL = re.compile(r"^[A-Z][A-Z0-9]{0,9}(\.[A-Z])?$")
 US_MICS = frozenset({"XNAS", "XNGS", "XNMS", "XNCM", "XNYS", "ARCX", "BATS", "XASE", "IEXG"})
 MAX_QUOTE_AGE_DAYS = 7
-PRICE_TYPES = ("LAST_TRADE", "INTRADAY_BAR_CLOSE", "EOD_CLOSE")
+PRICE_TYPES = ("LAST_TRADE", "INTRADAY_BAR_CLOSE", "EOD_CLOSE", "HISTORICAL_DELAYED_LAST")
 
 
 class FXProvider(Protocol):

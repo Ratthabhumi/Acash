@@ -15,27 +15,32 @@ verified against a live response (``BOT_SPEC_VERIFIED`` is False). The operation
 API catalogue; the query keys and response fields are still an unverified parser contract, so the
 provider registry keeps BOT at CONTRACT_UNVERIFIED and it is never constructed for a real refresh.
 
-MarketData.app Free adapter (``MARKETDATA_APP_FREE``) is registered but its live response schema
-is not yet verified (``MARKETDATA_CONTRACT_VERIFIED = False``); synthetic tests use a mock
-transport. The adapter will reach NOT_CONFIGURED until the contract and exchange-level rights are
-established and the Owner adds the provider to ODR-004 ``scope_providers``.
+MarketData.app Free adapter (``MARKETDATA_APP_FREE``) follows the documented array contract
+(``s``, ``symbol``, ``last``, ``updated``), authenticates with ``Authorization: Bearer`` and keeps a
+persisted 100-credit/day counter whose window opens at 09:30 America/New_York. The documented
+contract is verified; a real response has not been observed (``MARKETDATA_LIVE_RESPONSE_VERIFIED``
+is False), and the adapter is only constructed for a provider that ODR-004 reports READY.
 
 Frankfurter ECB FX adapter (``FRANKFURTER_ECB_FX``) uses
-``GET https://api.frankfurter.dev/v2/rate/USD/THB?providers=ECB``; the endpoint and envelope
-structure are sourced from the published Frankfurter documentation. The response schema is treated
-as unverified until a real response is observed and recorded (``FRANKFURTER_CONTRACT_VERIFIED``).
+``GET https://api.frankfurter.dev/v2/rate/USD/THB?providers=ECB`` and parses the documented V2
+scalar ``{date, base, quote, rate}`` object, optionally with a ``date`` query for as-of alignment.
+The documented contract is verified; a real response has not been observed
+(``FRANKFURTER_LIVE_RESPONSE_VERIFIED`` is False).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import ssl
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, List, Mapping, Optional, Pattern, Sequence, Tuple
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 from zoneinfo import ZoneInfo
@@ -54,8 +59,15 @@ ALPACA_SIP_MARGIN = timedelta(minutes=2)
 ALPACA_MAX_PAGES = 10
 SESSION_CLOSE = time(16, 0)
 BOT_SPEC_VERIFIED = False
-MARKETDATA_CONTRACT_VERIFIED = False
-FRANKFURTER_CONTRACT_VERIFIED = False
+# Documented-contract verification (official docs / OpenAPI) and observed-live verification are separate
+# states; neither one implies account entitlement, display rights or derived-use rights.
+MARKETDATA_CONTRACT_VERIFIED = True
+MARKETDATA_LIVE_RESPONSE_VERIFIED = False
+FRANKFURTER_CONTRACT_VERIFIED = True
+FRANKFURTER_LIVE_RESPONSE_VERIFIED = False
+# MarketData.app Free Forever: 100 credits per day, window opening at 09:30 America/New_York.
+MARKETDATA_CREDIT_LIMIT = 100
+MARKETDATA_CREDIT_RESET = time(9, 30)
 _QUERY_VALUE = re.compile(r"^[A-Za-z0-9.,:+/=_\-]{1,800}$")
 _RFC3339 = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
@@ -83,10 +95,10 @@ ENDPOINTS: Dict[str, Endpoint] = {
                               frozenset({"adjusted"}), frozenset({"Authorization"})),
     "MARKETDATA_APP_FREE": Endpoint("api.marketdata.app",
                                     re.compile(r"^/v1/stocks/quotes/$"),
-                                    frozenset({"symbols", "token"}), frozenset(), {}),
+                                    frozenset({"symbols"}), frozenset({"Authorization"}), {}),
     "FRANKFURTER_ECB_FX": Endpoint("api.frankfurter.dev",
                                    re.compile(r"^/v2/rate/[A-Z]{3}/[A-Z]{3}$"),
-                                   frozenset({"providers"}), frozenset(),
+                                   frozenset({"providers", "date"}), frozenset(),
                                    {"providers": frozenset({"ECB"})}),
         "BOT_REFERENCE_FX": Endpoint("gateway.api.bot.or.th", re.compile(r"^/Stat-ReferenceRate/v2/DAILY_REF_RATE/get$"),
                                  frozenset({"start_period", "end_period"}), frozenset({"Authorization"})),
@@ -183,6 +195,20 @@ def _rfc3339(provider_id: str, text: Any) -> datetime:
     fraction = (match.group(2) or "")[:7]
     offset = "+00:00" if match.group(3) == "Z" else match.group(3)
     return datetime.fromisoformat(match.group(1) + fraction + offset)
+
+
+def _unix_seconds(provider_id: str, value: Any) -> datetime:
+    """Whole Unix seconds (as the documented quote contract supplies) to an aware UTC timestamp."""
+    try:
+        stamp = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.") from None
+    if not stamp.is_finite() or stamp <= 0 or stamp != stamp.to_integral_value():
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.")
+    try:
+        return datetime.fromtimestamp(int(stamp), tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.") from None
 
 
 Limiter = Callable[[], bool]
@@ -339,74 +365,146 @@ class AlpacaHistoricalSIPProvider:
 class MarketDataAppFreeProvider:
     """MarketData.app Free Forever delayed quotes (``/v1/stocks/quotes/``).
 
-    100 credits/day budget enforced.  Data is delayed ≥ 24 h.  The live response schema
-    is **not yet verified** (``MARKETDATA_CONTRACT_VERIFIED = False``); the adapter raises
-    ``DataContractError`` on any unexpected envelope shape.  Synthetic tests use a mock
-    transport only.  The provider stays NOT_CONFIGURED until the Owner adds it to
-    ODR-004 ``scope_providers`` with exchange-level rights attested.
+    Documented contract (``MARKETDATA_CONTRACT_VERIFIED``): the response carries a status ``s`` plus
+    index-aligned ``symbol``, ``last`` and ``updated`` arrays; ``updated`` is Unix seconds. ``last`` is
+    a delayed last trade, never an official completed-session close, so it is labelled
+    ``HISTORICAL_DELAYED_LAST``. Only ``s == "ok"`` is usable and ``no_data`` is an empty result.
+
+    The token travels only in ``Authorization: Bearer`` (never in a query string). Credits are one per
+    requested symbol, reserved before the request against a persisted counter whose window opens at
+    09:30 America/New_York. A real response has not been observed
+    (``MARKETDATA_LIVE_RESPONSE_VERIFIED`` is False) and the provider stays not-READY until the Owner
+    attests the exchange-level rights in ODR-004 ``scope_providers``.
     """
 
-    credential: Credential        # (token, "") — token passed as query param, never in URL log
+    credential: Credential        # (token, "") — sent only in the Authorization header
     transport: Transport
-    allow: Limiter                # must gate on daily credit budget
+    allow: Limiter
     clock: Callable[[], datetime]
     provider_id: str = "MARKETDATA_APP_FREE"
-    _daily_credits_used: int = field(default=0, repr=False)
-    _credits_day: Optional[date] = field(default=None, repr=False)
-    DAILY_CREDIT_LIMIT: int = field(default=100, init=False, repr=False)
+    ledger_path: Optional[Path] = None
+    daily_credit_limit: int = MARKETDATA_CREDIT_LIMIT
+    _used: int = field(default=0, repr=False)
+    _window: Optional[date] = field(default=None, repr=False)
+    _lock: Any = field(default_factory=threading.Lock, repr=False)
 
-    def _charge(self, symbols: int) -> None:
-        """One credit per requested symbol against the published 100/day Free allowance.
+    @staticmethod
+    def credit_window(moment: datetime) -> date:
+        """The 09:30 America/New_York window containing ``moment``; DST follows the New York clock."""
+        local = moment.astimezone(NEW_YORK)
+        return local.date() if local.time() >= MARKETDATA_CREDIT_RESET else local.date() - timedelta(days=1)
 
-        Credits are charged before the request, so a failed call never over-spends; the counter
-        resets only when the UTC date changes.
+    def _load(self, window: date) -> None:
+        if self.ledger_path is None:
+            if self._window != window:
+                self._window, self._used = window, 0
+            return
+        if self.ledger_path.is_file():
+            try:
+                doc = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                raise DataContractError(f"CREDIT_LEDGER_INVALID: {self.provider_id}.") from None
+            used = doc.get("used") if isinstance(doc, dict) else None
+            if not isinstance(used, int) or isinstance(used, bool) or used < 0:
+                raise DataContractError(f"CREDIT_LEDGER_INVALID: {self.provider_id}.")
+            if doc.get("window") == window.isoformat():
+                self._window, self._used = window, min(used, self.daily_credit_limit)
+                return
+        self._window, self._used = window, 0
+
+    def _persist(self) -> None:
+        if self.ledger_path is None:
+            return
+        payload = json.dumps({"provider_id": self.provider_id, "window": str(self._window),
+                              "used": self._used}, sort_keys=True)
+        temporary = self.ledger_path.with_suffix(".tmp")
+        temporary.parent.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(payload, encoding="utf-8")
+        os.replace(temporary, self.ledger_path)
+
+    def _reserve(self, symbols: int) -> None:
+        """Reserve credits before the request so a failure can never over-spend the free allowance.
+
+        The lock serialises refreshes inside this process; the persisted counter survives restarts.
         """
-        today = self.clock().astimezone(timezone.utc).date()
-        if self._credits_day != today:
-            self._credits_day, self._daily_credits_used = today, 0
-        if self._daily_credits_used + symbols > self.DAILY_CREDIT_LIMIT:
-            raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id} daily credit budget exhausted.")
-        self._daily_credits_used += symbols
+        with self._lock:
+            window = self.credit_window(self.clock())
+            self._load(window)
+            if self._used + symbols > self.daily_credit_limit:
+                raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id} daily credit budget exhausted.")
+            self._used += symbols
+            self._persist()
+
+    def credits_used(self) -> int:
+        """Credits reserved in the current window (for the Dashboard status, never a price)."""
+        with self._lock:
+            self._load(self.credit_window(self.clock()))
+            return self._used
 
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(self.provider_id, ("EOD_CLOSE",), "UNKNOWN",
+        return ProviderCapabilities(self.provider_id, ("HISTORICAL_DELAYED_LAST",), "UNKNOWN",
                                     True, True, True, None)
 
     def latest_prices(self, security_ids: Sequence[str], as_of: date) -> Sequence[PriceObservation]:
         if not MARKETDATA_CONTRACT_VERIFIED:
-            raise DataContractError(
-                f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id} response schema not confirmed "
-                "against a live observation; add a verified schema before enabling live requests."
-            )
-        symbols = [s for s in security_ids if SYMBOL.match(s)]
+            raise DataContractError(f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id}.")
+        symbols = sorted({s for s in security_ids if SYMBOL.match(s)})
         if not symbols:
             return []
         if not self.allow():
             raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
-        self._charge(len(symbols))
-        # The live request shape stays the unverified placeholder; only the security registration and
-        # transport layers are active at this stage.
+        self._reserve(len(symbols))
         token = self.credential[0]
-        url = build_url(self.provider_id, "/v1/stocks/quotes/",
-                        {"symbols": ",".join(symbols), "token": token})
-        status, body = self.transport(HttpRequest(self.provider_id, url, {}))
-        if status != 200:
+        url = build_url(self.provider_id, "/v1/stocks/quotes/", {"symbols": ",".join(symbols)})
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        request = HttpRequest(self.provider_id, url, headers)
+        assert_allowed(request)
+        status, body = self.transport(request)
+        if status not in (200, 203):
             raise _status_error(self.provider_id, status)
         doc = _json_body(self.provider_id, body)
-        # Minimal envelope guard — full field parsing requires verified schema
         if not isinstance(doc, dict):
-            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} envelope.")
-        return []   # CONTRACT_UNVERIFIED guard above prevents reaching this line in practice
+            raise self._invalid("envelope")
+        state = doc.get("s")
+        if state == "no_data":
+            return []
+        if state != "ok":
+            raise self._invalid("status")
+        names, prices, stamps = doc.get("symbol"), doc.get("last"), doc.get("updated")
+        if not (isinstance(names, list) and isinstance(prices, list) and isinstance(stamps, list)):
+            raise self._invalid("arrays")
+        if not names or not len(names) == len(prices) == len(stamps):
+            raise self._invalid("array lengths")
+        if any(not isinstance(n, str) or not SYMBOL.match(n) for n in names):
+            raise self._invalid("symbol")
+        if len(set(names)) != len(names) or set(names) - set(symbols):
+            raise self._invalid("symbol set")
+        now = self.clock()
+        out: List[PriceObservation] = []
+        for symbol, price, stamp in zip(names, prices, stamps):
+            value = _positive(self.provider_id, price)
+            observed = _unix_seconds(self.provider_id, stamp)
+            if observed > now + timedelta(seconds=1):
+                raise self._invalid("future timestamp")
+            out.append(PriceObservation(
+                security_id=symbol, provider_id=self.provider_id, provider_symbol=symbol, currency="USD",
+                price=value, price_type="HISTORICAL_DELAYED_LAST",
+                market_date=observed.astimezone(NEW_YORK).date(), retrieved_at=now, coverage="UNKNOWN",
+                market_timestamp=observed))
+        return out
+
+    def _invalid(self, what: str) -> DataContractError:
+        return DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} {what}.")
 
 
 @dataclass
 class FrankfurterECBFxProvider:
     """ECB reference USD/THB via ``GET https://api.frankfurter.dev/v2/rate/USD/THB?providers=ECB``.
 
-    Keyless, no daily hard quota.  Rates are ECB reference rates: **not executable**.
-    The response schema is sourced from published Frankfurter documentation and is treated
-    as unverified until ``FRANKFURTER_CONTRACT_VERIFIED`` is set True after a real
-    response is recorded.  Label: ``REFERENCE_FX_NOT_EXECUTABLE``.
+    Documented V2 single-pair contract (``FRANKFURTER_CONTRACT_VERIFIED``): a scalar
+    ``{date, base, quote, rate}`` object, not a nested ``rates`` map. Keyless, no published hard
+    quota, ECB as the only accepted provider filter. Rates are reference rates: **not executable**,
+    and a real response has not been observed (``FRANKFURTER_LIVE_RESPONSE_VERIFIED`` is False).
     """
 
     transport: Transport
@@ -414,55 +512,57 @@ class FrankfurterECBFxProvider:
     clock: Callable[[], datetime]
     provider_id: str = "FRANKFURTER_ECB_FX"
 
-    # No credential needed — keyless API; credential tuple reserved for future auth
+    # No credential is required; the provider still needs ODR-004 scope and attested data-use rights.
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(self.provider_id, (), "REFERENCE_FX_NOT_EXECUTABLE",
                                     False, False, False, None)
 
-    def reference_rate(self, base: str = "USD", quote: str = "THB") -> Sequence[FXObservation]:
-        """Fetch the latest ECB reference rate for ``base``/``quote``."""
+    def _invalid(self, what: str) -> DataContractError:
+        return DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} {what}.")
+
+    def _fetch(self, base: str, quote: str, as_of: Optional[date]) -> Sequence[FXObservation]:
         if not FRANKFURTER_CONTRACT_VERIFIED:
-            raise DataContractError(
-                f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id} response schema not confirmed "
-                "against a live observation; record a real response before enabling live requests."
-            )
-        if not re.match(r"^[A-Z]{3}$", base) or not re.match(r"^[A-Z]{3}$", quote):
-            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} currency pair.")
+            raise DataContractError(f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id}.")
+        if not re.match(r"^[A-Z]{3}$", base) or not re.match(r"^[A-Z]{3}$", quote) or base == quote:
+            raise self._invalid("currency pair")
         if not self.allow():
             raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
-        path = f"/v2/rate/{base}/{quote}"
-        url = build_url(self.provider_id, path, {"providers": "ECB"})
+        query = {"providers": "ECB"} if as_of is None else {"providers": "ECB", "date": as_of.isoformat()}
+        url = build_url(self.provider_id, f"/v2/rate/{base}/{quote}", query)
         status, body = self.transport(HttpRequest(self.provider_id, url, {}))
         if status != 200:
             raise _status_error(self.provider_id, status)
         doc = _json_body(self.provider_id, body)
-        # Envelope: {"base": "USD", "quote": "THB", "date": "2026-10-31", "rates": {"ECB": 34.12}}
         if not isinstance(doc, dict):
-            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} envelope.")
+            raise self._invalid("envelope")
         try:
             obs_date = date.fromisoformat(str(doc["date"]))
-            rates = doc["rates"]
-            if not isinstance(rates, dict) or "ECB" not in rates:
-                raise KeyError("ECB")
-            rate = _positive(self.provider_id, rates["ECB"])
+            if str(doc["base"]).upper() != base or str(doc["quote"]).upper() != quote:
+                raise self._invalid("currency pair mismatch")
+            rate = _positive(self.provider_id, doc["rate"])
         except (KeyError, TypeError, ValueError):
-            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} fields.") from None
+            raise self._invalid("fields") from None
         retrieved = self.clock()
-        if obs_date > retrieved.astimezone(timezone.utc).date():
-            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} future date.")
+        if obs_date > retrieved.astimezone(NEW_YORK).date():
+            raise self._invalid("future date")
         back = Decimal(f"{Decimal(1) / rate:.10g}")
         return [
             FXObservation(base, quote, rate, obs_date, "REFERENCE_FX", self.provider_id, retrieved),
             FXObservation(quote, base, back, obs_date, "REFERENCE_FX", self.provider_id, retrieved),
         ]
 
-    def reference_rates(self, end: date, lookback_days: int = 7) -> Sequence[FXObservation]:
-        """``FXProvider`` protocol view: only observations inside ``[end-lookback_days, end]``.
+    def reference_rate(self, base: str = "USD", quote: str = "THB") -> Sequence[FXObservation]:
+        """Latest ECB reference rate for ``base``/``quote`` in both directions."""
+        return self._fetch(base, quote, None)
 
-        Frankfurter Free exposes the latest ECB reference rate; a stale rate outside the market
-        window is not silently substituted (an empty sequence becomes ``FX_UNAVAILABLE_FOR_MARKET_DATE``).
+    def reference_rates(self, end: date, lookback_days: int = 7) -> Sequence[FXObservation]:
+        """``FXProvider`` protocol view: ask for ``end`` and accept only ``[end-lookback_days, end]``.
+
+        No look-ahead: the request carries the valuation date, and a rate the source dates after it
+        or outside the window is refused rather than substituted (an empty sequence becomes
+        ``FX_UNAVAILABLE_FOR_MARKET_DATE``).
         """
-        observations = self.reference_rate("USD", "THB")
+        observations = self._fetch("USD", "THB", end)
         start = end - timedelta(days=lookback_days)
         return [o for o in observations if start <= o.market_date <= end]
 

@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+from acash.core.domain.exceptions import DataContractError
 from acash.ppds.private_observation import SCHEMA_V1_2, _repo_root, odr_state
 
 RECORD = Path("docs/governance/ODR_UPI_MARKET_DATA_004.json")
@@ -26,6 +27,10 @@ ADAPTED_PROVIDERS = ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE",
 KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
 # Providers that authenticate without a stored credential (published keyless endpoints).
 KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
+# One Owner-supplied credential may serve several read-only feeds of the same vendor. The alias only
+# reuses the secret: it never implies entitlement, display or derived-use rights, which each provider
+# must still attest separately before it can become READY.
+CREDENTIAL_ALIASES: Dict[str, str] = {"ALPACA_HISTORICAL": "ALPACA_BASIC"}
 STATUSES = ("NOT_CONFIGURED", "GOVERNANCE_REQUIRED", "CONTRACT_UNVERIFIED", "CREDENTIALS_REQUIRED",
             "ENTITLEMENT_REQUIRED", "DISPLAY_RIGHTS_UNVERIFIED", "DERIVED_USE_UNVERIFIED", "READY",
             "RATE_LIMITED", "SERVICE_UNAVAILABLE")
@@ -46,16 +51,16 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
                           "contract_verified": True, "rate_limit": "200/min",
                           "timestamp_policy": "BAR_OPEN_RFC3339",
                           "known_restriction": "BASIC_PLAN_SIP_DELAY_ENFORCED"},
-    "MARKETDATA_APP_FREE": {"role": "PRICE", "quote_type": "EOD_CLOSE",
-                            "coverage": "UNKNOWN", "label": "DELAYED_24H_PLUS",
-                            "contract_verified": False, "rate_limit": "100_credits/day",
-                            "timestamp_policy": "UNKNOWN",
+    "MARKETDATA_APP_FREE": {"role": "PRICE", "quote_type": "HISTORICAL_DELAYED_LAST",
+                            "coverage": "UNKNOWN", "label": "HISTORICAL_DELAYED_LAST",
+                            "contract_verified": True, "rate_limit": "100_credits/day @ 09:30 ET",
+                            "timestamp_policy": "UNIX_SECONDS_NEW_YORK",
                             "known_restriction": "EXCHANGE_AGREEMENT_AND_DERIVED_VALUE_RIGHTS_UNVERIFIED"},
     "FRANKFURTER_ECB_FX": {"role": "FX", "quote_type": "DAILY_REFERENCE_RATE",
                            "coverage": "REFERENCE_FX_NOT_EXECUTABLE", "label": "REFERENCE_FX_NOT_EXECUTABLE",
-                           "contract_verified": False, "rate_limit": "UNKNOWN",
+                           "contract_verified": True, "rate_limit": "UNKNOWN",
                            "timestamp_policy": "DATE_UTC",
-                           "known_restriction": "RESPONSE_SCHEMA_UNVERIFIED_AGAINST_LIVE"},
+                           "known_restriction": "REFERENCE_ONLY_NOT_EXECUTABLE"},
     "WEBULL_TH_OPENAPI": {"role": "PRICE", "quote_type": None, "coverage": "UNKNOWN", "label": None,
                           "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
                           "known_restriction": "OPENAPI_ENTITLEMENT_PENDING"},
@@ -71,13 +76,28 @@ class CredentialStore(Protocol):
     def lookup(self, provider_id: str) -> Optional[Credential]: ...
 
 
+def credential_target(provider_id: str) -> str:
+    """The Windows Credential Manager target for one adapted market-data provider."""
+    if provider_id not in ADAPTED_PROVIDERS:
+        raise DataContractError(f"PROVIDER_NOT_ADAPTED: {provider_id}.")
+    return CREDENTIAL_TARGET_PREFIX + provider_id
+
+
 class WindowsCredentialStore:
-    """Generic credentials named ``ACASH/MARKET_DATA/<PROVIDER_ID>`` (user name, secret)."""
+    """Generic credentials named ``ACASH/MARKET_DATA/<PROVIDER_ID>`` (user name, secret).
+
+    An aliased provider (``ALPACA_HISTORICAL`` -> ``ALPACA_BASIC``) reads the vendor's single
+    read-only credential when it has no target of its own; this reuses the secret only and grants
+    no entitlement or data-use right.
+    """
 
     def lookup(self, provider_id: str) -> Optional[Credential]:
         if provider_id not in ADAPTED_PROVIDERS:
             return None
-        return _cred_read(CREDENTIAL_TARGET_PREFIX + provider_id)
+        found = _cred_read(CREDENTIAL_TARGET_PREFIX + provider_id)
+        if found is None and provider_id in CREDENTIAL_ALIASES:
+            return _cred_read(CREDENTIAL_TARGET_PREFIX + CREDENTIAL_ALIASES[provider_id])
+        return found
 
 
 if sys.platform == "win32":
@@ -108,6 +128,67 @@ if sys.platform == "win32":
 else:
     def _cred_read(target: str) -> Optional[Credential]:
         return None
+
+
+if sys.platform == "win32":
+    CRED_TYPE_GENERIC = 1
+    CRED_PERSIST_LOCAL_MACHINE = 2
+    CRED_MAX_BLOB_BYTES = 2560
+    ERROR_NOT_FOUND = 1168
+
+    def _cred_write(target: str, username: str, secret: str) -> None:
+        """Store one generic credential for the current Windows user through CredWriteW.
+
+        The secret never passes through a command line: callers read it interactively and hand it
+        straight to this function. Errors carry the Win32 code only, never the value.
+        """
+        blob = secret.encode("utf-16-le")
+        if not blob or len(blob) > CRED_MAX_BLOB_BYTES:
+            raise DataContractError("CREDENTIAL_INVALID: secret length.")
+        buffer = (ctypes.c_ubyte * len(blob)).from_buffer_copy(blob)
+        cred = _Credential()
+        cred.Flags = 0
+        cred.Type = CRED_TYPE_GENERIC
+        cred.TargetName = target
+        cred.Comment = None
+        cred.LastWritten = wintypes.FILETIME()
+        cred.CredentialBlobSize = len(blob)
+        cred.CredentialBlob = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte))
+        cred.Persist = CRED_PERSIST_LOCAL_MACHINE
+        cred.AttributeCount = 0
+        cred.Attributes = None
+        cred.TargetAlias = None
+        cred.UserName = username
+        advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+        if not advapi.CredWriteW(ctypes.byref(cred), 0):
+            raise DataContractError(f"CREDENTIAL_WRITE_FAILED: WinError {ctypes.get_last_error()}.")
+
+    def _cred_delete(target: str) -> bool:
+        advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+        if advapi.CredDeleteW(target, CRED_TYPE_GENERIC, 0):
+            return True
+        return ctypes.get_last_error() == ERROR_NOT_FOUND
+else:
+    def _cred_write(target: str, username: str, secret: str) -> None:
+        raise DataContractError("CREDENTIAL_STORE_UNSUPPORTED: Windows Credential Manager only.")
+
+    def _cred_delete(target: str) -> bool:
+        raise DataContractError("CREDENTIAL_STORE_UNSUPPORTED: Windows Credential Manager only.")
+
+
+class WindowsCredentialWriter:
+    """Write side of the same store the refresh path reads; values are never returned or logged."""
+
+    def store(self, provider_id: str, credential: Credential) -> str:
+        target = credential_target(provider_id)
+        username, secret = credential
+        if not secret:
+            raise DataContractError("CREDENTIAL_INVALID: empty secret.")
+        _cred_write(target, username, secret)
+        return target
+
+    def remove(self, provider_id: str) -> bool:
+        return _cred_delete(credential_target(provider_id))
 
 
 def record_state(record: Optional[Path] = None, observation_record: Optional[Path] = None) -> Tuple[str, Dict[str, Any]]:

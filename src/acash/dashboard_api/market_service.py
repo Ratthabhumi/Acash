@@ -29,6 +29,7 @@ from acash.market_data.providers import (
     AlpacaIEXMarketDataProvider,
     BOTReferenceFXProvider,
     FrankfurterECBFxProvider,
+    MARKETDATA_CREDIT_LIMIT,
     MarketDataAppFreeProvider,
     MassiveEODMarketDataProvider,
     Transport,
@@ -46,6 +47,7 @@ MARKET_DIR = ("market",)
 PUBLISHED_FILE = "market_published.json"
 ATTEMPT_FILE = "market_last_attempt.json"
 LEGACY_FILES = ("market_view.json", "market_refresh.json")
+CREDITS_FILE = "marketdata_credits.json"
 LIMITS = {"ALPACA_BASIC": (200, 60.0), "ALPACA_HISTORICAL": (200, 60.0),
           "MARKETDATA_APP_FREE": (100, 86400.0), "FRANKFURTER_ECB_FX": (200, 3600.0),
           "MASSIVE_BASIC": (5, 60.0), "BOT_REFERENCE_FX": (200, 3600.0)}
@@ -66,11 +68,26 @@ class MarketService:
 
     def statuses(self) -> Dict[str, Any]:
         state, providers = ma.provider_statuses(self.store, self.record)
-        return {"odr_004": state, "providers": providers}
+        return {"odr_004": state, "providers": providers, "marketdata_credits": credit_view(self.clock)}
 
 
 def market_path(name: str) -> Path:
     return pi._private_dir(*MARKET_DIR) / name
+
+
+def credit_view(clock: Callable[[], datetime]) -> Dict[str, Any]:
+    """Free-tier budget for MarketData.app: counts only, no prices, readable without a request.
+
+    The published window opens at 09:30 America/New_York; a missing or unreadable ledger is reported
+    as an untouched budget rather than guessed, and the value never authorises a request by itself.
+    """
+    window = MarketDataAppFreeProvider.credit_window(clock())
+    doc = _read_json(CREDITS_FILE) or {}
+    used = doc.get("used")
+    same_window = doc.get("window") == window.isoformat()
+    reserved = used if same_window and isinstance(used, int) and not isinstance(used, bool) and used >= 0 else 0
+    return {"window": window.isoformat(), "limit": MARKETDATA_CREDIT_LIMIT, "reserved": reserved,
+            "remaining": max(0, MARKETDATA_CREDIT_LIMIT - reserved), "ledger_present": isinstance(used, int)}
 
 
 def _read_json(name: str) -> Optional[Dict[str, Any]]:
@@ -140,7 +157,8 @@ def _providers(service: MarketService, ready: List[Dict[str, Any]]) -> Dict[str,
         elif pid == "ALPACA_HISTORICAL":
             built[pid] = AlpacaHistoricalSIPProvider(credential, service.transport, allow, service.clock)
         elif pid == "MARKETDATA_APP_FREE":
-            built[pid] = MarketDataAppFreeProvider(credential, service.transport, allow, service.clock)
+            built[pid] = MarketDataAppFreeProvider(credential, service.transport, allow, service.clock,
+                                                   ledger_path=market_path(CREDITS_FILE))
         elif pid == "MASSIVE_BASIC":
             if not status["cache_permitted"]:
                 service.eod_cache.clear()

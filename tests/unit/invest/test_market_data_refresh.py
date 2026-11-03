@@ -305,67 +305,183 @@ def test_alpaca_historical_credential_not_in_url() -> None:
     assert all(CRED[0] not in c.url and CRED[1] not in c.url for c in t.calls)
 
 
-# ---- MarketDataApp Free (contract unverified guard) ------------------------------------------
+# ---- MarketDataApp Free (documented contract: s / symbol[] / last[] / updated[]) -------------
+
+_MARKETDATA_OK = {"s": "ok", "symbol": ["SYNA", "SYNB"], "last": ["100.25", "50.10"],
+                  "updated": [1769210435, 1769210436]}
+_MARKETDATA_NO_DATA = {"s": "no_data", "symbol": [], "last": [], "updated": []}
+_MARKETDATA_ERROR = {"s": "error", "message": "invalid symbols"}
+
+
+def _marketdata_body(doc: Dict[str, Any]) -> bytes:
+    return json.dumps(doc).encode("utf-8")
+
 
 def test_marketdata_app_raises_contract_unverified() -> None:
     """Adapter must refuse live requests until MARKETDATA_CONTRACT_VERIFIED is set True."""
-    t = FakeTransport()
-    provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
-    with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
-        provider.latest_prices(["SYNA"], date(2026, 11, 3))
-    assert len(t.calls) == 0  # no request sent
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", False)
+    try:
+        t = FakeTransport()
+        provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
+        with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
+            provider.latest_prices(["SYNA"], date(2026, 11, 3))
+        assert len(t.calls) == 0  # no request sent
+    finally:
+        monkeypatch.undo()
 
 
 def test_marketdata_app_endpoint_allowlist_rejects_wrong_host() -> None:
     """MARKETDATA_APP_FREE endpoint must only allow api.marketdata.app."""
     with pytest.raises(DataContractError, match="ENDPOINT_NOT_ALLOWED"):
         mp.assert_allowed(mp.HttpRequest("MARKETDATA_APP_FREE",
-                                         "https://evil.example/v1/stocks/quotes/?symbols=SYNA&token=tok", {}))
+                                         "https://evil.example/v1/stocks/quotes/?symbols=SYNA", {}))
 
 
-def test_marketdata_app_daily_credit_budget_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When remaining credits < symbols, raise PROVIDER_RATE_LIMITED before any request."""
+def test_marketdata_app_parses_index_aligned_arrays(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Index-aligned symbol/last/updated arrays; updated is Unix seconds -> New York session date."""
     monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"quotes": (200, {"status": "ok"})})
+    t = FakeTransport({"quotes": (200, _MARKETDATA_OK)})
     provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
-    provider._daily_credits_used = 95
-    provider._credits_day = NOW.astimezone(timezone.utc).date()
-    symbols = [f"SYN{i}" for i in range(10)]  # 10 symbols, only 5 credits left
-    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
-        provider.latest_prices(symbols, date(2026, 11, 3))
-    assert len(t.calls) == 0
+    obs = provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+    assert len(obs) == 2
+    assert {o.security_id: o.price for o in obs} == {"SYNA": Decimal("100.25"), "SYNB": Decimal("50.10")}
+    assert all(o.price_type == "HISTORICAL_DELAYED_LAST" for o in obs)
+    first = next(o for o in obs if o.security_id == "SYNA")
+    assert first.market_timestamp is not None
 
 
-def test_marketdata_app_charges_one_credit_per_symbol_and_resets_daily(
-        monkeypatch: pytest.MonkeyPatch) -> None:
-    """Credits are charged per symbol before the call, and the budget resets on a new UTC day."""
+def test_marketdata_app_bearer_token_never_in_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Token travels only in Authorization: Bearer; never as a URL query parameter."""
     monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"quotes": (200, {"status": "ok"})})
+    t = FakeTransport({"quotes": (200, _MARKETDATA_OK)})
     provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
-    provider._daily_credits_used = 95
-    provider._credits_day = NOW.astimezone(timezone.utc).date()
-    provider.latest_prices(["SYNA", "SYNB", "SYNC", "SYND", "SYNE"], date(2026, 11, 3))
-    assert provider._daily_credits_used == 100
-    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
-        provider.latest_prices(["SYNF"], date(2026, 11, 3))  # same day: budget is gone
-    provider._credits_day = date(2026, 11, 2)
-    provider.latest_prices(["SYNF"], date(2026, 11, 3))
-    assert provider._daily_credits_used == 1
+    provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+    assert len(t.calls) == 1
+    assert "token" not in t.calls[0].url
+    assert t.calls[0].headers.get("Authorization") == f"Bearer {CRED[0]}"
 
 
-# ---- Frankfurter ECB FX (contract unverified guard) -----------------------------------------
+def test_marketdata_app_handles_no_data_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """no_data is an empty result; error status is a contract failure, never a price."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_NO_DATA)}),
+                                            _allow, _clock)
+    assert provider.latest_prices(["SYNA"], date(2026, 11, 3)) == []
+    bad = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_ERROR)}),
+                                       _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        bad.latest_prices(["SYNA"], date(2026, 11, 3))
 
-def _frankfurter(rate: float = 34.12, date_str: str = "2026-11-03") -> Dict[str, Any]:
-    return {"base": "USD", "quote": "THB", "date": date_str, "rates": {"ECB": rate}}
+
+def test_marketdata_app_rejects_bad_shapes_and_prices(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mismatched arrays, unknown symbols, duplicates, nonpositive/future prices are rejected."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    base = dict(_MARKETDATA_OK)
+
+    mismatched = dict(base, symbol=["SYNA", "SYNB"], last=["100.25"])
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, mismatched)}),
+                                            _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+
+    unknown = dict(base, symbol=["SYNA", "ZZZ"], last=["100.25", "50.10"],
+                   updated=[1769210435, 1769210436])
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, unknown)}),
+                                            _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+    dup = dict(base, symbol=["SYNA", "SYNA"], last=["100.25", "100.25"],
+               updated=[1769210435, 1769210436])
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, dup)}),
+                                            _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+    nonpositive = dict(base, last=["0", "50.10"])
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, nonpositive)}),
+                                            _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+
+
+def test_marketdata_app_accepts_200_and_203(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 200 and 203 are both successful provider responses."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    for status in (200, 203):
+        t = FakeTransport({"quotes": (status, _MARKETDATA_OK)})
+        provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
+        assert len(provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))) == 2
+
+
+def test_marketdata_app_credit_window_is_new_york_0930() -> None:
+    """Credit window opens at 09:30 America/New_York and follows EST/EDT via the zoneinfo clock."""
+    before = datetime(2026, 6, 1, 13, 29, tzinfo=timezone.utc)  # 09:29 EDT
+    after = datetime(2026, 6, 1, 13, 30, tzinfo=timezone.utc)   # 09:30 EDT
+    assert mp.MarketDataAppFreeProvider.credit_window(before) == date(2026, 5, 31)
+    assert mp.MarketDataAppFreeProvider.credit_window(after) == date(2026, 6, 1)
+    winter = datetime(2026, 12, 1, 14, 29, tzinfo=timezone.utc)  # 09:29 EST
+    assert mp.MarketDataAppFreeProvider.credit_window(winter) == date(2026, 11, 30)
+
+
+def test_marketdata_app_credit_persists_across_restart(tmp_path: Path,
+                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    """Consumed credits survive a simulated restart through an atomic ledger file."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    ledger = tmp_path / "credits.json"
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_OK)}),
+                                            _allow, _clock, ledger_path=ledger)
+    provider.latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+    assert provider.credits_used() == 2
+    # Simulated restart: new provider instance reads the same ledger.
+    provider2 = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_OK)}),
+                                             _allow, _clock, ledger_path=ledger)
+    assert provider2.credits_used() == 2
+
+
+def test_marketdata_app_concurrent_refreshes_do_not_overspend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two concurrent refreshes against a near-empty budget cannot both succeed."""
+    import threading
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    provider = mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_OK)}),
+                                            _allow, _clock)
+    provider._reserve(98)
+    results: List[BaseException | None] = [None, None]
+
+    def hit(slot: int) -> None:
+        try:
+            provider._reserve(2)
+        except BaseException as exc:
+            results[slot] = exc
+
+    threads = [threading.Thread(target=hit, args=(i,)) for i in (0, 1)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    failures = [r for r in results if isinstance(r, DataContractError)]
+    assert len(failures) == 1  # exactly one of the two loses the race
+
+
+# ---- Frankfurter ECB FX (documented V2 contract: date / base / quote / rate) ---------------
+
+def _frankfurter_v2(rate: str = "34.12", date_str: str = "2026-11-03") -> Dict[str, Any]:
+    return {"date": date_str, "base": "USD", "quote": "THB", "rate": rate}
 
 
 def test_frankfurter_raises_contract_unverified() -> None:
     """Adapter must refuse live requests until FRANKFURTER_CONTRACT_VERIFIED is set True."""
-    t = FakeTransport()
-    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
-    with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
-        provider.reference_rate()
-    assert len(t.calls) == 0
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", False)
+    try:
+        t = FakeTransport()
+        provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+        with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
+            provider.reference_rate()
+        assert len(t.calls) == 0
+    finally:
+        monkeypatch.undo()
 
 
 def test_frankfurter_endpoint_allowlist_correct_host(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -375,9 +491,10 @@ def test_frankfurter_endpoint_allowlist_correct_host(monkeypatch: pytest.MonkeyP
     mp.assert_allowed(mp.HttpRequest("FRANKFURTER_ECB_FX", url, {}))
 
 
-def test_frankfurter_parses_ecb_rate_both_directions(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frankfurter_parses_v2_scalar_rate_both_directions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """V2 scalar {date, base, quote, rate}; reciprocal consistent; source ECB preserved."""
     monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12))})
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter_v2("34.12"))})
     provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
     obs = provider.reference_rate("USD", "THB")
     assert len(obs) == 2
@@ -389,19 +506,40 @@ def test_frankfurter_parses_ecb_rate_both_directions(monkeypatch: pytest.MonkeyP
     assert fwd.market_date.isoformat() == "2026-11-03"
 
 
-def test_frankfurter_rejects_future_date(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frankfurter_rejects_wrong_pair_and_future_date(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12, "2026-11-05"))})
-    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    wrong = mp.FrankfurterECBFxProvider(FakeTransport({"rate/USD/THB": (200, _frankfurter_v2("34.12", "2026-11-05"))}),
+                                        _allow, _clock)
     with pytest.raises(DataContractError, match="future date"):
-        provider.reference_rate()
+        wrong.reference_rate("USD", "THB")
+    mismatch = mp.FrankfurterECBFxProvider(FakeTransport({"rate/USD/THB": (200, {"date": "2026-11-03",
+                                                                           "base": "EUR", "quote": "USD",
+                                                                           "rate": "1.1"})}),
+                                           _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        mismatch.reference_rate("USD", "THB")
 
 
-def test_frankfurter_rejects_missing_ecb_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frankfurter_requests_historical_date_and_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """reference_rates(end) asks for ``end`` and keeps only rates within [end-lookback, end]."""
     monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
-    bad = {"base": "USD", "quote": "THB", "date": "2026-11-03", "rates": {"OTHER": 34.12}}
-    t = FakeTransport({"rate/USD/THB": (200, bad)})
-    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    captured: List[str] = []
+
+    def transport(request: mp.HttpRequest) -> Tuple[int, bytes]:
+        captured.append(request.url)
+        return 200, _marketdata_body(_frankfurter_v2("34.12", "2026-11-03"))
+
+    provider = mp.FrankfurterECBFxProvider(transport, _allow, _clock)
+    obs = provider.reference_rates(date(2026, 11, 3), lookback_days=7)
+    assert any("date=2026-11-03" in u for u in captured)
+    assert len(obs) == 2 and obs[0].market_date == date(2026, 11, 3)
+
+
+def test_frankfurter_rejects_unknown_rates_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The old nested ``rates.ECB`` envelope is not accepted by V2."""
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    bad = {"date": "2026-11-03", "base": "USD", "quote": "THB", "rates": {"ECB": 34.12}}
+    provider = mp.FrankfurterECBFxProvider(FakeTransport({"rate/USD/THB": (200, bad)}), _allow, _clock)
     with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
         provider.reference_rate()
 
@@ -409,20 +547,12 @@ def test_frankfurter_rejects_missing_ecb_key(monkeypatch: pytest.MonkeyPatch) ->
 def test_frankfurter_no_credential_in_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """Frankfurter is keyless; no secret must appear in any outbound URL."""
     monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"rate/USD/THB": (200, _frankfurter())})
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter_v2())})
     provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
     provider.reference_rate()
     assert len(t.calls) == 1
     assert "token" not in t.calls[0].url.lower()
-
-
-def test_frankfurter_reference_rates_filters_to_market_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
-    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12, "2026-10-31"))})
-    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
-    assert provider.reference_rates(date(2026, 11, 3), lookback_days=2) == []
-    obs = provider.reference_rates(date(2026, 11, 3), lookback_days=7)
-    assert len(obs) == 2 and obs[0].market_date == date(2026, 10, 31)
+    assert t.calls[0].headers == {}
 
 
 def test_frankfurter_is_keyless_and_can_be_ready_without_credential(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -549,10 +679,20 @@ def test_capabilities_default_to_unknown_and_never_claim_live_verification(root:
     assert ready["capabilities"]["authentication_verified"] == ready["capabilities"]["real_response_verified"] == "NOT_OBSERVED"
 
 
-def test_repository_odr4_has_empty_scope() -> None:
+def test_repository_odr4_scope_carries_no_attested_rights() -> None:
+    """The ratified scope expansion still authorises nothing: every right is false/absent."""
     doc = json.loads((Path(".") / ma.RECORD).read_text(encoding="utf-8"))
-    assert doc["scope_providers"] == [] and doc["decision_id"] == ma.DECISION_ID
+    assert doc["decision_id"] == ma.DECISION_ID
+    assert {e["provider_id"] for e in doc["scope_providers"]} == {
+        "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
+    for entry in doc["scope_providers"]:
+        assert all(entry.get(name) in (False, None) for name in ma.ATTESTATIONS), entry["provider_id"]
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "MARKET_DATA_SUBSCRIPTION"} <= set(doc["independent_of"])
+    assert {p["status"] for p in ma.provider_statuses(Store({}))[1]} <= {"ENTITLEMENT_REQUIRED",
+                                                                        "CREDENTIALS_REQUIRED",
+                                                                        "CONTRACT_UNVERIFIED",
+                                                                        "GOVERNANCE_REQUIRED",
+                                                                        "NOT_CONFIGURED"}
 
 
 # ---- partial valuation ------------------------------------------------------------------------
@@ -806,6 +946,25 @@ def test_status_reports_backend_capabilities_without_secrets(root: Path) -> None
     assert http == 200 and out["odr_004"] == "PROPOSED_NOT_RATIFIED"
     assert out["last_attempt"] is None and out["last_success"] is None
     assert {p["provider_id"]: p["status"] for p in out["providers"]}["ALPACA_BASIC"] == "GOVERNANCE_REQUIRED"
+
+
+def test_credit_view_reports_only_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Dashboard budget comes from the persisted ledger: counts only, no prices, no guesses."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    monkeypatch.setattr(ms, "market_path", lambda name: tmp_path / name)
+    empty = ms.credit_view(_clock)
+    assert empty["limit"] == mp.MARKETDATA_CREDIT_LIMIT and empty["reserved"] == 0
+    assert empty["ledger_present"] is False and empty["remaining"] == mp.MARKETDATA_CREDIT_LIMIT
+    ledger = tmp_path / ms.CREDITS_FILE
+    mp.MarketDataAppFreeProvider(CRED, FakeTransport({"quotes": (200, _MARKETDATA_OK)}), _allow, _clock,
+                                 ledger_path=ledger).latest_prices(["SYNA", "SYNB"], date(2026, 11, 3))
+    used = ms.credit_view(_clock)
+    assert used["reserved"] == 2 and used["remaining"] == mp.MARKETDATA_CREDIT_LIMIT - 2
+    assert used["ledger_present"] is True
+    assert json.loads(ledger.read_text(encoding="utf-8"))["used"] == 2
+    stale = {"window": "2020-01-01", "used": 99}
+    ledger.write_text(json.dumps(stale), encoding="utf-8")
+    assert ms.credit_view(_clock)["reserved"] == 0  # a window outside today never spends the budget
 
 
 def test_market_modules_hold_no_trading_surface_and_no_test_uses_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
