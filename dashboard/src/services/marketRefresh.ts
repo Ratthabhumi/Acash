@@ -36,8 +36,13 @@ export interface RefreshRecord {
 
 export interface AttemptRecord { requested_at: string; completed_at: string; status: string; code?: string }
 
+export interface CreditBudget {
+  window: string; limit: number; reserved: number; remaining: number; ledger_present: boolean;
+}
+
 export interface MarketStatus {
   status: string; odr_004?: string; odr_001?: string; providers?: ProviderStatus[];
+  marketdata_credits?: CreditBudget;
   last_attempt?: AttemptRecord | null; last_success?: RefreshRecord | null;
 }
 
@@ -48,8 +53,8 @@ export const PROVIDER_INFO: Record<string, { name: string; coverage: string }> =
   MASSIVE_BASIC: { name: 'Massive Basic', coverage: 'Previous session close (EOD)' },
   BOT_REFERENCE_FX: { name: 'BOT FX', coverage: 'Reference USD/THB (not executable)' },
   ALPACA_HISTORICAL: { name: 'Alpaca historical SIP', coverage: 'Delayed consolidated bars (≥ 15 min + margin), adapter gated' },
-  MARKETDATA_APP_FREE: { name: 'MarketData.app Free', coverage: 'Delayed/EOD quotes, 100 credits/day · contract unverified · gated' },
-  FRANKFURTER_ECB_FX: { name: 'Frankfurter ECB FX', coverage: 'ECB reference USD/THB, keyless, not executable · gated' },
+  MARKETDATA_APP_FREE: { name: 'MarketData.app Free', coverage: 'Delayed last trade (≥ 24h), Bearer header, 100 credits/day · documented contract' },
+  FRANKFURTER_ECB_FX: { name: 'Frankfurter ECB FX', coverage: 'ECB reference USD/THB, keyless, not executable · documented contract' },
   WEBULL_TH_OPENAPI: { name: 'Webull Thailand', coverage: 'Pending entitlement · no adapter' },
 };
 

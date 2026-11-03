@@ -42,6 +42,7 @@ export const MarketRefreshPanel: React.FC<Props> = ({ onMarketView }) => {
   };
 
   const blocker = refreshBlocker(status);
+  const credits = status?.marketdata_credits ?? null;
   const last = status?.last_success ?? null;
   const attempt = status?.last_attempt ?? null;
   const attemptFailed = attempt && attempt.status !== 'REFRESHED';
@@ -68,6 +69,10 @@ export const MarketRefreshPanel: React.FC<Props> = ({ onMarketView }) => {
           ...RIGHTS.map(([key]) => <span key={key} title={marketTh(p.capabilities?.[key] ?? 'UNKNOWN')}>{p.capabilities?.[key] ?? 'UNKNOWN'}</span>),
         ])} />
       <p className="text-[11px] text-muted">READY หมายถึง Owner รับรองสิทธิ์ครบตาม ODR-004 แล้วเท่านั้น ไม่ใช่หลักฐานว่าดึงข้อมูลจริงสำเร็จ (Live = NOT_OBSERVED)</p>
+      {credits && (
+        <p className="text-[11px] text-muted">MarketData.app Free: เหลือ {credits.remaining}/{credits.limit} credits
+          {' '}(กันใช้แล้ว {credits.reserved} · หน้าต่าง {credits.window} · รีเซ็ต 09:30 New York)</p>
+      )}
       {attemptFailed && (
         <p role="alert" className="text-amber-600">ครั้งล่าสุดที่กด ({attempt.completed_at}): {marketTh(attempt.status)}{attempt.code ? ` · ${attempt.code}` : ''}</p>
       )}
