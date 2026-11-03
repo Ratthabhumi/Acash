@@ -34,6 +34,32 @@ Preflight after the correction: `READY_WITH_WARNINGS` (warnings: the pre-existin
 `DIME_SECURITIES` unexplained difference, unverified security identity for securities without
 MIC/ISIN, and an unverified market session — none of them are new).
 
+## Real provider pilot (2026-11-03)
+
+Owner accepted the Alpaca and MarketData.app account terms and confirmed personal, local,
+noncommercial use. Each right was then attested only where the documented plan and the accepted
+terms support it, and the pilot used one bounded request per provider with public symbols only.
+
+| Provider | Rights attested | Real request | Observation |
+|---|---|---|---|
+| FRANKFURTER_ECB_FX | entitlement, display, calculation, derived, cache, retention | PASS | ECB reference USD/THB dated 2026-11-03, labelled reference-only |
+| ALPACA_BASIC | entitlement, display, calculation, derived (cache and retention **denied**) | PASS | IEX last trades for AAPL and VOO on 2026-11-03 |
+| ALPACA_HISTORICAL | same as Basic, delayed SIP only | PASS | delayed 1-minute bar closes, `INTRADAY_BAR_CLOSE` |
+| MARKETDATA_APP_FREE | all six rights (terms permit local storage while the account is open) | PASS | delayed last trades dated 2026-11-02, labelled `HISTORICAL_DELAYED_LAST` |
+| MASSIVE_BASIC / BOT / WEBULL | none | not attempted | outside scope; Massive derived-NAV rights unresolved |
+
+Defect found and fixed by the pilot: MarketData.app received `Bearer` with the credential's
+username half, so the first attempt was refused with `PROVIDER_ACCESS_DENIED`. The token is stored
+in the secret half, the adapter now reads that half first (with a fallback), and a regression test
+pins both layouts. The retry then returned a real delayed observation.
+
+Portfolio refresh through the same handler the dashboard button calls: `REFRESHED`,
+`PARTIAL_INDICATIVE_VALUATION`, reference FX resolved on the market date, every requested position
+priced, HOOD present exactly once from the Newwave position, and the weight basis reported as
+`SHARE_OF_PRICED_SUBTOTAL_NOT_TOTAL_PORTFOLIO`. The generation is **memory-only** because Alpaca's
+cache right is denied, so a restart does not preserve it; the statement snapshot and journal are
+never overwritten.
+
 ## Baseline status
 
 No frozen baseline exists yet (`data/private/transactions/baseline.json` is absent) and no

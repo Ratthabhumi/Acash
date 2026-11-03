@@ -59,9 +59,12 @@ def test_new_capability_states_and_scope(record: str, capability: str, state: st
     if capability == "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED":
         assert {e["provider_id"] for e in doc["scope_providers"]} == {
             "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
-        for entry in doc["scope_providers"]:
-            for k in ma.ATTESTATIONS:
-                assert entry[k] in (False, None), (entry["provider_id"], k)
+        entries = {e["provider_id"]: e for e in doc["scope_providers"]}
+        # Attested only where the accepted terms and documented plan support the right.
+        for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
+            assert entries[provider_id]["cache_permitted"] is False
+            assert entries[provider_id]["retention_policy_verified"] is False
+        assert entries["MARKETDATA_APP_FREE"]["cache_permitted"] is True
         lineage = doc["ratification_lineage"]
         assert lineage["decided_by"] == "OWNER" and lineage["scope_changed"] is False  # original history intact
         assert "ODR_UPI_MARKET_DATA_004_AMENDMENT_001" in doc.get("amendments", [])

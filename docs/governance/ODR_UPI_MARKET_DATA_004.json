@@ -25,46 +25,71 @@
   "scope_providers": [
     {
       "provider_id": "ALPACA_BASIC",
-      "entitlement_verified": false,
-      "display_permitted": false,
-      "calculation_permitted": false,
-      "derived_value_permitted": false,
+      "entitlement_verified": true,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
       "cache_permitted": false,
       "retention_policy_verified": false,
-      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; provider not READY until credentialed and attested."
+      "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Alpaca Basic includes the IEX real-time feed and the documented historical SIP access older than 15 minutes; single-venue IEX only. Personal noncommercial display and valuation are supported by the accepted terms. Cache and retention are NOT attested: the terms do not grant blanket storage or redistribution, so observations stay in memory only. Sources: docs.alpaca.markets about-market-data-api / market-data-faq, files.alpaca.markets TermsAndConditions.pdf",
+      "evidence_urls": [
+        "https://docs.alpaca.markets/us/docs/about-market-data-api",
+        "https://docs.alpaca.markets/us/docs/market-data-faq",
+        "https://files.alpaca.markets/disclosures/library/TermsAndConditions.pdf"
+      ],
+      "attested_on": "2026-11-03"
     },
     {
       "provider_id": "ALPACA_HISTORICAL",
-      "entitlement_verified": false,
-      "display_permitted": false,
-      "calculation_permitted": false,
-      "derived_value_permitted": false,
+      "entitlement_verified": true,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
       "cache_permitted": false,
       "retention_policy_verified": false,
-      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; Basic-plan SIP delay enforcement is adapter-side only, not an entitlement."
+      "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Historical SIP bars are documented as available to Basic accounts only with the access delay the adapter enforces (15 min + 2 min margin); not real-time and not a consolidated live quote. Cache and retention are NOT attested. Sources as above.",
+      "evidence_urls": [
+        "https://docs.alpaca.markets/us/reference/stockbars"
+      ],
+      "attested_on": "2026-11-03"
     },
     {
       "provider_id": "MARKETDATA_APP_FREE",
-      "entitlement_verified": false,
-      "display_permitted": false,
-      "calculation_permitted": false,
-      "derived_value_permitted": false,
-      "cache_permitted": false,
-      "retention_policy_verified": false,
-      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). All rights UNKNOWN pending separate Owner attestation; personal-localhost use noted in ToS 2026-10-26 but exchange-level derived-value rights unverified."
+      "entitlement_verified": true,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Free Forever terms (2026-10-26) permit a personal localhost dashboard and storage on a device the Owner controls while the account is open, with deletion on closure; no additional provider-side derived-data restriction, while exchange agreements still govern. Data is at least 24 h delayed and is labelled HISTORICAL_DELAYED_LAST, never real-time or an official EOD close. Sources: marketdata.app/terms, docs/account/free-accounts, docs/account/entitlements, docs/account/data-freshness",
+      "evidence_urls": [
+        "https://www.marketdata.app/terms/",
+        "https://www.marketdata.app/docs/account/free-accounts/",
+        "https://www.marketdata.app/docs/account/entitlements/",
+        "https://www.marketdata.app/docs/account/data-freshness/"
+      ],
+      "retention_condition": "retain while the account is open; delete on account closure",
+      "attested_on": "2026-11-03"
     },
     {
       "provider_id": "FRANKFURTER_ECB_FX",
-      "entitlement_verified": false,
-      "display_permitted": false,
-      "calculation_permitted": false,
-      "derived_value_permitted": false,
-      "cache_permitted": false,
-      "retention_policy_verified": false,
-      "evidence": "Scope added via ODR_UPI_MARKET_DATA_004_AMENDMENT_001 (ratified 2026-11-03). Keyless, but all rights UNKNOWN pending separate Owner attestation; keyless != authorized for outbound access."
+      "entitlement_verified": true,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Keyless published ECB reference rates; no account or entitlement step. Reference only, never an executable Dime! or broker rate, and never blended with a broker quote. Source: frankfurter.dev / api.frankfurter.dev/v2/openapi.json",
+      "evidence_urls": [
+        "https://frankfurter.dev/",
+        "https://api.frankfurter.dev/v2/openapi.json"
+      ],
+      "attested_on": "2026-11-03"
     }
   ],
-  "amendments": ["ODR_UPI_MARKET_DATA_004_AMENDMENT_001"],
+  "amendments": [
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_001"
+  ],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [
     "data/private/market/"
@@ -77,5 +102,11 @@
     "BROKER_NATIVE_IMPORT",
     "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED",
     "D5_DATA_ADMITTED"
-  ]
+  ],
+  "attestation_record": {
+    "attested_on": "2026-11-03",
+    "basis": "Owner accepted the Alpaca and MarketData.app account terms on 2026-11-03 and confirmed personal, local, noncommercial use; each right was checked against the documented plan.",
+    "not_attested": "Alpaca cache and retention stay unattested because the accepted terms do not grant blanket storage or redistribution.",
+    "unchanged": "Massive, BOT and Webull remain outside scope; no vendor right is inferred."
+  }
 }
