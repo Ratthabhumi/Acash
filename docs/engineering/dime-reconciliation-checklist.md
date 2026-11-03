@@ -60,6 +60,31 @@ priced, HOOD present exactly once from the Newwave position, and the weight basi
 cache right is denied, so a restart does not preserve it; the statement snapshot and journal are
 never overwritten.
 
+## Corrected valuation (2026-11-04)
+
+The large Owner-private overstatement was traced to the **input**, not to PPDS: the reverse FX
+direction had been entered as a THB-per-USD figure while labelled as USD-per-THB, so a
+THB-denominated mutual fund was converted twice. For the fund this produced a value roughly
+1,136x its THB NAV (33.8 x 33.65), which matches the figure that had been displayed. The
+reciprocal correction recorded above removed it: the fund now values at units x THB NAV with no
+FX multiplier, and a regression test pins that behaviour (`test_thb_fund_inside_a_usd_account_is
+_not_multiplied_by_fx`).
+
+| Component | Status after the correction |
+|---|---|
+| Thai mutual fund (THB NAV per unit, held in a USD-base account) | Correct: units x NAV, no FX applied |
+| US securities | Priced from the 2 Nov statement prices; a real refresh replaces them with authorised observations |
+| Cash, three accounts | Statement balances; FCD and securities cash stay separate |
+| Gold (oz, USD/oz) | Separate instrument, converted under the FX policy |
+| Total | Still **not** synchronised with the broker screenshot: the statement is valued 2026-11-02 while the screenshot is 2026-11-03 23:38, so market movement and the FX date explain the residual. No balancing cash or adjustment event was added to force a match |
+
+Bridge verdict: the residual is classified as observation-timing plus FX-date difference, not as a
+data-entry error. A same-moment comparison needs a snapshot taken from the broker at the same time
+as the statement; until then the total is an indicative valuation, never a verified NAV.
+
+The production Dashboard now opens in Owner-private mode only and hides the synthetic demo behind
+an explicit test-harness flag, so the figures above are what an ordinary launch shows.
+
 ## Baseline status
 
 No frozen baseline exists yet (`data/private/transactions/baseline.json` is absent) and no
