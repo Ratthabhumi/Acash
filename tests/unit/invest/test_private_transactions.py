@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -265,10 +266,134 @@ def test_journal_cash_on_a_negative_baseline_line_fails_closed(root: Path) -> No
 
 
 def test_transaction_routes_have_no_broker_or_edit_surface(root: Path) -> None:
-    assert set(pt.ROUTES) == {"state", "preview", "record"}
+    assert set(pt.ROUTES) == {"state", "preview", "record", "rebase"}
     assert all(m in ("GET", "POST") for methods in pt.ROUTES.values() for m in methods)
     for method in ("PUT", "DELETE", "PATCH"):
         assert _call(method, "record", {})[0] == 405
     text = Path(str(pt.__file__)).read_text(encoding="utf-8")
     for banned in ("import urllib", "import socket", "import requests", "alpaca", "/v2/orders"):
         assert banned not in text
+
+
+def _snapshot_edit(root: Path, change: Any) -> None:
+    path = root / "data" / "private" / "snapshot.json"
+    doc = json.loads(path.read_text("utf-8"))
+    change(doc)
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+
+def _main(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return next(a for a in doc["accounts"] if a["account_ref"] == "BROKER_D_MAIN")
+
+
+def _baseline(state: Dict[str, Any]) -> Tuple[str, str, Optional[str]]:
+    b = state["baseline"]
+    return b["baseline_status"], b["cutoff"], b["baseline_id"]
+
+
+def test_first_record_freezes_the_opening_baseline(root: Path) -> None:
+    assert _baseline(_call("GET", "state")[1]) == ("PROVISIONAL_FROM_SNAPSHOT", "2026-10-30", None)
+    assert _record(_buy())[0] == 200
+    frozen = json.loads((root / "data" / "private" / "transactions" / pt.BASELINE_FILE).read_text("utf-8"))
+    assert frozen["batch_id"] == "BASELINE_V1" and {r["trade_date"] for r in frozen["transactions"]} == {"2026-10-30"}
+    st = _call("GET", "state")[1]
+    assert _baseline(st) == ("FROZEN", "2026-10-30", "BASELINE_V1")
+    assert (_position(st, "BROKER_D_MAIN", "SYNIDX"), _cash(st, "BROKER_D_MAIN")) == ("14", "18.00")
+
+
+def test_price_only_snapshot_update_keeps_the_frozen_baseline(root: Path) -> None:
+    assert _record(_buy())[0] == 200
+    before = _call("GET", "state")[1]
+    _snapshot_edit(root, lambda d: [p.update(price=str(Decimal(str(p["price"])) + 1)) for p in d["prices"]])
+    after = _call("GET", "state")[1]
+    assert _baseline(after) == ("FROZEN", "2026-10-30", "BASELINE_V1")
+    assert after["projection"] == before["projection"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda d: d.update(valuation_date="2026-11-02"),
+    lambda d: next(p for p in _main(d)["positions"] if p["security_id"] == "SYNIDX").update(quantity="14"),
+    lambda d: _main(d)["cash"][0].update(amount="18.00"),
+], ids=["valuation_date", "quantity", "cash"])
+def test_material_snapshot_change_never_moves_the_cutoff_silently(root: Path, change: Any) -> None:
+    assert _record(_buy())[0] == 200
+    _snapshot_edit(root, change)
+    st = _call("GET", "state")[1]
+    assert _baseline(st) == ("SNAPSHOT_DIVERGED_REBASE_REQUIRED", "2026-10-30", "BASELINE_V1")
+    assert [e["status"] for e in st["entries"]] == ["APPLIED"]
+    assert _position(st, "BROKER_D_MAIN", "SYNIDX") == "14"
+    assert _record(_buy("TX_SECONDBUYAAA", day="2026-11-03"))[1]["status"] == "BASELINE_REBASE_REQUIRED"
+    assert _call("POST", "preview", {"transaction": _buy("TX_SECONDBUYAAA", day="2026-11-03")})[0] == 409
+    doc = json.loads((root / "data" / "private" / "snapshot.json").read_text("utf-8"))
+    assert pt.holdings_for_valuation(doc, TODAY) == (doc, "STATEMENT_ONLY_JOURNAL_NOT_APPLIED_REBASE_REQUIRED")
+
+
+def test_rebase_previews_then_archives_and_absorbs_events_exactly_once(root: Path) -> None:
+    assert _record(_buy())[0] == 200
+    assert _record(_buy("TX_SELLSYNIDXA", qty="1", price="12.00", day="2026-11-03", event="SELL"))[0] == 200
+
+    def roll(d: Dict[str, Any]) -> None:
+        d["valuation_date"] = "2026-11-02"
+        next(p for p in _main(d)["positions"] if p["security_id"] == "SYNIDX").update(quantity="14", cost_basis_total="1122.00")
+        _main(d)["cash"][0]["amount"] = "18.00"
+    _snapshot_edit(root, roll)
+    revision = _call("GET", "state")[1]["revision"]
+    status, out = _call("POST", "rebase", {"base_revision": revision, "confirm": False})
+    assert status == 200 and out["status"] == "REBASE_PREVIEW"
+    plan = out["plan"]
+    assert (plan["from_baseline"], plan["to_baseline"], plan["absorbed"], plan["reactivated"]) == \
+        ("BASELINE_V1", "BASELINE_V2", ["TX_BUYSYNIDXA"], [])
+    assert _position({"projection": plan["before"]}, "BROKER_D_MAIN", "SYNIDX") == "13"
+    assert _position({"projection": plan["after"]}, "BROKER_D_MAIN", "SYNIDX") == "13"
+    assert _cash({"projection": plan["after"]}, "BROKER_D_MAIN") == _cash({"projection": plan["before"]}, "BROKER_D_MAIN") == "29.00"
+    assert _call("GET", "state")[1]["revision"] == revision
+    assert _call("POST", "rebase", {"base_revision": "stale", "confirm": True})[1]["status"] == "REVISION_CONFLICT"
+    status, out = _call("POST", "rebase", {"base_revision": revision, "confirm": True})
+    assert status == 200 and out["status"] == "REBASED"
+    tx = root / "data" / "private" / "transactions"
+    assert json.loads((tx / "baselines" / "BASELINE_V1.json").read_text("utf-8"))["batch_id"] == "BASELINE_V1"
+    st = _call("GET", "state")[1]
+    assert _baseline(st) == ("FROZEN", "2026-11-02", "BASELINE_V2")
+    assert [e["status"] for e in st["entries"]] == ["BEFORE_BASELINE_CUTOFF", "APPLIED"]
+    assert (_position(st, "BROKER_D_MAIN", "SYNIDX"), _cash(st, "BROKER_D_MAIN")) == ("13", "29.00")
+    assert _call("POST", "rebase", {"base_revision": st["revision"], "confirm": True})[1]["status"] == "REBASE_NOT_REQUIRED"
+
+
+def test_rebase_write_failure_keeps_the_old_baseline_and_can_be_retried(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _record(_buy())[0] == 200
+    _snapshot_edit(root, lambda d: d.update(valuation_date="2026-11-01"))
+    path = root / "data" / "private" / "transactions" / pt.BASELINE_FILE
+    original = path.read_bytes()
+    real = pi._atomic_write
+
+    def fail(target: Path, data: bytes) -> None:
+        if target.name == pt.BASELINE_FILE:
+            raise OSError("disk full")
+        real(target, data)
+    monkeypatch.setattr(pi, "_atomic_write", fail)
+    revision = _call("GET", "state")[1]["revision"]
+    assert _call("POST", "rebase", {"base_revision": revision, "confirm": True})[1]["status"] == "WRITE_FAILED"
+    assert path.read_bytes() == original
+    monkeypatch.setattr(pi, "_atomic_write", real)
+    assert _call("POST", "rebase", {"base_revision": revision, "confirm": True})[1]["status"] == "REBASED"
+
+
+def test_journal_without_a_frozen_baseline_requires_a_rebase(root: Path) -> None:
+    assert _record(_buy())[0] == 200
+    (root / "data" / "private" / "transactions" / pt.BASELINE_FILE).unlink()
+    st = _call("GET", "state")[1]
+    assert st["baseline"]["baseline_status"] == "BASELINE_MISSING_REBASE_REQUIRED"
+    assert _record(_buy("TX_SECONDBUYAAA", day="2026-11-03"))[1]["status"] == "BASELINE_REBASE_REQUIRED"
+
+
+def test_replay_is_deterministic_across_restarts_and_conserves_cash(root: Path) -> None:
+    for row in (_buy(), _buy("TX_BUYAGAINAAA", qty="0.5", price="11.00", day="2026-11-03", commission="0.50"),
+                _buy("TX_SELLPARTAAA", qty="1.25", price="12.00", day="2026-11-03", event="SELL")):
+        assert _record(row)[0] == 200
+    first = _call("GET", "state", service=pi.InputService())[1]
+    second = _call("GET", "state", service=pi.InputService())[1]
+    assert first["projection"] == second["projection"] and first["revision"] == second["revision"]
+    nets = sum(Decimal(e["net_cash"]) for e in first["entries"])
+    assert Decimal(_cash(first, "BROKER_D_MAIN") or "0") == Decimal("40") + nets
+    assert Decimal(_position(first, "BROKER_D_MAIN", "SYNIDX") or "0") == Decimal("12") + 2 + Decimal("0.5") - Decimal("1.25")
+    assert first["event_date_policy"] == "TRADE_DATE_AS_ENTERED_FUTURE_CHECK_ASIA_BANGKOK"

@@ -3,9 +3,11 @@
 The journal is one ``ACASH_CANONICAL_TRANSACTIONS_V1`` batch at ``data/private/transactions/journal.json``
 and is append-only: a write must keep every earlier row byte-for-byte, carry the caller's base
 revision and an explicit confirmation, and pass a full replay through ``acash.ppds.transactions``
-together with an opening baseline derived from the saved snapshot. Events dated on or before the
-snapshot's ``valuation_date`` are already reflected in that baseline and are never replayed again.
-Recording needs ODR-001, ODR-002 and ODR-005 RATIFIED; reading needs ODR-001 and ODR-002. Nothing
+together with an opening baseline. The baseline is derived from the saved snapshot and frozen at
+the first recorded event as an OPENING_* batch in ``baseline.json`` (``BASELINE_V<n>``); its date
+is the cutoff, and events on or before it are never replayed. A later snapshot whose opening rows
+or date differ does not move the cutoff: the journal is then not applied and writes stop until the
+Owner previews and confirms a rebase, which archives the previous baseline. Recording needs ODR-001, ODR-002 and ODR-005 RATIFIED; reading needs ODR-001 and ODR-002. Nothing
 here contacts a broker: BUY/SELL rows describe trades the Owner already executed elsewhere.
 Corrections (reversal/supersession) are not enabled: the canonical schema has no correction
 event, and adding one is a separate Owner decision.
@@ -20,6 +22,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import private_input as pi
@@ -27,7 +30,7 @@ from acash.ppds import transactions as txn
 from acash.ppds.private_observation import SCHEMA_V1_2, odr_state, read_gated_json
 
 PREFIX = "/api/upi/transactions/"
-ROUTES: Dict[str, Tuple[str, ...]] = {"state": ("GET",), "preview": ("POST",), "record": ("POST",)}
+ROUTES: Dict[str, Tuple[str, ...]] = {"state": ("GET",), "preview": ("POST",), "record": ("POST",), "rebase": ("POST",)}
 RECORD = Path("docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json")
 DECISION_ID = "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005"
 CAPABILITY = "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED"
@@ -41,6 +44,13 @@ TRANSACTION_ID = re.compile(r"^TX_[A-Z]{8,28}$")
 BACKUPS_KEPT = 20
 CORRECTIONS = "NOT_ENABLED_PENDING_OWNER_DECISION"
 CENT = Decimal("0.01")
+BASELINE_FILE = "baseline.json"
+BASELINE_PREFIX = "BASELINE_V"
+REBASE_REQUIRED = ("SNAPSHOT_DIVERGED_REBASE_REQUIRED", "BASELINE_MISSING_REBASE_REQUIRED")
+# Trade dates are taken as entered; "future" means after today's date in Bangkok, which is ahead
+# of the US markets, so a completed US trade is never rejected because UTC is still on the day before.
+EVENT_DATE_POLICY = "TRADE_DATE_AS_ENTERED_FUTURE_CHECK_ASIA_BANGKOK"
+BANGKOK = ZoneInfo("Asia/Bangkok")
 
 
 def authoring_state() -> str:
@@ -76,8 +86,51 @@ def journal_path() -> Path:
     return path
 
 
+def baseline_path() -> Path:
+    path = pi._private_dir("transactions") / BASELINE_FILE
+    if pi._is_link(path):
+        raise DataContractError("TXN_PATH_LINK_REFUSED: baseline.")
+    return path
+
+
 def journal_revision() -> str:
-    return pi._revision(journal_path())
+    """Covers the journal and the frozen baseline: either changing invalidates a pending write."""
+    return f"{pi._revision(journal_path())}:{pi._revision(baseline_path())}"
+
+
+def _batch_bytes(batch_id: str, rows: List[Dict[str, Any]]) -> bytes:
+    doc = {"schema": txn.SCHEMA, "data_class": DATA_CLASS, "batch_id": batch_id, "transactions": rows}
+    txn.parse_batch(copy.deepcopy(doc))
+    return (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def frozen_baseline() -> Optional[Tuple[str, date, List[Dict[str, Any]]]]:
+    path = baseline_path()
+    if not path.is_file():
+        return None
+    doc = read_gated_json(path, "TXN_BASELINE", record=txn.AUTHORIZATION_RECORD, capability=txn.AUTHORIZED_CAPABILITY,
+                          schema=txn.SCHEMA)
+    batch = txn.parse_batch(doc)
+    rows = list(doc["transactions"])
+    dates = {str(r["trade_date"]) for r in rows}
+    if (batch.data_class != DATA_CLASS or not re.fullmatch(rf"{BASELINE_PREFIX}[1-9][0-9]{{0,5}}", batch.batch_id)
+            or len(dates) != 1 or any(r["event_type"] not in ("OPENING_POSITION", "OPENING_CASH") for r in rows)):
+        raise DataContractError("TXN_BASELINE_INVALID.")
+    return batch.batch_id, date.fromisoformat(dates.pop()), rows
+
+
+def active_baseline(doc: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The frozen baseline when one exists, compared with the one the current snapshot would give."""
+    cutoff, openings, excluded = baseline(doc)
+    base = {"baseline_id": None, "cutoff": cutoff, "openings": openings, "excluded": excluded, "snapshot_cutoff": cutoff,
+            "status": "BASELINE_MISSING_REBASE_REQUIRED" if rows else "PROVISIONAL_FROM_SNAPSHOT"}
+    frozen = frozen_baseline()
+    if frozen is not None:
+        bid, frozen_cutoff, frozen_rows = frozen
+        same = frozen_cutoff == cutoff and frozen_rows == openings
+        base.update(baseline_id=bid, cutoff=frozen_cutoff, openings=frozen_rows,
+                    status="FROZEN" if same else "SNAPSHOT_DIVERGED_REBASE_REQUIRED")
+    return base
 
 
 def load_rows() -> List[Dict[str, Any]]:
@@ -150,11 +203,14 @@ def baseline(doc: Dict[str, Any]) -> Tuple[date, List[Dict[str, Any]], List[Dict
     return cutoff, rows, excluded
 
 
-def _ledger(doc: Dict[str, Any], rows: List[Dict[str, Any]], as_of: date) -> Tuple[Optional[txn.LedgerState], Dict[str, Any]]:
-    cutoff, openings, excluded = baseline(doc)
+def _ledger(doc: Dict[str, Any], rows: List[Dict[str, Any]], as_of: date,
+            base: Optional[Dict[str, Any]] = None) -> Tuple[Optional[txn.LedgerState], Dict[str, Any]]:
+    base = base or active_baseline(doc, rows)
+    cutoff, openings = base["cutoff"], base["openings"]
     events = [r for r in rows if date.fromisoformat(str(r["trade_date"])) > cutoff]
-    info = {"cutoff": cutoff.isoformat(), "baseline_excluded": excluded, "applied": len(events),
-            "before_cutoff": len(rows) - len(events)}
+    info = {"cutoff": cutoff.isoformat(), "baseline_excluded": base["excluded"], "applied": len(events),
+            "before_cutoff": len(rows) - len(events), "baseline_id": base["baseline_id"],
+            "baseline_status": base["status"], "snapshot_cutoff": base["snapshot_cutoff"].isoformat()}
     parsed = [txn.parse_transaction(r, i) for i, r in enumerate(openings + events)]
     if len({t.key for t in parsed}) != len(parsed):
         raise DataContractError("TXN_DUPLICATE_ID.")
@@ -178,10 +234,11 @@ def _projection(state: Optional[txn.LedgerState]) -> Dict[str, Any]:
 
 
 def _today() -> date:
-    return datetime.now(timezone.utc).date()
+    return datetime.now(BANGKOK).date()
 
 
-def _validate(raw: Any, doc: Dict[str, Any], rows: List[Dict[str, Any]], today: date) -> Dict[str, Any]:
+def _validate(raw: Any, doc: Dict[str, Any], rows: List[Dict[str, Any]], today: date,
+              cutoff: date) -> Dict[str, Any]:
     if not isinstance(raw, dict) or raw.get("event_type") not in AUTHORED_EVENTS:
         raise DataContractError("TXN_EVENT_NOT_AUTHORABLE: only BUY, SELL, DEPOSIT, WITHDRAWAL, DIVIDEND, FEE.")
     row = {k: v for k, v in raw.items() if v is not None}
@@ -192,9 +249,8 @@ def _validate(raw: Any, doc: Dict[str, Any], rows: List[Dict[str, Any]], today: 
         raise DataContractError("TXN_ACCOUNT_UNKNOWN: record the account in the Setup Wizard first.")
     if parsed.security_id is not None and parsed.security_id not in {s["security_id"] for s in doc.get("securities", [])}:
         raise DataContractError("TXN_SECURITY_UNKNOWN: add the security in the Setup Wizard first.")
-    cutoff = date.fromisoformat(str(doc["valuation_date"]))
     if parsed.trade_date <= cutoff:
-        raise DataContractError("TXN_BEFORE_BASELINE_CUTOFF: the snapshot already reflects this date.")
+        raise DataContractError("TXN_BEFORE_BASELINE_CUTOFF: the opening baseline already reflects this date.")
     if parsed.trade_date > today:
         raise DataContractError("TXN_FUTURE_TRADE_DATE: only completed transactions can be recorded.")
     if parsed.event_type in ("BUY", "SELL") and parsed.security_id is not None:
@@ -204,9 +260,10 @@ def _validate(raw: Any, doc: Dict[str, Any], rows: List[Dict[str, Any]], today: 
     return row
 
 
-def _effect(doc: Dict[str, Any], rows: List[Dict[str, Any]], row: Dict[str, Any], today: date) -> Dict[str, Any]:
-    before, _ = _ledger(doc, rows, today)
-    after, info = _ledger(doc, rows + [row], today)
+def _effect(doc: Dict[str, Any], rows: List[Dict[str, Any]], row: Dict[str, Any], today: date,
+            base: Dict[str, Any]) -> Dict[str, Any]:
+    before, _ = _ledger(doc, rows, today, base)
+    after, info = _ledger(doc, rows + [row], today, base)
     return {"before": _projection(before), "after": _projection(after), "cutoff": info["cutoff"]}
 
 
@@ -221,7 +278,7 @@ def state() -> pi.Result:
                for r in rows]
     return 200, {"status": "OK", **authority(), "revision": journal_revision(), "baseline": info,
                  "entries": entries, "projection": _projection(ledger), "corrections": CORRECTIONS,
-                 "authored_events": list(AUTHORED_EVENTS)}
+                 "authored_events": list(AUTHORED_EVENTS), "event_date_policy": EVENT_DATE_POLICY}
 
 
 def _duplicate(rows: List[Dict[str, Any]], row: Dict[str, Any]) -> Optional[str]:
@@ -242,10 +299,13 @@ def preview(body: Any) -> pi.Result:
     if doc is None:
         return 404, {"status": "NO_INPUT"}
     rows, today = load_rows(), _today()
-    row = _validate(body["transaction"], doc, rows, today)
+    base = active_baseline(doc, rows)
+    if base["status"] in REBASE_REQUIRED:
+        return 409, {"status": "BASELINE_REBASE_REQUIRED", "baseline_status": base["status"]}
+    row = _validate(body["transaction"], doc, rows, today, base["cutoff"])
     duplicate = _duplicate(rows, row)
     return 200, {"status": "PREVIEW", "duplicate": duplicate, "revision": journal_revision(),
-                 "effect": _effect(doc, [r for r in rows if r.get("transaction_id") != row["transaction_id"]], row, today)}
+                 "effect": _effect(doc, [r for r in rows if r.get("transaction_id") != row["transaction_id"]], row, today, base)}
 
 
 def _backup(path: Path, revision: str) -> None:
@@ -269,9 +329,12 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
         if doc is None:
             return 404, {"status": "NO_INPUT"}
         path = journal_path()
-        current = pi._revision(path)
+        current, journal_current = journal_revision(), pi._revision(path)
         rows, today = load_rows(), _today()
-        row = _validate(body["transaction"], doc, rows, today)
+        base = active_baseline(doc, rows)
+        if base["status"] in REBASE_REQUIRED:
+            return 409, {"status": "BASELINE_REBASE_REQUIRED", "baseline_status": base["status"]}
+        row = _validate(body["transaction"], doc, rows, today, base["cutoff"])
         duplicate = _duplicate(rows, row)
         if duplicate == "ALREADY_RECORDED":
             return 200, {"status": "ALREADY_RECORDED", "revision": current}
@@ -283,22 +346,81 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
             if body.get("confirm_duplicate") is not True:
                 return 409, {"status": "POSSIBLE_DUPLICATE"}
             row["sequence"] = sum(1 for r in rows if "sequence" in r) + 1
-        ledger, _ = _ledger(doc, rows + [row], today)
-        new_doc = {"schema": txn.SCHEMA, "data_class": DATA_CLASS, "batch_id": BATCH_ID, "transactions": rows + [row]}
-        txn.parse_batch(copy.deepcopy(new_doc))
-        data = (json.dumps(new_doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        ledger, _ = _ledger(doc, rows + [row], today, base)
+        data = _batch_bytes(BATCH_ID, rows + [row])
+        freeze = None
+        if base["baseline_id"] is None:
+            if not base["openings"]:
+                raise DataContractError("TXN_BASELINE_EMPTY: the snapshot has no quantity positions or positive settled cash.")
+            freeze = _batch_bytes(f"{BASELINE_PREFIX}1", base["openings"])
         if not _write_authorized():
             return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **authority()}
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            if current != pi.ABSENT:
-                _backup(path, current)
+            if freeze is not None:
+                pi._atomic_write(baseline_path(), freeze)
+            if journal_current != pi.ABSENT:
+                _backup(path, journal_current)
             pi._atomic_write(path, data)
         except OSError as exc:
             return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
         if load_rows()[:-1] != rows:
             raise DataContractError("TXN_JOURNAL_NOT_APPEND_ONLY.")
-        return 200, {"status": "RECORDED", "revision": pi._revision(path), "projection": _projection(ledger)}
+        return 200, {"status": "RECORDED", "revision": journal_revision(), "projection": _projection(ledger)}
+
+
+def _rebase_plan(doc: Dict[str, Any], rows: List[Dict[str, Any]], today: date) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    old = active_baseline(doc, rows)
+    cutoff, openings, excluded = baseline(doc)
+    number = int(old["baseline_id"][len(BASELINE_PREFIX):]) + 1 if old["baseline_id"] else 1
+    new = {"baseline_id": f"{BASELINE_PREFIX}{number}", "cutoff": cutoff, "openings": openings, "excluded": excluded,
+           "snapshot_cutoff": cutoff, "status": "FROZEN"}
+    before, _ = _ledger(doc, rows, today, old)
+    after, _ = _ledger(doc, rows, today, new)
+    day = {r["transaction_id"]: date.fromisoformat(str(r["trade_date"])) for r in rows}
+    plan = {"from_baseline": old["baseline_id"], "from_cutoff": old["cutoff"].isoformat(),
+            "to_baseline": new["baseline_id"], "to_cutoff": cutoff.isoformat(),
+            "absorbed": [t for t, d in day.items() if old["cutoff"] < d <= cutoff],
+            "reactivated": [t for t, d in day.items() if cutoff < d <= old["cutoff"]],
+            "before": _projection(before), "after": _projection(after)}
+    return new, plan
+
+
+def rebase(body: Any, service: pi.InputService) -> pi.Result:
+    """Replace the frozen baseline with one from the current snapshot; preview unless confirmed.
+
+    Events dated on or before the new cutoff are treated as already inside the new snapshot
+    (``absorbed``); the plan lists them so the Owner confirms that, and nothing is deleted.
+    """
+    if not isinstance(body, dict) or set(body) != {"base_revision", "confirm"} or not isinstance(body["confirm"], bool):
+        return 400, {"status": "REQUEST_FIELDS_INVALID"}
+    with service.write_lock:
+        doc = _snapshot()
+        if doc is None:
+            return 404, {"status": "NO_INPUT"}
+        rows, today, current = load_rows(), _today(), journal_revision()
+        if active_baseline(doc, rows)["status"] not in REBASE_REQUIRED:
+            return 409, {"status": "REBASE_NOT_REQUIRED"}
+        new, plan = _rebase_plan(doc, rows, today)
+        if not new["openings"]:
+            raise DataContractError("TXN_BASELINE_EMPTY: the snapshot has no quantity positions or positive settled cash.")
+        if current != body["base_revision"]:
+            return 409, {"status": "REVISION_CONFLICT", "revision": current}
+        if not body["confirm"]:
+            return 200, {"status": "REBASE_PREVIEW", "revision": current, "plan": plan}
+        data = _batch_bytes(new["baseline_id"], new["openings"])
+        if not _write_authorized():
+            return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **authority()}
+        path = baseline_path()
+        try:
+            if path.is_file():
+                archive = pi._private_dir("transactions", "baselines")
+                archive.mkdir(parents=True, exist_ok=True)
+                pi._atomic_write(archive / f"{plan['from_baseline']}.json", path.read_bytes())
+            pi._atomic_write(path, data)
+        except OSError as exc:
+            return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
+        return 200, {"status": "REBASED", "revision": journal_revision(), "plan": plan}
 
 
 def holdings_for_valuation(doc: Dict[str, Any], today: date) -> Tuple[Dict[str, Any], str]:
@@ -311,7 +433,10 @@ def holdings_for_valuation(doc: Dict[str, Any], today: date) -> Tuple[Dict[str, 
     if authority()["odr_002"] != "RATIFIED" or not journal_path().is_file():
         return doc, "STATEMENT_BASELINE"
     rows = load_rows()
-    ledger, info = _ledger(doc, rows, today)
+    base = active_baseline(doc, rows)
+    if base["status"] in REBASE_REQUIRED:
+        return doc, "STATEMENT_ONLY_JOURNAL_NOT_APPLIED_REBASE_REQUIRED"
+    ledger, info = _ledger(doc, rows, today, base)
     if not info["applied"] or ledger is None:
         return doc, "STATEMENT_BASELINE"
     out = copy.deepcopy(doc)
@@ -357,6 +482,8 @@ def handle(method: str, name: str, body: Any, service: pi.InputService) -> pi.Re
             return preview(body)
         if not service.writes.allow():
             return 429, {"status": "RATE_LIMITED"}
+        if name == "rebase":
+            return rebase(body, service)
         return record(body, service)
     except DataContractError as exc:
         return 422, {"status": "TRANSACTION_REFUSED", **pi._code(exc)}
