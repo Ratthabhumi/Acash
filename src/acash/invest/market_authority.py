@@ -21,8 +21,11 @@ DECISION_ID = "ODR_UPI_MARKET_DATA_004"
 CAPABILITY = "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED"
 REQUIRES = ["ODR_UPI_PRIVATE_OBSERVATION_001"]
 CREDENTIAL_TARGET_PREFIX = "ACASH/MARKET_DATA/"
-ADAPTED_PROVIDERS = ("ALPACA_BASIC", "MASSIVE_BASIC", "BOT_REFERENCE_FX")
-KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("ALPACA_HISTORICAL", "WEBULL_TH_OPENAPI")
+ADAPTED_PROVIDERS = ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX",
+                     "MASSIVE_BASIC", "BOT_REFERENCE_FX")
+KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
+# Providers that authenticate without a stored credential (published keyless endpoints).
+KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
 STATUSES = ("NOT_CONFIGURED", "GOVERNANCE_REQUIRED", "CONTRACT_UNVERIFIED", "CREDENTIALS_REQUIRED",
             "ENTITLEMENT_REQUIRED", "DISPLAY_RIGHTS_UNVERIFIED", "DERIVED_USE_UNVERIFIED", "READY",
             "RATE_LIMITED", "SERVICE_UNAVAILABLE")
@@ -38,9 +41,21 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "BOT_REFERENCE_FX": {"role": "FX", "quote_type": "DAILY_REFERENCE_RATE", "coverage": "REFERENCE_FX_NOT_EXECUTABLE",
                          "label": "REFERENCE_FX_NOT_EXECUTABLE", "contract_verified": False, "rate_limit": "200/hour",
                          "timestamp_policy": "PERIOD_DATE_BANGKOK", "known_restriction": "RESPONSE_SCHEMA_UNVERIFIED"},
-    "ALPACA_HISTORICAL": {"role": "PRICE", "quote_type": "HISTORICAL_BAR", "coverage": "UNKNOWN", "label": None,
-                          "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
-                          "known_restriction": "ENDPOINT_AND_SIP_WINDOW_NOT_SUPPLIED"},
+    "ALPACA_HISTORICAL": {"role": "PRICE", "quote_type": "HISTORICAL_BAR",
+                          "coverage": "CONSOLIDATED", "label": "INTRADAY_BAR_CLOSE_OR_EOD_CLOSE",
+                          "contract_verified": True, "rate_limit": "200/min",
+                          "timestamp_policy": "BAR_OPEN_RFC3339",
+                          "known_restriction": "BASIC_PLAN_SIP_DELAY_ENFORCED"},
+    "MARKETDATA_APP_FREE": {"role": "PRICE", "quote_type": "EOD_CLOSE",
+                            "coverage": "UNKNOWN", "label": "DELAYED_24H_PLUS",
+                            "contract_verified": False, "rate_limit": "100_credits/day",
+                            "timestamp_policy": "UNKNOWN",
+                            "known_restriction": "EXCHANGE_AGREEMENT_AND_DERIVED_VALUE_RIGHTS_UNVERIFIED"},
+    "FRANKFURTER_ECB_FX": {"role": "FX", "quote_type": "DAILY_REFERENCE_RATE",
+                           "coverage": "REFERENCE_FX_NOT_EXECUTABLE", "label": "REFERENCE_FX_NOT_EXECUTABLE",
+                           "contract_verified": False, "rate_limit": "UNKNOWN",
+                           "timestamp_policy": "DATE_UTC",
+                           "known_restriction": "RESPONSE_SCHEMA_UNVERIFIED_AGAINST_LIVE"},
     "WEBULL_TH_OPENAPI": {"role": "PRICE", "quote_type": None, "coverage": "UNKNOWN", "label": None,
                           "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
                           "known_restriction": "OPENAPI_ENTITLEMENT_PENDING"},
@@ -145,7 +160,10 @@ def provider_status(provider_id: str, state: str, doc: Dict[str, Any], store: Cr
 
     if provider_id not in ADAPTED_PROVIDERS:
         return done("NOT_CONFIGURED", "NO_ADAPTER")
-    caps["credentials_configured"] = "ESTABLISHED" if store.lookup(provider_id) is not None else "MISSING"
+    if provider_id in KEYLESS_PROVIDERS:
+        caps["credentials_configured"] = "ESTABLISHED"
+    else:
+        caps["credentials_configured"] = "ESTABLISHED" if store.lookup(provider_id) is not None else "MISSING"
     if state != "RATIFIED":
         return done("GOVERNANCE_REQUIRED", f"ODR_004_{state}")
     if entry is None:

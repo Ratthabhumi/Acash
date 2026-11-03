@@ -19,7 +19,7 @@ from decimal import Decimal
 from acash.core.domain.exceptions import DataContractError
 from acash.ppds.private_observation import SCHEMA_V1_2, parse_snapshot
 
-PRICE_TYPES = ("EOD_CLOSE", "LAST_TRADE", "OWNER_OBSERVED", "SYNTHETIC")
+PRICE_TYPES = ("EOD_CLOSE", "LAST_TRADE", "INTRADAY_BAR_CLOSE", "OWNER_OBSERVED", "SYNTHETIC")
 COVERAGES = ("CONSOLIDATED", "NASDAQ_BASIC", "IEX_ONLY", "UNKNOWN")
 FX_KINDS = ("REFERENCE_FX", "BROKER_EXECUTED_FX", "INDICATIVE_FX")
 _CCY = re.compile(r"^[A-Z]{3}$")

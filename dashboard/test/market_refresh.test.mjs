@@ -25,7 +25,7 @@ test('refresh stays disabled unless ODR-004 is ratified and a price provider is 
   assert.equal(refreshBlocker({ ...ok, odr_004: 'PROPOSED_NOT_RATIFIED' }), 'MARKET_DATA_AUTHORIZATION_REQUIRED');
   assert.equal(refreshBlocker({ ...ok, providers: [{ provider_id: 'BOT_REFERENCE_FX', status: 'READY' }] }), 'NO_READY_PRICE_PROVIDER');
   assert.equal(refreshBlocker({ ...ok, providers: [{ provider_id: 'ALPACA_BASIC', status: 'CREDENTIALS_REQUIRED' }] }), 'NO_READY_PRICE_PROVIDER');
-  assert.deepEqual([...PRICE_PROVIDERS], ['ALPACA_BASIC', 'MASSIVE_BASIC']);
+  assert.deepEqual([...PRICE_PROVIDERS], ['ALPACA_BASIC', 'ALPACA_HISTORICAL', 'MARKETDATA_APP_FREE', 'MASSIVE_BASIC']);
 });
 
 test('partial valuation is never described as the whole portfolio and the client holds no secrets', () => {

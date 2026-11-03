@@ -207,7 +207,244 @@ def test_bot_rejects_malformed_or_out_of_range(body: Any) -> None:
         mp.BOTReferenceFXProvider(CRED, t, _allow, _clock).reference_rates(date(2026, 11, 3))
 
 
+# ---- Alpaca Historical SIP ------------------------------------------------------------------
+
+def _sip_bar(symbol: str, opened: str, o: float = 100.0, h: float = 101.0,
+             l: float = 99.0, c: float = 100.5) -> Dict[str, Any]:
+    return {"t": opened, "o": o, "h": h, "l": l, "c": c, "v": 10000, "n": 50, "vw": c}
+
+
+def _sip_resp(symbol: str, bars: List[Any], next_token: Optional[str] = None) -> Dict[str, Any]:
+    return {"bars": {symbol: bars}, "next_page_token": next_token}
+
+
+# NOW = datetime(2026, 11, 3, 21, 30, utc) → limit = NOW - 15min - 2min = 21:13 utc
+_SIP_LIMIT = datetime(2026, 11, 3, 21, 13, tzinfo=timezone.utc)
+# A 1-min bar opened at 21:10 UTC → closed 21:11 UTC < 21:13 → eligible
+_VALID_1MIN_OPEN = "2026-11-03T21:10:00Z"
+# A daily bar: opened 2026-11-03 NY (11:00 UTC); closes at 16:00 NY = 21:00 UTC < 21:13 → eligible
+_VALID_DAY_OPEN = "2026-11-03T11:00:00-05:00"
+
+
+def test_alpaca_historical_intraday_bar_selected_first() -> None:
+    bar = _sip_bar("SYNA", _VALID_1MIN_OPEN)
+    t = FakeTransport({"stocks/bars": (200, _sip_resp("SYNA", [bar]))})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    obs = provider.latest_prices(["SYNA"], date(2026, 11, 3))
+    assert len(obs) == 1
+    assert obs[0].price_type == "INTRADAY_BAR_CLOSE"
+    assert obs[0].security_id == "SYNA"
+    assert obs[0].price == Decimal("100.5")
+    assert obs[0].coverage == "CONSOLIDATED"
+
+
+def test_alpaca_historical_falls_back_to_daily_when_no_intraday() -> None:
+    # 1Min returns empty; 1Day returns a bar
+    day_bar = _sip_bar("SYNA", _VALID_DAY_OPEN)
+    t = FakeTransport({"stocks/bars": (200, {"bars": {"SYNA": []}, "next_page_token": None})})
+    # Second call (1Day) returns valid
+    call_count = [0]
+    def transport(req: mp.HttpRequest) -> Tuple[int, bytes]:
+        mp.assert_allowed(req)
+        call_count[0] += 1
+        if "1Min" in req.url:
+            return 200, json.dumps({"bars": {"SYNA": []}, "next_page_token": None}).encode()
+        return 200, json.dumps({"bars": {"SYNA": [day_bar]}, "next_page_token": None}).encode()
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, transport, _allow, _clock)
+    obs = provider.latest_prices(["SYNA"], date(2026, 11, 3))
+    assert len(obs) == 1
+    assert obs[0].price_type == "EOD_CLOSE"
+
+
+def test_alpaca_historical_rejects_future_bar() -> None:
+    # Bar opened after limit: 21:20 UTC > 21:13 limit
+    future_bar = _sip_bar("SYNA", "2026-11-03T21:20:00Z")
+    t = FakeTransport({"stocks/bars": (200, _sip_resp("SYNA", [future_bar]))})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="bar timestamp"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+
+def test_alpaca_historical_rejects_bad_bar_range() -> None:
+    # high < low is impossible
+    bad_bar = _sip_bar("SYNA", _VALID_1MIN_OPEN, o=100.0, h=98.0, l=99.0, c=100.0)
+    t = FakeTransport({"stocks/bars": (200, _sip_resp("SYNA", [bad_bar]))})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="bar range"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+
+def test_alpaca_historical_rejects_duplicate_bar_timestamp() -> None:
+    bar = _sip_bar("SYNA", _VALID_1MIN_OPEN)
+    t = FakeTransport({"stocks/bars": (200, _sip_resp("SYNA", [bar, bar]))})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="bar timestamp"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+
+def test_alpaca_historical_rejects_unrequested_symbol() -> None:
+    t = FakeTransport({"stocks/bars": (200, {"bars": {"EVIL": [_sip_bar("EVIL", _VALID_1MIN_OPEN)]},
+                                            "next_page_token": None})})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="unrequested symbol"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+
+def test_alpaca_historical_rate_limited_stops_immediately() -> None:
+    t = FakeTransport({"stocks/bars": (429, b"")})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+
+
+def test_alpaca_historical_credential_not_in_url() -> None:
+    bar = _sip_bar("SYNA", _VALID_1MIN_OPEN)
+    t = FakeTransport({"stocks/bars": (200, _sip_resp("SYNA", [bar]))})
+    provider = mp.AlpacaHistoricalSIPProvider(CRED, t, _allow, _clock)
+    provider.latest_prices(["SYNA"], date(2026, 11, 3))
+    assert all(CRED[0] not in c.url and CRED[1] not in c.url for c in t.calls)
+
+
+# ---- MarketDataApp Free (contract unverified guard) ------------------------------------------
+
+def test_marketdata_app_raises_contract_unverified() -> None:
+    """Adapter must refuse live requests until MARKETDATA_CONTRACT_VERIFIED is set True."""
+    t = FakeTransport()
+    provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
+        provider.latest_prices(["SYNA"], date(2026, 11, 3))
+    assert len(t.calls) == 0  # no request sent
+
+
+def test_marketdata_app_endpoint_allowlist_rejects_wrong_host() -> None:
+    """MARKETDATA_APP_FREE endpoint must only allow api.marketdata.app."""
+    with pytest.raises(DataContractError, match="ENDPOINT_NOT_ALLOWED"):
+        mp.assert_allowed(mp.HttpRequest("MARKETDATA_APP_FREE",
+                                         "https://evil.example/v1/stocks/quotes/?symbols=SYNA&token=tok", {}))
+
+
+def test_marketdata_app_daily_credit_budget_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When remaining credits < symbols, raise PROVIDER_RATE_LIMITED before any request."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"quotes": (200, {"status": "ok"})})
+    provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
+    provider._daily_credits_used = 95
+    provider._credits_day = NOW.astimezone(timezone.utc).date()
+    symbols = [f"SYN{i}" for i in range(10)]  # 10 symbols, only 5 credits left
+    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
+        provider.latest_prices(symbols, date(2026, 11, 3))
+    assert len(t.calls) == 0
+
+
+def test_marketdata_app_charges_one_credit_per_symbol_and_resets_daily(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Credits are charged per symbol before the call, and the budget resets on a new UTC day."""
+    monkeypatch.setattr(mp, "MARKETDATA_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"quotes": (200, {"status": "ok"})})
+    provider = mp.MarketDataAppFreeProvider(CRED, t, _allow, _clock)
+    provider._daily_credits_used = 95
+    provider._credits_day = NOW.astimezone(timezone.utc).date()
+    provider.latest_prices(["SYNA", "SYNB", "SYNC", "SYND", "SYNE"], date(2026, 11, 3))
+    assert provider._daily_credits_used == 100
+    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
+        provider.latest_prices(["SYNF"], date(2026, 11, 3))  # same day: budget is gone
+    provider._credits_day = date(2026, 11, 2)
+    provider.latest_prices(["SYNF"], date(2026, 11, 3))
+    assert provider._daily_credits_used == 1
+
+
+# ---- Frankfurter ECB FX (contract unverified guard) -----------------------------------------
+
+def _frankfurter(rate: float = 34.12, date_str: str = "2026-11-03") -> Dict[str, Any]:
+    return {"base": "USD", "quote": "THB", "date": date_str, "rates": {"ECB": rate}}
+
+
+def test_frankfurter_raises_contract_unverified() -> None:
+    """Adapter must refuse live requests until FRANKFURTER_CONTRACT_VERIFIED is set True."""
+    t = FakeTransport()
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_CONTRACT_UNVERIFIED"):
+        provider.reference_rate()
+    assert len(t.calls) == 0
+
+
+def test_frankfurter_endpoint_allowlist_correct_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    url = mp.build_url("FRANKFURTER_ECB_FX", "/v2/rate/USD/THB", {"providers": "ECB"})
+    assert "api.frankfurter.dev" in url
+    mp.assert_allowed(mp.HttpRequest("FRANKFURTER_ECB_FX", url, {}))
+
+
+def test_frankfurter_parses_ecb_rate_both_directions(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12))})
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    obs = provider.reference_rate("USD", "THB")
+    assert len(obs) == 2
+    fwd = next(o for o in obs if o.from_currency == "USD")
+    back = next(o for o in obs if o.from_currency == "THB")
+    assert fwd.rate == Decimal("34.12")
+    assert fwd.kind == "REFERENCE_FX"
+    assert abs(back.rate * fwd.rate - 1) < Decimal("1e-9")
+    assert fwd.market_date.isoformat() == "2026-11-03"
+
+
+def test_frankfurter_rejects_future_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12, "2026-11-05"))})
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    with pytest.raises(DataContractError, match="future date"):
+        provider.reference_rate()
+
+
+def test_frankfurter_rejects_missing_ecb_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    bad = {"base": "USD", "quote": "THB", "date": "2026-11-03", "rates": {"OTHER": 34.12}}
+    t = FakeTransport({"rate/USD/THB": (200, bad)})
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.reference_rate()
+
+
+def test_frankfurter_no_credential_in_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Frankfurter is keyless; no secret must appear in any outbound URL."""
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter())})
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    provider.reference_rate()
+    assert len(t.calls) == 1
+    assert "token" not in t.calls[0].url.lower()
+
+
+def test_frankfurter_reference_rates_filters_to_market_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mp, "FRANKFURTER_CONTRACT_VERIFIED", True)
+    t = FakeTransport({"rate/USD/THB": (200, _frankfurter(34.12, "2026-10-31"))})
+    provider = mp.FrankfurterECBFxProvider(t, _allow, _clock)
+    assert provider.reference_rates(date(2026, 11, 3), lookback_days=2) == []
+    obs = provider.reference_rates(date(2026, 11, 3), lookback_days=7)
+    assert len(obs) == 2 and obs[0].market_date == date(2026, 10, 31)
+
+
+def test_frankfurter_is_keyless_and_can_be_ready_without_credential(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(ma.REGISTRY["FRANKFURTER_ECB_FX"], "contract_verified", True)
+    _odr4(root, scope=[_entry("FRANKFURTER_ECB_FX")])
+    status = {p["provider_id"]: p for p in ma.provider_statuses(Store({}))[1]}["FRANKFURTER_ECB_FX"]
+    assert status["status"] == "READY"
+    assert status["capabilities"]["credentials_configured"] == "ESTABLISHED"
+
+
+def test_provider_factory_builds_new_adapted_providers() -> None:
+    service = ms.MarketService(Store(), FakeTransport())
+    ready = [{"provider_id": pid, "cache_permitted": False} for pid in
+             ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX")]
+    built = ms._providers(service, ready)
+    assert type(built["ALPACA_HISTORICAL"]).__name__ == "AlpacaHistoricalSIPProvider"
+    assert type(built["MARKETDATA_APP_FREE"]).__name__ == "MarketDataAppFreeProvider"
+    assert type(built["FRANKFURTER_ECB_FX"]).__name__ == "FrankfurterECBFxProvider"
+
+
 # ---- ODR-004 authority ------------------------------------------------------------------------
+
 
 def _odr1(root: Path, status: str = "RATIFIED") -> None:
     record = root / po.AUTHORIZATION_RECORD
@@ -265,12 +502,18 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
     _odr1(root)
     _odr4(root)
     assert _status() == {"ALPACA_BASIC": "GOVERNANCE_REQUIRED", "MASSIVE_BASIC": "GOVERNANCE_REQUIRED",
-                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED", "ALPACA_HISTORICAL": "NOT_CONFIGURED",
+                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED",
+                         "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
+                         "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
+                         "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
                          "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("MASSIVE_BASIC", entitlement_verified=None),
                        _entry("BOT_REFERENCE_FX", display_permitted=False), _entry("WEBULL_TH_OPENAPI")])
     assert _status() == {"ALPACA_BASIC": "READY", "MASSIVE_BASIC": "ENTITLEMENT_REQUIRED",
-                         "BOT_REFERENCE_FX": "DISPLAY_RIGHTS_UNVERIFIED", "ALPACA_HISTORICAL": "NOT_CONFIGURED",
+                         "BOT_REFERENCE_FX": "DISPLAY_RIGHTS_UNVERIFIED",
+                         "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
+                         "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
+                         "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
                          "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
     assert _status(Store({}))["ALPACA_BASIC"] == "CREDENTIALS_REQUIRED"
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("ALPACA_BASIC")])

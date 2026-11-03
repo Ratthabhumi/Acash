@@ -26,7 +26,7 @@ NEW_YORK = ZoneInfo("America/New_York")
 SYMBOL = re.compile(r"^[A-Z][A-Z0-9]{0,9}(\.[A-Z])?$")
 US_MICS = frozenset({"XNAS", "XNGS", "XNMS", "XNCM", "XNYS", "ARCX", "BATS", "XASE", "IEXG"})
 MAX_QUOTE_AGE_DAYS = 7
-PRICE_TYPES = ("LAST_TRADE", "EOD_CLOSE")
+PRICE_TYPES = ("LAST_TRADE", "INTRADAY_BAR_CLOSE", "EOD_CLOSE")
 
 
 class FXProvider(Protocol):
@@ -67,6 +67,7 @@ def refresh_prices(doc: Dict[str, Any], price_providers: Sequence[MarketDataProv
     selected = selection["selected"]
     market_date = max((o.market_date for o in selected.values()), default=None)
     fx: Sequence[FXObservation] = []
+    fx_provider_id: Optional[str] = None
     if len(_currencies(snapshot)) <= 1:
         fx_status = "NOT_REQUIRED"
     elif market_date is None:
@@ -78,9 +79,12 @@ def refresh_prices(doc: Dict[str, Any], price_providers: Sequence[MarketDataProv
             fx = fx_provider.reference_rates(market_date)
             fx_status = ("REFERENCE_FX_ON_MARKET_DATE" if any(r.market_date == market_date for r in fx)
                          else "FX_UNAVAILABLE_FOR_MARKET_DATE")
+            if fx_status == "REFERENCE_FX_ON_MARKET_DATE":
+                fx_provider_id = getattr(fx_provider, "provider_id", None)
         except DataContractError as exc:
             fx_status = str(exc).split(":")[0]
     derived, meta = partial_snapshot(doc, selected, fx, snapshot_id)
+    meta["fx_provider_id"] = fx_provider_id
     meta["coverage"]["unsupported_instruments"] = unsupported
     quotes = [{"security_id": sid, "provider_id": o.provider_id, "price": str(o.price), "currency": o.currency,
                "price_type": o.price_type, "coverage": o.coverage, "market_date": o.market_date.isoformat(),

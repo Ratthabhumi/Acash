@@ -3,7 +3,7 @@
 // credential ever reaches the browser.
 
 export const MARKET_ENDPOINT = 'http://127.0.0.1:8765/api/upi/market/';
-export const PRICE_PROVIDERS = ['ALPACA_BASIC', 'MASSIVE_BASIC'] as const;
+export const PRICE_PROVIDERS = ['ALPACA_BASIC', 'ALPACA_HISTORICAL', 'MARKETDATA_APP_FREE', 'MASSIVE_BASIC'] as const;
 
 export interface ProviderStatus {
   provider_id: string; status: string; detail?: string; cache_permitted?: boolean;
@@ -47,7 +47,9 @@ export const PROVIDER_INFO: Record<string, { name: string; coverage: string }> =
   ALPACA_BASIC: { name: 'Alpaca Basic', coverage: 'IEX real-time (single venue, not consolidated)' },
   MASSIVE_BASIC: { name: 'Massive Basic', coverage: 'Previous session close (EOD)' },
   BOT_REFERENCE_FX: { name: 'BOT FX', coverage: 'Reference USD/THB (not executable)' },
-  ALPACA_HISTORICAL: { name: 'Alpaca historical', coverage: 'Historical bars · contract not supplied · no adapter' },
+  ALPACA_HISTORICAL: { name: 'Alpaca historical SIP', coverage: 'Delayed consolidated bars (≥ 15 min + margin), adapter gated' },
+  MARKETDATA_APP_FREE: { name: 'MarketData.app Free', coverage: 'Delayed/EOD quotes, 100 credits/day · contract unverified · gated' },
+  FRANKFURTER_ECB_FX: { name: 'Frankfurter ECB FX', coverage: 'ECB reference USD/THB, keyless, not executable · gated' },
   WEBULL_TH_OPENAPI: { name: 'Webull Thailand', coverage: 'Pending entitlement · no adapter' },
 };
 

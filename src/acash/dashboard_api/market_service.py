@@ -25,8 +25,11 @@ from acash.dashboard_api import private_transactions as pt
 from acash.invest import market_authority as ma
 from acash.invest.capacity_plan import load_capacity
 from acash.market_data.providers import (
+    AlpacaHistoricalSIPProvider,
     AlpacaIEXMarketDataProvider,
     BOTReferenceFXProvider,
+    FrankfurterECBFxProvider,
+    MarketDataAppFreeProvider,
     MassiveEODMarketDataProvider,
     Transport,
     urllib_transport,
@@ -43,7 +46,9 @@ MARKET_DIR = ("market",)
 PUBLISHED_FILE = "market_published.json"
 ATTEMPT_FILE = "market_last_attempt.json"
 LEGACY_FILES = ("market_view.json", "market_refresh.json")
-LIMITS = {"ALPACA_BASIC": (200, 60.0), "MASSIVE_BASIC": (5, 60.0), "BOT_REFERENCE_FX": (200, 3600.0)}
+LIMITS = {"ALPACA_BASIC": (200, 60.0), "ALPACA_HISTORICAL": (200, 60.0),
+          "MARKETDATA_APP_FREE": (100, 86400.0), "FRANKFURTER_ECB_FX": (200, 3600.0),
+          "MASSIVE_BASIC": (5, 60.0), "BOT_REFERENCE_FX": (200, 3600.0)}
 REFRESHES_PER_MINUTE = 4
 
 
@@ -122,11 +127,20 @@ def _providers(service: MarketService, ready: List[Dict[str, Any]]) -> Dict[str,
     for status in ready:
         pid = status["provider_id"]
         credential = service.store.lookup(pid)
+        allow = service.limiters[pid].allow
+        # Keyless providers are built before the credential gate; everything else needs one.
+        if pid in ma.KEYLESS_PROVIDERS:
+            if pid == "FRANKFURTER_ECB_FX":
+                built[pid] = FrankfurterECBFxProvider(service.transport, allow, service.clock)
+            continue
         if credential is None:
             continue
-        allow = service.limiters[pid].allow
         if pid == "ALPACA_BASIC":
             built[pid] = AlpacaIEXMarketDataProvider(credential, service.transport, allow, service.clock)
+        elif pid == "ALPACA_HISTORICAL":
+            built[pid] = AlpacaHistoricalSIPProvider(credential, service.transport, allow, service.clock)
+        elif pid == "MARKETDATA_APP_FREE":
+            built[pid] = MarketDataAppFreeProvider(credential, service.transport, allow, service.clock)
         elif pid == "MASSIVE_BASIC":
             if not status["cache_permitted"]:
                 service.eod_cache.clear()
@@ -196,7 +210,10 @@ def refresh(service: MarketService) -> pi.Result:
     if not any(p["provider_id"] == "MASSIVE_BASIC" for p in ready):
         service.eod_cache.clear()
     providers = _providers(service, ready)
-    price_providers: List[MarketDataProvider] = [providers[p] for p in ("ALPACA_BASIC", "MASSIVE_BASIC") if p in providers]
+    # Priority order: real-time IEX, consolidated delayed SIP bars, delayed EOD, then EOD fallback.
+    price_providers: List[MarketDataProvider] = [
+        providers[p] for p in ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "MASSIVE_BASIC")
+        if p in providers]
     if not price_providers:
         return 409, {"status": "NO_READY_PRICE_PROVIDER", **statuses}
     snapshot_path, capacity_path = pi._input_path("snapshot"), pi._input_path("capacity")
@@ -208,7 +225,8 @@ def refresh(service: MarketService) -> pi.Result:
     doc, holdings_basis = pt.holdings_for_valuation(doc, requested_at.astimezone(timezone.utc).date())
     refresh_id = f"{requested_at.strftime('%Y%m%dT%H%M%SZ')}"
     try:
-        result = refresh_prices(doc, price_providers, providers.get("BOT_REFERENCE_FX"), requested_at,
+        fx_provider = providers.get("BOT_REFERENCE_FX") or providers.get("FRANKFURTER_ECB_FX")
+        result = refresh_prices(doc, price_providers, fx_provider, requested_at,
                                 "MARKET_REFRESH", service.clock)
     except DataContractError as exc:
         _attempt(service, requested_at, "REFRESH_FAILED", **pi._code(exc))
@@ -231,8 +249,8 @@ def refresh(service: MarketService) -> pi.Result:
         return 409, {"status": "INPUTS_CHANGED_DURING_REFRESH"}
     provider_statuses = {**{p["provider_id"]: p["status"] for p in statuses["providers"]},
                          **result["provider_statuses"]}
-    used = sorted({q["provider_id"] for q in result["quotes"] if q["used"]}
-                  | ({"BOT_REFERENCE_FX"} if result["fx_status"] == "REFERENCE_FX_ON_MARKET_DATE" else set()))
+    fx_provider_id = result["meta"].get("fx_provider_id")
+    used = sorted({q["provider_id"] for q in result["quotes"] if q["used"]} | ({fx_provider_id} if fx_provider_id else set()))
     summary = {
         "refresh_id": refresh_id, "requested_at": requested_at.isoformat(timespec="seconds"),
         "completed_at": service.clock().isoformat(timespec="seconds"), "provider_statuses": provider_statuses,
