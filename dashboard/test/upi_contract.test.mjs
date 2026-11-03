@@ -117,7 +117,10 @@ test('repository and page keep private values out of storage, URLs, logs and ana
 
 test('portfolio opens signed in from the launcher without any token entry', () => {
   assert.match(read('src/components/layout/CommandPalette.tsx'), /id: 'portfolio' as DashboardTab/);
-  assert.match(read('src/App.tsx'), /window\.location\.hash === '#portfolio' \? 'portfolio'/);
+  const app = read('src/App.tsx');
+  assert.match(app, /function initialTab\(\)/);
+  assert.match(app, /: 'portfolio';/);
+  assert.match(app, /RESEARCH_TABS/);
   const page = read('src/pages/PortfolioPage.tsx');
   assert.doesNotMatch(page, /type="password"|Session token|setToken/);
   assert.match(page, /upiRepository\.callInput\('GET', 'status'\)/);
@@ -170,4 +173,35 @@ test('portfolio opens owner-private by default and only a test harness may opt i
   assert.match(page, /\{ALLOW_SYNTHETIC && \(/);
   assert.doesNotMatch(page, /import\.meta\.env/);
   assert.match(read('src/services/upiRepository.ts'), /never substituted for owner data/);
+});
+
+test('portfolio uses accessible tabs and keeps every section in its own panel', () => {
+  const tabs = read('src/components/portfolio/PortfolioTabs.tsx');
+  assert.match(tabs, /role="tablist"/);
+  assert.match(tabs, /role="tab"/);
+  assert.match(tabs, /role="tabpanel"/);
+  assert.match(tabs, /aria-selected=\{selected\}/);
+  assert.match(tabs, /aria-controls=\{`panel-\$\{id\}`\}/);
+  assert.match(tabs, /hidden=\{active !== id\}/);
+  assert.match(tabs, /event\.key === 'ArrowRight'/);
+  assert.match(tabs, /tabIndex=\{selected \? 0 : -1\}/);
+  assert.match(tabs, /'overview', 'holdings', 'transactions', 'market', 'planning', 'data'/);
+
+  const page = read('src/pages/PortfolioPage.tsx');
+  for (const id of ['overview', 'holdings', 'transactions', 'market', 'planning', 'data']) {
+    assert.match(page, new RegExp(`<TabPanel id="${id}"`), id);
+  }
+  assert.equal((page.match(/<MarketRefreshPanel /g) || []).length, 1, 'market panel mounts once');
+  assert.equal((page.match(/<TransactionJournalPanel \/>/g) || []).length, 1, 'journal mounts once');
+  for (const section of ['overview', 'holdings', 'planning', 'data']) {
+    assert.match(page, new RegExp(`section="${section}"`), section);
+  }
+});
+
+test('market mode never claims a reconciled NAV or zero for unpriced instruments', () => {
+  const page = read('src/pages/PortfolioPage.tsx');
+  assert.match(page, /partial \? 'N\/A'/);
+  assert.match(page, /ต่างช่วงเวลา/);
+  assert.match(page, /ไม่ใช่ 0/);
+  assert.match(page, /position_level_coverage/);
 });

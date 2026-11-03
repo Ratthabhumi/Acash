@@ -12,8 +12,16 @@ import { PortfolioPage } from './pages/PortfolioPage';
 import { SkeletonLoader } from './components/common/SkeletonLoader';
 import { ThemeProvider } from './context/ThemeContext';
 
+const RESEARCH_TABS: readonly DashboardTab[] = ['overview', 'trades', 'evidence', 'validation', 'shadow'];
+
+/** Portfolio is the ordinary landing page; an explicit research hash still deep-links there. */
+function initialTab(): DashboardTab {
+  const hash = window.location.hash.replace('#', '');
+  return (RESEARCH_TABS as readonly string[]).includes(hash) ? (hash as DashboardTab) : 'portfolio';
+}
+
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<DashboardTab>(window.location.hash === '#portfolio' ? 'portfolio' : 'overview');
+  const [currentTab, setCurrentTab] = useState<DashboardTab>(initialTab);
   const [researchRun, setResearchRun] = useState<ResearchRun | null>(null);
   const [researchState, setResearchState] = useState<'LOADING' | 'READY' | 'SERVICE_UNAVAILABLE'>('LOADING');
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);

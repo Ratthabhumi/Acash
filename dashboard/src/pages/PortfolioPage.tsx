@@ -6,6 +6,7 @@ import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } fr
 import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
+import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
@@ -202,7 +203,8 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: bool
   );
 };
 
-const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: boolean }> = ({ view, warnings, partial = false }) => {
+const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: boolean;
+  section: 'overview' | 'holdings' | 'planning' | 'data' }> = ({ view, warnings, partial = false, section }) => {
   const meta = view.report_metadata;
   const ccy = meta.report_currency;
   const ov = view.portfolio_overview;
@@ -246,8 +248,9 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
 
   return (
     <div className="space-y-5">
-      <GovernanceStrip view={view} />
+      {section === 'overview' && <GovernanceStrip view={view} />}
 
+      {section === 'overview' && (<>
       <section aria-labelledby="sec-a" className="space-y-3">
         <SectionHeader id="sec-a" letter="A" title="Executive overview" note="Total best evidence combines computed NAV, broker-displayed values and unidentified holdings. It is not a verified NAV. Broker totals are compared, never added." />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -262,16 +265,26 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
           <SummaryCard label="Emergency reserve" value={formatDec(reserve.current_thb)} unit="THB" tone={reserve.status === 'RESERVE_SHORTFALL' ? 'warn' : 'good'}
             badge={<StatusBadge status={reserve.status ?? 'NOT_ESTABLISHED'} />}
             subtitle={`Target ${formatDec(reserve.target_thb)} · shortfall ${formatDec(reserve.shortfall_thb)} · ${reserve.coverage_months ?? NOT_ESTABLISHED} months covered`} />
-          <SummaryCard label="Account reconciliation" value={`${reconciled} / ${view.accounts.length}`} unit="reconciled" tone={unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
-            subtitle={Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')} />
+          <SummaryCard label="Account reconciliation" value={partial ? 'N/A' : `${reconciled} / ${view.accounts.length}`} unit={partial ? undefined : 'reconciled'} tone={partial ? 'default' : unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
+            subtitle={partial ? 'ต่างช่วงเวลา — ยอดโบรกเกอร์เทียบกับราคาตลาดล่าสุดไม่ได้' : Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')} />
         </div>
+        {partial && (
+          <p className="text-[11px] text-secondary">
+            ราคาตลาดครอบคลุม {formatWeight(view.coverage.position_level_coverage)} ของหลักทรัพย์ที่มีจำนวน ·
+            หลักทรัพย์ที่ไม่มีราคาตลาดตรงวันจะไม่ถูกตีค่า (แสดงเป็นยังไม่มีข้อมูล ไม่ใช่ 0) และยอดรวมนี้ไม่ใช่ NAV ที่กระทบยอดแล้ว
+          </p>
+        )}
       </section>
+      </>)}
 
+      {section === 'data' && (<>
       <section aria-labelledby="sec-f" className="space-y-3">
         <SectionHeader id="sec-f" letter="!" title="Findings" note="Grouped by a fixed rule: Critical = a figure may be wrong or out of date; Important = correct but incomplete, or a planning constraint; Info = not available in a snapshot report." />
         <Findings findings={findings} />
       </section>
+      </>)}
 
+      {section === 'overview' && (<>
       <section aria-labelledby="sec-b" className="space-y-3">
         <SectionHeader id="sec-b" letter="B" title="Portfolio allocation & exposure" note={`All weights come from the Python pack. Concentration status ${conc.status}: while unidentified value exists, weights are a lower bound, not portfolio-wide risk.`} />
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -305,7 +318,9 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
           </div>
         </div>
       </section>
+      </>)}
 
+      {section === 'planning' && (<>
       <section aria-labelledby="sec-c" className="space-y-3">
         <SectionHeader id="sec-c" letter="C" title="Financial capacity" note="Planning scenarios computed by the Python capacity planner. Illustrative only: not advice and not an instruction to transfer money." />
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -343,12 +358,16 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
           <KeyValues values={cap.quant_budget} />
         </Disclosure>
       </section>
+      </>)}
 
+      {section === 'holdings' && (<>
       <section aria-labelledby="sec-d" className="space-y-3">
         <SectionHeader id="sec-d" letter="D" title="Accounts & holdings" note="One card per observed account; open a card for totals, differences and sub-portfolio checks." />
         <AccountsAndHoldings view={view} ccy={ccy} partial={partial} />
       </section>
+      </>)}
 
+      {section === 'data' && (<>
       <section aria-labelledby="sec-e" className="space-y-3">
         <SectionHeader id="sec-e" letter="E" title="Evidence & governance" note="Data quality is about the evidence, not investment performance." />
         <ChartCard title="Data coverage" subtitle="Share of total best evidence backed by each kind of evidence."
@@ -379,6 +398,7 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
             snapshot_id: meta.snapshot_id, snapshot_schema: meta.snapshot_schema }} />
         </Disclosure>
       </section>
+      </>)}
     </div>
   );
 };
@@ -397,6 +417,7 @@ export const PortfolioPage: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState<'STATEMENT' | 'MARKET'>('STATEMENT');
+  const [tab, setTab] = useState<PortfolioTabId>('overview');
   const [marketAvailable, setMarketAvailable] = useState(false);
   const [marketState, setMarketState] = useState<LoadState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -510,24 +531,53 @@ export const PortfolioPage: React.FC = () => {
       </div>
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
-      {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && <MarketRefreshPanel onMarketView={onMarketView} />}
-      {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && <TransactionJournalPanel />}
-      {mode === 'OWNER_PRIVATE_READ_ONLY' && marketAvailable && !loading && (
-        <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Valuation source">
-          {(['STATEMENT', 'MARKET'] as const).map((s) => (
-            <button key={s} type="button" onClick={() => setSource(s)} aria-pressed={source === s}
-              className={`px-3 py-1 rounded border border-default ${source === s ? 'bg-accent text-white' : 'text-secondary hover:bg-surface-muted'}`}>
-              {s === 'STATEMENT' ? 'ตาม statement ที่บันทึก' : 'ตามราคาล่าสุด (Refresh)'}
-            </button>
-          ))}
-          {source === 'MARKET' && <span className="text-secondary">มูลค่าจากราคาตลาดล่าสุดกับจำนวนหุ้นที่บันทึกไว้ ไม่ใช่ยอดจากโบรกเกอร์ และอาจไม่ครบทั้งพอร์ต</span>}
-        </div>
-      )}
+      {!loading && (connected || mode === 'SYNTHETIC_DEMO') && <TabBar active={tab} onChange={setTab} />}
+      <TabPanel id="overview" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && marketAvailable && (
+          <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Valuation source">
+            {(['STATEMENT', 'MARKET'] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setSource(s)} aria-pressed={source === s}
+                className={`px-3 py-1 rounded border border-default ${source === s ? 'bg-accent text-white' : 'text-secondary hover:bg-surface-muted'}`}>
+                {s === 'STATEMENT' ? 'ตาม statement ที่บันทึก' : 'ตามราคาล่าสุด (Refresh)'}
+              </button>
+            ))}
+            {source === 'MARKET' && <span className="text-secondary">มูลค่าจากราคาตลาดล่าสุดกับจำนวนหุ้นที่บันทึกไว้ ไม่ใช่ยอดจากบรอกเกอร์ และอาจไม่ครบทั้งพอร์ต</span>}
+            {shown && 'view' in shown && (
+              <span className="text-secondary">
+                อ้างอิง: {source === 'MARKET' ? 'ราคาตลาด' : 'statement'} วันที่ {shown.view.report_metadata.valuation_date}
+              </span>
+            )}
+          </div>
+        )}
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="overview" />
+        )}
+        {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
+          <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>
+        )}
+      </TabPanel>
+      <TabPanel id="holdings" active={tab}>
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="holdings" />
+        )}
+      </TabPanel>
+      <TabPanel id="transactions" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <TransactionJournalPanel />}
+      </TabPanel>
+      <TabPanel id="market" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <MarketRefreshPanel onMarketView={onMarketView} />}
+      </TabPanel>
+      <TabPanel id="planning" active={tab}>
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="planning" />
+        )}
+      </TabPanel>
+      <TabPanel id="data" active={tab}>
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="data" />
+        )}
+      </TabPanel>
       {setupOpen && <SetupWizard hasReport={!!ready} onGenerated={onGenerated} />}
-      {!loading && shown && 'view' in shown && <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} />}
-      {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
-        <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>
-      )}
       {!loading && state && !('view' in state) && (
         <div className="bg-surface border border-default rounded-lg p-6 flex items-start gap-3 text-sm">
           <ShieldAlert className="w-5 h-5 text-muted shrink-0" />
