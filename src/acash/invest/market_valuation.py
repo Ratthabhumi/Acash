@@ -12,7 +12,7 @@ import copy
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from decimal import Decimal
 
@@ -143,6 +143,10 @@ class QuotePolicy:
     max_age_days: int
     price_types: Tuple[str, ...] = ("EOD_CLOSE",)
     now: Optional[datetime] = None
+    clock: Optional[Callable[[], datetime]] = None
+
+    def current(self) -> datetime:
+        return self.now or (self.clock() if self.clock else datetime.now(timezone.utc))
 
 
 def _aware(stamp: Optional[datetime]) -> bool:
@@ -179,7 +183,6 @@ def select_quotes(security_ids: Sequence[str], providers: Sequence[MarketDataPro
     """
     if policy.max_age_days < 0:
         raise DataContractError("QUOTE_POLICY_INVALID: max_age_days must be >= 0.")
-    now = policy.now or datetime.now(timezone.utc)
     wanted_all = sorted(set(security_ids))
     selected: Dict[str, PriceObservation] = {}
     rejected: List[Dict[str, str]] = []
@@ -200,6 +203,7 @@ def select_quotes(security_ids: Sequence[str], providers: Sequence[MarketDataPro
             statuses[pid] = str(exc).split(":")[0]
             continue
         statuses[pid] = "QUERIED"
+        now = policy.current()
         candidates: Dict[str, List[PriceObservation]] = {}
         for o in observations:
             if o.provider_id != pid or o.security_id not in wanted:
@@ -282,4 +286,85 @@ def revalue_snapshot(doc: Dict[str, Any], selected: Dict[str, PriceObservation],
             "REFERENCE_FX_NOT_EXECUTABLE" if any(r.kind == "REFERENCE_FX" for r in fx) else "",
         ) if f),
     }
+    return new, meta
+
+
+def partial_snapshot(doc: Dict[str, Any], selected: Dict[str, PriceObservation], fx: Sequence[FXObservation],
+                     snapshot_id: str) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    """Derived V1_2 document holding only the components that can be valued at one market date.
+
+    The market date is the latest date among the selected quotes. Positions without a quote,
+    with a quote from another date, or without a quantity, and accounts with only broker totals,
+    are left out and counted in ``coverage``; nothing is valued at zero or carried forward. Cash
+    is the owner's observed cash at the holdings observation date. FX is used only when it is
+    dated on the market date. The returned document is validated by ``parse_snapshot``; the
+    valuation itself is left to PPDS ``build_book``.
+    """
+    original = parse_snapshot(doc)
+    if original.schema != SCHEMA_V1_2:
+        raise DataContractError("REVALUATION_REQUIRES_V1_2.")
+    held = sorted({p.security_id for a in original.accounts for p in a.positions})
+    quoted = [s for s in held if s in selected]
+    market_date = max((selected[s].market_date for s in quoted), default=None)
+    priced = [s for s in quoted if selected[s].market_date == market_date]
+    misaligned = [s for s in quoted if s not in priced]
+    fx_used = [r for r in fx if r.market_date == market_date and r.kind in FX_KINDS]
+    total_only = [a.account_ref for a in original.accounts if not (a.positions or a.cash or a.observed_value_positions)]
+    coverage = {
+        "held_with_quantity": len(held), "priced": len(priced), "misaligned_date": len(misaligned),
+        "unpriced": len(held) - len(quoted),
+        "value_only": sum(len(a.observed_value_positions) for a in original.accounts),
+        "total_only_accounts": len(total_only),
+    }
+    complete = coverage["priced"] == coverage["held_with_quantity"] and not (
+        coverage["value_only"] or coverage["total_only_accounts"])
+    sources = sorted({selected[s].provider_id for s in priced})
+    meta: Dict[str, Any] = {
+        "market_date": market_date.isoformat() if market_date else None,
+        "holdings_observed_on": original.valuation_date.isoformat(),
+        "coverage": coverage,
+        "price_sources": sources,
+        "price_types": sorted({selected[s].price_type for s in priced}),
+        "price_coverage": sorted({selected[s].coverage for s in priced}),
+        "fx_dates": sorted({r.market_date.isoformat() for r in fx}),
+        "fx_used": bool(fx_used),
+        "cash_basis": "CASH_AS_OF_HOLDINGS_OBSERVATION",
+        "broker_total_comparison": "TIME_MISALIGNED_COMPARISON",
+        "flags": sorted(f for f in (
+            "REFERENCE_FX_NOT_EXECUTABLE" if any(r.kind == "REFERENCE_FX" for r in fx_used) else "",
+            "PRICES_PREDATE_HOLDINGS_OBSERVATION" if market_date and market_date < original.valuation_date else "",
+            "IEX_ONLY_NOT_CONSOLIDATED" if any(selected[s].coverage == "IEX_ONLY" for s in priced) else "",
+        ) if f),
+    }
+    if not priced or market_date is None:
+        meta["valuation_status"] = "UNAVAILABLE"
+        return None, meta
+    meta["valuation_status"] = ("PARTIAL_INDICATIVE_VALUATION" if not complete
+                                else "MIXED_SOURCE_INDICATIVE_VALUATION" if len(sources) > 1
+                                else "INDICATIVE_VALUATION")
+
+    keep = set(priced)
+    new = copy.deepcopy(doc)
+    observed_at = max([selected[s].retrieved_at for s in priced] + [r.retrieved_at for r in fx_used])
+    new.update(snapshot_id=snapshot_id, observed_at=observed_at.isoformat(), valuation_date=market_date.isoformat())
+    accounts = []
+    for account in new["accounts"]:
+        account.pop("reported_total", None)
+        account.pop("sub_portfolio_totals", None)
+        account["positions"] = [p for p in account.get("positions") or []
+                                if p.get("quantity") is not None and p.get("security_id") in keep]
+        for position in account["positions"]:
+            position.pop("observed_market_value", None)
+            position.pop("observed_market_value_currency", None)
+        if account["positions"] or account.get("cash"):
+            accounts.append(account)
+    new["accounts"] = accounts
+    new["securities"] = [s for s in new.get("securities") or [] if s.get("security_id") in keep]
+    new["prices"] = [{"security_id": s, "currency": selected[s].currency, "price": str(selected[s].price),
+                      "as_of": market_date.isoformat(),
+                      "published_at": (selected[s].market_timestamp or selected[s].retrieved_at).isoformat(),
+                      "source_id": selected[s].provider_id} for s in priced]
+    new["fx_rates"] = [{"from": r.from_currency, "to": r.to_currency, "rate": str(r.rate),
+                        "as_of": market_date.isoformat(), "source_id": r.provider_id} for r in fx_used]
+    parse_snapshot(new)
     return new, meta

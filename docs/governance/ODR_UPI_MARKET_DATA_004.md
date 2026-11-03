@@ -22,7 +22,23 @@ sends instrument identifiers to a third party and needs a locally stored API key
 | API keys in the Windows user credential store | Keys in the repository, frontend, URLs, logs, fixtures or AI context |
 | Observations cached under `data/private/market/` as the provider's terms allow | Publishing or syncing observations |
 
-`scope_providers` is empty: ratifying this record alone enables no provider.
+`scope_providers` is empty: ratifying this record alone enables no provider. Each later entry
+is an object `{"provider_id", "entitlement_verified", "display_permitted", "cache_permitted",
+"evidence"}` recorded by the Owner; `acash.invest.market_authority` treats a provider as READY
+only when it appears exactly once with `entitlement_verified` and `display_permitted` both
+`true` and a local credential `ACASH/MARKET_DATA/<PROVIDER_ID>` exists. Adding an entry is a
+scope change and is recorded with its own lineage.
+
+Fixed endpoints (`acash.market_data.providers.ENDPOINTS`), GET only, no redirects or proxies:
+
+| Provider | Host | Path | Query keys |
+|---|---|---|---|
+| `ALPACA_BASIC` | `data.alpaca.markets` | `/v2/stocks/trades/latest` | `symbols`, `feed=iex` |
+| `MASSIVE_BASIC` | `api.massive.com` | `/v2/aggs/ticker/{TICKER}/prev` | `adjusted=false` |
+| `BOT_REFERENCE_FX` | `gateway.api.bot.or.th` | `/Stat-ReferenceRate/v2/DAILY_REF_RATE/` | `start_period`, `end_period` |
+
+The BOT host, path, header and fields are taken from research and are not yet confirmed
+against a live response. `WEBULL_TH_OPENAPI` has no adapter.
 
 ## 4. Valuation rules already enforced in code
 
