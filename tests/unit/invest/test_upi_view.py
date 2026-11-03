@@ -286,3 +286,22 @@ def test_thb_fund_inside_a_usd_account_is_not_multiplied_by_fx(tmp_path: Path) -
     nav_delta = Decimal(str(after["portfolio_overview"]["computed_nav_ppds"])) - \
         Decimal(str(before["portfolio_overview"]["computed_nav_ppds"]))
     assert abs(nav_delta - expected) < Decimal("0.01")
+
+
+def test_stale_view_is_reported_stale_instead_of_as_current(tmp_path: Path,
+                                                            monkeypatch: pytest.MonkeyPatch) -> None:
+    """A report generated before an input correction must never be served as current figures."""
+    from acash.dashboard_api import private_input as pi
+
+    monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
+    path = tmp_path / "upi_view.json"
+    path.write_text(json.dumps(_private_view()), encoding="utf-8")
+    monkeypatch.setattr(pi, "report_consistency",
+                        lambda: {"status": "CONSISTENT", "generation_id": "g", "generated_at": "t",
+                                 "inputs_changed_since": False})
+    assert srv.load_view(path)[0] == "READY"
+    monkeypatch.setattr(pi, "report_consistency",
+                        lambda: {"status": "CONSISTENT", "generation_id": "g", "generated_at": "t",
+                                 "inputs_changed_since": True})
+    status, code, doc = srv.load_view(path)
+    assert (status, code) == ("STALE_REPORT", "REPORT_INPUT_STALE") and doc is not None

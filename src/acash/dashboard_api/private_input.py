@@ -405,6 +405,11 @@ def _generation_record() -> Dict[str, Any]:
             "inputs_changed_since": record.get("input_revisions") != current}
 
 
+def report_consistency() -> Dict[str, Any]:
+    """Public provenance check: does the published view still match the current inputs?"""
+    return _generation_record()
+
+
 def generate(report_date: Optional[date] = None) -> Result:
     """Build pack and view into a new generation directory, then publish view and record atomically."""
     if recover() == "RECOVERY_REQUIRED":

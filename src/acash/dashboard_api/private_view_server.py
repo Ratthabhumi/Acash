@@ -181,6 +181,12 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
         return _json(404, cors, {"status": status})
     if status == "INVALID_REPORT":
         return _json(422, cors, {"status": status, "code": code})
+    if status == "STALE_REPORT":
+        record = private_input.report_consistency()
+        return _json(409, cors, {"status": status, "code": code,
+                                 "generated_at": record.get("generated_at"),
+                                 "generation_id": record.get("generation_id"),
+                                 "valuation_date": (doc or {}).get("report_metadata", {}).get("valuation_date")})
     return _json(200, cors, doc)
 
 
@@ -222,7 +228,9 @@ def _market_route(method: str, name: str, headers: Mapping[str, str], token: str
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
     """Single authority for the private view contract: (READY | NO_REPORT | INVALID_REPORT, code, doc).
 
-    Callers must check ODR-001 first; ``read_gated_json`` refuses the read otherwise.
+    Callers must check ODR-001 first; ``read_gated_json`` refuses the read otherwise. A view whose
+    recorded input revisions no longer match the saved inputs is reported as STALE_REPORT, so a
+    report generated before an input correction can never be presented as current figures.
     """
     if not view_path.is_file():
         return "NO_REPORT", None, None
@@ -232,6 +240,9 @@ def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
         return "INVALID_REPORT", str(exc).split(":")[0].rstrip("."), None
     if not isinstance(doc, dict) or doc.get("view_schema") != VIEW_SCHEMA or doc.get("data_mode") != "OWNER_PRIVATE_READ_ONLY":
         return "INVALID_REPORT", "VIEW_CONTRACT_MISMATCH", None
+    record = private_input.report_consistency()
+    if record.get("status") == "CONSISTENT" and record.get("inputs_changed_since") is True:
+        return "STALE_REPORT", "REPORT_INPUT_STALE", doc
     return "READY", None, doc
 
 
