@@ -1,9 +1,9 @@
 """ODR-004 gate, per-provider activation status and local credential lookup for market data.
 
 A provider is READY only when ODR-004 is RATIFIED with ODR-001 as its ratified dependency, the
-provider appears exactly once in ``scope_providers`` with the Owner's entitlement and display
-attestations, and a credential exists in the Windows Credential Manager. Anything unknown is not
-permission. Credentials are read per request, handed only to the provider adapter and never
+provider appears exactly once in ``scope_providers`` with the Owner's entitlement, display,
+calculation and derived-value attestations, its adapter contract is verified, and a credential
+exists in the Windows Credential Manager. Anything unknown is not permission. Credentials are read per request, handed only to the provider adapter and never
 returned, logged or written by ACASH.
 """
 
@@ -22,9 +22,32 @@ CAPABILITY = "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED"
 REQUIRES = ["ODR_UPI_PRIVATE_OBSERVATION_001"]
 CREDENTIAL_TARGET_PREFIX = "ACASH/MARKET_DATA/"
 ADAPTED_PROVIDERS = ("ALPACA_BASIC", "MASSIVE_BASIC", "BOT_REFERENCE_FX")
-KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
-STATUSES = ("NOT_CONFIGURED", "GOVERNANCE_REQUIRED", "CREDENTIALS_REQUIRED", "ENTITLEMENT_REQUIRED",
-            "DISPLAY_RIGHTS_UNVERIFIED", "READY", "RATE_LIMITED", "SERVICE_UNAVAILABLE")
+KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("ALPACA_HISTORICAL", "WEBULL_TH_OPENAPI")
+STATUSES = ("NOT_CONFIGURED", "GOVERNANCE_REQUIRED", "CONTRACT_UNVERIFIED", "CREDENTIALS_REQUIRED",
+            "ENTITLEMENT_REQUIRED", "DISPLAY_RIGHTS_UNVERIFIED", "DERIVED_USE_UNVERIFIED", "READY",
+            "RATE_LIMITED", "SERVICE_UNAVAILABLE")
+# Canonical provider registry. ``contract_verified`` means the request/response contract comes from
+# the provider's published documentation as supplied by research, not from a live response.
+REGISTRY: Dict[str, Dict[str, Any]] = {
+    "ALPACA_BASIC": {"role": "PRICE", "quote_type": "LAST_TRADE", "coverage": "IEX_ONLY", "label": "REALTIME_IEX_ONLY",
+                     "contract_verified": True, "rate_limit": "200/min", "timestamp_policy": "TRADE_TIMESTAMP_RFC3339",
+                     "known_restriction": None},
+    "MASSIVE_BASIC": {"role": "PRICE", "quote_type": "EOD_CLOSE", "coverage": "UNKNOWN", "label": "PREVIOUS_ELIGIBLE_EOD",
+                      "contract_verified": True, "rate_limit": "5/min", "timestamp_policy": "SESSION_EPOCH_MS",
+                      "known_restriction": "TERMS_MAY_RESTRICT_DERIVED_WORKS_INCLUDING_NAV"},
+    "BOT_REFERENCE_FX": {"role": "FX", "quote_type": "DAILY_REFERENCE_RATE", "coverage": "REFERENCE_FX_NOT_EXECUTABLE",
+                         "label": "REFERENCE_FX_NOT_EXECUTABLE", "contract_verified": False, "rate_limit": "200/hour",
+                         "timestamp_policy": "PERIOD_DATE_BANGKOK", "known_restriction": "RESPONSE_SCHEMA_UNVERIFIED"},
+    "ALPACA_HISTORICAL": {"role": "PRICE", "quote_type": "HISTORICAL_BAR", "coverage": "UNKNOWN", "label": None,
+                          "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
+                          "known_restriction": "ENDPOINT_AND_SIP_WINDOW_NOT_SUPPLIED"},
+    "WEBULL_TH_OPENAPI": {"role": "PRICE", "quote_type": None, "coverage": "UNKNOWN", "label": None,
+                          "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
+                          "known_restriction": "OPENAPI_ENTITLEMENT_PENDING"},
+}
+# Owner attestations a scope entry may carry; every one defaults to UNKNOWN.
+ATTESTATIONS = ("entitlement_verified", "display_permitted", "calculation_permitted", "derived_value_permitted",
+                "cache_permitted", "retention_policy_verified")
 
 Credential = Tuple[str, str]
 
@@ -92,22 +115,52 @@ def _scope_entry(doc: Dict[str, Any], provider_id: str) -> Optional[Dict[str, An
 
 
 def provider_status(provider_id: str, state: str, doc: Dict[str, Any], store: CredentialStore) -> Dict[str, Any]:
-    """Activation status before any request; READY still says nothing about a live response."""
+    """Activation status before any request; READY still says nothing about a live response.
+
+    ``capabilities`` reports each right independently (ATTESTED / DENIED / UNKNOWN / ESTABLISHED / MISSING /
+    NOT_OBSERVED); READY needs governance, a verified contract, a credential and the entitlement,
+    display, calculation and derived-value attestations. Authentication and real responses are
+    never established here.
+    """
+    entry = _scope_entry(doc, provider_id) if state == "RATIFIED" else None
+    reg = REGISTRY.get(provider_id, {})
+    caps: Dict[str, str] = {
+        "governance_authorized": "ESTABLISHED" if entry is not None else "MISSING",
+        "contract_verified": "ESTABLISHED" if reg.get("contract_verified") is True else "UNKNOWN",
+        "credentials_configured": "UNKNOWN",
+        "authentication_verified": "NOT_OBSERVED",
+        "real_response_verified": "NOT_OBSERVED",
+    }
+    for name in ATTESTATIONS:
+        value = None if entry is None else entry.get(name)
+        caps[name] = "ATTESTED" if value is True else "DENIED" if value is False else "UNKNOWN"
+    out: Dict[str, Any] = {"provider_id": provider_id, "capabilities": caps,
+                           "registry": {k: reg.get(k) for k in ("role", "quote_type", "coverage", "label",
+                                                                 "rate_limit", "known_restriction")},
+                           "cache_permitted": caps["cache_permitted"] == "ATTESTED"}
+
+    def done(status: str, detail: str) -> Dict[str, Any]:
+        out.update(status=status, detail=detail)
+        return out
+
     if provider_id not in ADAPTED_PROVIDERS:
-        return {"provider_id": provider_id, "status": "NOT_CONFIGURED", "detail": "NO_ADAPTER"}
+        return done("NOT_CONFIGURED", "NO_ADAPTER")
+    caps["credentials_configured"] = "ESTABLISHED" if store.lookup(provider_id) is not None else "MISSING"
     if state != "RATIFIED":
-        return {"provider_id": provider_id, "status": "GOVERNANCE_REQUIRED", "detail": f"ODR_004_{state}"}
-    entry = _scope_entry(doc, provider_id)
+        return done("GOVERNANCE_REQUIRED", f"ODR_004_{state}")
     if entry is None:
-        return {"provider_id": provider_id, "status": "GOVERNANCE_REQUIRED", "detail": "PROVIDER_NOT_IN_SCOPE"}
-    if store.lookup(provider_id) is None:
-        return {"provider_id": provider_id, "status": "CREDENTIALS_REQUIRED", "detail": "NO_LOCAL_CREDENTIAL"}
-    if entry.get("entitlement_verified") is not True:
-        return {"provider_id": provider_id, "status": "ENTITLEMENT_REQUIRED", "detail": "ENTITLEMENT_NOT_ATTESTED"}
-    if entry.get("display_permitted") is not True:
-        return {"provider_id": provider_id, "status": "DISPLAY_RIGHTS_UNVERIFIED", "detail": "DISPLAY_NOT_ATTESTED"}
-    return {"provider_id": provider_id, "status": "READY", "detail": "ATTESTED_NOT_LIVE_VERIFIED",
-            "cache_permitted": entry.get("cache_permitted") is True}
+        return done("GOVERNANCE_REQUIRED", "PROVIDER_NOT_IN_SCOPE")
+    if caps["contract_verified"] != "ESTABLISHED":
+        return done("CONTRACT_UNVERIFIED", "ADAPTER_CONTRACT_NOT_VERIFIED")
+    if caps["credentials_configured"] != "ESTABLISHED":
+        return done("CREDENTIALS_REQUIRED", "NO_LOCAL_CREDENTIAL")
+    if caps["entitlement_verified"] != "ATTESTED":
+        return done("ENTITLEMENT_REQUIRED", "ENTITLEMENT_NOT_ATTESTED")
+    if caps["display_permitted"] != "ATTESTED":
+        return done("DISPLAY_RIGHTS_UNVERIFIED", "DISPLAY_NOT_ATTESTED")
+    if caps["calculation_permitted"] != "ATTESTED" or caps["derived_value_permitted"] != "ATTESTED":
+        return done("DERIVED_USE_UNVERIFIED", "CALCULATION_OR_DERIVED_VALUE_NOT_ATTESTED")
+    return done("READY", "ATTESTED_NOT_LIVE_VERIFIED")
 
 
 def provider_statuses(store: CredentialStore, record: Optional[Path] = None,

@@ -96,7 +96,8 @@ def _allow() -> bool:
     ("ALPACA_BASIC", "https://data.alpaca.markets/v2/stocks/trades/latest?symbols=SYNA%20100%20shares"),
     ("MASSIVE_BASIC", "https://api.massive.com/v2/snapshot/locale/us/markets/stocks/tickers?adjusted=false"),
     ("MASSIVE_BASIC", "https://api.massive.com/v2/aggs/ticker/../../x/prev?adjusted=false"),
-    ("BOT_REFERENCE_FX", "https://169.254.169.254/Stat-ReferenceRate/v2/DAILY_REF_RATE/"),
+    ("BOT_REFERENCE_FX", "https://169.254.169.254/Stat-ReferenceRate/v2/DAILY_REF_RATE/get"),
+    ("BOT_REFERENCE_FX", "https://gateway.api.bot.or.th/Stat-ReferenceRate/v2/DAILY_REF_RATE/"),
     ("WEBULL_TH_OPENAPI", "https://example.invalid/"),
 ])
 def test_allowlist_refuses_trading_ssrf_and_private_egress(pid: str, url: str) -> None:
@@ -217,8 +218,8 @@ def _odr1(root: Path, status: str = "RATIFIED") -> None:
 
 
 def _entry(pid: str, **changes: Any) -> Dict[str, Any]:
-    return {"provider_id": pid, "entitlement_verified": True, "display_permitted": True, "cache_permitted": False,
-            "evidence": "synthetic test", **changes}
+    return {"provider_id": pid, "entitlement_verified": True, "display_permitted": True, "calculation_permitted": True,
+            "derived_value_permitted": True, "cache_permitted": False, "evidence": "synthetic test", **changes}
 
 
 def _odr4(root: Path, status: str = "RATIFIED", scope: Optional[List[Any]] = None, **changes: Any) -> None:
@@ -234,6 +235,7 @@ def _odr4(root: Path, status: str = "RATIFIED", scope: Optional[List[Any]] = Non
 def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
     monkeypatch.setattr(ma, "_repo_root", lambda: tmp_path)
+    monkeypatch.setitem(ma.REGISTRY["BOT_REFERENCE_FX"], "contract_verified", True)
     _odr1(tmp_path)
     return tmp_path
 
@@ -263,14 +265,45 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
     _odr1(root)
     _odr4(root)
     assert _status() == {"ALPACA_BASIC": "GOVERNANCE_REQUIRED", "MASSIVE_BASIC": "GOVERNANCE_REQUIRED",
-                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED", "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
+                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED", "ALPACA_HISTORICAL": "NOT_CONFIGURED",
+                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("MASSIVE_BASIC", entitlement_verified=None),
                        _entry("BOT_REFERENCE_FX", display_permitted=False), _entry("WEBULL_TH_OPENAPI")])
     assert _status() == {"ALPACA_BASIC": "READY", "MASSIVE_BASIC": "ENTITLEMENT_REQUIRED",
-                         "BOT_REFERENCE_FX": "DISPLAY_RIGHTS_UNVERIFIED", "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
+                         "BOT_REFERENCE_FX": "DISPLAY_RIGHTS_UNVERIFIED", "ALPACA_HISTORICAL": "NOT_CONFIGURED",
+                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
     assert _status(Store({}))["ALPACA_BASIC"] == "CREDENTIALS_REQUIRED"
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("ALPACA_BASIC")])
     assert _status()["ALPACA_BASIC"] == "GOVERNANCE_REQUIRED"
+
+
+@pytest.mark.parametrize("changes", [{"calculation_permitted": None}, {"derived_value_permitted": False},
+                                     {"derived_value_permitted": "yes"}])
+def test_calculation_and_derived_value_rights_are_required(root: Path, changes: Dict[str, Any]) -> None:
+    _odr4(root, scope=[_entry("MASSIVE_BASIC", **changes)])
+    assert _status()["MASSIVE_BASIC"] == "DERIVED_USE_UNVERIFIED"
+
+
+def test_unverified_bot_contract_is_never_ready(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(ma.REGISTRY["BOT_REFERENCE_FX"], "contract_verified", False)
+    _odr4(root, scope=[_entry("BOT_REFERENCE_FX")])
+    status = {p["provider_id"]: p for p in ma.provider_statuses(Store())[1]}["BOT_REFERENCE_FX"]
+    assert status["status"] == "CONTRACT_UNVERIFIED"
+    assert status["capabilities"]["real_response_verified"] == "NOT_OBSERVED"
+    assert ma.REGISTRY["MASSIVE_BASIC"]["known_restriction"] == "TERMS_MAY_RESTRICT_DERIVED_WORKS_INCLUDING_NAV"
+    assert mp.BOT_SPEC_VERIFIED is False
+
+
+def test_capabilities_default_to_unknown_and_never_claim_live_verification(root: Path) -> None:
+    _odr4(root, scope=[{"provider_id": "ALPACA_BASIC"}])
+    status = {p["provider_id"]: p for p in ma.provider_statuses(Store())[1]}["ALPACA_BASIC"]
+    assert status["status"] == "ENTITLEMENT_REQUIRED" and status["cache_permitted"] is False
+    assert {status["capabilities"][k] for k in ma.ATTESTATIONS} == {"UNKNOWN"}
+    _odr4(root, scope=[_entry("ALPACA_BASIC")])
+    ready = {p["provider_id"]: p for p in ma.provider_statuses(Store())[1]}["ALPACA_BASIC"]
+    assert ready["status"] == "READY" and ready["detail"] == "ATTESTED_NOT_LIVE_VERIFIED"
+    assert ready["capabilities"]["cache_permitted"] == ("ATTESTED" if ready["cache_permitted"] else "DENIED")
+    assert ready["capabilities"]["authentication_verified"] == ready["capabilities"]["real_response_verified"] == "NOT_OBSERVED"
 
 
 def test_repository_odr4_has_empty_scope() -> None:
@@ -371,13 +404,99 @@ def test_refresh_values_through_ppds_and_preserves_inputs(root: Path) -> None:
     assert (out["requested_symbols_count"], out["priced_symbols_count"], out["stale_symbols_count"]) == (2, 1, 1)
     assert {"ALPACA_BASIC": "QUERIED", "MASSIVE_BASIC": "QUERIED", "BOT_REFERENCE_FX": "READY"}.items() <= out["provider_statuses"].items()
     assert all((root / "data" / "private" / n).read_bytes() == b for n, b in files.items())
-    assert CRED[1] not in json.dumps(out) and CRED[1] not in (root / "data" / "private" / "market" / ms.RECORD_FILE).read_text("utf-8")
+    assert out["persisted"] is False and out["holdings_basis"] == "STATEMENT_BASELINE"
+    market = root / "data" / "private" / "market"
+    assert sorted(p.name for p in market.iterdir()) == [ms.ATTEMPT_FILE]
+    attempt = (market / ms.ATTEMPT_FILE).read_text("utf-8")
+    assert CRED[1] not in json.dumps(out) and CRED[1] not in attempt and "50.25" not in attempt
     view_status, view = _call(service, "GET", "view")
     assert view_status == 200 and view["data_mode"] == "OWNER_PRIVATE_READ_ONLY"
     status_http, status_doc = _call(service, "GET", "status")
-    assert status_http == 200 and status_doc["last_refresh"]["valuation_status"] == "PARTIAL_INDICATIVE_VALUATION"
-    assert {q["security_id"]: q["used"] for q in status_doc["last_refresh"]["quotes"]} == {"SYNIDX": True, "SYNBOND": False}
+    assert status_http == 200 and status_doc["last_success"]["valuation_status"] == "PARTIAL_INDICATIVE_VALUATION"
+    assert {q["security_id"]: q["used"] for q in status_doc["last_success"]["quotes"]} == {"SYNIDX": True, "SYNBOND": False}
+    assert status_doc["last_success"]["providers_used"] == ["ALPACA_BASIC", "BOT_REFERENCE_FX"]
     assert CRED[1] not in json.dumps(status_doc)
+    assert service.eod_cache == {}
+
+
+def test_holdings_rows_come_from_the_ppds_book(root: Path) -> None:
+    _install(root)
+    _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("BOT_REFERENCE_FX")])
+    service = _service(FakeTransport(ROUTES))
+    assert _call(service, "POST", "refresh", {})[0] == 200
+    holdings = _call(service, "GET", "status")[1]["last_success"]["holdings"]
+    assert holdings["weight_basis"] == "SHARE_OF_PRICED_SUBTOTAL_NOT_TOTAL_PORTFOLIO"
+    (row,) = [r for r in holdings["rows"] if r["security_id"] == "SYNIDX"]
+    assert (row["account_ref"], row["quantity"], row["price"], row["provider_id"]) == ("BROKER_D_MAIN", "12", "50.25", "ALPACA_BASIC")
+    assert Decimal(row["market_value_local"]) == Decimal("603.00")
+    assert Decimal(row["unrealized_pnl_local"]) == Decimal("603.00") - Decimal("1100.00")
+    assert not any(r["security_id"] in ("SYNBOND", "SYNTHEME") for r in holdings["rows"])
+    assert 0 < Decimal(row["weight_of_priced_subtotal"]) <= 1
+    assert holdings["reporting_currency"] != row["price_currency"]
+    assert Decimal(row["market_value_reporting"]) == (Decimal("603.00") * Decimal("33.10")).quantize(Decimal("0.01"))
+    assert Decimal(row["weight_of_priced_subtotal"]) == (Decimal(row["market_value_reporting"]) / Decimal(holdings["priced_subtotal"])).quantize(Decimal("0.0001"))
+
+
+def test_cache_permitted_generation_persists_and_revocation_discards_it(root: Path) -> None:
+    _install(root)
+    _odr4(root, scope=[_entry("ALPACA_BASIC", cache_permitted=True), _entry("BOT_REFERENCE_FX", cache_permitted=True)])
+    service = _service(FakeTransport(ROUTES))
+    assert _call(service, "POST", "refresh", {})[1]["persisted"] is True
+    published = root / "data" / "private" / "market" / ms.PUBLISHED_FILE
+    assert published.is_file() and "50.25" in published.read_text("utf-8")
+    restarted = _service(FakeTransport())
+    assert _call(restarted, "GET", "view")[0] == 200
+    _odr4(root, scope=[_entry("ALPACA_BASIC", cache_permitted=False), _entry("BOT_REFERENCE_FX", cache_permitted=True)])
+    assert _call(restarted, "GET", "view") == (404, {"status": "NO_REPORT"})
+    assert not published.exists()
+
+
+@pytest.mark.parametrize("revoke", ["odr", "provider"])
+def test_revocation_discards_in_memory_generation(root: Path, revoke: str) -> None:
+    _install(root)
+    _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("BOT_REFERENCE_FX")])
+    service = _service(FakeTransport(ROUTES))
+    assert _call(service, "POST", "refresh", {})[0] == 200
+    if revoke == "odr":
+        _odr4(root, "REVOKED", [_entry("ALPACA_BASIC"), _entry("BOT_REFERENCE_FX")])
+        assert _call(service, "GET", "view")[0] == 403
+        _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("BOT_REFERENCE_FX")])
+    else:
+        _odr4(root, scope=[_entry("BOT_REFERENCE_FX")])
+    assert _call(service, "GET", "view") == (404, {"status": "NO_REPORT"})
+    assert service.memory_generation is None and _call(service, "GET", "status")[1]["last_success"] is None
+
+
+def test_authorization_change_during_refresh_publishes_nothing(root: Path) -> None:
+    _install(root)
+    _odr4(root, scope=[_entry("ALPACA_BASIC", cache_permitted=True), _entry("BOT_REFERENCE_FX", cache_permitted=True)])
+    inner = FakeTransport(ROUTES)
+
+    def revoking(request: mp.HttpRequest) -> Tuple[int, bytes]:
+        if "DAILY_REF_RATE" in request.url:
+            _odr4(root, scope=[_entry("BOT_REFERENCE_FX", cache_permitted=True)])
+        return inner(request)
+    http, out = _call(_service(revoking), "POST", "refresh", {})  # type: ignore[arg-type]
+    assert (http, out["status"]) == (409, "AUTHORIZATION_CHANGED_DURING_REFRESH")
+    assert not (root / "data" / "private" / "market" / ms.PUBLISHED_FILE).exists()
+
+
+def test_publish_write_failure_keeps_previous_generation(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _install(root)
+    _odr4(root, scope=[_entry("ALPACA_BASIC", cache_permitted=True), _entry("BOT_REFERENCE_FX", cache_permitted=True)])
+    service = _service(FakeTransport(ROUTES))
+    assert _call(service, "POST", "refresh", {})[0] == 200
+    published = root / "data" / "private" / "market" / ms.PUBLISHED_FILE
+    before = published.read_bytes()
+    original = pi._atomic_write
+
+    def failing(path: Path, data: bytes) -> None:
+        if path.name == ms.PUBLISHED_FILE:
+            raise OSError("disk full")
+        original(path, data)
+    monkeypatch.setattr(pi, "_atomic_write", failing)
+    assert _call(service, "POST", "refresh", {})[1]["status"] == "REFRESH_PUBLISH_FAILED"
+    assert published.read_bytes() == before and not list(published.parent.glob("*.tmp"))
 
 
 def test_quotes_retrieved_after_the_refresh_started_are_not_future(root: Path) -> None:
@@ -397,22 +516,26 @@ def test_failed_refresh_keeps_previous_published_view(root: Path) -> None:
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("BOT_REFERENCE_FX")])
     service = _service(FakeTransport(ROUTES))
     assert _call(service, "POST", "refresh", {})[0] == 200
-    view_path = root / "data" / "private" / "market" / ms.VIEW_FILE
-    before = view_path.read_bytes()
+    before = _call(service, "GET", "view")[1]["view_sha256"]
     service.transport = FakeTransport({"trades/latest": (503, b"")})
     http, out = _call(service, "POST", "refresh", {})
     assert http == 200 and out["status"] == "REFRESHED_WITHOUT_VALUATION"
     assert out["provider_statuses"]["ALPACA_BASIC"] == "PROVIDER_UNAVAILABLE"
-    assert view_path.read_bytes() == before
+    assert _call(service, "GET", "view")[1]["view_sha256"] == before
+    status = _call(service, "GET", "status")[1]
+    assert status["last_attempt"]["status"] == "REFRESHED_WITHOUT_VALUATION"
+    assert status["last_success"]["view_sha256"] == before
 
 
 def test_missing_fx_publishes_prices_but_no_view(root: Path) -> None:
     _install(root)
     _odr4(root, scope=[_entry("ALPACA_BASIC")])
-    http, out = _call(_service(FakeTransport(ROUTES)), "POST", "refresh", {})
+    service = _service(FakeTransport(ROUTES))
+    http, out = _call(service, "POST", "refresh", {})
     assert http == 200 and out["fx_status"] == "FX_PROVIDER_NOT_READY"
     assert out["valuation_status"].startswith("PRICES_ONLY_")
-    assert not (root / "data" / "private" / "market" / ms.VIEW_FILE).exists()
+    assert not (root / "data" / "private" / "market" / ms.PUBLISHED_FILE).exists()
+    assert _call(service, "GET", "view") == (404, {"status": "NO_REPORT"})
 
 
 @pytest.mark.parametrize("method, name, body, headers, http, code", [
@@ -437,7 +560,8 @@ def test_routes_refuse_unauthenticated_cross_origin_and_injected_requests(
 def test_status_reports_backend_capabilities_without_secrets(root: Path) -> None:
     _odr4(root, "PROPOSED_NOT_RATIFIED")
     http, out = _call(_service(FakeTransport()), "GET", "status")
-    assert http == 200 and out["odr_004"] == "PROPOSED_NOT_RATIFIED" and out["last_refresh"] is None
+    assert http == 200 and out["odr_004"] == "PROPOSED_NOT_RATIFIED"
+    assert out["last_attempt"] is None and out["last_success"] is None
     assert {p["provider_id"]: p["status"] for p in out["providers"]}["ALPACA_BASIC"] == "GOVERNANCE_REQUIRED"
 
 

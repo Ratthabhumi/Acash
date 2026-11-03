@@ -45,6 +45,14 @@ Fixed endpoints (`acash.market_data.providers.ENDPOINTS`), GET only, no redirect
 The BOT host, path, header and fields are taken from research and are not yet confirmed
 against a live response. `WEBULL_TH_OPENAPI` has no adapter.
 
+Implementation note (2026-11-03, no scope change): the code now applies stricter conditions
+than the paragraph above. A scope entry must also attest `calculation_permitted` and
+`derived_value_permitted`, and a provider whose contract is unverified in
+`market_authority.REGISTRY` stays `CONTRACT_UNVERIFIED` and is never READY. The BOT path is
+`/Stat-ReferenceRate/v2/DAILY_REF_RATE/get`, but BOT is still contract-unverified, so it cannot
+be enabled by a scope entry alone. Without `cache_permitted`, valuations live only in memory and
+are discarded when authority is withdrawn.
+
 ## 4. Valuation rules already enforced in code
 
 One market date per valuation; holdings without a price on that date, value-only holdings and

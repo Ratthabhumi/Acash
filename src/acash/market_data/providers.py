@@ -8,7 +8,10 @@ deviation raises ``DataContractError``. Adapters are only constructed for provid
 ``market_authority.provider_status`` reports READY; this module never logs URLs, headers or bodies.
 
 The BOT host, path, header and field names follow the ChatGPT research brief and are not yet
-verified against a live response (``BOT_SPEC_VERIFIED`` is False).
+verified against a live response (``BOT_SPEC_VERIFIED`` is False). The operation path
+``/Stat-ReferenceRate/v2/DAILY_REF_RATE/get`` and the ``Authorization`` header follow the published
+API catalogue; the query keys and response fields are still an unverified parser contract, so the
+provider registry keeps BOT at CONTRACT_UNVERIFIED and it is never constructed for a real refresh.
 """
 
 from __future__ import annotations
@@ -52,7 +55,7 @@ ENDPOINTS: Dict[str, Endpoint] = {
                              frozenset({"symbols", "feed"}), frozenset({"APCA-API-KEY-ID", "APCA-API-SECRET-KEY"})),
     "MASSIVE_BASIC": Endpoint("api.massive.com", re.compile(r"^/v2/aggs/ticker/[A-Z][A-Z0-9]{0,9}(\.[A-Z])?/prev$"),
                               frozenset({"adjusted"}), frozenset({"Authorization"})),
-    "BOT_REFERENCE_FX": Endpoint("gateway.api.bot.or.th", re.compile(r"^/Stat-ReferenceRate/v2/DAILY_REF_RATE/$"),
+    "BOT_REFERENCE_FX": Endpoint("gateway.api.bot.or.th", re.compile(r"^/Stat-ReferenceRate/v2/DAILY_REF_RATE/get$"),
                                  frozenset({"start_period", "end_period"}), frozenset({"Authorization"})),
 }
 
@@ -275,7 +278,7 @@ class BOTReferenceFXProvider:
         if not self.allow():
             raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
         start = end - timedelta(days=lookback_days)
-        url = build_url(self.provider_id, "/Stat-ReferenceRate/v2/DAILY_REF_RATE/",
+        url = build_url(self.provider_id, "/Stat-ReferenceRate/v2/DAILY_REF_RATE/get",
                         {"start_period": start.isoformat(), "end_period": end.isoformat()})
         status, body = self.transport(HttpRequest(self.provider_id, url, {"Authorization": self.credential[1]}))
         if status != 200:
