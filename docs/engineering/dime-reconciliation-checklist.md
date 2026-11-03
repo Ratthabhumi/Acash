@@ -16,15 +16,41 @@ produced this lives in `src/acash/invest/reconciliation.py` and prints codes onl
 | `CURRENT_HOLDINGS_CONFIRMED` | NO | holdings screenshot is 2026-11-03 20:40, not an independent confirmation |
 | `OWNER_PRIVATE_PORTFOLIO_RECONCILED` | NO | material evidence still missing |
 
+## Applied Owner-authorized corrections (2026-11-03)
+
+Both changes are local to `data/private/`; the originals were copied to
+`data/private/backups/pre-correction-<timestamp>/` before writing, and the patched document was
+validated by the real snapshot parser before the write became visible.
+
+| Correction | Result |
+|---|---|
+| FX pair | The date-matched USD→THB entry is the anchor; the reverse direction is now `1 / rate` computed with `Decimal` to 12 decimals, carrying the same valuation date. The two 3 Nov Dime! directional quotes were **not** inserted into a 2 Nov snapshot |
+| HOOD | Added to the Newwave grouping (four → five securities) as a quantity position with its cost basis; exactly one position row; no cash line changed |
+| BUY replay | Not recorded — the order predates the cutoff, so no journal event and no second cash debit |
+| Quantity precision | The holdings figure is used; the order figure and the 1e-7-share difference stay recorded as evidence, neither rounded nor overwritten |
+| Price provenance | The position carries the broker's pre-open last price labelled `DIME_SCREENSHOT_PREOPEN_LAST`; it is a broker observation, not a canonical feed price, and is not presented as a 2 Nov close measurement |
+
+Preflight after the correction: `READY_WITH_WARNINGS` (warnings: the pre-existing
+`DIME_SECURITIES` unexplained difference, unverified security identity for securities without
+MIC/ISIN, and an unverified market session — none of them are new).
+
+## Baseline status
+
+No frozen baseline exists yet (`data/private/transactions/baseline.json` is absent) and no
+journal exists, so there is no `BASELINE_V1` to preserve or amend. The corrected snapshot is the
+provisional baseline source; the first recorded transaction freezes it as `BASELINE_V1`, inside
+which HOOD is already present exactly once. A later `BASELINE_V2` is only needed if the baseline
+must move again, and it goes through the existing previewed, confirmed rebase.
+
 ## Audit result for the newly observed security (HOOD)
 
 | Check | Result |
 |---|---|
-| Present in the saved snapshot's securities | NO |
-| Present in the snapshot's quantity positions | NO |
+| Present in the saved snapshot's securities | NO before the correction; **YES** after it |
+| Present in the snapshot's quantity positions | NO before; **YES**, once, in Newwave |
 | Present in the transaction journal | NO — no journal exists yet |
 | Order timestamp vs opening cutoff | order is **before** the cutoff |
-| Classification | `OPENING_BASELINE_POSITION_OMITTED` |
+| Classification | `OPENING_BASELINE_POSITION_OMITTED` before the correction; now `PRE_BASELINE_IN_BASELINE` |
 | Cash effect | `NONE_EVIDENCE_ONLY` — the order must not debit cash a second time |
 | Fee | `FEE_NOT_ESTABLISHED` — no fee was invented |
 | Order quantity vs holdings quantity | `DISPLAY_PRECISION_DIFFERENCE` at 1e-7 shares — both values preserved, neither rounded |
