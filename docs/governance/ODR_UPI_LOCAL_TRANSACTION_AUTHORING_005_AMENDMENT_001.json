@@ -1,0 +1,66 @@
+{
+  "record": "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005_AMENDMENT_001",
+  "decision_id": "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005",
+  "capability": "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED",
+  "amendment_type": "SCOPE_NARROWING_AUTHORING_V1_ONLY",
+  "status": "PROPOSED_NOT_RATIFIED",
+  "proposed_on": "2026-11-03",
+  "proposed_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+  "scope_changed": true,
+  "ratification_required": true,
+  "ratified_by": null,
+  "ratified_on": null,
+  "base_decision": "docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json",
+  "base_document": "docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.md",
+  "reason": "ODR-005 section 3 lists corrections as superseding/reversing events in the same scope as ordinary recording. The V1 schema, previewer and journal implement ordinary recording only. Ordinary recording of completed transactions must not stay blocked while the optional correction mechanism is designed, so this amendment narrows the ratifiable V1 scope and moves corrections to a separate proposed decision (ODR-006).",
+  "ratifiable_scope": {
+    "authoring": [
+      "BUY",
+      "SELL",
+      "DEPOSIT",
+      "WITHDRAWAL",
+      "DIVIDEND",
+      "FEE"
+    ],
+    "read_only": [
+      "transaction history",
+      "projected holdings and cash from journal replay"
+    ],
+    "scope_schemas": [
+      "ACASH_CANONICAL_TRANSACTIONS_V1"
+    ],
+    "scope_files": [
+      "data/private/transactions/"
+    ]
+  },
+  "excluded_from_this_amendment": [
+    "VOID_ENTERED_EVENT",
+    "SUPERSEDE_ENTERED_EVENT",
+    "any correction, reversal or supersession authoring (moved to ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006)",
+    "editing or deleting a recorded event in place",
+    "orders to any broker (paper or live)"
+  ],
+  "disclosure": "This is a real narrowing of ODR-005 section 3, not an unchanged ratification: the 'Corrections as new reversing or superseding events' row leaves the ratifiable scope. If the Owner ratifies this amendment, ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.md section 3 must be amended in the same commit so the document and the record agree, and corrections must be authorized only through ODR-006.",
+  "unchanged_by_this_amendment": [
+    "status stays PROPOSED_NOT_RATIFIED until the Owner ratifies",
+    "scope_schemas and scope_files as recorded in the base decision",
+    "NO_REAL_ORDERS=true, REAL_CAPITAL_AUTHORITY_USD=0.00, D5_REAL_ADMISSION=NOT_ADMITTED, LANE_A/B=UNISSUED"
+  ],
+  "engineering_status": {
+    "authoring_engine": "IMPLEMENTED (src/acash/dashboard_api/private_transactions.py, src/acash/ppds/transactions.py)",
+    "preview_and_confirmation": "IMPLEMENTED",
+    "append_only_and_idempotency": "IMPLEMENTED",
+    "immutable_opening_baseline": "IMPLEMENTED (commit 39c9ac8: previewed, confirmed rebase)",
+    "mock_and_unit_tests": "PASSING",
+    "real_authoring": "NOT_AUTHORIZED — ODR-005 is PROPOSED_NOT_RATIFIED"
+  },
+  "owner_decision_wording": "I authorize ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005 as narrowed by AMENDMENT_001: local authoring of already-executed BUY, SELL, DEPOSIT, WITHDRAWAL, DIVIDEND and FEE events plus read-only history for ACASH_CANONICAL_TRANSACTIONS_V1 under data/private/transactions/, with corrections, in-place edits, broker orders and native import excluded. No trading, broker connectivity, credentials, capital transfer, market-data retrieval or D5 admission is authorized.",
+  "not_authorized_by_this_proposal": [
+    "Trading (paper or live)",
+    "Broker account connectivity or credentials",
+    "Capital or currency transfers",
+    "Market-data retrieval",
+    "Correction or supersession authoring",
+    "Autonomous ODR ratification"
+  ]
+}
