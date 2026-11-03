@@ -4,9 +4,11 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } from '../components/charts/PortfolioCharts';
 import { SetupWizard } from '../components/portfolio/SetupWizard';
+import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
+import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
-import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, formatDec, formatWeight } from '../services/upiView';
+import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, classifyResponse, formatDec, formatWeight } from '../services/upiView';
 
 const STATUS_HELP: Record<string, string> = {
   AUTHORIZATION_REQUIRED: 'Session expired, not signed in, or ODR-001 is not RATIFIED. Close the ACASH window and double-click START-DASHBOARD.bat again.',
@@ -384,6 +386,9 @@ export const PortfolioPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [source, setSource] = useState<'STATEMENT' | 'MARKET'>('STATEMENT');
+  const [marketAvailable, setMarketAvailable] = useState(false);
+  const [marketState, setMarketState] = useState<LoadState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const connect = useCallback(async () => {
@@ -425,7 +430,14 @@ export const PortfolioPage: React.FC = () => {
     return () => { live = false; abortRef.current?.abort(); };
   }, [connect]);
 
+  const onMarketView = useCallback((available: boolean) => {
+    setMarketAvailable(available);
+    if (!available) { setMarketState(null); setSource('STATEMENT'); return; }
+    void callMarket<unknown>('GET', 'view').then((r) => setMarketState(classifyResponse(r.http, r.body)));
+  }, []);
+
   const ready = state && 'view' in state;
+  const shown = source === 'MARKET' && marketState ? marketState : state;
   const setupOpen = mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && state !== null &&
     (state.status === 'NO_REPORT' || state.status === 'INVALID_REPORT' || editing);
   const onGenerated = () => { setEditing(false); void connect(); };
@@ -486,8 +498,23 @@ export const PortfolioPage: React.FC = () => {
       </div>
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
+      {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && <MarketRefreshPanel onMarketView={onMarketView} />}
+      {mode === 'OWNER_PRIVATE_READ_ONLY' && marketAvailable && !loading && (
+        <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Valuation source">
+          {(['STATEMENT', 'MARKET'] as const).map((s) => (
+            <button key={s} type="button" onClick={() => setSource(s)} aria-pressed={source === s}
+              className={`px-3 py-1 rounded border border-default ${source === s ? 'bg-accent text-white' : 'text-secondary hover:bg-surface-muted'}`}>
+              {s === 'STATEMENT' ? 'ตาม statement ที่บันทึก' : 'ตามราคาล่าสุด (Refresh)'}
+            </button>
+          ))}
+          {source === 'MARKET' && <span className="text-secondary">มูลค่าจากราคาตลาดล่าสุดกับจำนวนหุ้นที่บันทึกไว้ ไม่ใช่ยอดจากโบรกเกอร์ และอาจไม่ครบทั้งพอร์ต</span>}
+        </div>
+      )}
       {setupOpen && <SetupWizard hasReport={!!ready} onGenerated={onGenerated} />}
-      {!loading && state && 'view' in state && <PortfolioReport view={state.view} warnings={state.warnings} />}
+      {!loading && shown && 'view' in shown && <PortfolioReport view={shown.view} warnings={shown.warnings} />}
+      {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
+        <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>
+      )}
       {!loading && state && !('view' in state) && (
         <div className="bg-surface border border-default rounded-lg p-6 flex items-start gap-3 text-sm">
           <ShieldAlert className="w-5 h-5 text-muted shrink-0" />
