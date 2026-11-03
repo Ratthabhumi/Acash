@@ -17,6 +17,7 @@ const STATUS_HELP: Record<string, string> = {
   NO_REPORT: 'No private portfolio yet. Set up your portfolio with the wizard below.',
   INVALID_REPORT: 'The private view failed contract validation. Regenerate it from the current wealth pack.',
   SERVICE_UNAVAILABLE: 'The local ACASH service is not running. Double-click START-DASHBOARD.bat (it starts everything).',
+  STALE_REPORT: 'รายงานนี้สร้างจากข้อมูลนำเข้าชุดก่อนหน้า (เช่น ก่อนแก้ FX หรือเพิ่มหลักทรัพย์) จึงยังไม่ตรงกับ snapshot ปัจจุบัน: กด "Regenerate report" ในแท็บวางแผนเงินหรือหน้าอัปเดตพอร์ตก่อนอ่านตัวเลข',
 };
 
 // Presentation ordering only (never displayed): sorts rows by a Python decimal string.
@@ -255,16 +256,11 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
         <SectionHeader id="sec-a" letter="A" title="Executive overview" note="Total best evidence combines computed NAV, broker-displayed values and unidentified holdings. It is not a verified NAV. Broker totals are compared, never added." />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           <SummaryCard label={partial ? 'Priced holdings subtotal' : 'Total best evidence'} value={formatDec(ov.total_best_evidence)} unit={ccy}
-            subtitle={partial ? 'Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV.' : 'Computed + observed value-only + unclassified. Not a verified NAV.'} />
-          <SummaryCard label="Computed NAV (PPDS)" value={evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds)} unit={ccy}
-            subtitle={evidenceOnly ? 'No cash or quantity line carries value in this report.' : 'Quantity × price + settled cash. A subset of the portfolio.'} />
-          <SummaryCard label="Unclassified holdings" value={partial ? EXCLUDED : formatDec(ov.unclassified_holdings_value)} unit={partial ? undefined : ccy} tone={!partial && Number(ov.unclassified_holdings_value) > 0 ? 'warn' : 'default'}
-            subtitle={`Broker totals minus identified lines · ${formatWeight(conc.unclassified_share)} of best evidence`} />
+            subtitle={partial ? `Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV. Computed NAV ${formatDec(ov.computed_nav_ppds)}.` : `Computed NAV ${formatDec(ov.computed_nav_ppds)} + observed value-only items. Not a verified NAV.`} />
           <SummaryCard label="Cash (settled lines)" value={cash ? formatDec(cash.value) : NOT_ESTABLISHED} unit={ccy}
             subtitle="Settled cash lines in computed NAV. Cash inside broker totals is not separated." />
-          <SummaryCard label="Emergency reserve" value={formatDec(reserve.current_thb)} unit="THB" tone={reserve.status === 'RESERVE_SHORTFALL' ? 'warn' : 'good'}
-            badge={<StatusBadge status={reserve.status ?? 'NOT_ESTABLISHED'} />}
-            subtitle={`Target ${formatDec(reserve.target_thb)} · shortfall ${formatDec(reserve.shortfall_thb)} · ${reserve.coverage_months ?? NOT_ESTABLISHED} months covered`} />
+          <SummaryCard label="Coverage" value={formatWeight(view.coverage.position_level_coverage)} unit="positions"
+            subtitle={`Known value ${formatWeight(view.coverage.known_value_coverage)} · instruments without an aligned quote are excluded, never zero`} />
           <SummaryCard label="Account reconciliation" value={partial ? 'N/A' : `${reconciled} / ${view.accounts.length}`} unit={partial ? undefined : 'reconciled'} tone={partial ? 'default' : unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
             subtitle={partial ? 'ต่างช่วงเวลา — ยอดโบรกเกอร์เทียบกับราคาตลาดล่าสุดไม่ได้' : Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')} />
         </div>
