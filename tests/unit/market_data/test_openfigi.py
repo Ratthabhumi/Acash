@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Tuple
 
 import pytest
@@ -113,3 +114,23 @@ def test_module_declares_no_price_or_trading_surface() -> None:
     source = of.__file__ and open(of.__file__, encoding="utf-8").read()
     for banned in ("/v2/orders", "/v2/accounts", "paper-api", "AlpacaIEX", "PriceObservation"):
         assert banned not in source
+
+
+def test_identity_batch_discloses_only_tickers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from acash.market_data import identity_batch as ib
+
+    snapshot = tmp_path / "snapshot.json"
+    snapshot.write_text(json.dumps({"securities": [
+        {"security_id": "AAPL"}, {"security_id": "VOO"}, {"security_id": "SCBSET50"},
+        {"security_id": "MTS-GOLD"}, {"security_id": "AAPL"}]}), encoding="utf-8")
+    assert ib.held_tickers(snapshot) == ["AAPL", "VOO"]
+
+    provider, calls = _provider([(200, [_ok(IBM), _ok(IBM)])])
+    results = provider.map_identifiers("TICKER", ib.held_tickers(snapshot), exchCode="US")
+    body = json.loads(calls[0][2])
+    assert [job["idValue"] for job in body] == ["AAPL", "VOO"]
+    for job in body:
+        assert set(job) == {"idType", "idValue", "exchCode"}      # no quantity, value or account
+    rows = ib.rows_for(results)
+    assert rows[0]["owner_confirmation"] == "PENDING_OWNER_REVIEW"
+    assert "figi" in rows[0]["candidates"][0]
