@@ -22,15 +22,15 @@ CASH_DOC: Dict[str, Any] = {
     "accounts": [
         {"account_ref": "EXT_MAKE", "institution": "Make", "owner_label": "Make", "balance": "13000.00",
          "currency": "THB", "precision": "EXACT", "evidence_type": "OWNER_DECLARED",
-         "liquidity_status": "WITHDRAWABLE", "reserve_eligible": True, "inclusion_scope": "WEALTH_ONLY",
+         "liquidity_status": "WITHDRAWABLE", "reserve_eligible": True, "reserve_designated": True, "inclusion_scope": "WEALTH_ONLY",
          "observed_at": "2026-11-04T00:00:00+07:00", "effective_date": "2026-11-04"},
         {"account_ref": "EXT_LHB", "institution": "LHB", "owner_label": "LHB", "balance": "8000.00",
          "currency": "THB", "precision": "EXACT", "evidence_type": "OWNER_DECLARED",
-         "liquidity_status": "WITHDRAWABLE", "reserve_eligible": True, "inclusion_scope": "WEALTH_ONLY",
+         "liquidity_status": "WITHDRAWABLE", "reserve_eligible": True, "reserve_designated": True, "inclusion_scope": "WEALTH_ONLY",
          "observed_at": "2026-11-04T00:00:00+07:00", "effective_date": "2026-11-04"},
         {"account_ref": "EXT_KBANK", "institution": "KBank", "owner_label": "KBank", "balance": "2000.00",
          "currency": "THB", "precision": "APPROXIMATE", "evidence_type": "OWNER_ESTIMATE",
-         "liquidity_status": "SPENDING", "reserve_eligible": False, "inclusion_scope": "WEALTH_ONLY",
+         "liquidity_status": "SPENDING", "reserve_eligible": False, "reserve_designated": False, "inclusion_scope": "WEALTH_ONLY",
          "observed_at": "2026-11-04T00:00:00+07:00", "effective_date": "2026-11-04"},
     ],
 }
@@ -60,6 +60,7 @@ def test_totals_target_and_gap_are_three_distinct_numbers(tmp_path: Path) -> Non
     assert summary["total"] == "23000.00" and summary["target"] == "30000.00" and summary["gap"] == "7000.00"
     assert summary["approximate_component"] == "2000.00"
     assert summary["reserve_eligible_total"] == "21000.00"
+    assert summary["designated_reserve_total"] == "21000.00"
     assert "OWNER_TARGET_IS_NOT_THE_EXPENSE_DERIVED_RESERVE_REQUIREMENT" in summary["notes"]
     assert "EXTERNAL_CASH_IS_NOT_BROKER_CASH" in summary["notes"]
 

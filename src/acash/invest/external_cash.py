@@ -41,6 +41,7 @@ class ExternalAccount:
     evidence_type: str
     liquidity_status: str
     reserve_eligible: bool
+    reserve_designated: bool
     inclusion_scope: str
     observed_at: datetime
     effective_date: date
@@ -67,6 +68,10 @@ class ExternalCash:
 
     def reserve_eligible_total(self) -> Decimal:
         return sum((a.balance for a in self.accounts if a.reserve_eligible), Decimal(0))
+
+    def designated_reserve_total(self) -> Decimal:
+        """Owner-designated reserve only: eligibility is a suggestion, designation is the decision."""
+        return sum((a.balance for a in self.accounts if a.reserve_designated), Decimal(0))
 
 
 def _positive(value: Any, ctx: str) -> Decimal:
@@ -122,6 +127,7 @@ def load_external_cash(path: Path) -> ExternalCash:
             balance=_positive(raw.get("balance"), f"accounts[{index}].balance"),
             currency=str(raw.get("currency") or "THB"), precision=precision, evidence_type=evidence,
             liquidity_status=liquidity, reserve_eligible=raw.get("reserve_eligible") is True,
+            reserve_designated=raw.get("reserve_designated") is True,
             inclusion_scope=inclusion, observed_at=_aware(raw.get("observed_at"), f"accounts[{index}].observed_at"),
             effective_date=date.fromisoformat(str(raw.get("effective_date")))))
     target = doc.get("target")
@@ -141,7 +147,8 @@ def summary(cash: ExternalCash) -> Dict[str, Any]:
         "accounts": [{"account_ref": a.account_ref, "institution": a.institution, "owner_label": a.owner_label,
                       "balance": format(a.balance, "f"), "currency": a.currency, "precision": a.precision,
                       "evidence_type": a.evidence_type, "liquidity_status": a.liquidity_status,
-                      "reserve_eligible": a.reserve_eligible, "observed_at": a.observed_at.isoformat(),
+                      "reserve_eligible": a.reserve_eligible, "reserve_designated": a.reserve_designated,
+                      "observed_at": a.observed_at.isoformat(),
                       "effective_date": a.effective_date.isoformat()} for a in cash.accounts],
         "total": format(total, "f"),
         "approximate_component": format(cash.approximate(), "f"),
@@ -150,6 +157,7 @@ def summary(cash: ExternalCash) -> Dict[str, Any]:
         "target_evidence": cash.target_evidence,
         "gap": None if gap is None else format(gap, "f"),
         "reserve_eligible_total": format(cash.reserve_eligible_total(), "f"),
+        "designated_reserve_total": format(cash.designated_reserve_total(), "f"),
         "notes": ["EXTERNAL_CASH_IS_NOT_BROKER_CASH",
                   "EXTERNAL_CASH_IS_NOT_AUTOMATICALLY_EMERGENCY_RESERVE",
                   "OWNER_TARGET_IS_NOT_THE_EXPENSE_DERIVED_RESERVE_REQUIREMENT"],
