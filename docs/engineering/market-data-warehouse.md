@@ -209,3 +209,61 @@ evidence** (the remainder is cash plus the reconciliation residual, by design).
 
 The dashboard renders these rows in a sortable, searchable, per-account table with expandable
 FIGI/ISIN/source details; sorting compares decimal strings, so nothing is converted to floating point.
+
+## V100 â€” evidence integrity, BOT calendar scope and research labelling
+
+### Massive: three separate evidence states
+
+The record now distinguishes what was actually observed:
+
+| Field | Value | Meaning |
+| --- | --- | --- |
+| `PUBLIC_2026_REVISION_OBSERVED` | `true` | an official Terms page dated 2026-11-03 was seen in indexed public content |
+| `DIRECT_PAGE_VERSION_CONFLICT` | `true` | a direct fetch also returned the 2025-08-28 revision |
+| `EFFECTIVE_ACCOUNT_REVISION_UNVERIFIED` | `true` | the revision governing this account is **not** established |
+| `agent_verified_current_revision` | `false` | unchanged on purpose |
+| `subscriber_classification_inspected` | `false` | the signed-in plan and subscriber class were not inspected |
+
+Rights were **not** widened: private warehouse only, redistribution denied, no public derived benchmark,
+no model training. The record adds the backup exception (an inactive backup may be kept up to 90 days,
+but it may not be restored or used once the licence ends) and states that source-specific terms override
+Owner authorisation. The existing 26 partitions are preserved while their use remains supported; no
+automatic deletion was triggered by an older cached page.
+
+### BOT_HOLIDAYS: narrow scope, caching denied
+
+Amendment 005 adds one provider for one purpose: reading and privately displaying the published Thai
+financial-institutions holiday calendar, with the source URL and date. `cache_permitted` and
+`retention_policy_verified` stay `null`, so the warehouse refuses to store it, and the calendar is never
+used as a US exchange calendar. It does not authorise any other BOT product. With the credential alias
+(`BOT_HOLIDAYS â†’ BOT_OTHERS`) and the live-verified contract, its status is now `READY` with
+`cache_permitted: false`.
+
+### Research labels
+
+`build_proposal` and the FX decomposition now carry explicit labels, surfaced in the dashboard:
+
+`HYPOTHETICAL_HISTORICAL_BASKET`, `PRICE_RETURN_ONLY`, `CURRENT_WEIGHTS_APPLIED_HISTORICALLY`,
+`NOT_TRANSACTION_RECONSTRUCTED`, `NOT_REALIZED_PORTFOLIO_PERFORMANCE`, `BOT_REFERENCE_FX_NOT_EXECUTABLE`,
+`PARTIAL_UNIVERSE_RESEARCH`, `EXECUTION_AUTHORITY_NONE`.
+
+The +13.20% THB figure is a fixed-weight basket replayed over historical observations using today's
+observed weights. It is not realized portfolio performance: no transaction history, cash flows or
+historical positions exist in ACASH yet. `realized_performance` is `false` and
+`weights_are_current_not_historical` is `true` in the payload.
+
+### Data integrity (no network)
+
+One offline check over the private warehouse: **26/26 partitions** present, SHA-256 matching the
+manifest, **12,531 rows**, `first`/`last` dates matching, source tag `MASSIVE_BASIC`, retention record
+present with terms revision `2026-11-03`. The BOT series still holds 142 points and the decomposition
+97 sessions, regenerated with `--reuse-series` (zero provider calls).
+
+### Browser acceptance: NOT_RUN
+
+The authenticated matrix could not be executed by the agent. The launcher issues a single-use nonce
+(60 s) that is exchanged for an HttpOnly `SameSite=Strict` session cookie; the agent's browser context
+cannot inherit that cookie without the nonce being written into a tool call, and the same instruction
+set forbids printing the nonce or session value. The gate itself remains verified by contract tests
+(unauthenticated requests are rejected; Origin/Host/Cookie checks unchanged), and nothing was weakened
+to obtain a session. Marked **NOT_RUN** rather than reported as passing.

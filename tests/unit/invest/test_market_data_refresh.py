@@ -764,7 +764,7 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     assert doc["decision_id"] == ma.DECISION_ID
     entries = {e["provider_id"]: e for e in doc["scope_providers"]}
     assert set(entries) == {"ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE",
-                            "FRANKFURTER_ECB_FX", "MASSIVE_BASIC", "BOT_REFERENCE_FX"}
+                            "FRANKFURTER_ECB_FX", "MASSIVE_BASIC", "BOT_REFERENCE_FX", "BOT_HOLIDAYS"}
     for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
         assert entries[provider_id]["entitlement_verified"] is True
         assert entries[provider_id]["cache_permitted"] is None
@@ -782,7 +782,10 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     assert statuses["BOT_REFERENCE_FX"] == "CREDENTIALS_REQUIRED"
     # Amendment history is append-only: 003 recorded the scope, 004 the private-storage right.
     assert "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT" in doc["amendments"]
-    assert doc["amendments"][-1] == "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
+    # Append-only history: 004 recorded storage, 005 the narrow BOT holiday calendar scope.
+    assert doc["amendments"][-2:] == [
+        "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE",
+        "ODR_UPI_MARKET_DATA_004_AMENDMENT_005_BOT_HOLIDAYS"]
     massive = entries["MASSIVE_BASIC"]
     assert massive["cache_permitted"] is True and massive["retention_policy_verified"] is True
     assert massive["retention_policy"]["max_retention_after_terms_termination_days"] == 30
@@ -1165,3 +1168,70 @@ def test_research_route_projects_only_derived_fields(tmp_path: Path,
     # Raw observations must never be projected into a browser payload.
     assert "bars" not in json.dumps(doc)
     assert "close" not in json.dumps(doc)
+
+
+def test_massive_evidence_records_the_revision_conflict_without_widening_rights() -> None:
+    doc = json.loads((Path(".") / ma.RECORD).read_text(encoding="utf-8"))
+    entry = {e["provider_id"]: e for e in doc["scope_providers"]}["MASSIVE_BASIC"]
+    terms = entry["retention_terms"]
+    assert terms["PUBLIC_2026_REVISION_OBSERVED"] is True
+    assert terms["DIRECT_PAGE_VERSION_CONFLICT"] is True
+    assert terms["EFFECTIVE_ACCOUNT_REVISION_UNVERIFIED"] is True
+    # The public index showing a 2026 text never becomes an account-level verification.
+    assert terms["agent_verified_current_revision"] is False
+    assert terms["subscriber_classification_inspected"] is False
+    amendment = json.loads((Path(".") / "docs/governance/"
+                            "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE.json").read_text(encoding="utf-8"))
+    assert amendment["evidence_state"]["DIRECT_PAGE_VERSION_CONFLICT"] is True
+    assert amendment["third_party_precedence"] == "SOURCE_TERMS_OVERRIDE_OWNER_AUTHORIZATION"
+    assert amendment["backup_policy"]["inactive_backup_retention_days"] == 90
+    assert amendment["backup_policy"]["restoration_after_termination"] == "PROHIBITED"
+    # Rights are unchanged: private storage, no redistribution.
+    assert entry["cache_rights"]["redistribution"] == "DENIED"
+    assert "model_training" not in json.dumps(entry).replace('"model_training": false', "")
+
+
+def test_bot_holidays_is_in_scope_ready_and_denied_caching() -> None:
+    doc = json.loads((Path(".") / ma.RECORD).read_text(encoding="utf-8"))
+    entry = {e["provider_id"]: e for e in doc["scope_providers"]}["BOT_HOLIDAYS"]
+    assert entry["display_permitted"] is True and entry["calculation_permitted"] is True
+    assert entry["cache_permitted"] is None and entry["retention_policy_verified"] is None
+    assert "ODR_UPI_MARKET_DATA_004_AMENDMENT_005_BOT_HOLIDAYS" in doc["amendments"]
+    status = {p["provider_id"]: p for p in ma.provider_statuses(Store())[1]}["BOT_HOLIDAYS"]
+    assert status["status"] == "READY"
+    assert status["cache_permitted"] is False
+    # No other BOT product becomes authorised by this amendment.
+    others = {p["provider_id"]: p["status"] for p in ma.provider_statuses(Store())[1]}
+    assert others["BOT_REFERENCE_FX"] == "READY"
+
+
+def test_research_route_labels_a_partial_universe_hypothetical_basket(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pi, "_private_dir", lambda *parts: tmp_path.joinpath(*parts))
+    directory = tmp_path / "market_warehouse"
+    directory.mkdir(parents=True)
+    report = {
+        "generated_at": "2026-11-04T12:00:00+00:00",
+        "job": {"requests": 26, "storage_rights": "PERMITTED", "symbols": {"VOO": {}, "NASA": {}}},
+        "coverage": {"union_sessions": 501, "covered": 1, "partial": 1, "missing": 0, "symbols": {}},
+        "panel": {"aligned_sessions": 356, "first": "2025-03-28", "last": "2026-11-03",
+                  "eligible": ["VOO"], "excluded": {"NASA": {"reason": "SESSION_COVERAGE_BELOW_MINIMUM",
+                                                              "sessions": 151}}},
+        "proposal": {"strategy_id": "EQUAL_WEIGHT",
+                     "recommendation_status": "RESEARCH_ONLY_NOT_AUTHORIZED_FOR_EXECUTION",
+                     "execution_authority": "NONE", "performance_basis": "HYPOTHETICAL_HISTORICAL_BASKET",
+                     "realized_performance": False,
+                     "evidence_labels": ["HYPOTHETICAL_HISTORICAL_BASKET"],
+                     "limitations": [], "missing_evidence": []},
+        "governance": {"execution_authority": "NONE"},
+    }
+    (directory / "backfill_report.json").write_text(json.dumps(report), encoding="utf-8")
+    doc = ms.research_view()
+    assert doc["universe_status"] == "PARTIAL_UNIVERSE_RESEARCH"
+    assert doc["realized_performance"] is False
+    assert doc["performance_basis"] == "HYPOTHETICAL_HISTORICAL_BASKET"
+    for label in ("PARTIAL_UNIVERSE_RESEARCH", "PRICE_RETURN_ONLY", "HYPOTHETICAL_HISTORICAL_BASKET",
+                  "NOT_TRANSACTION_RECONSTRUCTED", "NOT_REALIZED_PORTFOLIO_PERFORMANCE",
+                  "EXECUTION_AUTHORITY_NONE"):
+        assert label in doc["evidence_labels"]
+    assert doc["proposal"]["evidence_labels"] == ["HYPOTHETICAL_HISTORICAL_BASKET"]

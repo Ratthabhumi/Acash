@@ -60,6 +60,8 @@ def main() -> int:
     parser.add_argument("--start", default=None)
     parser.add_argument("--end", default=None)
     parser.add_argument("--chunk-days", type=int, default=31)
+    parser.add_argument("--reuse-series", action="store_true",
+                        help="reuse the stored BOT series (offline; no provider request)")
     args = parser.parse_args()
 
     store = wh.BarWarehouse(WAREHOUSE, record=ROOT / ma.RECORD)
@@ -73,13 +75,30 @@ def main() -> int:
     common = sorted(set.intersection(*(set(series) for series in closes.values())))
     end = date.fromisoformat(args.end) if args.end else common[-1]
     start = date.fromisoformat(args.start) if args.start else common[0]
-    credential = ma.default_credential_store().lookup("BOT_EXCHANGE_RATES")
-    if credential is None:
-        print(json.dumps({"status": "FX_CREDENTIAL_MISSING", "provider_id": "BOT_EXCHANGE_RATES"}))
-        return 2
-    provider = mp.BOTReferenceFXProvider(credential, mp.urllib_transport,
-                                         RateLimiter(200, time.monotonic, 3600).allow, lambda: datetime.now(timezone.utc))
-    series = fx.collect_series(provider, start, end, chunk_days=args.chunk_days)
+    if args.reuse_series:
+        stored = fx.load_series()
+        if stored is None:
+            print(json.dumps({"status": "NO_FX_SERIES", "detail": "run without --reuse-series once"}))
+            return 2
+        points = {date.fromisoformat(p["date"]): fx.FxPoint(
+            date.fromisoformat(p["date"]), Decimal(p["usd_thb"]), str(p["source"]),
+            str(p["retrieved_at"]), str(p.get("rate_type", fx.RATE_TYPE)))
+            for p in stored.get("points", [])}
+        requested = stored.get("requested") or {}
+        series = fx.FxSeries(points=points, source=str(stored.get("source")),
+                             requested=(date.fromisoformat(requested["start"]),
+                                        date.fromisoformat(requested["end"])))
+        start, end = series.requested
+        common = [day for day in common if start <= day <= end]
+    else:
+        credential = ma.default_credential_store().lookup("BOT_EXCHANGE_RATES")
+        if credential is None:
+            print(json.dumps({"status": "FX_CREDENTIAL_MISSING", "provider_id": "BOT_EXCHANGE_RATES"}))
+            return 2
+        provider = mp.BOTReferenceFXProvider(
+            credential, mp.urllib_transport, RateLimiter(200, time.monotonic, 3600).allow,
+            lambda: datetime.now(timezone.utc))
+        series = fx.collect_series(provider, start, end, chunk_days=args.chunk_days)
     weights_by_symbol = weights(symbols)
     excluded = sorted(s for s in symbols if s not in weights_by_symbol)
     usable = {symbol: closes[symbol] for symbol in symbols if symbol in weights_by_symbol}

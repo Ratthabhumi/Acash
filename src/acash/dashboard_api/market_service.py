@@ -323,8 +323,17 @@ def research_view() -> Dict[str, Any]:
     panel = report.get("panel") or {}
     proposal = report.get("proposal") or {}
     job = report.get("job") or {}
+    excluded = panel.get("excluded") or {}
+    universe_status = "PARTIAL_UNIVERSE_RESEARCH" if excluded else "FULL_UNIVERSE_QUALIFIED"
+    labels = [universe_status, "PRICE_RETURN_ONLY", "HYPOTHETICAL_HISTORICAL_BASKET",
+              "NOT_TRANSACTION_RECONSTRUCTED", "NOT_REALIZED_PORTFOLIO_PERFORMANCE",
+              "EXECUTION_AUTHORITY_NONE"]
     return {
         "status": "RESEARCH_READY" if proposal.get("recommendation_status") else "RESEARCH_INCOMPLETE",
+        "universe_status": universe_status,
+        "evidence_labels": labels,
+        "performance_basis": proposal.get("performance_basis") or "HYPOTHETICAL_HISTORICAL_BASKET",
+        "realized_performance": False,
         "generated_at": report.get("generated_at"),
         "coverage": {key: matrix.get(key) for key in
                      ("union_sessions", "union_first", "union_last", "covered", "partial", "missing")},
@@ -339,7 +348,8 @@ def research_view() -> Dict[str, Any]:
                       "cash_weight", "target_weights", "current_weights", "proposed_actions", "modeled_risk",
                       "rank_scores", "in_sample_period", "out_of_sample_period", "transaction_cost_status",
                       "turnover_required", "modeled_transaction_cost", "limitations", "missing_evidence",
-                      "evaluated_strategies", "disclaimer")},
+                      "evaluated_strategies", "performance_basis", "realized_performance",
+                      "transaction_reconstructed", "evidence_labels", "disclaimer")},
         "requests": job.get("requests"),
         "storage_rights": job.get("storage_rights"),
         "governance": report.get("governance"),

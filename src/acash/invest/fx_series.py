@@ -170,6 +170,7 @@ class Decomposition:
                             for i in range(len(self.fx))]
             cumulative_usd = _compound(weighted_usd)
             portfolio = {"weight_basis": "CONSTANT_WEIGHTS_DAILY_REBALANCED",
+                         "weights_are_current_not_historical": True,
                          "usd_price_return": format(cumulative_usd, "f"),
                          "thb_return": format(cumulative_usd + cumulative_fx + cumulative_usd * cumulative_fx, "f"),
                          "fx_translation": format(cumulative_fx, "f"),
@@ -180,6 +181,16 @@ class Decomposition:
             "first": self.sessions[0].isoformat() if self.sessions else None,
             "last": latest,
             "identity": "(1 + R_THB) = (1 + R_USD) * (1 + R_FX)",
+            "performance_basis": "HYPOTHETICAL_HISTORICAL_BASKET",
+            "realized_performance": False,
+            "labels": [
+                "HYPOTHETICAL_HISTORICAL_BASKET",
+                "PRICE_RETURN_ONLY",
+                "CURRENT_WEIGHTS_APPLIED_HISTORICALLY",
+                "NOT_TRANSACTION_RECONSTRUCTED",
+                "NOT_REALIZED_PORTFOLIO_PERFORMANCE",
+                "BOT_REFERENCE_FX_NOT_EXECUTABLE",
+            ],
             "period_count": len(self.fx),
             "instruments": per,
             "portfolio": portfolio,

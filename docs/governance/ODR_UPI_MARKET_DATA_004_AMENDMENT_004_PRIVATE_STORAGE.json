@@ -22,7 +22,9 @@
       "Web search results and cached copies show different revisions; the effective revision for this account must be confirmed by the Owner against the signed-in terms page.",
       "Third-party data-provider restrictions and exchange terms continue to apply and are not overridden by the Owner's authorisation.",
       "Rights end with the subscription/plan; the storage right is not perpetual."
-    ]
+    ],
+    "public_revision_observed": true,
+    "direct_page_conflict_observed": true
   },
   "storage_scope": {
     "private_only": true,
@@ -95,5 +97,30 @@
     "This amendment grants no trading, transfer or publication right.",
     "If the vendor terms, plan or third-party restrictions change, collection must stop and the purge command must be run.",
     "Raw provider responses are not retained; only parsed daily bars and reference FX points are stored."
-  ]
+  ],
+  "evidence_state": {
+    "PUBLIC_2026_REVISION_OBSERVED": true,
+    "DIRECT_PAGE_VERSION_CONFLICT": true,
+    "EFFECTIVE_ACCOUNT_REVISION_UNVERIFIED": true,
+    "public_2026_revision_dated": "2026-11-03",
+    "older_revision_observed_dated": "2025-08-28",
+    "subscriber_classification_inspected": false,
+    "agent_verified_current_revision": false,
+    "recorded_on": "2026-11-04",
+    "note": "An official Massive Market Data Terms page dated 2026-11-03 was observed in indexed public content, while a direct fetch also returned a 2025-08-28 revision. The revision that governs this account is therefore unverified, and the private-storage authorisation is not widened."
+  },
+  "caveats": [
+    "Owner authorisation is not an external licence and cannot widen the vendor's terms.",
+    "The 2026-11-03 revision was observed in indexed official content; a direct fetch also returned the 2025-08-28 revision, so the account-effective revision stays unverified.",
+    "Third-party provider and exchange terms take precedence over this record.",
+    "Rights end with the plan; storage is not perpetual."
+  ],
+  "backup_policy": {
+    "inactive_backup_retention_days": 90,
+    "active_data_retention_days_after_termination": 30,
+    "restoration_after_termination": "PROHIBITED",
+    "continued_use_of_unlicensed_backup": "PROHIBITED",
+    "note": "A longer window applies only to an inactive backup that is never used; the stricter provider requirement wins where one exists."
+  },
+  "third_party_precedence": "SOURCE_TERMS_OVERRIDE_OWNER_AUTHORIZATION"
 }

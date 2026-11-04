@@ -144,7 +144,14 @@
         "terms_revision_dated": "2026-11-03",
         "recorded_on": "2026-11-04",
         "verification_basis": "OWNER_ATTESTED_RESEARCH_SUMMARY_NOT_AGENT_BROWSED",
-        "agent_verified_current_revision": false
+        "agent_verified_current_revision": false,
+        "PUBLIC_2026_REVISION_OBSERVED": true,
+        "DIRECT_PAGE_VERSION_CONFLICT": true,
+        "EFFECTIVE_ACCOUNT_REVISION_UNVERIFIED": true,
+        "public_2026_revision_dated": "2026-11-03",
+        "older_revision_observed_dated": "2025-08-28",
+        "subscriber_classification_inspected": false,
+        "note": "An official Massive Market Data Terms page dated 2026-11-03 was observed in indexed public content, while a direct fetch also returned a 2025-08-28 revision. The revision that governs this account is therefore unverified, and the private-storage authorisation is not widened."
       }
     },
     {
@@ -185,13 +192,33 @@
         "agent_verified_current_revision": false
       },
       "entitlement_verified": true
+    },
+    {
+      "provider_id": "BOT_HOLIDAYS",
+      "role": "CALENDAR",
+      "quoted_scope": "Published Thai financial-institutions holidays, read and privately displayed",
+      "approved_endpoints": [
+        "GET https://gateway.api.bot.or.th/financial-institutions-holidays/"
+      ],
+      "account_entitlement": "ENTITLED_API_KEY_CONFIGURED",
+      "entitlement_verified": true,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
+      "cache_permitted": null,
+      "retention_policy_verified": null,
+      "contract_verified_live": true,
+      "attested_by": "OWNER",
+      "attested_on": "2026-11-03",
+      "evidence": "Owner authorised reading and privately displaying the published financial-institutions holiday calendar (ODR_UPI_MARKET_DATA_004_AMENDMENT_005_BOT_HOLIDAYS). The adapter contract was verified against a live response on 2026-11-04 (20 holidays for 2026). Caching stays unrecorded because the BOT retention rule is not established, and this calendar is never used as a US exchange calendar."
     }
   ],
   "amendments": [
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_001",
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_002_CACHE_RIGHTS",
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT",
-    "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE",
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_005_BOT_HOLIDAYS"
   ],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [
@@ -211,6 +238,6 @@
     "basis": "Owner accepted the Alpaca and MarketData.app account terms on 2026-11-03 and confirmed personal, local, noncommercial use; each right was checked against the documented plan.",
     "not_attested": "Alpaca cache and retention stay unattested because the accepted terms do not grant blanket storage or redistribution.",
     "unchanged": "Massive, BOT and Webull remain outside scope; no vendor right is inferred.",
-    "latest_amendment": "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
+    "latest_amendment": "ODR_UPI_MARKET_DATA_004_AMENDMENT_005_BOT_HOLIDAYS"
   }
 }

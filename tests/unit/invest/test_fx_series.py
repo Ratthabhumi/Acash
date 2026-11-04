@@ -122,3 +122,15 @@ def test_series_round_trips_through_the_private_store(tmp_path: Any) -> None:
     decomposition = fx.load_decomposition(tmp_path)
     assert decomposition is not None and decomposition["sessions"] == 2
     assert fx.load_series(tmp_path / "absent") is None
+
+
+def test_decomposition_is_labelled_as_a_hypothetical_basket() -> None:
+    rates = {D1: Decimal("33.00"), D2: Decimal("33.33")}
+    closes = _closes(["100", "101"], [D1, D2])
+    summary = fx.decompose(closes, rates, [D1, D2]).summary({"AAA": Decimal("0.5"), "BBB": Decimal("0.5")})
+    assert summary["performance_basis"] == "HYPOTHETICAL_HISTORICAL_BASKET"
+    assert summary["realized_performance"] is False
+    for label in ("CURRENT_WEIGHTS_APPLIED_HISTORICALLY", "NOT_REALIZED_PORTFOLIO_PERFORMANCE",
+                  "BOT_REFERENCE_FX_NOT_EXECUTABLE", "PRICE_RETURN_ONLY"):
+        assert label in summary["labels"]
+    assert summary["portfolio"]["weights_are_current_not_historical"] is True
