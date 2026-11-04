@@ -164,3 +164,15 @@ def test_massive_and_bot_are_configurable_and_bot_refuses_the_legacy_contract() 
     assert "MASSIVE_BASIC" in ids and "BOT_REFERENCE_FX" in ids
     result = cs._test_connection("BOT_REFERENCE_FX")
     assert result.startswith(("REFUSED_NOT_READY", "REFUSED_CONTRACT_UNVERIFIED"))
+
+
+def test_menu_lists_every_keyed_provider_and_a_stable_exit() -> None:
+    items = cs.menu_items()
+    labels = " ".join(items.values())
+    for provider_id in ("ALPACA_BASIC", "MARKETDATA_APP_FREE", "OPENFIGI_IDENTITY",
+                        "MASSIVE_BASIC", "BOT_REFERENCE_FX"):
+        assert provider_id in labels
+    base = len(cs.KEYED_PROVIDERS)
+    assert items[str(base + 1)] == "Check Credential Status"
+    assert items[str(base + 5)] == "Exit"
+    assert str(base + 5) == "10"

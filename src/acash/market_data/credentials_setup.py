@@ -151,6 +151,19 @@ def _test_connection(provider_id: str) -> str:
     return f"REAL_RESPONSE_OBSERVED: {len(observations)} observation(s); schema valid, timestamps preserved"
 
 
+def menu_items() -> Dict[str, str]:
+    """Menu grows with the provider list; every provider is configurable, never silently omitted."""
+    items = {str(index): f"Configure {provider_id} — {label}"
+             for index, (provider_id, label, _) in enumerate(KEYED_PROVIDERS, start=1)}
+    base = len(KEYED_PROVIDERS)
+    items[str(base + 1)] = "Check Credential Status"
+    items[str(base + 2)] = "Test Authorized Provider Connection"
+    items[str(base + 3)] = "Replace Existing Credentials"
+    items[str(base + 4)] = "Remove Credentials"
+    items[str(base + 5)] = "Exit"
+    return items
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     writer = ma.WindowsCredentialWriter()
@@ -159,16 +172,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(_line())
     print("  Frankfurter ECB FX: KEYLESS_PROVIDER (no key required; ODR-004 and data-use gates still apply)")
     print("  Secrets are never displayed, logged, or written to a file.")
-    menu = {
-        "1": "Configure Alpaca API",
-        "2": "Configure MarketData.app API",
-        "3": "Configure OpenFIGI identity API",
-        "4": "Check Credential Status",
-        "5": "Test Authorized Provider Connection",
-        "6": "Replace Existing Credentials",
-        "7": "Remove Credentials",
-        "8": "Exit",
-    }
+    menu = menu_items()
     while True:
         print()
         for key, label in menu.items():
@@ -178,25 +182,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         except DataContractError as exc:
             print(f"  {exc}")
             return 2
-        if choice == "8":
+        count = len(KEYED_PROVIDERS)
+        if choice == str(count + 5):
             return 0
         try:
-            if choice in ("1", "2", "3"):
+            if choice.isdigit() and 1 <= int(choice) <= count:
                 provider_id, _, fields = KEYED_PROVIDERS[int(choice) - 1]
                 target = _configure(writer, provider_id, fields)
                 print(f"  CREDENTIAL_CONFIGURED at {target} (this does not mean PROVIDER_READY)")
-            elif choice == "4":
+            elif choice == str(count + 1):
                 for row in status_rows():
                     print(row)
-            elif choice == "5":
+            elif choice == str(count + 2):
                 test_id, _fields = _choose_provider("Provider to test")
                 print("  " + (_test_identity() if test_id in ma.IDENTITY_PROVIDERS
                               else _test_connection(test_id)))
-            elif choice == "6":
+            elif choice == str(count + 3):
                 provider_id, fields = _choose_provider("Provider to replace")
                 target = _configure(writer, provider_id, fields)
                 print(f"  CREDENTIAL_CONFIGURED at {target} (replaced)")
-            elif choice == "7":
+            elif choice == str(count + 4):
                 provider_id, _ = _choose_provider("Provider to remove")
                 print("  REMOVED" if writer.remove(provider_id) else "  NOT_FOUND")
             else:
