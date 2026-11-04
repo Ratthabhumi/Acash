@@ -33,7 +33,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   }, []);
 
   return (
-    <div className="min-h-screen w-full bg-app flex flex-col font-sans text-primary antialiased selection:bg-accent-subtle">
+    <div className="min-h-screen w-full bg-app flex flex-col font-sans text-primary antialiased selection:bg-accent-subtle overflow-x-hidden">
       {/* 1. Primary Header */}
       <Header
         metadata={researchRun ? researchRun.metadata : null}

@@ -30,6 +30,7 @@ interface ResearchDoc {
   fx?: Record<string, unknown>;
   universe_status?: string;
   evidence_labels?: string[];
+  cohorts?: Array<Record<string, unknown>>;
   performance_basis?: string;
   realized_performance?: boolean;
   note?: string;
@@ -314,6 +315,30 @@ export const ResearchDecisionPanel: React.FC = () => {
             <SimpleTable head={['Strategy', 'Rank score', 'Constraints', 'Hurdle']}
               rows={strategies.map((s) => [str(s.strategy), str(s.rank_score), str(s.constraints_satisfied),
                 str(s.hurdle_rate_cleared)])} />
+          )}
+
+          {(doc.cohorts ?? []).length > 0 && (
+            <div className="bg-surface border border-default rounded-lg p-3 space-y-1 text-xs">
+              <p className="font-semibold text-primary">Research cohorts (แยกช่วงเวลา ห้ามเทียบคะแนนข้ามชุด)</p>
+              <SimpleTable head={['Cohort', 'Universe', 'Sessions', 'Window', 'Strategy', 'OOS', 'Status']}
+                rows={(doc.cohorts ?? []).map((c) => {
+                  const excluded = (c.excluded as string[] | undefined) ?? [];
+                  const window = (c.evaluation_window ?? {}) as Record<string, string>;
+                  return [
+                    str(c.cohort_id),
+                    `${c.session_count ?? '—'} · excluded ${excluded.length ? excluded.join(', ') : 'none'}`,
+                    str(c.session_count),
+                    `${window.start ?? '—'} → ${window.end ?? '—'}`,
+                    str(c.strategy_id),
+                    str(c.out_of_sample_periods),
+                    `${str(c.evaluation_status)}${c.comparable_to_established ? '' : ' · not comparable'}`,
+                  ];
+                })} />
+              <p className="text-[11px] text-muted">
+                NASA เป็น ETF ที่เริ่มซื้อขาย 2026-03-30 จึงอยู่ในชุด RECENT_INCEPTION เท่านั้น
+                และไม่ถูกนำไปเทียบคะแนนกับชุด ESTABLISHED_HISTORY
+              </p>
+            </div>
           )}
 
           <details className="bg-surface border border-default rounded-lg p-3 text-xs">

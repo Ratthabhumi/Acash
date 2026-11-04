@@ -78,7 +78,7 @@ export const HoldingsTable: React.FC<Props> = ({ rows, ccy, total, positionValue
   }
 
   return (
-    <div className="bg-surface border border-default rounded-lg p-4 space-y-3">
+    <div className="bg-surface border border-default rounded-lg p-4 space-y-3 w-full min-w-0 max-w-full">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-primary">Holdings</h3>
@@ -96,13 +96,13 @@ export const HoldingsTable: React.FC<Props> = ({ rows, ccy, total, positionValue
         </label>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto w-full max-w-full">
         <table className="w-full text-xs">
           <caption className="sr-only">รายการหลักทรัพย์ที่ถือครอง</caption>
           <thead>
             <tr className="text-left text-[11px] text-muted border-b border-subtle">
               {HEAD.map(([label, key, title]) => (
-                <th key={label} scope="col" title={title} className="py-1.5 pr-3 font-medium whitespace-nowrap">
+                <th key={label} scope="col" title={title} className="py-1.5 pr-3 font-medium">
                   {key ? (
                     <button type="button" onClick={() => setSort(key)} aria-pressed={sort === key}
                       className="inline-flex items-center gap-1 hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded">

@@ -329,3 +329,62 @@ SSH to `mew@homelab` still times out and the previous Tailscale node (100.116.16
 reinstalled host is unqualified: **HOMELAB_WAITING_FOR_TAILSCALE_REENROLLMENT**. No remote command was
 attempted and no disk was touched. Re-enrolment and preflight steps live in
 `docs/operations/homelab-rebuild-v101.md`.
+
+## V102 â€” two research cohorts, tax evidence intake and repeatable browser acceptance
+
+### NASA is a short history, not a bad instrument
+
+NASA (Tema Space Innovators ETF) listed on 2026-03-30, so its 151 stored sessions are the whole fund.
+The 200-session floor is right for a benchmark and wrong for a new listing, so there are now two
+explicit cohorts built from the same qualified inputs:
+
+| Cohort | Universe | Sessions | Window | Status |
+| --- | --- | --- | --- | --- |
+| `ESTABLISHED_HISTORY` | 25 (NASA excluded) | 356 | 2025-03-28 â†’ 2026-11-03 | `BENCHMARK_ELIGIBLE` |
+| `RECENT_INCEPTION` | 26 (NASA included) | 104 aligned | 2026-03-31 â†’ 2026-11-03 | `EXPLORATORY_SMALL_SAMPLE` |
+
+The recent cohort uses a lower exploratory floor (`RECENT_INCEPTION_MIN_SESSIONS = 120`) and starts at the
+latest instrument's first qualified price â€” no pre-inception bar, no proxy ETF, no synthetic zero. Its
+IS/OOS windows (72/31) are published with a warning, `comparable_to_established: false`, and the schema
+note forbids cross-cohort ranking. Every instrument carries `first_tradable_date`,
+`first_qualified_price_date`, `coverage_start/end`, `observed_sessions`, `inception_limited_history`,
+`cohort_id`, `research_eligibility_reason` and `qualification_state`.
+
+### Tax and cash-flow evidence (staged, never a filing)
+
+`acash.invest.tax_intelligence` separates four things that are easy to merge by accident:
+
+- the Dime! annual summary (2026-01-01 â†’ 2026-09-30: in 3,475.59 / out 6,015.01 / gross dividends
+  123.74 / withheld 12.05 / net 111.69) is a **control total**. Arithmetic is validated and the effective
+  withholding ratio (9.74%) is reported as observed, not as a treaty rate;
+- dividends are **not** posted to the journal from an aggregate;
+- the ten supplied trade rows are staged: all are dated on or before the frozen 2026-11-02 baseline, so
+  they become `PRE_BASELINE_CANDIDATES` (governed rebase only), and the cancelled CRWV order is
+  `CANCELLED_ORDER` with `creates_position: false`;
+- cash lines are classified explicitly: a Dime! FCD â†’ Dime! USD move is
+  `BROKER_ACCOUNT_INTERNAL_TRANSFER`, an unexplained USD credit stays `UNMATCHED_TRANSFER`, and neither is
+  a remittance into Thailand.
+
+Tax liability stays `NOT_ESTABLISHED`, credit eligibility stays `CREDIT_ELIGIBILITY_UNVERIFIED`, and the
+readiness matrix reports `DATA_REQUIRED` for actual performance. THB-settled purchases keep both
+currencies and are never given an invented USD/THB rate.
+
+Evidence lives in `data/private/tax/evidence_2026.json` (git-ignored) and is served read-only at
+`GET /api/upi/tax` behind the same session and ODR gates as the private view.
+
+### Browser acceptance
+
+`dashboard/e2e/browser_acceptance.cjs` is a repeatable harness: it starts the production launcher with
+`--no-browser`, keeps the one-time sign-in URL in memory, exchanges it in one browser context, and runs
+19 checks. Playwright is not a repository dependency (run it with `NODE_PATH` pointing at an installed
+copy). Output is sanitized: any `nonce=` substring is redacted before printing.
+
+Latest run: **18/19 pass**. Authentication, 28 position rows, HOOD value, GE/GEV separation, both
+cohorts, the venue-verified session with the 21:30 ICT open, the tax payload, search, sorting, the
+absence of any order control, authenticated reload and the 401 for a fresh context all pass.
+
+**Failing check: narrow viewport.** At 390 px the holdings table still forces the document to 671 px
+(281 px overflow). The table is inside an `overflow-x-auto` wrapper and the shell has
+`overflow-x-hidden`, so the remaining cause is the table's own min-content width under the current
+720 px+ layout assumptions. This is a real responsive-layout defect, not a test artefact, and it is
+reported rather than masked by relaxing the assertion.

@@ -9,6 +9,7 @@ import { TransactionJournalPanel } from '../components/portfolio/TransactionJour
 import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
 import { ResearchDecisionPanel } from '../components/portfolio/ResearchDecisionPanel';
 import { HoldingsTable } from '../components/portfolio/HoldingsTable';
+import { TaxCashflowPanel } from '../components/portfolio/TaxCashflowPanel';
 import { fetchWealth, WealthReport } from '../services/wealth';
 import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
@@ -506,7 +507,7 @@ export const PortfolioPage: React.FC = () => {
     (state.status === 'NO_REPORT' || state.status === 'INVALID_REPORT' || editing);
   const onGenerated = () => { setEditing(false); void connect(); };
   return (
-    <div className="space-y-4 max-w-7xl">
+    <div className="space-y-4 max-w-7xl w-full min-w-0 overflow-x-hidden">
       <div className="bg-surface border border-default rounded-lg p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -595,6 +596,7 @@ export const PortfolioPage: React.FC = () => {
         )}
       </TabPanel>
       <TabPanel id="transactions" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <TaxCashflowPanel />}
         {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <TransactionJournalPanel />}
       </TabPanel>
       <TabPanel id="market" active={tab}>

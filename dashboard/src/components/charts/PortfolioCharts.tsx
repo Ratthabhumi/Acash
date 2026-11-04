@@ -101,6 +101,7 @@ export const BarList: React.FC<{ rows: BarRow[]; label: string }> = ({ rows, lab
 );
 
 export const SimpleTable: React.FC<{ head: string[]; rows: Array<Array<React.ReactNode>> }> = ({ head, rows }) => (
+  <div className="overflow-x-auto">
   <table className="w-full text-xs font-mono-code">
     <thead>
       <tr className="text-left text-muted">
@@ -115,4 +116,5 @@ export const SimpleTable: React.FC<{ head: string[]; rows: Array<Array<React.Rea
       ))}
     </tbody>
   </table>
+  </div>
 );
