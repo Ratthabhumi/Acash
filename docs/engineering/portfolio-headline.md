@@ -31,3 +31,16 @@ Rules:
   cash is not designated reserve.
 - The capacity input carries the designated reserve, so the expense-derived shortfall is computed
   against the designated amount and is not reduced by the cash target.
+
+## Residual contract (V92)
+
+`total_best_evidence` now equals **qualified** components only: computed NAV plus evidenced
+value-only positions. A broker-total residual is recorded separately as
+`unreconciled_broker_difference` with `residual_classification: UNQUALIFIED_NOT_IN_TOTAL` and never
+enters the total, the allocation denominator or any weight. For a totals-only snapshot with no
+qualified value the total is `0.00` and the coverage fields report `NOT_APPLICABLE_*` instead of
+dividing by zero.
+
+The classification registry also carries optional `sector` and `theme` fields, kept separate from
+the economic asset class so an aerospace ETF can be EQUITY with a theme without merging the two
+dimensions.

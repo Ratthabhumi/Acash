@@ -44,7 +44,7 @@ def test_synthetic_view_golden_values_copied_not_recomputed() -> None:
     assert (view["view_schema"], view["data_mode"]) == ("ACASH_UPI_VIEW_V1", "SYNTHETIC_DEMO")
     overview = view["portfolio_overview"]
     assert (overview["computed_nav_ppds"], overview["observed_position_value"], overview["unclassified_holdings_value"],
-            overview["total_best_evidence"]) == ("77220.00", "8250.00", "10280.00", "95750.00")
+            overview["total_best_evidence"]) == ("77220.00", "8250.00", "10280.00", "85470.00")
     assert overview["computed_nav_is_total_best_evidence"] is False
     assert view["concentration"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
     amounts = {r["monthly_contribution_thb"] for r in view["financial_capacity"]["scenarios"]}

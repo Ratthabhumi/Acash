@@ -87,11 +87,11 @@
         "allocation_by_sub_portfolio_best_evidence": {
           "BROKER_D_FCD/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
             "value": "16500.00",
-            "weight": "0.1818"
+            "weight": "0.0000"
           },
           "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
             "value": "74250.00",
-            "weight": "0.8182"
+            "weight": "0.0000"
           }
         },
         "concentration_best_evidence": {
@@ -101,22 +101,17 @@
           "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
           "top1_weight": "0.0000",
           "top_holdings": [],
-          "unclassified_share": "1.0000"
+          "unclassified_share": "0.0000"
         },
         "coverage": {
-          "account_total_reconciliation_coverage": "0.0000",
+          "account_total_reconciliation_coverage": "NOT_APPLICABLE_NO_VALUE",
           "cash_observed_accounts": "0/2",
-          "cost_basis_coverage": "0.0000",
+          "cost_basis_coverage": "NOT_APPLICABLE_NO_VALUE",
           "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
-          "known_value_coverage": "0.0000",
-          "position_level_coverage": "0.0000"
+          "known_value_coverage": "NOT_APPLICABLE_NO_VALUE",
+          "position_level_coverage": "NOT_APPLICABLE_NO_SECURITIES"
         },
-        "currency_exposure_best_evidence": {
-          "UNCLASSIFIED_RESIDUAL": {
-            "value": "90750.00",
-            "weight": "1.0000"
-          }
-        },
+        "currency_exposure_best_evidence": {},
         "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
         "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
         "report_currency": "THB",
@@ -124,8 +119,10 @@
         "valuation_basis": {
           "computed_nav_ppds": "0.00",
           "observed_position_value": "0.00",
-          "total_best_evidence": "90750.00",
-          "unclassified_holdings_value": "90750.00"
+          "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+          "total_best_evidence": "0.00",
+          "unclassified_holdings_value": "90750.00",
+          "unreconciled_broker_difference": "90750.00"
         }
       },
       "USD": {
@@ -191,11 +188,11 @@
         "allocation_by_sub_portfolio_best_evidence": {
           "BROKER_D_FCD/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
             "value": "500.00",
-            "weight": "0.1818"
+            "weight": "0.0000"
           },
           "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
             "value": "2250.00",
-            "weight": "0.8182"
+            "weight": "0.0000"
           }
         },
         "concentration_best_evidence": {
@@ -205,22 +202,17 @@
           "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
           "top1_weight": "0.0000",
           "top_holdings": [],
-          "unclassified_share": "1.0000"
+          "unclassified_share": "0.0000"
         },
         "coverage": {
-          "account_total_reconciliation_coverage": "0.0000",
+          "account_total_reconciliation_coverage": "NOT_APPLICABLE_NO_VALUE",
           "cash_observed_accounts": "0/2",
-          "cost_basis_coverage": "0.0000",
+          "cost_basis_coverage": "NOT_APPLICABLE_NO_VALUE",
           "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
-          "known_value_coverage": "0.0000",
-          "position_level_coverage": "0.0000"
+          "known_value_coverage": "NOT_APPLICABLE_NO_VALUE",
+          "position_level_coverage": "NOT_APPLICABLE_NO_SECURITIES"
         },
-        "currency_exposure_best_evidence": {
-          "UNCLASSIFIED_RESIDUAL": {
-            "value": "2750.00",
-            "weight": "1.0000"
-          }
-        },
+        "currency_exposure_best_evidence": {},
         "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
         "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
         "report_currency": "USD",
@@ -228,8 +220,10 @@
         "valuation_basis": {
           "computed_nav_ppds": "0.00",
           "observed_position_value": "0.00",
-          "total_best_evidence": "2750.00",
-          "unclassified_holdings_value": "2750.00"
+          "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+          "total_best_evidence": "0.00",
+          "unclassified_holdings_value": "2750.00",
+          "unreconciled_broker_difference": "2750.00"
         }
       }
     },
@@ -322,7 +316,7 @@
     "sub_portfolios": {
       "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
         "value": "74250.00",
-        "weight": "0.8182"
+        "weight": "0.0000"
       }
     }
   },
@@ -656,6 +650,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "72f9606db1eed2625cc40c62ac073956338c135e2c4985f1e4de296b133b61dc",
+  "pack_sha256": "1fd89f831bfa791580284013c482b18501b4c92a1f8b653e63f4bc266b5a7d45",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

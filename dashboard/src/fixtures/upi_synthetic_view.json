@@ -118,23 +118,23 @@
     "by_sub_portfolio_best_evidence": {
       "BANK_FCD/(account cash)": {
         "value": "16500.00",
-        "weight": "0.1723"
+        "weight": "0.1931"
       },
       "BROKER_D_MAIN/(account cash)": {
         "value": "1320.00",
-        "weight": "0.0138"
+        "weight": "0.0154"
       },
       "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
         "value": "5280.00",
-        "weight": "0.0551"
+        "weight": "0.0618"
       },
       "BROKER_D_MAIN/Core": {
         "value": "59400.00",
-        "weight": "0.6204"
+        "weight": "0.6950"
       },
       "BROKER_D_MAIN/Theme": {
         "value": "8250.00",
-        "weight": "0.0862"
+        "weight": "0.0965"
       },
       "BROKER_W_QUANT/(account cash)": {
         "value": "0.00",
@@ -142,7 +142,7 @@
       },
       "BROKER_X_OTHER/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
         "value": "5000.00",
-        "weight": "0.0522"
+        "weight": "0.0585"
       }
     },
     "computed_by_classification": {
@@ -157,45 +157,41 @@
     },
     "computed_status": "COMPUTED_SUBSET_PPDS",
     "currency_exposure_best_evidence": {
-      "UNCLASSIFIED_RESIDUAL": {
-        "value": "10280.00",
-        "weight": "0.1074"
-      },
       "USD": {
         "value": "85470.00",
-        "weight": "0.8926"
+        "weight": "1.0000"
       }
     }
   },
   "concentration": {
     "denominator": "TOTAL_BEST_EVIDENCE",
-    "hhi_identified_securities": "0.2212",
+    "hhi_identified_securities": "0.2776",
     "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
     "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
-    "top1_weight": "0.4136",
+    "top1_weight": "0.4633",
     "top_holdings": [
       {
         "key": "ZZSYNIDX0005",
-        "weight": "0.4136"
+        "weight": "0.4633"
       },
       {
         "key": "BBG00SYNBND1",
-        "weight": "0.2068"
+        "weight": "0.2317"
       },
       {
         "key": "BROKER_D_MAIN:SYNTHEME",
-        "weight": "0.0862"
+        "weight": "0.0965"
       }
     ],
-    "unclassified_share": "0.1074"
+    "unclassified_share": "0.1203"
   },
   "coverage": {
-    "account_total_reconciliation_coverage": "0.1723",
+    "account_total_reconciliation_coverage": "0.1931",
     "cash_observed_accounts": "3/4",
-    "cost_basis_coverage": "0.4997",
+    "cost_basis_coverage": "0.5598",
     "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
-    "known_value_coverage": "0.8926",
-    "position_level_coverage": "0.7622"
+    "known_value_coverage": "1.0000",
+    "position_level_coverage": "0.8780"
   },
   "data_mode": "SYNTHETIC_DEMO",
   "data_quality": {
@@ -304,8 +300,10 @@
     "computed_nav_is_total_best_evidence": false,
     "computed_nav_ppds": "77220.00",
     "observed_position_value": "8250.00",
-    "total_best_evidence": "95750.00",
-    "unclassified_holdings_value": "10280.00"
+    "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+    "total_best_evidence": "85470.00",
+    "unclassified_holdings_value": "10280.00",
+    "unreconciled_broker_difference": "10280.00"
   },
   "quant_workspace": {
     "new_strategies": "NONE_CREATED",
@@ -326,7 +324,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "c7e6fae827c44954994bb1775fc47dc603597ceca75620e6b7b12bf6c3495716",
+    "pack_sha256": "2b80149a8f342c89ef6b9f13686d53899a35fcd9956d8190e7495e5a06212db3",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "FULL_REPORT",
@@ -357,5 +355,5 @@
     }
   ],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "8c01bb8aa86551521ae7b8fb7f9e8cd9cbab44a37a355fcc0dcdb4e89268a447"
+  "view_sha256": "4af56f14d74e63d5d81068ed38ef613046d2ff312804f46fdbf81bce2ca64abe"
 }

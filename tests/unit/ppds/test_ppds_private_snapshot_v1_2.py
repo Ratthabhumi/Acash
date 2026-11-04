@@ -72,10 +72,12 @@ def test_reciprocal_fx_rates_must_agree_within_displayed_precision(back: str, ok
 def test_golden_evidence_values() -> None:
     ev = _ev(_doc())
     assert ev["valuation_basis"] == {"computed_nav_ppds": "77220.00", "observed_position_value": "8250.00",
-                                     "unclassified_holdings_value": "10280.00", "total_best_evidence": "95750.00"}
-    assert ev["coverage"] == {"known_value_coverage": "0.8926", "position_level_coverage": "0.7622",
-                              "cash_observed_accounts": "3/4", "account_total_reconciliation_coverage": "0.1723",
-                              "cost_basis_coverage": "0.4997", "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY"}
+                                     "unclassified_holdings_value": "10280.00", "unreconciled_broker_difference": "10280.00",
+                                     "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+                                     "total_best_evidence": "85470.00"}
+    assert ev["coverage"] == {"known_value_coverage": "1.0000", "position_level_coverage": "0.8780",
+                              "cash_observed_accounts": "3/4", "account_total_reconciliation_coverage": "0.1931",
+                              "cost_basis_coverage": "0.5598", "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY"}
     usd = _ev(_doc(), "USD")["valuation_basis"]
     assert (usd["computed_nav_ppds"], usd["unclassified_holdings_value"]) == ("2340.00", "311.52")
 
@@ -127,7 +129,7 @@ def test_known_value_exceeding_total_is_flagged_not_netted() -> None:
     main = _account(ev, "BROKER_D_MAIN")
     assert "KNOWN_VALUE_EXCEEDS_REPORTED_TOTAL" in main["flags"]
     assert main["unclassified_holdings_value"] == "0.00"
-    assert ev["valuation_basis"]["total_best_evidence"] == "90470.00"
+    assert ev["valuation_basis"]["total_best_evidence"] == "85470.00"
 
 
 def test_missing_fx_for_total_leaves_residual_unestablished() -> None:
@@ -159,7 +161,7 @@ def test_unverified_identity_is_not_merged_across_accounts() -> None:
     _acct_doc(doc, "BANK_FCD")["reported_total"]["amount"] = "610.00"
     keys = {h["key"]: h["weight"] for h in _ev(doc)["concentration_best_evidence"]["top_holdings"]}
     assert "BANK_FCD:SYNTHEME" in keys and "BROKER_D_MAIN:SYNTHEME" in keys
-    assert keys["ZZSYNIDX0005"] == "0.4317"
+    assert keys["ZZSYNIDX0005"] == "0.4815"
 
 
 def test_totals_only_snapshot_yields_evidence_only_report() -> None:
@@ -168,7 +170,9 @@ def test_totals_only_snapshot_yields_evidence_only_report() -> None:
     assert summary["unsupported_analyses"] == list(po.EVIDENCE_ONLY_UNSUPPORTED)
     ev = summary["evidence"]["THB"]
     assert ev["valuation_basis"] == {"computed_nav_ppds": "0.00", "observed_position_value": "0.00",
-                                     "unclassified_holdings_value": "90750.00", "total_best_evidence": "90750.00"}
+                                     "unclassified_holdings_value": "90750.00", "unreconciled_broker_difference": "90750.00",
+                                     "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+                                     "total_best_evidence": "0.00"}
     assert ev["concentration_best_evidence"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
     assert ev["concentration_best_evidence"]["top_holdings"] == []
     assert [(a["account_ref"], a["evidence_level"]) for a in ev["accounts"]] == [

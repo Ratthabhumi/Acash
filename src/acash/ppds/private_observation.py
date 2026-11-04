@@ -1092,43 +1092,47 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
 
     if abs(totals["computed"] - book.consolidated[ccy].consolidated_nav) > CONSERVATION_TOLERANCE:
         raise DataContractError("PRIVATE_CONSERVATION_BREAK: evidence components differ from PPDS NAV.")
-    denom = totals["computed"] + totals["observed"] + totals["residual"]
-    if denom <= ZERO:
-        raise DataContractError("PRIVATE_NAV_NONPOSITIVE: evidence weights undefined.")
-    non_cash = totals["securities"] + totals["observed"] + totals["residual"]
-    weights = sorted(((v / denom, k) for k, v in exposure.items()), reverse=True)
+    # Only qualified components enter the eligible total. A broker-total residual whose scope or
+    # observation time is not established is reconciliation diagnostics, never an asset.
+    denom = totals["computed"] + totals["observed"]
+    # A totals-only snapshot legitimately has no qualified value: it is an evidence-only report, not
+    # an error. A negative denominator would be a real contract break.
+    if denom < ZERO:
+        raise DataContractError("PRIVATE_NAV_NEGATIVE: evidence weights undefined.")
+    non_cash = totals["securities"] + totals["observed"]
+    weights = sorted(((v / denom, k) for k, v in exposure.items()), reverse=True) if denom > ZERO else []
     held = sorted({p.security_id for a in snap.accounts for p in a.positions}
                   | {o.security_id for a in snap.accounts for o in a.observed_value_positions})
-    if totals["residual"] > ZERO:
-        currencies["UNCLASSIFIED_RESIDUAL"] = totals["residual"]
     return {
         "report_currency": ccy,
         "valuation_basis": {
             "computed_nav_ppds": _q(totals["computed"]),
             "observed_position_value": _q(totals["observed"]),
             "unclassified_holdings_value": _q(totals["residual"]),
+            "unreconciled_broker_difference": _q(totals["residual"]),
+            "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
             "total_best_evidence": _q(denom),
         },
         "accounts": accounts_out,
         "coverage": {
-            "known_value_coverage": _w((totals["computed"] + totals["observed"]) / denom),
+            "known_value_coverage": _w((totals["computed"] + totals["observed"]) / denom) if denom > ZERO else "NOT_APPLICABLE_NO_VALUE",
             "position_level_coverage": _w(totals["securities"] / non_cash) if non_cash > ZERO else "NOT_APPLICABLE_NO_SECURITIES",
             "cash_observed_accounts": f"{sum(1 for x in accounts_out if x['cash_lines_observed'])}/{len(accounts_out)}",
-            "account_total_reconciliation_coverage": _w(totals["reconciled"] / denom),
-            "cost_basis_coverage": _w(totals["cost_known"] / denom),
+            "account_total_reconciliation_coverage": _w(totals["reconciled"] / denom) if denom > ZERO else "NOT_APPLICABLE_NO_VALUE",
+            "cost_basis_coverage": _w(totals["cost_known"] / denom) if denom > ZERO else "NOT_APPLICABLE_NO_VALUE",
             "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
         },
         "concentration_best_evidence": {
             "status": "COMPLETE" if totals["residual"] == ZERO else "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
             "denominator": "TOTAL_BEST_EVIDENCE",
             "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-            "unclassified_share": _w(totals["residual"] / denom),
+            "unclassified_share": _w(totals["residual"] / denom) if denom > ZERO else "0.0000",
             "top_holdings": [{"key": k, "weight": _w(w)} for w, k in weights[:5]],
             "top1_weight": _w(weights[0][0]) if weights else "0.0000",
             "hhi_identified_securities": _w(sum((w * w for w, _ in weights), ZERO)),
         },
-        "currency_exposure_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom)} for k, v in sorted(currencies.items())},
-        "allocation_by_sub_portfolio_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom)} for k, v in sorted(subs_alloc.items())},
+        "currency_exposure_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom) if denom > ZERO else "0.0000"} for k, v in sorted(currencies.items())},
+        "allocation_by_sub_portfolio_best_evidence": {k: {"value": _q(v), "weight": _w(v / denom) if denom > ZERO else "0.0000"} for k, v in sorted(subs_alloc.items())},
         "security_identity": [{"security_id": s, "identity_status": (identity[s].identity_status if s in identity
                                                                      else "SECURITY_IDENTITY_UNVERIFIED"),
                                "instrument_type": identity[s].instrument_type if s in identity else None} for s in held],

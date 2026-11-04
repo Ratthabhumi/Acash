@@ -31,7 +31,7 @@ test('golden values pass through as strings and computed NAV is not total best e
   const ov = parseUpiView(fixture(FULL), 'SYNTHETIC_DEMO').portfolio_overview;
   assert.deepEqual(
     [ov.computed_nav_ppds, ov.observed_position_value, ov.unclassified_holdings_value, ov.total_best_evidence],
-    ['77220.00', '8250.00', '10280.00', '95750.00'],
+    ['77220.00', '8250.00', '10280.00', '85470.00'],
   );
   assert.equal(ov.computed_nav_is_total_best_evidence, false);
   assert.notEqual(ov.computed_nav_ppds, ov.total_best_evidence);

@@ -43,7 +43,7 @@ test('unknown codes stay visible as IMPORTANT with the raw code', () => {
 
 test('barFraction is bounded geometry and fails to zero on missing or invalid input', () => {
   assert.equal(barFraction('0.4136'), 0.4136);
-  assert.equal(barFraction('8250.00', '95750.00'), 8250 / 95750);
+  assert.equal(barFraction('8250.00', '85470.00'), 8250 / 85470);
   assert.equal(barFraction('2', '1'), 1);
   for (const [p, w] of [[null, '1'], [undefined, '1'], ['-1', '1'], ['1', '0'], ['1', '-5'], ['abc', '1'], ['1e3', '1'], ['NaN', '1'], ['1', null]]) {
     assert.equal(barFraction(p, w), 0, `${p}/${w}`);

@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `72f9606db1eed262`
+Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `1fd89f831bfa7915`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -8,9 +8,9 @@ Read-only decision support. No orders, transfers, recurring plans or authority. 
 **EVIDENCE_ONLY_REPORT**: computed analytics are not produced. Not supported: ALLOCATION_BY_CLASSIFICATION, COMPUTED_CONCENTRATION, UNREALIZED_PNL, ILLUSTRATIVE_STRESS, CONTRIBUTION_FIRST_ALLOCATION, PERFORMANCE.
 
 ### Evidence and observed totals (THB)
-- Computed (PPDS quantity x price + settled cash): 0.00; observed value-only positions: 0.00; UNCLASSIFIED_HOLDINGS_VALUE: 90750.00; total best evidence: **90750.00**
-- Coverage: known value 0.0000, position level 0.0000, cash observed accounts 0/2, totals reconciled 0.0000, cost basis 0.0000, history NOT_ESTABLISHED_SNAPSHOT_ONLY
-- Concentration (LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT): top1 0.0000, unclassified share 1.0000, HHI 0.0000; market session MARKET_SESSION_NOT_VERIFIED
+- Computed (PPDS quantity x price + settled cash): 0.00; observed value-only positions: 0.00; UNCLASSIFIED_HOLDINGS_VALUE: 90750.00; total best evidence: **0.00**
+- Coverage: known value NOT_APPLICABLE_NO_VALUE, position level NOT_APPLICABLE_NO_SECURITIES, cash observed accounts 0/2, totals reconciled NOT_APPLICABLE_NO_VALUE, cost basis NOT_APPLICABLE_NO_VALUE, history NOT_ESTABLISHED_SNAPSHOT_ONLY
+- Concentration (LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT): top1 0.0000, unclassified share 0.0000, HHI 0.0000; market session MARKET_SESSION_NOT_VERIFIED
 | Account | Evidence level | Account total | Difference | Flags |
 |---|---|---|---:|---|
 | BROKER_D_FCD | ACCOUNT_TOTAL_ONLY | INSUFFICIENT_EVIDENCE | 500.00 | - |
@@ -19,7 +19,7 @@ Read-only decision support. No orders, transfers, recurring plans or authority. 
 ## B. Long-term accounts
 | Bucket | Value | Weight |
 |---|---:|---:|
-| BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE | 74250.00 | 0.8182 |
+| BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE | 74250.00 | 0.0000 |
 
 DESCRIPTIVE_ONLY: families are not ranked, not recommended and not suitability-assessed.
 - A_HOLD_CURRENT: Keep current holdings; contribute to cash only. e.g. -

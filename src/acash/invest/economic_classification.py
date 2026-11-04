@@ -32,6 +32,8 @@ class Classification:
     evidence_ref: str
     effective_date: date
     verification_status: str
+    sector: Optional[str] = None
+    theme: Optional[str] = None
 
 
 def load_registry(path: Path) -> Dict[str, Classification]:
@@ -55,9 +57,13 @@ def load_registry(path: Path) -> Dict[str, Classification]:
         evidence = str(raw.get("evidence_ref") or "").strip()
         if asset != "UNKNOWN" and not evidence:
             raise DataContractError(f"CLASSIFICATION_EVIDENCE_REQUIRED: {sid}.")
+        theme = raw.get("theme")
+        sector = raw.get("sector")
         out[sid] = Classification(sid, instrument, asset, str(raw.get("methodology") or ""), evidence,
                                   date.fromisoformat(str(raw.get("effective_date"))),
-                                  str(raw.get("verification_status") or "UNKNOWN"))
+                                  str(raw.get("verification_status") or "UNKNOWN"),
+                                  None if sector is None else str(sector),
+                                  None if theme is None else str(theme))
     return out
 
 
