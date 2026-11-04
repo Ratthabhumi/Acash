@@ -51,3 +51,18 @@ The capacity input previously held the owner's external-cash **target** in the c
 field. The input now holds the actual declared cash; the target lives in the external-cash registry.
 The emergency-reserve requirement remains expense-derived and unchanged, so a shortfall stays a
 shortfall until the underlying cash actually changes.
+
+## Broker cash: only visible accounts
+
+The broker app shows Dime! Save, Dime! USD and Dime! FCD. There is no separately confirmed
+"Securities Cash" account, so none is modelled. `DIME_SECURITIES` remains an investment-account
+container that legitimately holds settled-cash lines in the historical statement; that is a PPDS
+reference, not a fourth cash account.
+
+`cash_breakdown()` explains a broker cash category from the visible accounts only. When the visible
+THB equivalents do not add up to the displayed category total, the remainder is reported as
+`UNEXPLAINED_RESIDUAL` and is never assigned to an account, to FCD, or to buying power. A component
+without a THB equivalent makes the result `PARTIAL_COMPONENTS_NOT_VALUED` instead of guessing.
+
+A later screenshot with a different FX equivalent is a separate observation; it is never combined
+with an earlier total as if both were taken at the same moment.

@@ -256,12 +256,17 @@ def _wealth_payload(view_path: Path) -> Dict[str, Any]:
         payload["broker_observation"] = {"status": "NO_OBSERVATION", "code": str(exc).split(":")[0]}
     status, _code, doc = load_view(view_path)
     nav = None
-    valuation_date = None
+    calculated_at = None
     if status == "READY" and isinstance(doc, dict):
+        from datetime import datetime as _dt
         nav = Decimal(str(doc["portfolio_overview"]["computed_nav_ppds"]))
-        valuation_date = date.fromisoformat(str(doc["report_metadata"]["valuation_date"]))
+        raw_observed = doc["report_metadata"].get("observed_at")
+        try:
+            calculated_at = _dt.fromisoformat(str(raw_observed)) if raw_observed else None
+        except ValueError:
+            calculated_at = None
     if observation is not None:
-        payload["comparison"] = broker_observation.compare(observation, nav, valuation_date)
+        payload["comparison"] = broker_observation.compare(observation, nav, calculated_at)
     if cash is not None:
         payload["consolidated"] = external_cash.consolidated(
             Decimal(str(observation.displayed_total)) if observation else nav,

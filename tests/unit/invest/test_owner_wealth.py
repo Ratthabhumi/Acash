@@ -102,13 +102,18 @@ def test_broker_observation_arithmetic_and_append_only(tmp_path: Path) -> None:
         bo.parse_observation(broken)
 
 
-def test_comparison_refuses_cross_time_conclusions(tmp_path: Path) -> None:
-    observation = bo.parse_observation(OBS)
-    aligned = bo.compare(observation, Decimal("202826.52"), date(2026, 11, 4))
-    assert aligned["status"] == "SAME_TIME_COMPARABLE" and aligned["difference"] == "0.00"
-    misaligned = bo.compare(observation, Decimal("208740.01"), date(2026, 11, 2))
-    assert misaligned["status"] == "TIME_MISALIGNED" and misaligned["difference"] == "-5913.49"
-    assert "not proof of a missing transaction" in misaligned["note"]
+def test_comparison_requires_aligned_timestamps_not_just_the_same_date() -> None:
+    observation = bo.parse_observation(OBS)          # 2026-11-04 02:43 +07:00 == 2026-11-03 19:43Z
+    same_time = bo.compare(observation, Decimal("202826.52"), datetime(2026, 11, 3, 19, 45, tzinfo=timezone.utc))
+    assert same_time["status"] == "SAME_TIME_COMPARABLE" and same_time["difference"] == "0.00"
+    # Same UTC day, eight hours apart: the old date-only rule would have accepted this.
+    same_date = bo.compare(observation, Decimal("202826.52"), datetime(2026, 11, 3, 11, 43, tzinfo=timezone.utc))
+    assert same_date["status"] == "SAME_DATE_TIME_UNALIGNED"
+    assert same_date["alignment_tolerance_minutes"] == 5
+    cross = bo.compare(observation, Decimal("208740.01"), datetime(2026, 11, 2, 22, 41, tzinfo=timezone.utc))
+    assert cross["status"] == "CROSS_DATE_TIME_MISALIGNED" and cross["difference"] == "-5913.49"
+    assert "not proof of a missing transaction" in cross["note"]
+    assert bo.compare(observation, Decimal("1"), None)["status"] == "INSUFFICIENT_TIME_EVIDENCE"
     assert bo.compare(observation, None, None)["status"] == "CALCULATED_VALUE_UNAVAILABLE"
 
 
@@ -120,11 +125,12 @@ def test_wealth_endpoint_labels_mixed_evidence(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(po, "_repo_root", lambda: tmp_path)
 
     view = {"portfolio_overview": {"computed_nav_ppds": "208740.01"},
-            "report_metadata": {"valuation_date": "2026-11-02"}}
+            "report_metadata": {"valuation_date": "2026-11-02",
+                                "observed_at": "2026-11-02T22:41:00+07:00"}}
     monkeypatch.setattr(srv, "load_view", lambda _p: ("READY", None, view))
     payload = srv._wealth_payload(tmp_path / "unused.json")
     assert payload["external_cash"]["total"] == "23000.00"
-    assert payload["comparison"]["status"] == "TIME_MISALIGNED"
+    assert payload["comparison"]["status"] == "CROSS_DATE_TIME_MISALIGNED"
     assert payload["consolidated"]["evidence_quality"] == "MIXED_EVIDENCE_MIXED_TIME"
     assert payload["consolidated"]["consolidated_total"] == "225826.52"
 
@@ -135,3 +141,24 @@ def test_missing_private_files_degrade_without_figures(tmp_path: Path, monkeypat
     payload = srv._wealth_payload(tmp_path / "unused.json")
     assert payload["external_cash"]["status"] == "NO_EXTERNAL_CASH"
     assert "consolidated" not in payload
+
+
+def test_cash_breakdown_keeps_the_residual_unexplained() -> None:
+    """Visible accounts explain the broker cash total only partially; the gap is not a new account."""
+    total = Decimal("26977.79")
+    components = [
+        bo.CashComponent("DIME_FCD", "USD", Decimal("800.04"), Decimal("26945.34")),
+        bo.CashComponent("DIME_SAVE", "THB", Decimal("0.44"), Decimal("0.44")),
+        bo.CashComponent("DIME_USD", "USD", Decimal("0.00"), Decimal("0.00")),
+    ]
+    result = bo.cash_breakdown(total, components)
+    assert result["status"] == "UNEXPLAINED_RESIDUAL"
+    assert result["explained_total"] == "26945.78"
+    assert result["residual"] == "32.01"
+    assert "not a new cash account" in result["note"]
+    assert [c["account_ref"] for c in result["components"]] == ["DIME_FCD", "DIME_SAVE", "DIME_USD"]
+
+    exact = bo.cash_breakdown(Decimal("26945.78"), components[:2])
+    assert exact["status"] == "EXPLAINED" and exact["residual"] == "0.00"
+    partial = bo.cash_breakdown(total, [bo.CashComponent("DIME_FCD", "USD", Decimal("800.04"))])
+    assert partial["status"] == "PARTIAL_COMPONENTS_NOT_VALUED" and partial["components_not_valued"] == ["DIME_FCD"]
