@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `c7e6fae827c44954`
+Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `ec8e065010b80d34`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -43,9 +43,9 @@ Not evaluated: {'TECH_SELLOFF': 'NOT_EVALUATED_SECTOR_DATA_MISSING', 'SMALL_CAP_
 - BROKER_D_MAIN SYNIDX Core: NOT_DISPLAYED
 
 ### Evidence and observed totals (THB)
-- Computed (PPDS quantity x price + settled cash): 77220.00; observed value-only positions: 8250.00; UNCLASSIFIED_HOLDINGS_VALUE: 10280.00; total best evidence: **95750.00**
-- Coverage: known value 0.8926, position level 0.7622, cash observed accounts 3/4, totals reconciled 0.1723, cost basis 0.4997, history NOT_ESTABLISHED_SNAPSHOT_ONLY
-- Concentration (LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT): top1 0.4136, unclassified share 0.1074, HHI 0.2212; market session MARKET_SESSION_NOT_VERIFIED
+- Computed (PPDS quantity x price + settled cash): 77220.00; observed value-only positions: 8250.00; UNCLASSIFIED_HOLDINGS_VALUE: 10280.00; total best evidence: **85470.00**
+- Coverage: known value 1.0000, position level 0.8780, cash observed accounts 3/4, totals reconciled 0.1931, cost basis 0.5598, history NOT_ESTABLISHED_SNAPSHOT_ONLY
+- Concentration (COMPLETE): top1 0.4633, unclassified share 0.0000, HHI 0.2776; market session MARKET_SESSION_NOT_VERIFIED
 | Account | Evidence level | Account total | Difference | Flags |
 |---|---|---|---:|---|
 | BANK_FCD | QUANTITY_AND_PRICE_OBSERVED | RECONCILED | 0.00 | - |
@@ -126,8 +126,8 @@ V38 route costs for 10000 THB (MANUAL, 1 month; unranked):
 - OVERLAP_NOT_ESTABLISHED: no dated constituent weights.
 - COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.
 - RESERVE_SHORTFALL: rebuild emergency reserve before new risk.
-- UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.
-- SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.
+- BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 10280.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.
+- SECURITY_IDENTITY_UNVERIFIED: SYNTHEME still lack an owner-confirmed identifier; venue-unverified instruments are reported separately and are not merged across accounts.
 - ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.
 - MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.
 - V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.

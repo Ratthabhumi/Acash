@@ -74,16 +74,16 @@ Result = Tuple[int, Dict[str, Any]]
 
 
 class RateLimiter:
-    """Sliding one-minute window; a refused request is not counted."""
+    """Sliding window (one minute unless given); a refused request is not counted."""
 
-    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic) -> None:
-        self._limit, self._clock, self._lock = limit, clock, threading.Lock()
+    def __init__(self, limit: int, clock: Callable[[], float] = time.monotonic, window: float = 60) -> None:
+        self._limit, self._clock, self._lock, self._window = limit, clock, threading.Lock(), window
         self._hits: Deque[float] = deque()
 
     def allow(self) -> bool:
         with self._lock:
             now = self._clock()
-            while self._hits and now - self._hits[0] >= 60:
+            while self._hits and now - self._hits[0] >= self._window:
                 self._hits.popleft()
             if len(self._hits) >= self._limit:
                 return False
@@ -188,6 +188,12 @@ def _check_snapshot(doc: Any, report_date: Optional[date]) -> Tuple[List[Dict[st
     evidence = summary.get("evidence")
     if summary.get("report_type") == "EVIDENCE_ONLY_REPORT":
         warnings.append({"code": "EVIDENCE_ONLY_REPORT", "where": "report_type"})
+    value_only = sum(len(a.observed_value_positions) for a in snapshot.accounts)
+    unknown = sum(s.classification == "UNKNOWN" for s in snapshot.securities)
+    if value_only:
+        warnings.append({"code": "VALUE_ONLY_HOLDINGS", "where": f"count={value_only}"})
+    if unknown:
+        warnings.append({"code": "UNKNOWN_CLASSIFICATION", "where": f"count={unknown}"})
     if evidence:
         for acct in evidence[snapshot.reporting_currency]["accounts"]:
             total = acct["account_total"]
@@ -399,6 +405,11 @@ def _generation_record() -> Dict[str, Any]:
             "inputs_changed_since": record.get("input_revisions") != current}
 
 
+def report_consistency() -> Dict[str, Any]:
+    """Public provenance check: does the published view still match the current inputs?"""
+    return _generation_record()
+
+
 def generate(report_date: Optional[date] = None) -> Result:
     """Build pack and view into a new generation directory, then publish view and record atomically."""
     if recover() == "RECOVERY_REQUIRED":
@@ -416,7 +427,16 @@ def generate(report_date: Optional[date] = None) -> Result:
     previous_view = (out / VIEW_FILE).read_bytes() if (out / VIEW_FILE).is_file() else None
     published = False
     try:
-        pack = build_wealth_pack(build_book(load_snapshot(snapshot_path)), load_capacity(capacity_path), None, day)
+        classes = None
+        registry_path = _private_dir("economic_classification.json")
+        if registry_path.is_file():
+            try:
+                from acash.invest import economic_classification as ec
+                classes = {sid: c.economic_asset_class for sid, c in ec.load_registry(registry_path).items()}
+            except (OSError, ValueError, DataContractError):
+                classes = None
+        pack = build_wealth_pack(build_book(load_snapshot(snapshot_path)), load_capacity(capacity_path), None, day,
+                                 economic_classes=classes)
         view = build_view(json.loads(json.dumps(pack)))
         write_pack(pack, gen_dir)
         view_bytes = write_view(view, gen_dir / VIEW_FILE).read_bytes()

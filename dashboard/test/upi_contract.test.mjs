@@ -31,7 +31,7 @@ test('golden values pass through as strings and computed NAV is not total best e
   const ov = parseUpiView(fixture(FULL), 'SYNTHETIC_DEMO').portfolio_overview;
   assert.deepEqual(
     [ov.computed_nav_ppds, ov.observed_position_value, ov.unclassified_holdings_value, ov.total_best_evidence],
-    ['77220.00', '8250.00', '10280.00', '95750.00'],
+    ['77220.00', '8250.00', '10280.00', '85470.00'],
   );
   assert.equal(ov.computed_nav_is_total_best_evidence, false);
   assert.notEqual(ov.computed_nav_ppds, ov.total_best_evidence);
@@ -117,7 +117,10 @@ test('repository and page keep private values out of storage, URLs, logs and ana
 
 test('portfolio opens signed in from the launcher without any token entry', () => {
   assert.match(read('src/components/layout/CommandPalette.tsx'), /id: 'portfolio' as DashboardTab/);
-  assert.match(read('src/App.tsx'), /window\.location\.hash === '#portfolio' \? 'portfolio'/);
+  const app = read('src/App.tsx');
+  assert.match(app, /function initialTab\(\)/);
+  assert.match(app, /: 'portfolio';/);
+  assert.match(app, /RESEARCH_TABS/);
   const page = read('src/pages/PortfolioPage.tsx');
   assert.doesNotMatch(page, /type="password"|Session token|setToken/);
   assert.match(page, /upiRepository\.callInput\('GET', 'status'\)/);
@@ -160,4 +163,66 @@ test('nginx CSP allows only same-origin connections and keeps the shadow proxy',
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(conf, /location \/api\/shadow\/ \{/);
   assert.doesNotMatch(conf, /api\/upi/);
+});
+
+test('portfolio opens owner-private by default and only a test harness may opt into demo', () => {
+  const page = read('src/pages/PortfolioPage.tsx');
+  assert.match(page, /const ALLOW_SYNTHETIC = /);
+  assert.match(page, /__ACASH_ALLOW_SYNTHETIC_DEMO__/);
+  assert.match(page, /useState<DataMode>\(ALLOW_SYNTHETIC \? 'SYNTHETIC_DEMO' : 'OWNER_PRIVATE_READ_ONLY'\)/);
+  assert.match(page, /\{ALLOW_SYNTHETIC && \(/);
+  assert.doesNotMatch(page, /import\.meta\.env/);
+  assert.match(read('src/services/upiRepository.ts'), /never substituted for owner data/);
+});
+
+test('portfolio uses accessible tabs and keeps every section in its own panel', () => {
+  const tabs = read('src/components/portfolio/PortfolioTabs.tsx');
+  assert.match(tabs, /role="tablist"/);
+  assert.match(tabs, /role="tab"/);
+  assert.match(tabs, /role="tabpanel"/);
+  assert.match(tabs, /aria-selected=\{selected\}/);
+  assert.match(tabs, /aria-controls=\{`panel-\$\{id\}`\}/);
+  assert.match(tabs, /hidden=\{active !== id\}/);
+  assert.match(tabs, /event\.key === 'ArrowRight'/);
+  assert.match(tabs, /tabIndex=\{selected \? 0 : -1\}/);
+  assert.match(tabs, /'overview', 'holdings', 'transactions', 'market', 'planning', 'data'/);
+
+  const page = read('src/pages/PortfolioPage.tsx');
+  for (const id of ['overview', 'holdings', 'transactions', 'market', 'planning', 'data']) {
+    assert.match(page, new RegExp(`<TabPanel id="${id}"`), id);
+  }
+  assert.equal((page.match(/<MarketRefreshPanel /g) || []).length, 1, 'market panel mounts once');
+  assert.equal((page.match(/<TransactionJournalPanel \/>/g) || []).length, 1, 'journal mounts once');
+  for (const section of ['overview', 'holdings', 'planning', 'data']) {
+    assert.match(page, new RegExp(`section="${section}"`), section);
+  }
+});
+
+test('market mode never claims a reconciled NAV or zero for unpriced instruments', () => {
+  const page = read('src/pages/PortfolioPage.tsx');
+  assert.match(page, /partial \? 'N\/A'/);
+  assert.match(page, /ต่างช่วงเวลา/);
+  assert.match(page, /ไม่ใช่ 0/);
+  assert.match(page, /position_level_coverage/);
+});
+
+test('external cash stays outside the broker scope and is labelled mixed evidence', () => {
+  const panel = read('src/components/portfolio/ExternalCashPanel.tsx');
+  const service = read('src/services/wealth.ts');
+  assert.match(service, /api\/upi\/wealth/);
+  assert.match(service, /cache: 'no-store'/);
+  assert.match(panel, /เงินสดนอกพอร์ต/);
+  assert.match(panel, /เป้าหมายเงินสดนอกพอร์ต/);
+  assert.match(panel, /ไม่ถูกนำไปคิดใน NAV ของโบรกเกอร์/);
+  assert.match(panel, /mixed evidence/i);
+  for (const banned of [/localStorage/, /sessionStorage/, /document\.cookie/]) {
+    assert.doesNotMatch(panel + service, banned);
+  }
+});
+
+test('classification coverage is shown without claiming a full universe', () => {
+  const panel = read('src/components/portfolio/ExternalCashPanel.tsx');
+  assert.match(panel, /การจัดประเภทสินทรัพย์/);
+  assert.match(panel, /coverage_by_value/);
+  assert.match(panel, /ไม่เดาจาก ticker/);
 });

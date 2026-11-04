@@ -123,7 +123,7 @@ def assess_capacity(inputs: CapacityInputs, scenarios: Sequence[Decimal] = CONTR
     excess = effective_reserve - target if effective_reserve > target else ZERO
 
     rows: List[Dict[str, Any]] = []
-    for amount in [*scenarios, inputs.planned_contribution_thb]:
+    for amount in list(dict.fromkeys([*scenarios, inputs.planned_contribution_thb])):
         residual = surplus - amount
         if residual < ZERO:
             status = "CONTRIBUTION_EXCEEDS_SURPLUS"

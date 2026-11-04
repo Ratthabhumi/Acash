@@ -1,8 +1,9 @@
 """Loopback-only server for the owner-private dashboard view and the Setup Wizard inputs.
 
 The view route is one parameterless GET. The input routes (``private_input``) can replace
-only the two fixed input files and only while ODR-003 is also RATIFIED; there are no order,
-broker or arbitrary-path endpoints. Every request re-checks the Host, the Origin allowlist,
+only the two fixed input files and only while ODR-003 is also RATIFIED; the transaction routes
+(``private_transactions``) can only append to the fixed journal while ODR-005 is RATIFIED; there
+are no order, broker or arbitrary-path endpoints. Every request re-checks the Host, the Origin allowlist,
 a per-start session token that expires, and the ODR state before any file is read;
 localhost alone is never treated as authentication. Responses are ``no-store`` and the
 server never logs paths, payloads or values.
@@ -19,10 +20,11 @@ import time
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
-from acash.dashboard_api import private_input
+from acash.dashboard_api import market_service, private_input, private_transactions
+from acash.invest import broker_observation, economic_classification, external_cash
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
     MAX_INPUT_BYTES,
@@ -36,6 +38,7 @@ from acash.ppds.private_observation import (
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 ROUTE = "/api/upi/view"
+WEALTH_ROUTE = "/api/upi/wealth"
 SESSION_ROUTE = "/api/upi/session"
 LAUNCH_ROUTE = "/api/upi/launch"
 TOKEN_HEADER = "X-ACASH-Session"
@@ -131,7 +134,8 @@ def _bootstrap(method: str, target: str, headers: Mapping[str, str], session: Op
 
 def respond(method: str, target: str, headers: Mapping[str, str], token: str, view_path: Path, port: int,
             body: bytes = b"", service: Optional[private_input.InputService] = None,
-            session_expired: bool = False, session: Optional[Session] = None) -> Response:
+            session_expired: bool = False, session: Optional[Session] = None,
+            market: Optional[market_service.MarketService] = None) -> Response:
     headers = _Headers(headers)
     base = {"Cache-Control": "no-store", "Pragma": "no-cache", "Content-Type": "application/json",
             "X-Content-Type-Options": "nosniff", "Vary": "Origin"}
@@ -143,16 +147,25 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     origin = headers.get("Origin")
     if origin not in ALLOWED_ORIGINS:
         return _json(403, base, {"status": "ORIGIN_NOT_ALLOWED"})
-    name = target[len(private_input.PREFIX):] if target.startswith(private_input.PREFIX) else None
-    if service is not None and name in private_input.ROUTES:
-        return _input_route(method, name, headers, token, body, service, session_expired,
-                            {**base, "Access-Control-Allow-Origin": str(origin),
-                             "Access-Control-Allow-Credentials": "true",
-                             "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
-                             "Access-Control-Allow-Methods": ", ".join(private_input.ROUTES[name])})
+    market_name = target[len(market_service.PREFIX):] if target.startswith(market_service.PREFIX) else None
+    if market is not None and market_name in market_service.ROUTES:
+        return _market_route(method, market_name, headers, token, body, market, session_expired,
+                             {**base, "Access-Control-Allow-Origin": str(origin),
+                              "Access-Control-Allow-Credentials": "true",
+                              "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                              "Access-Control-Allow-Methods": ", ".join(market_service.ROUTES[market_name])})
+    for module in (private_input, private_transactions):
+        name = target[len(module.PREFIX):] if target.startswith(module.PREFIX) else None
+        if service is not None and name is not None and name in module.ROUTES:
+            return _input_route(method, name, headers, token, body, service, session_expired,
+                                {**base, "Access-Control-Allow-Origin": str(origin),
+                                 "Access-Control-Allow-Credentials": "true",
+                                 "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                                 "Access-Control-Allow-Methods": ", ".join(module.ROUTES[name])},
+                                module.ROUTES, module.handle)
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": TOKEN_HEADER, "Access-Control-Allow-Methods": "GET"}
-    if target != ROUTE:
+    if target not in (ROUTE, WEALTH_ROUTE):
         return _json(404, cors, {"status": "NOT_FOUND"})
     if method == "OPTIONS":
         return 204, cors, b""
@@ -165,33 +178,115 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     state = odr_state(None, SCHEMA_V1_2)
     if state != "RATIFIED":
         return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state})
+    if target == WEALTH_ROUTE:
+        return _json(200, cors, _wealth_payload(view_path))
     status, code, doc = load_view(view_path)
     if status == "NO_REPORT":
         return _json(404, cors, {"status": status})
     if status == "INVALID_REPORT":
         return _json(422, cors, {"status": status, "code": code})
+    if status == "STALE_REPORT":
+        record = private_input.report_consistency()
+        return _json(409, cors, {"status": status, "code": code,
+                                 "generated_at": record.get("generated_at"),
+                                 "generation_id": record.get("generation_id"),
+                                 "valuation_date": (doc or {}).get("report_metadata", {}).get("valuation_date")})
     return _json(200, cors, doc)
 
 
 def _input_route(method: str, name: str, headers: Mapping[str, str], token: str, body: bytes,
-                 service: private_input.InputService, session_expired: bool, cors: Dict[str, str]) -> Response:
+                 service: private_input.InputService, session_expired: bool, cors: Dict[str, str],
+                 routes: Mapping[str, Tuple[str, ...]] = private_input.ROUTES,
+                 dispatch: Callable[[str, str, Any, private_input.InputService], private_input.Result]
+                 = private_input.handle) -> Response:
     if method == "OPTIONS":
         return 204, cors, b""
-    if method not in private_input.ROUTES[name]:
+    if method not in routes[name]:
         return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
     if not _authenticated(headers, token):
         return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
     if session_expired:
         return _json(401, cors, {"status": "SESSION_EXPIRED"})
     rejected, payload = private_input.parse_body(method, headers, body)
-    status, doc = rejected or private_input.handle(method, name, payload, service)
+    status, doc = rejected or dispatch(method, name, payload, service)
     return _json(status, cors, doc)
+
+
+def _market_route(method: str, name: str, headers: Mapping[str, str], token: str, body: bytes,
+                  market: market_service.MarketService, session_expired: bool, cors: Dict[str, str]) -> Response:
+    if method == "OPTIONS":
+        return 204, cors, b""
+    if method not in market_service.ROUTES[name]:
+        return _json(405, cors, {"status": "METHOD_NOT_ALLOWED"})
+    if not _authenticated(headers, token):
+        return _json(401, cors, {"status": "SESSION_TOKEN_REQUIRED"})
+    if session_expired:
+        return _json(401, cors, {"status": "SESSION_EXPIRED"})
+    rejected, payload = private_input.parse_body(method, headers, body)
+    if rejected:
+        return _json(rejected[0], cors, rejected[1])
+    status, doc = market_service.handle(method, name, payload, market)
+    return _json(status, cors, doc)
+
+
+def _wealth_payload(view_path: Path) -> Dict[str, Any]:
+    """Owner-declared external cash plus the latest broker-displayed observation.
+
+    Read-only and sanitized: totals the Owner already declared, never a re-valuation. External cash
+    is reported in its own scope and the consolidated figure is labelled mixed evidence.
+    """
+    from decimal import Decimal
+    from datetime import date
+
+    from acash.ppds.private_observation import _repo_root
+
+    root = _repo_root()
+    payload: Dict[str, Any] = {"status": "OK"}
+    cash = None
+    try:
+        cash = external_cash.load_external_cash(root / "data/private/external_accounts.json")
+        payload["external_cash"] = external_cash.summary(cash)
+    except (OSError, ValueError, DataContractError) as exc:
+        payload["external_cash"] = {"status": "NO_EXTERNAL_CASH", "code": str(exc).split(":")[0]}
+    observation = None
+    try:
+        observation = broker_observation.latest(root / "data/private/broker_observations.json")
+        payload["broker_observation"] = broker_observation.summary(observation)
+    except (OSError, ValueError, DataContractError) as exc:
+        payload["broker_observation"] = {"status": "NO_OBSERVATION", "code": str(exc).split(":")[0]}
+    try:
+        registry = economic_classification.load_registry(root / "data/private/economic_classification.json")
+        values = economic_classification.security_values(root / "data/private/snapshot.json")
+        payload["classification"] = economic_classification.coverage(registry, values)
+        payload["economic_allocation"] = economic_classification.allocation(registry, values)
+    except (OSError, ValueError, KeyError, DataContractError) as exc:
+        payload["classification"] = {"status": "NO_CLASSIFICATION", "code": str(exc).split(":")[0]}
+    status, _code, doc = load_view(view_path)
+    nav = None
+    calculated_at = None
+    if status == "READY" and isinstance(doc, dict):
+        from datetime import datetime as _dt
+        nav = Decimal(str(doc["portfolio_overview"]["computed_nav_ppds"]))
+        raw_observed = doc["report_metadata"].get("observed_at")
+        try:
+            calculated_at = _dt.fromisoformat(str(raw_observed)) if raw_observed else None
+        except ValueError:
+            calculated_at = None
+    if observation is not None:
+        payload["comparison"] = broker_observation.compare(observation, nav, calculated_at)
+    if cash is not None:
+        payload["consolidated"] = external_cash.consolidated(
+            Decimal(str(observation.displayed_total)) if observation else nav,
+            observation.observed_at if observation else None, cash)
+    return payload
 
 
 def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
     """Single authority for the private view contract: (READY | NO_REPORT | INVALID_REPORT, code, doc).
 
-    Callers must check ODR-001 first; ``read_gated_json`` refuses the read otherwise.
+    Callers must check ODR-001 first; ``read_gated_json`` refuses the read otherwise. A view whose
+    recorded input revisions no longer match the saved inputs is reported as STALE_REPORT, so a
+    report generated before an input correction can never be presented as current figures.
     """
     if not view_path.is_file():
         return "NO_REPORT", None, None
@@ -201,6 +296,9 @@ def load_view(view_path: Path) -> Tuple[str, Optional[str], Any]:
         return "INVALID_REPORT", str(exc).split(":")[0].rstrip("."), None
     if not isinstance(doc, dict) or doc.get("view_schema") != VIEW_SCHEMA or doc.get("data_mode") != "OWNER_PRIVATE_READ_ONLY":
         return "INVALID_REPORT", "VIEW_CONTRACT_MISMATCH", None
+    record = private_input.report_consistency()
+    if record.get("status") == "CONSISTENT" and record.get("inputs_changed_since") is True:
+        return "STALE_REPORT", "REPORT_INPUT_STALE", doc
     return "READY", None, doc
 
 
@@ -218,7 +316,8 @@ def _read_body(handler: BaseHTTPRequestHandler) -> Optional[bytes]:
 
 
 def make_handler(token: str, view_path: Path, port: int, service: Optional[private_input.InputService] = None,
-                 expires_at: Optional[float] = None, session: Optional[Session] = None) -> type:
+                 expires_at: Optional[float] = None, session: Optional[Session] = None,
+                 market: Optional[market_service.MarketService] = None) -> type:
     class Handler(BaseHTTPRequestHandler):
         server_version = "acash-private-view"
         sys_version = ""
@@ -232,7 +331,7 @@ def make_handler(token: str, view_path: Path, port: int, service: Optional[priva
             else:
                 expired = expires_at is not None and time.monotonic() > expires_at
                 status, headers, out = respond(self.command, self.path, dict(self.headers.items()), token,
-                                               view_path, port, body, service, expired, session)
+                                               view_path, port, body, service, expired, session, market)
             self._write(status, headers, out)
 
         def _write(self, status: int, headers: Dict[str, str], body: bytes) -> None:
@@ -258,7 +357,8 @@ def serve(port: int = DEFAULT_PORT, view_path: Optional[Path] = None, token: Opt
     path = view_path or (_repo_root() / DEFAULT_VIEW)
     assert_private_location(path)
     session = Session(token or secrets.token_urlsafe(32), time.monotonic() + SESSION_SECONDS, launch_key)
-    handler = make_handler(session.token, path, port, private_input.InputService(), session.expires_at, session)
+    handler = make_handler(session.token, path, port, private_input.InputService(), session.expires_at, session,
+                           market_service.MarketService())
     server = ThreadingHTTPServer((HOST, port), handler)
     setattr(server, "acash_session", session)
     return server

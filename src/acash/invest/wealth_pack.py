@@ -107,7 +107,8 @@ def _authority_reason(authority: Mapping[str, str]) -> str:
             f"{authority['snapshot_schema']}; read-only observation, no trading or capital authority.")
 
 
-def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority: Mapping[str, str]) -> Dict[str, Any]:
+def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority: Mapping[str, str],
+              economic_complete: bool = False) -> Dict[str, Any]:
     reasons: List[str] = []
     if summary["performance_status"] != "PERFORMANCE_QUALIFIED":
         reasons.append("PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.")
@@ -120,7 +121,7 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority
             reasons.append("OVERLAP_NOT_ESTABLISHED: no dated constituent weights.")
         if analytics["unrealized_pnl"]["status"] != "OBSERVED_COST_BASIS":
             reasons.append(f"COST_BASIS_INCOMPLETE: {analytics['unrealized_pnl']['status']}; unrealized P&L only for the known-cost subset.")
-        if "UNKNOWN" in analytics["allocation_by_classification"]:
+        if "UNKNOWN" in analytics["allocation_by_classification"] and not economic_complete:
             reasons.append("UNKNOWN_CLASSIFICATION_PRESENT: evidence-backed classification missing for some holdings.")
     if capacity["reserve"]["status"] != "RESERVE_TARGET_MET":
         reasons.append("RESERVE_SHORTFALL: rebuild emergency reserve before new risk.")
@@ -129,10 +130,19 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority
     evidence = summary.get("evidence")
     if evidence:
         block = evidence[next(iter(evidence))]
-        if block["valuation_basis"]["unclassified_holdings_value"] != "0.00":
-            reasons.append("UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.")
-        if any(s["identity_status"] == "SECURITY_IDENTITY_UNVERIFIED" for s in block["security_identity"]):
-            reasons.append("SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.")
+        residual = block["valuation_basis"].get("unreconciled_broker_difference", "0.00")
+        if residual != "0.00":
+            reasons.append(
+                "BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by "
+                f"{residual} THB. Classified {block['valuation_basis'].get('residual_classification')}: it is a "
+                "reconciliation difference, not unidentified investable assets, and it is excluded from "
+                "allocation, NAV and concentration.")
+        unverified_ids = sorted(s["security_id"] for s in block["security_identity"]
+                                if s["identity_status"] == "SECURITY_IDENTITY_UNVERIFIED")
+        if unverified_ids:
+            reasons.append("SECURITY_IDENTITY_UNVERIFIED: " + ", ".join(unverified_ids)
+                           + " still lack an owner-confirmed identifier; venue-unverified instruments are "
+                             "reported separately and are not merged across accounts.")
         if any(not isinstance(a["account_total"], dict) or a["account_total"]["status"] not in
                ("RECONCILED", "CONSISTENT_WITH_DISPLAY_ROUNDING") for a in block["accounts"]):
             reasons.append("ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.")
@@ -145,11 +155,15 @@ def _decision(summary: Mapping[str, Any], capacity: Mapping[str, Any], authority
 
 def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
                       target_weights: Optional[Mapping[str, Decimal]] = None,
-                      report_date: Optional[date] = None) -> Dict[str, Any]:
+                      report_date: Optional[date] = None,
+                      economic_classes: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     if capacity_inputs.data_class != book.snapshot.data_class:
         raise DataContractError("PACK_DATA_CLASS_MISMATCH: snapshot and capacity must share a data class.")
     authority = observation_authority(book.snapshot.data_class, book.snapshot.schema)
     summary = book_summary(book, report_date)
+    held_ids = {p.security_id for a in book.snapshot.accounts for p in a.positions}
+    economic_complete = (economic_classes is not None and bool(held_ids)
+                         and all(economic_classes.get(sid, 'UNKNOWN') != 'UNKNOWN' for sid in held_ids))
     capacity = assess_capacity(capacity_inputs)
     reporting = book.snapshot.reporting_currency
     evidence_only = not summary["analytics"]
@@ -177,7 +191,8 @@ def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
         "C_quant_workspace": {**QUANT_WORKSPACE, "budget": capacity["quant_budget"],
                               "quant_accounts": [a.account_ref for a in book.snapshot.accounts if a.role == "QUANT_RESEARCH"]},
         "D_financial_capacity": {**capacity, "v38_route_costs_per_contribution": _v38_scenarios(CONTRIBUTION_SCENARIOS_THB)},
-        "E_decision": {**_decision(summary, capacity, authority), "v38_decision_pack": _v38_reference()},
+        "E_decision": {**_decision(summary, capacity, authority, economic_complete),
+                       "v38_decision_pack": _v38_reference()},
     }
     pack["pack_sha256"] = CanonicalConfigSerializer.compute_sha256(json.loads(json.dumps(pack, sort_keys=True)))
     return pack

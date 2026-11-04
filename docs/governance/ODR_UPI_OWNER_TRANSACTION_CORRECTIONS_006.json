@@ -1,0 +1,75 @@
+{
+  "record": "ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006",
+  "decision_id": "ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006",
+  "capability": "OWNER_LOCAL_TRANSACTION_CORRECTION_AUTHORIZED",
+  "status": "RATIFIED",
+  "proposed_on": "2026-11-03",
+  "proposed_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-03",
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's explicit approval on 2026-11-03: ODR-004, ODR-005, ODR-006 approved within their documented, bounded scopes (chat directive V84.1 section 0).",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "scope_changed": false,
+    "acceptance_evidence": "tests/unit/ppds/test_ppds_corrections.py",
+    "acceptance_commit": null
+  },
+  "document": "docs/governance/ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006.md",
+  "requires": [
+    "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005"
+  ],
+  "methodology": "APPEND_ONLY_SUPERSEDE_BY_ID",
+  "scope_corrections": [
+    "VOID_ENTERED_EVENT",
+    "SUPERSEDE_ENTERED_EVENT"
+  ],
+  "scope_schemas": [
+    "ACASH_CANONICAL_TRANSACTIONS_V2_CORRECTION_ENVELOPE"
+  ],
+  "scope_files": [
+    "data/private/transactions/"
+  ],
+  "correction_contract": {
+    "must_reference_existing_event": true,
+    "preserves_original_event": true,
+    "requires_reason": true,
+    "requires_owner_confirmation": true,
+    "records_revision_lineage": true,
+    "effective_state": "replayed deterministically by acash.ppds.transactions; never by a second accounting engine",
+    "rejections": [
+      "nonexistent target event",
+      "correction cycle",
+      "conflicting supersessions of the same target",
+      "double application of the same correction id",
+      "correction of an already-voided event without an explicit re-supersede"
+    ]
+  },
+  "accounting_semantics": "A correction amends recorded evidence; it is not an executed trade. A mistaken BUY is never represented as a real SELL. Cash and positions are recomputed from the effective event projection, and the original evidence stays readable.",
+  "schema_versioning": "ACASH_CANONICAL_TRANSACTIONS_V1 is not silently expanded; corrections use a versioned envelope (or a V2 journal contract) decided before implementation, and V1 history stays replayable unchanged.",
+  "engineering_status": {
+    "correction_engine": "IMPLEMENTED (src/acash/ppds/corrections.py, ACASH_CANONICAL_TRANSACTIONS_V2_CORRECTION_ENVELOPE)",
+    "dashboard_route": "IMPLEMENTED (/api/upi/transactions/correction, preview-free explicit confirmation, append-only envelope)",
+    "acceptance_tests": "tests/unit/ppds/test_ppds_corrections.py (12 synthetic cases: void, supersede, cycles, conflicts, double application, replay through PPDS)",
+    "real_owner_journal": "NOT APPLIED — no correction has been recorded against Owner data",
+    "trading": "NOT_AUTHORIZED"
+  },
+  "rollback": "Any status other than RATIFIED disables correction authoring at once; existing journals stay readable under ODR-002 and ODR-005. Reverting the ratifying commit removes the capability.",
+  "independent_of": [
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CAPITAL_TRANSFER",
+    "BROKER_NATIVE_IMPORT",
+    "CREDENTIAL_STORAGE",
+    "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+    "D5_DATA_ADMITTED"
+  ],
+  "owner_decision_wording": "I authorize ODR_UPI_OWNER_TRANSACTION_CORRECTIONS_006 under APPEND_ONLY_SUPERSEDE_BY_ID: voiding or superseding an already-recorded owner-local transaction event, keeping the original event and its revision lineage, with cash and positions recomputed by the existing PPDS transaction replay. No trading, broker connectivity, capital transfer, market-data retrieval or D5 admission is authorized.",
+  "not_authorized_by_this_proposal": [
+    "Trading (paper or live)",
+    "Fake reversing brokerage trades",
+    "In-place rewriting or deletion of historical evidence",
+    "Broker account connectivity or credentials",
+    "Autonomous ODR ratification"
+  ]
+}

@@ -4,15 +4,22 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { SkeletonLoader } from '../components/common/SkeletonLoader';
 import { BarList, BarRow, ChartCard, Segment, SimpleTable, StackedBar, Tone } from '../components/charts/PortfolioCharts';
 import { SetupWizard } from '../components/portfolio/SetupWizard';
+import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
+import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
+import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
+import { fetchWealth, WealthReport } from '../services/wealth';
+import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
+import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
 import { Finding, Severity, findingsFor } from '../services/upiFindings';
-import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, formatDec, formatWeight } from '../services/upiView';
+import { DataMode, LoadState, NOT_ESTABLISHED, UpiView, barFraction, classifyResponse, formatDec, formatWeight } from '../services/upiView';
 
 const STATUS_HELP: Record<string, string> = {
   AUTHORIZATION_REQUIRED: 'Session expired, not signed in, or ODR-001 is not RATIFIED. Close the ACASH window and double-click START-DASHBOARD.bat again.',
   NO_REPORT: 'No private portfolio yet. Set up your portfolio with the wizard below.',
   INVALID_REPORT: 'The private view failed contract validation. Regenerate it from the current wealth pack.',
   SERVICE_UNAVAILABLE: 'The local ACASH service is not running. Double-click START-DASHBOARD.bat (it starts everything).',
+  STALE_REPORT: 'รายงานนี้สร้างจากข้อมูลนำเข้าชุดก่อนหน้า (เช่น ก่อนแก้ FX หรือเพิ่มหลักทรัพย์) จึงยังไม่ตรงกับ snapshot ปัจจุบัน: กด "Regenerate report" ในแท็บวางแผนเงินหรือหน้าอัปเดตพอร์ตก่อนอ่านตัวเลข',
 };
 
 // Presentation ordering only (never displayed): sorts rows by a Python decimal string.
@@ -28,6 +35,8 @@ const classTone = (key: string): Tone => {
 };
 
 const humanize = (code: string) => code.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+
+const EXCLUDED = 'NOT_ESTABLISHED (not in this valuation)';
 
 const SectionHeader: React.FC<{ id: string; letter: string; title: string; note?: string }> = ({ id, letter, title, note }) => (
   <div className="flex items-baseline gap-3 pt-2">
@@ -138,7 +147,7 @@ const GovernanceStrip: React.FC<{ view: UpiView }> = ({ view }) => {
   );
 };
 
-const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, ccy }) => {
+const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: boolean }> = ({ view, ccy, partial = false }) => {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const accounts = view.accounts.filter((a) => !q || [a.account_ref, a.broker, a.role, a.account_total.status].some((s) => s?.toLowerCase().includes(q)));
@@ -165,7 +174,7 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, c
                 </div>
                 <dl className="grid grid-cols-3 gap-2 text-[11px]">
                   {([['Computed', a.computed_value], ['Value-only', a.observed_position_value], ['Unclassified', a.unclassified_holdings_value]] as const).map(([k, v]) => (
-                    <div key={k}><dt className="text-muted">{k}</dt><dd className="font-mono-code text-primary tabular-nums">{formatDec(v)}</dd></div>
+                    <div key={k}><dt className="text-muted">{k}</dt><dd className="font-mono-code text-primary tabular-nums">{partial && k !== 'Computed' ? EXCLUDED : formatDec(v)}</dd></div>
                   ))}
                 </dl>
               </summary>
@@ -197,7 +206,9 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string }> = ({ view, c
   );
 };
 
-const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view, warnings }) => {
+const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: boolean;
+  wealth?: WealthReport | null;
+  section: 'overview' | 'holdings' | 'planning' | 'data' }> = ({ view, warnings, partial = false, wealth = null, section }) => {
   const meta = view.report_metadata;
   const ccy = meta.report_currency;
   const ov = view.portfolio_overview;
@@ -214,10 +225,17 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
 
   const composition: Segment[] = [
     { label: 'Computed NAV (PPDS)', value: evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds), fraction: barFraction(ov.computed_nav_ppds, ov.total_best_evidence), tone: 'accent' },
-    { label: 'Observed value-only positions', value: formatDec(ov.observed_position_value), fraction: barFraction(ov.observed_position_value, ov.total_best_evidence), tone: 'sky' },
-    { label: 'Unclassified holdings value', value: formatDec(ov.unclassified_holdings_value), fraction: barFraction(ov.unclassified_holdings_value, ov.total_best_evidence), tone: 'unknown', note: formatWeight(conc.unclassified_share) },
+    { label: 'Observed value-only positions', value: partial ? EXCLUDED : formatDec(ov.observed_position_value), fraction: barFraction(ov.observed_position_value, ov.total_best_evidence), tone: 'sky' },
   ];
   const classification = view.allocation.computed_by_classification;
+  const economic = wealth?.economic_allocation && Object.keys(wealth.economic_allocation.by_class ?? {}).length
+    ? wealth.economic_allocation : null;
+  const economicSegments: Segment[] = economic
+    ? Object.entries(economic.by_class).sort(([, a], [, b]) => Number(b.value) - Number(a.value)).map(([name, bucket]) => ({
+        label: name, value: formatDec(bucket.value), note: formatWeight(bucket.weight),
+        fraction: barFraction(bucket.weight), tone: classTone(name) }))
+    : [];
+
   const classSegments: Segment[] = classification
     ? Object.entries(classification).sort(([, a], [, b]) => byValueDesc(a.value, b.value))
         .map(([k, b]) => ({ label: humanize(k), value: formatDec(b.value), fraction: barFraction(b.weight), tone: classTone(k), note: formatWeight(b.weight) }))
@@ -241,31 +259,49 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
 
   return (
     <div className="space-y-5">
-      <GovernanceStrip view={view} />
+      {section === 'overview' && <GovernanceStrip view={view} />}
 
+      {section === 'overview' && (<>
       <section aria-labelledby="sec-a" className="space-y-3">
         <SectionHeader id="sec-a" letter="A" title="Executive overview" note="Total best evidence combines computed NAV, broker-displayed values and unidentified holdings. It is not a verified NAV. Broker totals are compared, never added." />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          <SummaryCard label="Total best evidence" value={formatDec(ov.total_best_evidence)} unit={ccy} subtitle="Computed + observed value-only + unclassified. Not a verified NAV." />
-          <SummaryCard label="Computed NAV (PPDS)" value={evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds)} unit={ccy}
-            subtitle={evidenceOnly ? 'No cash or quantity line carries value in this report.' : 'Quantity × price + settled cash. A subset of the portfolio.'} />
-          <SummaryCard label="Unclassified holdings" value={formatDec(ov.unclassified_holdings_value)} unit={ccy} tone={Number(ov.unclassified_holdings_value) > 0 ? 'warn' : 'default'}
-            subtitle={`Broker totals minus identified lines · ${formatWeight(conc.unclassified_share)} of best evidence`} />
+          <SummaryCard label="มูลค่าพอร์ตล่าสุด (Dime! แสดง)" unit={ccy}
+            value={wealth?.broker_observation?.displayed_total ? formatDec(wealth.broker_observation.displayed_total) : NOT_ESTABLISHED}
+            badge={<StatusBadge status={wealth?.broker_observation?.evidence_status ?? 'BROKER_OBSERVATION_MISSING'} />}
+            subtitle={wealth?.broker_observation?.observed_at
+              ? `${wealth.broker_observation.observed_at} · ยอดที่แอปโบรกเกอร์แสดง ไม่ได้คำนวณโดย PPDS และอาจไม่ตรงเวลากับ holdings`
+              : 'ยังไม่มีหลักฐานยอดจากโบรกเกอร์'} />
+          <SummaryCard label={partial ? 'Priced holdings subtotal (market refresh)' : 'ACASH คำนวณ (statement)'}
+            value={partial ? formatDec(ov.total_best_evidence) : (evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds))} unit={ccy}
+            subtitle={partial
+              ? 'Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV.'
+              : `ฐานวันที่ ${meta.valuation_date} · quantity × price + settled cash (subset of the portfolio)`} />
           <SummaryCard label="Cash (settled lines)" value={cash ? formatDec(cash.value) : NOT_ESTABLISHED} unit={ccy}
             subtitle="Settled cash lines in computed NAV. Cash inside broker totals is not separated." />
-          <SummaryCard label="Emergency reserve" value={formatDec(reserve.current_thb)} unit="THB" tone={reserve.status === 'RESERVE_SHORTFALL' ? 'warn' : 'good'}
-            badge={<StatusBadge status={reserve.status ?? 'NOT_ESTABLISHED'} />}
-            subtitle={`Target ${formatDec(reserve.target_thb)} · shortfall ${formatDec(reserve.shortfall_thb)} · ${reserve.coverage_months ?? NOT_ESTABLISHED} months covered`} />
-          <SummaryCard label="Account reconciliation" value={`${reconciled} / ${view.accounts.length}`} unit="reconciled" tone={unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
-            subtitle={Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')} />
+          <SummaryCard label="Coverage" value={formatWeight(view.coverage.position_level_coverage)} unit="positions"
+            subtitle={`Known value ${formatWeight(view.coverage.known_value_coverage)} · instruments without an aligned quote are excluded, never zero`} />
+          <SummaryCard label="Account reconciliation" value={partial ? 'N/A' : `${reconciled} / ${view.accounts.length}`} unit={partial ? undefined : 'reconciled'} tone={partial ? 'default' : unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
+            subtitle={partial
+              ? 'ต่างช่วงเวลา — ยอดโบรกเกอร์เทียบกับราคาตลาดล่าสุดไม่ได้'
+              : `${Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')}${wealth?.comparison ? ` · เทียบยอดโบรกเกอร์: ${wealth.comparison.status}` : ''}`} />
         </div>
+        {partial && (
+          <p className="text-[11px] text-secondary">
+            ราคาตลาดครอบคลุม {formatWeight(view.coverage.position_level_coverage)} ของหลักทรัพย์ที่มีจำนวน ·
+            หลักทรัพย์ที่ไม่มีราคาตลาดตรงวันจะไม่ถูกตีค่า (แสดงเป็นยังไม่มีข้อมูล ไม่ใช่ 0) และยอดรวมนี้ไม่ใช่ NAV ที่กระทบยอดแล้ว
+          </p>
+        )}
       </section>
+      </>)}
 
+      {section === 'data' && (<>
       <section aria-labelledby="sec-f" className="space-y-3">
         <SectionHeader id="sec-f" letter="!" title="Findings" note="Grouped by a fixed rule: Critical = a figure may be wrong or out of date; Important = correct but incomplete, or a planning constraint; Info = not available in a snapshot report." />
         <Findings findings={findings} />
       </section>
+      </>)}
 
+      {section === 'overview' && (<>
       <section aria-labelledby="sec-b" className="space-y-3">
         <SectionHeader id="sec-b" letter="B" title="Portfolio allocation & exposure" note={`All weights come from the Python pack. Concentration status ${conc.status}: while unidentified value exists, weights are a lower bound, not portfolio-wide risk.`} />
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -273,9 +309,14 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
             table={<SimpleTable head={['Component', `Value (${ccy})`]} rows={composition.map((s) => [s.label, s.value])} />}>
             <StackedBar segments={composition} label="Portfolio composition" />
           </ChartCard>
-          <ChartCard title="Asset class within computed NAV" subtitle="Denominator: computed NAV only. Value-only and unidentified holdings are not classified."
-            table={classification ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={classSegments.map((s) => [s.label, s.value, s.note])} /> : <StatusBadge status={view.allocation.computed_status} />}>
-            {classification ? <StackedBar segments={classSegments} label="Classification within computed NAV" /> : <p className="text-xs text-secondary">{NOT_ESTABLISHED}: evidence-only report.</p>}
+          <ChartCard title="การจัดประเภทสินทรัพย์ตามหลักฐาน"
+            subtitle={economic ? `ตัวหาร: ${economic.denominator} (${formatDec(economic.denominator_value)} ${ccy}) · ไม่รวมส่วนต่างที่ยังกระทบยอดไม่ได้` : 'Denominator: computed NAV only. Value-only holdings are not classified.'}
+            table={economic
+              ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={economicSegments.map((s) => [s.label, s.value, s.note])} />
+              : classification ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={classSegments.map((s) => [s.label, s.value, s.note])} /> : <StatusBadge status={view.allocation.computed_status} />}>
+            {economic
+              ? <StackedBar segments={economicSegments} label="Economic asset allocation" />
+              : classification ? <StackedBar segments={classSegments} label="Classification within computed NAV" /> : <p className="text-xs text-secondary">{NOT_ESTABLISHED}: evidence-only report.</p>}
           </ChartCard>
           <ChartCard title="Sub-portfolios" subtitle="Sorted by value. Names are the owner's labels, not evidence-backed asset classes. Weights are of total best evidence."
             table={<SimpleTable head={['Bucket', `Value (${ccy})`, 'Weight']} rows={subRows.map((r) => [r.label, r.value, r.note])} />}>
@@ -299,7 +340,9 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
           </div>
         </div>
       </section>
+      </>)}
 
+      {section === 'planning' && (<>
       <section aria-labelledby="sec-c" className="space-y-3">
         <SectionHeader id="sec-c" letter="C" title="Financial capacity" note="Planning scenarios computed by the Python capacity planner. Illustrative only: not advice and not an instruction to transfer money." />
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
@@ -337,12 +380,16 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
           <KeyValues values={cap.quant_budget} />
         </Disclosure>
       </section>
+      </>)}
 
+      {section === 'holdings' && (<>
       <section aria-labelledby="sec-d" className="space-y-3">
         <SectionHeader id="sec-d" letter="D" title="Accounts & holdings" note="One card per observed account; open a card for totals, differences and sub-portfolio checks." />
-        <AccountsAndHoldings view={view} ccy={ccy} />
+        <AccountsAndHoldings view={view} ccy={ccy} partial={partial} />
       </section>
+      </>)}
 
+      {section === 'data' && (<>
       <section aria-labelledby="sec-e" className="space-y-3">
         <SectionHeader id="sec-e" letter="E" title="Evidence & governance" note="Data quality is about the evidence, not investment performance." />
         <ChartCard title="Data coverage" subtitle="Share of total best evidence backed by each kind of evidence."
@@ -373,17 +420,29 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[] }> = ({ view
             snapshot_id: meta.snapshot_id, snapshot_schema: meta.snapshot_schema }} />
         </Disclosure>
       </section>
+      </>)}
     </div>
   );
 };
 
+// Production never offers synthetic data. A development or test harness may opt in by setting
+// window.__ACASH_ALLOW_SYNTHETIC_DEMO__ = true before the app starts; there is no URL, storage or
+// environment toggle, so an ordinary launch can never fall back to demo figures.
+const ALLOW_SYNTHETIC = typeof window !== 'undefined'
+  && (window as unknown as { __ACASH_ALLOW_SYNTHETIC_DEMO__?: boolean }).__ACASH_ALLOW_SYNTHETIC_DEMO__ === true;
+
 export const PortfolioPage: React.FC = () => {
-  const [mode, setMode] = useState<DataMode>('SYNTHETIC_DEMO');
+  const [mode, setMode] = useState<DataMode>(ALLOW_SYNTHETIC ? 'SYNTHETIC_DEMO' : 'OWNER_PRIVATE_READ_ONLY');
   const [variant, setVariant] = useState<SyntheticVariant>('FULL_REPORT');
   const [state, setState] = useState<LoadState | null>(null);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [source, setSource] = useState<'STATEMENT' | 'MARKET'>('STATEMENT');
+  const [tab, setTab] = useState<PortfolioTabId>('overview');
+  const [wealth, setWealth] = useState<WealthReport | null>(null);
+  const [marketAvailable, setMarketAvailable] = useState(false);
+  const [marketState, setMarketState] = useState<LoadState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const connect = useCallback(async () => {
@@ -413,7 +472,7 @@ export const PortfolioPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
+    if (ALLOW_SYNTHETIC && mode === 'SYNTHETIC_DEMO') setState(upiRepository.loadSynthetic(variant));
   }, [mode, variant]);
 
   // The launcher's private service answering at all means ACASH was opened in private mode.
@@ -425,7 +484,21 @@ export const PortfolioPage: React.FC = () => {
     return () => { live = false; abortRef.current?.abort(); };
   }, [connect]);
 
+  useEffect(() => {
+    if (!connected) return;
+    const controller = new AbortController();
+    void fetchWealth(controller.signal).then((w) => { if (!controller.signal.aborted) setWealth(w); });
+    return () => controller.abort();
+  }, [connected]);
+
+  const onMarketView = useCallback((available: boolean) => {
+    setMarketAvailable(available);
+    if (!available) { setMarketState(null); setSource('STATEMENT'); return; }
+    void callMarket<unknown>('GET', 'view').then((r) => setMarketState(classifyResponse(r.http, r.body)));
+  }, []);
+
   const ready = state && 'view' in state;
+  const shown = source === 'MARKET' && marketState ? marketState : state;
   const setupOpen = mode === 'OWNER_PRIVATE_READ_ONLY' && connected && !loading && state !== null &&
     (state.status === 'NO_REPORT' || state.status === 'INVALID_REPORT' || editing);
   const onGenerated = () => { setEditing(false); void connect(); };
@@ -437,14 +510,16 @@ export const PortfolioPage: React.FC = () => {
             <h1 className="text-lg font-semibold text-primary">Portfolio Intelligence</h1>
             <p className="text-xs text-secondary">Read-only view of the Python wealth pack. Figures are computed in Python; this page only displays them.</p>
           </div>
-          <div className="flex gap-1 p-1 bg-surface-muted rounded-md" role="group" aria-label="Data mode">
-            {(['SYNTHETIC_DEMO', 'OWNER_PRIVATE_READ_ONLY'] as DataMode[]).map((m) => (
-              <button key={m} onClick={() => switchMode(m)} aria-pressed={mode === m}
-                className={`text-xs px-3 py-1.5 rounded font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === m ? 'bg-accent text-white shadow-sm' : 'text-secondary hover:text-primary'}`}>
-                {m === 'SYNTHETIC_DEMO' ? 'Synthetic demo' : 'Owner private'}
-              </button>
-            ))}
-          </div>
+          {ALLOW_SYNTHETIC && (
+            <div className="flex gap-1 p-1 bg-surface-muted rounded-md" role="group" aria-label="Data mode">
+              {(['SYNTHETIC_DEMO', 'OWNER_PRIVATE_READ_ONLY'] as DataMode[]).map((m) => (
+                <button key={m} onClick={() => switchMode(m)} aria-pressed={mode === m}
+                  className={`text-xs px-3 py-1.5 rounded font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${mode === m ? 'bg-accent text-white shadow-sm' : 'text-secondary hover:text-primary'}`}>
+                  {m === 'SYNTHETIC_DEMO' ? 'Synthetic demo' : 'Owner private'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {mode === 'SYNTHETIC_DEMO' ? (
           <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -486,8 +561,54 @@ export const PortfolioPage: React.FC = () => {
       </div>
 
       {loading && <SkeletonLoader className="h-40 w-full" />}
+      {!loading && (connected || mode === 'SYNTHETIC_DEMO') && <TabBar active={tab} onChange={setTab} />}
+      <TabPanel id="overview" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && marketAvailable && (
+          <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Valuation source">
+            {(['STATEMENT', 'MARKET'] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setSource(s)} aria-pressed={source === s}
+                className={`px-3 py-1 rounded border border-default ${source === s ? 'bg-accent text-white' : 'text-secondary hover:bg-surface-muted'}`}>
+                {s === 'STATEMENT' ? 'ตาม statement ที่บันทึก' : 'ตามราคาล่าสุด (Refresh)'}
+              </button>
+            ))}
+            {source === 'MARKET' && <span className="text-secondary">มูลค่าจากราคาตลาดล่าสุดกับจำนวนหุ้นที่บันทึกไว้ ไม่ใช่ยอดจากบรอกเกอร์ และอาจไม่ครบทั้งพอร์ต</span>}
+            {shown && 'view' in shown && (
+              <span className="text-secondary">
+                อ้างอิง: {source === 'MARKET' ? 'ราคาตลาด' : 'statement'} วันที่ {shown.view.report_metadata.valuation_date}
+              </span>
+            )}
+          </div>
+        )}
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} wealth={wealth} section="overview" />
+        )}
+        {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
+          <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>
+        )}
+      </TabPanel>
+      <TabPanel id="holdings" active={tab}>
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="holdings" />
+        )}
+      </TabPanel>
+      <TabPanel id="transactions" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <TransactionJournalPanel />}
+      </TabPanel>
+      <TabPanel id="market" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <MarketRefreshPanel onMarketView={onMarketView} />}
+      </TabPanel>
+      <TabPanel id="planning" active={tab}>
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="planning" />
+        )}
+      </TabPanel>
+      <TabPanel id="data" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <ExternalCashPanel />}
+        {!loading && shown && 'view' in shown && (
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="data" />
+        )}
+      </TabPanel>
       {setupOpen && <SetupWizard hasReport={!!ready} onGenerated={onGenerated} />}
-      {!loading && state && 'view' in state && <PortfolioReport view={state.view} warnings={state.warnings} />}
       {!loading && state && !('view' in state) && (
         <div className="bg-surface border border-default rounded-lg p-6 flex items-start gap-3 text-sm">
           <ShieldAlert className="w-5 h-5 text-muted shrink-0" />

@@ -1,0 +1,145 @@
+{
+  "record": "ODR_UPI_MARKET_DATA_004_AMENDMENT_001",
+  "decision_id": "ODR_UPI_MARKET_DATA_004",
+  "amendment_type": "SCOPE_PROVIDERS_EXPANSION",
+  "status": "RATIFIED",
+  "proposed_on": "2026-11-03",
+  "proposed_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+  "scope_changed": true,
+  "ratification_required": true,
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-03",
+  "base_decision": "docs/governance/ODR_UPI_MARKET_DATA_004.json",
+  "summary": "Scope expansion ratified by the Owner on 2026-11-03 within the bounded, documented scope. scope_providers now includes ALPACA_BASIC, ALPACA_HISTORICAL, MARKETDATA_APP_FREE and FRANKFURTER_ECB_FX. Every provider right remains UNKNOWN until the Owner attests entitlement, display, calculation, derived-value and cache permissions separately; no provider is READY or activated by ratification alone.",
+  "proposed_scope_entries": [
+    {
+      "provider_id": "ALPACA_BASIC",
+      "role": "PRICE_PRIMARY",
+      "approved_endpoints": [
+        "GET https://data.alpaca.markets/v2/stocks/trades/latest?symbols=...&feed=iex"
+      ],
+      "feed_quote_type": "LAST_TRADE",
+      "coverage": "IEX_ONLY",
+      "label": "REALTIME_IEX_ONLY — single-venue last trade, never FULL_MARKET_REALTIME",
+      "account_entitlement": "UNKNOWN — Basic plan IEX feed; must verify against the actual account tier",
+      "display_permitted": "UNKNOWN",
+      "calculation_permitted": "UNKNOWN",
+      "derived_value_permitted": "UNKNOWN",
+      "cache_permitted": "UNKNOWN",
+      "retention_policy": "UNKNOWN",
+      "authentication_required": "APCA-API-KEY-ID and APCA-API-SECRET-KEY headers",
+      "permitted_egress_fields": "symbols (public identifiers) and feed=iex only",
+      "contract_verified_live": false,
+      "evidence": "ChatGPT research 2026-11-03: https://docs.alpaca.markets/us/docs/about-market-data-api, https://docs.alpaca.markets/us/docs/market-data-faq"
+    },
+    {
+      "provider_id": "ALPACA_HISTORICAL",
+      "role": "PRICE",
+      "approved_endpoints": [
+        "GET https://data.alpaca.markets/v2/stocks/bars?feed=sip&adjustment=raw&timeframe=1Min|1Day&start=...&end=...&limit=10000"
+      ],
+      "feed_quote_type": "HISTORICAL_BAR_SIP_DELAYED",
+      "account_entitlement": "UNKNOWN — Basic plan allows delayed SIP bars; must verify against actual account tier",
+      "display_permitted": "UNKNOWN",
+      "calculation_permitted": "UNKNOWN",
+      "derived_value_permitted": "UNKNOWN",
+      "cache_permitted": "UNKNOWN",
+      "retention_policy": "UNKNOWN",
+      "authentication_required": "APCA-API-KEY-ID and APCA-API-SECRET-KEY headers",
+      "permitted_egress_fields": "symbols (public identifiers), timeframe, start, end, limit, feed, adjustment",
+      "delay_enforcement": "ALPACA_SIP_DELAY=15min + ALPACA_SIP_MARGIN=2min enforced in adapter",
+      "contract_verified_live": false,
+      "evidence": "ChatGPT research 2026-11-03: https://docs.alpaca.markets/us/reference/stockbars"
+    },
+    {
+      "provider_id": "MARKETDATA_APP_FREE",
+      "role": "PRICE",
+      "approved_endpoints": [
+        "GET https://api.marketdata.app/v1/stocks/quotes/?symbols=...  (Authorization: Bearer <LOCAL_TOKEN>)"
+      ],
+      "authentication": "Authorization header only. The token is never a URL query parameter, so it cannot reach a URL log, proxy log or browser history.",
+      "feed_quote_type": "HISTORICAL_DELAYED_LAST",
+      "documented_response": "s, symbol[], last[], updated[] index-aligned; updated is Unix seconds; HTTP 200 and 203 are success; no_data and error are handled explicitly",
+      "delay_policy": "Free Forever is delayed at least 24 hours. 'last' is a delayed last trade and is never labelled an official completed-session EOD close.",
+      "quota_policy": "100 credits/day, one credit per requested symbol, reserved before the request; window opens 09:30 America/New_York (not 00:00 UTC); counter persisted atomically so restarts cannot re-spend it",
+      "account_entitlement": "UNKNOWN — Free Forever plan; must be confirmed against the actual account",
+      "display_permitted": "UNKNOWN — personal localhost Dashboard usage noted in ToS 2026-10-26; exchange-level rights still govern",
+      "calculation_permitted": "UNKNOWN",
+      "derived_value_permitted": "UNKNOWN — no Derived Works/NAV restriction found in Free Plan ToS as of 2026-10-26; exchange-level rights still apply",
+      "cache_permitted": "UNKNOWN — Free plan data retainable while account open per ToS 2026-10-26; exact exchange-level restrictions not verified",
+      "retention_policy": "UNKNOWN",
+      "contract_verified_documented": true,
+      "contract_verified_live": false,
+      "evidence": "ChatGPT research 2026-11-03: https://www.marketdata.app/docs/api/stocks/quotes/, https://www.marketdata.app/docs/api/authentication/, https://www.marketdata.app/docs/api/dates-and-times/, https://www.marketdata.app/docs/account/plan-limits/, https://www.marketdata.app/terms/ (updated 2026-10-26)"
+    },
+    {
+      "provider_id": "FRANKFURTER_ECB_FX",
+      "role": "FX",
+      "approved_endpoints": [
+        "GET https://api.frankfurter.dev/v2/rate/USD/THB?providers=ECB",
+        "GET https://api.frankfurter.dev/v2/rate/USD/THB?providers=ECB&date=YYYY-MM-DD"
+      ],
+      "feed_quote_type": "DAILY_ECB_REFERENCE_RATE",
+      "documented_response": "{\"date\", \"base\", \"quote\", \"rate\"} — a single scalar rate for the requested pair; the earlier nested rates.ECB assumption was wrong and is removed",
+      "alignment_policy": "As-of requests carry the valuation date; the returned source date is preserved, weekends and holidays are reported as unavailable rather than substituted, and no future observation is accepted",
+      "account_entitlement": "UNKNOWN — keyless API; no account required per published documentation",
+      "display_permitted": "UNKNOWN",
+      "calculation_permitted": "UNKNOWN",
+      "derived_value_permitted": "UNKNOWN",
+      "cache_permitted": "UNKNOWN",
+      "retention_policy": "UNKNOWN",
+      "label": "REFERENCE_FX_NOT_EXECUTABLE — not a Dime! or broker executable rate",
+      "contract_verified_documented": true,
+      "contract_verified_live": false,
+      "evidence": "ChatGPT research 2026-11-03: https://frankfurter.dev/, https://api.frankfurter.dev/v2/openapi.json"
+    }
+  ],
+  "activation_prerequisites_per_provider": [
+    "Owner verifies actual account entitlement for each provider",
+    "Owner attests display_permitted, calculation_permitted, derived_value_permitted, cache_permitted and retention_policy_verified in the scope_providers entry",
+    "Credentials stored through SETUP-MARKET-DATA.bat (Windows Credential Manager, target ACASH/MARKET_DATA/<PROVIDER_ID>); ALPACA_HISTORICAL reuses the ALPACA_BASIC read-only alias and gains no entitlement from it",
+    "FRANKFURTER_ECB_FX is keyless but still needs the attestation above before any outbound request",
+    "Documented-contract verification is separate from live verification: MARKETDATA_LIVE_RESPONSE_VERIFIED and FRANKFURTER_LIVE_RESPONSE_VERIFIED stay False until the Owner observes a real authorized response",
+    "A provider becomes READY only when market_authority reports every gate true; the Dashboard must then show LIVE = NOT_OBSERVED until a real response is recorded"
+  ],
+  "owner_decision_wording": "I ratify ODR_UPI_MARKET_DATA_004_AMENDMENT_001: scope_providers now lists ALPACA_BASIC, ALPACA_HISTORICAL, MARKETDATA_APP_FREE and FRANKFURTER_ECB_FX for owner-local market-data retrieval only. This ratifies the scope, not any vendor grant: every entitlement, display, calculation, derived-value, cache and retention right stays UNKNOWN and the provider stays disabled until I attest it separately against the applicable agreement. No trading, broker connectivity, capital transfer, paid subscription or live-response claim is authorized by this record.",
+  "not_authorized_by_this_proposal": [
+    "Trading (paper or live)",
+    "Broker account connectivity",
+    "Capital or currency transfers",
+    "Paid subscriptions",
+    "Autonomous ODR ratification",
+    "Marking any right as VERIFIED without Owner-supplied evidence",
+    "Activating any live network request (adapters gate on MARKETDATA_CONTRACT_VERIFIED and FRANKFURTER_CONTRACT_VERIFIED)"
+  ],
+  "engineering_status": {
+    "ALPACA_BASIC": {
+      "adapter": "IMPLEMENTED",
+      "mock_tests": "userland endpoint/parse tests passing",
+      "live_response": "NOT_OBSERVED_IN_THIS_CHECKOUT",
+      "contract_verified": true
+    },
+    "ALPACA_HISTORICAL": {
+      "adapter": "IMPLEMENTED",
+      "mock_tests": "9 tests passing",
+      "live_response": "NOT_OBSERVED",
+      "contract_verified": true
+    },
+    "MARKETDATA_APP_FREE": {
+      "adapter": "IMPLEMENTED",
+      "documented_contract": "array parser, Bearer authentication, 100 credits/day with a 09:30 America/New_York window and a persisted counter",
+      "mock_tests": "12 tests passing (index alignment, no_data/error, duplicates, future timestamps, HTTP 200/203, credit window, DST, restart, concurrency, no secret in URL)",
+      "live_response": "NOT_OBSERVED",
+      "contract_verified": true,
+      "live_response_verified": false
+    },
+    "FRANKFURTER_ECB_FX": {
+      "adapter": "IMPLEMENTED",
+      "documented_contract": "V2 scalar {date, base, quote, rate} with an optional as-of date; the earlier nested rates.ECB assumption was removed",
+      "mock_tests": "9 tests passing (scalar parse both directions, pair mismatch, future date, as-of request, rejected nested envelope, keyless readiness, no secret in URL)",
+      "live_response": "NOT_OBSERVED",
+      "contract_verified": true,
+      "live_response_verified": false
+    }
+  }
+}

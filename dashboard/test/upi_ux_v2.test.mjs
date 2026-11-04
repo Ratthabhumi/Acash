@@ -13,7 +13,7 @@ const AUTHORITY = ['PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED', 'OWNER_PRIV
 
 test('every reason code the wealth pack can emit has a finding with a valid severity', () => {
   const pack = read('../src/acash/invest/wealth_pack.py');
-  const codes = [...pack.matchAll(/reasons\.append\(f?"([A-Z0-9_]+):/g)].map((m) => m[1]);
+  const codes = [...pack.matchAll(/reasons\.append\(\s*f?"([A-Z0-9_]+):/g)].map((m) => m[1]);
   assert.ok(codes.length >= 12, `parsed ${codes.length} codes`);
   for (const code of codes) {
     assert.ok(FINDINGS[code], `${code} has no finding entry`);
@@ -43,7 +43,7 @@ test('unknown codes stay visible as IMPORTANT with the raw code', () => {
 
 test('barFraction is bounded geometry and fails to zero on missing or invalid input', () => {
   assert.equal(barFraction('0.4136'), 0.4136);
-  assert.equal(barFraction('8250.00', '95750.00'), 8250 / 95750);
+  assert.equal(barFraction('8250.00', '85470.00'), 8250 / 85470);
   assert.equal(barFraction('2', '1'), 1);
   for (const [p, w] of [[null, '1'], [undefined, '1'], ['-1', '1'], ['1', '0'], ['1', '-5'], ['abc', '1'], ['1e3', '1'], ['NaN', '1'], ['1', null]]) {
     assert.equal(barFraction(p, w), 0, `${p}/${w}`);
@@ -59,7 +59,10 @@ test('portfolio UI does not compute or persist figures and keeps the A-E structu
     }
   }
   for (const id of ['sec-a', 'sec-b', 'sec-c', 'sec-d', 'sec-e']) assert.match(page, new RegExp(`id="${id}"`));
-  assert.match(page, /computed_nav_is_total_best_evidence|Not a verified NAV/);
+  // V89: the headline is the broker-displayed observation; the ACASH computed valuation is separate.
+  assert.match(page, /broker_observation\?\.displayed_total/);
+  assert.match(page, /ACASH คำนวณ \(statement\)/);
   assert.match(page, /evidenceOnly \? NOT_ESTABLISHED : formatDec\(ov\.computed_nav_ppds\)/);
+  assert.ok(!/label="Total best evidence"/.test(page), 'best evidence must not be the portfolio headline');
   assert.ok(!/NAV history|drawdown|projection/i.test(page), 'no time-series charts from a single snapshot');
 });

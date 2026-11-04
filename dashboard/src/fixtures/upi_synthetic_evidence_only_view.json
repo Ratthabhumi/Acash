@@ -70,38 +70,33 @@
     "by_sub_portfolio_best_evidence": {
       "BROKER_D_FCD/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
         "value": "16500.00",
-        "weight": "0.1818"
+        "weight": "0.0000"
       },
       "BROKER_D_MAIN/(account):UNCLASSIFIED_HOLDINGS_VALUE": {
         "value": "74250.00",
-        "weight": "0.8182"
+        "weight": "0.0000"
       }
     },
     "computed_by_classification": null,
     "computed_status": "NOT_COMPUTED_EVIDENCE_ONLY_REPORT",
-    "currency_exposure_best_evidence": {
-      "UNCLASSIFIED_RESIDUAL": {
-        "value": "90750.00",
-        "weight": "1.0000"
-      }
-    }
+    "currency_exposure_best_evidence": {}
   },
   "concentration": {
-    "denominator": "TOTAL_BEST_EVIDENCE",
+    "denominator": "QUALIFIED_TOTAL_BEST_EVIDENCE",
     "hhi_identified_securities": "0.0000",
     "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-    "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+    "status": "COMPLETE",
     "top1_weight": "0.0000",
     "top_holdings": [],
-    "unclassified_share": "1.0000"
+    "unclassified_share": "0.0000"
   },
   "coverage": {
-    "account_total_reconciliation_coverage": "0.0000",
+    "account_total_reconciliation_coverage": "NOT_APPLICABLE_NO_VALUE",
     "cash_observed_accounts": "0/2",
-    "cost_basis_coverage": "0.0000",
+    "cost_basis_coverage": "NOT_APPLICABLE_NO_VALUE",
     "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
-    "known_value_coverage": "0.0000",
-    "position_level_coverage": "0.0000"
+    "known_value_coverage": "NOT_APPLICABLE_NO_VALUE",
+    "position_level_coverage": "NOT_APPLICABLE_NO_SECURITIES"
   },
   "data_mode": "SYNTHETIC_DEMO",
   "data_quality": {
@@ -111,7 +106,7 @@
       "PERFORMANCE_NOT_ESTABLISHED",
       "EVIDENCE_ONLY_REPORT",
       "RESERVE_SHORTFALL",
-      "UNCLASSIFIED_HOLDINGS_PRESENT",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED",
       "MARKET_SESSION_NOT_VERIFIED",
       "V38_ROUTE_EVIDENCE_INCOMPLETE",
@@ -125,7 +120,7 @@
       "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
       "EVIDENCE_ONLY_REPORT: no cash or quantity line carries value; allocation, concentration, P&L and stress are not computed.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
-      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 90750.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
       "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
@@ -206,8 +201,10 @@
     "computed_nav_is_total_best_evidence": false,
     "computed_nav_ppds": "0.00",
     "observed_position_value": "0.00",
-    "total_best_evidence": "90750.00",
-    "unclassified_holdings_value": "90750.00"
+    "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
+    "total_best_evidence": "0.00",
+    "unclassified_holdings_value": "90750.00",
+    "unreconciled_broker_difference": "90750.00"
   },
   "quant_workspace": {
     "new_strategies": "NONE_CREATED",
@@ -228,7 +225,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "72f9606db1eed2625cc40c62ac073956338c135e2c4985f1e4de296b133b61dc",
+    "pack_sha256": "0a9a9490586a200e10f2500ec7daf5b191df813a00337d4fd7b7f50cdedf30ea",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "EVIDENCE_ONLY_REPORT",
@@ -250,5 +247,5 @@
   },
   "security_identity": [],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "71adeac20440b5b9b2c78973b28d337df69f6c3a5c5e3ddb6bda42ef83150375"
+  "view_sha256": "fda3eb255c10e9ad066eee0a7152ec5625e157b5da3f90deb327e73ce2705092"
 }

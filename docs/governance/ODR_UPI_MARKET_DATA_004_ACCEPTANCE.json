@@ -1,0 +1,96 @@
+{
+  "record": "ODR_UPI_MARKET_DATA_004_ACCEPTANCE",
+  "decision_id": "ODR_UPI_MARKET_DATA_004",
+  "condition": "Owner approval of ODR-004 was conditional on the market-data security, authority and fail-closed checks passing, with scope_providers kept empty",
+  "tested_commit": "6f33983e55b9950112be687fcdcca22390ccc91e",
+  "ci": {
+    "push_run": 41585316860,
+    "pull_request_run": 41585323075,
+    "head": "6f33983e55b9950112be687fcdcca22390ccc91e",
+    "conclusion": "success"
+  },
+  "local_verification": {
+    "pytest_full": "5025 passed, 22 skipped, 13 pre-existing warnings (nautilus Timestamp.utcnow, pydantic serializer, tarfile filter); none from market-data modules",
+    "mypy": "692 source files clean (Windows); invest, dashboard_api and market_data clean with --platform linux",
+    "dashboard": "typecheck clean, 61 node tests passed, build ok",
+    "browser_e2e": "synthetic temporary root with mocked transport: refresh produced PARTIAL_INDICATIVE_VALUATION through PPDS; a failing provider produced no current market view"
+  },
+  "defects_found_and_fixed": [
+    "QuotePolicy evaluated 'now' once before provider retrieval, so every quote retrieved later was rejected as FUTURE_TIMESTAMP; the clock is now re-read after each provider fetch",
+    "The HTTP adapters were first placed in acash.invest, which the existing network-free guard forbids; they moved to acash.market_data without weakening the guard"
+  ],
+  "checks": [
+    {
+      "requirement": "egress allowlist: https, exact host, no port/userinfo/fragment, fixed path, allowlisted query keys and header names, value charset; trading/account/paper endpoints and SSRF variants refused; transport re-checks every request, no redirects or proxies",
+      "tests": [
+        "test_allowlist_refuses_trading_ssrf_and_private_egress",
+        "test_allowlist_refuses_unlisted_headers_and_transport_rechecks",
+        "test_adapters_send_only_symbols_and_keep_secrets_out_of_urls",
+        "test_market_modules_hold_no_trading_surface_and_no_test_uses_the_network"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "authority: ODR-004 must be RATIFIED by OWNER with an ISO date, require ODR-001, and list a provider exactly once with entitlement and display attested; otherwise no adapter is constructed and no request is sent",
+      "tests": [
+        "test_odr4_states_close_every_provider",
+        "test_odr4_dependency_and_scope_gates",
+        "test_repository_odr4_has_empty_scope",
+        "test_refresh_without_authority_makes_no_request"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "fail-closed parsing: malformed, non-positive, NaN, mis-attributed, adjusted, duplicated or out-of-range provider data raises DataContractError; HTTP 401/403/429/5xx and network failures map to explicit codes; rate limits stop requests",
+      "tests": [
+        "test_alpaca_parses_iex_last_trade_with_new_york_session_date",
+        "test_alpaca_fails_closed",
+        "test_transport_failure_and_rate_limit_make_no_request",
+        "test_massive_previous_close_budget_and_cache",
+        "test_massive_rejects_adjusted_misattributed_or_malformed",
+        "test_bot_reference_rate_both_directions_and_holiday_gap",
+        "test_bot_rejects_malformed_or_out_of_range"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "valuation: missing components are counted and excluded, never valued as zero; PPDS is the only valuation authority; saved snapshot, capacity and transactions are unchanged; failed refresh keeps the previous view; missing FX publishes prices without a view",
+      "tests": [
+        "test_partial_valuation_counts_but_never_values_missing_components",
+        "test_refresh_values_through_ppds_and_preserves_inputs",
+        "test_quotes_retrieved_after_the_refresh_started_are_not_future",
+        "test_failed_refresh_keeps_previous_published_view",
+        "test_missing_fx_publishes_prices_but_no_view"
+      ],
+      "result": "PASS"
+    },
+    {
+      "requirement": "local API: Host/Origin/session checks, JSON-only POST with empty body, refresh rate limit and single-flight lock; status responses carry no secrets",
+      "tests": [
+        "test_routes_refuse_unauthenticated_cross_origin_and_injected_requests",
+        "test_status_reports_backend_capabilities_without_secrets"
+      ],
+      "result": "PASS"
+    }
+  ],
+  "test_module": "tests/unit/invest/test_market_data_refresh.py",
+  "limitations": [
+    "No real provider request has been made; every adapter is verified against mocked transports only",
+    "BOT host, path, header and field names are unconfirmed against a live response (BOT_SPEC_VERIFIED is False)",
+    "Provider entitlement, display and caching rights are not verified for any provider",
+    "WEBULL_TH_OPENAPI has no adapter"
+  ],
+  "rollback": "Set status in docs/governance/ODR_UPI_MARKET_DATA_004.json to REVOKED (closes the gate immediately) or revert the ratification commit",
+  "unchanged": {
+    "scope_changed": false,
+    "scope_providers": [],
+    "trading": "not authorized",
+    "broker_connectivity": "not authorized",
+    "paid_subscriptions": "not authorized",
+    "transaction_authoring": "not authorized (ODR-005 remains PROPOSED_NOT_RATIFIED)",
+    "NO_REAL_ORDERS": true,
+    "real_capital_authority_usd": "0.00",
+    "trading_authority": "none"
+  },
+  "result": "ALL_CHECKS_PASSED"
+}

@@ -1,0 +1,36 @@
+{
+  "decision_id": "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005",
+  "capability": "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED",
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-03",
+  "document": "docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.md",
+  "requires": [
+    "ODR_UPI_PRIVATE_OBSERVATION_001",
+    "ODR_UPI_PRIVATE_TRANSACTIONS_002"
+  ],
+  "scope_schemas": [
+    "ACASH_CANONICAL_TRANSACTIONS_V1"
+  ],
+  "scope_files": [
+    "data/private/transactions/"
+  ],
+  "ratification_lineage": {
+    "decided_by": "OWNER",
+    "instruction": "Owner's explicit approval on 2026-11-03: ODR-004, ODR-005, ODR-006 approved within their documented, bounded scopes (chat directive V84.1 section 0).",
+    "applied_by": "CODING_AGENT_AT_OWNER_DIRECTION",
+    "scope_changed": true,
+    "scope_change_basis": "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005_AMENDMENT_001 narrows ratifiable scope to BUY/SELL/DEPOSIT/WITHDRAWAL/DIVIDEND/FEE plus read-only history; corrections moved to ODR-006",
+    "acceptance_evidence": "tests/unit/invest/test_private_transactions.py, tests/unit/ppds/test_ppds_transactions.py",
+    "acceptance_commit": null
+  },
+  "independent_of": [
+    "TRADING_AUTHORIZED",
+    "BROKER_ACCOUNT_CONNECTIVITY",
+    "CREDENTIAL_STORAGE",
+    "CAPITAL_TRANSFER",
+    "BROKER_NATIVE_IMPORT",
+    "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+    "D5_DATA_ADMITTED"
+  ]
+}
