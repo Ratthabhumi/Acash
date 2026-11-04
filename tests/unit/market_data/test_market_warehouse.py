@@ -22,8 +22,7 @@ def _record(directory: Path, permitted: bool) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "odr.json"
     path.write_text(json.dumps({
-        "state": "RATIFIED",
-        "scope_providers": [{"provider_id": "MASSIVE_BASIC", "cache_permitted": True if permitted else None,
+        "status": "RATIFIED", "scope_providers": [{"provider_id": "MASSIVE_BASIC", "cache_permitted": True if permitted else None,
                              "retention_policy_verified": True if permitted else None}],
     }), encoding="utf-8")
     return path
@@ -167,3 +166,59 @@ def test_collect_without_retention_rights_never_claims_a_dataset(tmp_path: Path)
     assert report.completed == ["VOO"] and not store.partition("VOO").exists()
     with pytest.raises(DataContractError, match="STORAGE_RIGHTS_UNESTABLISHED"):
         co.collect(FakeSource({"VOO": [_bar()]}), store, ["VOO"], D, D, job_id="j2", persist=True)
+
+
+def test_repository_record_permits_private_storage_with_a_bounded_policy() -> None:
+    """The ratified ODR-004 record, not a fixture, is what the gate reads in production."""
+    record = Path("docs/governance/ODR_UPI_MARKET_DATA_004.json")
+    assert wh.storage_permitted("MASSIVE_BASIC", record) is True
+    assert wh.storage_permitted("BOT_REFERENCE_FX", record) is True
+    # Memory-only providers stay refused, so the gate is not a blanket "yes".
+    assert wh.storage_permitted("ALPACA_BASIC", record) is False
+    terms = wh.retention_terms("MASSIVE_BASIC", record)
+    assert terms is not None
+    assert terms["max_retention_after_terms_termination_days"] == 30
+    assert terms["purge_required_on_termination"] is True
+    assert terms["terms_revision"]["terms_revision_dated"] == "2026-11-03"
+    assert terms["cache_rights"]["redistribution"] == "DENIED"
+
+
+def test_purge_removes_every_observation_and_records_only_the_deletion(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path, True))
+    store.commit("VOO", [_bar(day=5), _bar(day=6, close="101")], job_id="j1")
+    store.record_sessions("VOO", [date(2026, 1, 5)], source="MASSIVE_BASIC", job_id="j1")
+    store.save_state("j1", {"completed": ["VOO"]})
+    assert store.partition("VOO").is_file()
+    with pytest.raises(DataContractError, match="WAREHOUSE_PURGE_REASON_REQUIRED"):
+        store.purge("   ")
+    result = store.purge("TERMS_ENDED")
+    assert result["partitions_removed"] == 1
+    assert not store.partition("VOO").exists() and not store.manifest_path.exists()
+    log = json.loads((tmp_path / "w" / "purge_log.json").read_text(encoding="utf-8"))
+    assert log["purges"][0]["reason"] == "TERMS_ENDED"
+    assert "close" not in json.dumps(log)
+
+
+def test_durable_plan_resumes_from_partitions_not_the_index(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path, True))
+    # The index says the range was seen, but nothing was persisted: a durable pass must refetch it.
+    store.record_sessions("VOO", [date(2026, 1, 5)], source="MASSIVE_BASIC", job_id="j0")
+    memory = co.plan(store, ["VOO"], date(2026, 1, 1), date(2026, 1, 6))
+    durable = co.plan(store, ["VOO"], date(2026, 1, 1), date(2026, 1, 6), durable=True)
+    assert memory["symbols"]["VOO"]["status"] == "NEEDS_INCREMENT"
+    assert durable["symbols"]["VOO"] == {"status": "NEEDS_FULL_RANGE",
+                                         "from": "2026-01-01", "to": "2026-01-06"}
+    store.commit("VOO", [_bar(day=5), _bar(day=6, close="101")], job_id="j1")
+    assert co.plan(store, ["VOO"], date(2026, 1, 1), date(2026, 1, 6),
+                   durable=True)["symbols"]["VOO"]["status"] == "COMPLETE"
+
+
+def test_durable_pass_writes_partitions_once(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path, True))
+    rows = {"VOO": [_bar(day=5), _bar(day=6, close="101")]}
+    first = co.collect(FakeSource(rows), store, ["VOO"], date(2026, 1, 5), date(2026, 1, 6),
+                       job_id="j1", pause=lambda _: None)
+    assert first.persisted is True and store.partition("VOO").is_file()
+    second = co.collect(FakeSource(rows), store, ["VOO"], date(2026, 1, 5), date(2026, 1, 6),
+                        job_id="j1", pause=lambda _: None)
+    assert second.completed == [] and second.skipped_existing == ["VOO"] and second.requests == 0

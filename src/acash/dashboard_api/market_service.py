@@ -42,7 +42,7 @@ from acash.invest.wealth_pack import build_wealth_pack
 from acash.ppds.private_observation import SCHEMA_V1_2, build_book, parse_snapshot, read_gated_json
 
 PREFIX = "/api/upi/market/"
-ROUTES = {"status": ("GET",), "refresh": ("POST",), "view": ("GET",), "research": ("GET",)}
+ROUTES = {"status": ("GET",), "refresh": ("POST",), "view": ("GET",), "research": ("GET",), "session": ("GET",)}
 MARKET_DIR = ("market",)
 PUBLISHED_FILE = "market_published.json"
 ATTEMPT_FILE = "market_last_attempt.json"
@@ -343,7 +343,31 @@ def research_view() -> Dict[str, Any]:
         "requests": job.get("requests"),
         "storage_rights": job.get("storage_rights"),
         "governance": report.get("governance"),
+        "fx": _fx_view(),
         "collector_health": health,
+    }
+
+
+def _fx_view() -> Dict[str, Any]:
+    """BOT reference FX series + THB decomposition, or an explicit absence (never a guess)."""
+    from acash.invest import fx_series as fx
+    series = fx.load_series()
+    decomposition = fx.load_decomposition()
+    if series is None:
+        return {"status": "NO_FX_SERIES", "note": "Run scripts/fx_panel.py to build the BOT reference series."}
+    summary = series.get("summary") or {}
+    return {
+        "status": "AVAILABLE" if decomposition else "SERIES_ONLY",
+        "source": summary.get("source"),
+        "rate_type": summary.get("rate_type"),
+        "orientation": summary.get("orientation"),
+        "executable": summary.get("executable"),
+        "first": summary.get("first"),
+        "last": summary.get("last"),
+        "points": summary.get("points"),
+        "weekday_gaps": summary.get("weekday_gaps"),
+        "latest": summary.get("latest"),
+        "decomposition": decomposition,
     }
 
 
@@ -377,6 +401,12 @@ def handle(method: str, name: str, body: Any, service: MarketService) -> pi.Resu
                 service.lock.release()
         if name == "research":
             return 200, research_view()
+        if name == "session":
+            from acash.invest import market_calendar as mc
+            try:
+                return 200, mc.session_view(mc.load_calendar(), service.clock())
+            except DataContractError as exc:
+                return 409, {"status": "MARKET_CALENDAR_UNAVAILABLE", **pi._code(exc)}
     except DataContractError as exc:
         return 422, {"status": "REFRESH_FAILED", **pi._code(exc)}
     return 404, {"status": "NOT_FOUND"}

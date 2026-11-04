@@ -112,6 +112,21 @@ def storage_permitted(provider_id: str, record: Optional[Path] = None) -> bool:
     return False
 
 
+def retention_terms(provider_id: str, record: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """The recorded retention policy for one provider, or ``None`` when nothing was recorded."""
+    state, entries = _odr_scope(record)
+    if state != "RATIFIED":
+        return None
+    for entry in entries:
+        if entry.get("provider_id") == provider_id:
+            policy = entry.get("retention_policy")
+            if isinstance(policy, dict):
+                return {**policy,
+                        "terms_revision": entry.get("retention_terms"),
+                        "cache_rights": entry.get("cache_rights")}
+    return None
+
+
 def _odr_scope(record: Optional[Path]) -> Tuple[str, List[Mapping[str, Any]]]:
     path = record or Path(ma.RECORD)
     if not path.is_file():
@@ -121,7 +136,8 @@ def _odr_scope(record: Optional[Path]) -> Tuple[str, List[Mapping[str, Any]]]:
     except (OSError, ValueError):
         return "UNREADABLE", []
     scope = doc.get("scope_providers") if isinstance(doc, dict) else None
-    state = doc.get("state") if isinstance(doc, dict) else None
+    # The record's ratified state lives in ``status``; ``state`` is accepted for older fixtures only.
+    state = doc.get("status", doc.get("state")) if isinstance(doc, dict) else None
     entries: List[Mapping[str, Any]] = [e for e in scope if isinstance(e, dict)] if isinstance(scope, list) else []
     return str(state or "UNKNOWN"), entries
 
@@ -248,6 +264,7 @@ class BarWarehouse:
             "requested": {"start": requested_start.isoformat() if requested_start else None,
                           "end": requested_end.isoformat() if requested_end else None},
             "storage_rights": "PERMITTED", "schema": SCHEMA,
+            "retention": retention_terms(source, self.record),
         })
         partitions[symbol] = entry
         manifest.update({"schema": SCHEMA, "updated_at": now, "generated_by": "acash.market_data.warehouse"})
@@ -288,6 +305,31 @@ class BarWarehouse:
     def load_state(self, job_id: str) -> Dict[str, Any]:
         job = self.state().get("jobs", {}).get(job_id)
         return dict(job) if isinstance(job, dict) else {}
+
+    def purge(self, reason: str) -> Dict[str, Any]:
+        """Delete every stored observation and index, leaving an auditable record of the deletion.
+
+        This is the retention obligation's execution path: when the terms or plan end, the private
+        warehouse is emptied. Only counts and the reason are recorded — never the data itself.
+        """
+        if not reason.strip():
+            raise DataContractError("WAREHOUSE_PURGE_REASON_REQUIRED.")
+        removed: List[str] = []
+        for path in sorted((self.root / "bars").glob("*.parquet")):
+            path.unlink()
+            removed.append(path.name)
+        for name in ("manifest.json", "session_index.json", "job_state.json"):
+            path = self.root / name
+            if path.is_file():
+                path.unlink()
+                removed.append(name)
+        log_path = self.root / "purge_log.json"
+        log = _read_json(log_path) or {"schema": SCHEMA, "purges": []}
+        log.setdefault("purges", []).append({
+            "purged_at": self.clock().isoformat(timespec="seconds"), "reason": reason.strip()[:200],
+            "removed": removed, "partitions_removed": sum(1 for name in removed if name.endswith(".parquet"))})
+        _atomic_write(log_path, _json_bytes(log))
+        return {"removed": removed, "partitions_removed": sum(1 for name in removed if name.endswith(".parquet"))}
 
 
 def _bar_row(bar: Bar) -> Dict[str, Any]:

@@ -147,6 +147,11 @@ def main() -> int:
     WAREHOUSE.mkdir(parents=True, exist_ok=True)
     (WAREHOUSE / "backfill_report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
                                                     encoding="utf-8")
+    co.write_health(store, symbols, WAREHOUSE / "health.json",
+                    generated_at=result["generated_at"], job_id=job_id,
+                    range={"start": start.isoformat(), "end": end.isoformat()}, requests=report.requests,
+                    completed=len(report.completed), failed=len(report.failed), stopped=report.stopped,
+                    storage_rights=report.storage_rights)
     summary = {
         "requests": payload["requests"], "provider_calls": payload["provider_calls"],
         "completed": len(report.completed), "failed": len(report.failed),

@@ -160,7 +160,7 @@ def build_wealth_pack(book: PortfolioBook, capacity_inputs: CapacityInputs,
     if capacity_inputs.data_class != book.snapshot.data_class:
         raise DataContractError("PACK_DATA_CLASS_MISMATCH: snapshot and capacity must share a data class.")
     authority = observation_authority(book.snapshot.data_class, book.snapshot.schema)
-    summary = book_summary(book, report_date)
+    summary = book_summary(book, report_date, economic_classes)
     held_ids = {p.security_id for a in book.snapshot.accounts for p in a.positions}
     economic_complete = (economic_classes is not None and bool(held_ids)
                          and all(economic_classes.get(sid, 'UNKNOWN') != 'UNKNOWN' for sid in held_ids))

@@ -994,7 +994,59 @@ def _residual(check: Mapping[str, Any]) -> Optional[Decimal]:
     return diff if diff > ZERO else None
 
 
-def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str, Any]:
+def _position_rows(a: Any, prices: Mapping[str, Any], identity: Mapping[str, Any],
+                   economic_classes: Optional[Mapping[str, str]], ccy: str,
+                   to_rep: Any) -> List[Dict[str, Any]]:
+    """One row per held line, copied from PPDS: never recomputed, never zero-filled.
+
+    Quantity x price lines carry a quantity and a price; value-only lines carry neither and say so.
+    Cost basis and unrealised P&L are ``None`` with a status when the evidence does not establish them.
+    A broker total's unexplained residual is deliberately absent: it is not a holding.
+    """
+    rows: List[Dict[str, Any]] = []
+    for p in a.positions:
+        price = prices[p.security_id]
+        local = p.quantity * price.price
+        value_rep = local * to_rep(price.currency, a.base_currency)
+        cost_ok = p.cost_basis_total is not None and p.cost_basis_currency == price.currency
+        cls = identity.get(p.security_id)
+        rows.append({
+            "account_ref": a.account_ref, "security_id": p.security_id, "sub_portfolio": p.sub_portfolio,
+            "figi": getattr(cls, "figi", None), "isin": getattr(cls, "isin", None),
+            "instrument_type": getattr(cls, "instrument_type", None),
+            "identity_status": getattr(cls, "identity_status", None),
+            "economic_class": (economic_classes or {}).get(p.security_id),
+            "quantity": str(p.quantity), "price": str(price.price), "price_currency": price.currency,
+            "value_local": _q(local), "value_reporting": _q(value_rep),
+            "cost_basis_local": _q(p.cost_basis_total) if cost_ok else None,
+            "cost_basis_status": "ESTABLISHED" if cost_ok else "COST_BASIS_NOT_ESTABLISHED",
+            "unrealized_pnl_local": _q(local - p.cost_basis_total) if cost_ok else None,
+            "unrealized_status": "COMPUTED" if cost_ok else "COST_BASIS_NOT_ESTABLISHED",
+            "source": "PPDS_QUANTITY_X_PRICE", "report_currency": ccy,
+        })
+    for o in a.observed_value_positions:
+        value_rep = o.market_value * to_rep(o.currency, a.base_currency)
+        cost_ok = o.cost_basis_total is not None and o.cost_basis_currency == o.currency
+        cls = identity.get(o.security_id)
+        rows.append({
+            "account_ref": a.account_ref, "security_id": o.security_id, "sub_portfolio": o.sub_portfolio,
+            "figi": getattr(cls, "figi", None), "isin": getattr(cls, "isin", None),
+            "instrument_type": getattr(cls, "instrument_type", None),
+            "identity_status": getattr(cls, "identity_status", None),
+            "economic_class": (economic_classes or {}).get(o.security_id),
+            "quantity": None, "price": None, "price_currency": o.currency,
+            "value_local": _q(o.market_value), "value_reporting": _q(value_rep),
+            "cost_basis_local": _q(o.cost_basis_total) if cost_ok else None,
+            "cost_basis_status": "ESTABLISHED" if cost_ok else "COST_BASIS_NOT_ESTABLISHED",
+            "unrealized_pnl_local": _q(o.market_value - o.cost_basis_total) if cost_ok else None,
+            "unrealized_status": "COMPUTED" if cost_ok else "COST_BASIS_NOT_ESTABLISHED",
+            "source": "BROKER_OBSERVED_MARKET_VALUE", "report_currency": ccy,
+        })
+    return rows
+
+
+def evidence_report(book: PortfolioBook, ccy: Optional[str] = None,
+                    economic_classes: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     """Evidence levels, total reconciliation, unclassified residual and coverage (V1_2 snapshots).
 
     Computed value is PPDS quantity x price plus settled cash. Value-only positions are added as
@@ -1013,6 +1065,7 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
     currencies: Dict[str, Decimal] = {}
     subs_alloc: Dict[str, Decimal] = {}
     accounts_out: List[Dict[str, Any]] = []
+    position_rows: List[Dict[str, Any]] = []
     prices = {p.symbol: p for p in snap.prices}
 
     def to_rep(src: str, base: str) -> Decimal:
@@ -1083,6 +1136,7 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
         totals["computed"] += computed
         totals["observed"] += observed
         totals["residual"] += residual
+        position_rows.extend(_position_rows(a, prices, identity, economic_classes, ccy, to_rep))
         accounts_out.append({
             "account_ref": a.account_ref, "evidence_level": level, "computed_value": _q(computed),
             "observed_position_value": _q(observed), "unclassified_holdings_value": _q(residual),
@@ -1100,6 +1154,14 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
     if denom < ZERO:
         raise DataContractError("PRIVATE_NAV_NEGATIVE: evidence weights undefined.")
     non_cash = totals["securities"] + totals["observed"]
+    position_total = sum((Decimal(row["value_reporting"]) for row in position_rows), ZERO)
+    # Deterministic order: the same portfolio in any input order must produce the same pack.
+    position_rows.sort(key=lambda row: (str(row["account_ref"]), str(row["security_id"]),
+                                        str(row.get("sub_portfolio") or ""), str(row["source"])))
+    for row in position_rows:
+        row["weight"] = _w(Decimal(row["value_reporting"]) / denom) if denom > ZERO else None
+        row["weight_basis"] = "SHARE_OF_TOTAL_BEST_EVIDENCE"
+        row["valuation_date"] = snap.valuation_date.isoformat()
     weights = sorted(((v / denom, k) for k, v in exposure.items()), reverse=True) if denom > ZERO else []
     held = sorted({p.security_id for a in snap.accounts for p in a.positions}
                   | {o.security_id for a in snap.accounts for o in a.observed_value_positions})
@@ -1114,6 +1176,17 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
             "total_best_evidence": _q(denom),
         },
         "accounts": accounts_out,
+        "positions": {
+            "schema": "ACASH_POSITION_ROWS_V1",
+            "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE",
+            "rows": position_rows,
+            "position_value_total": _q(position_total),
+            "qualification": {
+                "cash_excluded": True, "residual_excluded": True,
+                "note": ("Rows are held lines only. Settled cash and an unqualified broker-total residual "
+                         "are never turned into holdings, so the row values sum to less than the total."),
+            },
+        },
         "coverage": {
             "known_value_coverage": _w((totals["computed"] + totals["observed"]) / denom) if denom > ZERO else "NOT_APPLICABLE_NO_VALUE",
             "position_level_coverage": _w(totals["securities"] / non_cash) if non_cash > ZERO else "NOT_APPLICABLE_NO_SECURITIES",
@@ -1162,7 +1235,8 @@ def time_alignment(snapshot: PortfolioSnapshot) -> Dict[str, Any]:
     }
 
 
-def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dict[str, Any]:
+def book_summary(book: PortfolioBook, report_date: Optional[date] = None,
+                 economic_classes: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
     snap = book.snapshot
     freshness = valuation_age_days(book, report_date or snap.valuation_date)
     summary: Dict[str, Any] = {
@@ -1191,7 +1265,7 @@ def book_summary(book: PortfolioBook, report_date: Optional[date] = None) -> Dic
     if snap.schema != SCHEMA_V1_2:
         summary["analytics"] = {ccy: book_analytics(book, ccy) for ccy in snap.report_currencies}
         return summary
-    summary["evidence"] = {ccy: evidence_report(book, ccy) for ccy in snap.report_currencies}
+    summary["evidence"] = {ccy: evidence_report(book, ccy, economic_classes) for ccy in snap.report_currencies}
     if book.consolidated[snap.reporting_currency].consolidated_nav == ZERO:
         # No cash or quantity line carries value: analytics weights are undefined, so none are produced.
         summary["report_type"] = "EVIDENCE_ONLY_REPORT"

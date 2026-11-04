@@ -12,13 +12,15 @@ coverage result in that case; it just does not claim a durable dataset.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
 
 from acash.core.domain.exceptions import DataContractError
-from acash.market_data.warehouse import BarWarehouse, coverage, storage_permitted
+from acash.market_data.warehouse import BarWarehouse, coverage, retention_terms, storage_permitted
 
 #: Adapters refuse a call they cannot afford by returning nothing and naming the symbol in ``skipped``.
 RATE_LIMIT_PAUSE_SECONDS = 61.0
@@ -60,14 +62,23 @@ class CollectionReport:
                 "paused_seconds": round(self.paused_seconds, 3), "stopped": self.stopped}
 
 
-def plan(warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date) -> Dict[str, Any]:
-    """What still has to be fetched, from the session index only (no prices needed)."""
+def plan(warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date,
+         durable: bool = False) -> Dict[str, Any]:
+    """What still has to be fetched. ``durable`` resumes from stored partitions, not from the index.
+
+    The session index only proves that a range was *seen*; if the bars were not persisted (or were
+    purged), the next persistent pass must fetch the full range again rather than assume it is done.
+    """
     index = warehouse.session_index()
     rows = index.get("symbols", {}) if isinstance(index.get("symbols"), dict) else {}
     plan_rows: Dict[str, Any] = {}
     for symbol in symbols:
         entry = rows.get(symbol) or {}
-        last = entry.get("last")
+        if durable:
+            stored = warehouse.read(symbol)
+            last = max(stored).isoformat() if stored else None
+        else:
+            last = entry.get("last")
         if not last:
             plan_rows[symbol] = {"status": "NEEDS_FULL_RANGE", "from": start.isoformat(), "to": end.isoformat()}
             continue
@@ -77,7 +88,7 @@ def plan(warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date
         else:
             plan_rows[symbol] = {"status": "NEEDS_INCREMENT", "from": resume_at.isoformat(),
                                  "to": end.isoformat()}
-    return {"job": {"start": start.isoformat(), "end": end.isoformat()},
+    return {"job": {"start": start.isoformat(), "end": end.isoformat(), "durable": durable},
             "symbols": plan_rows,
             "needs_work": sorted(s for s, row in plan_rows.items() if row["status"] != "COMPLETE")}
 
@@ -120,7 +131,9 @@ def collect(source: DailyBarSource, warehouse: BarWarehouse, symbols: Sequence[s
     report.persisted = bool(permitted and persist is not False)
     previous = warehouse.load_state(job_id)
     done = set(previous.get("completed", [])) if isinstance(previous.get("completed"), list) else set()
-    roadmap = plan(warehouse, symbols, start, end)["symbols"]
+    if report.persisted:
+        done = set()  # a durable pass resumes from partitions, never from a checkpoint alone
+    roadmap = plan(warehouse, symbols, start, end, durable=report.persisted)["symbols"]
     for symbol in symbols:
         step = roadmap[symbol]
         if step["status"] == "COMPLETE" or symbol in done:
@@ -223,7 +236,17 @@ def health(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
         "last_job": {k: latest.get(k) for k in ("completed", "failed", "requests", "range", "stopped",
                                                 "persisted", "provider_id")} if latest else None,
         "partitions_present": sum(1 for symbol in symbols if warehouse.partition(symbol).is_file()),
+        "retention": retention_terms("MASSIVE_BASIC", warehouse.record),
         "storage_rights": "PERMITTED" if storage_permitted("MASSIVE_BASIC", warehouse.record)
         else "UNESTABLISHED",
         "note": "Session index holds dates only; prices are stored only where retention rights are established.",
     }
+
+
+def write_health(warehouse: BarWarehouse, symbols: Sequence[str], path: Path, **extra: Any) -> Dict[str, Any]:
+    """Persist the collector health record used by the dashboard (metadata only, no prices)."""
+    doc = health(warehouse, symbols)
+    doc.update(extra)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return doc

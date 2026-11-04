@@ -116,20 +116,35 @@
       "display_permitted": true,
       "calculation_permitted": true,
       "derived_value_permitted": true,
-      "cache_permitted": null,
-      "retention_policy_verified": null,
-      "contract_verified_live": false,
-      "evidence": "Owner attested personal, private research use for MASSIVE_BASIC on 2026-11-04 (ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT), covering display, calculation and derived-value use of EOD/historical observations for the owner's own portfolio. Persistent caching and retention remain UNKNOWN: the Stocks Basic terms do not grant blanket storage, so a refresh stays memory-only until that capability is evidence-backed. Source: massive.com/pricing (Stocks Basic, $0, EOD, 2 years history, 5 calls/min).",
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "contract_verified_live": true,
+      "evidence": "Owner authorised private, non-commercial storage on 2026-11-04 (ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE). Scope: parsed daily OHLCV for the held universe and benchmarks in a private warehouse, with no redistribution, no public derived benchmark and no model training; purge within 30 days of the terms or plan ending. The terms basis is the Owner's research summary of the 2026-11-03 revision, not an agent browse; third-party provider and exchange terms still apply.",
       "attested_on": "2026-11-04",
       "entitlement_verified": true,
       "attested_by": "OWNER",
       "cache_rights": {
         "memory_session": "PERMITTED_VERIFIED",
-        "short_lived_local": "PENDING_RIGHTS_VERIFICATION",
-        "persistent_historical_price": "PENDING_RIGHTS_VERIFICATION",
-        "derived_valuation_retention": "PENDING_RIGHTS_VERIFICATION",
-        "provider_response_retention": "PENDING_RIGHTS_VERIFICATION",
-        "redistribution": "PENDING_RIGHTS_VERIFICATION"
+        "short_lived_local": "PERMITTED_VERIFIED",
+        "persistent_historical_price": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "derived_valuation_retention": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "provider_response_retention": "NOT_STORED_RAW_ONLY_PARSED_BARS",
+        "redistribution": "DENIED"
+      },
+      "retention_policy": {
+        "classification": "PRIVATE_PERSONAL_RESEARCH_RETENTION",
+        "max_retention_after_terms_termination_days": 30,
+        "purge_required_on_termination": true,
+        "purge_command": "uv run python scripts/purge_market_data.py --confirm DELETE_PRIVATE_MARKET_DATA",
+        "reviewed_on": "2026-11-04",
+        "review_cadence": "ON_TERMS_REVISION_OR_ACCOUNT_CHANGE"
+      },
+      "retention_terms": {
+        "terms_url": "https://massive.com/legal/market-data-terms-of-service",
+        "terms_revision_dated": "2026-11-03",
+        "recorded_on": "2026-11-04",
+        "verification_basis": "OWNER_ATTESTED_RESEARCH_SUMMARY_NOT_AGENT_BROWSED",
+        "agent_verified_current_revision": false
       }
     },
     {
@@ -139,21 +154,44 @@
         "GET https://gateway.api.bot.or.th/Stat-ExchangeRate/v2 (documented v2 path)"
       ],
       "quoted_scope": "THB reference exchange rates, daily, research/cross-check use",
-      "account_entitlement": "UNKNOWN — requires an API key and an entitlement check",
-      "display_permitted": null,
-      "calculation_permitted": null,
-      "derived_value_permitted": null,
-      "cache_permitted": null,
-      "retention_policy_verified": null,
-      "contract_verified_live": false,
-      "evidence": "Owner authorized BOT_REFERENCE_FX on 2026-11-04 for personal reference-FX research. The existing adapter still targets a legacy endpoint (BOT_SPEC_VERIFIED=False) and must be migrated to the documented v2 contract before any live call.",
-      "attested_on": "2026-11-04"
+      "account_entitlement": "ENTITLED_API_KEY_CONFIGURED",
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "contract_verified_live": true,
+      "evidence": "Owner authorised private display, calculation and derived use of the BOT reference FX on 2026-11-04 (ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE). The adapter contract was verified against live responses on 2026-11-04: /Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/ with start_period/end_period, rows under result.data.data_detail filtered to USD, mid_rate as THB per one USD. The rate is a weighted-average interbank reference, never an executable brokerage conversion.",
+      "attested_on": "2026-11-04",
+      "attested_by": "OWNER",
+      "cache_rights": {
+        "persistent_reference_fx": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "redistribution": "DENIED",
+        "executable_rate_claim": "DENIED_REFERENCE_RATE_ONLY"
+      },
+      "retention_policy": {
+        "classification": "PRIVATE_PERSONAL_RESEARCH_RETENTION",
+        "max_retention_after_terms_termination_days": 30,
+        "purge_required_on_termination": true,
+        "purge_command": "uv run python scripts/purge_market_data.py --confirm DELETE_PRIVATE_MARKET_DATA",
+        "reviewed_on": "2026-11-04",
+        "review_cadence": "ON_TERMS_REVISION_OR_ACCOUNT_CHANGE"
+      },
+      "retention_terms": {
+        "terms_url": "https://massive.com/legal/market-data-terms-of-service",
+        "terms_revision_dated": "2026-11-03",
+        "recorded_on": "2026-11-04",
+        "verification_basis": "OWNER_ATTESTED_RESEARCH_SUMMARY_NOT_AGENT_BROWSED",
+        "agent_verified_current_revision": false
+      },
+      "entitlement_verified": true
     }
   ],
   "amendments": [
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_001",
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_002_CACHE_RIGHTS",
-    "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT"
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT",
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
   ],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [
@@ -172,6 +210,7 @@
     "attested_on": "2026-11-03",
     "basis": "Owner accepted the Alpaca and MarketData.app account terms on 2026-11-03 and confirmed personal, local, noncommercial use; each right was checked against the documented plan.",
     "not_attested": "Alpaca cache and retention stay unattested because the accepted terms do not grant blanket storage or redistribution.",
-    "unchanged": "Massive, BOT and Webull remain outside scope; no vendor right is inferred."
+    "unchanged": "Massive, BOT and Webull remain outside scope; no vendor right is inferred.",
+    "latest_amendment": "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
   }
 }

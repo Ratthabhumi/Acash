@@ -114,6 +114,17 @@
         "currency_exposure_best_evidence": {},
         "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
         "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+        "positions": {
+          "position_value_total": "0.00",
+          "qualification": {
+            "cash_excluded": true,
+            "note": "Rows are held lines only. Settled cash and an unqualified broker-total residual are never turned into holdings, so the row values sum to less than the total.",
+            "residual_excluded": true
+          },
+          "rows": [],
+          "schema": "ACASH_POSITION_ROWS_V1",
+          "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+        },
         "report_currency": "THB",
         "security_identity": [],
         "valuation_basis": {
@@ -215,6 +226,17 @@
         "currency_exposure_best_evidence": {},
         "evidence_level_note": "TRANSACTION_HISTORY_RECONCILED is assigned only by V2 reconcile_with_snapshot, never by a snapshot.",
         "market_session_status": "MARKET_SESSION_NOT_VERIFIED",
+        "positions": {
+          "position_value_total": "0.00",
+          "qualification": {
+            "cash_excluded": true,
+            "note": "Rows are held lines only. Settled cash and an unqualified broker-total residual are never turned into holdings, so the row values sum to less than the total.",
+            "residual_excluded": true
+          },
+          "rows": [],
+          "schema": "ACASH_POSITION_ROWS_V1",
+          "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+        },
         "report_currency": "USD",
         "security_identity": [],
         "valuation_basis": {
@@ -650,6 +672,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "0a9a9490586a200e10f2500ec7daf5b191df813a00337d4fd7b7f50cdedf30ea",
+  "pack_sha256": "d77ca7327659cbffe601d39f1a4e39d7153293486ec161cf4cc445d1d96001c3",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

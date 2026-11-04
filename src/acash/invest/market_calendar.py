@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -116,6 +116,72 @@ def session(cal: ExchangeCalendar, day: date) -> Dict[str, Optional[str]]:
     return {"status": "EARLY_CLOSE" if day in cal.early_closes else "OPEN",
             "open_utc": datetime.combine(day, cal.regular_open, tz).astimezone(utc).isoformat(),
             "close_utc": datetime.combine(day, closing, tz).astimezone(utc).isoformat()}
+
+
+BANGKOK = ZoneInfo("Asia/Bangkok")
+UTC = ZoneInfo("UTC")
+
+
+def _label(moment: datetime, zone: ZoneInfo) -> str:
+    return moment.astimezone(zone).strftime("%Y-%m-%d %H:%M %Z")
+
+
+def next_session(cal: ExchangeCalendar, start: date) -> Optional[date]:
+    """The next date at or after ``start`` that has a session; ``None`` outside verified coverage."""
+    day = max(start, cal.coverage_start)
+    while day <= cal.coverage_end:
+        if session(cal, day)["status"] in ("OPEN", "EARLY_CLOSE"):
+            return day
+        day = date.fromordinal(day.toordinal() + 1)
+    return None
+
+
+def session_view(cal: ExchangeCalendar, now: datetime) -> Dict[str, Any]:
+    """Venue-verified session state with both venue-local and Bangkok times.
+
+    Every time comes from the calendar fixture plus the IANA zones, so US daylight saving and early
+    closes are handled per date. The Thai calendar is not involved: a US exchange session is not a Thai
+    banking day.
+    """
+    if now.tzinfo is None:
+        raise DataContractError("CALENDAR_TIMESTAMP_NOT_AWARE.")
+    venue_tz = ZoneInfo(cal.timezone)
+    local_day = now.astimezone(venue_tz).date()
+    today = session(cal, local_day)
+    upcoming = next_session(cal, local_day)
+    view: Dict[str, Any] = {
+        "schema": "ACASH_MARKET_SESSION_VIEW_V1",
+        "mic": cal.mic,
+        "timezone": cal.timezone,
+        "calendar_id": cal.calendar_id,
+        "coverage": {"start": cal.coverage_start.isoformat(), "end": cal.coverage_end.isoformat()},
+        "regular": {"open_et": cal.regular_open.strftime("%H:%M"), "close_et": cal.regular_close.strftime("%H:%M"),
+                    "early_close_et": cal.early_close.strftime("%H:%M")},
+        "source": cal.source,
+        "calendar_status": "VERIFIED_VENUE_FIXTURE" if cal.coverage_start <= local_day <= cal.coverage_end
+        else NOT_VERIFIED_PERIOD,
+        "observed_at": {"et": _label(now, venue_tz), "ict": _label(now, BANGKOK)},
+        "today": {"date": local_day.isoformat(), "status": today["status"],
+                  "open_ict": None if today["open_utc"] is None else _label(datetime.fromisoformat(today["open_utc"]), BANGKOK),
+                  "close_ict": None if today["close_utc"] is None else _label(datetime.fromisoformat(today["close_utc"]), BANGKOK)},
+        "next_session": None,
+    }
+    if upcoming is not None:
+        info = session(cal, upcoming)
+        view["next_session"] = {
+            "date": upcoming.isoformat(), "status": info["status"],
+            "open_ict": _label(datetime.fromisoformat(str(info["open_utc"])), BANGKOK),
+            "close_ict": _label(datetime.fromisoformat(str(info["close_utc"])), BANGKOK),
+        }
+    if today["open_utc"] and today["close_utc"]:
+        opening = datetime.fromisoformat(today["open_utc"])
+        closing = datetime.fromisoformat(today["close_utc"])
+        view["state"] = "OPEN" if opening <= now <= closing else "CLOSED"
+        view["eod_eligible_after"] = _label(closing + timedelta(minutes=30), BANGKOK)
+    else:
+        view["state"] = today["status"]
+        view["eod_eligible_after"] = None
+    return view
 
 
 def price_session_status(cal: ExchangeCalendar, mic: Optional[str], published_at: datetime) -> str:

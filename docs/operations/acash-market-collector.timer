@@ -16,8 +16,11 @@ Documentation=file:///home/mew/Acash/docs/operations/market-data-collector-homel
 
 [Timer]
 Unit=acash-market-collector.service
-OnCalendar=Mon..Fri *-*-* 18:30:00
-Timezone=America/New_York
+# systemd parses the timezone inside the calendar expression; `Timezone=` is not a portable [Timer]
+# setting, so it is deliberately absent. Validate before enabling:
+#   systemd-analyze calendar 'Mon..Fri *-*-* 18:30:00 America/New_York'
+#   systemd-analyze verify acash-market-collector.timer
+OnCalendar=Mon..Fri *-*-* 18:30:00 America/New_York
 # A missed fire (host off, network down) runs once on the next boot rather than being lost.
 Persistent=true
 AccuracySec=1min

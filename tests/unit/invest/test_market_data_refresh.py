@@ -780,7 +780,16 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     # The wire contract is verified (live 2026-11-04), so the credential gate now comes first; with no
     # stored credential the feed still cannot be used for a portfolio value.
     assert statuses["BOT_REFERENCE_FX"] == "CREDENTIALS_REQUIRED"
-    assert doc["amendments"][-1] == "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT"
+    # Amendment history is append-only: 003 recorded the scope, 004 the private-storage right.
+    assert "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT" in doc["amendments"]
+    assert doc["amendments"][-1] == "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE"
+    massive = entries["MASSIVE_BASIC"]
+    assert massive["cache_permitted"] is True and massive["retention_policy_verified"] is True
+    assert massive["retention_policy"]["max_retention_after_terms_termination_days"] == 30
+    assert massive["cache_rights"]["redistribution"] == "DENIED"
+    assert massive["retention_terms"]["terms_revision_dated"] == "2026-11-03"
+    # A retention decision for one provider never widens another provider's rights.
+    assert entries["ALPACA_BASIC"]["cache_permitted"] is None
 
 
 # ---- partial valuation ------------------------------------------------------------------------

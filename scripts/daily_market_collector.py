@@ -58,10 +58,22 @@ def main() -> int:
     parser.add_argument("--symbols", default=None)
     parser.add_argument("--max-requests", type=int, default=40)
     parser.add_argument("--job-id", default=None)
+    parser.add_argument("--force", action="store_true", help="collect even when the venue is closed")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
     end = date.fromisoformat(args.end)
+    if not args.force:
+        from acash.invest import market_calendar as mc
+        calendar = mc.load_calendar()
+        venue_day = end
+        info = mc.session(calendar, venue_day)
+        if info["status"] not in ("OPEN", "EARLY_CLOSE"):
+            print(json.dumps({"status": "NO_SESSION", "date": venue_day.isoformat(),
+                              "reason": info["status"], "mic": calendar.mic,
+                              "detail": "The venue calendar has no session today; no provider request was made."},
+                             indent=2, sort_keys=True))
+            return 0
     start = (date.fromisoformat(args.start) if args.start
              else end - timedelta(days=730 if args.backfill else 10))
     symbols = [s.strip().upper() for s in args.symbols.split(",")] if args.symbols else held_symbols()
@@ -79,14 +91,12 @@ def main() -> int:
                                                lambda: datetime.now(timezone.utc), skipped=[])
     report = co.collect(provider, store, symbols, start, end, job_id=job_id, max_requests=args.max_requests,
                         pause=time.sleep)
-    health = co.health(store, symbols)
-    health.update({"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                   "job_id": job_id, "range": {"start": start.isoformat(), "end": end.isoformat()},
-                   "requests": report.requests, "completed": len(report.completed),
-                   "failed": len(report.failed), "stopped": report.stopped,
-                   "storage_rights": report.storage_rights})
-    WAREHOUSE.mkdir(parents=True, exist_ok=True)
-    (WAREHOUSE / "health.json").write_text(json.dumps(health, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    health = co.write_health(store, symbols, WAREHOUSE / "health.json",
+                             generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                             job_id=job_id, range={"start": start.isoformat(), "end": end.isoformat()},
+                             requests=report.requests, completed=len(report.completed),
+                             failed=len(report.failed), stopped=report.stopped,
+                             storage_rights=report.storage_rights)
     summary: Dict[str, Any] = {
         "status": "STOPPED" if report.stopped else ("NO_WORK" if not report.completed else "COLLECTED"),
         "job_id": job_id, "range": health["range"], "requests": report.requests,

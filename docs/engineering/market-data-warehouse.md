@@ -1,7 +1,7 @@
 # Market-Data Warehouse, Daily Collector and BOT Contracts
 
-Status (2026-11-04): **implemented and exercised with real provider data; not deployed on the Homelab;
-raw-bar retention is still gated.** No order, no transfer, `NO_REAL_ORDERS=true`, real capital authority
+Status (2026-11-04, V99): **implemented, exercised with real provider data, and now permitted to persist
+private bars under a bounded retention decision; still not deployed on the Homelab (Ubuntu reinstall pending).** No order, no transfer, `NO_REAL_ORDERS=true`, real capital authority
 USD 0.00.
 
 ## 1. What exists now
@@ -124,3 +124,88 @@ inspected in this cycle, and no Windows secret was copied.
 
 Full local suite at this commit: 5220 passed, 22 skipped; MyPy clean; dashboard typecheck, tests and build
 clean.
+
+## V99 â€” storage right, real persistence, FX, calendar and position rows
+
+### Storage decision and the bug it uncovered
+
+ODR-004 amendment 004 (`ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE`) records the Owner's
+private, non-commercial storage decision: private warehouse only, no redistribution, no public derived
+benchmark, no model training, and **purge within 30 days** of the terms or plan ending. It is an Owner
+attestation of a research summary of the 2026-11-03 terms revision, not an agent browse, and the record
+says so (`agent_verified_current_revision: false`). Third-party provider and exchange terms still apply.
+
+The first attempt to use it exposed a real defect in this module: `storage_permitted()` read
+`doc["state"]` while the ratified record stores `doc["status"]`, so the gate silently refused every
+provider â€” which is why V98 reported `UNESTABLISHED`. The gate now reads `status` (falling back to
+`state` for old fixtures), and a regression test reads the **repository record** rather than a fixture.
+
+Consequences now in force:
+
+- `BarWarehouse.commit()` persists parts only where the record permits it; Alpaca remains memory-only.
+- `purge(reason)` / `scripts/purge_market_data.py` empty the warehouse and write, in `purge_log.json`,
+  only counts, the reason and the removed filenames â€” never the data. Dry-run is the default.
+- A durable pass (`plan(..., durable=True)`) resumes from partitions, not from the session index; the
+  V98 checkpoint could otherwise "remember" a range that was never stored.
+
+### Real persistent run
+
+`scripts/backfill_massive_universe.py --persist` with the same universe and window as V98:
+
+- 26/26 symbols stored, **26 provider calls**, 31 budgeted attempts, 0 failures, `storage_rights: PERMITTED`.
+- **26 Parquet partitions** (about 0.6 MB total) with SHA-256, source, adjustment basis, retention terms
+  and terms revision in `manifest.json`; the values are decimal strings, never floats.
+- A second durable pass over the same window issues **0 requests** (it resumes from the partitions).
+
+### BOT reference FX (bounded, chunked, no fill)
+
+- The reference-rate endpoint refuses a window wider than about a month (HTTP 400 at 91 days), so the
+  series is built in **31-day chunks** â€” about 19 requests for two years, inside the 200/hour product limit.
+- Observed series: **142 points, 2026-03-31 â†’ 2026-11-03**, 14 weekday gaps. Earlier windows returned no
+  rows; that is reported as the series' first date, never back-filled with a proxy.
+- Rate orientation is fixed at **THB per USD**, `reference` only, `executable: false`.
+
+### THB decomposition (real numbers)
+
+On the 97 sessions where both prices and an FX rate exist (2026-03-31 â†’ 2026-11-03), constant weights,
+daily rebalanced, 25 instruments:
+
+| Term | Value |
+| --- | --- |
+| USD price return | +10.19% |
+| FX translation | +2.73% |
+| Cross term | +0.28% |
+| **THB return** | **+13.20%** |
+
+`(1 + R_THB) = (1 + R_USD)(1 + R_FX)` holds; the three terms add to the THB return and the residual is
+reported (`identity_residual`) rather than hidden. `HOOD` is excluded because no established weight
+exists for it â€” an exclusion, not a zero. Sessions without an FX rate are dropped, never forward-filled.
+
+### US calendar
+
+The existing XNYS fixture already carried the 2026 calendar, so nothing was re-transcribed. What was
+missing was exposure and use:
+
+- `session_view()` returns the venue state, the next session, the 2026 early closes and both the ET and
+  Bangkok times, all derived from the fixture plus IANA zones.
+- 2026-11-04 regular session = **21:30 â†’ 04:00 ICT**; 2026-11-26 closed; 2026-11-27 and 2026-12-24
+  early close at 13:00 ET (01:00 ICT next day); 2026-12-25 closed. July sessions open at 20:30 ICT.
+- The collector prints `NO_SESSION` and makes no request on a non-session date.
+- Thai financial-institutions holidays are a separate dataset and are never applied to a US session.
+
+### Position rows and the Holdings table
+
+`evidence_report()` now emits `ACASH_POSITION_ROWS_V1`: one row per held line with account, security,
+FIGI/ISIN, instrument type, economic class, quantity, price and currency, qualified value and weight,
+cost basis and unrealised P&L with an explicit status, source and valuation date. Rules enforced:
+
+- cash and the unqualified broker residual are **not** rows, so they cannot be counted twice;
+- a missing cost basis leaves P&L `null` with `COST_BASIS_NOT_ESTABLISHED`, never zero;
+- value-only lines carry `quantity: null` and `price: null`;
+- rows are sorted deterministically, so a permuted input produces an identical pack.
+
+Live result for the owner snapshot: **28 rows, 181,818.24 THB = 87.10% of the 208,740.01 THB total best
+evidence** (the remainder is cash plus the reconciliation residual, by design).
+
+The dashboard renders these rows in a sortable, searchable, per-account table with expandable
+FIGI/ISIN/source details; sorting compares decimal strings, so nothing is converted to floating point.

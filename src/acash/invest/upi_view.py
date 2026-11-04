@@ -57,6 +57,8 @@ def build_view(pack: Mapping[str, Any]) -> Dict[str, Any]:
     ev, d, c, e = a["evidence"][ccy], pack["D_financial_capacity"], pack["C_quant_workspace"], pack["E_decision"]
     meta = {acct["account_ref"]: acct for acct in a["accounts"]}
     analytics = a["analytics"].get(ccy) if a["analytics"] else None
+    positions_block = ev.get("positions") if isinstance(ev.get("positions"), dict) else {}
+    position_rows = positions_block.get("rows") if isinstance(positions_block.get("rows"), list) else []
     accounts: List[Dict[str, Any]] = []
     for acct in ev["accounts"]:
         m = meta.get(acct["account_ref"], {})
@@ -87,6 +89,14 @@ def build_view(pack: Mapping[str, Any]) -> Dict[str, Any]:
             "computed_by_classification": analytics["allocation_by_classification"] if analytics else None,
             "computed_status": "COMPUTED_SUBSET_PPDS" if analytics else "NOT_COMPUTED_EVIDENCE_ONLY_REPORT"},
         "concentration": ev["concentration_best_evidence"],
+        "positions": {
+            "schema": positions_block.get("schema", "ACASH_POSITION_ROWS_V1"),
+            "status": "AVAILABLE" if position_rows else "NO_POSITION_ROWS",
+            "weight_basis": positions_block.get("weight_basis"),
+            "position_value_total": positions_block.get("position_value_total"),
+            "qualification": positions_block.get("qualification"),
+            "rows": position_rows,
+        },
         "security_identity": ev["security_identity"],
         "financial_capacity": {
             "capacity_status": d["capacity_status"], "monthly_surplus_thb": d["monthly_surplus_thb"],

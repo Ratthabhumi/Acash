@@ -1,0 +1,99 @@
+{
+  "record": "ODR_UPI_MARKET_DATA_004_AMENDMENT_004_PRIVATE_STORAGE",
+  "decision_id": "ODR_UPI_MARKET_DATA_004",
+  "capability": "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+  "amendment_type": "PRIVATE_STORAGE_AND_REFERENCE_FX_RIGHTS",
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-04",
+  "scope_changed": true,
+  "base_decision": "docs/governance/ODR_UPI_MARKET_DATA_004.json",
+  "summary": "Owner authorises private, non-commercial storage of eligible daily market observations and the BOT reference FX series on owner-controlled hardware, plus display/calculation/derived use of the BOT reference FX. The right is conditional and time-bounded: private warehouse only, no redistribution, no public derived benchmark, no model training, and purge within 30 days of the applicable terms or plan ending. Owner authorisation is not a substitute for the vendor's own licence.",
+  "authorised_by_owner_on": "2026-11-04",
+  "owner_decision_text": "The Owner approved recording an Owner Approval for private storage and research use, explicitly not UNLIMITED_RETENTION, subject to plan/provider limits, private-only storage, no publication, purge after rights end (about 30 days), and separation from index/product/public distribution.",
+  "terms_basis": {
+    "provider_id": "MASSIVE_BASIC",
+    "terms_url": "https://massive.com/legal/market-data-terms-of-service",
+    "terms_revision_dated": "2026-11-03",
+    "recorded_on": "2026-11-04",
+    "verification_basis": "OWNER_ATTESTED_RESEARCH_SUMMARY_NOT_AGENT_BROWSED",
+    "agent_verified_current_revision": false,
+    "caveats": [
+      "Web search results and cached copies show different revisions; the effective revision for this account must be confirmed by the Owner against the signed-in terms page.",
+      "Third-party data-provider restrictions and exchange terms continue to apply and are not overridden by the Owner's authorisation.",
+      "Rights end with the subscription/plan; the storage right is not perpetual."
+    ]
+  },
+  "storage_scope": {
+    "private_only": true,
+    "owner_controlled_hardware_only": true,
+    "public_redistribution": false,
+    "public_dashboard_display": false,
+    "derived_benchmark_publication": false,
+    "model_training": false,
+    "sublicensing": false,
+    "permitted_content": [
+      "daily OHLCV aggregates for the held universe and required benchmarks",
+      "BOT daily reference USD/THB rates",
+      "derived research outputs (returns, coverage, proposals) without raw prices in public artifacts"
+    ]
+  },
+  "retention_policy": {
+    "classification": "PRIVATE_PERSONAL_RESEARCH_RETENTION",
+    "max_retention_after_terms_termination_days": 30,
+    "purge_required_on_termination": true,
+    "purge_command": "uv run python scripts/purge_market_data.py --confirm DELETE_PRIVATE_MARKET_DATA",
+    "reviewed_on": "2026-11-04",
+    "review_cadence": "ON_TERMS_REVISION_OR_ACCOUNT_CHANGE"
+  },
+  "applied_to": {
+    "MASSIVE_BASIC": {
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "cache_rights": {
+        "memory_session": "PERMITTED_VERIFIED",
+        "short_lived_local": "PERMITTED_VERIFIED",
+        "persistent_historical_price": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "derived_valuation_retention": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "provider_response_retention": "NOT_STORED_RAW_ONLY_PARSED_BARS",
+        "redistribution": "DENIED"
+      }
+    },
+    "BOT_REFERENCE_FX": {
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
+      "cache_permitted": true,
+      "retention_policy_verified": true,
+      "cache_rights": {
+        "persistent_reference_fx": "PERMITTED_PRIVATE_RESEARCH_WITH_TERMINATION_PURGE",
+        "redistribution": "DENIED",
+        "executable_rate_claim": "DENIED_REFERENCE_RATE_ONLY"
+      }
+    }
+  },
+  "not_authorized": [
+    "trading or order placement",
+    "capital transfer",
+    "public redistribution of raw or derived market data",
+    "publishing a public derived benchmark or index",
+    "AI model training on vendor data",
+    "perpetual or unlimited retention",
+    "claiming BOT reference FX as an executable brokerage rate",
+    "paid subscription upgrade"
+  ],
+  "activation_prerequisites": [
+    "Massive: credential present, live historical-bar response observed (V98), storage gate reads this record",
+    "BOT: contract verified against live responses (2026-11-04) and credential present",
+    "Both: purge path available and documented before any partition is written"
+  ],
+  "provider_status_after_amendment": {
+    "MASSIVE_BASIC": "READY_FOR_PRIVATE_RESEARCH_STORAGE",
+    "BOT_REFERENCE_FX": "READY_FOR_REFERENCE_FX_DISPLAY_AND_ANALYTICS"
+  },
+  "notes": [
+    "This amendment grants no trading, transfer or publication right.",
+    "If the vendor terms, plan or third-party restrictions change, collection must stop and the purge command must be run.",
+    "Raw provider responses are not retained; only parsed daily bars and reference FX points are stored."
+  ]
+}

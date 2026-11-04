@@ -316,3 +316,41 @@ def test_allocations_exclude_the_unqualified_residual() -> None:
     residual = view["portfolio_overview"]["unclassified_holdings_value"]
     assert residual != "0.00"                      # still reported as diagnostics
     assert view["portfolio_overview"]["total_best_evidence"] == "85470.00"
+
+
+def test_position_rows_are_conserved_and_never_include_the_broker_residual() -> None:
+    """Rows describe held lines only; cash and an unqualified broker residual stay out of them."""
+    view = uv.build_view(_pack())
+    block = view["positions"]
+    rows = block["rows"]
+    assert block["schema"] == "ACASH_POSITION_ROWS_V1" and block["status"] == "AVAILABLE"
+    assert rows and all(Decimal(r["value_reporting"]) > 0 for r in rows)
+    total_rows = sum(Decimal(r["value_reporting"]) for r in rows)
+    assert total_rows == Decimal(block["position_value_total"])
+    total = Decimal(view["portfolio_overview"]["total_best_evidence"])
+    residual = Decimal(view["portfolio_overview"]["unclassified_holdings_value"])
+    # Held lines + the reconciliation residual cannot reach the total, because cash is neither.
+    assert total_rows + residual <= total
+    assert all(r["source"] in ("PPDS_QUANTITY_X_PRICE", "BROKER_OBSERVED_MARKET_VALUE") for r in rows)
+    assert sum(Decimal(r["weight"]) for r in rows) < Decimal(1)
+    assert all(r["weight_basis"] == "SHARE_OF_TOTAL_BEST_EVIDENCE" for r in rows)
+
+
+def test_position_rows_never_invent_a_cost_basis_or_a_quantity() -> None:
+    rows = uv.build_view(_pack())["positions"]["rows"]
+    for row in rows:
+        established = row["cost_basis_status"] == "ESTABLISHED"
+        assert (row["unrealized_pnl_local"] is not None) is established
+        assert row["unrealized_status"] == ("COMPUTED" if established else "COST_BASIS_NOT_ESTABLISHED")
+        if row["source"] == "BROKER_OBSERVED_MARKET_VALUE":
+            assert row["quantity"] is None and row["price"] is None
+        else:
+            assert row["quantity"] is not None and row["price"] is not None
+
+
+def test_position_rows_are_identical_after_regeneration(tmp_path: Path) -> None:
+    first = uv.build_view(_pack())
+    written = uv.write_view(first, tmp_path / "view.json")
+    again = json.loads(written.read_text(encoding="utf-8"))
+    assert again["positions"] == first["positions"]
+    assert len(again["positions"]["rows"]) == len(first["positions"]["rows"])
