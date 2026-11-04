@@ -698,8 +698,9 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     assert set(entries) == {"ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
     for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
         assert entries[provider_id]["entitlement_verified"] is True
-        assert entries[provider_id]["cache_permitted"] is False
-        assert entries[provider_id]["retention_policy_verified"] is False
+        assert entries[provider_id]["cache_permitted"] is None
+        assert entries[provider_id]["cache_rights"]["persistent_historical_price"] == "PENDING_RIGHTS_VERIFICATION"
+        assert entries[provider_id]["retention_policy_verified"] is None
     for provider_id in ("MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"):
         assert entries[provider_id]["cache_permitted"] is True
     assert entries["FRANKFURTER_ECB_FX"]["retention_policy_verified"] is True

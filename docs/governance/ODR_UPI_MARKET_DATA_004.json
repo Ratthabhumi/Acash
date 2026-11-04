@@ -29,15 +29,24 @@
       "display_permitted": true,
       "calculation_permitted": true,
       "derived_value_permitted": true,
-      "cache_permitted": false,
-      "retention_policy_verified": false,
+      "cache_permitted": null,
+      "retention_policy_verified": null,
       "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Alpaca Basic includes the IEX real-time feed and the documented historical SIP access older than 15 minutes; single-venue IEX only. Personal noncommercial display and valuation are supported by the accepted terms. Cache and retention are NOT attested: the terms do not grant blanket storage or redistribution, so observations stay in memory only. Sources: docs.alpaca.markets about-market-data-api / market-data-faq, files.alpaca.markets TermsAndConditions.pdf",
       "evidence_urls": [
         "https://docs.alpaca.markets/us/docs/about-market-data-api",
         "https://docs.alpaca.markets/us/docs/market-data-faq",
         "https://files.alpaca.markets/disclosures/library/TermsAndConditions.pdf"
       ],
-      "attested_on": "2026-11-03"
+      "attested_on": "2026-11-03",
+      "cache_rights": {
+        "memory_session": "PERMITTED_VERIFIED",
+        "short_lived_local": "PENDING_RIGHTS_VERIFICATION",
+        "persistent_historical_price": "PENDING_RIGHTS_VERIFICATION",
+        "derived_valuation_retention": "PENDING_RIGHTS_VERIFICATION",
+        "provider_response_retention": "PENDING_RIGHTS_VERIFICATION",
+        "redistribution": "PENDING_RIGHTS_VERIFICATION"
+      },
+      "cache_rights_note": "The earlier DENIED value was a coding-assistant default, not a documented contractual denial. Nothing in the accepted terms was found to authorise persistent storage either, so the specific capabilities are PENDING_RIGHTS_VERIFICATION and memory-only behaviour is unchanged until evidence establishes otherwise."
     },
     {
       "provider_id": "ALPACA_HISTORICAL",
@@ -45,13 +54,22 @@
       "display_permitted": true,
       "calculation_permitted": true,
       "derived_value_permitted": true,
-      "cache_permitted": false,
-      "retention_policy_verified": false,
+      "cache_permitted": null,
+      "retention_policy_verified": null,
       "evidence": "OWNER_TERMS_ACCEPTED_AND_DOCUMENTED_PLAN_SCOPE; personal, local, noncommercial use. Historical SIP bars are documented as available to Basic accounts only with the access delay the adapter enforces (15 min + 2 min margin); not real-time and not a consolidated live quote. Cache and retention are NOT attested. Sources as above.",
       "evidence_urls": [
         "https://docs.alpaca.markets/us/reference/stockbars"
       ],
-      "attested_on": "2026-11-03"
+      "attested_on": "2026-11-03",
+      "cache_rights": {
+        "memory_session": "PERMITTED_VERIFIED",
+        "short_lived_local": "PENDING_RIGHTS_VERIFICATION",
+        "persistent_historical_price": "PENDING_RIGHTS_VERIFICATION",
+        "derived_valuation_retention": "PENDING_RIGHTS_VERIFICATION",
+        "provider_response_retention": "PENDING_RIGHTS_VERIFICATION",
+        "redistribution": "PENDING_RIGHTS_VERIFICATION"
+      },
+      "cache_rights_note": "The earlier DENIED value was a coding-assistant default, not a documented contractual denial. Nothing in the accepted terms was found to authorise persistent storage either, so the specific capabilities are PENDING_RIGHTS_VERIFICATION and memory-only behaviour is unchanged until evidence establishes otherwise."
     },
     {
       "provider_id": "MARKETDATA_APP_FREE",
@@ -88,7 +106,8 @@
     }
   ],
   "amendments": [
-    "ODR_UPI_MARKET_DATA_004_AMENDMENT_001"
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_001",
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_002_CACHE_RIGHTS"
   ],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [

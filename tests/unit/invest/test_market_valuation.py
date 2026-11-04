@@ -62,8 +62,8 @@ def test_new_capability_states_and_scope(record: str, capability: str, state: st
         entries = {e["provider_id"]: e for e in doc["scope_providers"]}
         # Attested only where the accepted terms and documented plan support the right.
         for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
-            assert entries[provider_id]["cache_permitted"] is False
-            assert entries[provider_id]["retention_policy_verified"] is False
+            assert entries[provider_id]["cache_permitted"] is None
+            assert entries[provider_id]["retention_policy_verified"] is None
         assert entries["MARKETDATA_APP_FREE"]["cache_permitted"] is True
         lineage = doc["ratification_lineage"]
         assert lineage["decided_by"] == "OWNER" and lineage["scope_changed"] is False  # original history intact
