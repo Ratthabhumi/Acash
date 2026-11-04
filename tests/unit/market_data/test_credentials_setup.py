@@ -157,3 +157,10 @@ def test_replace_and_remove_ask_for_the_provider_instead_of_defaulting_to_alpaca
     monkeypatch.setattr(cs, "_visible", lambda prompt: "not-a-number")
     with pytest.raises(DataContractError, match="PROVIDER_CHOICE_INVALID"):
         cs._choose_provider("Provider to remove")
+
+
+def test_massive_and_bot_are_configurable_and_bot_refuses_the_legacy_contract() -> None:
+    ids = [row[0] for row in cs.KEYED_PROVIDERS]
+    assert "MASSIVE_BASIC" in ids and "BOT_REFERENCE_FX" in ids
+    result = cs._test_connection("BOT_REFERENCE_FX")
+    assert result.startswith(("REFUSED_NOT_READY", "REFUSED_CONTRACT_UNVERIFIED"))

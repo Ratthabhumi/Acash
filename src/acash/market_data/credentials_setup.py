@@ -31,6 +31,10 @@ KEYED_PROVIDERS: Tuple[Tuple[str, str, Tuple[Tuple[str, bool], ...]], ...] = (
      (("API Token", True),)),
     ("OPENFIGI_IDENTITY", "OpenFIGI identity API (candidate FIGI mapping; key sent as a header only)",
      (("OpenFIGI API Key", True),)),
+    ("MASSIVE_BASIC", "Massive Stocks Basic (EOD and historical research; key sent as a header only)",
+     (("Massive API Key", True),)),
+    ("BOT_REFERENCE_FX", "BOT reference FX (official exchange-rate API; key sent as a header only)",
+     (("BOT API Key", True),)),
 )
 PROVIDER_LABELS = {provider_id: label for provider_id, label, _ in KEYED_PROVIDERS}
 
@@ -136,6 +140,12 @@ def _test_connection(provider_id: str) -> str:
     elif provider_id == "MARKETDATA_APP_FREE":
         observations = mp.MarketDataAppFreeProvider(credential or ("", ""), mp.urllib_transport, allow,
                                                     clock).latest_prices(list(SAMPLE_SYMBOLS), date.today())
+    elif provider_id == "MASSIVE_BASIC":
+        observations = mp.MassiveEODMarketDataProvider(credential or ("", ""), mp.urllib_transport, allow,
+                                                       clock).latest_prices(["AAPL"], date.today())
+    elif provider_id == "BOT_REFERENCE_FX":
+        return "REFUSED_CONTRACT_UNVERIFIED: the BOT adapter still targets the legacy endpoint; " \
+               "migrate it to the documented v2 contract before any live request"
     else:
         return "REFUSED_NO_SAMPLE_TEST_FOR_PROVIDER"
     return f"REAL_RESPONSE_OBSERVED: {len(observations)} observation(s); schema valid, timestamps preserved"
