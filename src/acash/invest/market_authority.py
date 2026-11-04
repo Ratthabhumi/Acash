@@ -105,6 +105,10 @@ class WindowsCredentialStore:
     """
 
     def lookup(self, provider_id: str) -> Optional[Credential]:
+        # BOT products have credentials but no verified adapter yet; the credential must still be
+        # readable so setup can verify its own write without implying connectivity.
+        if provider_id in BOT_PRODUCTS:
+            return _cred_read(CREDENTIAL_TARGET_PREFIX + provider_id)
         if provider_id not in ADAPTED_PROVIDERS:
             return None
         found = _cred_read(CREDENTIAL_TARGET_PREFIX + provider_id)

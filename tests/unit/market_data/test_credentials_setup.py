@@ -177,3 +177,19 @@ def test_menu_lists_every_keyed_provider_and_a_stable_exit() -> None:
     assert items[str(base + 1)] == "Check Credential Status"
     assert items[str(base + 5)] == "Exit"
     assert str(base + 5) == "15"
+
+
+def test_bot_product_credentials_are_retrievable_for_setup_readback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A BOT product has no adapter yet, but setup must still read back what it just stored."""
+    import acash.invest.market_authority as auth
+
+    seen = {}
+
+    def fake_read(target: str):
+        seen["target"] = target
+        return ("BOT_OTHERS", "SYNTHETIC_BOT_KEY") if target.endswith("BOT_OTHERS") else None
+
+    monkeypatch.setattr(auth, "_cred_read", fake_read)
+    assert auth.WindowsCredentialStore().lookup("BOT_OTHERS") == ("BOT_OTHERS", "SYNTHETIC_BOT_KEY")
+    assert seen["target"] == "ACASH/MARKET_DATA/BOT_OTHERS"
+    assert auth.WindowsCredentialStore().lookup("NOT_A_PROVIDER") is None
