@@ -28,6 +28,10 @@ interface ResearchDoc {
   governance?: Record<string, unknown>;
   collector_health?: Record<string, unknown>;
   fx?: Record<string, unknown>;
+  universe_status?: string;
+  evidence_labels?: string[];
+  performance_basis?: string;
+  realized_performance?: boolean;
   note?: string;
 }
 
@@ -149,19 +153,62 @@ const FxCard: React.FC<{ fx: FxDoc | null }> = ({ fx }) => {
   );
 };
 
+interface ProvidersDoc {
+  providers?: Array<{ provider_id: string; status: string; detail?: string }>;
+}
+
+const labelText = (label: string): string => ({
+  HYPOTHETICAL_HISTORICAL_BASKET: 'การจำลองตะกร้าย้อนหลัง (ไม่ใช่พอร์ตจริงในอดีต)',
+  PRICE_RETURN_ONLY: 'ใช้ราคาอย่างเดียว ไม่รวมเงินปันผล',
+  CURRENT_WEIGHTS_APPLIED_HISTORICALLY: 'ใช้น้ำหนักปัจจุบันย้อนหลัง',
+  NOT_TRANSACTION_RECONSTRUCTED: 'ไม่ได้สร้างจากประวัติซื้อขายจริง',
+  NOT_REALIZED_PORTFOLIO_PERFORMANCE: 'ไม่ใช่ผลตอบแทนที่เกิดขึ้นจริง',
+  BOT_REFERENCE_FX_NOT_EXECUTABLE: 'FX อ้างอิง ใช้ซื้อขายจริงไม่ได้',
+  PARTIAL_UNIVERSE_RESEARCH: 'วิเคราะห์บางส่วนของพอร์ต',
+  FULL_UNIVERSE_QUALIFIED: 'ครบทั้งพอร์ตที่ผ่านเกณฑ์',
+  EXECUTION_AUTHORITY_NONE: 'ไม่มีสิทธิ์สั่งซื้อขาย',
+}[label] ?? label);
+
+const ProviderHealthCard: React.FC<{ providers: ProvidersDoc | null; fx: FxDoc | null;
+  coverageLast: string | null; partitions: number | null }> = ({ providers, fx, coverageLast, partitions }) => {
+  const find = (id: string) => providers?.providers?.find((p) => p.provider_id === id);
+  const rows: Array<[string, string]> = [
+    ['Massive (price history)', `${find('MASSIVE_BASIC')?.status ?? 'UNKNOWN'} · session ล่าสุด ${coverageLast ?? '—'} · ${partitions ?? 0} partitions`],
+    ['BOT FX (reference)', `${find('BOT_REFERENCE_FX')?.status ?? 'UNKNOWN'} · ${fx?.latest?.usd_thb ?? '—'} THB/USD (${fx?.latest?.date ?? '—'})`],
+    ['BOT Holidays (Thai calendar)', `${find('BOT_HOLIDAYS')?.status ?? 'UNKNOWN'} · ใช้กับงานธนาคารไทยเท่านั้น ไม่ใช้แทนตลาดสหรัฐ`],
+    ['Collector (Homelab)', 'NOT_DEPLOYED · รอติดตั้ง Ubuntu ใหม่ (Windows เก็บข้อมูลอยู่)'],
+  ];
+  return (
+    <div className="bg-surface border border-default rounded-lg p-3 text-xs space-y-1">
+      <p className="font-semibold text-primary">Provider health</p>
+      <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt className="text-muted">{k}</dt>
+            <dd className="font-mono-code text-primary break-words">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+};
+
 export const ResearchDecisionPanel: React.FC = () => {
   const [doc, setDoc] = useState<ResearchDoc | null>(null);
   const [session, setSession] = useState<SessionDoc | null>(null);
+  const [providers, setProviders] = useState<ProvidersDoc | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [response, calendar] = await Promise.all([
+    const [response, calendar, status] = await Promise.all([
       callMarket<ResearchDoc>('GET', 'research'),
       callMarket<SessionDoc>('GET', 'session'),
+      callMarket<ProvidersDoc>('GET', 'status'),
     ]);
     setDoc(response.body as ResearchDoc);
     setSession(calendar.body as SessionDoc);
+    setProviders(status.body as ProvidersDoc);
     setLoading(false);
   }, []);
 
@@ -199,6 +246,10 @@ export const ResearchDecisionPanel: React.FC = () => {
         <FxCard fx={(doc?.fx as FxDoc | undefined) ?? null} />
       </div>
 
+      <ProviderHealthCard providers={providers} fx={(doc?.fx as FxDoc | undefined) ?? null}
+        coverageLast={coverage.union_last ?? null}
+        partitions={Number((doc?.collector_health as Record<string, unknown> | undefined)?.partitions_present ?? 0) || null} />
+
       {!loading && doc && doc.status === 'NO_RESEARCH_RUN' && (
         <div className="bg-surface border border-default rounded-lg p-4 text-xs text-secondary space-y-1">
           <p className="font-semibold text-primary">ยังไม่มีผลการดึงข้อมูลย้อนหลัง</p>
@@ -215,6 +266,16 @@ export const ResearchDecisionPanel: React.FC = () => {
               <span className="font-mono-code text-secondary">strategy: {str(proposal.strategy_id)}</span>
               <span className="text-muted">execution authority: {str(proposal.execution_authority ?? 'NONE')}</span>
             </div>
+            {(doc.evidence_labels ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {(doc.evidence_labels ?? []).map((label) => (
+                  <span key={label} title={label}
+                    className="text-[10px] px-1.5 py-0.5 rounded border border-default bg-surface-muted text-secondary">
+                    {labelText(label)}
+                  </span>
+                ))}
+              </div>
+            )}
             <p className="text-secondary">
               ผลวิจัยนี้ไม่ใช่คำสั่งซื้อและไม่ใช่การรับรองผลตอบแทน · {' '}
               {eligible.length}/{str(doc.universe?.requested)} instruments มีประวัติเพียงพอ ·
