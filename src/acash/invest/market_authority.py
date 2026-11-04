@@ -10,6 +10,7 @@ returned, logged or written by ACASH.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Tuple
@@ -23,7 +24,7 @@ CAPABILITY = "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED"
 REQUIRES = ["ODR_UPI_PRIVATE_OBSERVATION_001"]
 CREDENTIAL_TARGET_PREFIX = "ACASH/MARKET_DATA/"
 ADAPTED_PROVIDERS = ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX",
-                     "MASSIVE_BASIC", "BOT_REFERENCE_FX")
+                     "MASSIVE_BASIC", "BOT_REFERENCE_FX", "BOT_HOLIDAYS")
 KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
 # Providers that authenticate without a stored credential (published keyless endpoints).
 KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
@@ -39,7 +40,9 @@ BOT_PRODUCTS = ("BOT_EXCHANGE_RATES", "BOT_INTEREST_RATES", "BOT_STATISTICS", "B
 # One Owner-supplied credential may serve several read-only feeds of the same vendor. The alias only
 # reuses the secret: it never implies entitlement, display or derived-use rights, which each provider
 # must still attest separately before it can become READY.
-CREDENTIAL_ALIASES: Dict[str, str] = {"ALPACA_HISTORICAL": "ALPACA_BASIC"}
+CREDENTIAL_ALIASES: Dict[str, str] = {"ALPACA_HISTORICAL": "ALPACA_BASIC",
+                                      "BOT_REFERENCE_FX": "BOT_EXCHANGE_RATES",
+                                      "BOT_HOLIDAYS": "BOT_OTHERS"}
 STATUSES = ("NOT_CONFIGURED", "GOVERNANCE_REQUIRED", "CONTRACT_UNVERIFIED", "CREDENTIALS_REQUIRED",
             "ENTITLEMENT_REQUIRED", "DISPLAY_RIGHTS_UNVERIFIED", "DERIVED_USE_UNVERIFIED", "READY",
             "RATE_LIMITED", "SERVICE_UNAVAILABLE")
@@ -53,8 +56,12 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
                       "contract_verified": True, "rate_limit": "5/min", "timestamp_policy": "SESSION_EPOCH_MS",
                       "known_restriction": "TERMS_MAY_RESTRICT_DERIVED_WORKS_INCLUDING_NAV"},
     "BOT_REFERENCE_FX": {"role": "FX", "quote_type": "DAILY_REFERENCE_RATE", "coverage": "REFERENCE_FX_NOT_EXECUTABLE",
-                         "label": "REFERENCE_FX_NOT_EXECUTABLE", "contract_verified": False, "rate_limit": "200/hour",
-                         "timestamp_policy": "PERIOD_DATE_BANGKOK", "known_restriction": "RESPONSE_SCHEMA_UNVERIFIED"},
+                         "label": "REFERENCE_FX_NOT_EXECUTABLE", "contract_verified": True, "rate_limit": "200/hour",
+                         "timestamp_policy": "PERIOD_DATE_BANGKOK", "known_restriction": "WEIGHTED_AVERAGE_INTERBANK_NOT_EXECUTABLE"},
+    "BOT_HOLIDAYS": {"role": "CALENDAR", "quote_type": "HOLIDAY_CALENDAR",
+                     "coverage": "TH_FINANCIAL_INSTITUTIONS_ONLY", "label": "PUBLISHED_CALENDAR",
+                     "contract_verified": True, "rate_limit": "100/hour",
+                     "timestamp_policy": "CALENDAR_DATE_TH", "known_restriction": "TH_CALENDAR_ONLY_NOT_US_EQUITIES"},
     "ALPACA_HISTORICAL": {"role": "PRICE", "quote_type": "HISTORICAL_BAR",
                           "coverage": "CONSOLIDATED", "label": "INTRADAY_BAR_CLOSE_OR_EOD_CLOSE",
                           "contract_verified": True, "rate_limit": "200/min",
@@ -115,6 +122,35 @@ class WindowsCredentialStore:
         if found is None and provider_id in CREDENTIAL_ALIASES:
             return _cred_read(CREDENTIAL_TARGET_PREFIX + CREDENTIAL_ALIASES[provider_id])
         return found
+
+
+class EnvironmentCredentialStore:
+    """POSIX-host store: one environment variable per provider (``ACASH_MARKET_DATA_<PROVIDER>``).
+
+    The Homelab collector has no Windows Credential Manager. systemd supplies the variables from an
+    owner-readable ``EnvironmentFile``; ACASH never reads or writes a secrets file itself, never logs
+    a value and reuses a vendor alias only for the secret (no entitlement is implied).
+    """
+
+    def __init__(self, environ: Optional[Dict[str, str]] = None, prefix: str = "ACASH_MARKET_DATA_") -> None:
+        self._environ = os.environ if environ is None else environ
+        self._prefix = prefix
+
+    def lookup(self, provider_id: str) -> Optional[Credential]:
+        if provider_id not in ADAPTED_PROVIDERS and provider_id not in BOT_PRODUCTS:
+            return None
+        for candidate in (provider_id, CREDENTIAL_ALIASES.get(provider_id)):
+            if not candidate:
+                continue
+            secret = self._environ.get(self._prefix + candidate)
+            if secret:
+                return ("", secret)
+        return None
+
+
+def default_credential_store() -> CredentialStore:
+    """The host's supported store: Credential Manager on Windows, environment on POSIX."""
+    return WindowsCredentialStore() if sys.platform == "win32" else EnvironmentCredentialStore()
 
 
 if sys.platform == "win32":

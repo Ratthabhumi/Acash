@@ -1,0 +1,229 @@
+"""Incremental / backfill daily-bar collection with checkpoint, resume and provider isolation.
+
+The collector does not know how a provider authenticates or limits itself: it asks the adapter for a
+bounded range and lets the adapter's limiter refuse work it cannot do. A refusal is a *pause and
+retry*, never a silent truncation. Each symbol is independent, so one failing ticker cannot abort the
+run, and only a symbol whose request completed is marked done in the checkpoint.
+
+Persistence goes through :class:`acash.market_data.warehouse.BarWarehouse`, which refuses to store
+bars whose provider has no established retention rights. Collection therefore still returns a real
+coverage result in that case; it just does not claim a durable dataset.
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
+
+from acash.core.domain.exceptions import DataContractError
+from acash.market_data.warehouse import BarWarehouse, coverage, storage_permitted
+
+#: Adapters refuse a call they cannot afford by returning nothing and naming the symbol in ``skipped``.
+RATE_LIMIT_PAUSE_SECONDS = 61.0
+
+
+class DailyBarSource(Protocol):
+    skipped: List[str]
+    provider_id: str
+
+    def historical_daily(self, symbols: Sequence[str], start: date, end: date) -> List[Dict[str, Any]]: ...
+
+
+@dataclass
+class CollectionReport:
+    job_id: str
+    provider_id: str
+    start: date
+    end: date
+    requests: int = 0
+    provider_calls: int = 0
+    persisted: bool = False
+    storage_rights: str = "UNESTABLISHED"
+    symbols: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    completed: List[str] = field(default_factory=list)
+    failed: List[str] = field(default_factory=list)
+    skipped_existing: List[str] = field(default_factory=list)
+    paused_seconds: float = 0.0
+    stopped: Optional[str] = None
+    #: In-memory observations from this run only; never serialised into a report or a file.
+    bars: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict, repr=False)
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {"job_id": self.job_id, "provider_id": self.provider_id,
+                "range": {"start": self.start.isoformat(), "end": self.end.isoformat()},
+                "requests": self.requests, "provider_calls": self.provider_calls, "persisted": self.persisted,
+                "storage_rights": self.storage_rights, "symbols": self.symbols,
+                "completed": self.completed, "failed": self.failed,
+                "skipped_existing": self.skipped_existing,
+                "paused_seconds": round(self.paused_seconds, 3), "stopped": self.stopped}
+
+
+def plan(warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date) -> Dict[str, Any]:
+    """What still has to be fetched, from the session index only (no prices needed)."""
+    index = warehouse.session_index()
+    rows = index.get("symbols", {}) if isinstance(index.get("symbols"), dict) else {}
+    plan_rows: Dict[str, Any] = {}
+    for symbol in symbols:
+        entry = rows.get(symbol) or {}
+        last = entry.get("last")
+        if not last:
+            plan_rows[symbol] = {"status": "NEEDS_FULL_RANGE", "from": start.isoformat(), "to": end.isoformat()}
+            continue
+        resume_at = date.fromisoformat(str(last)) + timedelta(days=1)
+        if resume_at > end:
+            plan_rows[symbol] = {"status": "COMPLETE", "last": last}
+        else:
+            plan_rows[symbol] = {"status": "NEEDS_INCREMENT", "from": resume_at.isoformat(),
+                                 "to": end.isoformat()}
+    return {"job": {"start": start.isoformat(), "end": end.isoformat()},
+            "symbols": plan_rows,
+            "needs_work": sorted(s for s, row in plan_rows.items() if row["status"] != "COMPLETE")}
+
+
+def _classify(error: DataContractError) -> str:
+    text = str(error)
+    if text.startswith("PROVIDER_ACCESS_DENIED"):
+        return "ACCESS_DENIED"
+    if text.startswith("PROVIDER_RATE_LIMITED"):
+        return "RATE_LIMITED"
+    if "HTTP 404" in text:
+        return "NOT_FOUND"
+    if text.startswith("PROVIDER_UNAVAILABLE"):
+        return "PROVIDER_UNAVAILABLE"
+    if text.startswith("PROVIDER_RESPONSE_INVALID"):
+        return "RESPONSE_INVALID"
+    if text.startswith("STORAGE_RIGHTS_UNESTABLISHED"):
+        return "STORAGE_RIGHTS_UNESTABLISHED"
+    return "CONTRACT_ERROR"
+
+
+def collect(source: DailyBarSource, warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date,
+            *, job_id: str, persist: Optional[bool] = None, max_requests: int = 60,
+            pause: Callable[[float], None] = time.sleep,
+            pause_seconds: float = RATE_LIMIT_PAUSE_SECONDS, rate_limit_retries: int = 2) -> CollectionReport:
+    """Collect ``symbols`` for ``[start, end]``, resuming only the work that is still missing.
+
+    ``persist=None`` follows the storage-rights gate; ``True`` demands persistence and therefore fails
+    closed if the gate does not permit it. ``max_requests`` is a hard budget: the run stops cleanly and
+    the checkpoint keeps what already succeeded, so the next run continues.
+    """
+    if start > end:
+        raise DataContractError("COLLECTOR_RANGE_INVALID: start must be on or before end.")
+    provider_id = getattr(source, "provider_id", "UNKNOWN")
+    permitted = storage_permitted(provider_id, warehouse.record)
+    report = CollectionReport(job_id=job_id, provider_id=provider_id, start=start, end=end,
+                              storage_rights="PERMITTED" if permitted else "UNESTABLISHED")
+    if persist is True and not permitted:
+        raise DataContractError(f"STORAGE_RIGHTS_UNESTABLISHED: {provider_id}.")
+    report.persisted = bool(permitted and persist is not False)
+    previous = warehouse.load_state(job_id)
+    done = set(previous.get("completed", [])) if isinstance(previous.get("completed"), list) else set()
+    roadmap = plan(warehouse, symbols, start, end)["symbols"]
+    for symbol in symbols:
+        step = roadmap[symbol]
+        if step["status"] == "COMPLETE" or symbol in done:
+            report.skipped_existing.append(symbol)
+            report.symbols[symbol] = {"status": "ALREADY_COMPLETE", "last": step.get("last")}
+            continue
+        first = date.fromisoformat(step["from"])
+        attempt, refused, bars = 0, 0, []
+        while True:
+            if report.requests >= max_requests:
+                report.stopped = "REQUEST_BUDGET_EXHAUSTED"
+                break
+            report.requests += 1
+            source.skipped.clear() if hasattr(source.skipped, "clear") else setattr(source, "skipped", [])
+            try:
+                bars = source.historical_daily([symbol], first, end)
+            except DataContractError as error:
+                kind = _classify(error)
+                if kind != "RATE_LIMITED":
+                    report.provider_calls += 1
+                report.symbols[symbol] = {"status": kind, "error": str(error)[:300], "from": first.isoformat()}
+                if kind == "ACCESS_DENIED":
+                    report.stopped = "ACCESS_DENIED"
+                elif kind != "RATE_LIMITED":
+                    report.failed.append(symbol)
+                if kind == "ACCESS_DENIED":
+                    break
+                refused += 1
+                attempt += 1
+                if kind != "RATE_LIMITED" or attempt > rate_limit_retries:
+                    break
+                pause(pause_seconds)
+                report.paused_seconds += pause_seconds
+                continue
+            if symbol in getattr(source, "skipped", []):
+                attempt += 1
+                if attempt > rate_limit_retries:
+                    report.symbols[symbol] = {"status": "RATE_LIMITED", "from": first.isoformat()}
+                    report.failed.append(symbol)
+                    break
+                pause(pause_seconds)
+                report.paused_seconds += pause_seconds
+                continue
+            report.provider_calls += 1
+            break
+        if report.stopped == "ACCESS_DENIED":
+            report.failed.append(symbol)
+            break
+        if report.stopped == "REQUEST_BUDGET_EXHAUSTED":
+            report.symbols.setdefault(symbol, {"status": "DEFERRED", "reason": report.stopped})
+            report.failed.append(symbol)
+            break
+        if not bars:
+            if symbol not in report.symbols:
+                report.symbols[symbol] = {"status": "NO_SESSIONS", "from": first.isoformat()}
+                report.failed.append(symbol)
+            continue
+        sessions = sorted({bar["session_date"] if isinstance(bar["session_date"], date)
+                           else date.fromisoformat(str(bar["session_date"])) for bar in bars})
+        added = 0
+        if report.persisted:
+            try:
+                result = warehouse.commit(symbol, bars, job_id=job_id, source=provider_id,
+                                          requested_start=first, requested_end=end)
+                added = int(result["added"])
+            except DataContractError as error:
+                report.symbols[symbol] = {"status": _classify(error), "error": str(error)[:300]}
+                report.failed.append(symbol)
+                continue
+        else:
+            warehouse.record_sessions(symbol, sessions, source=provider_id, job_id=job_id)
+        report.completed.append(symbol)
+        report.bars[symbol] = list(bars)
+        report.symbols[symbol] = {"status": "COLLECTED", "sessions": len(sessions), "added": added,
+                                 "first": sessions[0].isoformat(), "last": sessions[-1].isoformat(),
+                                 "refused_calls": refused}
+        done.add(symbol)
+        warehouse.save_state(job_id, {"completed": sorted(done), "requests": report.requests,
+                                      "range": {"start": start.isoformat(), "end": end.isoformat()},
+                                      "provider_id": provider_id, "persisted": report.persisted,
+                                      "completed_at": None})
+    warehouse.save_state(job_id, {"completed": sorted(done), "requests": report.requests,
+                                  "range": {"start": start.isoformat(), "end": end.isoformat()},
+                                  "provider_id": provider_id, "persisted": report.persisted,
+                                  "stopped": report.stopped, "failed": sorted(set(report.failed))})
+    return report
+
+
+def health(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
+    """Collector health from stored evidence only; a timer firing is not ingestion."""
+    index = warehouse.session_index()
+    state = warehouse.state()
+    matrix = coverage(index, symbols)
+    jobs = state.get("jobs", {}) if isinstance(state.get("jobs"), dict) else {}
+    latest: Mapping[str, Any] = max(jobs.values(), key=lambda job: str(job.get("range", {}).get("end", "")),
+                                        default={})
+    return {
+        "schema": "ACASH_COLLECTOR_HEALTH_V1",
+        "coverage": matrix,
+        "last_job": {k: latest.get(k) for k in ("completed", "failed", "requests", "range", "stopped",
+                                                "persisted", "provider_id")} if latest else None,
+        "partitions_present": sum(1 for symbol in symbols if warehouse.partition(symbol).is_file()),
+        "storage_rights": "PERMITTED" if storage_permitted("MASSIVE_BASIC", warehouse.record)
+        else "UNESTABLISHED",
+        "note": "Session index holds dates only; prices are stored only where retention rights are established.",
+    }

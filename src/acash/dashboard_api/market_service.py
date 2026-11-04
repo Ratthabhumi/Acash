@@ -17,7 +17,7 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import private_input as pi
@@ -42,12 +42,13 @@ from acash.invest.wealth_pack import build_wealth_pack
 from acash.ppds.private_observation import SCHEMA_V1_2, build_book, parse_snapshot, read_gated_json
 
 PREFIX = "/api/upi/market/"
-ROUTES = {"status": ("GET",), "refresh": ("POST",), "view": ("GET",)}
+ROUTES = {"status": ("GET",), "refresh": ("POST",), "view": ("GET",), "research": ("GET",)}
 MARKET_DIR = ("market",)
 PUBLISHED_FILE = "market_published.json"
 ATTEMPT_FILE = "market_last_attempt.json"
 LEGACY_FILES = ("market_view.json", "market_refresh.json")
 CREDITS_FILE = "marketdata_credits.json"
+RESEARCH_DIR = ("market_warehouse",)
 LIMITS = {"ALPACA_BASIC": (200, 60.0), "ALPACA_HISTORICAL": (200, 60.0),
           "MARKETDATA_APP_FREE": (100, 86400.0), "FRANKFURTER_ECB_FX": (200, 3600.0),
           "MASSIVE_BASIC": (5, 60.0), "BOT_REFERENCE_FX": (200, 3600.0)}
@@ -90,8 +91,8 @@ def credit_view(clock: Callable[[], datetime]) -> Dict[str, Any]:
             "remaining": max(0, MARKETDATA_CREDIT_LIMIT - reserved), "ledger_present": isinstance(used, int)}
 
 
-def _read_json(name: str) -> Optional[Dict[str, Any]]:
-    path = market_path(name)
+def _read_json(name: str, directory: Optional[Tuple[str, ...]] = None) -> Optional[Dict[str, Any]]:
+    path = market_path(name) if directory is None else pi._private_dir(*directory) / name
     if not path.is_file():
         return None
     try:
@@ -306,6 +307,46 @@ def refresh(service: MarketService) -> pi.Result:
     return 200, {"status": "REFRESHED", **summary, "persisted": persist}
 
 
+def research_view() -> Dict[str, Any]:
+    """Derived research output only: coverage, universe eligibility and the proposal payload.
+
+    Reads the files written by ``scripts/backfill_massive_universe.py``. Raw bars are never stored
+    there (retention is unestablished), so nothing here can expose provider market data, and a missing
+    run is reported as such rather than reconstructed from memory.
+    """
+    report = _read_json("backfill_report.json", RESEARCH_DIR)
+    health = _read_json("health.json", RESEARCH_DIR)
+    if report is None or "coverage" not in report:
+        return {"status": "NO_RESEARCH_RUN", "collector_health": health,
+                "note": "Run scripts/backfill_massive_universe.py to produce derived research evidence."}
+    matrix = report.get("coverage") or {}
+    panel = report.get("panel") or {}
+    proposal = report.get("proposal") or {}
+    job = report.get("job") or {}
+    return {
+        "status": "RESEARCH_READY" if proposal.get("recommendation_status") else "RESEARCH_INCOMPLETE",
+        "generated_at": report.get("generated_at"),
+        "coverage": {key: matrix.get(key) for key in
+                     ("union_sessions", "union_first", "union_last", "covered", "partial", "missing")},
+        "symbols": matrix.get("symbols"),
+        "universe": {"requested": len(job.get("symbols") or {}), "eligible": panel.get("eligible") or [],
+                     "excluded": panel.get("excluded") or {}},
+        "panel_sessions": panel.get("aligned_sessions"),
+        "panel_range": {"first": panel.get("first"), "last": panel.get("last")},
+        "panel_weights": panel.get("weights"),
+        "proposal": {key: proposal.get(key) for key in
+                     ("strategy_id", "recommendation_status", "governance_status", "execution_authority",
+                      "cash_weight", "target_weights", "current_weights", "proposed_actions", "modeled_risk",
+                      "rank_scores", "in_sample_period", "out_of_sample_period", "transaction_cost_status",
+                      "turnover_required", "modeled_transaction_cost", "limitations", "missing_evidence",
+                      "evaluated_strategies", "disclaimer")},
+        "requests": job.get("requests"),
+        "storage_rights": job.get("storage_rights"),
+        "governance": report.get("governance"),
+        "collector_health": health,
+    }
+
+
 def handle(method: str, name: str, body: Any, service: MarketService) -> pi.Result:
     """Dispatch after the server's Host, Origin, session and body checks have passed."""
     observation = pi.authority()["odr_001"]
@@ -334,6 +375,8 @@ def handle(method: str, name: str, body: Any, service: MarketService) -> pi.Resu
                 return refresh(service)
             finally:
                 service.lock.release()
+        if name == "research":
+            return 200, research_view()
     except DataContractError as exc:
         return 422, {"status": "REFRESH_FAILED", **pi._code(exc)}
     return 404, {"status": "NOT_FOUND"}

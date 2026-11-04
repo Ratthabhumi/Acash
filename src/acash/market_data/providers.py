@@ -9,11 +9,15 @@ portfolio leaves the machine. Responses are parsed strictly with ``Decimal`` and
 deviation raises ``DataContractError``. Adapters are only constructed for providers that
 ``market_authority.provider_status`` reports READY; this module never logs URLs, headers or bodies.
 
-The BOT host, path, header and field names follow the ChatGPT research brief and are not yet
-verified against a live response (``BOT_SPEC_VERIFIED`` is False). The operation path
-``/Stat-ReferenceRate/v2/DAILY_REF_RATE/get`` and the ``Authorization`` header follow the published
-API catalogue; the query keys and response fields are still an unverified parser contract, so the
-provider registry keeps BOT at CONTRACT_UNVERIFIED and it is never constructed for a real refresh.
+The BOT reference-FX and financial-holidays contracts were verified against live responses on
+2026-11-04 (``BOT_CONTRACT_VERIFIED``): the exchange-rate path is
+``/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/`` with ``start_period``/``end_period`` and rows under
+``result.data.data_detail`` filtered to ``currency_id == "USD"`` (weighted-average interbank mid
+rate, baht per one unit of foreign currency), and the holiday calendar is
+``/financial-institutions-holidays/?year=`` with ``result.data`` rows carrying an ISO ``Date``.
+Both authenticate with the raw ``Authorization`` header (no ``Bearer`` prefix). Contract
+verification does not grant entitlement or display rights; the ODR-004 scope entry still governs
+whether the feed may be used.
 
 MarketData.app Free adapter (``MARKETDATA_APP_FREE``) follows the documented array contract
 (``s``, ``symbol``, ``last``, ``updated``), authenticates with ``Authorization: Bearer`` and keeps a
@@ -58,7 +62,12 @@ ALPACA_SIP_DELAY = timedelta(minutes=15)
 ALPACA_SIP_MARGIN = timedelta(minutes=2)
 ALPACA_MAX_PAGES = 10
 SESSION_CLOSE = time(16, 0)
-BOT_SPEC_VERIFIED = False
+BOT_SPEC_VERIFIED = True
+# Verified twice on 2026-11-04: the documented request shape was confirmed against the live gateway,
+# and the two response envelopes below were parsed from real payloads. Verification covers the wire
+# contract only; entitlement, display and derived-use rights stay with the ODR-004 scope entry.
+BOT_CONTRACT_VERIFIED = True
+BOT_LIVE_RESPONSE_VERIFIED = True
 # Documented-contract verification (official docs / OpenAPI) and observed-live verification are separate
 # states; neither one implies account entitlement, display rights or derived-use rights.
 MARKETDATA_CONTRACT_VERIFIED = True
@@ -102,8 +111,11 @@ ENDPOINTS: Dict[str, Endpoint] = {
                                    re.compile(r"^/v2/rate/[A-Z]{3}/[A-Z]{3}$"),
                                    frozenset({"providers", "date"}), frozenset(),
                                    {"providers": frozenset({"ECB"})}),
-        "BOT_REFERENCE_FX": Endpoint("gateway.api.bot.or.th", re.compile(r"^/Stat-ReferenceRate/v2/DAILY_REF_RATE/get$"),
-                                 frozenset({"start_period", "end_period"}), frozenset({"Authorization"})),
+        "BOT_REFERENCE_FX": Endpoint("gateway.api.bot.or.th",
+                                     re.compile(r"^/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/$"),
+                                     frozenset({"start_period", "end_period"}), frozenset({"Authorization"})),
+        "BOT_HOLIDAYS": Endpoint("gateway.api.bot.or.th", re.compile(r"^/financial-institutions-holidays/$"),
+                                 frozenset({"year"}), frozenset({"Authorization"})),
 }
 
 
@@ -694,9 +706,15 @@ class MassiveEODMarketDataProvider:
 
 @dataclass
 class BOTReferenceFXProvider:
-    """Bank of Thailand USD/THB reference rate (THB per USD) by period date. The reciprocal
-    THB->USD rate is derived exactly and rounded to 10 significant digits for PPDS, which needs
-    both directions. Reference rates are not executable conversion rates."""
+    """Bank of Thailand daily weighted-average interbank USD/THB rate (THB per 1 USD) by period date.
+
+    Contract verified against a live response on 2026-11-04 (``BOT_LIVE_RESPONSE_VERIFIED``): the
+    documented path carries a trailing slash and no ``/get`` suffix, and the payload nests rows under
+    ``result.data.data_detail`` with one row per currency per day. Rows are filtered to ``USD``; the
+    quoted unit (Baht per one unit of foreign currency) is checked before the rate is trusted. The
+    reciprocal THB->USD rate is derived exactly and rounded to 10 significant digits for PPDS, which
+    needs both directions. These are reference/average rates, **not** executable conversion rates.
+    """
 
     credential: Credential
     transport: Transport
@@ -705,36 +723,107 @@ class BOTReferenceFXProvider:
     provider_id: str = "BOT_REFERENCE_FX"
 
     def reference_rates(self, end: date, lookback_days: int = 7) -> Sequence[FXObservation]:
+        if not BOT_CONTRACT_VERIFIED:
+            raise DataContractError(f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id}.")
         if not self.allow():
             raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
         start = end - timedelta(days=lookback_days)
-        url = build_url(self.provider_id, "/Stat-ReferenceRate/v2/DAILY_REF_RATE/get",
+        if start > end:
+            raise DataContractError(f"PROVIDER_RANGE_INVALID: {self.provider_id}.")
+        url = build_url(self.provider_id, "/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/",
                         {"start_period": start.isoformat(), "end_period": end.isoformat()})
         status, body = self.transport(HttpRequest(self.provider_id, url, {"Authorization": self.credential[1]}))
         if status != 200:
             raise _status_error(self.provider_id, status)
         doc = _json_body(self.provider_id, body)
         try:
-            rows = doc["result"]["data"]["data_detail"]
+            payload = doc["result"]["data"]
+            rows = payload["data_detail"]
+            unit = str(payload["data_header"]["report_uoq_name_eng"]).lower()
         except (KeyError, TypeError):
             raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} envelope.") from None
+        if "unit of foreign currency" not in unit:
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} rate direction.")
         if not isinstance(rows, list):
             raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} rows.")
         retrieved, out, seen = self.clock(), [], set()
         for row in rows:
             if not isinstance(row, dict) or not isinstance(row.get("period"), str):
                 raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} row.")
+            if row.get("currency_id") != "USD":
+                continue
             try:
                 period = date.fromisoformat(row["period"])
             except ValueError:
                 raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} period.") from None
-            if row.get("rate") in (None, ""):
+            if row.get("mid_rate") in (None, ""):
                 continue
-            rate = _positive(self.provider_id, row.get("rate"))
+            rate = _positive(self.provider_id, row.get("mid_rate"))
             if period in seen or period > retrieved.astimezone(BANGKOK).date() or not start <= period <= end:
                 raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} period range.")
             seen.add(period)
             back = Decimal(f"{Decimal(1) / rate:.10g}")
             out.append(FXObservation("USD", "THB", rate, period, "REFERENCE_FX", self.provider_id, retrieved))
             out.append(FXObservation("THB", "USD", back, period, "REFERENCE_FX", self.provider_id, retrieved))
+        if not out:
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} no USD rows.")
         return out
+
+
+@dataclass(frozen=True)
+class Holiday:
+    """One financial-institutions holiday as published by the issuer of the calendar."""
+
+    date: date
+    name: str
+    provider_id: str
+
+
+@dataclass
+class BOTFinancialHolidaysProvider:
+    """``GET /financial-institutions-holidays/?year=YYYY``: Thai financial-institutions holidays.
+
+    Contract verified against a live response on 2026-11-04. The payload is a flat
+    ``result.data`` array of objects with an ISO ``Date`` and an English ``HolidayDescription``; the
+    response for a year is accepted only when every row falls inside that year, so a shifted payload
+    is refused instead of being used as a calendar. A holiday list is a calendar fact: it is not a
+    quote and carries no price.
+    """
+
+    credential: Credential
+    transport: Transport
+    allow: Limiter
+    clock: Callable[[], datetime]
+    provider_id: str = "BOT_HOLIDAYS"
+
+    def holidays(self, year: int) -> List[Holiday]:
+        if not BOT_CONTRACT_VERIFIED:
+            raise DataContractError(f"PROVIDER_CONTRACT_UNVERIFIED: {self.provider_id}.")
+        if not 1900 <= year <= 2100:
+            raise DataContractError(f"PROVIDER_RANGE_INVALID: {self.provider_id} year.")
+        if not self.allow():
+            raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
+        url = build_url(self.provider_id, "/financial-institutions-holidays/", {"year": str(year)})
+        status, body = self.transport(HttpRequest(self.provider_id, url, {"Authorization": self.credential[1]}))
+        if status != 200:
+            raise _status_error(self.provider_id, status)
+        doc = _json_body(self.provider_id, body)
+        try:
+            rows = doc["result"]["data"]
+        except (KeyError, TypeError):
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} envelope.") from None
+        if not isinstance(rows, list) or not rows:
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} rows.")
+        out: Dict[date, Holiday] = {}
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("Date"), str):
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} row.")
+            try:
+                day = date.fromisoformat(row["Date"])
+            except ValueError:
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} date.") from None
+            name = row.get("HolidayDescription")
+            if day.year != year or not isinstance(name, str) or not name.strip():
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} date range.")
+            out.setdefault(day, Holiday(day, name.strip()[:200], self.provider_id))
+        return [out[key] for key in sorted(out)]

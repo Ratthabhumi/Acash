@@ -157,6 +157,12 @@ def build_proposal(inputs: ProposalInputs, *, generated_at: Optional[datetime] =
         "modeled_transaction_cost": format(chosen_eval.estimated_transaction_cost, "f"),
         "turnover_required": format(chosen_eval.turnover_required, "f"),
         "rank_scores": {name: format(score(name), "f") for name in results},
+        "evaluated_strategies": [
+            {"strategy": name,
+             "rank_score": format(score(name), "f"),
+             "constraints_satisfied": bool(results[name]["evaluation"].constraints_satisfied),
+             "hurdle_rate_cleared": bool(results[name]["evaluation"].hurdle_rate_cleared)} for name in results
+        ],
         "limitations": ["Historical evaluation does not predict future returns.",
                         "Broker fee schedule is not established; costs are modelled estimates.",
                         "No dividend or corporate-action evidence is included."],

@@ -69,8 +69,15 @@ def _massive(symbol: str, close: Any, ms_stamp: int = PREV_SESSION_MS, adjusted:
             "results": [{"T": symbol, "c": close, "o": close, "h": close, "l": close, "v": 1, "t": ms_stamp}]}
 
 
-def _bot(rows: List[Tuple[str, str]]) -> Dict[str, Any]:
-    return {"result": {"data": {"data_detail": [{"period": d, "rate": r} for d, r in rows]}}}
+BOT_UNIT = "(Unit: Baht / 1 Unit of Foreign Currency)"
+
+
+def _bot(rows: List[Tuple[str, str]], currency: str = "USD",
+         unit: str = BOT_UNIT) -> Dict[str, Any]:
+    return {"result": {"api": "Daily Weighted-average Interbank Exchange Rate - THB / USD",
+                       "data": {"data_header": {"report_uoq_name_eng": unit},
+                                "data_detail": [{"period": d, "currency_id": currency, "mid_rate": r}
+                                                for d, r in rows]}}}
 
 
 def _clock() -> datetime:
@@ -96,8 +103,12 @@ def _allow() -> bool:
     ("ALPACA_BASIC", "https://data.alpaca.markets/v2/stocks/trades/latest?symbols=SYNA%20100%20shares"),
     ("MASSIVE_BASIC", "https://api.massive.com/v2/snapshot/locale/us/markets/stocks/tickers?adjusted=false"),
     ("MASSIVE_BASIC", "https://api.massive.com/v2/aggs/ticker/../../x/prev?adjusted=false"),
-    ("BOT_REFERENCE_FX", "https://169.254.169.254/Stat-ReferenceRate/v2/DAILY_REF_RATE/get"),
-    ("BOT_REFERENCE_FX", "https://gateway.api.bot.or.th/Stat-ReferenceRate/v2/DAILY_REF_RATE/"),
+    ("BOT_REFERENCE_FX", "https://169.254.169.254/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/"),
+    ("BOT_REFERENCE_FX", "https://gateway.api.bot.or.th/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE"),
+    ("BOT_REFERENCE_FX", "https://gateway.api.bot.or.th/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/get"),
+    ("BOT_REFERENCE_FX", "https://gateway.api.bot.or.th/Stat-ExchangeRate/v2/DAILY_AVG_EXG_RATE/?year=2026"),
+    ("BOT_HOLIDAYS", "https://gateway.api.bot.or.th/financial-institutions-holidays/get?year=2026"),
+    ("BOT_HOLIDAYS", "https://gateway.api.bot.or.th/Stat-ExchangeRate/?year=2026"),
     ("WEBULL_TH_OPENAPI", "https://example.invalid/"),
 ])
 def test_allowlist_refuses_trading_ssrf_and_private_egress(pid: str, url: str) -> None:
@@ -115,7 +126,7 @@ def test_allowlist_refuses_unlisted_headers_and_transport_rechecks() -> None:
 
 def test_adapters_send_only_symbols_and_keep_secrets_out_of_urls() -> None:
     t = FakeTransport({"trades/latest": (200, _alpaca({"SYNA": "10.5"})), "/prev": (200, _massive("SYNA", 10)),
-                       "DAILY_REF_RATE": (200, _bot([("2026-11-03", "33.10")]))})
+                       "DAILY_AVG_EXG_RATE": (200, _bot([("2026-11-03", "33.10")]))})
     mp.AlpacaIEXMarketDataProvider(CRED, t, _allow, _clock).latest_prices(["SYNA", "not a symbol"], date(2026, 11, 3))
     mp.MassiveEODMarketDataProvider(CRED, t, _allow, _clock).latest_prices(["SYNA"], date(2026, 11, 3))
     mp.BOTReferenceFXProvider(CRED, t, _allow, _clock).reference_rates(date(2026, 11, 3))
@@ -191,7 +202,7 @@ def test_massive_rejects_adjusted_misattributed_or_malformed(body: Any) -> None:
 # ---- BOT --------------------------------------------------------------------------------------
 
 def test_bot_reference_rate_both_directions_and_holiday_gap() -> None:
-    t = FakeTransport({"DAILY_REF_RATE": (200, _bot([("2026-10-30", "33.2000"), ("2026-11-02", ""), ("2026-11-03", "33.1000")]))})
+    t = FakeTransport({"DAILY_AVG_EXG_RATE": (200, _bot([("2026-10-30", "33.2000"), ("2026-11-02", ""), ("2026-11-03", "33.1000")]))})
     obs = mp.BOTReferenceFXProvider(CRED, t, _allow, _clock).reference_rates(date(2026, 11, 3))
     assert [(o.from_currency, o.to_currency, o.market_date.isoformat()) for o in obs][:2] == [
         ("USD", "THB", "2026-10-30"), ("THB", "USD", "2026-10-30")]
@@ -202,9 +213,63 @@ def test_bot_reference_rate_both_directions_and_holiday_gap() -> None:
 @pytest.mark.parametrize("body", [{"result": {}}, _bot([("2026-11-03", "abc")]), _bot([("2026-11-09", "33")]),
                                   _bot([("2026-11-03", "33"), ("2026-11-03", "33")]), _bot([("03/11/2026", "33")])])
 def test_bot_rejects_malformed_or_out_of_range(body: Any) -> None:
-    t = FakeTransport({"DAILY_REF_RATE": (200, body)})
+    t = FakeTransport({"DAILY_AVG_EXG_RATE": (200, body)})
     with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
         mp.BOTReferenceFXProvider(CRED, t, _allow, _clock).reference_rates(date(2026, 11, 3))
+
+
+def test_bot_ignores_other_currencies_and_requires_usd_rows() -> None:
+    mixed = {"result": {"data": {"data_header": {"report_uoq_name_eng": BOT_UNIT}, "data_detail": [
+        {"period": "2026-11-03", "currency_id": "EUR", "mid_rate": "39.5"},
+        {"period": "2026-11-03", "currency_id": "USD", "mid_rate": "33.10"}]}}}
+    obs = mp.BOTReferenceFXProvider(CRED, FakeTransport({"DAILY_AVG_EXG_RATE": (200, mixed)}),
+                                    _allow, _clock).reference_rates(date(2026, 11, 3))
+    assert len(obs) == 2 and obs[0].rate == Decimal("33.10")
+    only_eur = {"result": {"data": {"data_header": {"report_uoq_name_eng": BOT_UNIT}, "data_detail": [
+        {"period": "2026-11-03", "currency_id": "EUR", "mid_rate": "39.5"}]}}}
+    with pytest.raises(DataContractError, match="no USD rows"):
+        mp.BOTReferenceFXProvider(CRED, FakeTransport({"DAILY_AVG_EXG_RATE": (200, only_eur)}),
+                                  _allow, _clock).reference_rates(date(2026, 11, 3))
+
+
+def test_bot_refuses_an_unexpected_rate_direction() -> None:
+    body = _bot([("2026-11-03", "33.10")], unit="(Unit: USD / 1 Unit of Baht)")
+    with pytest.raises(DataContractError, match="rate direction"):
+        mp.BOTReferenceFXProvider(CRED, FakeTransport({"DAILY_AVG_EXG_RATE": (200, body)}),
+                                  _allow, _clock).reference_rates(date(2026, 11, 3))
+
+
+def test_bot_rate_limit_refuses_before_the_request() -> None:
+    t = FakeTransport({"DAILY_AVG_EXG_RATE": (200, _bot([("2026-11-03", "33.10")]))})
+    with pytest.raises(DataContractError, match="PROVIDER_RATE_LIMITED"):
+        mp.BOTReferenceFXProvider(CRED, t, lambda: False, _clock).reference_rates(date(2026, 11, 3))
+    assert t.calls == []
+
+
+def _holidays(rows: List[Tuple[str, str]]) -> Dict[str, Any]:
+    return {"result": {"api": "API_V2.FIHolidays", "data": [
+        {"Date": d, "HolidayDescription": name, "HolidayWeekDay": "Thursday"} for d, name in rows]}}
+
+
+def test_bot_holidays_are_sorted_deduplicated_and_year_checked() -> None:
+    t = FakeTransport({"financial-institutions-holidays": (200, _holidays([
+        ("2026-05-04", "Coronation Day"), ("2026-01-01", "New Year's Day"),
+        ("2026-01-01", "New Year's Day")]))})
+    out = mp.BOTFinancialHolidaysProvider(CRED, t, _allow, _clock).holidays(2026)
+    assert [h.date.isoformat() for h in out] == ["2026-01-01", "2026-05-04"]
+    assert out[0].name == "New Year's Day" and out[0].provider_id == "BOT_HOLIDAYS"
+
+
+@pytest.mark.parametrize("body", [
+    {"result": {"data": []}},
+    _holidays([("2027-01-01", "Wrong year")]),
+    _holidays([("01/01/2026", "Bad date")]),
+    {"result": {"data": [{"Date": "2026-01-01"}]}},
+])
+def test_bot_holidays_reject_malformed_payloads(body: Any) -> None:
+    t = FakeTransport({"financial-institutions-holidays": (200, body)})
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        mp.BOTFinancialHolidaysProvider(CRED, t, _allow, _clock).holidays(2026)
 
 
 # ---- Alpaca Historical SIP ------------------------------------------------------------------
@@ -643,7 +708,7 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
     _odr1(root)
     _odr4(root)
     assert _status() == {"ALPACA_BASIC": "GOVERNANCE_REQUIRED", "MASSIVE_BASIC": "GOVERNANCE_REQUIRED",
-                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED",
+                         "BOT_REFERENCE_FX": "GOVERNANCE_REQUIRED", "BOT_HOLIDAYS": "GOVERNANCE_REQUIRED",
                          "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
                          "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
                          "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
@@ -652,6 +717,7 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
                        _entry("BOT_REFERENCE_FX", display_permitted=False), _entry("WEBULL_TH_OPENAPI")])
     assert _status() == {"ALPACA_BASIC": "READY", "MASSIVE_BASIC": "ENTITLEMENT_REQUIRED",
                          "BOT_REFERENCE_FX": "DISPLAY_RIGHTS_UNVERIFIED",
+                         "BOT_HOLIDAYS": "GOVERNANCE_REQUIRED",
                          "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
                          "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
                          "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
@@ -675,7 +741,9 @@ def test_unverified_bot_contract_is_never_ready(root: Path, monkeypatch: pytest.
     assert status["status"] == "CONTRACT_UNVERIFIED"
     assert status["capabilities"]["real_response_verified"] == "NOT_OBSERVED"
     assert ma.REGISTRY["MASSIVE_BASIC"]["known_restriction"] == "TERMS_MAY_RESTRICT_DERIVED_WORKS_INCLUDING_NAV"
-    assert mp.BOT_SPEC_VERIFIED is False
+    # The wire contract is verified from a live payload; the ODR scope entry still keeps the feed
+    # ungoverned, so contract verification alone never makes it READY.
+    assert mp.BOT_SPEC_VERIFIED is True and mp.BOT_LIVE_RESPONSE_VERIFIED is True
 
 
 def test_capabilities_default_to_unknown_and_never_claim_live_verification(root: Path) -> None:
@@ -709,7 +777,9 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "MARKET_DATA_SUBSCRIPTION"} <= set(doc["independent_of"])
     statuses = {p["provider_id"]: p["status"] for p in ma.provider_statuses(Store({}))[1]}
     assert statuses["MASSIVE_BASIC"] in ("CREDENTIALS_REQUIRED", "CONTRACT_UNVERIFIED")
-    assert statuses["BOT_REFERENCE_FX"] == "CONTRACT_UNVERIFIED"
+    # The wire contract is verified (live 2026-11-04), so the credential gate now comes first; with no
+    # stored credential the feed still cannot be used for a portfolio value.
+    assert statuses["BOT_REFERENCE_FX"] == "CREDENTIALS_REQUIRED"
     assert doc["amendments"][-1] == "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT"
 
 
@@ -735,7 +805,7 @@ def _install(root: Path) -> Dict[str, bytes]:
 def test_partial_valuation_counts_but_never_values_missing_components(root: Path) -> None:
     obs = mp.AlpacaIEXMarketDataProvider(CRED, FakeTransport({"trades/latest": (200, _alpaca({"SYNIDX": "50.25"}))}),
                                          _allow, _clock).latest_prices(["SYNIDX"], date(2026, 11, 3))
-    fx = mp.BOTReferenceFXProvider(CRED, FakeTransport({"DAILY_REF_RATE": (200, _bot([("2026-11-03", "33.10")]))}),
+    fx = mp.BOTReferenceFXProvider(CRED, FakeTransport({"DAILY_AVG_EXG_RATE": (200, _bot([("2026-11-03", "33.10")]))}),
                                    _allow, _clock).reference_rates(date(2026, 11, 3))
     doc = _owner_doc()
     before = json.dumps(doc, sort_keys=True)
@@ -776,7 +846,7 @@ def _call(service: ms.MarketService, method: str, name: str, body: Any = None,
 
 
 ROUTES = {"trades/latest": (200, _alpaca({"SYNIDX": "50.25"})), "/ticker/SYNBOND/prev": (200, _massive("SYNBOND", 98.5)),
-          "DAILY_REF_RATE": (200, _bot([("2026-11-03", "33.10")]))}
+          "DAILY_AVG_EXG_RATE": (200, _bot([("2026-11-03", "33.10")]))}
 
 
 @pytest.mark.parametrize("status, scope, http, code", [
@@ -874,7 +944,7 @@ def test_authorization_change_during_refresh_publishes_nothing(root: Path) -> No
     inner = FakeTransport(ROUTES)
 
     def revoking(request: mp.HttpRequest) -> Tuple[int, bytes]:
-        if "DAILY_REF_RATE" in request.url:
+        if "DAILY_AVG_EXG_RATE" in request.url:
             _odr4(root, scope=[_entry("BOT_REFERENCE_FX", cache_permitted=True)])
         return inner(request)
     http, out = _call(_service(revoking), "POST", "refresh", {})  # type: ignore[arg-type]
@@ -1036,3 +1106,53 @@ def test_massive_historical_daily_bars_rate_limit_and_range_validation() -> None
     assert provider.skipped == ["AAPL"]
     with pytest.raises(DataContractError, match="MASSIVE_RANGE_INVALID"):
         provider.historical_daily(["AAPL"], date(2026, 10, 2), date(2026, 10, 1))
+
+
+# ---- research route ---------------------------------------------------------------------------
+
+def test_research_route_reports_a_missing_run_without_inventing_numbers(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pi, "_private_dir", lambda *parts: tmp_path.joinpath(*parts))
+    doc = ms.research_view()
+    assert doc["status"] == "NO_RESEARCH_RUN"
+    assert "note" in doc and doc["collector_health"] is None
+    assert "proposal" not in doc
+
+
+def test_research_route_projects_only_derived_fields(tmp_path: Path,
+                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pi, "_private_dir", lambda *parts: tmp_path.joinpath(*parts))
+    directory = tmp_path / "market_warehouse"
+    directory.mkdir(parents=True)
+    report = {
+        "generated_at": "2026-11-04T12:00:00+00:00",
+        "job": {"requests": 26, "storage_rights": "UNESTABLISHED",
+                "symbols": {"VOO": {"status": "COLLECTED"}}},
+        "coverage": {"union_sessions": 402, "union_first": "2025-01-02", "union_last": "2026-11-03",
+                     "covered": 24, "partial": 1, "missing": 1,
+                     "symbols": {"VOO": {"sessions": 402, "status": "COVERED"}}},
+        "panel": {"aligned_sessions": 401, "first": "2025-01-03", "last": "2026-11-03",
+                  "eligible": ["VOO"], "excluded": {"NASA": {"reason": "SESSION_COVERAGE_BELOW_MINIMUM",
+                                                              "sessions": 151}},
+                  "weights": {"VOO": "0.5"}},
+        "proposal": {"strategy_id": "EQUAL_WEIGHT",
+                     "recommendation_status": "RESEARCH_ONLY_NOT_AUTHORIZED_FOR_EXECUTION",
+                     "execution_authority": "NONE",
+                     "cash_weight": "0.0500", "target_weights": {"VOO": "0.95"},
+                     "proposed_actions": [{"symbol": "VOO", "action": "REDUCE", "from_weight": "1",
+                                           "to_weight": "0.95"}],
+                     "rank_scores": {"EQUAL_WEIGHT": "1.04"}, "modeled_risk": {"oos_sharpe": "0.6"},
+                     "limitations": ["Historical evaluation does not predict future returns."]},
+        "governance": {"execution_authority": "NONE", "real_capital_authority_usd": "0.00"},
+        "bars": {"VOO": [{"close": "100"}]},
+    }
+    (directory / "backfill_report.json").write_text(json.dumps(report), encoding="utf-8")
+    (directory / "health.json").write_text(json.dumps({"coverage": {"covered": 24}}), encoding="utf-8")
+    doc = ms.research_view()
+    assert doc["status"] == "RESEARCH_READY"
+    assert doc["proposal"]["strategy_id"] == "EQUAL_WEIGHT"
+    assert doc["universe"]["eligible"] == ["VOO"] and "NASA" in doc["universe"]["excluded"]
+    assert doc["storage_rights"] == "UNESTABLISHED"
+    # Raw observations must never be projected into a browser payload.
+    assert "bars" not in json.dumps(doc)
+    assert "close" not in json.dumps(doc)
