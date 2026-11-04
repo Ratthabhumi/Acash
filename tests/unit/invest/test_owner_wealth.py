@@ -162,3 +162,58 @@ def test_cash_breakdown_keeps_the_residual_unexplained() -> None:
     assert exact["status"] == "EXPLAINED" and exact["residual"] == "0.00"
     partial = bo.cash_breakdown(total, [bo.CashComponent("DIME_FCD", "USD", Decimal("800.04"))])
     assert partial["status"] == "PARTIAL_COMPONENTS_NOT_VALUED" and partial["components_not_valued"] == ["DIME_FCD"]
+
+
+def test_residual_is_not_an_asset_unless_same_time_and_complete() -> None:
+    """The 23,797.75 gap must be classified, not silently promoted to holdings value."""
+    from decimal import Decimal as D
+
+    assert bo.classify_residual(D("23797.75"), same_time=False, components_complete=True)[
+        "classification"] == "TIME_OR_SCOPE_MISALIGNED_DIFFERENCE"
+    assert bo.classify_residual(D("23797.75"), same_time=True, components_complete=False)[
+        "classification"] == "INCOMPLETE_ACCOUNT_COMPONENTS"
+    assert bo.classify_residual(D("23797.75"), same_time=True, components_complete=True)[
+        "classification"] == "QUALIFIED_UNIDENTIFIED_ASSET"
+    assert bo.classify_residual(D("-1"), same_time=True, components_complete=True)[
+        "classification"] == "UNEXPLAINED_NEGATIVE_DIFFERENCE"
+    assert bo.classify_residual(D("0"), same_time=True, components_complete=True)[
+        "classification"] == "NO_RESIDUAL"
+
+
+def test_classification_registry_requires_evidence_and_reports_partial_coverage(tmp_path: Path) -> None:
+    from acash.invest import economic_classification as ec
+
+    doc: Dict[str, Any] = {"schema": ec.SCHEMA, "data_class": ec.DATA_CLASS, "classifications": [
+        {"security_id": "VOO", "instrument_type": "ETF", "economic_asset_class": "EQUITY",
+         "methodology": "ISSUER_FUND_OBJECTIVE", "evidence_ref": "issuer page",
+         "effective_date": "2026-11-04", "verification_status": "ISSUER_EVIDENCE"},
+        {"security_id": "NASA", "instrument_type": "ETF", "economic_asset_class": "UNKNOWN",
+         "methodology": "NOT_CLASSIFIED", "evidence_ref": "",
+         "effective_date": "2026-11-04", "verification_status": "UNKNOWN"}]}
+    path = tmp_path / "classification.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    registry = ec.load_registry(path)
+    result = ec.coverage(registry, {"VOO": Decimal("100"), "NASA": Decimal("50")})
+    assert result["classified_count"] == 1 and result["unknown_count"] == 1
+    assert Decimal(result["coverage_by_count"]) == Decimal("0.5")
+    assert result["by_class"] == {"EQUITY": "100"}
+
+    doc["classifications"][0]["evidence_ref"] = ""      # an economic class needs evidence
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(DataContractError, match="CLASSIFICATION_EVIDENCE_REQUIRED"):
+        ec.load_registry(path)
+
+
+def test_identity_status_distinguishes_missing_venue_without_fabricating_it() -> None:
+    from acash.ppds.private_observation import SecurityClass
+
+    def build(**kw: Any) -> SecurityClass:
+        base = {"security_id": "VOO", "classification": "UNKNOWN", "methodology": "NOT_CLASSIFIED",
+                "evidence_ref": None, "instrument_type": "ETF", "exchange_mic": None,
+                "isin": None, "figi": None, "trading_currency": None}
+        return SecurityClass(**{**base, **kw})
+
+    assert build(figi="BBG000BLNNH6").identity_status == "IDENTITY_MAPPED_VENUE_UNVERIFIED"
+    assert build(figi="BBG000BLNNH6", exchange_mic="ARCX").identity_status == "IDENTITY_MAPPED_OWNER_SUPPLIED"
+    assert build().identity_status == "SECURITY_IDENTITY_UNVERIFIED"
+    assert build(instrument_type=None, figi="BBG000BLNNH6").identity_status == "SECURITY_IDENTITY_UNVERIFIED"

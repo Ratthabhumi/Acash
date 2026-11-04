@@ -108,6 +108,20 @@ export const ExternalCashPanel: React.FC = () => {
         </div>
       ) : null}
 
+      {report.classification && report.classification.status !== 'NO_CLASSIFICATION' ? (
+        <div className="border-t border-default pt-2 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted">การจัดประเภทสินทรัพย์ (Economic)</span>
+            <span className="font-mono-code text-primary">{report.classification.classified_count}/{report.classification.instrument_count}</span>
+            <span className="text-secondary">มูลค่าที่จำแนกได้ {(Number(report.classification.coverage_by_value) * 100).toFixed(1)}%</span>
+            <StatusBadge status={report.classification.status} />
+          </div>
+          <p className="text-[10px] text-muted">
+            ยังไม่จำแนก {report.classification.unknown_count} ตัว — คงสถานะ Unknown จนกว่าจะมีหลักฐานจากผู้ออกหลักทรัพย์ ไม่เดาจาก ticker
+          </p>
+        </div>
+      ) : null}
+
       <p className="text-[10px] text-muted">{cash?.notes?.join(' · ')}</p>
     </section>
   );

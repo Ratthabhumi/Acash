@@ -22,6 +22,12 @@ export interface BrokerObservationView {
   arithmetic?: string;
 }
 
+export interface ClassificationCoverage {
+  status: string; code?: string; instrument_count: number; classified_count: number; unknown_count: number;
+  coverage_by_count: string; coverage_by_value: string; by_class?: Record<string, string>;
+  note?: string;
+}
+
 export interface WealthComparison {
   status: string; difference: string | null; difference_pct: string | null;
   broker_observed_at?: string; calculated_valuation_date?: string; note?: string;
@@ -34,7 +40,7 @@ export interface ConsolidatedView {
 
 export interface WealthReport {
   status: string; external_cash?: ExternalCashView; broker_observation?: BrokerObservationView;
-  comparison?: WealthComparison; consolidated?: ConsolidatedView;
+  comparison?: WealthComparison; consolidated?: ConsolidatedView; classification?: ClassificationCoverage;
 }
 
 export async function fetchWealth(signal?: AbortSignal): Promise<WealthReport | null> {

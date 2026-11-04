@@ -219,3 +219,10 @@ test('external cash stays outside the broker scope and is labelled mixed evidenc
     assert.doesNotMatch(panel + service, banned);
   }
 });
+
+test('classification coverage is shown without claiming a full universe', () => {
+  const panel = read('src/components/portfolio/ExternalCashPanel.tsx');
+  assert.match(panel, /การจัดประเภทสินทรัพย์/);
+  assert.match(panel, /coverage_by_value/);
+  assert.match(panel, /ไม่เดาจาก ticker/);
+});

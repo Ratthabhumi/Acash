@@ -215,6 +215,24 @@ def cash_breakdown(displayed_total: Decimal, components: Sequence[CashComponent]
     }
 
 
+def classify_residual(residual: Decimal, *, same_time: bool, components_complete: bool) -> Dict[str, Any]:
+    """Qualify a broker-total residual before it may be treated as an asset.
+
+    Only a same-time comparison with complete components can produce a qualified unidentified asset.
+    Everything else is an unreconciled evidence difference; it stays visible but is not an asset and
+    does not enter allocation or any NAV.
+    """
+    if abs(residual) <= TOLERANCE:
+        return {"classification": "NO_RESIDUAL", "amount": format(residual, "f")}
+    if residual < 0:
+        return {"classification": "UNEXPLAINED_NEGATIVE_DIFFERENCE", "amount": format(residual, "f")}
+    if not same_time:
+        return {"classification": "TIME_OR_SCOPE_MISALIGNED_DIFFERENCE", "amount": format(residual, "f")}
+    if not components_complete:
+        return {"classification": "INCOMPLETE_ACCOUNT_COMPONENTS", "amount": format(residual, "f")}
+    return {"classification": "QUALIFIED_UNIDENTIFIED_ASSET", "amount": format(residual, "f")}
+
+
 def summary(observation: Optional[BrokerObservation]) -> Dict[str, Any]:
     if observation is None:
         return {"status": "NO_OBSERVATION"}

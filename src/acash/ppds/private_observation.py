@@ -400,8 +400,15 @@ class SecurityClass:
 
     @property
     def identity_status(self) -> str:
-        if self.instrument_type and self.exchange_mic and (self.isin or self.figi):
-            return "IDENTITY_MAPPED_OWNER_SUPPLIED"
+        """Owner-supplied identity, split so a missing MIC is not hidden and not fabricated.
+
+        An instrument with a verified instrument type and an ISIN/FIGI is identity-mapped. When the
+        venue MIC is still missing the status says so, instead of inventing a venue or collapsing the
+        record back to "unverified".
+        """
+        if self.instrument_type and (self.isin or self.figi):
+            return ("IDENTITY_MAPPED_OWNER_SUPPLIED" if self.exchange_mic
+                    else "IDENTITY_MAPPED_VENUE_UNVERIFIED")
         return "SECURITY_IDENTITY_UNVERIFIED"
 
 

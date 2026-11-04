@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
 from acash.dashboard_api import market_service, private_input, private_transactions
-from acash.invest import broker_observation, external_cash
+from acash.invest import broker_observation, economic_classification, external_cash
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
     MAX_INPUT_BYTES,
@@ -254,6 +254,12 @@ def _wealth_payload(view_path: Path) -> Dict[str, Any]:
         payload["broker_observation"] = broker_observation.summary(observation)
     except (OSError, ValueError, DataContractError) as exc:
         payload["broker_observation"] = {"status": "NO_OBSERVATION", "code": str(exc).split(":")[0]}
+    try:
+        registry = economic_classification.load_registry(root / "data/private/economic_classification.json")
+        values = economic_classification.security_values(root / "data/private/snapshot.json")
+        payload["classification"] = economic_classification.coverage(registry, values)
+    except (OSError, ValueError, KeyError, DataContractError) as exc:
+        payload["classification"] = {"status": "NO_CLASSIFICATION", "code": str(exc).split(":")[0]}
     status, _code, doc = load_view(view_path)
     nav = None
     calculated_at = None
