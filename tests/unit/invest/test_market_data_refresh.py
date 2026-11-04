@@ -997,3 +997,42 @@ def test_market_modules_hold_no_trading_surface_and_no_test_uses_the_network(mon
     monkeypatch.setattr(socket, "create_connection", blocked)
     with pytest.raises(DataContractError, match="ENDPOINT_NOT_ALLOWED"):
         mp.urllib_transport(mp.HttpRequest("MASSIVE_BASIC", "https://evil.example/v2/aggs/ticker/A/prev", {}))
+
+
+def _bar(day: str, close: float = 200.0) -> Dict[str, Any]:
+    stamp = int(datetime.fromisoformat(day + "T13:30:00+00:00").timestamp() * 1000)
+    return {"t": stamp, "o": close - 1, "h": close + 1, "l": close - 2, "c": close, "v": 1000}
+
+
+def test_massive_historical_daily_bars_are_bounded_and_labelled() -> None:
+    t = FakeTransport({"range/1/day": (200, {"results": [_bar("2026-10-01"), _bar("2026-10-02", 201.5)],
+                                              "resultsCount": 2, "status": "OK"})})
+    provider = mp.MassiveEODMarketDataProvider(CRED, t, _allow, _clock)
+    bars = provider.historical_daily(["AAPL"], date(2026, 10, 1), date(2026, 10, 2))
+    assert [b["session_date"] for b in bars] == [date(2026, 10, 1), date(2026, 10, 2)]
+    assert bars[0]["adjusted"] is False and bars[0]["provider"] == "MASSIVE_BASIC"
+    assert Decimal(bars[1]["close"]) == Decimal("201.5")
+    request = t.calls[0]
+    assert "range/1/day/2026-10-01/2026-10-02" in request.url and "adjusted=false" in request.url
+    assert request.headers["Authorization"].startswith("Bearer ")
+    assert CRED[1] not in request.url
+
+
+def test_massive_historical_daily_bars_reject_out_of_range_and_pagination() -> None:
+    t = FakeTransport({"range/1/day": (200, {"results": [_bar("2026-09-01")], "resultsCount": 1})})
+    provider = mp.MassiveEODMarketDataProvider(CRED, t, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_RESPONSE_INVALID"):
+        provider.historical_daily(["AAPL"], date(2026, 10, 1), date(2026, 10, 2))
+
+    paged = FakeTransport({"range/1/day": (200, {"results": [_bar("2026-10-01")], "next_url": "https://evil.example/x"})})
+    provider = mp.MassiveEODMarketDataProvider(CRED, paged, _allow, _clock)
+    with pytest.raises(DataContractError, match="PROVIDER_PAGINATION_UNSUPPORTED"):
+        provider.historical_daily(["AAPL"], date(2026, 10, 1), date(2026, 10, 2))
+
+
+def test_massive_historical_daily_bars_rate_limit_and_range_validation() -> None:
+    provider = mp.MassiveEODMarketDataProvider(CRED, FakeTransport(), lambda: False, _clock)
+    assert provider.historical_daily(["AAPL"], date(2026, 10, 1), date(2026, 10, 2)) == []
+    assert provider.skipped == ["AAPL"]
+    with pytest.raises(DataContractError, match="MASSIVE_RANGE_INVALID"):
+        provider.historical_daily(["AAPL"], date(2026, 10, 2), date(2026, 10, 1))

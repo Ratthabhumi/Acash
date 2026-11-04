@@ -91,7 +91,9 @@ ENDPOINTS: Dict[str, Endpoint] = {
                                   frozenset({"APCA-API-KEY-ID", "APCA-API-SECRET-KEY"}),
                                   {"feed": frozenset({"sip"}), "timeframe": frozenset({"1Min", "1Day"}),
                                    "adjustment": frozenset({"raw"})}),
-    "MASSIVE_BASIC": Endpoint("api.massive.com", re.compile(r"^/v2/aggs/ticker/[A-Z][A-Z0-9]{0,9}(\.[A-Z])?/prev$"),
+    "MASSIVE_BASIC": Endpoint("api.massive.com",
+                              re.compile(r"^/v2/aggs/ticker/[A-Z][A-Z0-9]{0,9}(\.[A-Z])?"
+                                         r"/(prev|range/1/day/\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2})$"),
                               frozenset({"adjusted"}), frozenset({"Authorization"})),
     "MARKETDATA_APP_FREE": Endpoint("api.marketdata.app",
                                     re.compile(r"^/v1/stocks/quotes/$"),
@@ -195,6 +197,20 @@ def _rfc3339(provider_id: str, text: Any) -> datetime:
     fraction = (match.group(2) or "")[:7]
     offset = "+00:00" if match.group(3) == "Z" else match.group(3)
     return datetime.fromisoformat(match.group(1) + fraction + offset)
+
+
+def _unix_millis(provider_id: str, value: Any) -> datetime:
+    """Whole Unix milliseconds (the aggregate-bar contract) to an aware UTC timestamp."""
+    try:
+        stamp = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.") from None
+    if not stamp.is_finite() or stamp <= 0 or stamp != stamp.to_integral_value():
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.")
+    try:
+        return datetime.fromtimestamp(int(stamp) // 1000, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} timestamp.") from None
 
 
 def _unix_seconds(provider_id: str, value: Any) -> datetime:
@@ -582,6 +598,51 @@ class MassiveEODMarketDataProvider:
     provider_id: str = "MASSIVE_BASIC"
     cache: Dict[str, PriceObservation] = field(default_factory=dict)
     skipped: List[str] = field(default_factory=list)
+
+    def historical_daily(self, symbols: Sequence[str], start: date, end: date) -> List[Dict[str, Any]]:
+        """Daily OHLCV aggregates for a bounded range (one request per symbol, 5/min budget).
+
+        Split-adjusted prices are explicitly *not* dividend-adjusted total returns; the caller must
+        treat this as a price-return series. A missing session is reported by absence, never filled.
+        Pagination beyond the documented window is refused rather than silently truncated.
+        """
+        if start > end:
+            raise DataContractError("MASSIVE_RANGE_INVALID: start must be on or before end.")
+        bars: List[Dict[str, Any]] = []
+        self.skipped = []
+        for symbol in [s for s in symbols if SYMBOL.match(s)]:
+            if not self.allow():
+                self.skipped.append(symbol)
+                continue
+            url = build_url(self.provider_id,
+                            f"/v2/aggs/ticker/{quote(symbol)}/range/1/day/{start.isoformat()}/{end.isoformat()}",
+                            {"adjusted": "false"})
+            status, body = self.transport(HttpRequest(self.provider_id, url,
+                                                      {"Authorization": f"Bearer {self.credential[1]}"}))
+            if status != 200:
+                raise _status_error(self.provider_id, status)
+            doc = _json_body(self.provider_id, body)
+            if not isinstance(doc, dict) or not isinstance(doc.get("results"), list):
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} bars envelope.")
+            if doc.get("next_url"):
+                raise DataContractError("PROVIDER_PAGINATION_UNSUPPORTED: MASSIVE_BASIC.")
+            for row in doc["results"]:
+                if not isinstance(row, dict):
+                    raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} bar.")
+                try:
+                    opened = _unix_millis(self.provider_id, row.get("t"))
+                except DataContractError:
+                    raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} bar timestamp.") from None
+                session = opened.astimezone(NEW_YORK).date()
+                if session < start or session > end:
+                    raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} bar out of range.")
+                bars.append({"symbol": symbol, "session_date": session, "open": str(_positive(self.provider_id, row.get("o"))),
+                             "high": str(_positive(self.provider_id, row.get("h"))),
+                             "low": str(_positive(self.provider_id, row.get("l"))),
+                             "close": str(_positive(self.provider_id, row.get("c"))),
+                             "volume": str(row.get("v")), "adjusted": False,
+                             "provider": self.provider_id, "retrieved_at": self.clock().isoformat()})
+        return bars
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(self.provider_id, ("EOD_CLOSE",), "UNKNOWN", True, True, True, None)
