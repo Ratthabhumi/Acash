@@ -7,6 +7,7 @@ import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
 import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
+import { fetchWealth, WealthReport } from '../services/wealth';
 import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
 import { SyntheticVariant, upiRepository } from '../services/upiRepository';
@@ -206,7 +207,8 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: bool
 };
 
 const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: boolean;
-  section: 'overview' | 'holdings' | 'planning' | 'data' }> = ({ view, warnings, partial = false, section }) => {
+  wealth?: WealthReport | null;
+  section: 'overview' | 'holdings' | 'planning' | 'data' }> = ({ view, warnings, partial = false, wealth = null, section }) => {
   const meta = view.report_metadata;
   const ccy = meta.report_currency;
   const ov = view.portfolio_overview;
@@ -256,14 +258,25 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
       <section aria-labelledby="sec-a" className="space-y-3">
         <SectionHeader id="sec-a" letter="A" title="Executive overview" note="Total best evidence combines computed NAV, broker-displayed values and unidentified holdings. It is not a verified NAV. Broker totals are compared, never added." />
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          <SummaryCard label={partial ? 'Priced holdings subtotal' : 'Total best evidence'} value={formatDec(ov.total_best_evidence)} unit={ccy}
-            subtitle={partial ? `Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV. Computed NAV ${formatDec(ov.computed_nav_ppds)}.` : `Computed NAV ${formatDec(ov.computed_nav_ppds)} + observed value-only items. Not a verified NAV.`} />
+          <SummaryCard label="มูลค่าพอร์ตล่าสุด (Dime! แสดง)" unit={ccy}
+            value={wealth?.broker_observation?.displayed_total ? formatDec(wealth.broker_observation.displayed_total) : NOT_ESTABLISHED}
+            badge={<StatusBadge status={wealth?.broker_observation?.evidence_status ?? 'BROKER_OBSERVATION_MISSING'} />}
+            subtitle={wealth?.broker_observation?.observed_at
+              ? `${wealth.broker_observation.observed_at} · ยอดที่แอปโบรกเกอร์แสดง ไม่ได้คำนวณโดย PPDS และอาจไม่ตรงเวลากับ holdings`
+              : 'ยังไม่มีหลักฐานยอดจากโบรกเกอร์'} />
+          <SummaryCard label={partial ? 'Priced holdings subtotal (market refresh)' : 'ACASH คำนวณ (statement)'}
+            value={partial ? formatDec(ov.total_best_evidence) : (evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds))} unit={ccy}
+            subtitle={partial
+              ? 'Only holdings priced on the market date plus settled cash. Not the total portfolio and not a NAV.'
+              : `ฐานวันที่ ${meta.valuation_date} · quantity × price + settled cash (subset of the portfolio)`} />
           <SummaryCard label="Cash (settled lines)" value={cash ? formatDec(cash.value) : NOT_ESTABLISHED} unit={ccy}
             subtitle="Settled cash lines in computed NAV. Cash inside broker totals is not separated." />
           <SummaryCard label="Coverage" value={formatWeight(view.coverage.position_level_coverage)} unit="positions"
             subtitle={`Known value ${formatWeight(view.coverage.known_value_coverage)} · instruments without an aligned quote are excluded, never zero`} />
           <SummaryCard label="Account reconciliation" value={partial ? 'N/A' : `${reconciled} / ${view.accounts.length}`} unit={partial ? undefined : 'reconciled'} tone={partial ? 'default' : unexplained > 0 ? 'bad' : reconciled === view.accounts.length ? 'good' : 'warn'}
-            subtitle={partial ? 'ต่างช่วงเวลา — ยอดโบรกเกอร์เทียบกับราคาตลาดล่าสุดไม่ได้' : Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')} />
+            subtitle={partial
+              ? 'ต่างช่วงเวลา — ยอดโบรกเกอร์เทียบกับราคาตลาดล่าสุดไม่ได้'
+              : `${Object.entries(statusCounts).map(([s, n]) => `${n} ${humanize(s).toLowerCase()}`).join(' · ')}${wealth?.comparison ? ` · เทียบยอดโบรกเกอร์: ${wealth.comparison.status}` : ''}`} />
         </div>
         {partial && (
           <p className="text-[11px] text-secondary">
@@ -415,6 +428,7 @@ export const PortfolioPage: React.FC = () => {
   const [editing, setEditing] = useState(false);
   const [source, setSource] = useState<'STATEMENT' | 'MARKET'>('STATEMENT');
   const [tab, setTab] = useState<PortfolioTabId>('overview');
+  const [wealth, setWealth] = useState<WealthReport | null>(null);
   const [marketAvailable, setMarketAvailable] = useState(false);
   const [marketState, setMarketState] = useState<LoadState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -457,6 +471,13 @@ export const PortfolioPage: React.FC = () => {
     });
     return () => { live = false; abortRef.current?.abort(); };
   }, [connect]);
+
+  useEffect(() => {
+    if (!connected) return;
+    const controller = new AbortController();
+    void fetchWealth(controller.signal).then((w) => { if (!controller.signal.aborted) setWealth(w); });
+    return () => controller.abort();
+  }, [connected]);
 
   const onMarketView = useCallback((available: boolean) => {
     setMarketAvailable(available);
@@ -547,7 +568,7 @@ export const PortfolioPage: React.FC = () => {
           </div>
         )}
         {!loading && shown && 'view' in shown && (
-          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="overview" />
+          <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} wealth={wealth} section="overview" />
         )}
         {!loading && source === 'MARKET' && marketState && !('view' in marketState) && (
           <div className="text-xs text-secondary">Market view: {marketState.status} {marketState.detail}</div>

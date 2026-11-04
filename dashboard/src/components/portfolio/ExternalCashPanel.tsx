@@ -55,9 +55,9 @@ export const ExternalCashPanel: React.FC = () => {
             <div className="text-[10px] text-secondary">เทียบกับเป้าหมายเงินสดนอกพอร์ตเท่านั้น</div>
           </div>
           <div className="bg-surface-muted rounded-md p-2">
-            <div className="text-[10px] text-muted">พร้อมใช้เป็นเงินสำรอง (ตามที่ระบบเสนอ)</div>
-            <div className="font-mono-code text-sm text-primary">{money(cash.reserve_eligible_total)}</div>
-            <div className="text-[10px] text-secondary">Owner ยังไม่ได้กำหนด officially</div>
+            <div className="text-[10px] text-muted">เงินสำรองที่กำหนดไว้ (Owner)</div>
+            <div className="font-mono-code text-sm text-primary">{money(cash.designated_reserve_total)}</div>
+            <div className="text-[10px] text-secondary">Make + LHB · ไม่รวม KBank (เงินใช้จ่าย)</div>
           </div>
         </div>
       ) : (

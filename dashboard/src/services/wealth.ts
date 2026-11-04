@@ -13,7 +13,7 @@ export interface ExternalCashView {
   status?: string; code?: string; scope: string; evidence_quality: string;
   accounts: ExternalAccountView[]; total: string; approximate_component: string;
   target: string | null; target_currency: string; gap: string | null;
-  reserve_eligible_total: string; notes: string[];
+  reserve_eligible_total: string; designated_reserve_total: string; notes: string[];
 }
 
 export interface BrokerObservationView {

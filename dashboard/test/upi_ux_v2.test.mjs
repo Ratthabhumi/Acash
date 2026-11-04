@@ -59,7 +59,10 @@ test('portfolio UI does not compute or persist figures and keeps the A-E structu
     }
   }
   for (const id of ['sec-a', 'sec-b', 'sec-c', 'sec-d', 'sec-e']) assert.match(page, new RegExp(`id="${id}"`));
-  assert.match(page, /computed_nav_is_total_best_evidence|Not a verified NAV/);
+  // V89: the headline is the broker-displayed observation; the ACASH computed valuation is separate.
+  assert.match(page, /broker_observation\?\.displayed_total/);
+  assert.match(page, /ACASH คำนวณ \(statement\)/);
   assert.match(page, /evidenceOnly \? NOT_ESTABLISHED : formatDec\(ov\.computed_nav_ppds\)/);
+  assert.ok(!/label="Total best evidence"/.test(page), 'best evidence must not be the portfolio headline');
   assert.ok(!/NAV history|drawdown|projection/i.test(page), 'no time-series charts from a single snapshot');
 });
