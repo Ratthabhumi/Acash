@@ -110,7 +110,8 @@ export function refreshBlocker(status: MarketStatus | null): string | null {
   return ready ? null : 'NO_READY_PRICE_PROVIDER';
 }
 
-export async function callMarket<T>(method: 'GET' | 'POST', route: 'status' | 'refresh' | 'view' | 'research',
+export async function callMarket<T>(method: 'GET' | 'POST',
+                                    route: 'status' | 'refresh' | 'view' | 'research' | 'session',
                                     signal?: AbortSignal): Promise<MarketCall<T | { status: string }>> {
   try {
     const response = await fetch(MARKET_ENDPOINT + route, {

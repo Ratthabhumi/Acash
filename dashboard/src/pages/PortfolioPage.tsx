@@ -8,6 +8,7 @@ import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
 import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
 import { ResearchDecisionPanel } from '../components/portfolio/ResearchDecisionPanel';
+import { HoldingsTable } from '../components/portfolio/HoldingsTable';
 import { fetchWealth, WealthReport } from '../services/wealth';
 import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
@@ -152,7 +153,6 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: bool
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const accounts = view.accounts.filter((a) => !q || [a.account_ref, a.broker, a.role, a.account_total.status].some((s) => s?.toLowerCase().includes(q)));
-  const securities = view.security_identity.filter((s) => !q || [s.security_id, s.instrument_type, s.identity_status].some((x) => x?.toLowerCase().includes(q)));
   return (
     <div className="space-y-3">
       <label className="relative block max-w-sm">
@@ -197,12 +197,14 @@ const AccountsAndHoldings: React.FC<{ view: UpiView; ccy: string; partial?: bool
         })}
       </div>
       {accounts.length === 0 && <p className="text-xs text-secondary">No account matches the filter.</p>}
-      <div className="bg-surface border border-default rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-primary mb-2">Holdings identity</h3>
-        <SimpleTable head={['Security', 'Type', 'Identity']}
-          rows={securities.map((s) => [s.security_id, s.instrument_type ?? NOT_ESTABLISHED, <StatusBadge key="i" status={s.identity_status} />])} />
-        <p className="text-[11px] text-muted mt-2">Values are in {ccy}. Holdings without owner-supplied identifiers are never merged across accounts.</p>
-      </div>
+      <HoldingsTable
+        rows={view.positions?.rows ?? []}
+        ccy={ccy}
+        total={view.portfolio_overview.total_best_evidence}
+        positionValueTotal={view.positions?.position_value_total ?? null}
+        status={view.positions?.status ?? 'NO_POSITION_ROWS'}
+        weightBasis={view.positions?.weight_basis ?? null}
+      />
     </div>
   );
 };

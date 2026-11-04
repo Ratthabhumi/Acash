@@ -40,6 +40,31 @@ export interface UpiAccount {
   flags: string[];
 }
 
+export interface PositionRow {
+  account_ref: string;
+  security_id: string;
+  sub_portfolio: string | null;
+  figi: string | null;
+  isin: string | null;
+  instrument_type: string | null;
+  identity_status: string | null;
+  economic_class: string | null;
+  quantity: Dec | null;
+  price: Dec | null;
+  price_currency: string;
+  value_local: Dec;
+  value_reporting: Dec;
+  weight: Dec | null;
+  weight_basis: string;
+  cost_basis_local: Dec | null;
+  cost_basis_status: string;
+  unrealized_pnl_local: Dec | null;
+  unrealized_status: string;
+  source: string;
+  report_currency: string;
+  valuation_date: string;
+}
+
 export interface CapacityScenario {
   monthly_contribution_thb: Dec;
   residual_after_contribution_thb: Dec;
@@ -92,6 +117,14 @@ export interface UpiView {
     top_holdings: Array<{ key: string; weight: Dec }>;
   };
   security_identity: Array<{ security_id: string; identity_status: string; instrument_type: string | null }>;
+  positions?: {
+    schema: string;
+    status: string;
+    weight_basis: string | null;
+    position_value_total: Dec | null;
+    qualification: Record<string, unknown> | null;
+    rows: PositionRow[];
+  };
   financial_capacity: {
     capacity_status: string;
     monthly_surplus_thb: Dec;

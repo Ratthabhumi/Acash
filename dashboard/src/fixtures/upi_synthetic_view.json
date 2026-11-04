@@ -305,6 +305,91 @@
     "unclassified_holdings_value": "10280.00",
     "unreconciled_broker_difference": "10280.00"
   },
+  "positions": {
+    "position_value_total": "67650.00",
+    "qualification": {
+      "cash_excluded": true,
+      "note": "Rows are held lines only. Settled cash and an unqualified broker-total residual are never turned into holdings, so the row values sum to less than the total.",
+      "residual_excluded": true
+    },
+    "rows": [
+      {
+        "account_ref": "BROKER_D_MAIN",
+        "cost_basis_local": null,
+        "cost_basis_status": "COST_BASIS_NOT_ESTABLISHED",
+        "economic_class": null,
+        "figi": "BBG00SYNBND1",
+        "identity_status": "IDENTITY_MAPPED_OWNER_SUPPLIED",
+        "instrument_type": "ETF",
+        "isin": null,
+        "price": "20.00",
+        "price_currency": "USD",
+        "quantity": "30",
+        "report_currency": "THB",
+        "security_id": "SYNBOND",
+        "source": "PPDS_QUANTITY_X_PRICE",
+        "sub_portfolio": "Core",
+        "unrealized_pnl_local": null,
+        "unrealized_status": "COST_BASIS_NOT_ESTABLISHED",
+        "valuation_date": "2026-10-30",
+        "value_local": "600.00",
+        "value_reporting": "19800.00",
+        "weight": "0.2317",
+        "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+      },
+      {
+        "account_ref": "BROKER_D_MAIN",
+        "cost_basis_local": "1100.00",
+        "cost_basis_status": "ESTABLISHED",
+        "economic_class": null,
+        "figi": null,
+        "identity_status": "IDENTITY_MAPPED_OWNER_SUPPLIED",
+        "instrument_type": "ETF",
+        "isin": "ZZSYNIDX0005",
+        "price": "100.00",
+        "price_currency": "USD",
+        "quantity": "12",
+        "report_currency": "THB",
+        "security_id": "SYNIDX",
+        "source": "PPDS_QUANTITY_X_PRICE",
+        "sub_portfolio": "Core",
+        "unrealized_pnl_local": "100.00",
+        "unrealized_status": "COMPUTED",
+        "valuation_date": "2026-10-30",
+        "value_local": "1200.00",
+        "value_reporting": "39600.00",
+        "weight": "0.4633",
+        "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+      },
+      {
+        "account_ref": "BROKER_D_MAIN",
+        "cost_basis_local": "300.00",
+        "cost_basis_status": "ESTABLISHED",
+        "economic_class": null,
+        "figi": null,
+        "identity_status": "SECURITY_IDENTITY_UNVERIFIED",
+        "instrument_type": null,
+        "isin": null,
+        "price": null,
+        "price_currency": "USD",
+        "quantity": null,
+        "report_currency": "THB",
+        "security_id": "SYNTHEME",
+        "source": "BROKER_OBSERVED_MARKET_VALUE",
+        "sub_portfolio": "Theme",
+        "unrealized_pnl_local": "-50.00",
+        "unrealized_status": "COMPUTED",
+        "valuation_date": "2026-10-30",
+        "value_local": "250.00",
+        "value_reporting": "8250.00",
+        "weight": "0.0965",
+        "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+      }
+    ],
+    "schema": "ACASH_POSITION_ROWS_V1",
+    "status": "AVAILABLE",
+    "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+  },
   "quant_workspace": {
     "new_strategies": "NONE_CREATED",
     "paper_or_live_connectivity": "DISABLED",
@@ -324,7 +409,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "ec8e065010b80d34bf3ef003979c44168c1a88225d3644092547feeba1329f34",
+    "pack_sha256": "fe557cf06bef9c9228acbc51f367a40a39c7eaff30dd0058396580a7477b92f9",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "FULL_REPORT",
@@ -355,5 +440,5 @@
     }
   ],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "dd8609ae9ed6582e719b40496643b7d6f644561aa132202ead5ae14d08db401f"
+  "view_sha256": "d1bd4bd7b522624f3287b1f2500787275bb5fa1cf63ad4a509455c77f384d1a8"
 }

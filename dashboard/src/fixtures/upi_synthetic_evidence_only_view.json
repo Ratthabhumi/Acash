@@ -206,6 +206,18 @@
     "unclassified_holdings_value": "90750.00",
     "unreconciled_broker_difference": "90750.00"
   },
+  "positions": {
+    "position_value_total": "0.00",
+    "qualification": {
+      "cash_excluded": true,
+      "note": "Rows are held lines only. Settled cash and an unqualified broker-total residual are never turned into holdings, so the row values sum to less than the total.",
+      "residual_excluded": true
+    },
+    "rows": [],
+    "schema": "ACASH_POSITION_ROWS_V1",
+    "status": "NO_POSITION_ROWS",
+    "weight_basis": "SHARE_OF_TOTAL_BEST_EVIDENCE"
+  },
   "quant_workspace": {
     "new_strategies": "NONE_CREATED",
     "paper_or_live_connectivity": "DISABLED",
@@ -225,7 +237,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "0a9a9490586a200e10f2500ec7daf5b191df813a00337d4fd7b7f50cdedf30ea",
+    "pack_sha256": "d77ca7327659cbffe601d39f1a4e39d7153293486ec161cf4cc445d1d96001c3",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "EVIDENCE_ONLY_REPORT",
@@ -247,5 +259,5 @@
   },
   "security_identity": [],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "fda3eb255c10e9ad066eee0a7152ec5625e157b5da3f90deb327e73ce2705092"
+  "view_sha256": "30609e0640774bb5a26b947b0778a3cc13655713a66ae343955ad8144a08afda"
 }

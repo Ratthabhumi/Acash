@@ -3,7 +3,6 @@ import { RefreshCw } from 'lucide-react';
 import { StatusBadge } from '../common/StatusBadge';
 import { SimpleTable } from '../charts/PortfolioCharts';
 import { callMarket } from '../../services/marketRefresh';
-import { marketSession } from '../../services/marketSession';
 
 // Displays the *derived* research output written by scripts/backfill_massive_universe.py plus the
 // collector's own health record. It shows what Python computed and nothing else: no price is read in
@@ -28,44 +27,141 @@ interface ResearchDoc {
   storage_rights?: string;
   governance?: Record<string, unknown>;
   collector_health?: Record<string, unknown>;
+  fx?: Record<string, unknown>;
   note?: string;
 }
 
 const str = (value: unknown): string => (value === null || value === undefined ? '—' : String(value));
 
-const SessionCard: React.FC = () => {
-  const [view, setView] = useState(() => marketSession());
-  useEffect(() => {
-    const timer = window.setInterval(() => setView(marketSession()), 60000);
-    return () => window.clearInterval(timer);
-  }, []);
+interface SessionDoc {
+  state?: string;
+  mic?: string;
+  calendar_status?: string;
+  regular?: { open_et?: string; close_et?: string; early_close_et?: string };
+  today?: { date?: string; status?: string; open_ict?: string | null; close_ict?: string | null };
+  next_session?: { date?: string; status?: string; open_ict?: string; close_ict?: string } | null;
+  eod_eligible_after?: string | null;
+  observed_at?: { et?: string; ict?: string };
+  source?: Record<string, string>;
+}
+
+const SessionCard: React.FC<{ session: SessionDoc | null }> = ({ session }) => {
+  if (!session) {
+    return (
+      <div className="bg-surface border border-default rounded-lg p-3 text-xs text-secondary">
+        ยังโหลดปฏิทินตลาดไม่ได้ — ไม่แสดงเวลาเปิด/ปิดแบบคาดเดา
+      </div>
+    );
+  }
+  const verified = session.calendar_status === 'VERIFIED_VENUE_FIXTURE';
   return (
     <div className="bg-surface border border-default rounded-lg p-3 space-y-1 text-xs">
-      <div className="flex items-center gap-2">
-        <StatusBadge status={view.state === 'OPEN' ? 'MARKET_OPEN' : 'MARKET_CLOSED'} />
-        <span className="text-secondary">New York {view.new_york_time} · Bangkok {view.bangkok_time}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={session.state ?? 'UNKNOWN'} />
+        <span className="font-mono-code text-secondary">{session.mic ?? 'VENUE_UNKNOWN'}</span>
+        <span className="text-muted">{verified ? 'ปฏิทินผ่านการตรวจ (fixture)' : session.calendar_status}</span>
       </div>
-      {view.next_change && (
+      <p className="text-secondary">
+        วันนี้ {session.today?.date ?? '—'} · {session.today?.status ?? '—'}
+        {session.today?.open_ict ? ` · เปิด ${session.today.open_ict}` : ''}
+        {session.today?.close_ict ? ` · ปิด ${session.today.close_ict}` : ''}
+      </p>
+      {session.next_session && (
         <p className="text-secondary">
-          ถัดไป: {view.next_change.kind === 'OPEN' ? 'เปิดตลาด' : 'ปิดตลาด'} · {view.next_change.at_bangkok}
-          <span className="text-muted"> (ET {view.next_change.at_ny})</span>
+          session ถัดไป: {session.next_session.date} ({session.next_session.status}) · เปิด {session.next_session.open_ict} · ปิด {session.next_session.close_ict}
         </p>
       )}
+      {session.eod_eligible_after && (
+        <p className="text-muted">ข้อมูล EOD ของวันนี้ควรพร้อมหลัง {session.eod_eligible_after}</p>
+      )}
       <p className="text-[11px] text-muted">
-        ตารางวันหยุดตลาดสหรัฐยังไม่ได้ยืนยัน (ไม่มีปฏิทินที่ผ่านการตรวจ) จึงไม่แสดงว่าวันนี้เป็นวันหยุด
+        เวลาแปลงจาก America/New_York เป็น Asia/Bangkok ตาม timezone จริง (รองรับ DST และ early close) ·
+        ปฏิทินไทยไม่เกี่ยวกับตลาดสหรัฐ
       </p>
+    </div>
+  );
+};
+
+interface FxDoc {
+  status?: string;
+  source?: string;
+  rate_type?: string;
+  orientation?: string;
+  executable?: boolean;
+  first?: string;
+  last?: string;
+  points?: number;
+  weekday_gaps?: number;
+  latest?: { date?: string; usd_thb?: string; retrieved_at?: string };
+  decomposition?: {
+    sessions?: number;
+    first?: string;
+    last?: string;
+    portfolio?: { usd_price_return?: string; fx_translation?: string; thb_return?: string;
+      cross_term?: string; weight_basis?: string };
+    caveats?: string[];
+  };
+}
+
+const FxCard: React.FC<{ fx: FxDoc | null }> = ({ fx }) => {
+  if (!fx || fx.status === 'NO_FX_SERIES') {
+    return (
+      <div className="bg-surface border border-default rounded-lg p-3 text-xs text-secondary">
+        ยังไม่มีชุดข้อมูล FX อ้างอิง (BOT) — ยังไม่คำนวณผลตอบแทนเป็นเงินบาท
+      </div>
+    );
+  }
+  const d = fx.decomposition?.portfolio;
+  const pct = (value?: string) => (value === undefined ? '—' : `${(Number(value) * 100).toFixed(2)}%`);
+  return (
+    <div className="bg-surface border border-default rounded-lg p-3 space-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={fx.status ?? 'UNKNOWN'} />
+        <span className="font-mono-code text-primary">
+          {fx.latest?.usd_thb ?? '—'} THB/USD
+        </span>
+        <span className="text-muted">{fx.latest?.date ?? '—'} · {fx.source ?? '—'}</span>
+      </div>
+      <p className="text-[11px] text-secondary">
+        {fx.rate_type ?? '—'} · {fx.orientation ?? '—'} · ใช้ซื้อขายจริงไม่ได้ ({fx.executable ? 'ไม่' : 'ถูกต้อง: reference only'})
+      </p>
+      <p className="text-secondary">
+        ชุดข้อมูล {fx.points ?? 0} วัน ({fx.first} → {fx.last}) · ช่องว่างวันธรรมดา {fx.weekday_gaps ?? 0} วัน
+        (ไม่เติมค่า)
+      </p>
+      {d && (
+        <div className="pt-1">
+          <p className="text-secondary">
+            ผลตอบแทนพอร์ตช่วง {fx.decomposition?.first} → {fx.decomposition?.last} ({fx.decomposition?.sessions} sessions):
+          </p>
+          <ul className="list-disc pl-5 text-secondary">
+            <li>ราคา USD: {pct(d.usd_price_return)}</li>
+            <li>ค่าเงิน (FX translation): {pct(d.fx_translation)}</li>
+            <li>Cross term: {pct(d.cross_term)}</li>
+            <li>รวมเป็นเงินบาท: {pct(d.thb_return)}</li>
+          </ul>
+          <p className="text-[11px] text-muted">
+            (1 + R_THB) = (1 + R_USD)(1 + R_FX) · น้ำหนัก {d.weight_basis ?? '—'} · เป็นการประมาณการ ไม่ใช่กำไรจริง
+          </p>
+        </div>
+      )}
     </div>
   );
 };
 
 export const ResearchDecisionPanel: React.FC = () => {
   const [doc, setDoc] = useState<ResearchDoc | null>(null);
+  const [session, setSession] = useState<SessionDoc | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const response = await callMarket<ResearchDoc>('GET', 'research');
+    const [response, calendar] = await Promise.all([
+      callMarket<ResearchDoc>('GET', 'research'),
+      callMarket<SessionDoc>('GET', 'session'),
+    ]);
     setDoc(response.body as ResearchDoc);
+    setSession(calendar.body as SessionDoc);
     setLoading(false);
   }, []);
 
@@ -98,7 +194,10 @@ export const ResearchDecisionPanel: React.FC = () => {
         </div>
       </div>
 
-      <SessionCard />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <SessionCard session={session} />
+        <FxCard fx={(doc?.fx as FxDoc | undefined) ?? null} />
+      </div>
 
       {!loading && doc && doc.status === 'NO_RESEARCH_RUN' && (
         <div className="bg-surface border border-default rounded-lg p-4 text-xs text-secondary space-y-1">
