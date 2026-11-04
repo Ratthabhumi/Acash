@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `1fd89f831bfa7915`
+Snapshot `SYN_TOTALS_ONLY_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `50ab73b40a7dcdd2`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -10,7 +10,7 @@ Read-only decision support. No orders, transfers, recurring plans or authority. 
 ### Evidence and observed totals (THB)
 - Computed (PPDS quantity x price + settled cash): 0.00; observed value-only positions: 0.00; UNCLASSIFIED_HOLDINGS_VALUE: 90750.00; total best evidence: **0.00**
 - Coverage: known value NOT_APPLICABLE_NO_VALUE, position level NOT_APPLICABLE_NO_SECURITIES, cash observed accounts 0/2, totals reconciled NOT_APPLICABLE_NO_VALUE, cost basis NOT_APPLICABLE_NO_VALUE, history NOT_ESTABLISHED_SNAPSHOT_ONLY
-- Concentration (LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT): top1 0.0000, unclassified share 0.0000, HHI 0.0000; market session MARKET_SESSION_NOT_VERIFIED
+- Concentration (COMPLETE): top1 0.0000, unclassified share 0.0000, HHI 0.0000; market session MARKET_SESSION_NOT_VERIFIED
 | Account | Evidence level | Account total | Difference | Flags |
 |---|---|---|---:|---|
 | BROKER_D_FCD | ACCOUNT_TOTAL_ONLY | INSUFFICIENT_EVIDENCE | 500.00 | - |

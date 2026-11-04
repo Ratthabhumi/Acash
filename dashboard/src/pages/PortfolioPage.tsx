@@ -226,9 +226,16 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
   const composition: Segment[] = [
     { label: 'Computed NAV (PPDS)', value: evidenceOnly ? NOT_ESTABLISHED : formatDec(ov.computed_nav_ppds), fraction: barFraction(ov.computed_nav_ppds, ov.total_best_evidence), tone: 'accent' },
     { label: 'Observed value-only positions', value: partial ? EXCLUDED : formatDec(ov.observed_position_value), fraction: barFraction(ov.observed_position_value, ov.total_best_evidence), tone: 'sky' },
-    { label: 'Unclassified holdings value', value: partial ? EXCLUDED : formatDec(ov.unclassified_holdings_value), fraction: barFraction(ov.unclassified_holdings_value, ov.total_best_evidence), tone: 'unknown', note: formatWeight(conc.unclassified_share) },
   ];
   const classification = view.allocation.computed_by_classification;
+  const economic = wealth?.economic_allocation && Object.keys(wealth.economic_allocation.by_class ?? {}).length
+    ? wealth.economic_allocation : null;
+  const economicSegments: Segment[] = economic
+    ? Object.entries(economic.by_class).sort(([, a], [, b]) => Number(b.value) - Number(a.value)).map(([name, bucket]) => ({
+        label: name, value: formatDec(bucket.value), note: formatWeight(bucket.weight),
+        fraction: barFraction(bucket.weight), tone: classTone(name) }))
+    : [];
+
   const classSegments: Segment[] = classification
     ? Object.entries(classification).sort(([, a], [, b]) => byValueDesc(a.value, b.value))
         .map(([k, b]) => ({ label: humanize(k), value: formatDec(b.value), fraction: barFraction(b.weight), tone: classTone(k), note: formatWeight(b.weight) }))
@@ -302,9 +309,14 @@ const PortfolioReport: React.FC<{ view: UpiView; warnings: string[]; partial?: b
             table={<SimpleTable head={['Component', `Value (${ccy})`]} rows={composition.map((s) => [s.label, s.value])} />}>
             <StackedBar segments={composition} label="Portfolio composition" />
           </ChartCard>
-          <ChartCard title="Asset class within computed NAV" subtitle="Denominator: computed NAV only. Value-only and unidentified holdings are not classified."
-            table={classification ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={classSegments.map((s) => [s.label, s.value, s.note])} /> : <StatusBadge status={view.allocation.computed_status} />}>
-            {classification ? <StackedBar segments={classSegments} label="Classification within computed NAV" /> : <p className="text-xs text-secondary">{NOT_ESTABLISHED}: evidence-only report.</p>}
+          <ChartCard title="การจัดประเภทสินทรัพย์ตามหลักฐาน"
+            subtitle={economic ? `ตัวหาร: ${economic.denominator} (${formatDec(economic.denominator_value)} ${ccy}) · ไม่รวมส่วนต่างที่ยังกระทบยอดไม่ได้` : 'Denominator: computed NAV only. Value-only holdings are not classified.'}
+            table={economic
+              ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={economicSegments.map((s) => [s.label, s.value, s.note])} />
+              : classification ? <SimpleTable head={['Class', `Value (${ccy})`, 'Weight']} rows={classSegments.map((s) => [s.label, s.value, s.note])} /> : <StatusBadge status={view.allocation.computed_status} />}>
+            {economic
+              ? <StackedBar segments={economicSegments} label="Economic asset allocation" />
+              : classification ? <StackedBar segments={classSegments} label="Classification within computed NAV" /> : <p className="text-xs text-secondary">{NOT_ESTABLISHED}: evidence-only report.</p>}
           </ChartCard>
           <ChartCard title="Sub-portfolios" subtitle="Sorted by value. Names are the owner's labels, not evidence-backed asset classes. Weights are of total best evidence."
             table={<SimpleTable head={['Bucket', `Value (${ccy})`, 'Weight']} rows={subRows.map((r) => [r.label, r.value, r.note])} />}>

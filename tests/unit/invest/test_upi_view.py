@@ -46,7 +46,7 @@ def test_synthetic_view_golden_values_copied_not_recomputed() -> None:
     assert (overview["computed_nav_ppds"], overview["observed_position_value"], overview["unclassified_holdings_value"],
             overview["total_best_evidence"]) == ("77220.00", "8250.00", "10280.00", "85470.00")
     assert overview["computed_nav_is_total_best_evidence"] is False
-    assert view["concentration"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
+    assert view["concentration"]["status"] == "COMPLETE"
     amounts = {r["monthly_contribution_thb"] for r in view["financial_capacity"]["scenarios"]}
     assert {"5000.00", "7500.00", "10000.00"} <= amounts
     assert view["decision_status"]["orders_generated"] == 0
@@ -305,3 +305,14 @@ def test_stale_view_is_reported_stale_instead_of_as_current(tmp_path: Path,
                                  "inputs_changed_since": True})
     status, code, doc = srv.load_view(path)
     assert (status, code) == ("STALE_REPORT", "REPORT_INPUT_STALE") and doc is not None
+
+
+def test_allocations_exclude_the_unqualified_residual() -> None:
+    """The broker residual is diagnostics; it must not appear in any allocation or weight."""
+    view = uv.build_view(_pack())
+    assert "UNCLASSIFIED_RESIDUAL" not in view["allocation"]["currency_exposure_best_evidence"]
+    assert view["concentration"]["unclassified_share"] == "0.0000"
+    assert view["concentration"]["status"] == "COMPLETE"
+    residual = view["portfolio_overview"]["unclassified_holdings_value"]
+    assert residual != "0.00"                      # still reported as diagnostics
+    assert view["portfolio_overview"]["total_best_evidence"] == "85470.00"

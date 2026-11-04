@@ -173,7 +173,7 @@ def test_totals_only_snapshot_yields_evidence_only_report() -> None:
                                      "unclassified_holdings_value": "90750.00", "unreconciled_broker_difference": "90750.00",
                                      "residual_classification": "UNQUALIFIED_NOT_IN_TOTAL",
                                      "total_best_evidence": "0.00"}
-    assert ev["concentration_best_evidence"]["status"] == "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT"
+    assert ev["concentration_best_evidence"]["status"] == "COMPLETE"
     assert ev["concentration_best_evidence"]["top_holdings"] == []
     assert [(a["account_ref"], a["evidence_level"]) for a in ev["accounts"]] == [
         ("BROKER_D_FCD", "ACCOUNT_TOTAL_ONLY"), ("BROKER_D_MAIN", "SUBPORTFOLIO_TOTAL_ONLY")]

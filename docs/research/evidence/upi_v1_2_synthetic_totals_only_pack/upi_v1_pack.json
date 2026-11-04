@@ -95,10 +95,10 @@
           }
         },
         "concentration_best_evidence": {
-          "denominator": "TOTAL_BEST_EVIDENCE",
+          "denominator": "QUALIFIED_TOTAL_BEST_EVIDENCE",
           "hhi_identified_securities": "0.0000",
           "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-          "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+          "status": "COMPLETE",
           "top1_weight": "0.0000",
           "top_holdings": [],
           "unclassified_share": "0.0000"
@@ -196,10 +196,10 @@
           }
         },
         "concentration_best_evidence": {
-          "denominator": "TOTAL_BEST_EVIDENCE",
+          "denominator": "QUALIFIED_TOTAL_BEST_EVIDENCE",
           "hhi_identified_securities": "0.0000",
           "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-          "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+          "status": "COMPLETE",
           "top1_weight": "0.0000",
           "top_holdings": [],
           "unclassified_share": "0.0000"
@@ -650,6 +650,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "1fd89f831bfa791580284013c482b18501b4c92a1f8b653e63f4bc266b5a7d45",
+  "pack_sha256": "50ab73b40a7dcdd2f2c246e8d5b0e5ee88f0a5b52f13c6e000fbe0aa92795d6c",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

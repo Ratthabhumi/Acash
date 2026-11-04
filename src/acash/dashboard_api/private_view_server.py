@@ -258,6 +258,7 @@ def _wealth_payload(view_path: Path) -> Dict[str, Any]:
         registry = economic_classification.load_registry(root / "data/private/economic_classification.json")
         values = economic_classification.security_values(root / "data/private/snapshot.json")
         payload["classification"] = economic_classification.coverage(registry, values)
+        payload["economic_allocation"] = economic_classification.allocation(registry, values)
     except (OSError, ValueError, KeyError, DataContractError) as exc:
         payload["classification"] = {"status": "NO_CLASSIFICATION", "code": str(exc).split(":")[0]}
     status, _code, doc = load_view(view_path)

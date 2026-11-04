@@ -217,3 +217,27 @@ def test_identity_status_distinguishes_missing_venue_without_fabricating_it() ->
     assert build(figi="BBG000BLNNH6", exchange_mic="ARCX").identity_status == "IDENTITY_MAPPED_OWNER_SUPPLIED"
     assert build().identity_status == "SECURITY_IDENTITY_UNVERIFIED"
     assert build(instrument_type=None, figi="BBG000BLNNH6").identity_status == "SECURITY_IDENTITY_UNVERIFIED"
+
+
+def test_economic_allocation_uses_the_classified_denominator(tmp_path: Path) -> None:
+    from acash.invest import economic_classification as ec
+
+    doc: Dict[str, Any] = {"schema": ec.SCHEMA, "data_class": ec.DATA_CLASS, "classifications": [
+        {"security_id": "VOO", "instrument_type": "ETF", "economic_asset_class": "EQUITY",
+         "methodology": "ISSUER_FUND_OBJECTIVE", "evidence_ref": "issuer",
+         "effective_date": "2026-11-04", "verification_status": "ISSUER_EVIDENCE"},
+        {"security_id": "MTS-GOLD", "instrument_type": "OTHER", "economic_asset_class": "COMMODITY_GOLD",
+         "methodology": "INSTRUMENT_SPECIFICATION", "evidence_ref": "spec",
+         "effective_date": "2026-11-04", "verification_status": "OWNER_EVIDENCE"},
+        {"security_id": "NASA", "instrument_type": "ETF", "economic_asset_class": "UNKNOWN",
+         "methodology": "NOT_CLASSIFIED", "evidence_ref": "",
+         "effective_date": "2026-11-04", "verification_status": "UNKNOWN"}]}
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    registry = ec.load_registry(path)
+    result = ec.allocation(registry, {"VOO": Decimal("300"), "MTS-GOLD": Decimal("100"),
+                                      "NASA": Decimal("50")})
+    assert result["denominator_value"] == "450"
+    assert set(result["by_class"]) == {"EQUITY", "COMMODITY_GOLD"}     # unknown is not assigned
+    assert result["by_class"]["EQUITY"]["weight"] == "0.6667"
+    assert sum(Decimal(v["weight"]) for v in result["by_class"].values()) <= Decimal("1.0001")

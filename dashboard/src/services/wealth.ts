@@ -28,6 +28,11 @@ export interface ClassificationCoverage {
   note?: string;
 }
 
+export interface EconomicAllocation {
+  status: string; denominator: string; denominator_value?: string;
+  by_class: Record<string, { value: string; weight: string }>; note?: string;
+}
+
 export interface WealthComparison {
   status: string; difference: string | null; difference_pct: string | null;
   broker_observed_at?: string; calculated_valuation_date?: string; note?: string;
@@ -41,6 +46,7 @@ export interface ConsolidatedView {
 export interface WealthReport {
   status: string; external_cash?: ExternalCashView; broker_observation?: BrokerObservationView;
   comparison?: WealthComparison; consolidated?: ConsolidatedView; classification?: ClassificationCoverage;
+  economic_allocation?: EconomicAllocation;
 }
 
 export async function fetchWealth(signal?: AbortSignal): Promise<WealthReport | null> {

@@ -67,6 +67,38 @@ def load_registry(path: Path) -> Dict[str, Classification]:
     return out
 
 
+def allocation(registry: Dict[str, Classification],
+               values: Mapping[str, Optional[Decimal]]) -> Dict[str, Any]:
+    """Value-weighted economic allocation over the classified instruments only.
+
+    The denominator is the classified value, stated explicitly: an unclassified instrument or an
+    unreconciled broker residual never enters the weighting.
+    """
+    buckets: Dict[str, Decimal] = {}
+    classified_total = Decimal(0)
+    for sid, classification in registry.items():
+        value = values.get(sid)
+        if value is None:
+            continue
+        classified_total += value
+        if classification.economic_asset_class == "UNKNOWN":
+            continue
+        buckets[classification.economic_asset_class] = (
+            buckets.get(classification.economic_asset_class, Decimal(0)) + value)
+    if classified_total <= 0:
+        return {"status": "NOT_APPLICABLE_NO_VALUE", "denominator": "0", "by_class": {}}
+    return {
+        "status": "COMPUTED_SUBSET_ECONOMIC_CLASS",
+        "denominator": "CLASSIFIED_HOLDING_VALUE",
+        "denominator_value": format(classified_total, "f"),
+        "by_class": {name: {"value": format(amount, "f"),
+                            "weight": format((amount / classified_total).quantize(Decimal("0.0001")), "f")}
+                     for name, amount in sorted(buckets.items())},
+        "note": "Weights use classified holding value only; unreconciled broker differences and "
+                "unclassified instruments are excluded, so no weight is invented.",
+    }
+
+
 def security_values(snapshot_path: Path, reporting_currency: str = "THB") -> Dict[str, Decimal]:
     """Holding value per security in the reporting currency, using the snapshot's own FX rates."""
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))

@@ -82,10 +82,10 @@
     "currency_exposure_best_evidence": {}
   },
   "concentration": {
-    "denominator": "TOTAL_BEST_EVIDENCE",
+    "denominator": "QUALIFIED_TOTAL_BEST_EVIDENCE",
     "hhi_identified_securities": "0.0000",
     "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-    "status": "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
+    "status": "COMPLETE",
     "top1_weight": "0.0000",
     "top_holdings": [],
     "unclassified_share": "0.0000"
@@ -225,7 +225,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "1fd89f831bfa791580284013c482b18501b4c92a1f8b653e63f4bc266b5a7d45",
+    "pack_sha256": "50ab73b40a7dcdd2f2c246e8d5b0e5ee88f0a5b52f13c6e000fbe0aa92795d6c",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "EVIDENCE_ONLY_REPORT",
@@ -247,5 +247,5 @@
   },
   "security_identity": [],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "340c7eb658a86a856fd93f35b48ac6111c0d1409628149c997bfa1d1010de724"
+  "view_sha256": "ef85359e2b3835abc7a2582b9c20191117372d03e91fdde5c04308cde21efdaa"
 }

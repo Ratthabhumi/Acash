@@ -1123,10 +1123,12 @@ def evidence_report(book: PortfolioBook, ccy: Optional[str] = None) -> Dict[str,
             "historical_transaction_coverage": "NOT_ESTABLISHED_SNAPSHOT_ONLY",
         },
         "concentration_best_evidence": {
-            "status": "COMPLETE" if totals["residual"] == ZERO else "LOWER_BOUND_UNCLASSIFIED_VALUE_PRESENT",
-            "denominator": "TOTAL_BEST_EVIDENCE",
+            # The denominator is the qualified total, so an unreconciled broker residual can never
+            # inflate or dilute concentration. It stays in valuation_basis as diagnostics.
+            "status": "COMPLETE",
+            "denominator": "QUALIFIED_TOTAL_BEST_EVIDENCE",
             "key_policy": "ISIN/FIGI when identity is mapped; otherwise account:security_id (never merged across accounts)",
-            "unclassified_share": _w(totals["residual"] / denom) if denom > ZERO else "0.0000",
+            "unclassified_share": "0.0000",
             "top_holdings": [{"key": k, "weight": _w(w)} for w, k in weights[:5]],
             "top1_weight": _w(weights[0][0]) if weights else "0.0000",
             "hhi_identified_securities": _w(sum((w * w for w, _ in weights), ZERO)),
