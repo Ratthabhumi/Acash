@@ -7,6 +7,7 @@ import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
 import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
+import { ResearchDecisionPanel } from '../components/portfolio/ResearchDecisionPanel';
 import { fetchWealth, WealthReport } from '../services/wealth';
 import { PortfolioTabId, TabBar, TabPanel } from '../components/portfolio/PortfolioTabs';
 import { callMarket } from '../services/marketRefresh';
@@ -598,6 +599,7 @@ export const PortfolioPage: React.FC = () => {
         {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <MarketRefreshPanel onMarketView={onMarketView} />}
       </TabPanel>
       <TabPanel id="planning" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <ResearchDecisionPanel />}
         {!loading && shown && 'view' in shown && (
           <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="planning" />
         )}

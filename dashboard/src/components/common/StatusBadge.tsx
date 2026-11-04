@@ -17,7 +17,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 
   if (norm === 'NOT_AUTHORIZED' || norm === 'FAIL' || norm === 'CLOSED_LOSS' || norm === 'REJECTED') {
     bgClass = 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800/60';
-  } else if (norm === 'PASS' || norm === 'CLOSED_WIN' || norm === 'COMPLETED') {
+  } else if (norm === 'PASS' || norm === 'CLOSED_WIN' || norm === 'COMPLETED' || norm === 'MARKET_OPEN') {
     bgClass = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60';
   } else if (norm === 'PENDING' || norm === 'PENDING_REVIEW' || norm === 'WARNING') {
     bgClass = 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60';

@@ -52,6 +52,7 @@ export const PROVIDER_INFO: Record<string, { name: string; coverage: string }> =
   ALPACA_BASIC: { name: 'Alpaca Basic', coverage: 'IEX real-time (single venue, not consolidated)' },
   MASSIVE_BASIC: { name: 'Massive Basic', coverage: 'Previous session close (EOD)' },
   BOT_REFERENCE_FX: { name: 'BOT FX', coverage: 'Reference USD/THB (not executable)' },
+  BOT_HOLIDAYS: { name: 'BOT Holidays', coverage: 'Thai financial-institutions calendar (not a US equity calendar)' },
   ALPACA_HISTORICAL: { name: 'Alpaca historical SIP', coverage: 'Delayed consolidated bars (≥ 15 min + margin), adapter gated' },
   MARKETDATA_APP_FREE: { name: 'MarketData.app Free', coverage: 'Delayed last trade (≥ 24h), Bearer header, 100 credits/day · documented contract' },
   FRANKFURTER_ECB_FX: { name: 'Frankfurter ECB FX', coverage: 'ECB reference USD/THB, keyless, not executable · documented contract' },
@@ -109,7 +110,7 @@ export function refreshBlocker(status: MarketStatus | null): string | null {
   return ready ? null : 'NO_READY_PRICE_PROVIDER';
 }
 
-export async function callMarket<T>(method: 'GET' | 'POST', route: 'status' | 'refresh' | 'view',
+export async function callMarket<T>(method: 'GET' | 'POST', route: 'status' | 'refresh' | 'view' | 'research',
                                     signal?: AbortSignal): Promise<MarketCall<T | { status: string }>> {
   try {
     const response = await fetch(MARKET_ENDPOINT + route, {
