@@ -32,3 +32,19 @@ set. Ambiguous results never merge securities or change aggregation silently.
 Installing the key does not authorise network use. The connectivity test runs only when the key is
 present and the Owner selects it explicitly; automated tests use a synthetic key and a mocked POST
 transport. A real OpenFIGI response remains `LIVE_NOT_OBSERVED` until the Owner runs that test.
+
+## Conditional bulk review
+
+`market_data/identity_review.py` turns candidate evidence into a reviewable decision without
+auto-confirming anything:
+
+- `AUTO_VALIDATED_CANDIDATE` — exactly one candidate, a valid `BBG` FIGI, a matching ticker, a venue
+  and an instrument type, and no FIGI shared with another ticker.
+- `REVIEW_REQUIRED` — ambiguous result, missing venue/type, or a non-single status.
+- `BLOCKED_CONFLICT` — invalid FIGI, ticker mismatch, or a duplicate FIGI.
+
+`confirm_bulk(path, revision, confirm=True)` accepts only the revision the Owner actually reviewed
+(stale revisions fail closed), confirms only the auto-validated set, records the excluded tickers,
+the timestamp and the previous revision, and writes atomically. Ambiguous or contradictory rows stay
+out of the bulk action. Identity confirmation never changes quantities, prices, FX, cash or cost
+basis, and a later API response cannot silently rewrite a confirmed mapping.

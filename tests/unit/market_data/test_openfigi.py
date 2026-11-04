@@ -134,3 +134,71 @@ def test_identity_batch_discloses_only_tickers(tmp_path: Path, monkeypatch: pyte
     rows = ib.rows_for(results)
     assert rows[0]["owner_confirmation"] == "PENDING_OWNER_REVIEW"
     assert "figi" in rows[0]["candidates"][0]
+
+
+def _batch(tmp_path: Path, rows: Any) -> Path:
+    path = tmp_path / "identities.json"
+    path.write_text(json.dumps({"schema": "ACASH_SECURITY_IDENTITIES_V1",
+                                "data_class": "OWNER_PRIVATE_OBSERVATION", "rows": rows}), encoding="utf-8")
+    return path
+
+
+def _row(ticker: str, figi: str = "BBG000BLNNH6", **candidate: Any) -> Dict[str, Any]:
+    return {"ticker": ticker, "status": "SINGLE_CANDIDATE",
+            "candidates": [{"figi": figi, "ticker": ticker, "exch_code": "US",
+                            "security_type": "Common Stock", **candidate}]}
+
+
+def test_identity_review_validates_deterministically(tmp_path: Path) -> None:
+    from acash.market_data import identity_review as ir
+
+    rows = [_row("AAPL"), _row("VOO", figi="BBG000BLNNH7"),
+            _row("BAD", figi="NOT_A_FIGI"),
+            {"ticker": "MISMATCH", "status": "SINGLE_CANDIDATE",
+             "candidates": [{"figi": "BBG000BLNNH8", "ticker": "OTHER", "exch_code": "US",
+                            "security_type": "Common Stock"}]},
+            _row("NOVENUE", figi="BBG000BLNNH9", exch_code=""),
+            {"ticker": "MULTI", "status": "MULTIPLE_CANDIDATES",
+             "candidates": [{"figi": "BBG000BLNNHA", "ticker": "MULTI", "exch_code": "US"},
+                            {"figi": "BBG000BLNNHB", "ticker": "MULTI", "exch_code": "US"}]}]
+    validated = {r["ticker"]: r["validation"] for r in ir.validate_rows(rows)}
+    assert validated["AAPL"] == ir.AUTO and validated["VOO"] == ir.AUTO
+    assert validated["BAD"] == ir.BLOCKED and "FIGI_FORMAT_INVALID" in str(
+        next(r for r in ir.validate_rows(rows) if r["ticker"] == "BAD")["reasons"])
+    assert validated["MISMATCH"] == ir.BLOCKED and validated["NOVENUE"] == ir.REVIEW
+    assert validated["MULTI"] == ir.REVIEW
+
+
+def test_identity_review_blocks_duplicate_figis(tmp_path: Path) -> None:
+    from acash.market_data import identity_review as ir
+
+    rows = [_row("AAPL"), _row("MSFT", figi="BBG000BLNNH6")]
+    validated = {r["ticker"]: r["validation"] for r in ir.validate_rows(rows)}
+    assert validated["AAPL"] == ir.AUTO and validated["MSFT"] == ir.BLOCKED
+
+
+def test_bulk_confirmation_applies_only_validated_rows_and_checks_the_revision(tmp_path: Path) -> None:
+    from acash.market_data import identity_review as ir
+
+    path = _batch(tmp_path, [_row("AAPL"), _row("BAD", figi="NOT_A_FIGI"), _row("MULTI", figi="BBG000BLNNHC")])
+    # make MULTI ambiguous so it must stay out of the bulk action
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["rows"][2] = {"ticker": "MULTI", "status": "MULTIPLE_CANDIDATES",
+                      "candidates": [{"figi": "BBG000BLNNHC", "ticker": "MULTI", "exch_code": "US"},
+                                     {"figi": "BBG000BLNNHD", "ticker": "MULTI", "exch_code": "US"}]}
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    revision = ir.load_batch(path)["revision"]
+
+    with pytest.raises(DataContractError, match="IDENTITY_REVIEW_REVISION_CONFLICT"):
+        ir.confirm_bulk(path, "stale-revision", confirm=True)
+    with pytest.raises(DataContractError, match="IDENTITY_CONFIRMATION_REQUIRED"):
+        ir.confirm_bulk(path, revision, confirm=False)
+
+    result = ir.confirm_bulk(path, revision, confirm=True)
+    assert result["status"] == "CONFIRMED" and result["confirmed"] == 1
+    assert result["excluded"] == ["BAD", "MULTI"]
+    after = {row["ticker"]: row for row in ir.load_batch(path)["doc"]["rows"]}
+    assert after["AAPL"]["owner_confirmation"] == ir.CONFIRMED
+    assert after["BAD"].get("owner_confirmation") != ir.CONFIRMED
+    assert after["MULTI"].get("owner_confirmation") != ir.CONFIRMED
+    assert ir.load_batch(path)["doc"]["confirmation_revision"]["previous_revision"] == revision
