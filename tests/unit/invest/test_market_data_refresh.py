@@ -695,7 +695,8 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     doc = json.loads((Path(".") / ma.RECORD).read_text(encoding="utf-8"))
     assert doc["decision_id"] == ma.DECISION_ID
     entries = {e["provider_id"]: e for e in doc["scope_providers"]}
-    assert set(entries) == {"ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
+    assert set(entries) == {"ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE",
+                            "FRANKFURTER_ECB_FX", "MASSIVE_BASIC", "BOT_REFERENCE_FX"}
     for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):
         assert entries[provider_id]["entitlement_verified"] is True
         assert entries[provider_id]["cache_permitted"] is None
@@ -707,7 +708,9 @@ def test_repository_odr4_scope_attests_only_documented_rights() -> None:
     assert doc["attestation_record"]["attested_on"] == "2026-11-03"
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "MARKET_DATA_SUBSCRIPTION"} <= set(doc["independent_of"])
     statuses = {p["provider_id"]: p["status"] for p in ma.provider_statuses(Store({}))[1]}
-    assert statuses["MASSIVE_BASIC"] == "GOVERNANCE_REQUIRED"
+    assert statuses["MASSIVE_BASIC"] in ("CREDENTIALS_REQUIRED", "CONTRACT_UNVERIFIED")
+    assert statuses["BOT_REFERENCE_FX"] == "CONTRACT_UNVERIFIED"
+    assert doc["amendments"][-1] == "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT"
 
 
 # ---- partial valuation ------------------------------------------------------------------------

@@ -58,7 +58,8 @@ def test_new_capability_states_and_scope(record: str, capability: str, state: st
     assert {"TRADING_AUTHORIZED", "BROKER_ACCOUNT_CONNECTIVITY", "CAPITAL_TRANSFER"} <= set(doc["independent_of"])
     if capability == "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED":
         assert {e["provider_id"] for e in doc["scope_providers"]} == {
-            "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX"}
+            "ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX",
+            "MASSIVE_BASIC", "BOT_REFERENCE_FX"}
         entries = {e["provider_id"]: e for e in doc["scope_providers"]}
         # Attested only where the accepted terms and documented plan support the right.
         for provider_id in ("ALPACA_BASIC", "ALPACA_HISTORICAL"):

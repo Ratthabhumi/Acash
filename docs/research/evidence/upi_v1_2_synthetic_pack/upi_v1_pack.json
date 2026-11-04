@@ -1170,8 +1170,8 @@
       "OVERLAP_NOT_ESTABLISHED: no dated constituent weights.",
       "COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
-      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
-      "SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 10280.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.",
+      "SECURITY_IDENTITY_UNVERIFIED: SYNTHEME still lack an owner-confirmed identifier; venue-unverified instruments are reported separately and are not merged across accounts.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
       "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
@@ -1205,6 +1205,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "65f42c8965bd53c7a0b53e348a86972e091ef86d1adcfd3e2dcbc90de28ad585",
+  "pack_sha256": "ec8e065010b80d34bf3ef003979c44168c1a88225d3644092547feeba1329f34",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

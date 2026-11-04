@@ -13,7 +13,7 @@ const AUTHORITY = ['PRIVATE_OBSERVATION_AUTHORIZATION_NOT_REQUIRED', 'OWNER_PRIV
 
 test('every reason code the wealth pack can emit has a finding with a valid severity', () => {
   const pack = read('../src/acash/invest/wealth_pack.py');
-  const codes = [...pack.matchAll(/reasons\.append\(f?"([A-Z0-9_]+):/g)].map((m) => m[1]);
+  const codes = [...pack.matchAll(/reasons\.append\(\s*f?"([A-Z0-9_]+):/g)].map((m) => m[1]);
   assert.ok(codes.length >= 12, `parsed ${codes.length} codes`);
   for (const code of codes) {
     assert.ok(FINDINGS[code], `${code} has no finding entry`);

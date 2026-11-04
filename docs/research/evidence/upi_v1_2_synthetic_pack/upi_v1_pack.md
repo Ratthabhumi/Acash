@@ -1,6 +1,6 @@
 # ACASH Unified Portfolio Intelligence — SYNTHETIC_PUBLIC_FIXTURE
 
-Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `65f42c8965bd53c7`
+Snapshot `SYN_PILOT_V1_2` valued 2026-10-30 (observed 2026-11-02T08:15:00+07:00) · support state **SNAPSHOT_ONLY** · performance **PERFORMANCE_NOT_ESTABLISHED** · pack `ec8e065010b80d34`
 
 Read-only decision support. No orders, transfers, recurring plans or authority. Stress figures are illustrative, not forecasts.
 
@@ -126,8 +126,8 @@ V38 route costs for 10000 THB (MANUAL, 1 month; unranked):
 - OVERLAP_NOT_ESTABLISHED: no dated constituent weights.
 - COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.
 - RESERVE_SHORTFALL: rebuild emergency reserve before new risk.
-- UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.
-- SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.
+- BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 10280.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.
+- SECURITY_IDENTITY_UNVERIFIED: SYNTHEME still lack an owner-confirmed identifier; venue-unverified instruments are reported separately and are not merged across accounts.
 - ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.
 - MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.
 - V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.

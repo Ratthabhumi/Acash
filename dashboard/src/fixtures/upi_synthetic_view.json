@@ -202,7 +202,7 @@
       "OVERLAP_NOT_ESTABLISHED",
       "COST_BASIS_INCOMPLETE",
       "RESERVE_SHORTFALL",
-      "UNCLASSIFIED_HOLDINGS_PRESENT",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE",
       "SECURITY_IDENTITY_UNVERIFIED",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED",
       "MARKET_SESSION_NOT_VERIFIED",
@@ -218,8 +218,8 @@
       "OVERLAP_NOT_ESTABLISHED: no dated constituent weights.",
       "COST_BASIS_INCOMPLETE: PARTIAL_COST_BASIS; unrealized P&L only for the known-cost subset.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
-      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
-      "SECURITY_IDENTITY_UNVERIFIED: some holdings lack owner-supplied identifiers; not merged across accounts.",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 10280.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.",
+      "SECURITY_IDENTITY_UNVERIFIED: SYNTHEME still lack an owner-confirmed identifier; venue-unverified instruments are reported separately and are not merged across accounts.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
       "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
@@ -324,7 +324,7 @@
   "report_metadata": {
     "observation_lag_days": 3,
     "observed_at": "2026-11-02T08:15:00+07:00",
-    "pack_sha256": "65f42c8965bd53c7a0b53e348a86972e091ef86d1adcfd3e2dcbc90de28ad585",
+    "pack_sha256": "ec8e065010b80d34bf3ef003979c44168c1a88225d3644092547feeba1329f34",
     "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1",
     "report_currency": "THB",
     "report_type": "FULL_REPORT",
@@ -355,5 +355,5 @@
     }
   ],
   "view_schema": "ACASH_UPI_VIEW_V1",
-  "view_sha256": "52c847acbe30b75312d7975e2ce99ae41456f6243b5f9b3d3e16cdcd97f269c3"
+  "view_sha256": "dd8609ae9ed6582e719b40496643b7d6f644561aa132202ead5ae14d08db401f"
 }

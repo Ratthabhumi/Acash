@@ -103,11 +103,47 @@
         "https://api.frankfurter.dev/v2/openapi.json"
       ],
       "attested_on": "2026-11-03"
+    },
+    {
+      "provider_id": "MASSIVE_BASIC",
+      "role": "PRICE_HISTORY_AND_EOD",
+      "approved_endpoints": [
+        "GET https://api.massive.com/v2/aggs/ticker/{ticker}/prev",
+        "historical daily aggregate bars (documented, not yet implemented)"
+      ],
+      "quoted_scope": "US stocks/ETFs, EOD aggregates, up to the documented Basic history window",
+      "account_entitlement": "UNKNOWN — Basic plan documented at 5 requests/minute and a limited history window",
+      "display_permitted": null,
+      "calculation_permitted": null,
+      "derived_value_permitted": null,
+      "cache_permitted": null,
+      "retention_policy_verified": null,
+      "contract_verified_live": false,
+      "evidence": "Owner authorized MASSIVE_BASIC on 2026-11-04 for personal private research, historical returns and EOD valuation observations. Provider documentation still has to be verified against a real response; no entitlement is claimed.",
+      "attested_on": "2026-11-04"
+    },
+    {
+      "provider_id": "BOT_REFERENCE_FX",
+      "role": "FX_REFERENCE",
+      "approved_endpoints": [
+        "GET https://gateway.api.bot.or.th/Stat-ExchangeRate/v2 (documented v2 path)"
+      ],
+      "quoted_scope": "THB reference exchange rates, daily, research/cross-check use",
+      "account_entitlement": "UNKNOWN — requires an API key and an entitlement check",
+      "display_permitted": null,
+      "calculation_permitted": null,
+      "derived_value_permitted": null,
+      "cache_permitted": null,
+      "retention_policy_verified": null,
+      "contract_verified_live": false,
+      "evidence": "Owner authorized BOT_REFERENCE_FX on 2026-11-04 for personal reference-FX research. The existing adapter still targets a legacy endpoint (BOT_SPEC_VERIFIED=False) and must be migrated to the documented v2 contract before any live call.",
+      "attested_on": "2026-11-04"
     }
   ],
   "amendments": [
     "ODR_UPI_MARKET_DATA_004_AMENDMENT_001",
-    "ODR_UPI_MARKET_DATA_004_AMENDMENT_002_CACHE_RIGHTS"
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_002_CACHE_RIGHTS",
+    "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT"
   ],
   "scope_egress": "Instrument identifiers (symbol, exchange) and dates only",
   "scope_files": [

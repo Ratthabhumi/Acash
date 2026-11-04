@@ -1,0 +1,35 @@
+{
+  "record": "ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT",
+  "decision_id": "ODR_UPI_MARKET_DATA_004",
+  "capability": "OWNER_MARKET_DATA_RETRIEVAL_AUTHORIZED",
+  "amendment_type": "SCOPE_PROVIDERS_EXPANSION",
+  "status": "RATIFIED",
+  "ratified_by": "OWNER",
+  "ratified_on": "2026-11-04",
+  "scope_changed": true,
+  "base_decision": "docs/governance/ODR_UPI_MARKET_DATA_004.json",
+  "summary": "Add MASSIVE_BASIC and BOT_REFERENCE_FX to scope_providers for personal, private research: historical returns, EOD valuation observations and reference FX cross-checks. The Owner authorization is recorded, but credential, entitlement, response-schema and live-response verification are explicitly NOT claimed, so both providers stay disabled until those steps are evidenced.",
+  "authorized_purposes": [
+    "personal private market research",
+    "historical return panel",
+    "EOD valuation observations",
+    "reference FX and cross-provider validation",
+    "read-only portfolio research calculations"
+  ],
+  "not_authorized": [
+    "trading or order placement",
+    "capital transfer",
+    "public redistribution",
+    "paid subscription upgrade",
+    "derived-data publication"
+  ],
+  "activation_prerequisites": [
+    "Massive: credential in Windows Credential Manager and a documented-contract check against a real response",
+    "BOT: migrate the adapter from the legacy endpoint to the documented v2 contract, then a real response",
+    "Both: per-capability attestation (display, calculation, derived use, cache, retention) before READY"
+  ],
+  "provider_status_after_amendment": {
+    "MASSIVE_BASIC": "CONTRACT_UNVERIFIED",
+    "BOT_REFERENCE_FX": "CONTRACT_UNVERIFIED"
+  }
+}

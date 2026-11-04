@@ -346,7 +346,7 @@ def test_pilot_runs_offline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     wp.main(["--snapshot", str(FIXTURE), "--target-weights", TARGETS, "--output", str(tmp_path)])
     pack = json.loads((tmp_path / "upi_v1_pack.json").read_text(encoding="utf-8"))
     reasons = " ".join(pack["E_decision"]["reasons"])
-    assert "UNCLASSIFIED_HOLDINGS_PRESENT" in reasons and "MARKET_SESSION_NOT_VERIFIED" in reasons
+    assert "BROKER_TOTAL_RECONCILIATION_DIFFERENCE" in reasons and "MARKET_SESSION_NOT_VERIFIED" in reasons
     assert pack["E_decision"]["orders_generated"] == 0
 
 

@@ -616,7 +616,7 @@
       "PERFORMANCE_NOT_ESTABLISHED: snapshot only, no cash-flow history.",
       "EVIDENCE_ONLY_REPORT: no cash or quantity line carries value; allocation, concentration, P&L and stress are not computed.",
       "RESERVE_SHORTFALL: rebuild emergency reserve before new risk.",
-      "UNCLASSIFIED_HOLDINGS_PRESENT: broker totals exceed identified lines; concentration is a lower bound.",
+      "BROKER_TOTAL_RECONCILIATION_DIFFERENCE: broker total exceeds identified lines by 90750.00 THB. Classified UNQUALIFIED_NOT_IN_TOTAL: it is a reconciliation difference, not unidentified investable assets, and it is excluded from allocation, NAV and concentration.",
       "ACCOUNT_TOTALS_NOT_FULLY_RECONCILED: see evidence.accounts.",
       "MARKET_SESSION_NOT_VERIFIED: the pack applies no exchange calendar; preflight checks XNYS price times against the 2026-2028 NYSE fixture only.",
       "V38_ROUTE_EVIDENCE_INCOMPLETE: FX spread and per-symbol eligibility remain owner-evidence items.",
@@ -650,6 +650,6 @@
     "snapshot_schema": "ACASH_PRIVATE_PORTFOLIO_SNAPSHOT_V1_2",
     "trading_authority": "NONE"
   },
-  "pack_sha256": "50ab73b40a7dcdd2f2c246e8d5b0e5ee88f0a5b52f13c6e000fbe0aa92795d6c",
+  "pack_sha256": "0a9a9490586a200e10f2500ec7daf5b191df813a00337d4fd7b7f50cdedf30ea",
   "pack_version": "UNIFIED_PORTFOLIO_INTELLIGENCE_V1"
 }

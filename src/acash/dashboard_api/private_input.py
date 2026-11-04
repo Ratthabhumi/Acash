@@ -427,7 +427,16 @@ def generate(report_date: Optional[date] = None) -> Result:
     previous_view = (out / VIEW_FILE).read_bytes() if (out / VIEW_FILE).is_file() else None
     published = False
     try:
-        pack = build_wealth_pack(build_book(load_snapshot(snapshot_path)), load_capacity(capacity_path), None, day)
+        classes = None
+        registry_path = _private_dir("economic_classification.json")
+        if registry_path.is_file():
+            try:
+                from acash.invest import economic_classification as ec
+                classes = {sid: c.economic_asset_class for sid, c in ec.load_registry(registry_path).items()}
+            except (OSError, ValueError, DataContractError):
+                classes = None
+        pack = build_wealth_pack(build_book(load_snapshot(snapshot_path)), load_capacity(capacity_path), None, day,
+                                 economic_classes=classes)
         view = build_view(json.loads(json.dumps(pack)))
         write_pack(pack, gen_dir)
         view_bytes = write_view(view, gen_dir / VIEW_FILE).read_bytes()
