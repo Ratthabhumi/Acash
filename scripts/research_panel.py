@@ -43,7 +43,10 @@ def main() -> int:
     if not symbols:
         print(json.dumps({"status": "NO_STORED_BARS"}))
         return 2
-    panel = rpanel.panel_inputs_from_warehouse(store, symbols, VIEW)
+    closes = {symbol: {day: bar.close for day, bar in store.read(symbol).items()} for symbol in symbols}
+    weights = rpanel.weights_from_view(VIEW, symbols)
+    panel = rpanel.build_panel(closes, weights, symbols)
+    cohorts = rpanel.build_cohorts(closes, weights, symbols)
     proposal: Dict[str, Any] = {"status": rp.INSUFFICIENT}
     inputs = None
     if panel.get("status") == "PANEL_READY":
@@ -63,6 +66,17 @@ def main() -> int:
         ).encode()).hexdigest() if inputs is not None else None,
         "proposal": proposal,
         "labels": rpanel.real_vs_hypothetical(panel),
+        "cohorts": cohorts,
+        "cohort_summary": [
+            {"cohort_id": c["cohort_id"], "status": c["status"],
+             "evaluation_status": c["evaluation_status"],
+             "comparable_to_established": c["comparable_to_established"],
+             "session_count": c.get("session_count"),
+             "evaluation_window": c.get("evaluation_window"),
+             "strategy_id": (c.get("proposal") or {}).get("strategy_id"),
+             "out_of_sample_periods": ((c.get("proposal") or {}).get("out_of_sample_period") or {}).get("periods"),
+             "excluded": sorted(c.get("excluded") or {})}
+            for c in cohorts["cohorts"]],
         "governance": {"execution_authority": "NONE", "real_capital_authority_usd": "0.00",
                        "no_real_orders": True, "retention": "PERMITTED",
                        "note": "Rebuilt offline from stored partitions; no provider was called."},

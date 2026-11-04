@@ -353,6 +353,7 @@ def research_view() -> Dict[str, Any]:
         "requests": job.get("requests"),
         "storage_rights": job.get("storage_rights"),
         "governance": report.get("governance"),
+        "cohorts": report.get("cohort_summary"),
         "fx": _fx_view(),
         "collector_health": health,
     }
