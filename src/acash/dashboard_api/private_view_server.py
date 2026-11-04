@@ -39,6 +39,7 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 ROUTE = "/api/upi/view"
 WEALTH_ROUTE = "/api/upi/wealth"
+TAX_ROUTE = "/api/upi/tax"
 SESSION_ROUTE = "/api/upi/session"
 LAUNCH_ROUTE = "/api/upi/launch"
 TOKEN_HEADER = "X-ACASH-Session"
@@ -165,7 +166,7 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
                                 module.ROUTES, module.handle)
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": TOKEN_HEADER, "Access-Control-Allow-Methods": "GET"}
-    if target not in (ROUTE, WEALTH_ROUTE):
+    if target not in (ROUTE, WEALTH_ROUTE, TAX_ROUTE):
         return _json(404, cors, {"status": "NOT_FOUND"})
     if method == "OPTIONS":
         return 204, cors, b""
@@ -178,6 +179,8 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
     state = odr_state(None, SCHEMA_V1_2)
     if state != "RATIFIED":
         return _json(403, cors, {"status": "AUTHORIZATION_REQUIRED", "odr_state": state})
+    if target == TAX_ROUTE:
+        return _json(200, cors, _tax_payload())
     if target == WEALTH_ROUTE:
         return _json(200, cors, _wealth_payload(view_path))
     status, code, doc = load_view(view_path)
@@ -227,6 +230,16 @@ def _market_route(method: str, name: str, headers: Mapping[str, str], token: str
         return _json(rejected[0], cors, rejected[1])
     status, doc = market_service.handle(method, name, payload, market)
     return _json(status, cors, doc)
+
+
+def _tax_payload() -> Dict[str, Any]:
+    """Staged tax/cash-flow evidence. Aggregates stay aggregates; no liability is computed here."""
+    from acash.invest import tax_intelligence as tax
+    doc = tax.load_evidence(private_input._private_dir("tax"))
+    if doc is None:
+        return {"status": "NO_TAX_EVIDENCE",
+                "note": "Run scripts/tax_evidence.py after recording broker evidence."}
+    return {"status": "AVAILABLE", "is_tax_filing": False, **doc}
 
 
 def _wealth_payload(view_path: Path) -> Dict[str, Any]:
