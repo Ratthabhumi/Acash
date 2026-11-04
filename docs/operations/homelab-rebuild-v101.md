@@ -9,6 +9,21 @@ mounted at `/data` for the historical warehouse and backups.
 
 ## 1. Bootstrap checklist (GitOps, no secrets in Git)
 
+**First: get the reinstalled host back on the network.** SSH currently times out and the previous
+Tailscale node is offline; nothing below can be checked until this is done from the local console:
+
+```bash
+sudo apt update && sudo apt install -y openssh-server curl
+sudo systemctl enable --now ssh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo systemctl enable --now tailscaled && sudo tailscale up     # open the printed link, sign in
+tailscale status && tailscale ip -4
+systemctl is-active ssh tailscaled
+```
+
+Use the IP that `tailscale ip -4` reports **now**; do not assume `100.116.167.3` comes back. Leave the old
+node in place until the new one is verified.
+
 ```bash
 # identity and network first
 hostnamectl; ip -brief addr; timedatectl

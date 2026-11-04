@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from acash.dashboard_api.private_input import RateLimiter  # noqa: E402
 from acash.invest import fx_series as fx  # noqa: E402
 from acash.invest import market_authority as ma  # noqa: E402
+from acash.invest import research_panel as rpanel  # noqa: E402
 from acash.market_data import providers as mp  # noqa: E402
 from acash.market_data import warehouse as wh  # noqa: E402
 
@@ -44,15 +45,8 @@ def held_symbols() -> List[str]:
 
 
 def weights(symbols: List[str]) -> Dict[str, Decimal]:
-    snapshot = json.loads((PRIVATE / "snapshot.json").read_text(encoding="utf-8"))
-    values: Dict[str, Decimal] = {}
-    for account in snapshot["accounts"]:
-        for position in account.get("positions") or []:
-            symbol = str(position["security_id"])
-            if symbol in symbols and position.get("observed_market_value_currency") == "USD":
-                values[symbol] = values.get(symbol, Decimal(0)) + Decimal(str(position["observed_market_value"]))
-    total = sum(values.values(), Decimal(0))
-    return {symbol: value / total for symbol, value in values.items() if total > 0}
+    """Global weights from the authoritative position rows, never a sub-portfolio share."""
+    return rpanel.weights_from_view(PRIVATE / "out" / "upi_view.json", symbols)
 
 
 def main() -> int:

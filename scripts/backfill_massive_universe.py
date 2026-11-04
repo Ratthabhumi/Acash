@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from acash.dashboard_api.private_input import RateLimiter  # noqa: E402
 from acash.invest import market_authority as ma  # noqa: E402
+from acash.invest import research_panel as rpanel  # noqa: E402
 from acash.invest import research_proposal as rp  # noqa: E402
 from acash.market_data import collector as co  # noqa: E402
 from acash.market_data import providers as mp  # noqa: E402
@@ -47,50 +48,12 @@ def held_symbols() -> List[str]:
     return sorted(set(out))
 
 
-def panel_weights(symbols: List[str]) -> Dict[str, Decimal]:
-    """Panel-relative weights from the snapshot's observed market values (never whole-portfolio NAV)."""
-    snapshot = json.loads((PRIVATE / "snapshot.json").read_text(encoding="utf-8"))
-    values: Dict[str, Decimal] = {}
-    for account in snapshot["accounts"]:
-        for position in account.get("positions") or []:
-            symbol = str(position["security_id"])
-            if symbol not in symbols:
-                continue
-            raw = position.get("observed_market_value")
-            if raw is None or position.get("observed_market_value_currency") != "USD":
-                continue
-            values[symbol] = values.get(symbol, Decimal(0)) + Decimal(str(raw))
-    total = sum(values.values(), Decimal(0))
-    if total <= 0:
-        return {}
-    return {symbol: values[symbol] / total for symbol in symbols if symbol in values}
-
-
 def build_panel(bars: Dict[str, List[Dict[str, Any]]], symbols: List[str]) -> Dict[str, Any]:
-    closes: Dict[str, Dict[date, Decimal]] = {}
-    for symbol in symbols:
-        rows = bars.get(symbol) or []
-        closes[symbol] = {date.fromisoformat(str(row["session_date"])): Decimal(str(row["close"])) for row in rows}
-    eligible = [s for s in symbols if len(closes[s]) >= MIN_SESSIONS]
-    excluded = {s: {"reason": "SESSION_COVERAGE_BELOW_MINIMUM", "sessions": len(closes[s])}
-                for s in symbols if s not in eligible}
-    if not eligible:
-        return {"status": rp.INSUFFICIENT, "excluded": excluded, "eligible": []}
-    common = sorted(set.intersection(*(set(closes[s]) for s in eligible)))
-    if len(common) < 2:
-        return {"status": rp.INSUFFICIENT, "excluded": excluded, "eligible": eligible,
-                "missing_evidence": ["fewer than two aligned sessions across the eligible universe"]}
-    weights = panel_weights(eligible)
-    if not weights:
-        return {"status": rp.INSUFFICIENT, "excluded": excluded, "eligible": eligible,
-                "missing_evidence": ["no USD observed market value for the eligible universe"]}
-    returns = {s: [(closes[s][common[i]] / closes[s][common[i - 1]]) - 1 for i in range(1, len(common))]
-               for s in eligible}
-    timestamps = [datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) for day in common[1:]]
-    inputs = rp.ProposalInputs(returns=returns, timestamps=timestamps, current_weights=weights)
-    return {"status": "PANEL_READY", "eligible": eligible, "excluded": excluded, "inputs": inputs,
-            "aligned_sessions": len(common), "first": common[0].isoformat(), "last": common[-1].isoformat(),
-            "weights": {s: format(w, "f") for s, w in weights.items()}}
+    """Delegate to the canonical panel builder; weights come from qualified position rows."""
+    closes = {symbol: {date.fromisoformat(str(row["session_date"])): Decimal(str(row["close"]))
+                       for row in (bars.get(symbol) or [])} for symbol in symbols}
+    weights = rpanel.weights_from_view(PRIVATE / "out" / "upi_view.json", symbols)
+    return rpanel.build_panel(closes, weights, symbols)
 
 
 def main() -> int:

@@ -267,3 +267,65 @@ cannot inherit that cookie without the nonce being written into a tool call, and
 set forbids printing the nonce or session value. The gate itself remains verified by contract tests
 (unauthenticated requests are rejected; Origin/Host/Cookie checks unchanged), and nothing was weakened
 to obtain a session. Marked **NOT_RUN** rather than reported as passing.
+
+## V101 â€” owner evidence, corrected weights, and what remains
+
+### The weight-source defect (silent zero weights)
+
+The panel and the FX decomposition derived weights from a position's `observed_market_value`. `HOOD` has
+a quantity and a cost basis but no broker-displayed market value in the 2026-11-02 snapshot, so it was
+dropped: the proposal then gave it **weight 0 without saying so**, and the FX decomposition reported
+"excluded: HOOD". A zero weight is a silent change to the portfolio that was evaluated.
+
+Fixed with one authority, `acash.invest.research_panel`:
+
+- weights come from the authoritative position rows (`value_local` per pricing currency, quantity x price
+  on the valuation date), never from `observed_market_value` and never from a sub-portfolio share;
+- a symbol with no qualified value is **excluded with a reason**, not zeroed;
+- when the eligible subset is smaller than the portfolio, weights are renormalised **and**
+  `weights_renormalised_to_panel: true` is reported.
+
+Offline rebuild (`scripts/research_panel.py`, **0 provider calls**) from the 26 stored partitions:
+
+| Item | Before | After |
+| --- | --- | --- |
+| Instruments in the proposal | 25, HOOD weight 0 | 25, **HOOD weight 1.96%** |
+| Instruments in the FX decomposition | 25, HOOD excluded | **26, no exclusions** |
+| USD price return | +10.19% | **+9.06%** |
+| FX translation | +2.73% | +2.73% |
+| Cross term | +0.28% | **+0.25%** |
+| THB result | +13.20% | **+12.04%** |
+
+The earlier +13.20% was therefore distorted by a missing weight; the corrected figure remains a
+**hypothetical fixed-weight basket**, not realized performance.
+
+### Dated broker-display observations
+
+`acash.invest.broker_positions` stores a broker screenshot as its own dated capture
+(`ACASH_BROKER_POSITION_OBSERVATIONS_V1`):
+
+- it never modifies the snapshot, so `observed_at 2026-11-02T22:41+07` and the 2026-11-02 valuation stay
+  truthful;
+- there is no quantity, trade or cash field, so a capture cannot create a transaction;
+- `displayed_subportfolio_weight` is stored as metadata only. The 2026-11-05 Newwave capture records
+  META 6,190.83 / GE 3,637.46 / HOOD 3,401.60 / ACHR 3,338.04 THB and marks
+  `subportfolio_rows_complete: false`, because the fifth asset's value was not visible â€” the four visible
+  rows imply 20.53% for HOOD, not the displayed 17.21%, which is exactly why a displayed share is never
+  reused as a global weight;
+- `GE` and `GEV` stay separate securities (distinct rows, distinct FIGIs); a duplicate `security_id` in
+  one capture is refused.
+
+### Browser acceptance
+
+The authenticated smoke test (real launcher, one-time sign-in, HTTP 200 with 28 rows, reload 200, a fresh
+browser 401) was executed by the Owner against `df3d67d` and is recorded as **BROWSER_SMOKE_PASS**. The
+focused UI matrix (search, sorting, narrow viewport, every decision-panel state) was **NOT_RUN** in this
+cycle: re-running the login flow was explicitly out of scope, and no repeatable in-repo browser harness
+exists yet. Nothing about authentication was weakened to obtain a session.
+
+### Homelab
+
+SSH to `mew@homelab` still times out and the previous Tailscale node (100.116.167.3) is offline, so the
+reinstalled host is unqualified: **HOMELAB_WAITING_FOR_TAILSCALE_REENROLLMENT**. No remote command was
+attempted and no disk was touched. Re-enrolment and preflight steps live in
+`docs/operations/homelab-rebuild-v101.md`.
