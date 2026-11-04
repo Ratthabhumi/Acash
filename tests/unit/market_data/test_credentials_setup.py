@@ -185,7 +185,7 @@ def test_bot_product_credentials_are_retrievable_for_setup_readback(monkeypatch:
 
     seen = {}
 
-    def fake_read(target: str):
+    def fake_read(target: str) -> tuple[str, str] | None:
         seen["target"] = target
         return ("BOT_OTHERS", "SYNTHETIC_BOT_KEY") if target.endswith("BOT_OTHERS") else None
 
