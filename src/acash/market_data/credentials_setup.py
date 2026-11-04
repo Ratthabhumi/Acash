@@ -33,7 +33,17 @@ KEYED_PROVIDERS: Tuple[Tuple[str, str, Tuple[Tuple[str, bool], ...]], ...] = (
      (("OpenFIGI API Key", True),)),
     ("MASSIVE_BASIC", "Massive Stocks Basic (EOD and historical research; key sent as a header only)",
      (("Massive API Key", True),)),
-    ("BOT_REFERENCE_FX", "BOT reference FX (official exchange-rate API; key sent as a header only)",
+    ("BOT_EXCHANGE_RATES", "BOT Exchange Rates (THB reference FX; header auth, 200 calls/hour)",
+     (("BOT API Key", True),)),
+    ("BOT_INTEREST_RATES", "BOT Interest Rates (policy/deposit/BIBOR; 200 calls/hour)",
+     (("BOT API Key", True),)),
+    ("BOT_STATISTICS", "BOT Statistics (Thai macro series; 2000 calls/hour)",
+     (("BOT API Key", True),)),
+    ("BOT_DEBT_AUCTION", "BOT Debt Securities Auction (bond auction results; 200 calls/hour)",
+     (("BOT API Key", True),)),
+    ("BOT_LICENSE_CHECK", "BOT License Check (financial-institution due diligence; 100 calls/hour)",
+     (("BOT API Key", True),)),
+    ("BOT_OTHERS", "BOT Others (financial institutions' holidays; 100 calls/hour)",
      (("BOT API Key", True),)),
 )
 PROVIDER_LABELS = {provider_id: label for provider_id, label, _ in KEYED_PROVIDERS}
@@ -71,6 +81,9 @@ def status_rows(store: Optional[ma.CredentialStore] = None) -> List[str]:
         out.append(f"  {entry['provider_id']:<20} {entry['status']:<24} credentials={credentials}")
     out.append(f"  {'OPENFIGI_IDENTITY':<20} {'CONFIGURED' if ma.identity_credential() is not None else 'NOT_CONFIGURED':<24} "
                "credentials=" + ("ESTABLISHED" if ma.identity_credential() is not None else "MISSING"))
+    for product, state in ma.bot_product_credentials().items():
+        out.append(f"  {product:<20} {'CREDENTIAL_CONFIGURED' if state == 'CONFIGURED' else 'NOT_CONFIGURED':<24} "
+                   "adapter=CONTRACT_UNVERIFIED")
     return out
 
 
@@ -116,6 +129,9 @@ def _choose_provider(prompt: str) -> Tuple[str, Tuple[Tuple[str, bool], ...]]:
 
 def _test_connection(provider_id: str) -> str:
     """Authorized sample request. Every gate is checked before a byte leaves the machine."""
+    if provider_id in ma.BOT_PRODUCTS:
+        return ("REFUSED_CONTRACT_UNVERIFIED: no verified adapter exists for this BOT product yet; "
+                "the credential is stored but no live request is made")
     store = ma.WindowsCredentialStore()
     state, statuses = ma.provider_statuses(store)
     entry = next((s for s in statuses if s["provider_id"] == provider_id), None)
@@ -143,9 +159,9 @@ def _test_connection(provider_id: str) -> str:
     elif provider_id == "MASSIVE_BASIC":
         observations = mp.MassiveEODMarketDataProvider(credential or ("", ""), mp.urllib_transport, allow,
                                                        clock).latest_prices(["AAPL"], date.today())
-    elif provider_id == "BOT_REFERENCE_FX":
-        return "REFUSED_CONTRACT_UNVERIFIED: the BOT adapter still targets the legacy endpoint; " \
-               "migrate it to the documented v2 contract before any live request"
+    elif provider_id == "BOT_REFERENCE_FX" or provider_id in ma.BOT_PRODUCTS:
+        return ("REFUSED_CONTRACT_UNVERIFIED: the BOT endpoint contract for this product has not been "
+                "verified against the official schema; no live request is made")
     else:
         return "REFUSED_NO_SAMPLE_TEST_FOR_PROVIDER"
     return f"REAL_RESPONSE_OBSERVED: {len(observations)} observation(s); schema valid, timestamps preserved"

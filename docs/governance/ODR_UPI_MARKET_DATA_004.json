@@ -113,14 +113,24 @@
       ],
       "quoted_scope": "US stocks/ETFs, EOD aggregates, up to the documented Basic history window",
       "account_entitlement": "UNKNOWN — Basic plan documented at 5 requests/minute and a limited history window",
-      "display_permitted": null,
-      "calculation_permitted": null,
-      "derived_value_permitted": null,
+      "display_permitted": true,
+      "calculation_permitted": true,
+      "derived_value_permitted": true,
       "cache_permitted": null,
       "retention_policy_verified": null,
       "contract_verified_live": false,
-      "evidence": "Owner authorized MASSIVE_BASIC on 2026-11-04 for personal private research, historical returns and EOD valuation observations. Provider documentation still has to be verified against a real response; no entitlement is claimed.",
-      "attested_on": "2026-11-04"
+      "evidence": "Owner attested personal, private research use for MASSIVE_BASIC on 2026-11-04 (ODR_UPI_MARKET_DATA_004_AMENDMENT_003_MASSIVE_BOT), covering display, calculation and derived-value use of EOD/historical observations for the owner's own portfolio. Persistent caching and retention remain UNKNOWN: the Stocks Basic terms do not grant blanket storage, so a refresh stays memory-only until that capability is evidence-backed. Source: massive.com/pricing (Stocks Basic, $0, EOD, 2 years history, 5 calls/min).",
+      "attested_on": "2026-11-04",
+      "entitlement_verified": true,
+      "attested_by": "OWNER",
+      "cache_rights": {
+        "memory_session": "PERMITTED_VERIFIED",
+        "short_lived_local": "PENDING_RIGHTS_VERIFICATION",
+        "persistent_historical_price": "PENDING_RIGHTS_VERIFICATION",
+        "derived_valuation_retention": "PENDING_RIGHTS_VERIFICATION",
+        "provider_response_retention": "PENDING_RIGHTS_VERIFICATION",
+        "redistribution": "PENDING_RIGHTS_VERIFICATION"
+      }
     },
     {
       "provider_id": "BOT_REFERENCE_FX",

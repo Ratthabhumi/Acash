@@ -31,6 +31,11 @@ KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
 # metadata, never a quote, and reuse the same credential store under their own namespace.
 IDENTITY_PROVIDERS = ("OPENFIGI_IDENTITY",)
 IDENTITY_CREDENTIAL_TARGET_PREFIX = "ACASH/IDENTITY/"
+# Bank of Thailand API products the Owner subscribes to. Each has its own credential target; none has
+# a verified adapter/endpoint contract yet, so they are registered for credential management only and
+# stay out of ADAPTED_PROVIDERS (which must mirror the implemented endpoint allowlist).
+BOT_PRODUCTS = ("BOT_EXCHANGE_RATES", "BOT_INTEREST_RATES", "BOT_STATISTICS", "BOT_DEBT_AUCTION",
+                "BOT_LICENSE_CHECK", "BOT_OTHERS")
 # One Owner-supplied credential may serve several read-only feeds of the same vendor. The alias only
 # reuses the secret: it never implies entitlement, display or derived-use rights, which each provider
 # must still attest separately before it can become READY.
@@ -81,9 +86,11 @@ class CredentialStore(Protocol):
 
 
 def credential_target(provider_id: str) -> str:
-    """The Windows Credential Manager target for one adapted market-data or identity provider."""
+    """The Windows Credential Manager target for one adapted market-data, identity or BOT product."""
     if provider_id in IDENTITY_PROVIDERS:
         return IDENTITY_CREDENTIAL_TARGET_PREFIX + provider_id
+    if provider_id in BOT_PRODUCTS:
+        return CREDENTIAL_TARGET_PREFIX + provider_id
     if provider_id not in ADAPTED_PROVIDERS:
         raise DataContractError(f"PROVIDER_NOT_ADAPTED: {provider_id}.")
     return CREDENTIAL_TARGET_PREFIX + provider_id
@@ -279,3 +286,9 @@ def provider_statuses(store: CredentialStore, record: Optional[Path] = None,
                       observation_record: Optional[Path] = None) -> Tuple[str, List[Dict[str, Any]]]:
     state, doc = record_state(record, observation_record)
     return state, [provider_status(p, state, doc, store) for p in KNOWN_PROVIDERS]
+
+
+def bot_product_credentials() -> Dict[str, str]:
+    """Credential presence per BOT product (never the value)."""
+    return {pid: ("CONFIGURED" if _cred_read(CREDENTIAL_TARGET_PREFIX + pid) is not None else "MISSING")
+            for pid in BOT_PRODUCTS}
