@@ -33,9 +33,12 @@ def test_service_is_a_hardened_oneshot_that_cannot_place_an_order() -> None:
     lines = _lines(SERVICE)
     assert "Type=oneshot" in lines and "User=mew" in lines and "Restart=no" in lines
     assert "EnvironmentFile=/etc/acash/market-data.env" in lines
-    assert "ExecStart=/home/mew/Acash/.venv/bin/python scripts/daily_market_collector.py" in lines
+    assert ("ExecStart=/data/acash/venv/bin/python /data/acash/app/scripts/daily_market_collector.py"
+            " --catch-up") in lines
+    assert "Environment=ACASH_PRIVATE_DIR=/data/acash/state/private" in lines
+    assert "EnvironmentFile=/etc/acash/market-data.env" in lines
     assert "ProtectSystem=strict" in lines and "NoNewPrivileges=yes" in lines
-    assert "ReadWritePaths=/home/mew/Acash/data/private" in lines
+    assert "ReadWritePaths=/data/acash/state" in lines
     assert not any("Enable=" in line for line in lines)
     text = SERVICE.read_text(encoding="utf-8").lower()
     for banned in ("/v2/orders", "paper-api", "transfer", "api.alpaca.markets"):
@@ -46,6 +49,9 @@ def test_service_is_a_hardened_oneshot_that_cannot_place_an_order() -> None:
 def test_templates_explicitly_refuse_to_claim_a_deployment() -> None:
     for path in (TIMER, SERVICE):
         head = path.read_text(encoding="utf-8")[:600].lower()
-        assert "template only" in head
+        # The units are installed by the fail-closed installer; they must say so and must not claim a
+        # running deployment.
+        assert "installed by scripts/deploy/deploy_acash_collector.sh" in head
+    assert "never enable before the acceptance pass" in TIMER.read_text(encoding="utf-8").lower()
     plan = Path("docs/operations/market-data-collector-homelab.md").read_text(encoding="utf-8")
     assert "NOT DEPLOYED" in plan and "systemd-analyze calendar" in plan
