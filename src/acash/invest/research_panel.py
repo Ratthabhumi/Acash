@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from acash.core.domain.exceptions import DataContractError
 from acash.invest import research_proposal as rp
+from acash.invest import security_identity as si
 
 MIN_SESSIONS = 200
 # Exploratory cohort: NASA listed on 2026-03-30, so a 200-session floor would drop it permanently.
@@ -69,12 +70,32 @@ def weights_from_view(view_path: Path, symbols: Sequence[str],
     return qualified_weights(rows, symbols, currency)
 
 
+def identity_exclusions(registry: Sequence[Any], closes: Mapping[str, Mapping[date, Decimal]],
+                        symbols: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+    """Symbols whose stored sessions do not map to exactly one research-eligible identity."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for symbol in symbols:
+        days = sorted(closes.get(symbol) or {})
+        if not days:
+            continue
+        result = si.research_eligibility(registry, symbol, days)
+        if not result["eligible"]:
+            out[symbol] = {"reason": result["reason"], "detail": result.get("detail"),
+                           "identities": [entry["canonical_id"] for entry in result["identities"]]}
+    return out
+
+
 def build_panel(closes: Mapping[str, Mapping[date, Decimal]], weights: Mapping[str, Decimal],
-                symbols: Sequence[str], min_sessions: int = MIN_SESSIONS) -> Dict[str, Any]:
+                symbols: Sequence[str], min_sessions: int = MIN_SESSIONS,
+                registry: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
     """Aligned return panel from stored closes, with explicit reasons for every exclusion."""
     excluded: Dict[str, Any] = {}
+    identity_blocked = identity_exclusions(registry or [], closes, symbols)
     eligible: List[str] = []
     for symbol in symbols:
+        if symbol in identity_blocked:
+            excluded[symbol] = {**identity_blocked[symbol], "sessions": len(closes.get(symbol) or {})}
+            continue
         series = closes.get(symbol) or {}
         if len(series) < min_sessions:
             excluded[symbol] = {"reason": "SESSION_COVERAGE_BELOW_MINIMUM", "sessions": len(series)}
@@ -141,7 +162,7 @@ def instrument_metadata(closes: Mapping[str, Mapping[date, Decimal]], weights: M
 
 
 def build_cohorts(closes: Mapping[str, Mapping[date, Decimal]], weights: Mapping[str, Decimal],
-                  symbols: Sequence[str]) -> Dict[str, Any]:
+                  symbols: Sequence[str], registry: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
     """Two independent cohorts over the same inputs; their scores are not comparable.
 
     ESTABLISHED_HISTORY keeps the original 200-session floor and the long benchmark window.
@@ -151,7 +172,8 @@ def build_cohorts(closes: Mapping[str, Mapping[date, Decimal]], weights: Mapping
     """
     cohorts: List[Dict[str, Any]] = []
     for cohort_id, config in COHORTS.items():
-        panel = build_panel(closes, weights, symbols, min_sessions=int(config["min_sessions"]))
+        panel = build_panel(closes, weights, symbols, min_sessions=int(config["min_sessions"]),
+                            registry=registry)
         entry: Dict[str, Any] = {
             "cohort_id": cohort_id,
             "evaluation_status": config["evaluation_status"],
@@ -159,6 +181,7 @@ def build_cohorts(closes: Mapping[str, Mapping[date, Decimal]], weights: Mapping
             "min_sessions": config["min_sessions"],
             "status": panel.get("status"),
             "excluded": panel.get("excluded", {}),
+            "identity_blocked": sorted(set(identity_exclusions(registry or [], closes, symbols))),
             "instruments": instrument_metadata(closes, weights, symbols, cohort_id, int(config["min_sessions"])),
         }
         if panel.get("status") == "PANEL_READY":

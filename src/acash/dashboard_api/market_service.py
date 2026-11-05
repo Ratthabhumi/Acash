@@ -354,10 +354,26 @@ def research_view() -> Dict[str, Any]:
         "storage_rights": job.get("storage_rights"),
         "governance": report.get("governance"),
         "cohorts": report.get("cohort_summary"),
+        "readiness": _readiness_view(report, health),
         "warehouse_sync": _read_json("sync_state.json", RESEARCH_DIR),
         "fx": _fx_view(),
         "collector_health": health,
     }
+
+
+def _readiness_view(report: Dict[str, Any], health: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """One authoritative readiness classification; every number is copied from existing outputs."""
+    from acash.invest import readiness as ir
+    from acash.invest import security_identity as si
+    tax = None
+    try:
+        from acash.invest import tax_intelligence as tax_mod
+        tax = tax_mod.load_evidence(pi._private_dir("tax"))
+    except (OSError, ValueError, DataContractError):
+        tax = None
+    view = _read_json("upi_view.json", ("out",))
+    return ir.build_readiness(view=view, health=health, report=report, tax=tax,
+                              registry=si.load_registry(Path(si.DEFAULT_REGISTRY)))
 
 
 def _fx_view() -> Dict[str, Any]:

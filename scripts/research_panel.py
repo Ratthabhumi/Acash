@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from acash.invest import research_panel as rpanel  # noqa: E402
 from acash.invest import research_proposal as rp  # noqa: E402
+from acash.invest import security_identity as si  # noqa: E402
 from acash.market_data import collector as co  # noqa: E402
 from acash.market_data import warehouse as wh  # noqa: E402
 
@@ -46,8 +47,9 @@ def main() -> int:
         return 2
     closes = {symbol: {day: bar.close for day, bar in store.read(symbol).items()} for symbol in symbols}
     weights = rpanel.weights_from_view(VIEW, symbols)
-    panel = rpanel.build_panel(closes, weights, symbols)
-    cohorts = rpanel.build_cohorts(closes, weights, symbols)
+    registry = si.load_registry(ROOT / si.DEFAULT_REGISTRY)
+    panel = rpanel.build_panel(closes, weights, symbols, registry=registry)
+    cohorts = rpanel.build_cohorts(closes, weights, symbols, registry=registry)
     proposal: Dict[str, Any] = {"status": rp.INSUFFICIENT}
     inputs = None
     if panel.get("status") == "PANEL_READY":
@@ -68,6 +70,12 @@ def main() -> int:
         "proposal": proposal,
         "labels": rpanel.real_vs_hypothetical(panel),
         "cohorts": cohorts,
+        "identity": {
+            "schema": si.SCHEMA,
+            "registry_entries": len(registry),
+            "blocked": rpanel.identity_exclusions(registry, closes, symbols),
+            "note": "A series that spans two security identities is excluded from every return calculation.",
+        },
         "cohort_summary": [
             {"cohort_id": c["cohort_id"], "status": c["status"],
              "evaluation_status": c["evaluation_status"],

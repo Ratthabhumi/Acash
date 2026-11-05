@@ -1,0 +1,52 @@
+{
+  "schema": "ACASH_SECURITY_IDENTITY_REGISTRY_V1",
+  "generated_at": "2026-11-05T00:00:00+00:00",
+  "note": "Ticker validity intervals for instruments whose ticker text is ambiguous. A series is research-eligible only when every stored session maps to one eligible canonical identity. No private data is stored here.",
+  "entries": [
+    {
+      "canonical_id": "SPCX_LEGACY_SPAC_AND_NEW_ISSUE_ETF",
+      "ticker": "SPCX",
+      "valid_from": "2019-01-01",
+      "valid_to": "2026-04-06",
+      "instrument_type": "ETF",
+      "figi": null,
+      "status": "LEGACY_RENAMED_TO_SPCK",
+      "research_eligible": false,
+      "lineage": "The SPAC and New Issue ETF traded as SPCX until 2026-04-06 and changed its ticker to SPCK effective 2026-04-07.",
+      "evidence": [
+        "SEC filing 2026-04-02 (497): ticker change SPCX -> SPCK effective 2026-04-07",
+        "Identity of the new SPCX has not been confirmed by FIGI/CUSIP in this repository"
+      ]
+    },
+    {
+      "canonical_id": "SPCK_SPAC_AND_NEW_ISSUE_ETF",
+      "ticker": "SPCK",
+      "valid_from": "2026-04-07",
+      "valid_to": null,
+      "instrument_type": "ETF",
+      "figi": null,
+      "status": "RENAMED_FROM_SPCX",
+      "research_eligible": false,
+      "lineage": "Same fund as the legacy SPCX ETF under a new ticker.",
+      "evidence": [
+        "SEC filing 2026-04-02 (497): ticker change SPCX -> SPCK effective 2026-04-07"
+      ]
+    },
+    {
+      "canonical_id": "SPCX_SPACE_EXPLORATION_TECHNOLOGIES",
+      "ticker": "SPCX",
+      "valid_from": "2026-06-12",
+      "valid_to": null,
+      "instrument_type": "COMMON_STOCK",
+      "figi": null,
+      "status": "IDENTITY_UNVERIFIED_FIGI_PENDING",
+      "research_eligible": false,
+      "lineage": "Space Exploration Technologies Corp. common stock began trading as SPCX on 2026-06-12; the previous SPCX security must not be linked to it.",
+      "evidence": [
+        "Nasdaq technical notice DTN2026-8: reused ticker, do not link prior SPCX history",
+        "SpaceX investor relations: shares began trading as SPCX on 2026-06-12",
+        "FIGI/CUSIP for the new listing is not established in this repository"
+      ]
+    }
+  ]
+}
