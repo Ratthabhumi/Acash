@@ -28,6 +28,7 @@ interface ResearchDoc {
   governance?: Record<string, unknown>;
   collector_health?: Record<string, unknown>;
   fx?: Record<string, unknown>;
+  warehouse_sync?: { synced_at?: string; partitions_verified?: number; source_host?: string } | null;
   universe_status?: string;
   evidence_labels?: string[];
   cohorts?: Array<Record<string, unknown>>;
@@ -252,6 +253,11 @@ export const ResearchDecisionPanel: React.FC = () => {
       <ProviderHealthCard providers={providers} fx={(doc?.fx as FxDoc | undefined) ?? null}
         coverageLast={coverage.union_last ?? null}
         partitions={Number((doc?.collector_health as Record<string, unknown> | undefined)?.partitions_present ?? 0) || null} />
+      <p className="text-[11px] text-muted">
+        Windows warehouse sync: {doc?.warehouse_sync?.synced_at
+          ? `${doc.warehouse_sync.synced_at} · ${doc.warehouse_sync.partitions_verified ?? 0} partitions · 0 provider calls`
+          : 'ยังไม่ได้ sync จาก Homelab'}
+      </p>
 
       {!loading && doc && doc.status === 'NO_RESEARCH_RUN' && (
         <div className="bg-surface border border-default rounded-lg p-4 text-xs text-secondary space-y-1">
