@@ -26,7 +26,7 @@ from acash.invest import shadow  # noqa: E402
 from acash.market_data import warehouse as wh  # noqa: E402
 
 PRIVATE = Path(os.environ["ACASH_PRIVATE_DIR"]) if os.environ.get("ACASH_PRIVATE_DIR") else ROOT / "data" / "private"
-PROTOCOL = PRIVATE / "shadow" / "protocol_v1.json"
+PROTOCOL = PRIVATE / "shadow" / "protocol_v2.json"
 JOURNAL = PRIVATE / "shadow" / "journal.json"
 NEW_US = {"SCBSET50", "MTS-GOLD"}
 
