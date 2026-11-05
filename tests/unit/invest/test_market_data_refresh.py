@@ -712,7 +712,9 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
                          "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
                          "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
                          "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
-                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
+                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED",
+                         "TWELVE_DATA_BASIC": "NOT_CONFIGURED",
+                         "ALPHA_VANTAGE_FREE": "NOT_CONFIGURED"}
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("MASSIVE_BASIC", entitlement_verified=None),
                        _entry("BOT_REFERENCE_FX", display_permitted=False), _entry("WEBULL_TH_OPENAPI")])
     assert _status() == {"ALPACA_BASIC": "READY", "MASSIVE_BASIC": "ENTITLEMENT_REQUIRED",
@@ -721,7 +723,9 @@ def test_odr4_dependency_and_scope_gates(root: Path) -> None:
                          "ALPACA_HISTORICAL": "GOVERNANCE_REQUIRED",
                          "MARKETDATA_APP_FREE": "GOVERNANCE_REQUIRED",
                          "FRANKFURTER_ECB_FX": "GOVERNANCE_REQUIRED",
-                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED"}
+                         "WEBULL_TH_OPENAPI": "NOT_CONFIGURED",
+                         "TWELVE_DATA_BASIC": "NOT_CONFIGURED",
+                         "ALPHA_VANTAGE_FREE": "NOT_CONFIGURED"}
     assert _status(Store({}))["ALPACA_BASIC"] == "CREDENTIALS_REQUIRED"
     _odr4(root, scope=[_entry("ALPACA_BASIC"), _entry("ALPACA_BASIC")])
     assert _status()["ALPACA_BASIC"] == "GOVERNANCE_REQUIRED"
