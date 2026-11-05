@@ -55,3 +55,20 @@ def test_templates_explicitly_refuse_to_claim_a_deployment() -> None:
     assert "never enable before the acceptance pass" in TIMER.read_text(encoding="utf-8").lower()
     plan = Path("docs/operations/market-data-collector-homelab.md").read_text(encoding="utf-8")
     assert "NOT DEPLOYED" in plan and "systemd-analyze calendar" in plan
+
+
+def test_installer_injects_credentials_through_systemd_and_guards_its_paths() -> None:
+    installer = Path("scripts/deploy/deploy_acash_collector.sh").read_text(encoding="utf-8")
+    # Acceptance runs the installed unit, whose EnvironmentFile supplies the provider key.
+    assert "systemctl start acash-market-collector.service" in installer
+    acceptance = installer.split("acceptance pass via")[1].split("enable only on request")[0]
+    assert "runuser" not in acceptance  # the secret comes from systemd, never from this script
+    assert "EnvironmentFile=/etc/acash/market-data.env" not in installer.split("acceptance")[1][:1200]
+    assert "stat -c %Y" in installer  # health must be refreshed by the run
+    # A root-owned recursive operation may only target the fixed app directory.
+    assert "case \"$APP_ROOT\" in" in installer and "/data/acash/app) ;;" in installer
+    # The runtime artifacts must travel with the bundle.
+    assert "ODR_UPI_MARKET_DATA_004.json" in installer
+    assert "nyse_xnys_calendar_2026_2028.json" in installer
+    transfer = Path("scripts/deploy/Transfer-AcashCollectorBundle.ps1").read_text(encoding="utf-8")
+    assert "docs\\governance" in transfer and "nyse_xnys_calendar_2026_2028.json" in transfer

@@ -53,7 +53,8 @@ def held_symbols() -> List[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ACASH daily market-data collector (research only).")
-    parser.add_argument("--end", default=datetime.now(NEW_YORK).date().isoformat())
+    parser.add_argument("--end", default=None,
+                        help="explicit session date; defaults to the latest completed eligible session")
     parser.add_argument("--backfill", action="store_true", help="request the full Basic window, not just new sessions")
     parser.add_argument("--start", default=None)
     parser.add_argument("--symbols", default=None)
@@ -66,7 +67,15 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
-    end = date.fromisoformat(args.end)
+    eligible = co.latest_completed_session()
+    end = date.fromisoformat(args.end) if args.end else date.fromisoformat(eligible["session_date"])
+    if args.end and end > date.fromisoformat(eligible["session_date"]):
+        print(json.dumps({"status": "SESSION_NOT_YET_ELIGIBLE", "requested": end.isoformat(),
+                          "latest_eligible": eligible["session_date"],
+                          "eligible_at_ict": eligible["eligible_at_ict"],
+                          "detail": "EOD data for a session is not requested before its close and publication."},
+                         indent=2, sort_keys=True))
+        return 0
     if not args.force:
         from acash.invest import market_calendar as mc
         calendar = mc.load_calendar()

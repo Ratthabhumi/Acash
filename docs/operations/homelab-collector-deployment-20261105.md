@@ -13,6 +13,7 @@ capital authority USD 0.00.
 | `/data/acash` | exists, `root:root 0700`, empty — **not writable by `mew` yet** |
 | Python | 3.12.3, `rsync` present, `systemd 255 (255.4-1ubuntu8.18)` |
 | `systemd-analyze` | present |
+| governance/calendar in bundle | `ODR_UPI_MARKET_DATA_004.json`, ODR-001, NYSE fixture — present |
 | `python3.12-venv` | **missing** (`ensurepip` unavailable) — the installer now installs it as root |
 | Time sync | `NTPSynchronized=yes` |
 | Existing ACASH units | none (HYP_011 state preserved) |
@@ -20,8 +21,8 @@ capital authority USD 0.00.
 
 ## What was transferred
 
-Bundle `~/acash-bundle` on the host, archive SHA-256 `9385b88334f481de141790f5f831d7088ff0907d0a748150b93f62d0d21499a8`,
-hash re-verified after transfer:
+Bundle `~/acash-bundle` on the host, archive SHA-256 `4bbbd547e914e6b3176d4456b6027f9d139d595b0084e35848fc19dba6a980b0`,
+hash re-verified after transfer (the V104 bundle also carries `docs/governance/*` and the NYSE calendar fixture):
 
 - `app/` — `src/` + `scripts/` + this operations doc (no Git history, no credentials);
 - `deploy/` — the two unit templates and the installer;
@@ -48,7 +49,7 @@ sudo ~/acash-bundle/deploy/deploy_acash_collector.sh
 sudo ~/acash-bundle/deploy/deploy_acash_collector.sh --enable
 ```
 
-The installer is fail-closed: it refuses when `/data` is not a separate mount, when the credential file is
+The acceptance run is started through the installed `acash-market-collector.service`, so the provider key is loaded by systemd from `/etc/acash/market-data.env` and never enters the installer process, a command line or a log. The installer is fail-closed: it refuses when `/data` is not a separate mount, when the credential file is
 missing or not `0600`, when a transferred partition fails its hash, when the calendar expression is
 rejected by the installed systemd, or when the acceptance pass does not write a health record with
 `storage_rights: PERMITTED`. It never touches HYP_011 units and does not enable the timer without

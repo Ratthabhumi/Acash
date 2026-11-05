@@ -244,6 +244,32 @@ def gaps(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
     return {"symbols_with_gaps": sorted(detail), "detail": detail, "union_sessions": len(union)}
 
 
+def latest_completed_session(now: datetime | None = None,
+                             publication_delay: timedelta = timedelta(minutes=30)) -> Dict[str, Any]:
+    """The most recent session whose close (+ publication delay) has already passed.
+
+    A trading day is not an eligible EOD session until the venue has closed and the provider has had
+    time to publish. Before that moment the default collector asks for the *previous* session rather
+    than a bar that does not exist yet.
+    """
+    from datetime import datetime as _dt
+    from zoneinfo import ZoneInfo
+    from acash.invest import market_calendar as mc
+    moment = now or _dt.now(timezone.utc)
+    calendar = mc.load_calendar()
+    day = moment.astimezone(ZoneInfo(calendar.timezone)).date()
+    for _ in range(12):
+        info = mc.session(calendar, day)
+        if info["status"] in ("OPEN", "EARLY_CLOSE") and info["close_utc"]:
+            eligible_at = _dt.fromisoformat(str(info["close_utc"])) + publication_delay
+            if eligible_at <= moment:
+                return {"session_date": day.isoformat(), "session_status": info["status"],
+                        "eligible_at_utc": eligible_at.isoformat(),
+                        "eligible_at_ict": eligible_at.astimezone(ZoneInfo("Asia/Bangkok")).isoformat()}
+        day = day - timedelta(days=1)
+    raise DataContractError("COLLECTOR_NO_ELIGIBLE_SESSION: calendar coverage is too short.")
+
+
 def next_run(now: datetime | None = None) -> Dict[str, Any]:
     """The next scheduled EOD pass, derived from the venue calendar and 18:30 America/New_York."""
     from datetime import datetime as _dt, time as _time, timedelta as _td

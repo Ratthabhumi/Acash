@@ -254,3 +254,22 @@ def test_next_run_follows_the_venue_calendar_and_dst() -> None:
     assert after_close["session_date"] == "2026-11-06"
     thanksgiving = co.next_run(datetime(2026, 11, 26, 23, 0, tzinfo=timezone.utc))  # 18:00 ET holiday
     assert thanksgiving["session_date"] == "2026-11-27" and thanksgiving["session_status"] == "EARLY_CLOSE"
+
+
+def test_latest_completed_session_waits_for_close_and_publication() -> None:
+    from datetime import datetime, timezone
+    before_close = co.latest_completed_session(datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc))
+    assert before_close["session_date"] == "2026-11-04"  # 07:00 ET, today has not closed
+    after_publication = co.latest_completed_session(datetime(2026, 11, 6, 0, 0, tzinfo=timezone.utc))
+    assert after_publication["session_date"] == "2026-11-05"  # 19:00 ET + 30 min delay
+    assert after_publication["eligible_at_ict"].startswith("2026-11-06T04:30:00")
+
+
+def test_latest_completed_session_skips_holidays_and_weekends() -> None:
+    from datetime import datetime, timezone
+    thanksgiving = co.latest_completed_session(datetime(2026, 11, 26, 23, 0, tzinfo=timezone.utc))
+    assert thanksgiving["session_date"] == "2026-11-25"
+    saturday = co.latest_completed_session(datetime(2026, 11, 7, 12, 0, tzinfo=timezone.utc))
+    assert saturday["session_date"] == "2026-11-06"
+    early_close = co.latest_completed_session(datetime(2026, 11, 27, 19, 0, tzinfo=timezone.utc))
+    assert early_close["session_date"] == "2026-11-27" and early_close["session_status"] == "EARLY_CLOSE"

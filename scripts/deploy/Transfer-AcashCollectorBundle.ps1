@@ -30,6 +30,14 @@ Copy-Item -Recurse src (Join-Path $bundle "app\src")
 Copy-Item -Recurse scripts (Join-Path $bundle "app\scripts")
 New-Item -ItemType Directory -Path (Join-Path $bundle "app\docs\operations") -Force | Out-Null
 Copy-Item docs\operations\market-data-collector-homelab.md (Join-Path $bundle "app\docs\operations")
+# Public, non-secret artifacts the runtime needs on the host: the retention gate reads the ratified
+# ODR record, and the session calendar reads the venue fixture.
+New-Item -ItemType Directory -Path (Join-Path $bundle "app\docs\governance") -Force | Out-Null
+Copy-Item docs\governance\*.json (Join-Path $bundle "app\docs\governance")
+Copy-Item docs\governance\*.md (Join-Path $bundle "app\docs\governance") -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path (Join-Path $bundle "app\docs\research\evidence") -Force | Out-Null
+Copy-Item docs\research\evidence\nyse_xnys_calendar_2026_2028.json (Join-Path $bundle "app\docs\research\evidence")
+Copy-Item docs\operations\homelab-collector-deployment-20261105.md (Join-Path $bundle "app\docs\operations") -ErrorAction SilentlyContinue
 
 Write-Host "[transfer] staging unit templates and installer"
 Copy-Item docs\operations\acash-market-collector.service (Join-Path $bundle "deploy")

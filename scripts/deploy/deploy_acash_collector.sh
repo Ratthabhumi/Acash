@@ -27,6 +27,11 @@ fail() { echo "STOP: $*" >&2; exit 2; }
 say() { echo "[acash] $*"; }
 
 [[ $EUID -eq 0 ]] || fail "run with sudo (storage and unit installation need root)"
+# The app directory is fixed: a root-owned recursive delete must never be able to touch anything else.
+case "$APP_ROOT" in
+  /data/acash/app) ;;
+  *) fail "refusing to operate on APP_ROOT=$APP_ROOT" ;;
+esac
 [[ -d /data ]] || fail "/data is not mounted"
 findmnt -rn /data >/dev/null || fail "/data is not a separate mount; refusing to write a warehouse"
 [[ -n "$(ls -A /data 2>/dev/null || true)" || true ]] # /data may be empty
@@ -54,6 +59,10 @@ perm=$(stat -c '%a' "$ENV_FILE")
 
 # ---- app + state ---------------------------------------------------------------------------------
 id mew >/dev/null 2>&1 || fail "user mew does not exist"
+for required in docs/governance/ODR_UPI_MARKET_DATA_004.json \
+                docs/research/evidence/nyse_xnys_calendar_2026_2028.json; do
+  [[ -f "$BUNDLE/app/$required" ]] || fail "bundle is missing $required (rebuild it with Transfer-AcashCollectorBundle.ps1)"
+done
 install -d -o root -g root -m 0755 /data/acash
 rm -rf "$APP_ROOT.new"
 install -d -o root -g root -m 0755 "$APP_ROOT.new"
@@ -89,6 +98,14 @@ import pyarrow, acash.market_data.collector, acash.market_data.warehouse, acash.
 print("[acash] runtime ok: pyarrow", pyarrow.__version__)
 PY
 
+# The retention gate must read the deployed governance record, not a copy from the developer machine.
+runuser -u mew -- env PYTHONPATH="$APP_ROOT/src" "$VENV/bin/python" -c \
+  "from acash.market_data import warehouse as w; \
+   print('[acash] storage_rights gate:', w.storage_permitted('MASSIVE_BASIC', '$APP_ROOT/docs/governance/ODR_UPI_MARKET_DATA_004.json'))" \
+  | tee /tmp/acash-gate.txt >/dev/null
+grep -q 'True' /tmp/acash-gate.txt || fail "retention gate is not PERMITTED on the staged app"
+rm -f /tmp/acash-gate.txt
+
 # ---- hash verification of transferred partitions --------------------------------------------------
 PYTHONPATH="$APP_ROOT/src" ACASH_PRIVATE_DIR="$STATE_ROOT/private" "$VENV/bin/python" - <<'PY'
 import hashlib, json, pathlib
@@ -118,20 +135,31 @@ install -m 0644 "$BUNDLE/deploy/acash-market-collector.timer" /etc/systemd/syste
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/acash-market-collector.timer
 
-# ---- acceptance: one bounded, authorized collection pass -------------------------------------------
-say "acceptance pass (bounded; respects 5 requests/minute)"
-runuser -u mew -- env PYTHONPATH="$APP_ROOT/src" ACASH_PRIVATE_DIR="$STATE_ROOT/private" \
-  "$VENV/bin/python" "$APP_ROOT/scripts/daily_market_collector.py" --catch-up --max-requests 40 \
-  || fail "acceptance pass failed"
+# ---- acceptance: one bounded, authorized collection pass through the real systemd service ----------
+# The credential lives only in /etc/acash/market-data.env, which systemd reads before dropping
+# privileges. The acceptance therefore starts the installed service and inspects its health record;
+# the secret is never interpolated into a command, a log or the environment of this installer.
+say "acceptance pass via acash-market-collector.service (bounded; 5 requests/minute)"
 HEALTH="$STATE_ROOT/private/market_warehouse/health.json"
+START_EPOCH=$(date +%s)
+systemctl start acash-market-collector.service || fail "collector service failed to start"
+RESULT=$(systemctl show -p Result --value acash-market-collector.service)
+[[ "$RESULT" == "success" ]] || fail "collector service result=$RESULT (see journalctl -u acash-market-collector.service)"
 [[ -f "$HEALTH" ]] || fail "acceptance wrote no health record"
+[[ "$(stat -c %Y "$HEALTH")" -ge "$START_EPOCH" ]] || fail "health record was not refreshed by the acceptance run"
 python3 - "$HEALTH" <<'PY'
 import json, sys
 doc = json.load(open(sys.argv[1]))
-print("[acash] health:", doc.get("coverage", {}).get("covered"), "covered /",
-      doc.get("coverage", {}).get("missing"), "missing; next run:", (doc.get("next_run") or {}).get("next_run_ict"))
+status = "STOPPED" if doc.get("stopped") else ("FAILED" if doc.get("failed") else
+                                               ("COLLECTED" if doc.get("completed") else "NO_WORK"))
+print("[acash] health:", status, "| covered", doc.get("coverage", {}).get("covered"),
+      "| missing", doc.get("coverage", {}).get("missing"),
+      "| next run", (doc.get("next_run") or {}).get("next_run_ict"),
+      "| latest eligible", (doc.get("latest_eligible_session") or {}).get("session_date"))
 if doc.get("storage_rights") != "PERMITTED":
     raise SystemExit("STORAGE_RIGHTS_NOT_PERMITTED: refuse to enable unattended collection")
+if status in ("FAILED", "STOPPED"):
+    raise SystemExit(f"ACCEPTANCE_NOT_SUCCESSFUL: {status}")
 PY
 
 # ---- enable only on request and only after acceptance ----------------------------------------------
