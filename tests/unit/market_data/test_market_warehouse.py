@@ -222,3 +222,35 @@ def test_durable_pass_writes_partitions_once(tmp_path: Path) -> None:
     second = co.collect(FakeSource(rows), store, ["VOO"], date(2026, 1, 5), date(2026, 1, 6),
                         job_id="j1", pause=lambda _: None)
     assert second.completed == [] and second.skipped_existing == ["VOO"] and second.requests == 0
+
+
+def test_force_full_refetches_without_duplicating_rows(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path, True))
+    rows = {"VOO": [_bar(day=5), _bar(day=6, close="101")]}
+    co.collect(FakeSource(rows), store, ["VOO"], date(2026, 1, 5), date(2026, 1, 6), job_id="j1",
+               pause=lambda _: None)
+    again = co.collect(FakeSource(rows), store, ["VOO"], date(2026, 1, 5), date(2026, 1, 6), job_id="j2",
+                       pause=lambda _: None, force_full=True)
+    assert again.completed == ["VOO"] and again.requests == 1 and again.skipped_existing == []
+    assert len(store.read("VOO")) == 2  # refetched, not duplicated
+
+
+def test_gaps_report_missing_sessions_against_the_union(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path, True))
+    store.record_sessions("VOO", [date(2026, 1, 5), date(2026, 1, 6)], source="MASSIVE_BASIC", job_id="j1")
+    store.record_sessions("BIL", [date(2026, 1, 5)], source="MASSIVE_BASIC", job_id="j1")
+    result = co.gaps(store, ["VOO", "BIL"])
+    assert result["symbols_with_gaps"] == ["BIL"]
+    assert result["detail"]["BIL"]["missing"] == 1 and result["detail"]["BIL"]["first_missing"] == "2026-01-06"
+    assert result["union_sessions"] == 2
+
+
+def test_next_run_follows_the_venue_calendar_and_dst() -> None:
+    from datetime import datetime, timezone
+    before_close = co.next_run(datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc))  # 07:00 ET
+    assert before_close["session_date"] == "2026-11-05"
+    assert before_close["next_run_et"].startswith("2026-11-05T18:30:00-05:00")
+    after_close = co.next_run(datetime(2026, 11, 6, 0, 30, tzinfo=timezone.utc))  # 19:30 ET on 11-05
+    assert after_close["session_date"] == "2026-11-06"
+    thanksgiving = co.next_run(datetime(2026, 11, 26, 23, 0, tzinfo=timezone.utc))  # 18:00 ET holiday
+    assert thanksgiving["session_date"] == "2026-11-27" and thanksgiving["session_status"] == "EARLY_CLOSE"

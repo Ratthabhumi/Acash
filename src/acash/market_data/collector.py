@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence
 
@@ -113,7 +113,8 @@ def _classify(error: DataContractError) -> str:
 def collect(source: DailyBarSource, warehouse: BarWarehouse, symbols: Sequence[str], start: date, end: date,
             *, job_id: str, persist: Optional[bool] = None, max_requests: int = 60,
             pause: Callable[[float], None] = time.sleep,
-            pause_seconds: float = RATE_LIMIT_PAUSE_SECONDS, rate_limit_retries: int = 2) -> CollectionReport:
+            pause_seconds: float = RATE_LIMIT_PAUSE_SECONDS, rate_limit_retries: int = 2,
+            force_full: bool = False) -> CollectionReport:
     """Collect ``symbols`` for ``[start, end]``, resuming only the work that is still missing.
 
     ``persist=None`` follows the storage-rights gate; ``True`` demands persistence and therefore fails
@@ -134,6 +135,11 @@ def collect(source: DailyBarSource, warehouse: BarWarehouse, symbols: Sequence[s
     if report.persisted:
         done = set()  # a durable pass resumes from partitions, never from a checkpoint alone
     roadmap = plan(warehouse, symbols, start, end, durable=report.persisted)["symbols"]
+    if force_full:
+        # Catch-up after downtime: a middle gap cannot be reached by resuming from the last session, so
+        # the requested symbols are asked for again over the full window.
+        roadmap = {symbol: {"status": "NEEDS_FULL_RANGE", "from": start.isoformat(), "to": end.isoformat()}
+                   for symbol in symbols}
     for symbol in symbols:
         step = roadmap[symbol]
         if step["status"] == "COMPLETE" or symbol in done:
@@ -222,6 +228,43 @@ def collect(source: DailyBarSource, warehouse: BarWarehouse, symbols: Sequence[s
     return report
 
 
+def gaps(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
+    """Sessions a symbol is missing relative to the union of every indexed session."""
+    index = warehouse.session_index()
+    matrix = coverage(index, symbols)
+    rows = index.get("symbols", {}) if isinstance(index.get("symbols"), dict) else {}
+    union = sorted({value for symbol in symbols for value in (rows.get(symbol, {}) or {}).get("dates", [])})
+    detail: Dict[str, Any] = {}
+    for symbol in symbols:
+        dates = set((rows.get(symbol) or {}).get("dates") or [])
+        missing = [day for day in union if day not in dates]
+        if missing:
+            detail[symbol] = {"missing": len(missing), "first_missing": missing[0],
+                              "last_missing": missing[-1], "dates": missing[:50]}
+    return {"symbols_with_gaps": sorted(detail), "detail": detail, "union_sessions": len(union)}
+
+
+def next_run(now: datetime | None = None) -> Dict[str, Any]:
+    """The next scheduled EOD pass, derived from the venue calendar and 18:30 America/New_York."""
+    from datetime import datetime as _dt, time as _time, timedelta as _td
+    from zoneinfo import ZoneInfo
+    from acash.invest import market_calendar as mc
+    moment = now or _dt.now(timezone.utc)
+    calendar = mc.load_calendar()
+    new_york = ZoneInfo("America/New_York")
+    day = moment.astimezone(new_york).date()
+    for _ in range(10):
+        info = mc.session(calendar, day)
+        candidate = moment.astimezone(new_york).replace(hour=18, minute=30, second=0, microsecond=0)
+        candidate = candidate.replace(year=day.year, month=day.month, day=day.day)
+        if info["status"] in ("OPEN", "EARLY_CLOSE") and candidate > moment:
+            return {"next_run_et": candidate.isoformat(), "session_date": day.isoformat(),
+                    "session_status": info["status"],
+                    "next_run_ict": candidate.astimezone(ZoneInfo("Asia/Bangkok")).isoformat()}
+        day = day + _td(days=1)
+    return {"next_run_et": None, "session_date": None, "session_status": "NOT_VERIFIED_WITHIN_CALENDAR"}
+
+
 def health(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
     """Collector health from stored evidence only; a timer firing is not ingestion."""
     index = warehouse.session_index()
@@ -237,10 +280,18 @@ def health(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
                                                 "persisted", "provider_id")} if latest else None,
         "partitions_present": sum(1 for symbol in symbols if warehouse.partition(symbol).is_file()),
         "retention": retention_terms("MASSIVE_BASIC", warehouse.record),
+        "missing_sessions": gaps(warehouse, symbols),
+        "next_run": next_run(),
+        "storage_bytes": _storage_bytes(warehouse.root),
+        "rate_limit": "5 requests/minute (MASSIVE_BASIC)",
         "storage_rights": "PERMITTED" if storage_permitted("MASSIVE_BASIC", warehouse.record)
         else "UNESTABLISHED",
         "note": "Session index holds dates only; prices are stored only where retention rights are established.",
     }
+
+
+def _storage_bytes(root: Path) -> int:
+    return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
 
 
 def write_health(warehouse: BarWarehouse, symbols: Sequence[str], path: Path, **extra: Any) -> Dict[str, Any]:

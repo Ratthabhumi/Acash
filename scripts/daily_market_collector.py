@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -35,7 +36,7 @@ from acash.market_data import collector as co  # noqa: E402
 from acash.market_data import providers as mp  # noqa: E402
 from acash.market_data import warehouse as wh  # noqa: E402
 
-PRIVATE = ROOT / "data" / "private"
+PRIVATE = Path(os.environ["ACASH_PRIVATE_DIR"]) if os.environ.get("ACASH_PRIVATE_DIR") else ROOT / "data" / "private"
 WAREHOUSE = PRIVATE / "market_warehouse"
 NON_US = {"SCBSET50", "MTS-GOLD"}
 NEW_YORK = ZoneInfo("America/New_York")
@@ -59,6 +60,9 @@ def main() -> int:
     parser.add_argument("--max-requests", type=int, default=40)
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--force", action="store_true", help="collect even when the venue is closed")
+    parser.add_argument("--catch-up", action="store_true",
+                        help="after the incremental pass, refetch symbols that have middle gaps")
+    parser.add_argument("--max-gap-symbols", type=int, default=5)
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
@@ -91,6 +95,17 @@ def main() -> int:
                                                lambda: datetime.now(timezone.utc), skipped=[])
     report = co.collect(provider, store, symbols, start, end, job_id=job_id, max_requests=args.max_requests,
                         pause=time.sleep)
+    catch_up: Dict[str, Any] = {"requested": [], "report": None}
+    if args.catch_up:
+        missing = co.gaps(store, symbols)
+        repair = [s for s in missing["symbols_with_gaps"] if s not in report.failed][:args.max_gap_symbols]
+        if repair:
+            catch_up["requested"] = repair
+            second = co.collect(provider, store, repair, start, end, job_id=f"{job_id}_CATCHUP",
+                                max_requests=min(args.max_requests, len(repair) + 2), pause=time.sleep,
+                                force_full=True)
+            catch_up["report"] = {"completed": second.completed, "failed": second.failed,
+                                  "requests": second.requests, "stopped": second.stopped}
     health = co.write_health(store, symbols, WAREHOUSE / "health.json",
                              generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                              job_id=job_id, range={"start": start.isoformat(), "end": end.isoformat()},

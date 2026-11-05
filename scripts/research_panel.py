@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +25,7 @@ from acash.invest import research_proposal as rp  # noqa: E402
 from acash.market_data import collector as co  # noqa: E402
 from acash.market_data import warehouse as wh  # noqa: E402
 
-PRIVATE = ROOT / "data" / "private"
+PRIVATE = Path(os.environ["ACASH_PRIVATE_DIR"]) if os.environ.get("ACASH_PRIVATE_DIR") else ROOT / "data" / "private"
 WAREHOUSE = PRIVATE / "market_warehouse"
 VIEW = PRIVATE / "out" / "upi_view.json"
 NON_US = {"SCBSET50", "MTS-GOLD"}
