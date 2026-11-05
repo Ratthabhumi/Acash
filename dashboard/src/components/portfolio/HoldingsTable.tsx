@@ -96,7 +96,52 @@ export const HoldingsTable: React.FC<Props> = ({ rows, ccy, total, positionValue
         </label>
       </div>
 
-      <div className="overflow-x-auto w-full max-w-full">
+      <div className="md:hidden space-y-2" aria-label="Holdings (compact)">
+        <label className="flex items-center gap-2 text-[11px] text-muted">
+          เรียงตาม
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}
+            className="bg-surface border border-default rounded px-2 py-1 text-xs text-primary">
+            <option value="value_reporting">มูลค่า</option>
+            <option value="weight">น้ำหนัก</option>
+            <option value="security_id">ชื่อหลักทรัพย์</option>
+            <option value="unrealized_pnl_local">กำไร/ขาดทุน</option>
+          </select>
+        </label>
+        {filtered.map((row) => {
+          const key = `${row.account_ref}:${row.security_id}:${row.sub_portfolio ?? ''}:${row.source}`;
+          const expanded = open === key;
+          return (
+            <div key={key} className="bg-surface-muted/40 border border-default rounded-lg p-2 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="font-mono-code text-primary">{row.security_id}</span>
+                  <span className="block text-[11px] text-muted">{row.account_ref} · {row.instrument_type ?? NOT_ESTABLISHED}</span>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-mono-code tabular-nums text-primary">{formatDec(row.value_reporting)}</span>
+                  <span className="block text-[11px] text-muted">{row.weight === null ? NOT_ESTABLISHED : row.weight}</span>
+                </div>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1 text-[11px]">
+                <div><dt className="text-muted">จำนวน</dt><dd className="font-mono-code">{row.quantity ?? NOT_ESTABLISHED}</dd></div>
+                <div><dt className="text-muted">ราคา</dt><dd className="font-mono-code">{row.price === null ? NOT_ESTABLISHED : `${formatDec(row.price)} ${row.price_currency}`}</dd></div>
+                <div><dt className="text-muted">ชั้นสินทรัพย์</dt><dd>{row.economic_class ?? NOT_ESTABLISHED}</dd></div>
+                <div><dt className="text-muted">P&amp;L</dt><dd className="font-mono-code">{row.unrealized_pnl_local === null ? 'ไม่มีต้นทุน' : `${formatDec(row.unrealized_pnl_local)} ${row.price_currency}`}</dd></div>
+              </dl>
+              <button type="button" onClick={() => setOpen(expanded ? null : key)} aria-expanded={expanded}
+                className="mt-1 text-[11px] text-secondary underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded">
+                {expanded ? 'ซ่อนรายละเอียด' : 'รายละเอียด FIGI/ISIN'}
+              </button>
+              {expanded && (
+                <p className="mt-1 text-[11px] font-mono-code text-secondary break-all">
+                  FIGI {row.figi ?? NOT_ESTABLISHED} · ISIN {row.isin ?? NOT_ESTABLISHED} · {row.source}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden md:block overflow-x-auto w-full max-w-full">
         <table className="w-full text-xs">
           <caption className="sr-only">รายการหลักทรัพย์ที่ถือครอง</caption>
           <thead>
