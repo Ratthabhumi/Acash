@@ -182,14 +182,15 @@ class QuantDingerAdapter:
 
     framework_id = "QUANTDINGER"
     adapter_version = "acash.qd.v1"
-    ALLOWED = ("/api/experiments", "/api/backtests")
+    BASE = "/api/agent/v1"
+    ALLOWED = ("/api/agent/v1/experiments", "/api/agent/v1/backtests")
 
     def __init__(self, transport: Optional[Callable[[str], Mapping[str, Any]]] = None) -> None:
         self.transport = transport
 
     def read_result(self, path: str) -> FrameworkResult:
-        if not any(path.startswith(prefix) for prefix in self.ALLOWED):
-            raise DataContractError("QUANTDINGER_SCOPE_REFUSED: only experiment/backtest reads are allowed.")
+        if path not in self.ALLOWED and not any(path.startswith(prefix + "/") for prefix in self.ALLOWED):
+            raise DataContractError("QUANTDINGER_SCOPE_REFUSED: only exact read-only agent paths are allowed.")
         if self.transport is None:
             return FrameworkResult(self.framework_id, self.adapter_version, "BLOCKED", "NOT_CONNECTED",
                                    path, None, False, "READ_SCOPE_ONLY", "BLOCKED",
@@ -203,29 +204,35 @@ class QuantDingerAdapter:
                                diagnostics={"id": item_id, "keys": sorted(payload)[:10]})
 
 
-def acceptance_matrix(journal: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
-    """Separate code, native runtime, smoke and qualification for every framework."""
-    nautilus = NautilusAdapter().status()
+def acceptance_matrix(smoke_evidence: Optional[Mapping[str, Mapping[str, Any]]] = None) -> Dict[str, Any]:
+    """Independent dimensions; nothing is promoted because another dimension is true.
+
+    ``smoke_evidence`` must be a recorded native execution (command/API, version, input and output hash).
+    Package availability, a fixture test or a timestamp never sets ``native_smoke_verified``.
+    """
+    evidence = dict(smoke_evidence or {})
     rows: List[Dict[str, Any]] = []
     for framework_id, meta in FRAMEWORKS.items():
-        if framework_id == "NAUTILUS_TRADER":
-            result = nautilus
-            rows.append({**result.as_dict(), "native_verified": result.native_runtime != "NOT_INSTALLED",
-                         "offline_smoke": "EXISTING_TESTS", "canonical_evidence": False,
-                         "production_enabled": False})
-            continue
+        installed = runtime_available(meta["module"])
+        record = evidence.get(framework_id) or {}
+        recorded = bool(record.get("command") and record.get("version") and record.get("output_sha256"))
         rows.append({
-            "framework_id": framework_id, "adapter_version": FRAMEWORKS[framework_id]["version"],
-            "integration_status": "ADAPTER_IMPLEMENTED",
-            "native_runtime": "INSTALLED" if runtime_available(meta["module"]) else "NOT_INSTALLED",
-            "native_verified": False,
-            "offline_smoke": "FIXTURE_CONTRACT_ONLY",
-            "canonical_evidence": False,
+            "framework_id": framework_id,
+            "adapter_version": FRAMEWORKS[framework_id]["version"],
+            "adapter_present": True,
+            "package_installed": installed,
+            "native_smoke_verified": recorded,
+            "native_smoke": record or None,
+            "input_rights_qualified": False,
+            "pit_validated": False,
+            "result_reconciled": False,
+            "dashboard_connected": False,
             "production_enabled": False,
-            "blocked_reason": "REAL_DATA_RIGHTS_UNVERIFIED_OR_RUNTIME_NOT_CONNECTED",
+            "blocked_reason": None if recorded else
+            ("NATIVE_SMOKE_NOT_RECORDED" if installed else "RUNTIME_NOT_INSTALLED_OR_NOT_CONNECTED"),
             "execution_authority": NO_EXECUTION,
             "license": meta["license"], "isolation": meta["isolation"], "role": meta["role"],
         })
     return {"schema": MATRIX_SCHEMA, "frameworks": rows,
-            "note": ("A fixture contract test is not native execution, and native execution is not ACASH "
-                     "validation. No framework has execution authority.")}
+            "note": ("Dimensions are independent: installed != executed != reconciled != production. "
+                     "No framework has execution authority.")}

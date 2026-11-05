@@ -18,8 +18,11 @@ def test_matrix_separates_code_from_native_and_qualification() -> None:
     for row in matrix["frameworks"]:
         assert row["execution_authority"] == fi.NO_EXECUTION
         assert row["production_enabled"] is False
-        assert row["canonical_evidence"] is False
-        assert row["offline_smoke"] != "NATIVE_EXECUTED"
+        assert row["input_rights_qualified"] is False
+        assert row["pit_validated"] is False
+        assert row["result_reconciled"] is False
+        # Installed never implies executed or qualified.
+        assert row["native_smoke_verified"] is False
 
 
 def test_openbb_requires_pit_timestamps_and_source() -> None:
@@ -63,13 +66,13 @@ def test_freqtrade_artifact_is_synthetic_and_not_orders() -> None:
 
 def test_quantdinger_refuses_order_scope_and_reports_disconnected() -> None:
     adapter = fi.QuantDingerAdapter()
-    assert adapter.read_result("/api/backtests/1").integration_status == "BLOCKED"
-    assert adapter.read_result("/api/backtests/1").blocked_reason == "NATIVE_RUNTIME_NOT_CONNECTED"
-    for path in ("/api/orders", "/api/runtime", "/api/agents/t"):
+    assert adapter.read_result("/api/agent/v1/backtests/1").integration_status == "BLOCKED"
+    assert adapter.read_result("/api/agent/v1/backtests/1").blocked_reason == "NATIVE_RUNTIME_NOT_CONNECTED"
+    for path in ("/api/orders", "/api/runtime", "/api/agent/v1/orders", "/api/backtests/1"):
         with pytest.raises(DataContractError, match="QUANTDINGER_SCOPE_REFUSED"):
             adapter.read_result(path)
     payload = {"experiment_id": "exp-1", "metric": "sharpe", "value": "1.2"}
-    connected = fi.QuantDingerAdapter(lambda path: payload).read_result("/api/experiments/exp-1")
+    connected = fi.QuantDingerAdapter(lambda path: payload).read_result("/api/agent/v1/experiments/exp-1")
     assert connected.result_type == "EXTERNAL_ENGINE_RESULT" and connected.native_runtime == "REMOTE_READ_ONLY"
 
 
@@ -87,3 +90,4 @@ def test_doctor_script_emits_the_same_matrix(tmp_path: Path) -> None:
     assert completed.returncode == 0
     doc = json.loads(completed.stdout)
     assert doc["schema"] == fi.MATRIX_SCHEMA and len(doc["frameworks"]) == 5
+    assert all(row["native_smoke_verified"] is False for row in doc["frameworks"])
