@@ -57,6 +57,8 @@ export const PROVIDER_INFO: Record<string, { name: string; coverage: string }> =
   MARKETDATA_APP_FREE: { name: 'MarketData.app Free', coverage: 'Delayed last trade (≥ 24h), Bearer header, 100 credits/day · documented contract' },
   FRANKFURTER_ECB_FX: { name: 'Frankfurter ECB FX', coverage: 'ECB reference USD/THB, keyless, not executable · documented contract' },
   WEBULL_TH_OPENAPI: { name: 'Webull Thailand', coverage: 'Pending entitlement · no adapter' },
+  TWELVE_DATA_BASIC: { name: 'Twelve Data Basic', coverage: 'Secondary cross-check · adapter and data rights unverified, disabled' },
+  ALPHA_VANTAGE_FREE: { name: 'Alpha Vantage Free', coverage: 'Secondary cross-check · 3 requests/day budget when enabled, disabled' },
 };
 
 export const MARKET_TH: Record<string, string> = {
