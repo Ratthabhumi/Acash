@@ -177,6 +177,8 @@ const ProviderHealthCard: React.FC<{ providers: ProvidersDoc | null; fx: FxDoc |
     ['Massive (price history)', `${find('MASSIVE_BASIC')?.status ?? 'UNKNOWN'} · session ล่าสุด ${coverageLast ?? '—'} · ${partitions ?? 0} partitions`],
     ['BOT FX (reference)', `${find('BOT_REFERENCE_FX')?.status ?? 'UNKNOWN'} · ${fx?.latest?.usd_thb ?? '—'} THB/USD (${fx?.latest?.date ?? '—'})`],
     ['BOT Holidays (Thai calendar)', `${find('BOT_HOLIDAYS')?.status ?? 'UNKNOWN'} · ใช้กับงานธนาคารไทยเท่านั้น ไม่ใช้แทนตลาดสหรัฐ`],
+    ['Twelve Data (cross-check)', `${find('TWELVE_DATA_BASIC')?.status ?? 'UNKNOWN'} · key มีแล้ว แต่ adapter/สิทธิ์ข้อมูลยังไม่ยืนยัน → ปิดใช้`],
+    ['Alpha Vantage (cross-check)', `${find('ALPHA_VANTAGE_FREE')?.status ?? 'UNKNOWN'} · งบ 3 คำขอ/วัน เมื่อเปิดใช้ (ยังปิด)`],
     ['Collector (Homelab)', 'NOT_DEPLOYED · รอติดตั้ง Ubuntu ใหม่ (Windows เก็บข้อมูลอยู่)'],
   ];
   return (
