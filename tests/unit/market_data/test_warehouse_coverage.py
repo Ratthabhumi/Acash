@@ -40,11 +40,23 @@ def test_pre_inception_dates_are_not_applicable_not_missing(tmp_path: Path) -> N
     days = [date(2026, 1, 5 + i) for i in range(4)]
     store.record_sessions("VOO", days, source="MASSIVE_BASIC", job_id="j")
     store.record_sessions("NASA", days[2:], source="MASSIVE_BASIC", job_id="j")
-    matrix = wh.coverage(store.session_index(), ["VOO", "NASA"])
+    matrix = wh.coverage(store.session_index(), ["VOO", "NASA"],
+                         inception={"NASA": {"verified": True, "date": "2026-01-07"}})
     nasa = matrix["symbols"]["NASA"]
     assert nasa["not_applicable_pre_inception"] == 2 and nasa["missing_after_inception"] == 0
     assert nasa["status"] == "PARTIAL_LIMITED_HISTORY" and nasa["inception_limited_history"] is True
     assert matrix["covered"] == 1 and matrix["partial_limited_history"] == 1 and matrix["missing"] == 0
+
+
+def test_gaps_without_listing_evidence_stay_inception_unverified(tmp_path: Path) -> None:
+    store = wh.BarWarehouse(tmp_path / "w", CLOCK, _record(tmp_path))
+    days = [date(2026, 1, 5 + i) for i in range(4)]
+    store.record_sessions("VOO", days, source="MASSIVE_BASIC", job_id="j")
+    store.record_sessions("CRWV", days[2:], source="MASSIVE_BASIC", job_id="j")
+    crwv = wh.coverage(store.session_index(), ["VOO", "CRWV"])["symbols"]["CRWV"]
+    assert crwv["inception_verified"] is False
+    assert crwv["inception_unverified_gaps"] == 2 and crwv["not_applicable_pre_inception"] == 0
+    assert crwv["status"] == "PARTIAL_INCEPTION_UNVERIFIED"
 
 
 def test_a_gap_after_inception_stays_partial(tmp_path: Path) -> None:

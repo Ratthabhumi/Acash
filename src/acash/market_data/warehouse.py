@@ -356,7 +356,8 @@ def _read_json(path: Path) -> Optional[Dict[str, Any]]:
     return doc if isinstance(doc, dict) else None
 
 
-def coverage(index: Mapping[str, Any], symbols: Sequence[str]) -> Dict[str, Any]:
+def coverage(index: Mapping[str, Any], symbols: Sequence[str],
+             inception: Optional[Mapping[str, Mapping[str, Any]]] = None) -> Dict[str, Any]:
     """Per-symbol coverage plus gaps against the union of indexed sessions (no forward fill)."""
     rows = index.get("symbols", {}) if isinstance(index.get("symbols"), dict) else {}
     union = sorted({value for symbol in symbols for value in (rows.get(symbol, {}) or {}).get("dates", [])})
@@ -368,16 +369,23 @@ def coverage(index: Mapping[str, Any], symbols: Sequence[str]) -> Dict[str, Any]
             per[symbol] = {"sessions": 0, "status": "MISSING", "error": entry.get("error")}
             continue
         missing = sorted(set(union) - set(dates))
-        # A date before the instrument's first stored session is not missing data: the fund did not
-        # exist yet. Only gaps after inception count as real missing sessions.
-        before_inception = [day for day in missing if day < dates[0]]
-        after_inception = [day for day in missing if day > dates[0]]
+        evidence = (inception or {}).get(symbol) or {}
+        verified = bool(evidence.get("verified")) and evidence.get("date") is not None
+        inception_date = str(evidence["date"]) if verified else dates[0]
+        # Pre-inception classification needs listing evidence. Without it, an early gap stays
+        # INCEPTION_UNVERIFIED rather than being excused as "the fund did not exist".
+        before_inception = [day for day in missing if verified and day < inception_date]
+        after_inception = [day for day in missing if day > inception_date]
+        unverified_inception = [day for day in missing if not verified and day < dates[0]]
         status = ("COVERED" if not missing else
-                  "PARTIAL_LIMITED_HISTORY" if not after_inception else "PARTIAL")
+                  "PARTIAL_LIMITED_HISTORY" if verified and not after_inception else
+                  "PARTIAL_INCEPTION_UNVERIFIED" if unverified_inception and not after_inception else "PARTIAL")
         per[symbol] = {"sessions": len(dates), "first": dates[0], "last": dates[-1],
                        "missing_vs_union": len(missing), "missing_sample": missing[:5],
                        "not_applicable_pre_inception": len(before_inception),
                        "missing_after_inception": len(after_inception),
+                       "inception_verified": verified,
+                       "inception_unverified_gaps": len(unverified_inception),
                        "inception_limited_history": len(dates) < 200,
                        "status": status, "error": entry.get("error")}
     return {"schema": SCHEMA, "union_sessions": len(union), "union_first": union[0] if union else None,
@@ -385,6 +393,8 @@ def coverage(index: Mapping[str, Any], symbols: Sequence[str]) -> Dict[str, Any]
             "covered": sum(1 for v in per.values() if v["status"] == "COVERED"),
             "partial_limited_history": sum(1 for v in per.values()
                                            if v["status"] == "PARTIAL_LIMITED_HISTORY"),
+            "partial_inception_unverified": sum(1 for v in per.values()
+                                                if v["status"] == "PARTIAL_INCEPTION_UNVERIFIED"),
             "partial": sum(1 for v in per.values() if v["status"] == "PARTIAL"),
             "missing": sum(1 for v in per.values() if v["status"] == "MISSING"),
             "contains_prices": False}

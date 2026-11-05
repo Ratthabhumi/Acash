@@ -41,9 +41,10 @@ def test_single_identity_still_blocked_until_eligible() -> None:
     assert result["reason"] == si.UNVERIFIED
 
 
-def test_unknown_ticker_keeps_its_snapshot_identity() -> None:
-    result = si.research_eligibility(REGISTRY, "NASA", [date(2026, 4, 1)])
-    assert result["eligible"] is True and result["reason"] == si.NO_ENTRY
+def test_unknown_ticker_is_never_pit_qualified() -> None:
+    result = si.research_eligibility(REGISTRY, "IBM", [date(2026, 4, 1)])
+    assert result["eligible"] is True and result["pit_qualified"] is False
+    assert result["reason"] == si.NO_ENTRY
 
 
 def test_cohorts_exclude_the_identity_collision() -> None:

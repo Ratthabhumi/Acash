@@ -1,7 +1,7 @@
 {
   "schema": "ACASH_SECURITY_IDENTITY_REGISTRY_V1",
   "generated_at": "2026-11-05T00:00:00+00:00",
-  "note": "Ticker validity intervals for instruments whose ticker text is ambiguous. A series is research-eligible only when every stored session maps to one eligible canonical identity. No private data is stored here.",
+  "note": "Ticker validity intervals and official identity evidence. Research eligibility requires one confirmed identity AND a reconciled owner position; unknown tickers are never treated as point-in-time qualified.",
   "entries": [
     {
       "canonical_id": "SPCX_LEGACY_SPAC_AND_NEW_ISSUE_ETF",
@@ -39,13 +39,54 @@
       "valid_to": null,
       "instrument_type": "COMMON_STOCK",
       "figi": null,
-      "status": "IDENTITY_UNVERIFIED_FIGI_PENDING",
+      "status": "IDENTITY_CONFIRMED_OWNER_POSITION_UNVERIFIED",
       "research_eligible": false,
       "lineage": "Space Exploration Technologies Corp. common stock began trading as SPCX on 2026-06-12; the previous SPCX security must not be linked to it.",
       "evidence": [
-        "Nasdaq technical notice DTN2026-8: reused ticker, do not link prior SPCX history",
+        "Nasdaq technical notice DTN2026-8: SPCX reused by Space Exploration Technologies Corp.; prior SPCX history must not be linked",
         "SpaceX investor relations: shares began trading as SPCX on 2026-06-12",
-        "FIGI/CUSIP for the new listing is not established in this repository"
+        "CUSIP 84615Q103 / ISIN US84615Q1031 (official)",
+        "The owner's SPCX position carries FIGI BBG000NQF3Z5, which does not match the new listing; reconciliation is required before admission"
+      ],
+      "cusip": "84615Q103",
+      "isin": "US84615Q1031",
+      "venue": "NASDAQ_GLOBAL_SELECT"
+    },
+    {
+      "canonical_id": "NASA_TEMA_SPACE_INNOVATORS",
+      "ticker": "NASA",
+      "valid_from": "2026-03-30",
+      "valid_to": null,
+      "instrument_type": "ETF",
+      "figi": null,
+      "cusip": null,
+      "isin": null,
+      "venue": "NYSE_ARCA",
+      "status": "LISTING_VERIFIED",
+      "research_eligible": true,
+      "inception_verified": true,
+      "lineage": "Tema Space Innovators ETF listed 2026-03-30; the first stored session is 2026-03-31.",
+      "evidence": [
+        "Issuer page temaetfs.com/nasa: inception date 2026-03-30",
+        "Owner research handoff 2026-11-04"
+      ]
+    },
+    {
+      "canonical_id": "CRWV_COREWEAVE",
+      "ticker": "CRWV",
+      "valid_from": null,
+      "valid_to": null,
+      "instrument_type": "COMMON_STOCK",
+      "figi": null,
+      "cusip": null,
+      "isin": null,
+      "venue": "NASDAQ_GLOBAL_SELECT",
+      "status": "INCEPTION_UNVERIFIED",
+      "research_eligible": true,
+      "inception_verified": false,
+      "lineage": "First stored session 2025-03-28 is an observation, not proof of the listing date.",
+      "evidence": [
+        "Observed first warehouse session 2025-03-28 (not listing evidence)"
       ]
     }
   ]

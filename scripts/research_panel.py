@@ -56,7 +56,8 @@ def main() -> int:
         inputs = panel.pop("inputs")
         proposal = rp.build_proposal(inputs)
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    coverage = wh.coverage(store.session_index(), symbols)
+    inception = {s: si.inception_evidence(registry, s) for s in symbols}
+    coverage = wh.coverage(store.session_index(), symbols, inception=inception)
     report = {
         "generated_at": generated,
         "job": {"job_id": "OFFLINE_PANEL_REBUILD", "requests": 0, "provider_calls": 0,

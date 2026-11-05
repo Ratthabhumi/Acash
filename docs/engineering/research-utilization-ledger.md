@@ -8,7 +8,7 @@ dashboard, not that it is profitable or admissible.
 | --- | --- | --- |
 | Massive EOD + Parquet warehouse | **INTEGRATED** | 26 partitions, SHA-256 verified, `storage_rights: PERMITTED` under ODR-004 amendment 004 |
 | Massive Grouped Daily (1 request/session) | **INTEGRATED** | production collector, 1 request for 2026-11-04, `failed=0` |
-| Point-in-time security identity | **PARTIALLY_INTEGRATED** | registry + quarantine gate live; SPCX identity is unresolved (ticker reuse) |
+| Point-in-time security identity | **PARTIALLY_INTEGRATED** | registry with CUSIP/ISIN evidence; the SPCX owner position is still unreconciled, so the series stays quarantined |
 | OpenFIGI identity mapping | **INTEGRATED** | owner confirmation recorded; venue status still per-instrument |
 | Economic classification | **INTEGRATED** | 28/28 holdings classified |
 | NYSE session calendar | **INTEGRATED** | XNYS fixture only; other venues not covered |
@@ -21,9 +21,10 @@ dashboard, not that it is profitable or admissible.
 | V38 fee / route cost research | **ENGINE_IMPLEMENTED_DATA_PENDING** | no broker fee schedule or FX spread evidence |
 | ETF look-through / overlap | **BLOCKED** | no dated, rights-qualified holdings file → `OVERLAP_NOT_ESTABLISHED` |
 | Windows warehouse sync | **INTEGRATED** | delta transfer, hash-verified cutover, 0 provider calls |
-| Windows scheduled sync | **PARTIALLY_INTEGRATED** | Task Scheduler script prepared; not yet registered on the workstation |
+| Windows scheduled sync | **INTEGRATED** | scheduled task registered, 13:30 Tue-Sat, next run 2026-11-06 |
 | Off-device backup | **DEFERRED** | no independent destination (`/data/backups` is same-HDD) |
 | Homelab daily collector | **INTEGRATED** | timer active, service success, next run 2026-11-06 13:00 ICT |
+| Forward shadow research | **INTEGRATED** | frozen protocol + append-only journal; 0 forward observations yet |
 | Execution / orders | **BLOCKED (by contract)** | `NO_REAL_ORDERS=true`, authority USD 0.00 |
 
 ## SPCX identity decision (P0)
