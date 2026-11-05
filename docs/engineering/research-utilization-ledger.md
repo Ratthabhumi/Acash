@@ -24,7 +24,7 @@ dashboard, not that it is profitable or admissible.
 | Windows scheduled sync | **INTEGRATED** | scheduled task registered, 13:30 Tue-Sat, next run 2026-11-06 |
 | Off-device backup | **DEFERRED** | no independent destination (`/data/backups` is same-HDD) |
 | Homelab daily collector | **INTEGRATED** | timer active, service success, next run 2026-11-06 13:00 ICT |
-| Forward shadow research | **INTEGRATED** | frozen protocol + append-only journal; 0 forward observations yet |
+| Forward shadow research | **PARTIAL** | P0 correctness repaired (PIT cutoff, identity gate, strategy-weighted outcomes, atomic journal); 0 forward observations yet |
 | Execution / orders | **BLOCKED (by contract)** | `NO_REAL_ORDERS=true`, authority USD 0.00 |
 
 ## SPCX identity decision (P0)

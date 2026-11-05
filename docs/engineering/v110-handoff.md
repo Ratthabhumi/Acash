@@ -69,3 +69,24 @@ proven it can observe a full session without duplication.
 2. Provide the life-of-account transaction and cash-flow evidence for since-baseline performance.
 3. Supply dated ETF holdings if look-through is wanted.
 4. Decide whether to keep the 13:30 sync schedule as configured.
+
+
+## V111 — integrity closure (2026-11-06)
+
+- Shadow P0 repairs: the frozen universe and its exclusions are enforced, the identity registry is applied
+  at every build, input series are truncated at the decision cutoff, a constituent that fails identity is
+  BLOCKED instead of silently renormalised, outcomes use the recorded target weights plus an independent
+  equal-weight benchmark, and the journal is written under a single-writer lock with atomic replace and a
+  `.bak` generation.
+- SPCX: OpenFIGI levels recorded (composite `BBG000NQF3Z5`, share class `BBG001SQPN65`, listing
+  `BBG022H91Q24`). The owner position's FIGI is the **composite**, so the earlier "mismatch" was a level
+  comparison error; the series still spans the legacy ETF, so only sessions from 2026-06-12 could ever be
+  admitted and the series stays quarantined pending broker scope confirmation.
+- CRWV: official listing 2025-03-28 recorded; the 98 early gaps are now `NOT_APPLICABLE_PRE_INCEPTION`
+  (PARTIAL_LIMITED_HISTORY) instead of `INCEPTION_UNVERIFIED`.
+- Readiness sources: calendar from the verified XNYS fixture over the last stored session, transactions
+  from the canonical journal count (not only the tax aggregate), and quant validation from the forward
+  shadow report.
+- Not done in this cycle: the transaction import/preview/confirm workflow, the full Dashboard redesign
+  (contrast tokens, navigation, forward-shadow panel) and the scheduled-sync acceptance (the task has not
+  run yet).

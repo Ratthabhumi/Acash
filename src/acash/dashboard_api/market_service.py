@@ -372,8 +372,20 @@ def _readiness_view(report: Dict[str, Any], health: Optional[Dict[str, Any]]) ->
     except (OSError, ValueError, DataContractError):
         tax = None
     view = _read_json("upi_view.json", ("out",))
+    journal_events = 0
+    shadow_report = None
+    try:
+        from acash.invest import shadow as shadow_mod
+        journal = pi._private_dir("shadow") / "journal.json"
+        if journal.is_file():
+            doc = json.loads(journal.read_text(encoding="utf-8"))
+            journal_events = len(doc.get("signals") or []) + len(doc.get("outcomes") or [])
+            shadow_report = shadow_mod.report(journal)
+    except (OSError, ValueError, DataContractError):
+        journal_events, shadow_report = 0, None
     return ir.build_readiness(view=view, health=health, report=report, tax=tax,
-                              registry=si.load_registry(Path(si.DEFAULT_REGISTRY)))
+                              registry=si.load_registry(Path(si.DEFAULT_REGISTRY)),
+                              journal_events=journal_events, shadow_report=shadow_report)
 
 
 def _fx_view() -> Dict[str, Any]:

@@ -32,13 +32,13 @@ NEW_US = {"SCBSET50", "MTS-GOLD"}
 
 
 def _universe(store: wh.BarWarehouse, registry: List[Any]) -> Dict[str, Any]:
+    """Held symbols with a partition; identity eligibility is enforced by the caller/protocol."""
     snapshot = json.loads((PRIVATE / "snapshot.json").read_text(encoding="utf-8"))
     held = sorted({str(s["security_id"]) for s in snapshot["securities"]
                    if s.get("figi") and str(s["security_id"]) not in NEW_US})
     symbols = [s for s in held if store.partition(s).is_file()]
     closes = {s: {d: bar.close for d, bar in store.read(s).items()} for s in symbols}
-    weights = rpanel.weights_from_view(PRIVATE / "out" / "upi_view.json", symbols)
-    return {"symbols": symbols, "closes": closes, "weights": weights}
+    return {"symbols": symbols, "closes": closes}
 
 
 def main() -> int:
@@ -56,11 +56,15 @@ def main() -> int:
         print(json.dumps(shadow.report(JOURNAL), indent=2, sort_keys=True))
         return 0
     if args.register:
+        registry = si.load_registry(ROOT / si.DEFAULT_REGISTRY)
+        data = _universe(store, registry)
+        eligible = [s for s in data["symbols"]
+                    if s != "SPCX" and si.research_eligibility(registry, s, sorted(data["closes"][s]))["eligible"]]
         protocol = {
             "protocol_id": "ACASH_SHADOW_V1", "version": 1,
             "registered_at": datetime.now(timezone.utc).date().isoformat(),
             "universe": {"cohort": "ESTABLISHED_HISTORY", "identity_gate": "security_identity_registry",
-                         "excluded_identities": ["SPCX"]},
+                         "symbols": eligible, "excluded_identities": ["SPCX"]},
             "strategies": ["CASH", "BUY_AND_HOLD", "EQUAL_WEIGHT"], "benchmark": "EQUAL_WEIGHT",
             "available_data_cutoff": "2026-11-04", "cost_assumptions": "UNKNOWN",
             "fx_basis": "REFERENCE_FX_NOT_EXECUTABLE", "horizon": "OPEN_ENDED",
@@ -73,8 +77,16 @@ def main() -> int:
         print(json.dumps({"status": "REGISTERED", "sha256": doc["sha256"], "path": str(PROTOCOL)}, indent=2))
         return 0
     protocol_doc = shadow.load_protocol(PROTOCOL)
-    data = _universe(store, si.load_registry(ROOT / si.DEFAULT_REGISTRY))
+    registry = si.load_registry(ROOT / si.DEFAULT_REGISTRY)
+    data = _universe(store, registry)
+    frozen = list(protocol_doc["protocol"]["universe"]["symbols"])
+    data["symbols"] = frozen
+    data["closes"] = {s: data["closes"][s] for s in frozen if s in data["closes"]}
+    data["weights"] = rpanel.weights_from_view(PRIVATE / "out" / "upi_view.json", frozen)
     latest = max((d for series in data["closes"].values() for d in series), default=None)
+    if latest is None:
+        print(json.dumps({"status": "NO_QUALIFIED_SESSIONS"}))
+        return 2
     if args.observe:
         added = shadow.observe_outcomes(JOURNAL, data["closes"], data["symbols"])
         print(json.dumps({"status": "OBSERVED", "outcomes_added": len(added)}, indent=2))
@@ -82,7 +94,7 @@ def main() -> int:
     session = date.fromisoformat(args.session) if args.session else latest
     try:
         entry = shadow.evaluate_session(protocol_doc, data["closes"], data["weights"], data["symbols"],
-                                        session, JOURNAL)
+                                        session, JOURNAL, registry=registry)
     except Exception as error:  # evidence, not a crash: report the exact refusal
         print(json.dumps({"status": type(error).__name__, "code": str(error)[:200]}, indent=2))
         return 2

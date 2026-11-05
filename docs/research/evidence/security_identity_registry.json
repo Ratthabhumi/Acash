@@ -39,18 +39,34 @@
       "valid_to": null,
       "instrument_type": "COMMON_STOCK",
       "figi": null,
-      "status": "IDENTITY_CONFIRMED_OWNER_POSITION_UNVERIFIED",
+      "status": "IDENTITY_CONFIRMED_OWNER_SCOPE_UNVERIFIED",
       "research_eligible": false,
       "lineage": "Space Exploration Technologies Corp. common stock began trading as SPCX on 2026-06-12; the previous SPCX security must not be linked to it.",
       "evidence": [
-        "Nasdaq technical notice DTN2026-8: SPCX reused by Space Exploration Technologies Corp.; prior SPCX history must not be linked",
-        "SpaceX investor relations: shares began trading as SPCX on 2026-06-12",
-        "CUSIP 84615Q103 / ISIN US84615Q1031 (official)",
-        "The owner's SPCX position carries FIGI BBG000NQF3Z5, which does not match the new listing; reconciliation is required before admission"
+        "Nasdaq DTN2026-8: SPCX reused; prior SPCX history must not be linked",
+        "SpaceX IR: first session 2026-06-12",
+        "OpenFIGI BBG022H91Q24: composite BBG000NQF3Z5, share class BBG001SQPN65, CUSIP 84615Q103, ISIN US84615Q1031",
+        "Owner position FIGI BBG000NQF3Z5 is the COMPOSITE identifier, so it is not a level mismatch; broker holding scope still needs confirmation",
+        "Stored series begins 2024-11-04 and spans the legacy ETF, so only sessions from 2026-06-12 could be admitted"
       ],
       "cusip": "84615Q103",
       "isin": "US84615Q1031",
-      "venue": "NASDAQ_GLOBAL_SELECT"
+      "venue": "NASDAQ_GLOBAL_SELECT",
+      "identifiers": {
+        "composite_figi": "BBG000NQF3Z5",
+        "share_class_figi": "BBG001SQPN65",
+        "listing_figi": "BBG022H91Q24",
+        "cusip": "84615Q103",
+        "isin": "US84615Q1031"
+      },
+      "figi_level_verified": true,
+      "owner_position": {
+        "figi": "BBG000NQF3Z5",
+        "level": "COMPOSITE",
+        "matches_composite": true,
+        "instrument_type": "COMMON_STOCK",
+        "state": "IDENTIFIER_LEVEL_RECONCILED_POSITION_SCOPE_UNVERIFIED"
+      }
     },
     {
       "canonical_id": "NASA_TEMA_SPACE_INNOVATORS",
@@ -74,19 +90,20 @@
     {
       "canonical_id": "CRWV_COREWEAVE",
       "ticker": "CRWV",
-      "valid_from": null,
+      "valid_from": "2025-03-28",
       "valid_to": null,
       "instrument_type": "COMMON_STOCK",
       "figi": null,
       "cusip": null,
       "isin": null,
       "venue": "NASDAQ_GLOBAL_SELECT",
-      "status": "INCEPTION_UNVERIFIED",
+      "status": "LISTING_VERIFIED",
       "research_eligible": true,
-      "inception_verified": false,
+      "inception_verified": true,
       "lineage": "First stored session 2025-03-28 is an observation, not proof of the listing date.",
       "evidence": [
-        "Observed first warehouse session 2025-03-28 (not listing evidence)"
+        "CoreWeave press release 2025-03-27: trading expected to begin on Nasdaq 2025-03-28",
+        "Nasdaq opening-bell record 2025-03-28"
       ]
     }
   ]

@@ -39,7 +39,9 @@ def build_readiness(view: Optional[Mapping[str, Any]] = None,
                     health: Optional[Mapping[str, Any]] = None,
                     report: Optional[Mapping[str, Any]] = None,
                     tax: Optional[Mapping[str, Any]] = None,
-                    registry: Optional[Sequence[Any]] = None) -> Dict[str, Any]:
+                    registry: Optional[Sequence[Any]] = None,
+                    journal_events: int = 0,
+                    shadow_report: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     view = view or {}
     health = health or {}
     report = report or {}
@@ -74,9 +76,10 @@ def build_readiness(view: Optional[Mapping[str, Any]] = None,
             QUALIFIED if (capacity.get("reserve") or {}).get("status") in ("ESTABLISHED", "FUNDED") else PARTIAL,
             basis="capacity_inputs", detail=str((capacity.get("reserve") or {}).get("status"))),
         "transactions": _component(
-            QUALIFIED if tax_ready.get("trade_history") == QUALIFIED else PARTIAL
-            if tax_ready.get("trade_history") else INSUFFICIENT,
-            basis="canonical transaction journal", detail=str(tax_ready.get("trade_history", "MISSING"))),
+            QUALIFIED if journal_events > 0 and tax_ready.get("trade_history") == QUALIFIED else
+            PARTIAL if journal_events > 0 or tax_ready.get("trade_history") else INSUFFICIENT,
+            basis="canonical transaction journal",
+            detail=f"{journal_events} journal event(s); tax readiness {tax_ready.get('trade_history', 'MISSING')}"),
         "realized_performance": _component(
             QUALIFIED if tax_ready.get("historical_performance") == QUALIFIED else INSUFFICIENT,
             basis="flows + opening/closing valuations", detail=str(tax_ready.get("historical_performance", "DATA_REQUIRED"))),
@@ -84,13 +87,15 @@ def build_readiness(view: Optional[Mapping[str, Any]] = None,
             QUALIFIED if (report.get("fx") or {}).get("status") == "AVAILABLE" else PARTIAL,
             basis="BOT reference FX", detail=str((report.get("fx") or {}).get("status"))),
         "calendar": _component(
-            QUALIFIED if (health.get("next_run") or {}).get("next_run_et") else INSUFFICIENT,
-            basis="XNYS fixture", detail=str((health.get("next_run") or {}).get("next_run_ict"))),
+            _calendar_status(health, coverage), basis="verified XNYS session fixture",
+            detail=str(coverage.get("union_last"))),
         "corporate_actions": _component(INSUFFICIENT, basis="dividend/split evidence", detail="no itemised distribution evidence"),
         "etf_lookthrough": _component(BLOCKED, basis="dated issuer holdings", detail="OVERLAP_NOT_ESTABLISHED"),
         "fees": _component(INSUFFICIENT, basis="broker fee schedule", detail="no route-cost evidence"),
-        "quant_validation": _component(INSUFFICIENT, basis="frozen trials + forward observations",
-                                       detail="STATISTICAL_VALIDATION_NOT_ESTABLISHED"),
+        "quant_validation": _component(
+            _validation_status(shadow_report), basis="frozen protocol + forward journal",
+            detail=str((shadow_report or {}).get("statistical_validation",
+                                                 "STATISTICAL_VALIDATION_NOT_ESTABLISHED"))),
     }
 
     portfolio_health = _component(
@@ -175,3 +180,27 @@ def _next_evidence(identity_blocked: Mapping[str, Any], tax_ready: Mapping[str, 
     if components["quant_validation"]["status"] != QUALIFIED:
         steps.append("validation: frozen trials and enough forward shadow observations")
     return steps or ["none: all evaluated inputs are qualified"]
+
+
+def _calendar_status(health: Mapping[str, Any], coverage: Mapping[str, Any]) -> str:
+    """The venue fixture must actually cover the last stored session."""
+    last = coverage.get("union_last")
+    if not last:
+        return INSUFFICIENT
+    try:
+        from datetime import date as _date
+        from acash.invest import market_calendar as mc
+        calendar = mc.load_calendar()
+        info = mc.session(calendar, _date.fromisoformat(str(last)))
+    except Exception:
+        return INSUFFICIENT
+    return QUALIFIED if info["status"] in ("OPEN", "EARLY_CLOSE", "CLOSED_HOLIDAY", "CLOSED_WEEKEND") else INSUFFICIENT
+
+
+def _validation_status(shadow_report: Optional[Mapping[str, Any]]) -> str:
+    outcomes = int((shadow_report or {}).get("forward_observations") or 0)
+    if outcomes == 0:
+        return INSUFFICIENT
+    if outcomes < 30:
+        return PARTIAL
+    return INSUFFICIENT  # canonical DSR/PBO still needs the full trial ledger
