@@ -1,10 +1,11 @@
 # acash-market-collector.timer
 # Installed by scripts/deploy/deploy_acash_collector.sh; never enable before the acceptance pass.
 #
-# One fire per US trading weekday at 18:30 America/New_York — after the 16:00 close (and after a 13:00
-# early close) so the provider has published the end-of-day aggregate. The timezone lives inside the
+# One fire per day at 01:00 America/New_York, Tuesday through Saturday: the Massive Basic plan
+# publishes a session's daily bars only after midnight ET on the following calendar day, so 18:30
+# was too early and could return HTTP 403 for a session that simply was not entitled yet. The timezone lives inside the
 # calendar expression because `Timezone=` is not a portable [Timer] key:
-#   systemd-analyze calendar 'Mon..Fri *-*-* 18:30:00 America/New_York'
+#   systemd-analyze calendar 'Tue..Sat *-*-* 01:00:00 America/New_York'
 #
 # This job covers US equity/ETF EOD only. FX, macro and corporate actions follow their own publication
 # cycles and must not be forced into this timer.
@@ -15,7 +16,7 @@ Documentation=file:///data/acash/app/docs/operations/market-data-collector-homel
 
 [Timer]
 Unit=acash-market-collector.service
-OnCalendar=Mon..Fri *-*-* 18:30:00 America/New_York
+OnCalendar=Tue..Sat *-*-* 01:00:00 America/New_York
 # A missed fire (host off, network down) runs once on the next boot rather than being lost; the
 # collector then resumes from stored partitions and repairs middle gaps with --catch-up.
 Persistent=true

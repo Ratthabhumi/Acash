@@ -126,7 +126,7 @@ else:
 PY
 
 # ---- systemd --------------------------------------------------------------------------------------
-CAL='Mon..Fri *-*-* 18:30:00 America/New_York'
+CAL='Tue..Sat *-*-* 01:00:00 America/New_York'
 systemd-analyze calendar "$CAL" >/dev/null || fail "OnCalendar expression rejected by this systemd"
 grep -q '^OnCalendar='"$CAL"'$' "$BUNDLE/deploy/acash-market-collector.timer" \
   || fail "timer template does not carry the validated OnCalendar expression"

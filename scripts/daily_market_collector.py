@@ -61,6 +61,8 @@ def main() -> int:
     parser.add_argument("--max-requests", type=int, default=40)
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--force", action="store_true", help="collect even when the venue is closed")
+    parser.add_argument("--per-ticker", action="store_true",
+                        help="use per-symbol historical bars instead of one Grouped Daily request per session")
     parser.add_argument("--catch-up", action="store_true",
                         help="after the incremental pass, refetch symbols that have middle gaps")
     parser.add_argument("--max-gap-symbols", type=int, default=5)
@@ -102,8 +104,19 @@ def main() -> int:
     provider = mp.MassiveEODMarketDataProvider(credential, mp.urllib_transport,
                                                RateLimiter(5, time.monotonic, 60).allow,
                                                lambda: datetime.now(timezone.utc), skipped=[])
-    report = co.collect(provider, store, symbols, start, end, job_id=job_id, max_requests=args.max_requests,
-                        pause=time.sleep)
+    grouped: Dict[str, Any] | None = None
+    if not args.per_ticker and not args.symbols:
+        sessions = co.grouped_sessions(store, symbols, start, end)[-max(1, args.max_requests):]
+        grouped = co.collect_grouped(provider, store, symbols, sessions, job_id=job_id,
+                                     max_requests=args.max_requests, pause=time.sleep)
+        report = co.CollectionReport(job_id=job_id, provider_id="MASSIVE_BASIC", start=start, end=end,
+                                     requests=grouped["requests"], persisted=True,
+                                     storage_rights="PERMITTED")
+        report.completed = list(symbols) if grouped["rows_added"] else []
+        report.failed = sorted(grouped["errors"])
+    else:
+        report = co.collect(provider, store, symbols, start, end, job_id=job_id,
+                            max_requests=args.max_requests, pause=time.sleep)
     catch_up: Dict[str, Any] = {"requested": [], "report": None}
     if args.catch_up:
         missing = co.gaps(store, symbols)

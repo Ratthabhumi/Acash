@@ -25,7 +25,8 @@ REQUIRES = ["ODR_UPI_PRIVATE_OBSERVATION_001"]
 CREDENTIAL_TARGET_PREFIX = "ACASH/MARKET_DATA/"
 ADAPTED_PROVIDERS = ("ALPACA_BASIC", "ALPACA_HISTORICAL", "MARKETDATA_APP_FREE", "FRANKFURTER_ECB_FX",
                      "MASSIVE_BASIC", "BOT_REFERENCE_FX", "BOT_HOLIDAYS")
-KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI",)
+KNOWN_PROVIDERS = ADAPTED_PROVIDERS + ("WEBULL_TH_OPENAPI", "TWELVE_DATA_BASIC",
+                                     "ALPHA_VANTAGE_FREE")
 # Providers that authenticate without a stored credential (published keyless endpoints).
 KEYLESS_PROVIDERS = frozenset({"FRANKFURTER_ECB_FX"})
 # Identity providers are a separate authority from price/FX feeds: they return candidate FIGI
@@ -80,6 +81,18 @@ REGISTRY: Dict[str, Dict[str, Any]] = {
     "WEBULL_TH_OPENAPI": {"role": "PRICE", "quote_type": None, "coverage": "UNKNOWN", "label": None,
                           "contract_verified": False, "rate_limit": None, "timestamp_policy": None,
                           "known_restriction": "OPENAPI_ENTITLEMENT_PENDING"},
+    # Owner credentials exist, but no adapter is implemented and no contract/data right is verified:
+    # these stay unusable until both are evidenced. Quota budgets are declared, not consumed.
+    "TWELVE_DATA_BASIC": {"role": "PRICE_CROSSCHECK", "quote_type": None, "coverage": "UNKNOWN",
+                          "label": "SECONDARY_VALIDATION_DISABLED", "contract_verified": False,
+                          "rate_limit": "8 credits/minute, 800 credits/day (endpoint-weighted)",
+                          "timestamp_policy": "PROVIDER_DEPENDENT",
+                          "known_restriction": "CREDENTIAL_EXISTS_DATA_RIGHTS_UNVERIFIED"},
+    "ALPHA_VANTAGE_FREE": {"role": "PRICE_CROSSCHECK", "quote_type": None, "coverage": "UNKNOWN",
+                           "label": "SECONDARY_VALIDATION_DISABLED", "contract_verified": False,
+                           "rate_limit": "25 requests/day (ACASH budget 3/day)",
+                           "timestamp_policy": "PROVIDER_DEPENDENT",
+                           "known_restriction": "CREDENTIAL_EXISTS_PREMIUM_ENDPOINTS_EXCLUDED"},
 }
 # Owner attestations a scope entry may carry; every one defaults to UNKNOWN.
 ATTESTATIONS = ("entitlement_verified", "display_permitted", "calculation_permitted", "derived_value_permitted",
@@ -137,7 +150,8 @@ class EnvironmentCredentialStore:
         self._prefix = prefix
 
     def lookup(self, provider_id: str) -> Optional[Credential]:
-        if provider_id not in ADAPTED_PROVIDERS and provider_id not in BOT_PRODUCTS:
+        if provider_id not in ADAPTED_PROVIDERS and provider_id not in BOT_PRODUCTS \
+                and provider_id not in KNOWN_PROVIDERS:
             return None
         for candidate in (provider_id, CREDENTIAL_ALIASES.get(provider_id)):
             if not candidate:

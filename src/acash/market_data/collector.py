@@ -244,28 +244,28 @@ def gaps(warehouse: BarWarehouse, symbols: Sequence[str]) -> Dict[str, Any]:
     return {"symbols_with_gaps": sorted(detail), "detail": detail, "union_sessions": len(union)}
 
 
-def latest_completed_session(now: datetime | None = None,
-                             publication_delay: timedelta = timedelta(minutes=30)) -> Dict[str, Any]:
-    """The most recent session whose close (+ publication delay) has already passed.
+def latest_completed_session(now: datetime | None = None) -> Dict[str, Any]:
+    """The newest session whose EOD data is *entitled* on the Massive Basic plan.
 
-    A trading day is not an eligible EOD session until the venue has closed and the provider has had
-    time to publish. Before that moment the default collector asks for the *previous* session rather
-    than a bar that does not exist yet.
+    Basic publishes a session's daily bars only after midnight America/New_York on the following
+    calendar day, so a session is eligible only when the current ET date is strictly after it. Weekends,
+    holidays and early closes are handled by the venue calendar; nothing is inferred.
     """
     from datetime import datetime as _dt
     from zoneinfo import ZoneInfo
     from acash.invest import market_calendar as mc
     moment = now or _dt.now(timezone.utc)
     calendar = mc.load_calendar()
-    day = moment.astimezone(ZoneInfo(calendar.timezone)).date()
-    for _ in range(12):
+    today_et = moment.astimezone(ZoneInfo(calendar.timezone)).date()
+    day = today_et - timedelta(days=1)
+    for _ in range(14):
         info = mc.session(calendar, day)
-        if info["status"] in ("OPEN", "EARLY_CLOSE") and info["close_utc"]:
-            eligible_at = _dt.fromisoformat(str(info["close_utc"])) + publication_delay
-            if eligible_at <= moment:
-                return {"session_date": day.isoformat(), "session_status": info["status"],
-                        "eligible_at_utc": eligible_at.isoformat(),
-                        "eligible_at_ict": eligible_at.astimezone(ZoneInfo("Asia/Bangkok")).isoformat()}
+        if info["status"] in ("OPEN", "EARLY_CLOSE") and day < today_et:
+            midnight_et = _dt.combine(today_et, datetime.min.time(), tzinfo=ZoneInfo(calendar.timezone))
+            return {"session_date": day.isoformat(), "session_status": info["status"],
+                    "eligible_at_utc": midnight_et.astimezone(timezone.utc).isoformat(),
+                    "eligible_at_ict": midnight_et.astimezone(ZoneInfo("Asia/Bangkok")).isoformat(),
+                    "rule": "SESSION_STRICTLY_BEFORE_CURRENT_ET_DATE"}
         day = day - timedelta(days=1)
     raise DataContractError("COLLECTOR_NO_ELIGIBLE_SESSION: calendar coverage is too short.")
 
@@ -281,9 +281,10 @@ def next_run(now: datetime | None = None) -> Dict[str, Any]:
     day = moment.astimezone(new_york).date()
     for _ in range(10):
         info = mc.session(calendar, day)
-        candidate = moment.astimezone(new_york).replace(hour=18, minute=30, second=0, microsecond=0)
+        candidate = moment.astimezone(new_york).replace(hour=1, minute=0, second=0, microsecond=0)
         candidate = candidate.replace(year=day.year, month=day.month, day=day.day)
-        if info["status"] in ("OPEN", "EARLY_CLOSE") and candidate > moment:
+        if (info["status"] in ("OPEN", "EARLY_CLOSE") and day.weekday() in (1, 2, 3, 4, 5)
+                and candidate > moment):
             return {"next_run_et": candidate.isoformat(), "session_date": day.isoformat(),
                     "session_status": info["status"],
                     "next_run_ict": candidate.astimezone(ZoneInfo("Asia/Bangkok")).isoformat()}
@@ -327,3 +328,66 @@ def write_health(warehouse: BarWarehouse, symbols: Sequence[str], path: Path, **
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return doc
+
+
+def grouped_sessions(warehouse: BarWarehouse, symbols: Sequence[str], start: date,
+                     end: date) -> List[date]:
+    """Eligible venue sessions in ``[start, end]`` that are still missing for at least one symbol."""
+    from acash.invest import market_calendar as mc
+    calendar = mc.load_calendar()
+    day = start
+    sessions: List[date] = []
+    while day <= end:
+        if mc.session(calendar, day)["status"] in ("OPEN", "EARLY_CLOSE"):
+            sessions.append(day)
+        day = day + timedelta(days=1)
+    stored = {symbol: set(warehouse.read(symbol)) for symbol in symbols}
+    return [day for day in sessions if any(day not in stored[symbol] for symbol in symbols)]
+
+
+def collect_grouped(source: Any, warehouse: BarWarehouse, symbols: Sequence[str], sessions: Sequence[date],
+                    *, job_id: str, max_requests: int = 10,
+                    pause: Callable[[float], None] = time.sleep,
+                    pause_seconds: float = RATE_LIMIT_PAUSE_SECONDS) -> Dict[str, Any]:
+    """One Grouped Daily request per missing session; only held symbols are written.
+
+    The full-market payload never leaves this function. A session that fails is left missing and
+    reported, so the next run retries it instead of pretending the day is complete.
+    """
+    provider_id = getattr(source, "provider_id", "MASSIVE_BASIC")
+    if not storage_permitted(provider_id, warehouse.record):
+        raise DataContractError(f"STORAGE_RIGHTS_UNESTABLISHED: {provider_id}.")
+    by_symbol: Dict[str, List[Dict[str, Any]]] = {symbol: [] for symbol in symbols}
+    collected: List[str] = []
+    requests = 0
+    errors: Dict[str, str] = {}
+    for day in sessions:
+        if requests >= max_requests:
+            break
+        for attempt in range(2):
+            try:
+                rows = source.grouped_daily(day, symbols)
+            except DataContractError as error:
+                message = str(error)
+                if message.startswith("PROVIDER_RATE_LIMITED") and attempt == 0:
+                    pause(pause_seconds)
+                    continue
+                errors[day.isoformat()] = message.split(":")[0]
+                break
+            requests += 1
+            for row in rows:
+               by_symbol[row["symbol"]].append(row)
+            collected.append(day.isoformat())
+            break
+    added = 0
+    for symbol, rows in by_symbol.items():
+        if not rows:
+            continue
+        result = warehouse.commit(symbol, rows, job_id=job_id, source=provider_id,
+                                  requested_start=min(sessions), requested_end=max(sessions))
+        added += int(result["added"])
+    missing_after = grouped_sessions(warehouse, symbols, min(sessions), max(sessions)) if sessions else []
+    return {"job_id": job_id, "provider_id": provider_id, "requests": requests, "sessions": collected,
+            "sessions_requested": len(sessions), "rows_added": added,
+            "errors": errors, "missing_after": [d.isoformat() for d in missing_after],
+            "persisted": True}

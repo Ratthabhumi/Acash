@@ -101,8 +101,9 @@ ENDPOINTS: Dict[str, Endpoint] = {
                                   {"feed": frozenset({"sip"}), "timeframe": frozenset({"1Min", "1Day"}),
                                    "adjustment": frozenset({"raw"})}),
     "MASSIVE_BASIC": Endpoint("api.massive.com",
-                              re.compile(r"^/v2/aggs/ticker/[A-Z][A-Z0-9]{0,9}(\.[A-Z])?"
-                                         r"/(prev|range/1/day/\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2})$"),
+                              re.compile(r"^/v2/aggs/(ticker/[A-Z][A-Z0-9]{0,9}(\.[A-Z])?"
+                                         r"/(prev|range/1/day/\d{4}-\d{2}-\d{2}/\d{4}-\d{2}-\d{2})"
+                                         r"|grouped/locale/us/market/stocks/\d{4}-\d{2}-\d{2})$"),
                               frozenset({"adjusted"}), frozenset({"Authorization"})),
     "MARKETDATA_APP_FREE": Endpoint("api.marketdata.app",
                                     re.compile(r"^/v1/stocks/quotes/$"),
@@ -655,6 +656,58 @@ class MassiveEODMarketDataProvider:
                              "volume": str(row.get("v")), "adjusted": False,
                              "provider": self.provider_id, "retrieved_at": self.clock().isoformat()})
         return bars
+
+    def grouped_daily(self, session: date, symbols: Sequence[str]) -> List[Dict[str, Any]]:
+        """Daily Market Summary: one request for every US stock bar of a session (Basic plan).
+
+        The full-market payload is filtered to the requested symbols in memory and is never persisted;
+        only the per-symbol bars are handed to the warehouse. A missing symbol is absent, not zero.
+        """
+        if not self.allow():
+            raise DataContractError(f"PROVIDER_RATE_LIMITED: {self.provider_id}.")
+        url = build_url(self.provider_id,
+                        f"/v2/aggs/grouped/locale/us/market/stocks/{session.isoformat()}",
+                        {"adjusted": "false"})
+        status, body = self.transport(HttpRequest(self.provider_id, url,
+                                                  {"Authorization": f"Bearer {self.credential[1]}"}))
+        if status != 200:
+            raise _status_error(self.provider_id, status)
+        doc = _json_body(self.provider_id, body)
+        if not isinstance(doc, dict) or not isinstance(doc.get("results"), list):
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped envelope.")
+        if doc.get("adjusted") is not False:
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped adjusted flag.")
+        if doc.get("queryCount") is None and doc.get("resultsCount") is None:
+            raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped counts.")
+        wanted = set(symbols)
+        seen: Dict[str, Dict[str, Any]] = {}
+        out: List[Dict[str, Any]] = []
+        for row in doc["results"]:
+            if not isinstance(row, dict):
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped row.")
+            symbol = row.get("T")
+            if not isinstance(symbol, str) or symbol not in wanted:
+                continue
+            opened = _unix_millis(self.provider_id, row.get("t"))
+            if opened.astimezone(NEW_YORK).date() != session:
+                raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped session.")
+            bar = {"symbol": symbol, "session_date": session,
+                   "open": str(_positive(self.provider_id, row.get("o"))),
+                   "high": str(_positive(self.provider_id, row.get("h"))),
+                   "low": str(_positive(self.provider_id, row.get("l"))),
+                   "close": str(_positive(self.provider_id, row.get("c"))),
+                   "volume": str(row.get("v")), "adjusted": False,
+                   "provider": self.provider_id, "retrieved_at": self.clock().isoformat()}
+            if symbol in seen:
+                existing = seen[symbol]
+                if existing["close"] != bar["close"] or existing["open"] != bar["open"]:
+                    raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped duplicate.")
+                continue
+            seen[symbol] = bar
+            out.append(bar)
+        if not out:
+            raise DataContractError(f"PROVIDER_NO_DATA: {self.provider_id} grouped session {session.isoformat()}.")
+        return out
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(self.provider_id, ("EOD_CLOSE",), "UNKNOWN", True, True, True, None)

@@ -23,7 +23,7 @@ def test_timer_carries_the_timezone_inside_the_calendar_expression() -> None:
     lines = _lines(TIMER)
     assert not any(line.startswith("Timezone=") for line in lines), "Timezone= is not a portable [Timer] key"
     calendars = [line.split("=", 1)[1] for line in lines if line.startswith("OnCalendar=")]
-    assert calendars == ["Mon..Fri *-*-* 18:30:00 America/New_York"]
+    assert calendars == ["Tue..Sat *-*-* 01:00:00 America/New_York"]
     assert calendars[0].endswith("America/New_York")
     assert "Persistent=true" in lines and "Unit=acash-market-collector.service" in lines
     assert "WantedBy=timers.target" in lines

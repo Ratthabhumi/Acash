@@ -66,7 +66,7 @@ rejected by the installed systemd, or when the acceptance pass does not write a 
 
 Service: oneshot, `User=mew`, `MemoryMax=512M`, `CPUQuota=50%`, `ProtectSystem=strict`,
 `ReadWritePaths=/data/acash/state`, `ExecStart=… daily_market_collector.py --catch-up`.
-Timer: `OnCalendar=Mon..Fri *-*-* 18:30:00 America/New_York`, `Persistent=true` (validated with
+Timer: `OnCalendar=Tue..Sat *-*-* 01:00:00 America/New_York`, `Persistent=true` (validated with
 `systemd-analyze calendar` inside the installer before install).
 
 ## What is still unproven
