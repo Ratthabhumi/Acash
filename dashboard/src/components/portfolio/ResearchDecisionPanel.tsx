@@ -32,6 +32,7 @@ interface ResearchDoc {
   universe_status?: string;
   evidence_labels?: string[];
   cohorts?: Array<Record<string, unknown>>;
+  readiness?: Record<string, unknown>;
   performance_basis?: string;
   realized_performance?: boolean;
   note?: string;
@@ -249,6 +250,31 @@ export const ResearchDecisionPanel: React.FC = () => {
         <SessionCard session={session} />
         <FxCard fx={(doc?.fx as FxDoc | undefined) ?? null} />
       </div>
+
+      {doc?.readiness && (
+        <div className="bg-surface border border-default rounded-lg p-3 space-y-1 text-xs">
+          <p className="font-semibold text-primary">ความพร้อมในการตัดสินใจ (จากข้อมูลที่มีหลักฐาน)</p>
+          <div className="flex flex-wrap gap-1">
+            {([
+              ['พอร์ต', (doc.readiness.portfolio_health as Record<string, unknown> | undefined)?.status],
+              ['วางแผนระยะยาว', (doc.readiness.long_term_planning as Record<string, unknown> | undefined)?.status],
+              ['งานวิจัยย้อนหลัง', (doc.readiness.historical_research as Record<string, unknown> | undefined)?.status],
+              ['ตัดสินใจ', (doc.readiness.decision_readiness as Record<string, unknown> | undefined)?.status],
+            ] as const).map(([label, status]) => (
+              <span key={label} className="text-[10px] px-1.5 py-0.5 rounded border border-default bg-surface-muted">
+                {label}: <span className="font-mono-code">{str(status)}</span>
+              </span>
+            ))}
+          </div>
+          <ul className="list-disc pl-5 text-secondary">
+            {(((doc.readiness.decision_readiness as Record<string, unknown> | undefined)?.next_evidence as string[] | undefined) ?? [])
+              .map((step) => <li key={step}>{step}</li>)}
+          </ul>
+          <p className="text-[11px] text-muted">
+            BLOCKED/INSUFFICIENT = ยังไม่มีหลักฐานพอ · ไม่มีคำสั่งซื้อและไม่มีการรับรองผลตอบแทน
+          </p>
+        </div>
+      )}
 
       <ProviderHealthCard providers={providers} fx={(doc?.fx as FxDoc | undefined) ?? null}
         coverageLast={coverage.union_last ?? null}
