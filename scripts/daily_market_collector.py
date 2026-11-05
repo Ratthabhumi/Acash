@@ -118,7 +118,9 @@ def main() -> int:
         report = co.collect(provider, store, symbols, start, end, job_id=job_id,
                             max_requests=args.max_requests, pause=time.sleep)
     catch_up: Dict[str, Any] = {"requested": [], "report": None}
-    if args.catch_up:
+    if args.catch_up and grouped is None:
+        # Grouped Daily already detects missing eligible sessions; legacy union gaps mistake
+        # pre-inception absence for missing data and can waste per-ticker API requests.
         missing = co.gaps(store, symbols)
         repair = [s for s in missing["symbols_with_gaps"] if s not in report.failed][:args.max_gap_symbols]
         if repair:
@@ -133,19 +135,22 @@ def main() -> int:
                              job_id=job_id, range={"start": start.isoformat(), "end": end.isoformat()},
                              requests=report.requests, completed=len(report.completed),
                              failed=len(report.failed), stopped=report.stopped,
-                             storage_rights=report.storage_rights)
+                             storage_rights=report.storage_rights,
+                             grouped_error_codes=grouped["errors"] if grouped is not None else {})
     summary: Dict[str, Any] = {
-        "status": "STOPPED" if report.stopped else ("NO_WORK" if not report.completed else "COLLECTED"),
+        "status": "STOPPED" if report.stopped else ("FAILED" if report.failed else
+                  ("NO_WORK" if not report.completed else "COLLECTED")),
         "job_id": job_id, "range": health["range"], "requests": report.requests,
         "completed": len(report.completed), "failed": len(report.failed),
         "skipped_existing": len(report.skipped_existing), "stopped": report.stopped,
+        "grouped_error_codes": grouped["errors"] if grouped is not None else {},
         "storage_rights": report.storage_rights,
         "covered": health["coverage"]["covered"], "partial": health["coverage"]["partial"],
         "missing": health["coverage"]["missing"], "union_sessions": health["coverage"]["union_sessions"],
     }
     if not args.quiet:
         print(json.dumps(summary, indent=2, sort_keys=True))
-    return 0 if report.stopped != "ACCESS_DENIED" else 3
+    return 3 if report.stopped == "ACCESS_DENIED" else (4 if report.failed else 0)
 
 
 if __name__ == "__main__":

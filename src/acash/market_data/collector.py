@@ -363,8 +363,13 @@ def collect_grouped(source: Any, warehouse: BarWarehouse, symbols: Sequence[str]
     errors: Dict[str, str] = {}
     for day in sessions:
         if requests >= max_requests:
+            errors[day.isoformat()] = "REQUEST_BUDGET_EXHAUSTED"
             break
         for attempt in range(2):
+            if requests >= max_requests:
+                errors[day.isoformat()] = "REQUEST_BUDGET_EXHAUSTED"
+                break
+            requests += 1  # Conservative attempts, including rejected HTTP calls.
             try:
                 rows = source.grouped_daily(day, symbols)
             except DataContractError as error:
@@ -374,7 +379,6 @@ def collect_grouped(source: Any, warehouse: BarWarehouse, symbols: Sequence[str]
                     continue
                 errors[day.isoformat()] = message.split(":")[0]
                 break
-            requests += 1
             for row in rows:
                by_symbol[row["symbol"]].append(row)
             collected.append(day.isoformat())

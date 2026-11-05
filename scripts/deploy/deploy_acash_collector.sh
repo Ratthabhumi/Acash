@@ -73,11 +73,21 @@ rm -rf "$APP_ROOT.new"
 
 install -d -o mew -g mew -m 0700 "$STATE_ROOT"
 install -d -o mew -g mew -m 0700 "$STATE_ROOT/private"
+# Upgrade safety: a bundle may be older than the running host. Existing partitions and the snapshot
+# are authoritative on the host and are never overwritten by bundle data.
 if [[ -d "$BUNDLE/warehouse" ]]; then
   install -d -o mew -g mew -m 0700 "$STATE_ROOT/private/market_warehouse"
-  rsync -a "$BUNDLE/warehouse/." "$STATE_ROOT/private/market_warehouse/"
+  if [[ -f "$STATE_ROOT/private/market_warehouse/manifest.json" ]]; then
+    say "existing warehouse preserved (bundle data not copied over newer state)"
+  else
+    rsync -a "$BUNDLE/warehouse/." "$STATE_ROOT/private/market_warehouse/"
+  fi
 fi
-[[ -f "$BUNDLE/snapshot.json" ]] && install -o mew -g mew -m 0600 "$BUNDLE/snapshot.json" "$STATE_ROOT/private/snapshot.json"
+if [[ -f "$BUNDLE/snapshot.json" && ! -f "$STATE_ROOT/private/snapshot.json" ]]; then
+  install -o mew -g mew -m 0600 "$BUNDLE/snapshot.json" "$STATE_ROOT/private/snapshot.json"
+fi
+chown -R root:root "$APP_ROOT"
+chmod -R a+rX "$APP_ROOT"
 
 # ---- runtime -------------------------------------------------------------------------------------
 if [[ ! -x "$VENV/bin/python" ]]; then
@@ -101,7 +111,7 @@ PY
 # The retention gate must read the deployed governance record, not a copy from the developer machine.
 runuser -u mew -- env PYTHONPATH="$APP_ROOT/src" "$VENV/bin/python" -c \
   "from acash.market_data import warehouse as w; \
-   print('[acash] storage_rights gate:', w.storage_permitted('MASSIVE_BASIC', '$APP_ROOT/docs/governance/ODR_UPI_MARKET_DATA_004.json'))" \
+   print('[acash] storage_rights gate:', w.storage_permitted('MASSIVE_BASIC', __import__('pathlib').Path('$APP_ROOT/docs/governance/ODR_UPI_MARKET_DATA_004.json')))" \
   | tee /tmp/acash-gate.txt >/dev/null
 grep -q 'True' /tmp/acash-gate.txt || fail "retention gate is not PERMITTED on the staged app"
 rm -f /tmp/acash-gate.txt
@@ -128,7 +138,7 @@ PY
 # ---- systemd --------------------------------------------------------------------------------------
 CAL='Tue..Sat *-*-* 01:00:00 America/New_York'
 systemd-analyze calendar "$CAL" >/dev/null || fail "OnCalendar expression rejected by this systemd"
-grep -q '^OnCalendar='"$CAL"'$' "$BUNDLE/deploy/acash-market-collector.timer" \
+grep -Fxq "OnCalendar=$CAL" "$BUNDLE/deploy/acash-market-collector.timer" \
   || fail "timer template does not carry the validated OnCalendar expression"
 install -m 0644 "$BUNDLE/deploy/acash-market-collector.service" /etc/systemd/system/acash-market-collector.service
 install -m 0644 "$BUNDLE/deploy/acash-market-collector.timer" /etc/systemd/system/acash-market-collector.timer

@@ -56,6 +56,7 @@ from acash.invest.market_valuation import FXObservation, PriceObservation, Provi
 
 BANGKOK = ZoneInfo("Asia/Bangkok")
 MAX_RESPONSE_BYTES = 1_000_000
+MAX_GROUPED_RESPONSE_BYTES = 12_000_000  # Full-market grouped response; separately bounded.
 TIMEOUT_SECONDS = 10.0
 ALPACA_BATCH = 100
 ALPACA_SIP_DELAY = timedelta(minutes=15)
@@ -169,7 +170,9 @@ def urllib_transport(request: HttpRequest) -> Tuple[int, bytes]:
     req = urllib.request.Request(request.url, headers=dict(request.headers), method="GET")
     try:
         with opener.open(req, timeout=TIMEOUT_SECONDS) as response:
-            return int(response.status), response.read(MAX_RESPONSE_BYTES + 1)
+            grouped = request.provider_id == "MASSIVE_BASIC" and "/v2/aggs/grouped/" in urlsplit(request.url).path
+            cap = MAX_GROUPED_RESPONSE_BYTES if grouped else MAX_RESPONSE_BYTES
+            return int(response.status), response.read(cap + 1)
     except urllib.error.HTTPError as exc:
         return int(exc.code), b""
     except (urllib.error.URLError, TimeoutError, OSError, ssl.SSLError):
@@ -184,8 +187,8 @@ def _status_error(provider_id: str, status: int) -> DataContractError:
     return DataContractError(f"PROVIDER_UNAVAILABLE: {provider_id} HTTP {status}.")
 
 
-def _json_body(provider_id: str, body: bytes) -> Any:
-    if len(body) > MAX_RESPONSE_BYTES:
+def _json_body(provider_id: str, body: bytes, *, limit: int = MAX_RESPONSE_BYTES) -> Any:
+    if len(body) > limit:
         raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {provider_id} response too large.")
     try:
         return json.loads(body.decode("utf-8"), parse_float=Decimal, parse_int=Decimal)
@@ -672,7 +675,7 @@ class MassiveEODMarketDataProvider:
                                                   {"Authorization": f"Bearer {self.credential[1]}"}))
         if status != 200:
             raise _status_error(self.provider_id, status)
-        doc = _json_body(self.provider_id, body)
+        doc = _json_body(self.provider_id, body, limit=MAX_GROUPED_RESPONSE_BYTES)
         if not isinstance(doc, dict) or not isinstance(doc.get("results"), list):
             raise DataContractError(f"PROVIDER_RESPONSE_INVALID: {self.provider_id} grouped envelope.")
         if doc.get("adjusted") is not False:

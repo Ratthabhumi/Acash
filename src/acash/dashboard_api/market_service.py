@@ -354,6 +354,7 @@ def research_view() -> Dict[str, Any]:
         "storage_rights": job.get("storage_rights"),
         "governance": report.get("governance"),
         "cohorts": report.get("cohort_summary"),
+        "warehouse_sync": _read_json("sync_state.json", RESEARCH_DIR),
         "fx": _fx_view(),
         "collector_health": health,
     }

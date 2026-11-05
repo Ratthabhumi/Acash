@@ -1,7 +1,9 @@
 # Homelab Collector Deployment — 2026-11-05 (PARTIAL, waiting on one sudo step)
 
-Status: **host verified and bundle staged; collector not yet installed, not yet scheduled.**
-`ACASH_COLLECTOR_DEPLOYMENT = PENDING_OWNER_SUDO`. No order authority, `NO_REAL_ORDERS=true`,
+Status (updated 2026-11-05): **INSTALLED AND ACTIVE on the Acer host.** The timer is active, the
+service completed with `Result=success`, one Massive Grouped Daily request collected the
+2026-11-04 session for all 26 symbols (`failed=0`, `storage_rights=PERMITTED`), and the next run is
+2026-11-06 13:00 ICT (01:00 ET). No order authority, `NO_REAL_ORDERS=true`,
 capital authority USD 0.00.
 
 ## Host facts (verified read-only over SSH, 2026-11-05)
@@ -84,3 +86,32 @@ Timer: `OnCalendar=Tue..Sat *-*-* 01:00:00 America/New_York`, `Persistent=true` 
   up to `--max-gap-symbols` (default 5) over the bounded window, inside the same 5 req/min budget.
 - A missed timer fire runs once at the next boot (`Persistent=true`), then the gap repair fills the
   sessions the host missed while offline.
+
+
+## V106 — production sync back to git and to Windows
+
+The running host was hotfixed after the bundle was built, so the verified changes were ported back into
+Git (not re-implemented): a separate 12 MB cap for the full-market Grouped Daily response, attempts
+counted including failed HTTP calls, sanitized `grouped_error_codes`, no per-ticker catch-up while
+grouped collection runs, `FAILED` versus `NO_WORK` reporting with non-zero exit, a `Path` for the
+governance record in the installer, and `grep -Fxq` for the timer expression.
+
+An installer re-run is now upgrade-safe: if `/data/acash/state/private/market_warehouse/manifest.json`
+already exists, the bundle's older warehouse is **not** copied over it, the existing snapshot is kept,
+and only the app directory is replaced (ownership reset to root, world-readable). Credentials and the
+running timer are untouched.
+
+Windows sync (no provider calls):
+
+```powershell
+powershell -NoProfile -File scripts/deploy/Sync-WarehouseFromHomelab.ps1
+```
+
+It stages the host warehouse, verifies every partition against the host manifest's SHA-256, replaces
+only `data/private/market_warehouse`, writes `sync_state.json` (`provider_calls: 0`) and rebuilds the
+research panel offline. The Dashboard shows the sync time and partition count.
+
+Coverage is now inception-aware: a date before an instrument's first stored session is reported as
+`not_applicable_pre_inception` (status `PARTIAL_LIMITED_HISTORY`), not as missing data. After the
+2026-11-04 sync: 23 COVERED, 2 PARTIAL_LIMITED_HISTORY (CRWV, NASA), 1 PARTIAL (SPCX has a real gap after
+inception) and 0 missing.

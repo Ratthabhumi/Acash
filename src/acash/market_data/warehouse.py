@@ -368,12 +368,23 @@ def coverage(index: Mapping[str, Any], symbols: Sequence[str]) -> Dict[str, Any]
             per[symbol] = {"sessions": 0, "status": "MISSING", "error": entry.get("error")}
             continue
         missing = sorted(set(union) - set(dates))
+        # A date before the instrument's first stored session is not missing data: the fund did not
+        # exist yet. Only gaps after inception count as real missing sessions.
+        before_inception = [day for day in missing if day < dates[0]]
+        after_inception = [day for day in missing if day > dates[0]]
+        status = ("COVERED" if not missing else
+                  "PARTIAL_LIMITED_HISTORY" if not after_inception else "PARTIAL")
         per[symbol] = {"sessions": len(dates), "first": dates[0], "last": dates[-1],
                        "missing_vs_union": len(missing), "missing_sample": missing[:5],
-                       "status": "COVERED" if not missing else "PARTIAL", "error": entry.get("error")}
+                       "not_applicable_pre_inception": len(before_inception),
+                       "missing_after_inception": len(after_inception),
+                       "inception_limited_history": len(dates) < 200,
+                       "status": status, "error": entry.get("error")}
     return {"schema": SCHEMA, "union_sessions": len(union), "union_first": union[0] if union else None,
             "union_last": union[-1] if union else None, "symbols": per,
             "covered": sum(1 for v in per.values() if v["status"] == "COVERED"),
+            "partial_limited_history": sum(1 for v in per.values()
+                                           if v["status"] == "PARTIAL_LIMITED_HISTORY"),
             "partial": sum(1 for v in per.values() if v["status"] == "PARTIAL"),
             "missing": sum(1 for v in per.values() if v["status"] == "MISSING"),
             "contains_prices": False}
