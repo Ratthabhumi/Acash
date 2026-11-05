@@ -1,0 +1,85 @@
+# Homelab Collector Deployment — 2026-11-05 (PARTIAL, waiting on one sudo step)
+
+Status: **host verified and bundle staged; collector not yet installed, not yet scheduled.**
+`ACASH_COLLECTOR_DEPLOYMENT = PENDING_OWNER_SUDO`. No order authority, `NO_REAL_ORDERS=true`,
+capital authority USD 0.00.
+
+## Host facts (verified read-only over SSH, 2026-11-05)
+
+| Item | Result |
+| --- | --- |
+| SSH / user | reachable at `mew@homelab`, non-root `mew` |
+| `/data` | `/dev/sda1`, 916 G, **870 G free**, separate mount |
+| `/data/acash` | exists, `root:root 0700`, empty — **not writable by `mew` yet** |
+| Python | 3.12.3, `rsync` present, `systemd 255 (255.4-1ubuntu8.18)` |
+| `systemd-analyze` | present |
+| `python3.12-venv` | **missing** (`ensurepip` unavailable) — the installer now installs it as root |
+| Time sync | `NTPSynchronized=yes` |
+| Existing ACASH units | none (HYP_011 state preserved) |
+| sudo | password required, so installation is the Owner's step |
+
+## What was transferred
+
+Bundle `~/acash-bundle` on the host, archive SHA-256 `9385b88334f481de141790f5f831d7088ff0907d0a748150b93f62d0d21499a8`,
+hash re-verified after transfer:
+
+- `app/` — `src/` + `scripts/` + this operations doc (no Git history, no credentials);
+- `deploy/` — the two unit templates and the installer;
+- `warehouse/` — **26 Parquet partitions + manifest + session index + FX artifacts**, all 26 SHA-256
+  values re-checked on the host (0 failures);
+- `snapshot.json` — needed for the symbol universe (owner-private, transferred over SSH only).
+
+Nothing was re-downloaded: the Windows warehouse is the authoritative copy and the transfer preserved it.
+
+## Owner actions (two commands, on the host)
+
+```bash
+# 1. Credentials: create locally, never copied from Windows Credential Manager
+sudo install -d -m 0700 /etc/acash
+sudo install -m 0600 /dev/null /etc/acash/market-data.env
+sudoedit /etc/acash/market-data.env
+#   ACASH_MARKET_DATA_MASSIVE_BASIC=<key>
+#   ACASH_MARKET_DATA_BOT_EXCHANGE_RATES=<key>   (optional)
+
+# 2. Install + acceptance pass (installs python3.12-venv, venv, app, state, units, one bounded run)
+sudo ~/acash-bundle/deploy/deploy_acash_collector.sh
+
+# 3. Only after reviewing /data/acash/state/private/market_warehouse/health.json
+sudo ~/acash-bundle/deploy/deploy_acash_collector.sh --enable
+```
+
+The installer is fail-closed: it refuses when `/data` is not a separate mount, when the credential file is
+missing or not `0600`, when a transferred partition fails its hash, when the calendar expression is
+rejected by the installed systemd, or when the acceptance pass does not write a health record with
+`storage_rights: PERMITTED`. It never touches HYP_011 units and does not enable the timer without
+`--enable`.
+
+## Layout once installed
+
+```
+/data/acash/app     code, root-owned, read-only to the service user
+/data/acash/venv    python 3.12 + pyarrow
+/data/acash/state   ACASH_PRIVATE_DIR (mew 0700): market_warehouse/, health.json, fx/
+/etc/acash/market-data.env   credentials, root 0600, read by systemd before privilege drop
+```
+
+Service: oneshot, `User=mew`, `MemoryMax=512M`, `CPUQuota=50%`, `ProtectSystem=strict`,
+`ReadWritePaths=/data/acash/state`, `ExecStart=… daily_market_collector.py --catch-up`.
+Timer: `OnCalendar=Mon..Fri *-*-* 18:30:00 America/New_York`, `Persistent=true` (validated with
+`systemd-analyze calendar` inside the installer before install).
+
+## What is still unproven
+
+- The collector has **not run on the host** (needs the sudo step above).
+- The timer has **not been enabled**; `systemctl list-timers` is not evidence until the service ran.
+- Reboot survival, missed-session recovery on the host and 24/7 continuity across the single hotspot
+  uplink are untested.
+- Off-device backup remains blocked (no second device); `/data/backups` is same-HDD, per the Pi contract.
+
+## Catch-up behaviour (implemented, tested locally)
+
+- A durable pass resumes from the stored partitions, not from a "we saw this range" checkpoint.
+- `--catch-up` detects middle gaps (dates missing between a symbol and the union calendar) and refetches
+  up to `--max-gap-symbols` (default 5) over the bounded window, inside the same 5 req/min budget.
+- A missed timer fire runs once at the next boot (`Persistent=true`), then the gap repair fills the
+  sessions the host missed while offline.

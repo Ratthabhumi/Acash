@@ -1,27 +1,23 @@
 # acash-market-collector.timer
-# TEMPLATE ONLY — not installed. Enabling it without the prechecks in
-# docs/operations/market-data-collector-homelab.md would claim a collection cadence that has never run.
+# Installed by scripts/deploy/deploy_acash_collector.sh; never enable before the acceptance pass.
 #
-# Cadence rationale: one fire per US trading weekday, 18:30 America/New_York. The regular session
-# closes at 16:00 ET; 18:30 ET leaves room for the provider to publish the end-of-day aggregate. The
-# expression is timezone-aware, so the UTC instant shifts with US daylight saving automatically — do
-# not replace it with a fixed ICT or UTC offset.
+# One fire per US trading weekday at 18:30 America/New_York — after the 16:00 close (and after a 13:00
+# early close) so the provider has published the end-of-day aggregate. The timezone lives inside the
+# calendar expression because `Timezone=` is not a portable [Timer] key:
+#   systemd-analyze calendar 'Mon..Fri *-*-* 18:30:00 America/New_York'
 #
-# This job covers US equity/ETF EOD only. FX, macro and corporate-action sources publish on their own
+# This job covers US equity/ETF EOD only. FX, macro and corporate actions follow their own publication
 # cycles and must not be forced into this timer.
 
 [Unit]
 Description=ACASH daily market-data collector timer (research only)
-Documentation=file:///home/mew/Acash/docs/operations/market-data-collector-homelab.md
+Documentation=file:///data/acash/app/docs/operations/market-data-collector-homelab.md
 
 [Timer]
 Unit=acash-market-collector.service
-# systemd parses the timezone inside the calendar expression; `Timezone=` is not a portable [Timer]
-# setting, so it is deliberately absent. Validate before enabling:
-#   systemd-analyze calendar 'Mon..Fri *-*-* 18:30:00 America/New_York'
-#   systemd-analyze verify acash-market-collector.timer
 OnCalendar=Mon..Fri *-*-* 18:30:00 America/New_York
-# A missed fire (host off, network down) runs once on the next boot rather than being lost.
+# A missed fire (host off, network down) runs once on the next boot rather than being lost; the
+# collector then resumes from stored partitions and repairs middle gaps with --catch-up.
 Persistent=true
 AccuracySec=1min
 RandomizedDelaySec=120

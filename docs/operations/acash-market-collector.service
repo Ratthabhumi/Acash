@@ -1,46 +1,44 @@
 # acash-market-collector.service
-# TEMPLATE ONLY — not installed, not enabled, and NOT proven to have run on the Homelab.
-# Installing requires the Owner to complete the prechecks in
-# docs/operations/market-data-collector-homelab.md (remote HEAD, disk, runtime, credentials).
+# TEMPLATE — installed by scripts/deploy/deploy_acash_collector.sh on the Acer host.
+# Research-only market-data acquisition: NO_REAL_ORDERS=true, capital authority USD 0.00, no broker calls.
 #
-# One bounded, idempotent collection pass over the held US universe. It is research-only:
-# NO_REAL_ORDERS=true, real capital authority stays USD 0.00, and nothing here can place an order.
-#
-# Credentials: systemd supplies ACASH_MARKET_DATA_<PROVIDER_ID> from an owner-created file. ACASH never
-# reads or writes a secrets file itself and never logs a value. Do not copy Windows Credential Manager
-# entries to this host.
+# Layout (see docs/operations/market-data-collector-homelab.md):
+#   /data/acash/app    code (root-owned, read-only to the service user)
+#   /data/acash/state  ACASH_PRIVATE_DIR (mew-owned 0700): warehouse, health, FX artifacts
+#   /data/acash/venv   python + pyarrow
+#   /etc/acash/market-data.env  credentials (root 0600), read by systemd before dropping privileges
 
 [Unit]
 Description=ACASH daily market-data collector (research only, no orders)
-Documentation=file:///home/mew/Acash/docs/operations/market-data-collector-homelab.md
+Documentation=file:///data/acash/app/docs/operations/market-data-collector-homelab.md
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
-# One pass per invocation; a failure is evidence for investigation, not a retry loop.
 
 [Service]
 Type=oneshot
 User=mew
 Group=mew
-WorkingDirectory=/home/mew/Acash
-Environment=PYTHONDONTWRITEBYTECODE=1
+WorkingDirectory=/data/acash/app
+Environment=PYTHONPATH=/data/acash/app/src
+Environment=ACASH_PRIVATE_DIR=/data/acash/state/private
 Environment=ACASH_NO_REAL_ORDERS=true
+Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/acash/market-data.env
-ExecStart=/home/mew/Acash/.venv/bin/python scripts/daily_market_collector.py
-# Each symbol is committed atomically; an interrupted pass resumes from the session index.
+# --catch-up: after the incremental pass, symbols with middle gaps (missed while offline) are refetched
+# over the bounded window, one pass only, inside the same request budget.
+ExecStart=/data/acash/venv/bin/python /data/acash/app/scripts/daily_market_collector.py --catch-up
+# A failure is evidence for investigation, not an automatic retry loop.
 Restart=no
 TimeoutStartSec=1800
 TimeoutStopSec=60
-# Five provider requests per minute, 26 symbols, pausing on refusal: a full backfill takes minutes,
-# not seconds. The budget below bounds a single invocation.
 MemoryMax=512M
 CPUQuota=50%
 Nice=10
-# Hardening. ProtectHome=read-only is relaxed only for the private data directory the collector owns.
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/mew/Acash/data/private
+ReadWritePaths=/data/acash/state
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
@@ -50,4 +48,4 @@ LockPersonality=yes
 MemoryDenyWriteExecute=yes
 UMask=0077
 
-# No [Install] section: the timer starts this oneshot, so `systemctl enable` on the service fails closed.
+# No [Install]: the timer starts this oneshot, so `systemctl enable` on the service fails closed.
