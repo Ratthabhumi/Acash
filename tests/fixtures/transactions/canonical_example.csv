@@ -1,0 +1,3 @@
+transaction_id,event_type,account_ref,trade_date,settlement_date,security_id,quantity,price,gross_amount,commission,fees,tax,currency,net_cash,source_document_ref
+TX_FIXTUREBUYA,BUY,BROKER_D_MAIN,2026-11-03,,SYNIDX,2,10.50,21.00,1.00,0,0,USD,-22.00,FIXTURE_001
+TX_FIXTUREDEPA,DEPOSIT,BANK_FCD,2026-11-03,,,,,,,,,USD,100.00,FIXTURE_002

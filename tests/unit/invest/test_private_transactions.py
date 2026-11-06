@@ -530,6 +530,80 @@ def test_csv_import_invalid_row_rejects_entire_batch(root: Path) -> None:
     assert not (root / "data" / "private" / "transactions" / pt.JOURNAL_FILE).exists()
 
 
+def test_csv_template_is_directly_importable_after_adding_rows(root: Path) -> None:
+    template = _call("GET", "import-template")[1]["csv"]
+    assert template.startswith("transaction_id,event_type")
+    assert not template.startswith("#")
+    fixture = Path("tests/fixtures/transactions/canonical_example.csv").read_text(encoding="utf-8")
+    lines = fixture.splitlines()
+    raw = (template + "\n".join(lines[1:]) + "\n").encode("utf-8")
+    import base64
+    http, out = _call("POST", "import-preview", {"csv_bytes_base64": base64.b64encode(raw).decode("ascii")})
+    assert http == 200 and out["status"] == "IMPORT_PREVIEW" and out["accepted_count"] == 2
+
+
+def test_csv_invalid_header_and_empty_body_fail_with_reasons(root: Path) -> None:
+    import base64
+    bad = base64.b64encode(b"wrong,columns\n1,2\n").decode("ascii")
+    http, out = _call("POST", "import-preview", {"csv_bytes_base64": bad})
+    assert http == 422 and out["status"] == "IMPORT_REFUSED"
+    assert out["errors"][0]["code"] == "CSV_COLUMNS_UNSUPPORTED"
+    empty = base64.b64encode(b"").decode("ascii")
+    http, out = _call("POST", "import-preview", {"csv_bytes_base64": empty})
+    assert http == 422 and out["errors"][0]["code"] == "CSV_HEADER_MISSING"
+
+
+def test_import_confirm_rolls_back_baseline_and_journal_on_failure(root: Path,
+                                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    rows = [_buy(), _buy("TX_BUYAGAINAAA", qty="1", price="9.00", day="2026-11-03")]
+    preview = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})[1]
+    real = pi._atomic_write
+
+    def fail_journal(target: Path, data: bytes) -> None:
+        if target.name == pt.JOURNAL_FILE:
+            raise OSError("disk full")
+        real(target, data)
+
+    monkeypatch.setattr(pi, "_atomic_write", fail_journal)
+    http, out = _call("POST", "import-confirm", {"base_revision": preview["revision"], "confirm": True,
+                                                 "preview_sha256": preview["preview_sha256"], "rows": rows})
+    assert http == 500 and out["status"] in ("WRITE_FAILED", "RECOVERY_REQUIRED")
+    tx = root / "data" / "private" / "transactions"
+    assert not (tx / pt.BASELINE_FILE).exists()
+    assert not (tx / pt.JOURNAL_FILE).exists()
+    monkeypatch.setattr(pi, "_atomic_write", real)
+    http, out = _call("POST", "import-confirm", {"base_revision": preview["revision"], "confirm": True,
+                                                 "preview_sha256": preview["preview_sha256"], "rows": rows})
+    assert http == 200 and out["status"] == "IMPORTED"
+
+
+def test_import_confirm_keeps_previous_bytes_when_journal_write_fails(root: Path,
+                                                                      monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _record(_buy())[0] == 200
+    tx = root / "data" / "private" / "transactions"
+    journal_before = (tx / pt.JOURNAL_FILE).read_bytes()
+    baseline_before = (tx / pt.BASELINE_FILE).read_bytes()
+    rows = [_buy("TX_NEWBUYAAAA", qty="1", price="8.00", day="2026-11-03")]
+    preview = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})[1]
+    real = pi._atomic_write
+
+    def fail_journal(target: Path, data: bytes) -> None:
+        if target.name == pt.JOURNAL_FILE:
+            raise OSError("disk full")
+        real(target, data)
+
+    monkeypatch.setattr(pi, "_atomic_write", fail_journal)
+    http, out = _call("POST", "import-confirm", {"base_revision": preview["revision"], "confirm": True,
+                                                 "preview_sha256": preview["preview_sha256"], "rows": rows})
+    assert http == 500 and out["status"] in ("WRITE_FAILED", "RECOVERY_REQUIRED")
+    assert (tx / pt.JOURNAL_FILE).read_bytes() == journal_before
+    assert (tx / pt.BASELINE_FILE).read_bytes() == baseline_before
+    monkeypatch.setattr(pi, "_atomic_write", real)
+    http, out = _call("POST", "import-confirm", {"base_revision": preview["revision"], "confirm": True,
+                                                 "preview_sha256": preview["preview_sha256"], "rows": rows})
+    assert http == 200 and out["status"] == "IMPORTED"
+
+
 def test_csv_import_revision_conflict_and_hash_mismatch_fail_closed(root: Path) -> None:
     rows = [_buy()]
     preview = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})[1]

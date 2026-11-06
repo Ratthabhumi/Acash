@@ -21,6 +21,7 @@ import hashlib
 import io
 import json
 import re
+import secrets
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -59,6 +60,8 @@ CORRECTIONS = "APPEND_ONLY_SUPERSEDE_BY_ID"
 CENT = Decimal("0.01")
 BASELINE_FILE = "baseline.json"
 BASELINE_PREFIX = "BASELINE_V"
+TXN_JOURNAL_FILE = ".journal_transaction.json"
+RECOVERY_SCHEMA = "ACASH_TXN_COMMIT_V1"
 REBASE_REQUIRED = ("SNAPSHOT_DIVERGED_REBASE_REQUIRED", "BASELINE_MISSING_REBASE_REQUIRED")
 # Trade dates are taken as entered; "future" means after today's date in Bangkok, which is ahead
 # of the US markets, so a completed US trade is never rejected because UTC is still on the day before.
@@ -417,13 +420,121 @@ def preview(body: Any) -> pi.Result:
                  "effect": _effect(doc, [r for r in rows if r.get("transaction_id") != row["transaction_id"]], row, today, base)}
 
 
-def _backup(path: Path, revision: str) -> None:
+def _backup(path: Path, revision: str) -> str:
     backups = pi._private_dir("transactions", "backups")
     backups.mkdir(parents=True, exist_ok=True)
     name = f"journal-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{revision[:12]}.json"
     pi._atomic_write(backups / name, path.read_bytes())
     for old in sorted(backups.glob("journal-*.json"))[:-BACKUPS_KEPT]:
         old.unlink()
+    return name
+
+
+def _backup_baseline(path: Path, revision: str) -> str:
+    backups = pi._private_dir("transactions", "backups")
+    backups.mkdir(parents=True, exist_ok=True)
+    name = f"baseline-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{revision[:12]}.json"
+    pi._atomic_write(backups / name, path.read_bytes())
+    for old in sorted(backups.glob("baseline-*.json"))[:-BACKUPS_KEPT]:
+        old.unlink()
+    return name
+
+
+def _txn_journal_path() -> Path:
+    path = pi._private_dir("transactions") / TXN_JOURNAL_FILE
+    if pi._is_link(path):
+        raise DataContractError("TXN_PATH_LINK_REFUSED: recovery journal.")
+    return path
+
+
+def _restore_pair(doc: Dict[str, Any]) -> None:
+    """Restore the journal and baseline from a recovery record; idempotent."""
+    backups = pi._private_dir("transactions", "backups")
+    baseline = doc.get("baseline")
+    journal = doc.get("journal")
+    if not isinstance(baseline, dict) or not isinstance(journal, dict):
+        raise DataContractError("TXN_RECOVERY_INVALID: entries.")
+    if baseline.get("existed"):
+        name = baseline.get("backup")
+        if not isinstance(name, str) or not name.startswith("baseline-"):
+            raise DataContractError("TXN_RECOVERY_INVALID: baseline backup.")
+        pi._atomic_write(baseline_path(), (backups / name).read_bytes())
+    elif baseline_path().exists():
+        baseline_path().unlink()
+    if journal.get("existed"):
+        name = journal.get("backup")
+        if not isinstance(name, str) or not name.startswith("journal-"):
+            raise DataContractError("TXN_RECOVERY_INVALID: journal backup.")
+        pi._atomic_write(journal_path(), (backups / name).read_bytes())
+    elif journal_path().exists():
+        journal_path().unlink()
+
+
+def _txn_recover() -> str:
+    """Finish an interrupted import by restoring both files: NONE, RECOVERED or RECOVERY_REQUIRED."""
+    path = _txn_journal_path()
+    if not path.exists():
+        return "NONE"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or doc.get("schema") != RECOVERY_SCHEMA:
+            raise DataContractError("TXN_RECOVERY_INVALID: schema.")
+        _restore_pair(doc)
+    except (OSError, ValueError, KeyError, DataContractError):
+        return "RECOVERY_REQUIRED"
+    path.unlink()
+    return "RECOVERED"
+
+
+def _pair_unchanged(record: Dict[str, Any]) -> bool:
+    """True when neither file changed, so a failed write needs no restoration."""
+    backups = pi._private_dir("transactions", "backups")
+    for kind, path in (("journal", journal_path()), ("baseline", baseline_path())):
+        entry = record.get(kind)
+        if not isinstance(entry, dict):
+            return False
+        if entry.get("existed"):
+            name = entry.get("backup")
+            if not isinstance(name, str) or not path.is_file():
+                return False
+            if path.read_bytes() != (backups / name).read_bytes():
+                return False
+        elif path.exists():
+            return False
+    return True
+
+
+def _commit_files(freeze: Optional[bytes], journal_data: bytes) -> None:
+    """Write baseline (when freezing) and journal as one recoverable pair.
+
+    A failure after the baseline write restores both files, so an import can never leave
+    the journal and baseline from different revisions.
+    """
+    path, bpath = journal_path(), baseline_path()
+    backups = pi._private_dir("transactions", "backups")
+    backups.mkdir(parents=True, exist_ok=True)
+    journal_existed, baseline_existed = path.is_file(), bpath.is_file()
+    record = {
+        "schema": RECOVERY_SCHEMA, "transaction": secrets.token_hex(8),
+        "journal": {"existed": journal_existed,
+                    "backup": _backup(path, pi._revision(path)) if journal_existed else None},
+        "baseline": {"existed": baseline_existed,
+                     "backup": _backup_baseline(bpath, pi._revision(bpath)) if baseline_existed else None},
+    }
+    recovery = _txn_journal_path()
+    pi._atomic_write(recovery, json.dumps(record, sort_keys=True).encode("utf-8"))
+    try:
+        if freeze is not None:
+            pi._atomic_write(bpath, freeze)
+        pi._atomic_write(path, journal_data)
+    except OSError:
+        if _txn_recover() != "RECOVERY_REQUIRED":
+            raise
+        if _pair_unchanged(record):
+            recovery.unlink(missing_ok=True)
+            raise
+        raise DataContractError("TXN_RECOVERY_REQUIRED")
+    recovery.unlink()
 
 
 def record(body: Any, service: pi.InputService) -> pi.Result:
@@ -434,11 +545,12 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
     if body["confirm"] is not True:
         return 400, {"status": "CONFIRMATION_REQUIRED"}
     with service.write_lock:
+        if _txn_recover() == "RECOVERY_REQUIRED":
+            return 409, {"status": "TXN_RECOVERY_REQUIRED"}
         doc = _snapshot()
         if doc is None:
             return 404, {"status": "NO_INPUT"}
-        path = journal_path()
-        current, journal_current = journal_revision(), pi._revision(path)
+        current = journal_revision()
         rows, today = load_rows(), _today()
         base = active_baseline(doc, rows)
         if base["status"] in REBASE_REQUIRED:
@@ -465,12 +577,10 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
         if not _write_authorized():
             return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **authority()}
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if freeze is not None:
-                pi._atomic_write(baseline_path(), freeze)
-            if journal_current != pi.ABSENT:
-                _backup(path, journal_current)
-            pi._atomic_write(path, data)
+            journal_path().parent.mkdir(parents=True, exist_ok=True)
+            _commit_files(freeze, data)
+        except DataContractError:
+            return 500, {"status": "RECOVERY_REQUIRED"}
         except OSError as exc:
             return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
         if load_rows()[:-1] != rows:
@@ -479,10 +589,8 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
 
 
 def _csv_template() -> str:
-    """Canonical blank CSV with one commented example row removed from the download."""
-    header = ",".join(CSV_COLUMNS)
-    example = ("TX_EXAMPLEBUYA,BUY,BROKER_D_MAIN,2026-11-03,,SYNIDX,2,10.50,21.00,1.00,0,0,USD,-22.00,BROKER_STMT_001")
-    return f"# ACASH canonical transaction CSV (remove this comment line before importing)\n{header}\n{example}\n"
+    """Canonical blank CSV: header only, directly importable after the Owner adds rows."""
+    return ",".join(CSV_COLUMNS) + "\n"
 
 
 def _parse_csv(raw: bytes) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -621,11 +729,12 @@ def import_confirm(body: Any, service: pi.InputService) -> pi.Result:
     if _hash_rows(raw_rows) != body["preview_sha256"]:
         return 409, {"status": "PREVIEW_HASH_MISMATCH"}
     with service.write_lock:
+        if _txn_recover() == "RECOVERY_REQUIRED":
+            return 409, {"status": "TXN_RECOVERY_REQUIRED"}
         doc = _snapshot()
         if doc is None:
             return 404, {"status": "NO_INPUT"}
-        path = journal_path()
-        current, journal_current = journal_revision(), pi._revision(path)
+        current = journal_revision()
         rows, today = load_rows(), _today()
         base = active_baseline(doc, rows)
         if base["status"] in REBASE_REQUIRED:
@@ -659,12 +768,10 @@ def import_confirm(body: Any, service: pi.InputService) -> pi.Result:
         if not _write_authorized():
             return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **authority()}
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            if freeze is not None:
-                pi._atomic_write(baseline_path(), freeze)
-            if journal_current != pi.ABSENT:
-                _backup(path, journal_current)
-            pi._atomic_write(path, data)
+            journal_path().parent.mkdir(parents=True, exist_ok=True)
+            _commit_files(freeze, data)
+        except DataContractError:
+            return 500, {"status": "RECOVERY_REQUIRED"}
         except OSError as exc:
             return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
         if load_rows()[:-len(new_rows)] != rows:

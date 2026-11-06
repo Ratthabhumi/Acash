@@ -1,4 +1,4 @@
-# Research Utilization Ledger (V107, 2026-11-05)
+# Research Utilization Ledger (V116, 2026-11-06)
 
 What ACASH has built, what is actually usable for a decision, and what is still missing. Statuses are
 deliberately narrow: `INTEGRATED` means the output is computed from qualified inputs and shown in the
@@ -7,7 +7,7 @@ dashboard, not that it is profitable or admissible.
 | Area | Status | Evidence / limitation |
 | --- | --- | --- |
 | Massive EOD + Parquet warehouse | **INTEGRATED** | 26 partitions, SHA-256 verified, `storage_rights: PERMITTED` under ODR-004 amendment 004 |
-| Massive Grouped Daily (1 request/session) | **INTEGRATED** | production collector, 1 request for 2026-11-04, `failed=0` |
+| Massive Grouped Daily (1 request/session) | **INTEGRATED** | production collector, `completed=26 / failed=0`, latest session 2026-11-05 |
 | Point-in-time security identity | **PARTIALLY_INTEGRATED** | registry with CUSIP/ISIN evidence; the SPCX owner position is still unreconciled, so the series stays quarantined |
 | OpenFIGI identity mapping | **INTEGRATED** | owner confirmation recorded; venue status still per-instrument |
 | Economic classification | **INTEGRATED** | 28/28 holdings classified |
@@ -16,16 +16,26 @@ dashboard, not that it is profitable or admissible.
 | THB return decomposition | **RESEARCH_ONLY** | hypothetical fixed-weight basket, `PRICE_RETURN_ONLY`, not realized performance |
 | Research cohorts (established / recent inception) | **RESEARCH_ONLY** | NASA included only in the exploratory cohort; SPCX now excluded |
 | Portfolio valuation (PPDS/UPI) | **INTEGRATED** | 28 position rows; cash and broker residual excluded from holdings |
+| Portfolio dashboard + system status | **INTEGRATED** | Thai-first tabs, CSV import panel, country/status panel; all figures are Python-calculated; desktop smoke passed |
+| Five framework adapters | **ADAPTER_ONLY** | Nautilus bridge plus OpenBB/TradingAgents/Freqtrade/QuantDinger adapters; `native_smoke_verified` remains 0/5 |
 | FIFO / TWR / XIRR engines | **ENGINE_IMPLEMENTED_DATA_PENDING** | no complete life-of-account transaction journal |
+| Owner CSV batch import | **SYNTHETIC_VERIFIED** | template → preview → confirm → idempotent reimport; all-or-nothing with cross-file rollback; real Dime mapping still `DATA_PENDING` |
 | Dime! tax evidence | **PARTIALLY_INTEGRATED** | annual aggregate staged; dividends/withholding not itemised; liability NOT_ESTABLISHED |
 | V38 fee / route cost research | **ENGINE_IMPLEMENTED_DATA_PENDING** | no broker fee schedule or FX spread evidence |
 | ETF look-through / overlap | **BLOCKED** | no dated, rights-qualified holdings file → `OVERLAP_NOT_ESTABLISHED` |
 | Windows warehouse sync | **INTEGRATED** | delta transfer, hash-verified cutover, 0 provider calls |
-| Windows scheduled sync | **INTEGRATED** | scheduled task registered, 13:30 Tue-Sat, next run 2026-11-06 |
+| Windows scheduled sync | **PARTIALLY_INTEGRATED** | actual run 2026-11-06 13:30 ICT exit 0, `SYNCED`, 26 verified, 0 provider calls; action updated 2026-11-06 to `-Scheduled`; provenance acceptance remains PENDING until a correctly marked run succeeds (no backfill) |
 | Off-device backup | **DEFERRED** | no independent destination (`/data/backups` is same-HDD) |
 | Homelab daily collector | **INTEGRATED** | timer active, service success, next run 2026-11-06 13:00 ICT |
 | Forward shadow research | **PARTIAL** | P0 correctness repaired (PIT cutoff, identity gate, strategy-weighted outcomes, atomic journal); 0 forward observations yet |
 | Execution / orders | **BLOCKED (by contract)** | `NO_REAL_ORDERS=true`, authority USD 0.00 |
+
+## Transaction CSV import note
+
+`preview_sha256` is the SHA-256 of the normalised row payload returned to the client. The server
+recomputes it and revalidates every row and the journal/baseline revision under the write lock before
+appending, so a tampered or stale confirmation is refused. It is a client-echo integrity check, not a
+server-signed proof that the Owner visually inspected the same preview.
 
 ## SPCX identity decision (P0)
 
