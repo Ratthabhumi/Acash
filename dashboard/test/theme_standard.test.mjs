@@ -36,9 +36,9 @@ const LIGHT_TOKENS = {
   '--border-default': '#D8D3C8',
   '--text-primary': '#171613',
   '--text-secondary': '#6F6B61',
-  '--text-muted': '#9A958A',
-  '--accent': '#78836B',
-  '--accent-hover': '#6A755E',
+  '--text-muted': '#726D62',
+  '--accent': '#66715A',
+  '--accent-hover': '#59634E',
   '--accent-subtle': '#E5E8DF',
 };
 

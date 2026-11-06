@@ -13,9 +13,9 @@
     --border-default: #D8D3C8;
     --text-primary: #171613;
     --text-secondary: #6F6B61;
-    --text-muted: #9A958A;
-    --accent: #78836B;
-    --accent-hover: #6A755E;
+    --text-muted: #726D62;
+    --accent: #66715A;
+    --accent-hover: #59634E;
     --accent-subtle: #E5E8DF;
 
     /* RGB triplets so Tailwind alpha modifiers resolve against the tokens */
@@ -25,9 +25,9 @@
     --border-default-rgb: 216 211 200;
     --text-primary-rgb: 23 22 19;
     --text-secondary-rgb: 111 107 97;
-    --text-muted-rgb: 154 149 138;
-    --accent-rgb: 120 131 107;
-    --accent-hover-rgb: 106 117 94;
+    --text-muted-rgb: 114 109 98;
+    --accent-rgb: 102 113 90;
+    --accent-hover-rgb: 89 99 78;
     --accent-subtle-rgb: 229 232 223;
 
     /* Derived structural tokens (warm family) */
