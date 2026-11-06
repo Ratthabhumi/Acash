@@ -7,6 +7,7 @@ import { SetupWizard } from '../components/portfolio/SetupWizard';
 import { MarketRefreshPanel } from '../components/portfolio/MarketRefreshPanel';
 import { TransactionJournalPanel } from '../components/portfolio/TransactionJournalPanel';
 import { ExternalCashPanel } from '../components/portfolio/ExternalCashPanel';
+import { SystemStatusPanel } from '../components/portfolio/SystemStatusPanel';
 import { ResearchDecisionPanel } from '../components/portfolio/ResearchDecisionPanel';
 import { HoldingsTable } from '../components/portfolio/HoldingsTable';
 import { TaxCashflowPanel } from '../components/portfolio/TaxCashflowPanel';
@@ -609,6 +610,7 @@ export const PortfolioPage: React.FC = () => {
         )}
       </TabPanel>
       <TabPanel id="data" active={tab}>
+        {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <SystemStatusPanel />}
         {mode === 'OWNER_PRIVATE_READ_ONLY' && connected && <ExternalCashPanel />}
         {!loading && shown && 'view' in shown && (
           <PortfolioReport view={shown.view} warnings={shown.warnings} partial={source === 'MARKET'} section="data" />

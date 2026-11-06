@@ -8,7 +8,7 @@ import subprocess
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -272,7 +272,8 @@ def test_journal_cash_on_a_negative_baseline_line_fails_closed(root: Path) -> No
 
 
 def test_transaction_routes_have_no_broker_or_edit_surface(root: Path) -> None:
-    assert set(pt.ROUTES) == {"state", "preview", "record", "rebase", "correction"}
+    assert set(pt.ROUTES) == {"state", "preview", "record", "rebase", "correction",
+                               "import-template", "import-preview", "import-confirm"}
     assert all(m in ("GET", "POST") for methods in pt.ROUTES.values() for m in methods)
     for method in ("PUT", "DELETE", "PATCH"):
         assert _call(method, "record", {})[0] == 405
@@ -469,3 +470,76 @@ def test_journal_replay_survives_restart_with_corrections_applied(root: Path) ->
     first = _call("GET", "state", service=pi.InputService())[1]
     second = _call("GET", "state", service=pi.InputService())[1]
     assert first["projection"] == second["projection"] and first["effective_count"] == 1
+
+
+def _csv(rows: List[Dict[str, str]]) -> bytes:
+    import io, csv
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=pt.CSV_COLUMNS)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({k: row.get(k, "") for k in pt.CSV_COLUMNS})
+    return buf.getvalue().encode("utf-8")
+
+
+def _b64(rows: List[Dict[str, str]]) -> str:
+    import base64
+    return base64.b64encode(_csv(rows)).decode("ascii")
+
+
+def test_csv_template_is_downloadable(root: Path) -> None:
+    http, out = _call("GET", "import-template")
+    assert http == 200 and "transaction_id,event_type" in out["csv"]
+
+
+def test_csv_import_preview_does_not_mutate(root: Path) -> None:
+    rows = [_buy(), _buy("TX_BUYAGAINAAA", qty="1", price="9.00", day="2026-11-03")]
+    http, out = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})
+    assert http == 200 and out["status"] == "IMPORT_PREVIEW"
+    assert out["new_count"] == 2 and out["already_imported_count"] == 0
+    assert not (root / "data" / "private" / "transactions" / pt.JOURNAL_FILE).exists()
+
+
+def test_csv_import_three_rows_then_idempotent_reimport(root: Path) -> None:
+    rows = [
+        _buy(),
+        _buy("TX_BUYAGAINAAA", qty="1", price="9.00", day="2026-11-03"),
+        {"transaction_id": "TX_DEPOSITAAAA", "account_ref": "BANK_FCD", "event_type": "DEPOSIT",
+         "trade_date": "2026-11-02", "currency": "USD", "net_cash": "100.00"},
+    ]
+    preview = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})[1]
+    assert preview["status"] == "IMPORT_PREVIEW"
+    confirm = _call("POST", "import-confirm",
+                    {"base_revision": preview["revision"], "confirm": True,
+                     "preview_sha256": preview["preview_sha256"], "rows": rows})[1]
+    assert confirm["status"] == "IMPORTED" and confirm["appended_count"] == 3
+    state = _call("GET", "state")[1]
+    assert _position(state, "BROKER_D_MAIN", "SYNIDX") == "15"
+    assert _cash(state, "BANK_FCD") == "600.00"
+    repeat = _call("POST", "import-confirm",
+                   {"base_revision": state["revision"], "confirm": True,
+                    "preview_sha256": preview["preview_sha256"], "rows": rows})[1]
+    assert repeat["status"] == "ALREADY_IMPORTED" and repeat["appended_count"] == 0
+
+
+def test_csv_import_invalid_row_rejects_entire_batch(root: Path) -> None:
+    bad = [_buy(), _buy("TX_BADSELLAAA", event="SELL", qty="100")]
+    http, out = _call("POST", "import-preview", {"csv_bytes_base64": _b64(bad)})
+    assert http == 422 and out["status"] == "IMPORT_REFUSED"
+    assert any("TXN_POSITION_OVERSOLD" in (e.get("code") or "") for e in out["errors"])
+    assert not (root / "data" / "private" / "transactions" / pt.JOURNAL_FILE).exists()
+
+
+def test_csv_import_revision_conflict_and_hash_mismatch_fail_closed(root: Path) -> None:
+    rows = [_buy()]
+    preview = _call("POST", "import-preview", {"csv_bytes_base64": _b64(rows)})[1]
+    _record(_buy("TX_OTHERBUYAAA", qty="1"))
+    http, out = _call("POST", "import-confirm",
+                      {"base_revision": preview["revision"], "confirm": True,
+                       "preview_sha256": preview["preview_sha256"], "rows": rows})
+    assert http == 409 and out["status"] == "REVISION_CONFLICT"
+    tampered = [{**rows[0], "quantity": "99"}]
+    http, out = _call("POST", "import-confirm",
+                      {"base_revision": preview["revision"], "confirm": True,
+                       "preview_sha256": preview["preview_sha256"], "rows": tampered})
+    assert http == 409 and out["status"] == "PREVIEW_HASH_MISMATCH"

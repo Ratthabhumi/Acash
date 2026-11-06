@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from acash.core.domain.exceptions import DataContractError
-from acash.dashboard_api import market_service, private_input, private_transactions
+from acash.dashboard_api import dashboard_status, market_service, private_input, private_transactions
 from acash.invest import broker_observation, economic_classification, external_cash
 from acash.invest.upi_view import VIEW_SCHEMA
 from acash.ppds.private_observation import (
@@ -164,6 +164,15 @@ def respond(method: str, target: str, headers: Mapping[str, str], token: str, vi
                                  "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
                                  "Access-Control-Allow-Methods": ", ".join(module.ROUTES[name])},
                                 module.ROUTES, module.handle)
+    if service is not None and target.startswith(dashboard_status.PREFIX):
+        name = target[len(dashboard_status.PREFIX):]
+        if name in dashboard_status.ROUTES:
+            return _input_route(method, name, headers, token, body, service, session_expired,
+                                {**base, "Access-Control-Allow-Origin": str(origin),
+                                 "Access-Control-Allow-Credentials": "true",
+                                 "Access-Control-Allow-Headers": f"{TOKEN_HEADER}, Content-Type",
+                                 "Access-Control-Allow-Methods": ", ".join(dashboard_status.ROUTES[name])},
+                                dashboard_status.ROUTES, dashboard_status.handle)
     cors = {**base, "Access-Control-Allow-Origin": str(origin), "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Headers": TOKEN_HEADER, "Access-Control-Allow-Methods": "GET"}
     if target not in (ROUTE, WEALTH_ROUTE, TAX_ROUTE):

@@ -21,7 +21,7 @@ $script = Join-Path $PSScriptRoot "Sync-WarehouseFromHomelab.ps1"
 if (-not (Test-Path $script)) { throw "SYNC_SCRIPT_MISSING" }
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -Scheduled"
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tuesday, Wednesday, Thursday, Friday, Saturday -At "13:30"
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)

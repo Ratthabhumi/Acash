@@ -7,13 +7,17 @@
 #    `market_warehouse.previous` until the next successful sync, so an interrupted run never destroys it.
 # 5. Rebuild the offline research panel only when the inputs actually changed.
 #
+# Use -Scheduled only from the registered Task Scheduler action; manual runs are not accepted as
+# scheduled-run evidence.
+#
 #   powershell -NoProfile -File scripts/deploy/Sync-WarehouseFromHomelab.ps1
 
 param(
   [string]$HostName = "mew@homelab",
   [string]$RemoteState = "/data/acash/state/private/market_warehouse",
   [switch]$SkipResearchRebuild,
-  [switch]$Force
+  [switch]$Force,
+  [switch]$Scheduled
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,10 +31,19 @@ if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $staging "bars") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $staging "fx") -Force | Out-Null
 
+function Write-SyncState {
+  param([Parameter(Mandatory=$true)] [hashtable]$Doc)
+  [System.IO.File]::WriteAllText((Join-Path $local "sync_state.json"), ($Doc | ConvertTo-Json),
+    (New-Object System.Text.UTF8Encoding($false)))
+}
+
 Write-Host "[sync] fetching remote manifest"
 scp -q "${HostName}:${RemoteState}/manifest.json" (Join-Path $staging "manifest.json")
+if ($LASTEXITCODE -ne 0) { throw "SYNC_SCP_FAILED: manifest.json" }
 scp -q "${HostName}:${RemoteState}/session_index.json" (Join-Path $staging "session_index.json")
+if ($LASTEXITCODE -ne 0) { throw "SYNC_SCP_FAILED: session_index.json" }
 scp -q "${HostName}:${RemoteState}/health.json" (Join-Path $staging "health.json")
+if ($LASTEXITCODE -ne 0) { throw "SYNC_SCP_FAILED: health.json" }
 $remote = Get-Content (Join-Path $staging "manifest.json") -Raw | ConvertFrom-Json
 $localManifestPath = Join-Path $local "manifest.json"
 $localManifest = if (Test-Path $localManifestPath) { Get-Content $localManifestPath -Raw | ConvertFrom-Json } else { $null }
@@ -53,9 +66,10 @@ if ($changed.Count -eq 0 -and -not $SkipResearchRebuild) {
     schema = "ACASH_WAREHOUSE_SYNC_V1"; source_host = $HostName
     synced_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     status = "NO_CHANGE"; partitions_verified = 0; provider_calls = 0
+    exit_code = 0; hostname = $env:COMPUTERNAME
   }
-  [System.IO.File]::WriteAllText((Join-Path $local "sync_state.json"), ($state | ConvertTo-Json),
-    (New-Object System.Text.UTF8Encoding($false)))
+  if ($Scheduled) { $state["scheduled_by"] = "TASK_SCHEDULER"; $state["scheduled_at"] = $state["synced_at"] }
+  Write-SyncState -Doc $state
   Remove-Item $work -Recurse -Force
   exit 0
 }
@@ -63,9 +77,11 @@ if ($changed.Count -eq 0 -and -not $SkipResearchRebuild) {
 Write-Host "[sync] transferring $($changed.Count) changed partition(s)"
 foreach ($symbol in $changed) {
   scp -q "${HostName}:${RemoteState}/bars/${symbol}.parquet" (Join-Path $staging ("bars\{0}.parquet" -f $symbol))
+  if ($LASTEXITCODE -ne 0) { throw "SYNC_SCP_FAILED: bars/${symbol}.parquet" }
 }
 # FX artifacts are small; copy when present and let the hash check below catch drift.
 scp -q -r "${HostName}:${RemoteState}/fx/." (Join-Path $staging "fx") 2>$null
+if ($LASTEXITCODE -ne 0) { throw "SYNC_SCP_FAILED: fx" }
 
 $verified = 0
 foreach ($symbol in $remote.partitions.PSObject.Properties.Name) {
@@ -95,10 +111,10 @@ try {
     schema = "ACASH_WAREHOUSE_SYNC_V1"; source_host = $HostName
     synced_at = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     status = "SYNCED"; partitions_changed = $changed.Count; partitions_verified = $verified
-    provider_calls = 0
+    provider_calls = 0; exit_code = 0; hostname = $env:COMPUTERNAME
   }
-  [System.IO.File]::WriteAllText((Join-Path $local "sync_state.json"), ($state | ConvertTo-Json),
-    (New-Object System.Text.UTF8Encoding($false)))
+  if ($Scheduled) { $state["scheduled_by"] = "TASK_SCHEDULER"; $state["scheduled_at"] = $state["synced_at"] }
+  Write-SyncState -Doc $state
 } catch {
   if (Test-Path $previous) { Remove-Item $local -Recurse -Force -ErrorAction SilentlyContinue; Move-Item $previous $local }
   throw
@@ -108,5 +124,11 @@ Remove-Item $work -Recurse -Force
 if (-not $SkipResearchRebuild) {
   Write-Host "[sync] rebuilding the research panel (0 provider calls)"
   uv run python scripts/research_panel.py | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    $state["status"] = "RESEARCH_REBUILD_FAILED"
+    $state["exit_code"] = $LASTEXITCODE
+    Write-SyncState -Doc $state
+    throw "RESEARCH_REBUILD_FAILED: exit $LASTEXITCODE"
+  }
 }
 Write-Host "[sync] done: $verified partitions verified, $($changed.Count) transferred"

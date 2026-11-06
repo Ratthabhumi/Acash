@@ -22,6 +22,12 @@ export const OPTIONAL_FIELDS = new Set(['settlement_date', 'commission', 'fees']
 
 export const TXN_TH: Record<string, string> = {
   RECORDED: 'บันทึกแล้ว', ALREADY_RECORDED: 'รายการนี้บันทึกไว้แล้ว (ไม่บันทึกซ้ำ)',
+  IMPORTED: 'นำเข้าสำเร็จ', ALREADY_IMPORTED: 'รายการทั้งหมดมีอยู่แล้ว (ไม่บันทึกซ้ำ)',
+  IMPORT_PREVIEW: 'ตรวจสอบข้อมูลก่อนยืนยัน', IMPORT_REFUSED: 'ไฟล์มีรายการที่ไม่ผ่านการตรวจสอบ',
+  CSV_NO_VALID_ROWS: 'ไม่พบรายการที่ถูกต้องในไฟล์', CSV_HEADER_MISSING: 'ไฟล์ไม่มีหัวตาราง',
+  CSV_COLUMNS_UNSUPPORTED: 'คอลัมน์บางคอลัมน์ไม่รองรับ', CSV_DECIMAL_INVALID: 'ตัวเลขไม่ถูกต้อง',
+  CSV_DUPLICATE_TRANSACTION_ID: 'รหัสรายการซ้ำกันในไฟล์', CSV_DUPLICATE_ECONOMIC_RECORD: 'รายการเศรษฐกิจซ้ำกันในไฟล์',
+  CSV_BASE64_INVALID: 'ไฟล์เข้ารหัสผิดรูปแบบ', PREVIEW_HASH_MISMATCH: 'ข้อมูลที่ยืนยันเปลี่ยนแปลงจากตอนตรวจสอบ ให้ตรวจสอบใหม่',
   POSSIBLE_DUPLICATE: 'มีรายการเหมือนกันทุกช่องอยู่แล้ว ถ้าเป็นการซื้อขายจริงอีกครั้ง ให้ติ๊กยืนยันรายการซ้ำ',
   TXN_ID_CONFLICT: 'รหัสรายการชนกับรายการอื่น', REVISION_CONFLICT: 'ข้อมูลเปลี่ยนจากหน้าต่างอื่น โหลดใหม่แล้วลองอีกครั้ง',
   CONFIRMATION_REQUIRED: 'ต้องยืนยันก่อนบันทึก', TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED: 'ODR-005 ยังไม่ได้รับการรับรอง จึงบันทึกไม่ได้',
@@ -44,7 +50,9 @@ export function newTransactionId(): string {
 
 export interface TxnCall { http: number; body: Record<string, any> }
 
-export async function callTxn(method: 'GET' | 'POST', route: 'state' | 'preview' | 'record', body?: unknown): Promise<TxnCall> {
+export type ImportRoute = 'import-template' | 'import-preview' | 'import-confirm';
+
+export async function callTxn(method: 'GET' | 'POST', route: 'state' | 'preview' | 'record' | ImportRoute, body?: unknown): Promise<TxnCall> {
   try {
     const response = await fetch(TXN_ENDPOINT + route, {
       method,

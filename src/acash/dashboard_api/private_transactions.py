@@ -16,6 +16,9 @@ never change, and only the ratified corrections alter the effective events that 
 from __future__ import annotations
 
 import copy
+import csv
+import hashlib
+import io
 import json
 import re
 from datetime import date, datetime, timezone
@@ -32,7 +35,13 @@ from acash.ppds.private_observation import SCHEMA_V1_2, odr_state, read_gated_js
 
 PREFIX = "/api/upi/transactions/"
 ROUTES: Dict[str, Tuple[str, ...]] = {"state": ("GET",), "preview": ("POST",), "record": ("POST",),
-                                      "rebase": ("POST",), "correction": ("POST",)}
+                                      "rebase": ("POST",), "correction": ("POST",),
+                                      "import-template": ("GET",), "import-preview": ("POST",),
+                                      "import-confirm": ("POST",)}
+CSV_COLUMNS = ["transaction_id", "event_type", "account_ref", "trade_date", "settlement_date",
+               "security_id", "quantity", "price", "gross_amount", "commission", "fees", "tax",
+               "currency", "net_cash", "source_document_ref"]
+CSV_DECIMALS = {"quantity", "price", "gross_amount", "commission", "fees", "tax", "net_cash"}
 RECORD = Path("docs/governance/ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005.json")
 DECISION_ID = "ODR_UPI_LOCAL_TRANSACTION_AUTHORING_005"
 CAPABILITY = "OWNER_LOCAL_TRANSACTION_AUTHORING_AUTHORIZED"
@@ -469,6 +478,201 @@ def record(body: Any, service: pi.InputService) -> pi.Result:
         return 200, {"status": "RECORDED", "revision": journal_revision(), "projection": _projection(ledger)}
 
 
+def _csv_template() -> str:
+    """Canonical blank CSV with one commented example row removed from the download."""
+    header = ",".join(CSV_COLUMNS)
+    example = ("TX_EXAMPLEBUYA,BUY,BROKER_D_MAIN,2026-11-03,,SYNIDX,2,10.50,21.00,1.00,0,0,USD,-22.00,BROKER_STMT_001")
+    return f"# ACASH canonical transaction CSV (remove this comment line before importing)\n{header}\n{example}\n"
+
+
+def _parse_csv(raw: bytes) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Parse CSV into normalized row dicts and a list of per-row errors."""
+    text = raw.decode("utf-8-sig") if raw.startswith(b"\xef\xbb\xbf") else raw.decode("utf-8")
+    reader = csv.DictReader(io.StringIO(text))
+    rows, errors = [], []
+    if reader.fieldnames is None:
+        return [], [{"row_number": 0, "code": "CSV_HEADER_MISSING", "where": "file", "summary": "empty file"}]
+    unknown = set(reader.fieldnames) - set(CSV_COLUMNS)
+    if unknown:
+        return [], [{"row_number": 0, "code": "CSV_COLUMNS_UNSUPPORTED", "where": ",".join(sorted(unknown)),
+                     "summary": f"supported: {','.join(CSV_COLUMNS)}"}]
+    for i, raw_row in enumerate(reader, start=2):
+        row: Dict[str, Any] = {}
+        for key in CSV_COLUMNS:
+            val = (raw_row.get(key) or "").strip()
+            if not val:
+                continue
+            if key in CSV_DECIMALS:
+                try:
+                    Decimal(val)
+                except Exception:
+                    errors.append({"row_number": i, "code": "CSV_DECIMAL_INVALID", "where": key, "summary": val})
+                    break
+            row[key] = val
+        else:
+            if not row:
+                continue
+            if row.get("event_type") not in AUTHORED_EVENTS:
+                errors.append({"row_number": i, "code": "TXN_EVENT_NOT_AUTHORABLE", "where": "event_type",
+                               "summary": row.get("event_type", "missing")})
+                continue
+            rows.append(row)
+    return rows, errors
+
+
+def _hash_rows(rows: List[Dict[str, Any]]) -> str:
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _validate_batch(doc: Dict[str, Any], rows: List[Dict[str, Any]], today: date,
+                    base: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Validate every row; return (validated_rows, errors). No mutations."""
+    validated, errors = [], []
+    for i, row in enumerate(rows, start=2):
+        try:
+            validated.append(_validate(row, doc, load_rows(), today, base["cutoff"]))
+        except DataContractError as exc:
+            code, where = pi._code(exc).get("code", "TRANSACTION_REFUSED"), pi._code(exc).get("where", "")
+            errors.append({"row_number": i, "code": code, "where": where, "summary": row.get("transaction_id", "-")})
+    return validated, errors
+
+
+def _batch_conflicts(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Fail closed on ambiguous duplicate identities inside the import batch."""
+    by_id: Dict[str, List[Dict[str, Any]]] = {}
+    by_fp: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        tid = str(row.get("transaction_id", ""))
+        by_id.setdefault(tid, []).append(row)
+        fp = txn.parse_transaction(row, 0).fingerprint
+        by_fp.setdefault(fp, []).append(row)
+    for tid, group in by_id.items():
+        if len(group) > 1 and any(group[0] != g for g in group[1:]):
+            return {"row_number": 0, "code": "CSV_DUPLICATE_TRANSACTION_ID", "where": tid,
+                    "summary": "same transaction_id with different content"}
+    for fp, group in by_fp.items():
+        if len(group) > 1 and len({r.get("transaction_id") for r in group}) > 1:
+            return {"row_number": 0, "code": "CSV_DUPLICATE_ECONOMIC_RECORD", "where": f"fingerprint:{fp[:16]}",
+                    "summary": "two rows describe the same economic event with different ids"}
+    return None
+
+
+def import_preview(body: Any) -> pi.Result:
+    if not isinstance(body, dict) or set(body) != {"csv_bytes_base64"}:
+        return 400, {"status": "REQUEST_FIELDS_INVALID"}
+    try:
+        raw = __import__("base64").b64decode(body["csv_bytes_base64"])
+    except Exception:
+        return 400, {"status": "CSV_BASE64_INVALID"}
+    doc = _snapshot()
+    if doc is None:
+        return 404, {"status": "NO_INPUT"}
+    rows, parse_errors = _parse_csv(raw)
+    today, existing = _today(), load_rows()
+    base = active_baseline(doc, existing)
+    if base["status"] in REBASE_REQUIRED:
+        return 409, {"status": "BASELINE_REBASE_REQUIRED", "baseline_status": base["status"]}
+    batch_conflict = _batch_conflicts(rows)
+    if batch_conflict:
+        return 422, {"status": "IMPORT_REFUSED", "errors": [batch_conflict], "accepted_count": 0, "rejected_count": 1}
+    validated, validate_errors = _validate_batch(doc, rows, today, base)
+    errors = parse_errors + validate_errors
+    if errors:
+        return 422, {"status": "IMPORT_REFUSED", "errors": errors, "accepted_count": len(validated),
+                     "rejected_count": len(errors)}
+    if not validated:
+        return 422, {"status": "IMPORT_REFUSED", "code": "CSV_NO_VALID_ROWS"}
+    new_rows, already = [], 0
+    for row in validated:
+        dup = _duplicate(existing, row)
+        if dup == "ALREADY_RECORDED":
+            already += 1
+        elif dup in ("TXN_ID_CONFLICT", "POSSIBLE_DUPLICATE"):
+            return 422, {"status": "IMPORT_REFUSED", "code": dup, "transaction_id": row["transaction_id"]}
+        else:
+            new_rows.append(row)
+    try:
+        effect = _effect(doc, existing, new_rows[0], today, base) if len(new_rows) == 1 else \
+            {"before": _projection(_ledger(doc, existing, today, base)[0]),
+             "after": _projection(_ledger(doc, existing + new_rows, today, base)[0]),
+             "cutoff": base["cutoff"].isoformat()}
+    except DataContractError as exc:
+        return 422, {"status": "IMPORT_REFUSED", "errors": [{"row_number": 0, **pi._code(exc)}]}
+    summaries = [{"transaction_id": r.get("transaction_id"), "event_type": r["event_type"],
+                  "account_ref": r["account_ref"], "trade_date": r["trade_date"],
+                  "security_id": r.get("security_id"), "currency": r.get("currency"),
+                  "net_cash": r.get("net_cash")} for r in validated]
+    return 200, {"status": "IMPORT_PREVIEW", "preview_sha256": _hash_rows(validated),
+                 "revision": journal_revision(), "baseline_cutoff": base["cutoff"].isoformat(),
+                 "accepted_count": len(validated), "already_imported_count": already,
+                 "new_count": len(new_rows), "rejected_count": 0, "row_summaries": summaries,
+                 "rows": validated, "effect": effect}
+
+
+def import_confirm(body: Any, service: pi.InputService) -> pi.Result:
+    if not isinstance(body, dict) or not {"base_revision", "confirm", "preview_sha256", "rows"} <= set(body) \
+            or set(body) - {"base_revision", "confirm", "preview_sha256", "rows"}:
+        return 400, {"status": "REQUEST_FIELDS_INVALID"}
+    if body["confirm"] is not True:
+        return 400, {"status": "CONFIRMATION_REQUIRED"}
+    if not isinstance(body["rows"], list) or not all(isinstance(r, dict) for r in body["rows"]):
+        return 400, {"status": "REQUEST_FIELDS_INVALID"}
+    raw_rows = body["rows"]
+    if _hash_rows(raw_rows) != body["preview_sha256"]:
+        return 409, {"status": "PREVIEW_HASH_MISMATCH"}
+    with service.write_lock:
+        doc = _snapshot()
+        if doc is None:
+            return 404, {"status": "NO_INPUT"}
+        path = journal_path()
+        current, journal_current = journal_revision(), pi._revision(path)
+        rows, today = load_rows(), _today()
+        base = active_baseline(doc, rows)
+        if base["status"] in REBASE_REQUIRED:
+            return 409, {"status": "BASELINE_REBASE_REQUIRED", "baseline_status": base["status"]}
+        if current != body["base_revision"]:
+            return 409, {"status": "REVISION_CONFLICT", "revision": current}
+        batch_conflict = _batch_conflicts(raw_rows)
+        if batch_conflict:
+            return 422, {"status": "IMPORT_REFUSED", "errors": [batch_conflict]}
+        validated, errors = _validate_batch(doc, raw_rows, today, base)
+        if errors:
+            return 422, {"status": "IMPORT_REFUSED", "errors": errors}
+        new_rows, skipped = [], 0
+        for row in validated:
+            dup = _duplicate(rows, row)
+            if dup == "ALREADY_RECORDED":
+                skipped += 1
+            elif dup in ("TXN_ID_CONFLICT", "POSSIBLE_DUPLICATE"):
+                return 409, {"status": "IMPORT_REFUSED", "code": dup, "transaction_id": row["transaction_id"]}
+            else:
+                new_rows.append(row)
+        if not new_rows:
+            return 200, {"status": "ALREADY_IMPORTED", "revision": current, "appended_count": 0, "skipped_count": skipped}
+        ledger, _ = _ledger(doc, rows + new_rows, today, base)
+        data = _batch_bytes(BATCH_ID, rows + new_rows)
+        freeze = None
+        if base["baseline_id"] is None:
+            if not base["openings"]:
+                raise DataContractError("TXN_BASELINE_EMPTY: the snapshot has no quantity positions or positive settled cash.")
+            freeze = _batch_bytes(f"{BASELINE_PREFIX}1", base["openings"])
+        if not _write_authorized():
+            return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **authority()}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if freeze is not None:
+                pi._atomic_write(baseline_path(), freeze)
+            if journal_current != pi.ABSENT:
+                _backup(path, journal_current)
+            pi._atomic_write(path, data)
+        except OSError as exc:
+            return 500, {"status": "WRITE_FAILED", "code": type(exc).__name__}
+        if load_rows()[:-len(new_rows)] != rows:
+            raise DataContractError("TXN_JOURNAL_NOT_APPEND_ONLY.")
+        return 200, {"status": "IMPORTED", "revision": journal_revision(), "projection": _projection(ledger),
+                     "appended_count": len(new_rows), "skipped_count": skipped}
+
+
 def _rebase_plan(doc: Dict[str, Any], rows: List[Dict[str, Any]], today: date) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     old = active_baseline(doc, rows)
     cutoff, openings, excluded = baseline(doc)
@@ -576,16 +780,22 @@ def handle(method: str, name: str, body: Any, service: pi.InputService) -> pi.Re
     try:
         if name == "state":
             return state()
+        if name == "import-template":
+            return 200, {"status": "OK", "csv": _csv_template()}
         if auth["odr_005"] != "RATIFIED":
             return 403, {"status": "TRANSACTION_AUTHORING_AUTHORIZATION_REQUIRED", **auth}
         if name == "preview":
             return preview(body)
+        if name == "import-preview":
+            return import_preview(body)
         if not service.writes.allow():
             return 429, {"status": "RATE_LIMITED"}
         if name == "rebase":
             return rebase(body, service)
         if name == "correction":
             return record_correction(body, service)
+        if name == "import-confirm":
+            return import_confirm(body, service)
         return record(body, service)
     except DataContractError as exc:
         return 422, {"status": "TRANSACTION_REFUSED", **pi._code(exc)}
